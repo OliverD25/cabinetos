@@ -1,4 +1,4 @@
-# CabinetOS
+# CabinetOS — Modern System Commander
 
 ## The Constitution comes first
 
