@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResponseEnvelope",
+  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":1,\"core_version\":\"0.1.0\"}\n```",
+  "type": "object",
+  "properties": {
+    "id": {
+      "description": "Created by the sender of a request. The reply carries the same ID.",
+      "$ref": "#/$defs/RequestId"
+    }
+  },
+  "oneOf": [
+    {
+      "description": "Reply to `ping`.",
+      "type": "object",
+      "properties": {
+        "core_version": {
+          "description": "The core's version, for example `0.1.0`.",
+          "type": "string"
+        },
+        "protocol_version": {
+          "description": "The protocol version the core speaks (`PROTOCOL_VERSION`, now 1).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "pong"
+        }
+      },
+      "required": [
+        "type",
+        "protocol_version",
+        "core_version"
+      ]
+    },
+    {
+      "description": "The request succeeded and returns no data.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "The request failed.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "What kind of failure.",
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "description": "A human-readable explanation, for logs and error dialogs.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "error"
+        }
+      },
+      "required": [
+        "type",
+        "code",
+        "message"
+      ]
+    }
+  ],
+  "required": [
+    "id"
+  ],
+  "$defs": {
+    "ErrorCode": {
+      "description": "Why a request failed.",
+      "oneOf": [
+        {
+          "description": "The envelope was valid, but its `type` is not a request this core knows.",
+          "type": "string",
+          "const": "unknown_request"
+        },
+        {
+          "description": "The frame was not a valid envelope: bad JSON, a missing or malformed\n`id`, or fields that do not fit the request type.",
+          "type": "string",
+          "const": "protocol_error"
+        },
+        {
+          "description": "The frame was longer than the 16 MiB limit. The core closes the\nconnection after this reply, because large data belongs in shared\nmemory.",
+          "type": "string",
+          "const": "frame_too_large"
+        },
+        {
+          "description": "The core failed while handling a valid request.",
+          "type": "string",
+          "const": "internal"
+        }
+      ]
+    },
+    "RequestId": {
+      "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",
+      "type": "string",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$"
+    }
+  }
+}

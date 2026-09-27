@@ -1,2 +1,32 @@
 //! The IPC contract between the UI, the core and the indexer.
+//!
+//! - **Control channel.** JSON messages carried in length-prefixed frames over a
+//!   named pipe (ADR 0006). Each message is an [`Envelope`]: a [`RequestId`]
+//!   plus a [`Request`] or a [`Response`]. The framing itself lives in
+//!   `cabinetos-ipc`.
+//! - **Data channel.** `#[repr(C)]` layouts in shared memory ([`shm`]), read by
+//!   the UI through a pointer with no copy.
+//!
+//! The Rust types here are the source of truth. With the `schema` feature, the
+//! [`schema`] module exports them as JSON Schema into `sdk/protocol/`, so the C#
+//! side can be checked against them.
+//!
+//! Serves Constitution Article 1 (Zero-Compromise Performance: bulk data goes
+//! through shared memory, not through serialization) and Article 12 (Unified
+//! Diagnostics: one request ID follows an action through every process).
+//! Brief §4.
 #![forbid(unsafe_code)]
+
+mod id;
+mod message;
+pub mod shm;
+
+#[cfg(feature = "schema")]
+pub mod schema;
+
+pub use id::{InvalidRequestId, RequestId};
+pub use message::{Envelope, ErrorCode, Request, Response};
+
+/// Version of the control-channel protocol. The core reports it in
+/// [`Response::Pong`]. Raise it whenever a message changes shape.
+pub const PROTOCOL_VERSION: u32 = 1;
