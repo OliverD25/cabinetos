@@ -62,3 +62,7 @@ Extensions are strictly separated into two distinct architectural layers to prot
 
 - **Core Plugins (The Invisible Engine):** Headless WebAssembly modules that hook directly into the backend core to intercept I/O, modify background behavior, or add commands, completely decoupled from the UI.
 - **Tool Extensions (The Visual Workspace):** Frontend UI-driven applets hosted in dedicated dockable "Tool Panes" (e.g., bash terminals, hex editors, markdown previews) that visualize or interact with selected files without touching the core I/O pipeline.
+
+## 12. Unified, Zero-Latency Telemetry & Logging
+
+Given the multi-process, highly concurrent nature of the architecture, comprehensive observability is mandatory. The system must implement a lock-free, unified logging pipeline that records events across the UI, the IPC bridge, the Rust core, and the Plugin sandboxes. Logging must be completely asynchronous to guarantee it never blocks the main I/O pipeline or the UI thread. In the event of a crash, the system must immediately write a diagnostic trace that pinpoint the exact boundary (Frontend, Engine, or Plugin) where the failure occurred.
