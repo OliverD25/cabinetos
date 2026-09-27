@@ -1,4 +1,4 @@
-# Project Constitution
+# CabinetOS — Modern System Commander: Project Constitution
 
 > **Status: protected.** This document defines the concepts and principles of the
 > project. No part of it — wording or content — may be changed without explicit
