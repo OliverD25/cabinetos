@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<script src="./doc-page.js"></script>
+<style>
+doc-page:not(:defined){visibility:hidden}
+body{margin:0;font-family:'Open Sans','Segoe UI Variable','Segoe UI',sans-serif;color:#1b1b1f}
+a{color:#0f6cbd;text-decoration:none}a:hover{text-decoration:underline}
+.ff-keep{break-inside:avoid;orphans:3;widows:3}
+</style>
+</helmet>
+<doc-page margin="0.8in">
+<div slot="footer" style="display:flex;justify-content:space-between;width:100%;font-size:10px;color:#6b6b73;padding-top:6px;border-top:1px solid #e3e3e8;white-space:nowrap">
+  <span style="white-space:nowrap">FileForge · Design handout · Round 1</span><span style="white-space:nowrap">September 2026</span>
+</div>
+
+<div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6b6b73;margin:0 0 10px">Design handout · Round 1</div>
+<h1 style="font-size:32px;line-height:1.15;font-weight:700;margin:0 0 10px;letter-spacing:-.01em">FileForge: a developer-first file manager for Windows 11</h1>
+<p style="font-size:16px;line-height:1.6;color:#44444c;margin:0 0 22px">Total Commander's operational power with VS Code's workspaces, terminal, command palette and extensibility, delivered as a native Fluent application. This handout accompanies the clickable prototype and explains what was built, why, and what is still open.</p>
+
+<div class="ff-keep" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:0 0 28px">
+  <div style="padding:12px 14px;border:1px solid #e3e3e8;border-radius:6px"><div style="font-size:11px;color:#6b6b73;margin-bottom:3px">Prototype</div><a href="./FileForge.dc.html" style="font-size:13px;font-weight:600">FileForge.dc.html</a></div>
+  <div style="padding:12px 14px;border:1px solid #e3e3e8;border-radius:6px"><div style="font-size:11px;color:#6b6b73;margin-bottom:3px">Scope</div><div style="font-size:13px;font-weight:600">Views A–E, dark mode</div></div>
+  <div style="padding:12px 14px;border:1px solid #e3e3e8;border-radius:6px"><div style="font-size:11px;color:#6b6b73;margin-bottom:3px">Layout takes</div><div style="font-size:13px;font-weight:600">Classic · Terminal right · Rail</div></div>
+</div>
+
+<h2 style="font-size:20px;font-weight:700;margin:0 0 10px">1. Principles</h2>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 10px"><strong>Low floor, high ceiling.</strong> The first-run experience is a single pane, a sidebar and an address bar. Every power feature (second pane, terminal, palette, editors) is one toggle or one shortcut away and leaves no trace when it is off.</p>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 10px"><strong>Native first.</strong> Mica backdrop for the window, Acrylic only for transient surfaces (palette, context menu, flyouts, dialogs). Windows 11 list selection (3 px accent pill, translucent row fill), 4 px control radii, 8 px surface radii, standard caption buttons. No web-style chrome.</p>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 22px"><strong>Commands are the product.</strong> Every action has an id, a category and a keybinding. Buttons, menus, the palette and plugins all call the same commands, so the UI stays consistent no matter where an action is triggered.</p>
+
+<h2 style="font-size:20px;font-weight:700;margin:0 0 10px">2. Visual language</h2>
+<table style="width:100%;border-collapse:collapse;font-size:13px;margin:0 0 22px">
+  <thead><tr style="text-align:left;color:#6b6b73;font-size:11px;text-transform:uppercase;letter-spacing:.06em"><th style="padding:6px 8px;border-bottom:1px solid #c9c9d1">Token</th><th style="padding:6px 8px;border-bottom:1px solid #c9c9d1">Value</th><th style="padding:6px 8px;border-bottom:1px solid #c9c9d1">Use</th></tr></thead>
+  <tbody>
+    <tr><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Type</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Segoe UI Variable 13 px body, 12 px secondary, 11 px caption</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Prototype substitutes Open Sans</td></tr>
+    <tr><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Mono</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Cascadia Code 12 px</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Terminal, hex, keycaps, paths</td></tr>
+    <tr><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Backdrop</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Mica · rgba(32,32,32,.86)</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Window</td></tr>
+    <tr><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Layer</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">rgba(255,255,255,.05) + 1 px .07 stroke</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Panes, marketplace, cards</td></tr>
+    <tr><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Acrylic</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">rgba(44,44,44,.72) blur 40 saturate 1.6</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Palette, context menu, flyout</td></tr>
+    <tr><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Accent</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">#60CDFF (system), theme-overridable</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Selection pill, active toggles, primary button</td></tr>
+    <tr><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Text</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">#FFF · .786 · .544 · .363</td><td style="padding:7px 8px;border-bottom:1px solid #e3e3e8">Primary, secondary, tertiary, disabled</td></tr>
+  </tbody>
+</table>
+
+<h2 style="font-size:20px;font-weight:700;margin:0 0 10px">3. The views</h2>
+
+<h3 style="font-size:16px;font-weight:600;margin:0 0 6px">A. Main workspace</h3>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 8px">Dual pane by default for the developer profile; the <em>Dual / Single</em> toggle in the command bar collapses to one pane. The active pane carries a brighter border and a white title; Tab switches focus. Workspace tabs sit in the title bar and drive the sidebar, the git branch in the status bar and the terminal's starting directory.</p>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 8px">The terminal is a toggleable panel whose working directory follows the active pane. Three layout takes are switchable in the prototype's Tweaks:</p>
+<ul style="font-size:14.5px;line-height:1.65;margin:0 0 16px;padding-left:22px">
+  <li><strong>Classic</strong>: sidebar left, terminal docked bottom. Most familiar to Total Commander users; widest file lists.</li>
+  <li><strong>Terminal right</strong>: terminal as a third column. Keeps long file lists tall, suits ultrawide monitors.</li>
+  <li><strong>Rail</strong>: VS Code activity rail (Explorer, Marketplace, Git, Terminal) with a collapsible panel. Best for plugin-heavy setups where the sidebar hosts many views.</li>
+</ul>
+
+<h3 style="font-size:16px;font-weight:600;margin:0 0 6px">B. Command palette</h3>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 16px">Ctrl+Shift+P opens an Acrylic overlay anchored 64 px below the title bar. Rows show <em>Category: Command</em>, a plugin badge when the command comes from an extension, and the binding as keycaps. Chords render as two keycaps joined by "then" (Ctrl+K then Ctrl+C). Hovering a row reveals a pencil; clicking it switches the row into recording mode, and the next keys pressed become the binding (a second combo within one second makes a chord, Esc cancels).</p>
+
+<h3 style="font-size:16px;font-weight:600;margin:0 0 6px">C. Marketplace</h3>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 16px">Replaces the pane area rather than opening a separate window, so it inherits the sidebar and status bar. Cards show author with a verified mark, rating and count, installs, and a Theme / WASM plugin label. Selecting a card opens a detail column with the requested capabilities listed up front. Install opens a permissions review dialog: each capability is rated low, medium or high, the sandbox is explained in one sentence, and the primary action reads "Allow and install". Themes apply immediately (accent and Mica tint) so the user sees the result without leaving the store.</p>
+
+<h3 style="font-size:16px;font-weight:600;margin:0 0 6px">D. Editors and context menu</h3>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 16px">Opening a Markdown or binary file replaces the <em>other</em> pane with an editor tab (Markdown Preview+, Hex Editor Pro). The tab strip shows the providing plugin and a close button that returns the pane to its folder. The right-click menu follows the Windows 11 pattern: an icon strip for cut, copy, paste, rename and delete, then labelled rows. Plugin actions are grouped under a "From plugins" heading with a source badge so users can always tell where an action came from.</p>
+
+<h3 style="font-size:16px;font-weight:600;margin:0 0 6px">E. File operations flyout</h3>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 22px">Copy operations run in a bottom-right Acrylic flyout: title, source → destination, a live throughput graph, percent, bytes done, ETA, Pause and Cancel. Minimising it leaves a compact progress pill in the status bar; the main UI is never blocked and panes stay fully interactive during the transfer.</p>
+
+<h2 style="font-size:20px;font-weight:700;margin:0 0 10px">4. Default keybindings</h2>
+<table style="width:100%;border-collapse:collapse;font-size:13px;margin:0 0 22px">
+  <thead><tr style="text-align:left;color:#6b6b73;font-size:11px;text-transform:uppercase;letter-spacing:.06em"><th style="padding:6px 8px;border-bottom:1px solid #c9c9d1">Command</th><th style="padding:6px 8px;border-bottom:1px solid #c9c9d1">Binding</th><th style="padding:6px 8px;border-bottom:1px solid #c9c9d1">Source</th></tr></thead>
+  <tbody>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Command palette</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Ctrl+Shift+P</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Core</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Toggle dual pane</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Ctrl+Shift+D</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Core</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Toggle terminal</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Ctrl+`</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Core</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Toggle sidebar</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Ctrl+B</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Core</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Focus other pane</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Tab</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Core</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Copy / move to other pane</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">F5 / F6</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Core (Total Commander)</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Marketplace</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Ctrl+Shift+X</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Core</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Switch workspace</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Ctrl+K then Ctrl+W</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Core</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Markdown preview / open as hex</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Ctrl+K then V / H</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Plugins</td></tr>
+    <tr><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Commit staged changes</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8;font-family:'Fira Code',monospace;font-size:12px">Ctrl+K then Ctrl+C</td><td style="padding:6px 8px;border-bottom:1px solid #e3e3e8">Git Lens plugin</td></tr>
+  </tbody>
+</table>
+
+<h2 style="font-size:20px;font-weight:700;margin:0 0 10px">5. Plugin trust model</h2>
+<p style="font-size:14.5px;line-height:1.65;margin:0 0 8px">Plugins are WebAssembly modules that declare capabilities in their manifest. The UI surfaces this in three places so the user is never surprised:</p>
+<ol style="font-size:14.5px;line-height:1.65;margin:0 0 22px;padding-left:22px">
+  <li>Marketplace detail: "Requested capabilities" listed before the Install button is pressed.</li>
+  <li>Review dialog: each capability rated low / medium / high with a plain-language reason, plus an opt-in to trust the publisher for updates.</li>
+  <li>In use: every plugin-provided command, menu item and editor tab carries the plugin's name as a badge.</li>
+</ol>
+
+<h2 style="font-size:20px;font-weight:700;margin:0 0 10px">6. Open questions and next steps</h2>
+<ul style="font-size:14.5px;line-height:1.65;margin:0 0 22px;padding-left:22px">
+  <li>Light mode and high-contrast variants of every surface.</li>
+  <li>First-run experience: how and when the single-pane user discovers the second pane, the terminal and the palette.</li>
+  <li>Pane types beyond folder, Markdown and hex (image, archive contents, remote drives) and how many editor tabs a pane can hold.</li>
+  <li>Conflict and error states for transfers: overwrite prompts, permission errors, network drops.</li>
+  <li>Keybinding conflicts: what the palette shows when a recorded shortcut is already taken.</li>
+  <li>Real Fluent iconography and Segoe UI Variable once the design moves into the native toolkit.</li>
+</ul>
+</doc-page>
+</x-dc>
+</body>
+</html>
