@@ -3,5 +3,18 @@
     "ask": [
       "Edit(**/CONSTITUTION.md)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-constitution.js\""
+          }
+        ]
+      }
+    ]
   }
 }
