@@ -1,0 +1,32 @@
+# Rust
+/core/target/
+**/*.rs.bk
+*.pdb
+
+# .NET / Visual Studio
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+*.binlog
+launchSettings.json
+
+# Plugin SDK build output
+/sdk/**/target/
+*.wasm
+!/sdk/fixtures/**/*.wasm
+
+# Local tool state
+.claude/settings.local.json
+*.local.json
+*.log
+/logs/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

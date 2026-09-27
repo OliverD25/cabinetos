@@ -76,7 +76,7 @@ Places where the brief or the design handout disagree with the Constitution, or 
 
 | # | Where | Conflict | Proposed handling | Decide in |
 |---|-------|----------|-------------------|-----------|
-| A | Brief §8 title | Says "telemetry"; the creator renamed Article 12 to "Diagnostics" because telemetry suggests data sent home | Phase 0 copies the brief word for word, then a follow-up edit changes "telemetry" to "diagnostics" in §8 with the creator's OK | Phase 0 |
+| A | Brief §8, first sentence | Says "telemetry"; the creator renamed Article 12 to "Diagnostics" because telemetry suggests data sent home | Done in Phase 0: `docs/ARCHITECTURE.md` says "diagnostics" and its change log records the edit. The creator's preference was already known from the Article 12 rename | Phase 0 (done) |
 | B | Design §1 vs §3A | §1: first run is a single pane. §3A: dual pane by default. Article 5 makes dual-pane the primary paradigm; Article 4 wants a casual user at ease | Recommend dual by default with single one toggle away; confirm before the UI phase | Phase 5 |
 | C | Brief §6 Layer 2 | "WinUI UserControls or WebView2" and "if they crash, the window must remain responsive". An in-process control cannot guarantee that | WebView2 for third-party Tool Extensions; native controls only first-party (section 2 default) | Phase 7 |
 | D | Design sidebar "Tags" | File tagging is a feature, not navigation. Article 10 says features are opt-in | Tags become a first-party plugin (core plugin stores tags; UI hook draws the dot). Not in the core | Phase 7 |

@@ -1,0 +1,26 @@
+# EditorConfig: https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{md,json,jsonc,yml,yaml,toml,wit,js,html,css}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows-owned files keep CRLF, matching .gitattributes
+[*.{cs,xaml,csproj,sln,slnx,props,targets,manifest,ps1,cmd,bat,rc}]
+end_of_line = crlf
+
+[*.cs]
+indent_size = 4
+
+[Makefile]
+indent_style = tab
