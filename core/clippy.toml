@@ -1,0 +1,3 @@
+# Words the pedantic `doc_markdown` lint accepts without backticks.
+# ".." keeps clippy's built-in list (GitHub, WebAssembly, ...).
+doc-valid-idents = ["CabinetOS", "NVMe", "WinUI", ".."]

@@ -1,0 +1,12 @@
+[package]
+name = "cabinetos-diag"
+description = "Structured JSON Lines diagnostics, a ring buffer of recent events and crash traces."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

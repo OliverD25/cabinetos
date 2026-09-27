@@ -1,0 +1,49 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT"
+repository = "https://github.com/OliverD25/cabinetos"
+publish = false
+
+[workspace.dependencies]
+# Workspace crates
+cabinetos-diag = { path = "crates/cabinetos-diag" }
+cabinetos-ipc = { path = "crates/cabinetos-ipc" }
+cabinetos-protocol = { path = "crates/cabinetos-protocol" }
+
+# External crates. Each crate adds the features it needs on top of these.
+anyhow = "1.0"
+clap = { version = "4.6", features = ["derive"] }
+schemars = "1.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3.27"
+thiserror = "2.0"
+time = { version = "0.3", default-features = false, features = ["std"] }
+tokio = "1.53"
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "registry", "std"] }
+ulid = "3.0"
+windows = "0.62"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints that cost more than they give in this codebase.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+# Every unsafe block must carry a `// SAFETY:` comment (CLAUDE.md working rules).
+undocumented_unsafe_blocks = "warn"

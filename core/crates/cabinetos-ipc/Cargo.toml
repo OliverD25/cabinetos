@@ -1,0 +1,12 @@
+[package]
+name = "cabinetos-ipc"
+description = "Named pipe transport with a user-only DACL, framing, shared-memory sections and process watching."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

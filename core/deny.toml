@@ -1,0 +1,39 @@
+# cargo-deny configuration (checked with cargo-deny 0.20).
+# Run from core/: `cargo deny check`. CI runs the same check.
+
+[graph]
+# CabinetOS ships for Windows only (ADR 0004): x64 now, ARM64 planned. Crates
+# used only on other platforms are not part of the product and are not checked.
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+# Check every optional feature too (the protocol crate's `schema` feature).
+all-features = true
+
+[advisories]
+# Every advisory that is in scope is an error: vulnerabilities always are.
+# cargo-deny 0.20 has no "warn" level for unmaintained crates in this file, so
+# they stay in scope here, and CI adds `--warn unmaintained` on the command
+# line: an unmaintained crate is reported there without failing the build.
+unmaintained = "all"
+ignore = []
+
+[licenses]
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
