@@ -18,4 +18,11 @@ must be consistent with it.
 - **When in doubt about scope, default to Article 10.** A feature that is not core
   file navigation belongs in an extension, not in the core application.
 
+## The desk
+
+This project's task board (the desk) is bound in `.claude/notion-desk.json`. Its
+card "Development Plan (mirror of the repo plan)" is a copy of
+[docs/PLAN.md](docs/PLAN.md). The repo file is the source of truth. When
+`docs/PLAN.md` changes, refresh that card from the file in the same session.
+
 @CONSTITUTION.md
