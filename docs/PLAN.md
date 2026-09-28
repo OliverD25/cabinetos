@@ -155,13 +155,15 @@ Done when: the core and the UI run together, a listing of 100,000 files scrolls 
 
 Articles: 3, 4, 5, 7.
 
-### Phase 6 — Indexer
+### Phase 6 — Indexer — core side done 2026-09-28
 
 Goal: instant search over whole volumes.
 
 Produces: MFT reader into a compact in-memory tree keyed by file reference number; USN Journal tailing to keep it fresh; the elevated `cabinetos-indexer.exe` as a Windows service with an on-demand elevated mode; read-only query pipe; core fallback when absent; search field in the UI.
 
 Done when: the index of the system drive builds in seconds, a rename on disk appears in search results within a second, and the app works unchanged with the indexer stopped.
+
+Core side done 2026-09-28; the search field waits for the UI (Phase 5). Built: `cabinetos-index`, an in-memory index keyed by file reference number, built by enumerating the MFT through `FSCTL_ENUM_USN_DATA` (the NTFS driver returns each entry's FRN, parent, name and attributes, so no on-disk structure is parsed) and kept current by one thread per volume that follows `FSCTL_READ_USN_JOURNAL`, rebuilding in the background when the journal cannot continue; names interned; ranked substring search on several threads. `cabinetos-indexer.exe` runs it elevated, in a terminal (`--console`) or as a Windows service (`--install`, manual start, LocalSystem), and answers only `ping`, `index_status` and `search`, over `\\.\pipe\cabinetos-indexer` with a medium integrity label so the normal-rights core can ask. The core answers `search` from the indexer within 200 ms, or walks one folder tree itself (at most 2 s and 20,000 entries) and says `source: walk`. Measured 2026-09-28 on the GitHub Actions runner's `C:` (release build): 1,358,009 entries in 3.3 s, 87 bytes per entry, a 3-letter query in 12.5 ms, a rename visible to search after 9 ms. On this PC with the indexer stopped, `search` answered from a walk and `index status` said `available: no`; the index of this PC's own `C:` is still to be measured in an elevated run. Open question for the creator: should search hits be filtered by the asking user's folder rights (today any logged-on user can search all names, as the "Everything" tool does)? Guide: [indexer.md](indexer.md).
 
 Articles: 1.
 

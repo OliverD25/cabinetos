@@ -17,13 +17,15 @@ workspace architecture of VS Code.
   reachable from a command palette, with chord keybindings.
 
 Status: pre-alpha. Phases 0 to 4 of [the plan](docs/PLAN.md) are done, and
-the core side of Phase 7: the governing documents, and a Rust core that lists
-and watches directories in shared memory, serves its configuration, commands
-and keymap, runs copy, move and delete jobs on per-disk queues, and runs
-sandboxed WebAssembly plugins whose crashes it contains, all over a user-only
-named pipe (`core/`, 307 tests, CI green). Phase 5, the WinUI 3 shell, needs
-the .NET SDK; the core-side parts of Phases 6 and 8 (indexer, terminal host)
-continue meanwhile.
+the core sides of Phases 6 and 7: the governing documents, and a Rust core
+that lists and watches directories in shared memory, serves its
+configuration, commands and keymap, runs copy, move and delete jobs on
+per-disk queues, runs sandboxed WebAssembly plugins whose crashes it
+contains, and searches whole NTFS volumes through an elevated indexer (or
+walks folders without it), all over a user-only named pipe, with the indexer
+behind a read-only pipe of its own (`core/`, 356 tests, CI green). Phase 5,
+the WinUI 3 shell, needs the .NET SDK; the core side of Phase 8 (terminal
+host) continues meanwhile.
 
 ## Documents
 
@@ -41,6 +43,7 @@ continue meanwhile.
 | [docs/keybindings.md](docs/keybindings.md) | Key grammar, chords, the Immutable System Tier, conflict rules. |
 | [docs/jobs.md](docs/jobs.md) | Copy, move and delete jobs: scheduler, conflicts, progress. |
 | [docs/plugins.md](docs/plugins.md) | Core Plugins: manifest, capabilities, sandbox, limits, crashes. |
+| [docs/indexer.md](docs/indexer.md) | The indexer: how volumes are indexed and kept current, the read-only pipe, the service, search without it. |
 
 ## Layout
 
