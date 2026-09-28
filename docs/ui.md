@@ -33,7 +33,7 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper and the theme picker's model, the marketplace view's model and card texts, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper (with the light colours of a `system` theme) and the theme picker's model, the marketplace view's model and card texts, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
 | `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, the editor tabs of Tool Extensions, the plugin list and review, the theme applier (brushes, WinUI's accent, the tinted Mica backdrop) and the theme picker, the marketplace view, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
@@ -66,13 +66,15 @@ cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabineto
 The end-to-end tests start the real core: a listing read from shared
 memory; 200 files copied through `TransferCenter` with one conflict
 answered Skip, which must end `completed` with that file untouched; a
-folder made and renamed; the type names and icon keys of a listing's rows,
-and the icon PNGs at every offered size; a `cmd` session whose echo
-comes back through the terminal's byte pump; the theme picker choosing
-Nord, whose `theme_changed` the mapper turns into Nord's accent and Mica
-tint; and the marketplace model over the local index of
+folder made and renamed; the type names and icon keys of a listing's rows
+(a `.gitattributes` gets a type name in words, not a program identifier
+such as `txtfile`), and the icon PNGs at every offered size; a `cmd`
+session whose echo comes back through the terminal's byte pump; the theme
+picker choosing Nord, whose `theme_changed` the mapper turns into Nord's
+accent and Mica tint; and the marketplace model over the local index of
 `sdk/marketplace/build-index.ps1` (read, search, install Hello with its
-review's grant until it is active, uninstall). They run when
+review's grant until it is active, the core's `installedVersion` after the
+install and none after the uninstall). They run when
 `CABINETOS_CORE_EXE` is set or the core is built in `core/target`, and
 skip themselves otherwise (as in the CI job `ui`, which builds no core).
 
@@ -87,8 +89,8 @@ skip themselves otherwise (as in the CI job `ui`, which builds no core).
 | `CABINETOS_THEMES_DIR` | Not read by the UI; the core it starts inherits it and reads the themes there ([themes.md](themes.md)) |
 | `CABINETOS_PLUGINS_DIR`, `CABINETOS_MARKETPLACE_DIR` | Not read by the UI, except the plugins folder for the empty plugin list's hint; the core it starts inherits them and installs there ([marketplace.md](marketplace.md), "Folders"). Set both to a scratch folder to try installs without touching `%LOCALAPPDATA%\CabinetOS` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
-| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` for a light theme) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button with that accessible name (`click:Installed` shows the marketplace's Installed tab); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -186,6 +188,13 @@ names and icons"):
   old one until it arrives.
 - A core before protocol 9 answers `unknown_request`; the built-in text
   and glyphs then stay, until a restarted core is asked again.
+- Where the shell answers a program identifier instead of a name
+  (`txtfile` for `.gitattributes` on the development PC), the core sends
+  `EXT File` since protocol 11, as Explorer shows it: "GITATTRIBUTES File".
+  The window shows what the core sends. Checked on 2026-09-28 in a
+  snapshot (`.gitattributes` and `.gitignore` read "GITATTRIBUTES File"
+  and "GITIGNORE File"), and an end-to-end test checks that the name is
+  words, not an identifier.
 
 Each pane lists with `watch: true`. A `listing_refreshed` swaps the view:
 the new section is mapped, the rows are replaced, the selection follows its
@@ -267,20 +276,44 @@ their keys, so each of them is in the palette and can be rebound; the
 window registers a handler for each one (`RegisterUiHandler`).
 `file.properties` takes `{"scope": "folder"}` for the folder itself.
 
-These commands exist only in the UI, because they belong to the window's
-own controls: `transfer.pause`, `transfer.resume`, `transfer.cancel`,
-`transfer.close`, `transfer.minimize`, `transfer.restore`,
-`transfer.next`, `conflict.resolve`, `sidebar.pin`, `sidebar.unpin`, and
-the terminal's `terminal.new` (`{"profile": …, "cwd": …}`),
-`terminal.show` and `terminal.close` (`{"session": …}`) and
-`terminal.reload`, the search's `search.scope`
-(`{"wholeVolume": true}`), the plugins' `plugins.review` and
-`plugins.reload` (`{"id": …}`) and `plugins.grant`, and the editors'
-`editor.close` and `editor.reload` (`{"pane": 0 or 1}`) (`RegisterLocal`).
+Since protocol 11 the registry also lists the commands of the window's own
+controls, so they are in the palette too, ranked by the core, and can be
+rebound: the transfer flyout's `transfer.pause`, `transfer.resume`,
+`transfer.cancel`, `transfer.close`, `transfer.minimize`,
+`transfer.restore`, `transfer.next` and `conflict.resolve`;
+`sidebar.pin` and `sidebar.unpin`; the terminal's `terminal.new`
+(`{"profile": …, "cwd": …}`), `terminal.show`, `terminal.close`
+(`{"session": …}`) and `terminal.reload`; the search's `search.scope`
+(`{"wholeVolume": true}`); `plugins.list`; and the editors'
+`editor.openMarkdownPreview` (Ctrl+K V in a pane), `editor.close` and
+`editor.reload` (`{"pane": 0 or 1}`). The window keeps only their handlers.
+Run from the palette or a key, without arguments, each one acts on what is
+in front:
+
+- the transfer commands act on the job the flyout shows;
+- `conflict.resolve` opens the flyout at the waiting conflict, or says that
+  none waits;
+- `sidebar.pin` and `sidebar.unpin` take the active pane's folder;
+- `terminal.show` shows the dock, and `terminal.close` ends the shown shell;
+- `search.scope` switches "Whole volume" on or off;
+- `editor.close` and `editor.reload` take the editor that has the keyboard,
+  else the one that is open.
+
+With a core before protocol 11 they still run, because a handler runs when
+the registry does not list its command; they are then not in the palette.
+
+A few commands exist only in the UI, because they belong to a dialog or to
+a view's buttons (`RegisterLocal`): the plugins' `plugins.review` and
+`plugins.reload` (`{"id": …}`) and `plugins.grant`, the theme picker's
+`theme.apply`, and the marketplace's `market.refresh`, `market.select`,
+`market.install`, `market.uninstall` and `market.source` (`{"id": …}`).
 They run through the router like the others, but they are not in the
-palette and cannot be rebound. `plugins.list` and
-`editor.openMarkdownPreview` are in the palette although the core does not
-list them yet ("Plugins", "Tool Extensions").
+palette and cannot be rebound.
+
+A plugin's command run from the palette or a key gets `{"path", "paths"}`
+from the active pane: the focused row and the selected rows, or the focused
+search hit. From the context menu it gets the menu's rows
+([plugins.md](plugins.md), "What the shell passes").
 
 | Command | In this version |
 |---|---|
@@ -292,7 +325,8 @@ list them yet ("Plugins", "Tool Extensions").
 | `help.about` | Runs in the core; the result is shown in a dialog |
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
 | `view.toggleTerminal` | Shows the terminal, gives the keyboard back to the pane, or hides it ("The terminal") |
-| `marketplace.browse`, `workspace.switch`, `preferences.selectColorTheme`, `terminal.runTask` | "arrives in a later version" in the status bar |
+| `marketplace.browse`, `preferences.selectColorTheme` | Open the marketplace and the theme picker ("The marketplace", "Themes") |
+| `workspace.switch`, `terminal.runTask` | "arrives in a later version" in the status bar |
 
 ## File operations
 
@@ -339,7 +373,10 @@ and the design's 200 ms slide-up. It shows one job:
 - the speed graph: 56 px, the last 40 samples of `speed_bps` taken every
   500 ms, as an accent line over an area at 18 %. Its scale follows the
   fastest sample, never below 1 MB/s. A job without bytes to count (a
-  delete, a move on one volume, empty files) draws a flat line;
+  delete, a move on one volume, empty files) graphs `items_per_second`
+  instead (protocol 11), never below 10 items/s. The pace at the graph's
+  top right names its unit: "412 items/s" where a copy says "610 MB/s". A
+  paused job samples 0, and the pace disappears once the job ends;
 - the progress bar: 4 px, its width follows the core's numbers over 400 ms
   on the compositor (an implicit scale transition);
 - the footer: the percent (rounded down, so 100 % means done), "1.2 GB of
@@ -445,6 +482,7 @@ Like every setting, the window's own state lives in `cabinetos.json`
 | `ui.dualPane`, `ui.sidebar` | The user toggles them | At start, and on every `config_changed` |
 | `ui.lastPaths` | The window closes (at most 1 s is spent on it) | At start: the left pane opens the first, the right pane the second; a folder that is gone falls back to the first-start folders |
 | `ui.pinned` | "Pin this folder to the sidebar", and "Unpin from sidebar" on a pinned row | At start and on `config_changed` |
+| `ui.dockSize.bottom`, `ui.dockSize.right` | A drag of the dock's splitter ends (once per drag) | At start and on `config_changed`, except during a drag ("The terminal") |
 
 The sidebar always shows Desktop, Downloads, Documents and the profile
 folder; `ui.pinned` holds the folders the user added, shown after them,
@@ -565,12 +603,9 @@ for, and says what they do (Constitution Article 8).
   when one crashes. Every `plugin_state_changed` and `plugin_crashed` makes
   the window read `list_plugins` again and compare (`PluginWatch`,
   tested); an open list follows.
-- `plugins.list` is the window's own command, because the core's registry
-  does not have it yet. The palette lists it after the core's hits, found
-  by a plain substring of its category, title or ID; this is a stopgap,
-  since the core ranks everything else. It cannot be rebound until the
-  core registers it (`RegisterWindowCommand`), and then the registry's
-  entry takes over.
+- `plugins.list` is in the core's registry since protocol 11, so the
+  palette ranks it with everything else and it can be rebound; the window
+  only runs it.
 
 Checked on 2026-09-28 with the `hello` fixture of `sdk/fixtures/plugins`
 (`CABINETOS_PLUGINS_DIR`): the status bar named it at start, the review
@@ -598,8 +633,16 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   240 px. Beside them when it is `right`: 32 % of the width, 220 to
   380 px. The 8 px gap before the dock is a splitter: a drag sets the
   size, at least the minimum above and at most what leaves the panes 160 px
-  of height (320 px of width). The dragged size lasts until the window
-  closes; there is no setting for it yet.
+  of height (320 px of width). The end of a drag saves the size in
+  `ui.dockSize.bottom` or `ui.dockSize.right` (`set_value`, once per drag,
+  in whole pixels), so each placement keeps its own size across restarts.
+  At start, and when the file changes, `null` means the sizes above, and a
+  saved size is held to the same limits in the window as it is then. A
+  change in the file applies at once, except during a drag, and the
+  window's own save coming back from the core moves nothing. Checked on
+  2026-09-28 with the snapshot step `dock:330`: the file got
+  `"bottom": 330`, and after a restart the dock opened at about 330 px
+  (measured in the snapshot) instead of the design's 240 px.
 - **The header, 34 px.** One tab per shell: a green dot while it runs,
   the profile's name, and × to end it. "+" starts the default profile
   (`terminal.defaultProfile`); the arrow next to it lists every profile of
@@ -793,10 +836,22 @@ levels. [themes.md](themes.md) has the format and the shipped themes
 - **Light and dark.** `kind: light` sets the window's `RequestedTheme` to
   Light, so WinUI's own controls and the dialogs draw their light forms;
   `dark` sets Dark. The caption buttons follow, and Tool Extension pages
-  get it as `prefers-color-scheme`. The theme decides, not Windows: the
-  `default` theme is dark, so the window is dark when Windows is in light
-  mode too. Before this version, the window fell back to WinUI's light
-  brushes in light mode; the design has no light tokens.
+  get it as `prefers-color-scheme`. `kind: system` (protocol 11; the
+  shipped `default` theme has it) follows Windows' mode for apps: the
+  window reads it from `UISettings` (Windows' background colour for apps,
+  white in light mode) when it applies the theme, and applies the theme
+  again when `ColorValuesChanged` brings another mode, while it runs.
+- **Light mode of a `system` theme.** Its palette and terminal are its
+  dark-mode colours ([themes.md](themes.md): the light look is the
+  window's choice). In light mode the window uses its own light colours
+  instead (`SystemLight`, in `CabinetOS.Core`, tested): Windows 11's own
+  light-mode values from WinUI's Fluent resources, the Windows colour
+  palette for the file types and levels, and Windows Terminal's
+  "One Half Light" scheme (MIT) for the terminal. The theme's accent and
+  Mica stay the theme's, so `default` shows the Windows accent's
+  light-mode shade on plain light Mica (Constitution Article 3). The
+  design has no light tokens yet (its handout lists light mode as an open
+  question), so these are a first choice, not the design's.
 - **The terminal.** The xterm.js page gets the theme's foreground, cursor
   and 16 ANSI colours, a selection in the accent at 30 %, and the scheme's
   background with alpha 0. Cells with the default background then show the
@@ -805,19 +860,23 @@ levels. [themes.md](themes.md) has the format and the shipped themes
 - **The picker.** "Preferences: Color Theme" (`preferences.selectColorTheme`,
   Ctrl+K Ctrl+T) opens a list in the palette's frame, one row per theme:
   a swatch (the accent as a dot on the Mica tint; a theme without its own
-  accent shows the Windows accent), the name, the author, "light" for a
-  light theme, and a check on the theme in effect. Up, Down, Home and End
-  move; Enter or a click applies it with `set_value ui.theme`. The picker
-  closes once the core accepts, and `theme_changed` then repaints the
-  window. A refusal shows in red in the footer. Esc or a click outside
-  closes the picker. It reads each theme with `get_theme` when it opens,
-  because `list_themes` has no Mica tint for the swatch.
+  accent shows the Windows accent, and plain Mica shows light or dark Mica
+  as the theme would now), the name, the author, "light" for a light
+  theme or "light or dark, as Windows is set" for a `system` one, and a
+  check on the theme in effect. Up, Down, Home and End move; Enter or a
+  click applies it with `set_value ui.theme`. The picker closes once the
+  core accepts, and `theme_changed` then repaints the window. A refusal
+  shows in red in the footer. Esc or a click outside closes the picker.
+  The tints come with `list_themes` (protocol 11), so opening it is one
+  request; with an older core every swatch shows plain Mica. An open
+  picker draws its swatches again when Windows' accent or mode changes.
 - **A theme that cannot be used.** The core checks every theme before it
   sends one. If a colour still cannot be read, the mapper names its key in
   the log and nothing of that theme is applied; the last theme stays.
 - **Logs.** Target `cabinetos_ui::theme`: "theme applied" with the ID, the
-  accent, and the Mica tint and opacity; "theme chosen"; "a theme token
-  could not be set" (once per token) if a brush refuses a colour.
+  kind, the mode it was drawn in (`light` or `dark`), the accent, and the
+  Mica tint and opacity; "theme chosen"; "a theme token could not be set"
+  (once per token) if a brush refuses a colour.
 
 Checked on 2026-09-28 (release builds, locked screen): Nord named in
 `cabinetos.json` was applied at start ("theme applied nord accent
@@ -826,6 +885,18 @@ themes with their swatches and applied Rosé Pine Moon live: panes, the
 accent, the terminal and the caption buttons changed at once. In pwsh under
 Catppuccin Mocha, SGR 31, 32, 36, 94 and 95 drew the theme's red, green,
 cyan, bright blue and bright magenta.
+
+Checked on 2026-09-28 for protocol 11 (release builds, a fresh themes
+folder through `CABINETOS_THEMES_DIR`, so the core wrote `default` 1.1.0
+with `kind: system`). Windows was in dark mode, and the window drew dark
+("theme applied default kind system mode dark"). The snapshot step
+`mode:light` then made the window take Windows as light, through the same
+method a change in Windows calls: panes, text, the accent, the terminal
+(One Half Light) and the open theme picker turned light, and the log said
+"mode light". `mode:windows` asked Windows again, and the window turned
+dark. Windows' own setting was not changed for the check, so a real
+change there (`ColorValuesChanged`) was not tried; it calls the same
+method.
 
 What a theme does not change:
 
@@ -837,10 +908,12 @@ What a theme does not change:
   from the plugin's ID.
 - Tool Extension pages get light or dark only. The tool messages have no
   theme colours yet ([tool-extensions.md](tool-extensions.md)).
-- No light theme ships. A light one from a scratch index turned the
-  window, WinUI's own controls, the marketplace and the picker light at
-  once (2026-09-28). Menus and tooltips were not opened under it. Dialogs
-  take the window's light or dark when they open.
+- No light theme ships; `default` is light only in Windows' light mode. A
+  light one from a scratch index turned the window, WinUI's own controls,
+  the marketplace and the picker light at once (2026-09-28). Menus and
+  tooltips were not opened in light mode. Dialogs take the window's light
+  or dark when they open, so one that is open while the mode changes keeps
+  the old one.
 
 ## The marketplace
 
@@ -863,8 +936,10 @@ the core's events.
   network only for these requests (trust rule 6).
 - **The nav** (180 px): Discover (everything), Plugins (Core Plugins and
   Tool Extensions, since both add function; the chip on each card tells
-  them apart), Themes, and Installed (items of the index that are
-  installed, whoever installed them), each with its count.
+  them apart), Themes, and Installed, each with its count. Installed lists
+  what the marketplace installed: the items that carry `installedVersion`
+  (protocol 11), the core's record of its installs. A shipped theme or a
+  plugin copied in by hand is not listed there.
 - **Search.** The field ("Search plugins and themes") sends
   `marketplace_search` once typing pauses for 150 ms. Only the newest
   text's hits show, best first, narrowed by the tab. The caption says
@@ -875,20 +950,39 @@ the core's events.
   when the index says so, the author, two lines of description, the star
   rating and its count (or "No ratings"), the installs when the index
   knows them, and the kind chip ("WASM plugin", "Theme", "Tool"). The top
-  right corner says "Installing 45%", "Installed" or "Applied". The tile
-  shows the first letters of the name on a colour: a theme's own accent,
-  else a colour taken from the ID. When the index lists several versions
-  of one ID, the card shows the newest.
+  right corner says "Installing 45%", "Update available", "Installed" or
+  "Applied". "Installed" also marks an extension that is in its folder but
+  did not come from the marketplace (`list_plugins`, `list_themes`,
+  `list_tools`), because the core would refuse to install it (trust rule
+  7). The tile shows the first letters of the name on a colour: a theme's
+  own accent, else a colour taken from the ID. The core offers one item per
+  extension, the newest version it can run (protocol 11), so the view shows
+  the items as they come.
 - **The detail column** (340 px, slides in over 180 ms) of the selected
   card: the 52 px tile, the name, "author · v{version}", the primary
-  button, Source, Uninstall when installed, three tiles (rating, installs,
-  download size), the long description, and for a plugin "Requested
-  capabilities" with level dots and reasons (the core adds the levels). ×
-  or Esc closes it.
+  button, Source, Uninstall for what the marketplace installed, a line
+  about the installed version or about who put the extension there, three
+  tiles (rating, installs, download size), the long description, and for
+  a plugin "Requested capabilities" with level dots and reasons (the core
+  adds the levels). × or Esc closes it.
 - **The primary button** says "Install", or "Install and apply" for a
   theme. While installing it says "Installing…", and a 2 px bar under the
   words follows `install_progress`. Installed, it says "Installed", or
   "Applied" for the theme in effect, and is disabled.
+- **Updates.** When the offered version is newer than `installedVersion`
+  (compared as numbers, so 0.10.0 is newer than 0.2.0), the card says
+  "Update available", the button says "Update", and the line under the
+  buttons says "Version 1.0.0 is installed. The update replaces its
+  files." A plugin's update is reviewed first, as a first install is,
+  because the core clears the plugin's grants (trust rule 1). A theme's
+  update is not applied, since an update is not a choice of theme; the
+  core applies it again when it is the theme in effect. The status bar
+  then says "Paper is updated to version 1.1.0.". An installed version
+  newer than the offer is kept: the button says "Installed", and the line
+  names both versions. The view learns the installed versions at each
+  refresh and from its own installs and uninstalls; the versions in a
+  search reply are not taken, because a reply made before an install ended
+  would undo it.
 - **Installing a plugin.** The review dialog of "Plugins" opens first,
   with what the index says the plugin asks for. Nothing is downloaded
   before "Allow and install" (trust rule 1). Allow closes the dialog and
@@ -907,11 +1001,14 @@ the core's events.
   core's words: a download whose SHA-256 is not the index's, a CabinetOS
   that is too old, or something already there that the marketplace did not
   install.
-- **Uninstall** asks first ("Uninstall Hello?", with Cancel as the default
-  button), then sends `uninstall_extension`. The theme in effect cannot be
-  removed; its button is disabled and its tooltip says why. An extension
-  the marketplace did not install (a shipped theme, a plugin copied by
-  hand) is refused by the core, and the view says so.
+- **Uninstall** is offered only for what the marketplace installed. It
+  asks first ("Uninstall Hello?", with Cancel as the default button), then
+  sends `uninstall_extension`. The theme in effect cannot be removed; its
+  button is disabled and its tooltip says why. An extension the
+  marketplace did not install (a shipped theme, a plugin copied by hand)
+  has no Uninstall; the line under the buttons says why the marketplace
+  leaves it alone. A tool removed elsewhere (the command line) leaves the
+  Installed tab at the next `tools_changed`.
 - **Source** opens the author's web page in the default browser with
   `Launcher.LaunchUriAsync`. It is the one call the view makes outside the
   core (a launch, not file I/O). Only an `http` or `https` address is
@@ -924,7 +1021,9 @@ the core's events.
     index with `sdk/marketplace/build-index.ps1`;
   - "Cannot read the marketplace index.", with the core's reason;
   - "This core has no marketplace yet.", for a core before protocol 10;
-  - "Nothing from this index is installed." and "No results for …".
+  - "Nothing was installed from the marketplace yet.", which adds that
+    shipped themes and extensions copied in by hand are not listed there,
+    and "No results for …".
 - **Keys.** The keyboard starts in the search field; Tab reaches the tabs
   and the cards, and Enter or Space selects one. Esc closes the detail
   column, then the view. A command that works on the panes (a sidebar
@@ -934,7 +1033,7 @@ the core's events.
 - **Logs.** Target `cabinetos_ui::market`: "marketplace shown",
   "marketplace index read" with the source and the number of items,
   "marketplace index not read" with the reason, "plugin installed and
-  granted", "source page opened".
+  granted" with its version, "source page opened".
 
 Checked on 2026-09-28 (release builds, locked screen) with the local index
 of `build-index.ps1` and one light theme added to it for the check. The
@@ -949,17 +1048,26 @@ against the real core without a window: it builds the local index, reads
 and searches it, installs Hello with its review's grant, waits until the
 plugin is active, and uninstalls it.
 
+Checked on 2026-09-28 for protocol 11 (release builds, scratch folders):
+Paper 1.0.0 (a light theme added to the local index for the check) and
+Hello were installed; the Installed tab listed exactly those two, and not
+the four shipped themes. With the index then offering Paper 1.1.0 and the
+Default theme in effect, Paper's card said "Update available", its button
+"Update", and the line under it "Version 1.0.0 is installed. The update
+replaces its files."; Uninstall was offered. Update installed 1.1.0
+without applying it, the card and the button went back to "Installed",
+and the status bar said "Paper is updated to version 1.1.0.". The
+snapshot step `click:Installed` showed the tab.
+
 ## Not in this version
 
 | What | Why |
 |---|---|
-| Publisher identities, "Trust {author}", rating an extension, update checks | Not in Phase 9 ([marketplace.md](marketplace.md), "Not yet") |
-| Telling what the marketplace installed | The view counts as installed what `list_plugins`, `list_themes` and `list_tools` list; no request says which of them the marketplace installed, so Uninstall of a shipped theme is offered and the core refuses it |
-| A newer version of an installed extension | The card says "Installed" whatever its version |
+| Publisher identities, "Trust {author}", rating an extension, update checks in the background | Not in Phase 9 ([marketplace.md](marketplace.md), "Not yet"); an update shows when the index is read (Refresh) |
 | A virtualized card grid | Every card of the tab is made; fine for an index of hundreds |
 | Tools in the Tool Dock, and tools opened without a file | The dock holds the terminal; tools open as editor tabs ([tool-extensions.md](tool-extensions.md), "Not yet") |
 | Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
-| Saving the dock's dragged size | No setting for it yet |
+| Light-mode tokens from the design | The design has none yet; a `system` theme in light mode uses Windows 11's own light colours ("Themes") |
 | Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |
 | Sorting by a column | The column headers are static; the order is `panes.sort` from `cabinetos.json` |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
@@ -967,14 +1075,22 @@ plugin is active, and uninstalls it.
 
 ## Known gaps
 
-What is built but not finished, as of the self-review of 2026-09-28:
+What is built but not finished, as of the self-review of 2026-09-28 and
+the protocol 11 work that night:
 
 - **Not checked with real keys yet.** All checks ran on a locked screen
   with the snapshot aid, which runs commands and types text but presses no
   keys. Still to do on an unlocked screen: scrolling 100,000 entries with
   PageDown held, keys inside the terminal and the Markdown Preview,
   Ctrl+Shift+X, Ctrl+K Ctrl+T and Tab through the marketplace, the
-  uninstall confirmation, and menus and tooltips under a light theme.
+  uninstall confirmation, a real drag of the dock's splitter, menus and
+  tooltips in light mode, and the window following a real change of
+  Windows' light or dark mode.
+- **An install made elsewhere with an older version.** The view takes an
+  install it hears of from `install_finished` as the version the index
+  offers, because the event names no version. After
+  `cabinetos-cli market install hello --version 0.1.0`, the card says
+  "Installed" instead of "Update available" until the next Refresh.
 - **The icon cache has no limit.** Every icon the core sent stays until
   the window closes. They are 16 to 32 px bitmaps, so a session that shows
   thousands of program icons holds a few MB.
