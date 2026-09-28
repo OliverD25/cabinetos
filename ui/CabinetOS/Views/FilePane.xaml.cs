@@ -42,6 +42,7 @@ public sealed partial class FilePane : UserControl
     private long _firstRowTicks;
     private bool _renderingHooked;
     private TaskCompletionSource<string?>? _rename;
+    private bool _clearButtonHidden;
     private int _renameIndex = -1;
     private string _renameOriginal = "";
     private int _noteIndex = -1;
@@ -126,6 +127,7 @@ public sealed partial class FilePane : UserControl
         UpdateLayout();
         RenameBox.Text = name;
         RenameBox.Visibility = Visibility.Visible;
+        HideClearButton();
         PositionEditors();
         RenameBox.Focus(FocusState.Programmatic);
         var dot = selectStem ? name.LastIndexOf('.') : -1;
@@ -135,6 +137,41 @@ public sealed partial class FilePane : UserControl
 
     /// <summary>Stops an edit without renaming (Esc).</summary>
     public void CancelRename() => EndRename(commit: false);
+
+    // WinUI's text box shows a clear button (×) while it has the focus. A name edited in
+    // place has none in the design, and a click on it would move the focus and end the edit.
+    private void HideClearButton()
+    {
+        if (_clearButtonHidden)
+        {
+            return;
+        }
+        RenameBox.ApplyTemplate();
+        if (FindPart(RenameBox, "DeleteButton") is Button clear)
+        {
+            clear.MaxWidth = 0;
+            clear.IsTabStop = false;
+            clear.IsHitTestVisible = false;
+            _clearButtonHidden = true;
+        }
+
+        static DependencyObject? FindPart(DependencyObject parent, string name)
+        {
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is FrameworkElement { Name: var childName } && childName == name)
+                {
+                    return child;
+                }
+                if (FindPart(child, name) is { } found)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+    }
 
     /// <summary>Types <paramref name="text"/> into the edit and presses Enter (development snapshots).</summary>
     public void CommitRename(string text)

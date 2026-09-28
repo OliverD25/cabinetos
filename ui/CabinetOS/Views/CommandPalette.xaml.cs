@@ -59,6 +59,9 @@ public sealed partial class CommandPalette : UserControl
     /// <summary>Runs a command through the window's router: (command, args, trigger).</summary>
     public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
 
+    /// <summary>Gives the keyboard back (to the pane, or the shell it came from) when the palette closes.</summary>
+    public Action? ReturnFocus { get; set; }
+
     /// <summary>The palette's state.</summary>
     public PaletteModel? Model
     {
@@ -102,6 +105,9 @@ public sealed partial class CommandPalette : UserControl
     private void OnClosed()
     {
         _searchTimer.Stop();
+        // The keyboard goes back before the panel collapses: a collapsing focused input
+        // hands it to whatever comes next, maybe the other pane, which then becomes active.
+        ReturnFocus?.Invoke();
         Visibility = Visibility.Collapsed;
     }
 

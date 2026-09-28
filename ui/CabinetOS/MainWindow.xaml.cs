@@ -146,7 +146,7 @@ public sealed partial class MainWindow : Window
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
-        _palette.Closed += ReturnFocusAfterPalette;
+        Palette.ReturnFocus = ReturnFocusAfterPalette;
         _palette.KeymapUpdated += keymap => ApplyKeymap(Keymap.From(keymap));
 
         TransferView.Center = _transfers;
@@ -1034,6 +1034,13 @@ public sealed partial class MainWindow : Window
         {
             CloseMarketLevel();
         }
+        else if (_transfers.IsFlyoutOpen && IsFocusWithin(TransferView))
+        {
+            // Esc in the flyout does what its minimize button does: it folds into the
+            // pill, and an ended transfer closes. The pane takes the keyboard first.
+            FocusActivePane();
+            _transfers.Minimize();
+        }
         else if (FileMenu.IsOpen)
         {
             FileMenu.Close();
@@ -1051,6 +1058,19 @@ public sealed partial class MainWindow : Window
         {
             EndSearch(focusPane: true);
         }
+    }
+
+    private bool IsFocusWithin(UIElement container)
+    {
+        var focused = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
+        for (var element = focused; element is not null; element = VisualTreeHelper.GetParent(element))
+        {
+            if (element == container)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ----- File commands -----
@@ -1799,17 +1819,16 @@ public sealed partial class MainWindow : Window
             {
                 _palette.CancelRecording();
             }
-            else if (!KeyNames.IsModifier(virtualKey) && KeyNames.FromVirtualKey(virtualKey) is { } recorded)
+            else if (KeyNames.ComboFor(virtualKey, modifiers) is { } recorded)
             {
-                _palette.Record(new KeyCombo(modifiers, recorded));
+                _palette.Record(recorded);
             }
             return;
         }
-        if (KeyNames.IsModifier(virtualKey) || KeyNames.FromVirtualKey(virtualKey) is not { } name)
+        if (KeyNames.ComboFor(virtualKey, modifiers) is not { } combo)
         {
             return;
         }
-        var combo = new KeyCombo(modifiers, name);
         switch (_keys.OnKey(combo, CurrentContexts()))
         {
             case KeyOutcome.Run run:
