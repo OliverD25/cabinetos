@@ -10,6 +10,8 @@ JSON-based theme engine).
 The format is the crate `core/crates/cabinetos-protocol` (`Theme`); the
 folder and the checks are `core/crates/cabinetos-themes`. The schema, for
 editors: [sdk/themes/theme.schema.json](../sdk/themes/theme.schema.json).
+How the window applies a theme, and its theme picker:
+[ui.md](ui.md), "Themes".
 
 ## At a glance
 
@@ -170,8 +172,6 @@ whole theme as JSON: the one named, or the one in effect.
 
 ## Not yet
 
-- Applying a theme in the window is UI work (Phase 5); today the CLI
-  shows the themes and the events.
 - There are no light themes yet; `kind` is there for them.
 - A new version of a shipped theme does not replace a copy already in the
   folder; delete the file to get the new one at the next start.
