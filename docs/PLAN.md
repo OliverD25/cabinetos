@@ -145,13 +145,15 @@ Measured 2026-09-28 on this PC (E:, NVMe, release build): 10,000 files of 1–64
 
 Articles: 1, 5.
 
-### Phase 5 — WinUI 3 shell v1
+### Phase 5 — WinUI 3 shell v1 — built 2026-09-28, scrolling check pending
 
 Goal: the first window a user can live in. Design views A and B.
 
 Produces: the C# solution; process launcher and pipe client; shared-memory reader in `unsafe` C#; `CommandRouter` with the chord state machine; dual-pane grid with `ItemsRepeater` virtualization and instant single-pane toggle; breadcrumb address bar; status bar; Command Palette with fuzzy search and inline rebinding (design view B); Mica backdrop; design tokens from the handout; the first-run experience.
 
 Done when: the core and the UI run together, a listing of 100,000 files scrolls without frame drops, and every visible action goes through `CommandRouter` and a command ID.
+
+Built 2026-09-28; the scrolling check waits for an unlocked screen. Built: `ui/CabinetOS.sln` on .NET 10 and the Windows App SDK 2.5.1, unpackaged, using the Windows App Runtime installed on the machine. `CabinetOS.Core` holds everything that runs without a window: the pipe client, the protocol types (tested against `sdk/protocol` and `sdk/config`), the core launcher, `ListingView` (the only `unsafe` C#; it reads listings straight from the core's shared memory), keys and the chord state machine, the `CommandRouter`, and diagnostics in the core's log format with crash traces at the `frontend` boundary. `CabinetOS.exe` draws design view A (Mica title bar; back, forward and up; breadcrumbs that turn into an address box; pinned folders in the sidebar; two panes of virtualized rows with an instant single-pane toggle; a status bar that shows a waiting chord) and design view B (the palette: the core ranks the commands, each row shows its keys and chords, the Immutable System Tier shows a lock, and the pencil or F2 records new keys, which the core writes to `cabinetos.json`). Dual pane on first start (conflict B). Every button, key, crumb, sidebar row and palette row goes through `CommandRouter` with a ULID, and a folder opened by a command is listed under the same ID in the core's log. 158 tests, one of them against the real core. Measured 2026-09-28 on this PC (release builds; the screen was locked, so Windows drew about 33 frames per second): both panes shown 0.82–0.87 s after start; a folder of 100,000 entries drawn 82 ms after the command, 38 ms of it in the core; closing ends the core in 0.4 s. Not measured yet: scrolling that folder with PageDown held, which needs an unlocked screen. Waiting for the core: `list_volumes` (the Drives section stays hidden), a request that writes settings (the last folders, the pane mode and the pinned folders stay in memory), and shell type names and icons; all three are in the core additions being built. Open for the creator: the Windows App SDK ships under the Microsoft Software License Terms, which include a data-collection clause for the runtime; WinUI 3 (ADR 0001) cannot be used without it, so a recorded exception is needed. Guide: [ui.md](ui.md).
 
 Articles: 3, 4, 5, 7.
 
