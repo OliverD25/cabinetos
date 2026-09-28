@@ -401,12 +401,9 @@ public sealed partial class MainWindow : Window
                 break;
             case KeymapChangedEvent keymap:
                 _keys.SetKeymap(Keymap.From(keymap.Keymap));
-                _ = RefreshCommandsSafelyAsync();
-                break;
-            case PluginStateChangedEvent or PluginCrashedEvent:
-                _ = RefreshCommandsSafelyAsync();
                 break;
         }
+        _ = RefreshCommandsAsync(coreEvent);
     }
 
     private async Task ReadConfigSafelyAsync()
@@ -421,16 +418,11 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task RefreshCommandsSafelyAsync()
+    private async Task RefreshCommandsAsync(CoreEvent coreEvent)
     {
-        try
+        if (await _router.OnCoreEventAsync(coreEvent))
         {
-            await _router.RefreshAsync();
             await _palette.RefreshAsync();
-        }
-        catch (IOException error)
-        {
-            Diag.Info(Target, "cannot read the command list", new LogField("error", error.Message));
         }
     }
 

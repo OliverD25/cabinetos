@@ -103,6 +103,29 @@ public sealed class CommandRouter(ICoreChannel core)
         SetCommands(commands.Commands);
     }
 
+    /// <summary>
+    /// Reads the command list again after an event that may change it: a new
+    /// keymap (the keys shown), a configuration change, or a plugin that
+    /// started, stopped or crashed (its commands). Returns whether it did.
+    /// </summary>
+    public async Task<bool> OnCoreEventAsync(CoreEvent coreEvent)
+    {
+        if (coreEvent is not (KeymapChangedEvent or ConfigChangedEvent or PluginStateChangedEvent or PluginCrashedEvent))
+        {
+            return false;
+        }
+        try
+        {
+            await RefreshAsync();
+            return true;
+        }
+        catch (IOException error)
+        {
+            Diag.Info(Target, "cannot read the command list", new LogField("error", error.Message));
+            return false;
+        }
+    }
+
     /// <summary>Uses <paramref name="commands"/> as the command list.</summary>
     public void SetCommands(IReadOnlyList<CommandInfo> commands)
     {

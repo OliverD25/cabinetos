@@ -163,6 +163,23 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public async Task The_list_is_read_again_when_keys_config_or_plugins_change()
+    {
+        var core = new FakeChannel(_ => new CommandsReply(Registry));
+        var router = new CommandRouter(core);
+        var keymap = new KeymapData(1000, [], []);
+
+        Assert.True(await router.OnCoreEventAsync(new KeymapChangedEvent(keymap)));
+        Assert.True(await router.OnCoreEventAsync(new ConfigChangedEvent(["ui.layout"])));
+        Assert.True(await router.OnCoreEventAsync(new PluginCrashedEvent("crashy", "trap")));
+        Assert.False(await router.OnCoreEventAsync(new ListingLostEvent(1, "gone")));
+        Assert.False(await router.OnCoreEventAsync(new TerminalExitedEvent(1, 0)));
+
+        Assert.Equal(3, core.Requests.Count(r => r is ListCommandsRequest));
+        Assert.Equal(Registry.Count, router.Commands.Count);
+    }
+
+    [Fact]
     public async Task A_lost_core_is_a_failed_run()
     {
         var router = new CommandRouter(new FakeChannel(_ => throw new Core.Ipc.CoreDisconnectedException("gone")));
