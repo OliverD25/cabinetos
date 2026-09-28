@@ -23,6 +23,9 @@ const JOURNAL_BUFFER: usize = 64 * 1024;
 /// Journal read failures in a row before the volume is given up.
 const MAX_READ_FAILURES: u32 = 10;
 
+/// How long `stop` keeps cancelling a thread's reads before it just waits.
+const STOP_WAIT: Duration = Duration::from_secs(10);
+
 /// A read that returns nothing sooner than this did not wait; the thread
 /// then pauses, so it cannot spin.
 const QUICK_EMPTY_READ: Duration = Duration::from_millis(50);
@@ -214,6 +217,15 @@ impl Indexes {
         let threads =
             std::mem::take(&mut *self.threads.lock().unwrap_or_else(PoisonError::into_inner));
         for thread in threads {
+            // A journal read waits for the next change, however long that
+            // takes (its timeout does not end the wait: a stop took 31 s on
+            // CI before this). Cancelling the read ends it at once; it is
+            // repeated in case the thread had not reached the read yet.
+            let deadline = Instant::now() + STOP_WAIT;
+            while !thread.is_finished() && Instant::now() < deadline {
+                win::cancel_blocking_io(&thread);
+                std::thread::sleep(Duration::from_millis(20));
+            }
             let _ = thread.join();
         }
     }
@@ -375,11 +387,12 @@ fn build(
         if stop.load(Ordering::SeqCst) {
             return Ok(None);
         }
-        let Some(bytes) = volume
-            .enumerate(start, &mut buffer)
-            .map_err(|error| format!("cannot read the MFT of {letter}: ({error})"))?
-        else {
-            break;
+        let bytes = match volume.enumerate(start, &mut buffer) {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => break,
+            // A stop cancels the read in progress.
+            Err(_) if stop.load(Ordering::SeqCst) => return Ok(None),
+            Err(error) => return Err(format!("cannot read the MFT of {letter}: ({error})")),
         };
         let Some(next) = record::header(bytes) else {
             break;
@@ -461,6 +474,8 @@ fn follow(shared: &Shared, volume: &Volume, journal: &Journal, stop: &AtomicBool
             Err(ReadError::NotActive) => {
                 return Follow::Failed("the change journal was deleted".to_owned());
             }
+            // A stop cancels the read in progress.
+            Err(_) if stop.load(Ordering::SeqCst) => return Follow::Stopped,
             Err(ReadError::Other(error)) => {
                 match volume.journal() {
                     Ok(now) if now.id != journal.id || next < now.first_usn => {

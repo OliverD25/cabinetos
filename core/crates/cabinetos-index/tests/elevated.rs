@@ -196,5 +196,9 @@ fn a_volume_builds_and_follows_changes_within_a_second() {
 
     let lag = indexes.status().remove(0).journal_lag;
     println!("journal lag at the end: {lag:?} bytes");
+    let stopping = Instant::now();
     indexes.stop();
+    let stopped = stopping.elapsed();
+    println!("stopping took {stopped:?}");
+    assert!(stopped < Duration::from_secs(5), "{stopped:?}");
 }

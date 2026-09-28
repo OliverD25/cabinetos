@@ -284,8 +284,9 @@ impl Volume {
         }
     }
 
-    /// The journal's records from `start`, waiting up to about a second for
-    /// the first one. The buffer begins with the USN to read from next.
+    /// The journal's records from `start`, waiting until there is at least
+    /// one. The buffer begins with the USN to read from next. The wait can
+    /// be long on a quiet volume; [`cancel_blocking_io`] ends it.
     pub(crate) fn read_journal<'a>(
         &self,
         journal: &Journal,
@@ -296,8 +297,9 @@ impl Volume {
             StartUsn: start,
             ReasonMask: u32::MAX,
             ReturnOnlyOnClose: 0,
-            // Return as soon as one record arrives, or when the timeout
-            // ends, so the thread can notice it should stop.
+            // Return as soon as one record arrives. Windows did not end the
+            // wait after this timeout on CI (a stop waited 31 s for the next
+            // change), so stopping cancels the read instead.
             Timeout: 1,
             BytesToWaitFor: 1,
             UsnJournalID: journal.id,
@@ -318,6 +320,17 @@ impl Volume {
             Err(error) => Err(ReadError::Other(error)),
         }
     }
+}
+
+/// Ends a blocking I/O call the thread is waiting in, such as a journal read
+/// that waits for the next change. Does nothing when there is none.
+pub(crate) fn cancel_blocking_io(thread: &std::thread::JoinHandle<()>) {
+    // SAFETY: the handle belongs to a thread that has not been joined, so it
+    // is open; CancelSynchronousIo only marks that thread's pending
+    // synchronous I/O as cancelled. "Nothing to cancel" is an expected
+    // result and is ignored.
+    let _ =
+        unsafe { windows::Win32::System::IO::CancelSynchronousIo(HANDLE(thread.as_raw_handle())) };
 }
 
 /// Whether `error` means the caller lacks the rights.
