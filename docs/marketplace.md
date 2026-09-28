@@ -138,7 +138,9 @@ Plain `http:`, for the index or a download, needs
 `marketplace.allowInsecure`. A redirect from `https:` to `http:` is refused
 too. Certificates are checked against the Windows certificate store. A web
 index is kept in the cache with its `ETag`, so the next refresh of an
-unchanged index is one `304 Not Modified`.
+unchanged index is one `304 Not Modified`. The cache files are replaced
+through a temporary file and a rename, and a cached copy that cannot be
+read anyway (a disk error) is fetched again whole, without the tag.
 
 ## Trust rules
 

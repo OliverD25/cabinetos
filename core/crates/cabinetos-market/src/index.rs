@@ -252,8 +252,13 @@ fn text_of(bytes: &[u8], what: &str) -> Result<String, MarketError> {
         .map_err(|_| MarketError::market(format!("the index {what} is not UTF-8 text")))
 }
 
+/// The file that keeps the cached index's `ETag`.
+const META_FILE: &str = "index.meta.json";
+
 /// Fetches an index from the web. The cache in `cache_dir` holds the last
 /// copy and its `ETag`; an unchanged index costs one `304 Not Modified`.
+/// A cached copy that cannot be read (half written, damaged) is fetched
+/// again whole: a 304 alone would send every later refresh back to it.
 fn fetch_remote(
     url: &Url,
     cache_dir: &Path,
@@ -261,54 +266,32 @@ fn fetch_remote(
     allow_insecure: bool,
 ) -> Result<Index, MarketError> {
     let cached = cache_dir.join(INDEX_FILE);
-    let meta_path = cache_dir.join("index.meta.json");
-    let meta = std::fs::read(&meta_path)
+    let meta = std::fs::read(cache_dir.join(META_FILE))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<CacheMeta>(&bytes).ok())
         .filter(|meta| meta.source == url.as_str() && cached.is_file());
-    let mut request = http.agent(allow_insecure).get(url.as_str());
-    if let Some(etag) = meta.as_ref().and_then(|meta| meta.etag.as_deref()) {
-        request = request.header("If-None-Match", etag);
-    }
-    let response = request
-        .call()
-        .map_err(|error| MarketError::market(format!("cannot fetch the index {url}: {error}")))?;
-    let status = response.status().as_u16();
-    let (text, etag) = match status {
-        304 if meta.is_some() => {
-            let bytes = read_limited(&cached)?;
-            (
-                text_of(&bytes, url.as_str())?,
-                meta.and_then(|meta| meta.etag),
-            )
-        }
-        200 => {
-            let etag = response
-                .headers()
-                .get("etag")
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_owned);
-            let bytes = response
-                .into_body()
-                .into_with_config()
-                .limit(MAX_INDEX_BYTES)
-                .read_to_vec()
-                .map_err(|error| {
-                    MarketError::market(format!("cannot read the index {url}: {error}"))
-                })?;
-            (text_of(&bytes, url.as_str())?, etag)
-        }
-        status => {
-            return Err(MarketError::market(format!(
-                "the server answered {status} for the index {url}"
-            )));
-        }
+    let tag = meta.as_ref().and_then(|meta| meta.etag.clone());
+    let (items, fresh, etag) = match download(url, tag.as_deref(), http, allow_insecure)? {
+        Downloaded::Whole { text, etag } => (parse_index(&text)?, Some(text), etag),
+        Downloaded::NotModified => match read_cached(&cached, url) {
+            Ok(items) => (items, None, tag),
+            Err(error) => {
+                tracing::warn!(%url, error = %error.message, "the cached copy of the index cannot be read; fetching the whole index again");
+                match download(url, None, http, allow_insecure)? {
+                    Downloaded::Whole { text, etag } => (parse_index(&text)?, Some(text), etag),
+                    Downloaded::NotModified => {
+                        return Err(MarketError::market(format!(
+                            "the server answered 304 for the index {url} without being asked"
+                        )));
+                    }
+                }
+            }
+        },
     };
-    let items = parse_index(&text)?;
     let fetched_at_ms = now_ms();
     keep_in_cache(
         cache_dir,
-        &text,
+        fresh.as_deref(),
         &CacheMeta {
             source: url.to_string(),
             etag,
@@ -323,17 +306,91 @@ fn fetch_remote(
     })
 }
 
+/// What one request for the index brought.
+enum Downloaded {
+    /// The server confirmed the tag sent: the cached copy is current.
+    NotModified,
+    /// The index itself, with its tag.
+    Whole { text: String, etag: Option<String> },
+}
+
+/// Asks for the index, with `If-None-Match: tag` when there is a tag. A 304
+/// counts only as the answer to a tag.
+fn download(
+    url: &Url,
+    tag: Option<&str>,
+    http: &Http,
+    allow_insecure: bool,
+) -> Result<Downloaded, MarketError> {
+    let mut request = http.agent(allow_insecure).get(url.as_str());
+    if let Some(tag) = tag {
+        request = request.header("If-None-Match", tag);
+    }
+    let response = request
+        .call()
+        .map_err(|error| MarketError::market(format!("cannot fetch the index {url}: {error}")))?;
+    match response.status().as_u16() {
+        304 if tag.is_some() => Ok(Downloaded::NotModified),
+        200 => {
+            let etag = response
+                .headers()
+                .get("etag")
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned);
+            let bytes = response
+                .into_body()
+                .into_with_config()
+                .limit(MAX_INDEX_BYTES)
+                .read_to_vec()
+                .map_err(|error| {
+                    MarketError::market(format!("cannot read the index {url}: {error}"))
+                })?;
+            Ok(Downloaded::Whole {
+                text: text_of(&bytes, url.as_str())?,
+                etag,
+            })
+        }
+        status => Err(MarketError::market(format!(
+            "the server answered {status} for the index {url}"
+        ))),
+    }
+}
+
+/// The items of the cached copy of the index at `url`.
+fn read_cached(cached: &Path, url: &Url) -> Result<Vec<MarketItem>, MarketError> {
+    let bytes = read_limited(cached)?;
+    parse_index(&text_of(&bytes, url.as_str())?)
+}
+
 /// Best effort: without a cache the next fetch downloads the whole index.
-fn keep_in_cache(cache_dir: &Path, text: &str, meta: &CacheMeta) {
+/// Each file is replaced through a temporary file and a rename, so an
+/// interrupted write leaves the old file whole. `text` is `None` when the
+/// server confirmed the cached copy: only its time changes.
+fn keep_in_cache(cache_dir: &Path, text: Option<&str>, meta: &CacheMeta) {
     let written = std::fs::create_dir_all(cache_dir)
-        .and_then(|()| std::fs::write(cache_dir.join(INDEX_FILE), text))
+        .and_then(|()| match text {
+            Some(text) => replace_file(&cache_dir.join(INDEX_FILE), text.as_bytes()),
+            None => Ok(()),
+        })
         .and_then(|()| {
             let meta = serde_json::to_vec_pretty(meta).map_err(std::io::Error::other)?;
-            std::fs::write(cache_dir.join("index.meta.json"), meta)
+            replace_file(&cache_dir.join(META_FILE), &meta)
         });
     if let Err(error) = written {
         tracing::warn!(dir = %cache_dir.display(), %error, "cannot keep the index in the cache");
     }
+}
+
+fn replace_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let name = path
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    let temporary = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
+    let result = std::fs::write(&temporary, bytes).and_then(|()| std::fs::rename(&temporary, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
 }
 
 #[derive(Deserialize)]

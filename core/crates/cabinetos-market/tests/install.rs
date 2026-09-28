@@ -566,6 +566,38 @@ fn serve(files: BTreeMap<String, Vec<u8>>, requests: usize) -> (u16, Arc<Mutex<V
     (port, seen)
 }
 
+/// A cached copy of the index that cannot be read (half of it, as an
+/// interrupted write leaves it) must not stick: the server answers the
+/// cache's tag with 304, which would send every refresh back to the broken
+/// copy until the index changes on the server.
+#[test]
+fn a_damaged_cached_index_is_fetched_again() {
+    let mut setup = Setup::new();
+    setup.offer("theme", "paper", "1.0.0", b"{}", &json!({}));
+    setup.write_index();
+    let files = BTreeMap::from([(
+        "/market/index.json".to_owned(),
+        fs::read(setup.index_dir().join("index.json")).unwrap(),
+    )]);
+    let (port, seen) = serve(files, 3);
+    let source =
+        Source::parse(&format!("http://127.0.0.1:{port}/market/index.json"), true).unwrap();
+    let market = setup.market();
+    let first = market.fetch(&source, true).unwrap();
+
+    let cached = setup.dirs().market.join("index.json");
+    let text = fs::read(&cached).unwrap();
+    fs::write(&cached, &text[..text.len() / 2]).unwrap();
+    let second = market.fetch(&source, true).unwrap();
+    assert_eq!(second.items, first.items);
+    assert_eq!(fs::read(&cached).unwrap(), text, "the cache is whole again");
+
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 3);
+    assert!(seen[1].to_ascii_lowercase().contains("if-none-match"));
+    assert!(!seen[2].to_ascii_lowercase().contains("if-none-match"));
+}
+
 /// The HTTPS client sets up rustls with its crypto provider and the Windows
 /// certificate store when it first connects. A local port that hangs up
 /// makes the handshake start and fail: an error, not a panic about a
