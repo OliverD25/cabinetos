@@ -37,18 +37,25 @@ There are two channels:
 
 ## The handshake
 
-A client that wants listings says `hello` first, once per connection:
+A client that wants listings or events says `hello` first, once per
+connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":2,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":3,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
 Windows and refuses a mismatch with `protocol_error`. The core needs the PID
 because it duplicates shared-memory handles into that process. A
 `list_directory` before `hello` fails with `protocol_error`, message
-`hello required`. `ping`, `shutdown` and `volume_info` work without it.
+`hello required`. From `hello` on, the connection also receives the
+configuration events (`config_changed`, `config_error`, `keymap_changed`).
+Every other request works without `hello`.
+
+Protocol version 3 (Phase 3) added the configuration, command and keymap
+messages, and made the `list_directory` options `include_hidden` and `sort`
+optional.
 
 ## Requests and replies
 
@@ -57,9 +64,16 @@ because it duplicates shared-memory handles into that process. A
 | `ping` | — | `pong` (`protocol_version`, `core_version`) |
 | `shutdown` | — | `ok`, then the core exits with code 0 |
 | `hello` | `client_pid`, `client_name` | `welcome` (`protocol_version`, `core_version`) |
-| `list_directory` | `path`; `include_hidden` (default `false`); `sort` (default `{"key":"name","descending":false}`); `watch` (default `false`) | `listing_opened` |
+| `list_directory` | `path`; `include_hidden` and `sort` (when left out, the `panes` settings of [config.md](config.md) decide: by default `false` and `{"key":"name","descending":false}`); `watch` (default `false`) | `listing_opened` |
 | `close_listing` | `listing_id` | `ok` |
 | `volume_info` | `path` (need not exist) | `volume_info` |
+| `get_config` | — | `config` (`path`, `config`) |
+| `get_keymap` | — | `keymap` |
+| `list_commands` | — | `commands` |
+| `search_commands` | `query`; `limit` (default 20) | `search_results` (`hits`) |
+| `execute_command` | `command`; `args` (default `null`) | `command_result` or `command_routed` |
+| `set_keybinding` | `command`, `keys` (`""` for none) | `keymap` |
+| `reset_keybinding` | `command` | `keymap` |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -74,11 +88,17 @@ Any request can instead get `error` with a `code` and a `message`:
 | `invalid_path` | The path is malformed, or names a file where a directory is needed. |
 | `no_such_listing` | No open listing on this connection has that `listing_id`. |
 | `io` | Reading from the disk or the network failed. |
+| `unknown_command` | No command has that ID. |
+| `not_implemented` | The command exists, but the core cannot run it yet; it arrives in a later phase. |
+| `invalid_keys` | The keys do not follow the key grammar ([keybindings.md](keybindings.md)). |
+| `keybinding_conflict` | The keys are taken by another command in the same context, or a combination would be both a binding and the start of a chord. |
+| `immutable_binding` | The change touches the Immutable System Tier. |
+| `config_error` | The configuration file cannot be changed now: it has an error the user must fix first, or it cannot be written. |
 
-Requests on one connection are independent: `list_directory` and
-`volume_info` run in the background, so a slow directory does not hold up
-the next request, and their replies may come in any order. Match replies to
-requests by `id`.
+Requests on one connection are independent: `list_directory`,
+`volume_info`, `set_keybinding` and `reset_keybinding` run in the
+background, so a slow directory does not hold up the next request, and their
+replies may come in any order. Match replies to requests by `id`.
 
 ## Listing a directory
 
@@ -240,8 +260,95 @@ Every disk field is best effort: when Windows does not say, the field is
 `null` (or `disk` itself is, for example for network shares). Nothing here
 needs administrator rights.
 
+## Configuration, commands and keybindings
+
+The core owns `cabinetos.json` ([config.md](config.md)), the command
+registry and the keymap ([keybindings.md](keybindings.md)). The UI asks for
+them and never reads the file itself.
+
+```json
+{"id":"01M…","type":"get_config"}
+{"id":"01M…","type":"config","path":"C:\\Users\\me\\AppData\\Roaming\\CabinetOS\\cabinetos.json",
+ "config":{"version":1,"ui":{"layout":"classic","dualPane":true,…},…}}
+```
+
+`config` is the whole configuration in effect, defaults included, in the
+file's own format.
+
+```json
+{"id":"01M…","type":"get_keymap"}
+{"id":"01M…","type":"keymap","chord_window_ms":1000,
+ "bindings":[{"keys":"ctrl+shift+p","command":"palette.show"},
+             {"keys":"f5","command":"file.copyToOtherPane","when":"filesView"},…],
+ "immutable":["palette.show","overlay.close","keys.open"]}
+```
+
+`bindings` holds every binding in effect, grouped by command in registry
+order; `when` is absent for a binding that applies everywhere. The UI runs
+the chord state machine with `chord_window_ms` (keybindings.md, "Chords").
+
+```json
+{"id":"01M…","type":"list_commands"}
+{"id":"01M…","type":"commands","commands":[{"id":"view.toggleDualPane",
+ "category":"View","title":"Toggle Dual Pane","keys":["ctrl+shift+d"],
+ "default_keys":["ctrl+shift+d"],"source":{"kind":"core"},"target":"ui",
+ "immutable":false},…]}
+{"id":"01M…","type":"search_commands","query":"dual","limit":5}
+{"id":"01M…","type":"search_results","hits":[{"id":"view.toggleDualPane","score":208}]}
+```
+
+`source` is `{"kind":"core"}` or `{"kind":"plugin","id":"…"}`. The palette
+shows `category: title` and the `keys`; the ranking is in keybindings.md,
+"Palette search". `score` only orders the hits.
+
+```json
+{"id":"01M…","type":"execute_command","command":"help.about"}
+{"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
+ "core_version":"0.1.0","protocol_version":3,"config_path":"C:\\…\\cabinetos.json"}}
+{"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
+{"id":"01M…","type":"command_routed","target":"ui"}
+```
+
+The field is `command`, not `id`, because `id` is already the request's own
+ID in the same object. The core runs its own commands (`target` `core`) and
+answers `command_result`; a UI command comes back as `command_routed`, for
+the UI to run.
+
+```json
+{"id":"01M…","type":"set_keybinding","command":"view.toggleSidebar","keys":"Ctrl+Alt+B"}
+{"id":"01M…","type":"keymap","chord_window_ms":1000,"bindings":[…],"immutable":[…]}
+```
+
+`set_keybinding` and `reset_keybinding` write the file and answer with the
+new keymap. The keys are normalized (`ctrl+alt+b`). Refusals come as `error`
+with `invalid_keys`, `unknown_command`, `keybinding_conflict`,
+`immutable_binding` or `config_error`; the file is then not changed.
+
+**Events.** Every connection that said `hello` receives these, whoever caused
+the change: a text editor, another client, or this one. The core sends them
+within a second of the file being saved.
+
+```json
+{"id":"01M…","type":"config_changed","changed":["keybindings"]}
+{"id":"01M…","type":"keymap_changed","keymap":{"chord_window_ms":1000,"bindings":[…],"immutable":[…]}}
+{"id":"01M…","type":"config_error","line":3,"column":13,
+ "message":"unknown field `dualPan`, expected one of `layout`, `dualPane`, `sidebar`, `theme`"}
+```
+
+- `config_changed` comes for every change that took effect. `changed` lists
+  the settings as dotted paths (`ui.layout`, `panes.sort.descending`); an
+  array such as `keybindings` counts as one setting. It is empty when a
+  broken file was fixed back to the settings already in effect: the event
+  then says the error is gone.
+- `keymap_changed` follows `config_changed` when the compiled keymap
+  differs, with the whole new keymap.
+- `config_error` means the file cannot be used; the settings in effect stay.
+  `line` and `column` count from 1 (columns in characters) and are `null`
+  when unknown, for example when the file was deleted.
+
 ## Trying it by hand
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
-`ls --watch` prints each `listing_refreshed`, and `volume` prints
-`volume_info`. See [core/README.md](../core/README.md).
+`ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
+and `config`, `commands` and `keys` cover the messages above (`keys watch`
+prints the events). See [core/README.md](../core/README.md).

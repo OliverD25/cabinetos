@@ -82,5 +82,7 @@ returned nothing; Visual Studio has only the C++ workload).
   the directory with the `CABINETOS_LOG_DIR` environment variable, the level
   with `CABINETOS_LOG` (default `info`), and set `CABINETOS_LOG_STDERR=1` to
   also print to stderr. Format: [diagnostics.md](diagnostics.md).
-- Config: `%APPDATA%\CabinetOS\cabinetos.json`. Override with
-  `CABINETOS_CONFIG`.
+- Config: `%APPDATA%\CabinetOS\cabinetos.json`, created with the defaults
+  when the core first starts. Override with `--config <path>` on
+  `cabinetos-core` or with `CABINETOS_CONFIG`. Format:
+  [config.md](config.md).

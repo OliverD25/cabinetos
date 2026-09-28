@@ -23,8 +23,11 @@ The Rust processes (core, indexer, CLI) get all of this from the
   files that way. Each process keeps its newest 14 daily files, today's
   included; older files of that process are deleted when it starts and at each
   daily rollover. Crash traces are never deleted.
-- **Level.** `info` by default. `CABINETOS_LOG` sets a filter, for example
-  `debug` or `info,cabinetos_ipc=trace`.
+- **Level.** `info` by default. For the core, `logging.level` in
+  `cabinetos.json` sets it, and a change applies while the core runs
+  ([config.md](config.md)). The environment variable `CABINETOS_LOG` wins
+  over both: it sets a filter, for example `debug` or
+  `info,cabinetos_ipc=trace`.
 - **Terminal.** `CABINETOS_LOG_STDERR=1` also prints every event to stderr in a
   readable multi-line form. The CLI prints only warnings and errors to stderr
   unless `CABINETOS_LOG` asks for more.

@@ -128,12 +128,12 @@ brief. Responsibilities, Constitution articles and build commands per crate:
 | §2 Rust Core Engine | `cabinetos-index`: in-memory volume index, MFT reader, USN Journal tailer | stub until Phase 6 |
 | §2 Rust Core Engine | `cabinetos-indexer`: the elevated indexer process ([ADR 0002](decisions/0002-separate-elevated-indexer.md)) | stub until Phase 6 |
 | §3 Copy/Move Queues | `cabinetos-jobs`: `JobQueueManager`, copy/move/delete backends, progress throttling, conflict states | stub until Phase 4 |
-| §4 UI-Core Bridge (IPC) | `cabinetos-protocol`: message envelopes, request IDs, events, shared-memory layouts, JSON Schema export to `sdk/protocol/` ([ipc.md](ipc.md)) | Phase 1; listings and events in Phase 2 |
+| §4 UI-Core Bridge (IPC) | `cabinetos-protocol`: message envelopes, request IDs, events, shared-memory layouts, JSON Schema export to `sdk/protocol/` ([ipc.md](ipc.md)) | Phase 1; listings and events in Phase 2; configuration, command and keymap messages in Phase 3 |
 | §4 UI-Core Bridge (IPC) | `cabinetos-ipc`: named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch | Phase 1; events in Phase 2 |
 | §5 WinUI 3 Frontend | no crate: the C# solution in `ui/` | Phase 5 |
 | §6 Extension Architecture | `cabinetos-plugins`: Layer 1, the `wasmtime` host for Core Plugins | stub until Phase 7 |
-| §7 Config, Keyboard & Command Palette | `cabinetos-config`: `cabinetos.json` load, schema, defaults, watch, diff | stub until Phase 3 |
-| §7 Config, Keyboard & Command Palette | `cabinetos-commands`: command registry, keybindings, immutable tier | stub until Phase 3 |
+| §7 Config, Keyboard & Command Palette | `cabinetos-config`: `cabinetos.json` parsing with line and column errors, defaults, JSON Schema export to `sdk/config/`, directory watch, diff, atomic rewrite ([config.md](config.md)) | Phase 3 |
+| §7 Config, Keyboard & Command Palette | `cabinetos-commands`: command registry, key grammar and chords, keymap compilation with the Immutable System Tier, palette search ([keybindings.md](keybindings.md)) | Phase 3 |
 | §8 Logging & Crash Diagnostics | `cabinetos-diag`: JSON Lines logs, ring buffer, crash traces ([diagnostics.md](diagnostics.md)) | Phase 1 |
 
 Two crates serve every section rather than one: `cabinetos-core` builds
@@ -149,3 +149,4 @@ without a UI.
 | 2026-09-28 | §8, first sentence: "telemetry" → "diagnostics". | Article 12 of the Constitution was renamed by the creator on 2026-09-28 to avoid the word "telemetry", which suggests data sent to the developer. The brief describes only local logs and crash traces. Recorded in PLAN.md, consistency check row A. |
 | 2026-09-28 | Added the "Crate map" section. | Phase 1 created the Rust workspace. The map links each brief section to the crate that implements it (PLAN.md §6, definition of done item 6). |
 | 2026-09-28 | Crate map: `cabinetos-fs` is real (Phase 2); the §4 rows note the Phase 2 listings and events and link [ipc.md](ipc.md). | Phase 2 built the filesystem engine and the listing protocol. Size, dates and attributes arrive with the listing itself, because the NT API returns them in the same pass, so the §2 "asynchronous hydration" stream is kept for icons and shell type names (Phase 5). |
+| 2026-09-28 | Crate map: `cabinetos-config` and `cabinetos-commands` are real (Phase 3) and link [config.md](config.md) and [keybindings.md](keybindings.md); the §4 protocol row notes the Phase 3 messages. | Phase 3 built the configuration file handling, the command registry and the keymap. §7 says the core "pushes state updates to the UI"; it does so as `config_changed`, `keymap_changed` and `config_error` events. The palette's fuzzy matching (§7) also runs in the core, because the UI does no data processing (§1). |
