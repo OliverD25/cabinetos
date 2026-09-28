@@ -237,7 +237,7 @@ fn copies_a_tree_with_empty_folders_a_big_file_a_junction_and_a_long_path() {
             let seed = group * 100 + number;
             write_file(
                 &folder.join(format!("file {number}.txt")),
-                1 + (seed as usize * 37) % 4096,
+                1 + usize::try_from(seed * 37 % 4096).unwrap(),
                 seed,
             );
         }
@@ -415,18 +415,15 @@ fn skip_and_overwrite_policies_decide_without_asking() {
         assert_eq!(last.state, JobState::Completed);
         assert!(conflicts.is_empty(), "{policy:?}: {conflicts:?}");
         let kept = fs::read_to_string(destination.join("src").join("3.txt")).unwrap_or_default();
-        match policy {
-            ConflictPolicy::Skip => {
-                assert_eq!(last.files_skipped, 5);
-                assert_eq!(kept, "old");
-            }
-            _ => {
-                assert_eq!(last.files_skipped, 0);
-                assert_eq!(
-                    content_hash(&destination.join("src").join("3.txt")),
-                    content_hash(&source.join("3.txt"))
-                );
-            }
+        if policy == ConflictPolicy::Skip {
+            assert_eq!(last.files_skipped, 5);
+            assert_eq!(kept, "old");
+        } else {
+            assert_eq!(last.files_skipped, 0);
+            assert_eq!(
+                content_hash(&destination.join("src").join("3.txt")),
+                content_hash(&source.join("3.txt"))
+            );
         }
     }
 }
@@ -818,6 +815,7 @@ fn bad_requests_are_refused_before_anything_happens() {
 /// times: `cargo test -p cabinetos-jobs --release --test engine -- --ignored --nocapture measure`.
 #[test]
 #[ignore = "a measurement, not a test; run it by hand"]
+#[expect(clippy::cast_precision_loss, reason = "numbers for display")]
 fn measure_files_in_flight() {
     let dir = scratch("measure");
     let source = dir.path().join("src");
@@ -828,7 +826,7 @@ fn measure_files_in_flight() {
             let seed = group * 100 + number;
             write_file(
                 &folder.join(format!("{number}.bin")),
-                1024 + (seed as usize * 7919) % (63 * 1024),
+                1024 + usize::try_from(seed * 7919 % (63 * 1024)).unwrap(),
                 seed,
             );
         }
