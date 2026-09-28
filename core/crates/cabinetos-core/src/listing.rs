@@ -79,6 +79,7 @@ pub(crate) fn fs_failure(error: &FsError) -> Failure {
         FsError::NotFound { .. } => ErrorCode::NotFound,
         FsError::AccessDenied { .. } => ErrorCode::AccessDenied,
         FsError::InvalidPath { .. } => ErrorCode::InvalidPath,
+        FsError::AlreadyExists { .. } => ErrorCode::AlreadyExists,
         FsError::Io { .. } => ErrorCode::Io,
     };
     (code, error.to_string())
@@ -285,6 +286,7 @@ mod tests {
             (FsError::from_win32("x", 2), ErrorCode::NotFound),
             (FsError::from_win32("x", 5), ErrorCode::AccessDenied),
             (FsError::from_win32("x", 267), ErrorCode::InvalidPath),
+            (FsError::from_win32("x", 183), ErrorCode::AlreadyExists),
             (FsError::from_win32("x", 21), ErrorCode::Io),
         ];
         for (error, code) in cases {

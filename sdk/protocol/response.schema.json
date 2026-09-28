@@ -707,6 +707,11 @@
           "const": "invalid_path"
         },
         {
+          "description": "Something with that name is already there (a new folder or a rename).",
+          "type": "string",
+          "const": "already_exists"
+        },
+        {
           "description": "No open listing on this connection has that `listing_id`.",
           "type": "string",
           "const": "no_such_listing"

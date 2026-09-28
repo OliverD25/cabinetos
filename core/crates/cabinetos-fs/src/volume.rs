@@ -17,8 +17,8 @@ use cabinetos_protocol::{DiskIdentity, VolumeDetails};
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, GetDiskFreeSpaceExW,
-    GetVolumeInformationW, GetVolumeNameForVolumeMountPointW, GetVolumePathNameW,
-    GetVolumePathNamesForVolumeNameW, OPEN_EXISTING,
+    GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
+    GetVolumePathNameW, GetVolumePathNamesForVolumeNameW, OPEN_EXISTING,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 use windows::Win32::System::Ioctl::{
@@ -30,6 +30,68 @@ use windows::Win32::System::Ioctl::{
 use windows::core::PCWSTR;
 
 use crate::{FsError, path};
+
+/// What kind of drive a letter names (`GetDriveTypeW`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DriveKind {
+    /// A USB stick, a card reader, a floppy disk.
+    Removable,
+    /// A disk inside the machine, or a `subst` folder.
+    Fixed,
+    /// A network share mapped to the letter.
+    Remote,
+    /// An optical drive.
+    CdRom,
+    /// A RAM disk.
+    RamDisk,
+    /// Windows cannot tell.
+    Unknown,
+}
+
+/// A drive letter in use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Drive {
+    /// `A` to `Z`.
+    pub letter: char,
+    /// What kind of drive it is.
+    pub kind: DriveKind,
+}
+
+/// Every drive letter in use, `A` to `Z`, with its kind. A letter whose root
+/// does not resolve is left out. It reads each letter's device type, not
+/// the drive itself, so an empty card reader or a share whose server is gone
+/// is listed too; [`info_for_path`] is what finds out.
+#[must_use]
+pub fn drives() -> Vec<Drive> {
+    // `GetDriveTypeW` results.
+    const REMOVABLE: u32 = 2;
+    const FIXED: u32 = 3;
+    const REMOTE: u32 = 4;
+    const CDROM: u32 = 5;
+    const RAMDISK: u32 = 6;
+    const NO_ROOT_DIR: u32 = 1;
+
+    // SAFETY: a plain call without arguments.
+    let mask = unsafe { GetLogicalDrives() };
+    (0..26u8)
+        .filter(|bit| mask & (1 << bit) != 0)
+        .filter_map(|bit| {
+            let letter = char::from(b'A' + bit);
+            let root: Vec<u16> = format!("{letter}:\\").encode_utf16().chain([0]).collect();
+            // SAFETY: `root` is NUL-terminated and outlives the call.
+            let kind = match unsafe { GetDriveTypeW(PCWSTR(root.as_ptr())) } {
+                REMOVABLE => DriveKind::Removable,
+                FIXED => DriveKind::Fixed,
+                REMOTE => DriveKind::Remote,
+                CDROM => DriveKind::CdRom,
+                RAMDISK => DriveKind::RamDisk,
+                NO_ROOT_DIR => return None,
+                _ => DriveKind::Unknown,
+            };
+            Some(Drive { letter, kind })
+        })
+        .collect()
+}
 
 /// The volume that holds `path` and the physical disk under it. `path` does
 /// not have to exist; its volume does.
@@ -371,6 +433,25 @@ mod tests {
         if let Some(disk) = &info.disk {
             assert!(!disk.bus_type.is_empty());
         }
+    }
+
+    #[test]
+    fn the_system_drive_is_a_fixed_letter() {
+        let windows = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_owned());
+        let letter = windows.chars().next().unwrap().to_ascii_uppercase();
+        let drives = drives();
+        assert!(
+            drives.contains(&Drive {
+                letter,
+                kind: DriveKind::Fixed
+            }),
+            "{drives:?}"
+        );
+        assert!(
+            drives
+                .windows(2)
+                .all(|pair| pair[0].letter < pair[1].letter)
+        );
     }
 
     #[test]

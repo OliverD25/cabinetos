@@ -845,6 +845,8 @@ pub enum ErrorCode {
     AccessDenied,
     /// The path is malformed, or it names a file where a directory is needed.
     InvalidPath,
+    /// Something with that name is already there (a new folder or a rename).
+    AlreadyExists,
     /// No open listing on this connection has that `listing_id`.
     NoSuchListing,
     /// Reading from the disk or the network failed.
@@ -1389,6 +1391,7 @@ mod tests {
             (ErrorCode::NotFound, "not_found"),
             (ErrorCode::AccessDenied, "access_denied"),
             (ErrorCode::InvalidPath, "invalid_path"),
+            (ErrorCode::AlreadyExists, "already_exists"),
             (ErrorCode::NoSuchListing, "no_such_listing"),
             (ErrorCode::Io, "io"),
             (ErrorCode::UnknownCommand, "unknown_command"),

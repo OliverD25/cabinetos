@@ -501,6 +501,7 @@ fn fs_code(error: &cabinetos_fs::FsError) -> u32 {
         FsError::NotFound { .. } => crate::win::code::PATH_NOT_FOUND,
         FsError::AccessDenied { .. } => crate::win::code::ACCESS_DENIED,
         FsError::InvalidPath { .. } => crate::win::code::INVALID_NAME,
+        FsError::AlreadyExists { .. } => crate::win::code::ALREADY_EXISTS,
         FsError::Io { source, .. } => source.raw_os_error().map_or(0, i32::cast_unsigned),
     }
 }

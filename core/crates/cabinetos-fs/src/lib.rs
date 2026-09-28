@@ -16,17 +16,25 @@
 //! (Dual-Pane Foundation: independent listings per pane). Brief §2.
 //!
 //! [`volume::info_for_path`] tells which volume and physical disk a path is
-//! on, so the job engine can keep copies on one disk from competing.
-//! [`DirectoryWatcher`] reports when a directory changes, so its listing can
-//! be read again.
+//! on, so the job engine can keep copies on one disk from competing, and
+//! [`volume::drives`] lists the drive letters in use. [`DirectoryWatcher`]
+//! reports when a directory changes, so its listing can be read again.
+//!
+//! [`create_directory`] and [`rename`] are the changes a user makes to a
+//! folder without a job; [`open_path`] opens a file or folder with its
+//! default application.
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
-//! (`enumerate`, `volume`, `watch`, `time`, and one function in `sort`), each
-//! block with a `SAFETY:` comment.
+//! (`enumerate`, `volume`, `watch`, `time`, `ops`, `open`, and one function
+//! in `sort`), each block with a `SAFETY:` comment.
 
 #[allow(unsafe_code)]
 mod enumerate;
 mod error;
+#[allow(unsafe_code)]
+mod open;
+#[allow(unsafe_code)]
+mod ops;
 mod path;
 mod pipeline;
 mod section;
@@ -43,6 +51,8 @@ use cabinetos_protocol::SortSpec;
 use cabinetos_protocol::shm::{EntryKind, ListingMeta};
 
 pub use error::FsError;
+pub use open::open_path;
+pub use ops::{create_directory, rename};
 pub use path::verbatim_wide;
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter};
 pub use watch::{DirectoryChanged, DirectoryWatcher};

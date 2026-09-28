@@ -19,10 +19,14 @@ windows = { workspace = true, features = [
   "Win32_Globalization",
   "Win32_Security",
   "Win32_Storage_FileSystem",
+  "Win32_System_Com",
   "Win32_System_IO",
   "Win32_System_Ioctl",
+  "Win32_System_Registry",
   "Win32_System_Threading",
   "Win32_System_Time",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]
@@ -30,8 +34,6 @@ windows = { workspace = true, features = [
 cabinetos-ipc.workspace = true
 criterion.workspace = true
 tempfile.workspace = true
-# StrCmpLogicalW, to check the sort order against Explorer's in tests only.
-windows = { workspace = true, features = ["Win32_UI_Shell"] }
 
 [[bench]]
 name = "list_directory"
