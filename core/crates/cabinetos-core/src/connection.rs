@@ -8,8 +8,8 @@
 //!   queued, so a `listing_opened` always goes out before the events of that
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
-//!   (`list_directory`, `volume_info`, the keybinding and plugin settings
-//!   writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
+//!   (`list_directory`, `volume_info`, `list_volumes`, the keybinding and
+//!   plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`)
 //!   as tasks, so one slow directory, plugin, search or shell never holds up
 //!   the next request. After `hello` it also forwards the configuration,
@@ -40,7 +40,7 @@ use crate::listing::{self, Failure, Published, WatchedListing};
 use crate::plugins::check_grants;
 use crate::search;
 use crate::settings::{Settings, every_section};
-use crate::{CORE_VERSION, decode_request, terminal};
+use crate::{CORE_VERSION, decode_request, terminal, volumes};
 
 /// How long the writer may take to send what is still queued when the
 /// connection ends.
@@ -272,6 +272,10 @@ impl Session {
                 } => self.list_directory(&id, &span, path, include_hidden, sort, watch),
                 Request::VolumeInfo { path } => {
                     self.volume_info(&id, &span, path);
+                    None
+                }
+                Request::ListVolumes => {
+                    self.spawn_task_reply(&id, &span, kind, volumes::list_volumes());
                     None
                 }
                 Request::GetConfig => Some(self.services.settings.get_config()),

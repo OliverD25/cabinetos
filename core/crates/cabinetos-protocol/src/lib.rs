@@ -55,5 +55,6 @@ pub use terminal::{TerminalSession, TerminalState};
 /// (`recycle_bin_too_small`, `delete_permanently`) and the plugins; version
 /// 6 file search (`search`, `file_search_results`) and the indexer's state
 /// (`index_status`); version 7 terminal sessions (`terminal_open` and the
-/// other `terminal_*` messages).
-pub const PROTOCOL_VERSION: u32 = 7;
+/// other `terminal_*` messages); version 8 what the shell needs beyond
+/// listing: `list_volumes` and the error code `already_exists`.
+pub const PROTOCOL_VERSION: u32 = 8;

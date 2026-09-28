@@ -54,12 +54,7 @@ public class ProtocolTests
         {
             request.Id = Id;
             var json = Encoding.UTF8.GetString(MessageCodec.Encode(request));
-            if (!variants.TryGetValue(request.Type, out var declared))
-            {
-                // list_volumes is not in protocol version 7 yet (Phase 5, Part D).
-                Assert.Equal("list_volumes", request.Type);
-                continue;
-            }
+            Assert.True(variants.TryGetValue(request.Type, out var declared), $"{request.Type} is not in the request schema");
             AssertValid(RequestSchema.Value, json);
             using var document = JsonDocument.Parse(json);
             foreach (var property in document.RootElement.EnumerateObject())
@@ -69,7 +64,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(13, checkedTypes.Count);
+        Assert.Equal(14, checkedTypes.Count);
     }
 
     [Fact]

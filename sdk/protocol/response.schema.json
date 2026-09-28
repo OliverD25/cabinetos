@@ -19,7 +19,7 @@
           "type": "string"
         },
         "protocol_version": {
-          "description": "The protocol version the core speaks (`PROTOCOL_VERSION`, now 3).",
+          "description": "The protocol version the core speaks (`PROTOCOL_VERSION`).",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
@@ -80,7 +80,7 @@
           "type": "string"
         },
         "protocol_version": {
-          "description": "The protocol version the core speaks (`PROTOCOL_VERSION`, now 3).",
+          "description": "The protocol version the core speaks (`PROTOCOL_VERSION`).",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
@@ -163,6 +163,27 @@
       "$ref": "#/$defs/VolumeDetails",
       "required": [
         "type"
+      ]
+    },
+    {
+      "description": "Reply to `list_volumes`: the volumes that answered, by drive letter.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "volumes"
+        },
+        "volumes": {
+          "description": "Each volume as `volume_info` describes it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VolumeDetails"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "volumes"
       ]
     },
     {

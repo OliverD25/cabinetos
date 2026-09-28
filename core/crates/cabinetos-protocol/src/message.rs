@@ -83,6 +83,9 @@ pub enum Request {
         /// Any path on the volume; it does not have to exist.
         path: String,
     },
+    /// Asks for every volume that has a drive letter. The core answers
+    /// `volumes`.
+    ListVolumes,
     /// Asks for the configuration in effect and the path of its file. The
     /// core answers `config`.
     GetConfig,
@@ -253,6 +256,7 @@ impl Request {
         "list_directory",
         "close_listing",
         "volume_info",
+        "list_volumes",
         "get_config",
         "get_keymap",
         "list_commands",
@@ -287,6 +291,7 @@ impl Request {
             Self::ListDirectory { .. } => "list_directory",
             Self::CloseListing { .. } => "close_listing",
             Self::VolumeInfo { .. } => "volume_info",
+            Self::ListVolumes => "list_volumes",
             Self::GetConfig => "get_config",
             Self::GetKeymap => "get_keymap",
             Self::ListCommands => "list_commands",
@@ -350,7 +355,7 @@ pub enum SortKey {
 pub enum Response {
     /// Reply to `ping`.
     Pong {
-        /// The protocol version the core speaks (`PROTOCOL_VERSION`, now 3).
+        /// The protocol version the core speaks (`PROTOCOL_VERSION`).
         protocol_version: u32,
         /// The core's version, for example `0.1.0`.
         core_version: String,
@@ -366,7 +371,7 @@ pub enum Response {
     },
     /// Reply to `hello`.
     Welcome {
-        /// The protocol version the core speaks (`PROTOCOL_VERSION`, now 3).
+        /// The protocol version the core speaks (`PROTOCOL_VERSION`).
         protocol_version: u32,
         /// The core's version, for example `0.1.0`.
         core_version: String,
@@ -390,6 +395,11 @@ pub enum Response {
     },
     /// Reply to `volume_info`.
     VolumeInfo(VolumeDetails),
+    /// Reply to `list_volumes`: the volumes that answered, by drive letter.
+    Volumes {
+        /// Each volume as `volume_info` describes it.
+        volumes: Vec<VolumeDetails>,
+    },
     /// Reply to `get_config`.
     Config {
         /// The configuration file the core reads.
@@ -483,6 +493,7 @@ impl Response {
         "welcome",
         "listing_opened",
         "volume_info",
+        "volumes",
         "config",
         "keymap",
         "commands",
@@ -508,6 +519,7 @@ impl Response {
             Self::Welcome { .. } => "welcome",
             Self::ListingOpened { .. } => "listing_opened",
             Self::VolumeInfo(_) => "volume_info",
+            Self::Volumes { .. } => "volumes",
             Self::Config { .. } => "config",
             Self::Keymap(_) => "keymap",
             Self::Commands { .. } => "commands",
@@ -943,6 +955,7 @@ mod tests {
             Request::VolumeInfo {
                 path: r"C:\".to_owned(),
             },
+            Request::ListVolumes,
             Request::GetConfig,
             Request::GetKeymap,
             Request::ListCommands,
@@ -1041,6 +1054,23 @@ mod tests {
         }
     }
 
+    fn volume() -> VolumeDetails {
+        VolumeDetails {
+            drive_letter: Some('C'),
+            volume_guid_path: r"\\?\Volume{0e5e0000-0000-0000-0000-100000000000}\".to_owned(),
+            filesystem: "NTFS".to_owned(),
+            label: String::new(),
+            total_bytes: 2_000_000_000_000,
+            free_bytes: 1_000_000_000_000,
+            disk: Some(DiskIdentity {
+                device_number: 0,
+                bus_type: "NVMe".to_owned(),
+                seek_penalty: Some(false),
+                media_type: Some("SSD".to_owned()),
+            }),
+        }
+    }
+
     #[expect(clippy::too_many_lines, reason = "one example of every response")]
     fn every_response() -> Vec<Response> {
         vec![
@@ -1065,20 +1095,20 @@ mod tests {
                 generation: 1,
                 elapsed_us: 1234,
             },
-            Response::VolumeInfo(VolumeDetails {
-                drive_letter: Some('C'),
-                volume_guid_path: r"\\?\Volume{0e5e0000-0000-0000-0000-100000000000}\".to_owned(),
-                filesystem: "NTFS".to_owned(),
-                label: String::new(),
-                total_bytes: 2_000_000_000_000,
-                free_bytes: 1_000_000_000_000,
-                disk: Some(DiskIdentity {
-                    device_number: 0,
-                    bus_type: "NVMe".to_owned(),
-                    seek_penalty: Some(false),
-                    media_type: Some("SSD".to_owned()),
-                }),
-            }),
+            Response::VolumeInfo(volume()),
+            Response::Volumes {
+                volumes: vec![
+                    volume(),
+                    VolumeDetails {
+                        drive_letter: Some('Z'),
+                        volume_guid_path: String::new(),
+                        filesystem: "NTFS".to_owned(),
+                        label: "share".to_owned(),
+                        disk: None,
+                        ..volume()
+                    },
+                ],
+            },
             Response::Config {
                 path: r"C:\Users\me\AppData\Roaming\CabinetOS\cabinetos.json".to_owned(),
                 config: json!({"version": 1, "ui": {"layout": "classic"}}),
@@ -1279,6 +1309,22 @@ mod tests {
         assert_eq!(value["chord_window_ms"], 1000);
         assert_eq!(value["bindings"][1]["when"], "filesView");
         assert!(value["bindings"][0].get("when").is_none());
+    }
+
+    #[test]
+    fn volumes_hold_what_volume_info_holds() {
+        let value = serde_json::to_value(Envelope::new(
+            id(),
+            Response::Volumes {
+                volumes: vec![volume()],
+            },
+        ))
+        .unwrap();
+        assert_eq!(value["type"], "volumes");
+        let single = serde_json::to_value(volume()).unwrap();
+        assert_eq!(value["volumes"][0], single);
+        assert_eq!(value["volumes"][0]["drive_letter"], "C");
+        assert_eq!(value["volumes"][0]["disk"]["media_type"], "SSD");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
-//! UI will), `volume`, `shutdown`, the configuration (`config`), the command
+//! UI will), `volume` and `volumes`, `shutdown`, the configuration (`config`), the command
 //! registry (`commands`), the keymap (`keys`), jobs (`copy`, `move`,
 //! `delete`, `jobs`, `job`), the Core Plugins (`plugins`), the events the
 //! core sends (`events watch`), file search (`search`, `index status`), and
@@ -97,6 +97,8 @@ enum Command {
         /// Any path on the volume; it does not have to exist.
         path: String,
     },
+    /// List every volume that has a drive letter, with its disk.
+    Volumes,
     /// Show or check the configuration file (cabinetos.json).
     Config {
         #[command(subcommand)]
@@ -590,12 +592,8 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             };
             ls::ls(&mut client, args).await?;
         }
-        Command::Volume { path } => {
-            let reply = send(&mut client, Request::VolumeInfo { path: path.clone() }).await?;
-            match reply.body {
-                Response::VolumeInfo(details) => print_volume(&details),
-                other => return Err(failure(path, &other)),
-            }
+        Command::Volume { .. } | Command::Volumes => {
+            volume_command(&mut client, &cli.command).await?;
         }
         Command::Config { .. } | Command::Commands { .. } | Command::Keys { .. } => {
             settings_command(&mut client, &cli.command).await?;
@@ -617,6 +615,28 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             action: IndexAction::Status,
         } => search::status(&mut client).await?,
         Command::Term(arguments) => term_command(&mut client, arguments).await?,
+    }
+    Ok(())
+}
+
+/// The volume commands: `volume` and `volumes`.
+async fn volume_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
+    match command {
+        Command::Volume { path } => {
+            let reply = send(client, Request::VolumeInfo { path: path.clone() }).await?;
+            match reply.body {
+                Response::VolumeInfo(details) => print_volume(&details),
+                other => return Err(failure(path, &other)),
+            }
+        }
+        Command::Volumes => {
+            let reply = send(client, Request::ListVolumes).await?;
+            match reply.body {
+                Response::Volumes { volumes } => print_volumes(&volumes),
+                other => return Err(failure("list_volumes", &other)),
+            }
+        }
+        _ => unreachable!("only volume commands come here"),
     }
     Ok(())
 }
@@ -830,6 +850,46 @@ fn print_volume(details: &VolumeDetails) {
     }
 }
 
+/// One line per volume, under a header.
+fn print_volumes(volumes: &[VolumeDetails]) {
+    if volumes.is_empty() {
+        say(format_args!("no volume answered"));
+        return;
+    }
+    let mut lines = vec![format!(
+        "{:<6} {:<10} {:>11} {:>11}  {:<7} {:<6} {:<5} label",
+        "drive", "filesystem", "size", "free", "bus", "media", "disk"
+    )];
+    for volume in volumes {
+        let unknown = || "?".to_owned();
+        let letter = volume
+            .drive_letter
+            .map_or_else(unknown, |letter| format!("{letter}:"));
+        let (bus, media, disk) = volume.disk.as_ref().map_or_else(
+            || ("-".to_owned(), "-".to_owned(), "-".to_owned()),
+            |disk| {
+                (
+                    disk.bus_type.clone(),
+                    disk.media_type.clone().unwrap_or_else(unknown),
+                    disk.device_number.to_string(),
+                )
+            },
+        );
+        lines.push(format!(
+            "{letter:<6} {:<10} {:>11} {:>11}  {bus:<7} {media:<6} {disk:<5} {}",
+            volume.filesystem,
+            binary_size(volume.total_bytes),
+            binary_size(volume.free_bytes),
+            volume.label
+        ));
+    }
+    for line in lines {
+        if !say(format_args!("{}", line.trim_end())) {
+            break;
+        }
+    }
+}
+
 /// Prints one line to stdout. Returns `false` once stdout is closed (the
 /// output was piped into `head`, say), so the caller can stop quietly
 /// instead of panicking like `println!`.
@@ -973,6 +1033,8 @@ mod tests {
                 path: r"H:\".to_owned()
             }
         );
+        let cli = Cli::try_parse_from(["cabinetos-cli", "volumes"]).unwrap();
+        assert_eq!(cli.command, Command::Volumes);
     }
 
     #[test]

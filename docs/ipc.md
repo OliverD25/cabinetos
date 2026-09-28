@@ -44,7 +44,7 @@ connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":7,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":8,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
@@ -70,6 +70,8 @@ file search (`search`, `file_search_results`) and `index_status`. Version 7
 (Phase 8) added the terminal sessions: five requests, the replies
 `terminal_opened` and `terminal_sessions`, the event `terminal_exited`, and
 the error codes `no_such_session`, `unknown_profile` and `spawn_failed`.
+Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
+`volumes`, and the error code `already_exists`.
 
 ## Requests and replies
 
@@ -81,6 +83,7 @@ the error codes `no_such_session`, `unknown_profile` and `spawn_failed`.
 | `list_directory` | `path`; `include_hidden` and `sort` (when left out, the `panes` settings of [config.md](config.md) decide: by default `false` and `{"key":"name","descending":false}`); `watch` (default `false`) | `listing_opened` |
 | `close_listing` | `listing_id` | `ok` |
 | `volume_info` | `path` (need not exist) | `volume_info` |
+| `list_volumes` | — | `volumes` (`volumes`) |
 | `get_config` | — | `config` (`path`, `config`) |
 | `get_keymap` | — | `keymap` |
 | `list_commands` | — | `commands` |
@@ -115,6 +118,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `not_found` | The path does not exist. |
 | `access_denied` | Windows denied access. |
 | `invalid_path` | The path is malformed, or names a file where a directory is needed. |
+| `already_exists` | Something with that name is already there. |
 | `no_such_listing` | No open listing on this connection has that `listing_id`. |
 | `io` | Reading from the disk or the network failed. |
 | `unknown_command` | No command has that ID. |
@@ -133,7 +137,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
 
 Requests on one connection are independent: `list_directory`,
-`volume_info`, `set_keybinding`, `reset_keybinding`, `start_job`,
+`volume_info`, `list_volumes`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
 `terminal_open`, `terminal_close` and `terminal_sync_cwd` run in the
@@ -301,6 +305,28 @@ Every disk field is best effort: when Windows does not say, the field is
 `null` (or `disk` itself is, for example for network shares). Nothing here
 needs administrator rights.
 
+```json
+{"id":"01M…","type":"list_volumes"}
+{"id":"01M…","type":"volumes","volumes":[
+ {"drive_letter":"C","volume_guid_path":"\\\\?\\Volume{…}\\","filesystem":"NTFS","label":"System Disk",
+  "total_bytes":2000381014016,"free_bytes":1308375261184,
+  "disk":{"device_number":1,"bus_type":"NVMe","seek_penalty":false,"media_type":"SSD"}},
+ {"drive_letter":"M","volume_guid_path":"","filesystem":"NTFS","label":"_sync_music",
+  "total_bytes":5761394913280,"free_bytes":2891714670592,"disk":null}]}
+```
+
+`list_volumes` answers with the volume behind every drive letter, in letter
+order, each exactly as `volume_info` describes it; the sidebar's Drives
+section shows them. `drive_letter` is always the letter asked for, even
+when the volume has another one too (a `subst` letter shows its folder's
+volume). The drives are asked in parallel, and a drive that does not
+answer is left out instead of failing the request: a drive that is not
+ready (an empty card reader or optical drive), one that fails, a network
+drive whose server does not answer within 200 ms, or a local drive that
+takes more than 2 s. A drive left out for time is not asked again until
+its first query has ended, so a share whose server is gone holds one
+thread in the core, not one per request.
+
 ## Configuration, commands and keybindings
 
 The core owns `cabinetos.json` ([config.md](config.md)), the command
@@ -347,7 +373,7 @@ hits.
 ```json
 {"id":"01M…","type":"execute_command","command":"help.about"}
 {"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
- "core_version":"0.1.0","protocol_version":7,"config_path":"C:\\…\\cabinetos.json"}}
+ "core_version":"0.1.0","protocol_version":8,"config_path":"C:\\…\\cabinetos.json"}}
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
@@ -641,6 +667,7 @@ by force). When the core stops, it closes every session.
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
 `ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
+`volumes` prints `volumes`,
 `config`, `commands` and `keys` cover the configuration messages (`keys
 watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`
 cover the jobs, `plugins`, `commands exec` and `events watch` cover the

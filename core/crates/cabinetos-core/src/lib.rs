@@ -28,6 +28,7 @@ mod plugins;
 mod search;
 mod settings;
 mod terminal;
+mod volumes;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

@@ -141,6 +141,19 @@
       ]
     },
     {
+      "description": "Asks for every volume that has a drive letter. The core answers\n`volumes`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "list_volumes"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
       "description": "Asks for the configuration in effect and the path of its file. The\ncore answers `config`.",
       "type": "object",
       "properties": {
