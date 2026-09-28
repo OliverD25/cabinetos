@@ -25,13 +25,58 @@ on:
       - "ui/**"
       - ".github/workflows/ci.yml"
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+# No workflow-wide concurrency group: each job has its own, so a push
+# cancels only the same job's older run. The `changes` job decides which
+# jobs run, so a push that touches only ui/ never starts (or cancels) a core
+# check, and a core push leaves a running UI check alone.
 
 jobs:
+  changes:
+    name: Which parts changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      core: ${{ steps.diff.outputs.core }}
+      ui: ${{ steps.diff.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The whole history, so the diff reaches the previous push.
+          fetch-depth: 0
+
+      - name: Compare with the previous push or the pull request's base
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then from="$BASE"; else from="$BEFORE"; fi
+          # A new branch or a force push leaves nothing to compare with: run everything.
+          if [ -z "$from" ] || ! git cat-file -e "$from^{commit}" 2>/dev/null; then
+            echo "no earlier commit to compare with; every job runs"
+            echo "core=true" >> "$GITHUB_OUTPUT"
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed="$(git diff --name-only "$from" "$HEAD")"
+          printf 'changed since %s:\n%s\n' "$from" "$changed"
+          touches() {
+            if printf '%s\n' "$changed" | grep -Eq "$1"; then echo true; else echo false; fi
+          }
+          # The same paths as the trigger above, split by the job that needs them.
+          echo "core=$(touches '^(core/|sdk/(protocol|config|wit|fixtures)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "ui=$(touches '^(ui/|sdk/(protocol|config)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
   core:
     name: Rust core (fmt, clippy, test, release build, benches compile)
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    concurrency:
+      group: core-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: windows-latest
     # A hung test must not burn hours of paid Windows minutes. A run without
     # the cache builds wasmtime twice (debug and release) and took 33 minutes
@@ -88,6 +133,11 @@ jobs:
 
   ui:
     name: WinUI shell (build, test)
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    concurrency:
+      group: ui-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: windows-latest
     # Restore, a Release build and the tests take a few minutes; a hang
     # must not burn paid Windows minutes.
@@ -124,6 +174,11 @@ jobs:
 
   deny:
     name: cargo-deny (licenses, advisories, bans, sources)
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    concurrency:
+      group: deny-${{ github.ref }}
+      cancel-in-progress: true
     # cargo-deny-action runs in a Docker container, and GitHub runs container
     # actions only on Linux runners. deny.toml limits the check to the
     # Windows targets, so the result is the same as on Windows.
