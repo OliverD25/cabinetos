@@ -360,6 +360,15 @@ async fn a_crashing_plugin_is_removed_while_the_core_keeps_serving_listings() {
     assert!(details.contains("wasm backtrace"), "{trap}");
     // The fixtures keep their function names (sdk/templates/plugins).
     assert!(details.contains("Guest>::on_command"), "{trap}");
+    // The panic's own text, as the plugin wrote it to stderr.
+    let stderr = lines
+        .iter()
+        .find(|line| line["message"] == "crashy was asked to crash")
+        .expect("the plugin's stderr line is in the log");
+    assert_eq!(stderr["level"], "WARN");
+    assert_eq!(stderr["boundary"], "plugin");
+    assert_eq!(stderr["plugin_id"], "crashy");
+    assert_eq!(stderr["fields"]["stream"], "stderr");
 }
 
 #[tokio::test]
