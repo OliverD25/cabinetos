@@ -534,10 +534,7 @@ fn the_https_client_sets_up_its_tls_and_reports_a_failed_handshake() {
     let source = Source::parse(&format!("https://127.0.0.1:{port}/index.json"), false).unwrap();
     let error = setup.market().fetch(&source, false).unwrap_err();
     assert_eq!(error.code, ErrorCode::MarketplaceError);
-    assert!(
-        error.message.contains("cannot fetch the index"),
-        "{error}"
-    );
+    assert!(error.message.contains("cannot fetch the index"), "{error}");
 }
 
 #[test]
