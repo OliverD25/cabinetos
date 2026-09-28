@@ -196,17 +196,27 @@ public sealed class ListingView : IDisposable
         return -1;
     }
 
-    /// <summary>The index of the first entry named <paramref name="name"/> (any case), or -1.</summary>
+    /// <summary>
+    /// The index of the entry named exactly <paramref name="name"/>, else of the
+    /// first one named so in any case, or -1. A case-sensitive folder can hold
+    /// <c>Report.txt</c> and <c>report.txt</c> side by side.
+    /// </summary>
     public int IndexOfName(ReadOnlySpan<char> name)
     {
+        var anyCase = -1;
         for (var i = 0; i < Count; i++)
         {
-            if (NameSpan(i).Equals(name, StringComparison.OrdinalIgnoreCase))
+            var candidate = NameSpan(i);
+            if (candidate.SequenceEqual(name))
             {
                 return i;
             }
+            if (anyCase < 0 && candidate.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                anyCase = i;
+            }
         }
-        return -1;
+        return anyCase;
     }
 
     /// <summary>Unmaps the view and closes the section handle.</summary>

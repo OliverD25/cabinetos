@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Listing;
+using CabinetOS.Core.Presentation;
 using CabinetOS.Services;
 using CabinetOS.ViewModels;
 using Microsoft.UI.Input;
@@ -130,8 +131,7 @@ public sealed partial class FilePane : UserControl
         HideClearButton();
         PositionEditors();
         RenameBox.Focus(FocusState.Programmatic);
-        var dot = selectStem ? name.LastIndexOf('.') : -1;
-        RenameBox.Select(0, dot > 0 ? dot : name.Length);
+        RenameBox.Select(0, DisplayFormat.RenameStem(name, isFolder: !selectStem));
         return pending.Task;
     }
 

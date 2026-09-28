@@ -1590,7 +1590,7 @@ public sealed partial class MainWindow : Window
         if (CommandArgs.Text(invocation.Args, "scope") == "folder" || targets.Count == 0)
         {
             title = pane.FolderName;
-            var (files, folders, bytes) = Tally(view, Enumerable.Range(0, view.Count));
+            var (files, folders, bytes) = PropertiesText.Tally(view, Enumerable.Range(0, view.Count));
             rows.Add(("Location", DisplayFormat.Parent(pane.Path) ?? pane.Path));
             rows.Add(("Contains", $"{files:N0} files, {folders:N0} folders"));
             rows.Add(("Size of the files", DisplayFormat.SizeWithBytes(bytes, culture)));
@@ -1598,24 +1598,13 @@ public sealed partial class MainWindow : Window
         else if (targets.Count == 1)
         {
             var entry = targets[0];
-            var index = entry.Index;
             title = entry.Name;
-            rows.Add(("Type", DisplayFormat.TypeText(entry.Name, view.Kind(index), entry.IsFolder)));
-            rows.Add(("Location", pane.Path));
-            if (!entry.IsFolder)
-            {
-                rows.Add(("Size", DisplayFormat.SizeWithBytes(entry.Size, culture)));
-            }
-            rows.Add(("Created", FullTime(view.Created(index))));
-            rows.Add(("Modified", FullTime(view.Modified(index))));
-            rows.Add(("Accessed", FullTime(view.Accessed(index))));
-            var attributes = DisplayFormat.AttributeNames(view.Attributes(index));
-            rows.Add(("Attributes", attributes.Length == 0 ? "None" : attributes));
+            rows.AddRange(PropertiesText.ForEntry(view, entry.Index, pane.Path, pane.Detail(entry.Index, entry.Name, entry.IsFolder), culture));
         }
         else
         {
             title = $"{targets.Count:N0} items";
-            var (files, folders, bytes) = Tally(view, targets.Select(t => t.Index));
+            var (files, folders, bytes) = PropertiesText.Tally(view, targets.Select(t => t.Index));
             rows.Add(("Location", pane.Path));
             rows.Add(("Contains", $"{files:N0} files, {folders:N0} folders"));
             rows.Add(("Size of the files", DisplayFormat.SizeWithBytes(bytes, culture)));
@@ -1646,28 +1635,6 @@ public sealed partial class MainWindow : Window
         };
         await ShowDialogAsync(dialog);
         FocusActivePane();
-
-        static string FullTime(DateTime utc) => utc == DateTime.MinValue ? "" : utc.ToLocalTime().ToString("G", CultureInfo.CurrentCulture);
-    }
-
-    // Files, folders and the bytes of the files among some rows of the listing (nothing is read from the disk).
-    private static (int Files, int Folders, ulong Bytes) Tally(ListingView view, IEnumerable<int> indexes)
-    {
-        int files = 0, folders = 0;
-        ulong bytes = 0;
-        foreach (var index in indexes)
-        {
-            if (view.IsFolder(index))
-            {
-                folders++;
-            }
-            else
-            {
-                files++;
-                bytes += view.Size(index);
-            }
-        }
-        return (files, folders, bytes);
     }
 
     private async Task ControlShownAsync(string action, CommandInvocation invocation)

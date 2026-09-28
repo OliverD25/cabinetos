@@ -75,6 +75,17 @@ public static class DisplayFormat
         return string.Concat(name[(dot + 1)..].ToString().ToUpperInvariant(), " File");
     }
 
+    /// <summary>
+    /// How much of a name the rename box selects at first, in UTF-16 units: a
+    /// file's name without its extension (after the last dot, not a leading
+    /// one), as in Explorer; a folder's whole name.
+    /// </summary>
+    public static int RenameStem(string name, bool isFolder)
+    {
+        var dot = isFolder ? -1 : name.LastIndexOf('.');
+        return dot > 0 ? dot : name.Length;
+    }
+
     /// <summary>The lower-case extension without the dot, or empty.</summary>
     public static string Extension(ReadOnlySpan<char> name)
     {

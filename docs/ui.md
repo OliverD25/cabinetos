@@ -1230,6 +1230,55 @@ without applying it, the card and the button went back to "Installed",
 and the status bar said "Paper is updated to version 1.1.0.". The
 snapshot step `click:Installed` showed the tab.
 
+## Edge cases
+
+What the shell does with the names, paths, links and windows that break
+file managers, one class at a time, each with its tests
+(`ui/CabinetOS.Tests`) and snapshots of a fixture. The fixture is made by
+`ui/livecheck/edge-fixture.ps1 -Root <folder>` (Windows PowerShell or
+PowerShell 7) until the core's fixture script covers the same.
+
+### Names beyond ASCII
+
+The fixture's `names\` folder holds `Звіт 2026.txt`, `Ґанок`,
+`Їжак і Єнот.md`, `日本語のファイル.txt`, `中文文件夹`, `📁 photos`,
+`𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt` (surrogate pairs), `café.txt` in NFC and in NFD side by
+side, `مستند.txt` (right to left), a 255-unit name, and in a
+case-sensitive folder `Report.txt` and `report.txt`.
+
+- **The order is the core's.** The core sorts in Explorer's natural order
+  (case-insensitive, digits as numbers, the user's locale), folders first;
+  the shell shows the rows exactly in that order and never sorts. For the
+  fixture: `case`, `Ґанок`, `📁 photos`, `中文文件夹`, then the 255-unit
+  name, the two `café.txt`, `Звіт 2026.txt`, `Їжак і Єнот.md`,
+  `مستند.txt`, `𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt`, `日本語のファイル.txt`.
+- **A name is its units.** The listing's names come back unit for unit,
+  so NFC and NFD `café.txt` are two rows and two names, and a name is
+  found exactly before it is found in another case: in a case-sensitive
+  folder, selecting `report.txt` after a rename no longer picks
+  `Report.txt` (`ListingView.IndexOfName`).
+- **Right-to-left names keep their extension on the right.** Every text
+  of the window takes the window's reading order, left to right, as
+  Explorer does; WinUI's default took it from the first letter and showed
+  `مستند.txt` as `txt.مستند` (an implicit `TextBlock` style in
+  `App.xaml`).
+- **F2 selects the stem**: the name up to its last dot, not a leading one
+  (`Їжак і Єнот` of `Їжак і Єнот.md`, `cafe` with its combining accent,
+  all of `.gitignore`), in UTF-16 units, so it never ends inside a
+  surrogate pair (`DisplayFormat.RenameStem`).
+- **Properties names the type the Type column shows** ("Markdown Source
+  File"); it used the built-in "MD File" before (`PropertiesText`).
+- The crumbs, the address box, the pane titles, the status bar, the
+  conflict card, the search field and its hits, and the terminal's folder
+  line showed every fixture name whole (snapshots, 2026-09-29). A Cyrillic
+  query in the palette finds no command and says "0 commands".
+- Typing Cyrillic with Unicode key events (the touch keyboard's way) into
+  the address box, the search field and the rename box goes to WinUI's
+  own text boxes, which took such events correctly in the live check; the
+  real-key check is `ui/livecheck/livecheck.ps1`'s.
+
+Tests: `NamesBeyondAsciiTests` (14).
+
 ## Not in this version
 
 | What | Why |

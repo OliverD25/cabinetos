@@ -115,6 +115,15 @@
 
             <x:Double x:Key="CbRowHeight">30</x:Double>
 
+            <!--
+              Text in the window's reading order, left to right: a right-to-left name keeps
+              its extension on the right, as Explorer shows it (docs/ui.md, "Edge cases").
+              WinUI's default takes the direction from the text's first letter, which showed
+              مستند.txt as txt.مستند.
+            -->
+            <Style TargetType="TextBlock">
+                <Setter Property="TextReadingOrder" Value="UseFlowDirection" />
+            </Style>
             <Style x:Key="CbSectionLabelStyle" TargetType="TextBlock">
                 <Setter Property="FontSize" Value="11" />
                 <Setter Property="FontWeight" Value="SemiBold" />
