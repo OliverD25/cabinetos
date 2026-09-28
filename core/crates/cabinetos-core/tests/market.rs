@@ -389,7 +389,7 @@ async fn a_theme_and_a_tool_install_with_their_events() {
             let tool = zip(&[
                 (
                     "tool.json",
-                    br#"{"id":"md-preview","name":"Markdown Preview","version":"1.0.0"}"#,
+                    br#"{"id":"md-preview","name":"Markdown Preview","version":"1.0.0","author":"Me","description":"Shows Markdown.","entry":"index.html","accepts":["*.md"],"placement":"pane"}"#,
                 ),
                 ("index.html", b"<!doctype html>"),
             ]);

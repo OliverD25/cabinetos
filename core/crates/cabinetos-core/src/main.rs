@@ -58,9 +58,9 @@ struct Args {
     #[arg(long, value_name = "PATH")]
     themes_dir: Option<PathBuf>,
 
-    /// Keep the Tool Extensions in this folder instead of
-    /// %LOCALAPPDATA%\CabinetOS\tools (or the `CABINETOS_TOOLS_DIR`
-    /// variable).
+    /// Install Tool Extensions into this folder instead of
+    /// %LOCALAPPDATA%\CabinetOS\tools, where the window reads them. For
+    /// tests; unlike the window, the core reads no `CABINETOS_TOOLS_DIR`.
     #[arg(long, value_name = "PATH")]
     tools_dir: Option<PathBuf>,
 

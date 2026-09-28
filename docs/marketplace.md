@@ -34,8 +34,13 @@ to the UI (`core/crates/cabinetos-core/src/market.rs`). The index format is
 |---|---|---|---|
 | Plugins | `%LOCALAPPDATA%\CabinetOS\plugins\<id>\` | `--plugins-dir <path>` | `CABINETOS_PLUGINS_DIR` |
 | Themes | `%LOCALAPPDATA%\CabinetOS\themes\<id>.json` | `--themes-dir <path>` | `CABINETOS_THEMES_DIR` |
-| Tool Extensions | `%LOCALAPPDATA%\CabinetOS\tools\<id>\` | `--tools-dir <path>` | `CABINETOS_TOOLS_DIR` |
+| Tool Extensions | `%LOCALAPPDATA%\CabinetOS\tools\<id>\` | `--tools-dir <path>` | none (see below) |
 | The marketplace's own files | `%LOCALAPPDATA%\CabinetOS\marketplace\` | `--marketplace-dir <path>` | `CABINETOS_MARKETPLACE_DIR` |
+
+Tools go where the window reads installed tools. The core reads no
+`CABINETOS_TOOLS_DIR`: in the window that variable names a folder of tools
+in development, read first ([tool-extensions.md](tool-extensions.md)), and
+the core, which the window starts, inherits the window's environment.
 
 The marketplace folder holds `installed.json` (the record of installs:
 each extension's kind, version, SHA-256, index, time and exact files), the
@@ -106,9 +111,11 @@ What a download is, by kind:
 - **tool**: a zip of the tool's folder, with `tool.json` at its root. It
   lands in `tools\<id>\`.
 
-A `tool.json` has at least `id` (the folder's name), `name` and `version`,
-and may have `author` and `description`. The core reads only these; every
-other key belongs to the Tool Dock, which hosts the tool (Phase 5).
+`tool.json` is the window's format ([tool-extensions.md](tool-extensions.md)).
+The core checks `id` (the folder's name, at most 63 characters, since the
+window makes it a host name), `name`, `version`, `author` and
+`description`; the window checks the rest (`entry`, `accepts`,
+`placement`) when it loads the tool, and leaves out one it cannot use.
 
 ## Where downloads come from
 
@@ -215,6 +222,10 @@ cabinetos-cli market tools
   `https://marketplace.cabinetos.invalid/index.json`, which can never
   resolve. Publishing an index is a decision for the project's creator.
 - Publisher identities and signatures; until then `verified` is only shown.
-- The marketplace view and the Tool Dock are UI work (Phase 5).
+- The marketplace view is UI work. The window reads the tools folders at
+  its start, so a tool installed while it runs shows at its next start;
+  `tools_changed` is there for when it follows the list live.
+- The core checks only part of `tool.json`; a tool that installs but that
+  the window cannot load is left out by the window, with a warning.
 - An update is not atomic (see above), and there is no automatic update
   check.

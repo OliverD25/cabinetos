@@ -114,8 +114,8 @@ pub struct CoreConfig {
     /// The themes folder; `None` uses `CABINETOS_THEMES_DIR` or
     /// `%LOCALAPPDATA%\CabinetOS\themes`.
     pub themes_dir: Option<PathBuf>,
-    /// The Tool Extensions folder; `None` uses `CABINETOS_TOOLS_DIR` or
-    /// `%LOCALAPPDATA%\CabinetOS\tools`.
+    /// The folder the marketplace installs Tool Extensions into; `None`
+    /// uses `%LOCALAPPDATA%\CabinetOS\tools`, where the window reads them.
     pub tools_dir: Option<PathBuf>,
     /// The marketplace's own folder (the index cache, downloads, the record
     /// of installs); `None` uses `CABINETOS_MARKETPLACE_DIR` or

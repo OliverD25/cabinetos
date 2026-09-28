@@ -38,24 +38,18 @@ pub use index::{Index, Source, parse_index, search};
 pub use install::{Dirs, Installed, Market};
 pub use tools::{TOOL_MANIFEST_FILE, list_tools};
 
-/// Environment variable naming the Tool Extensions folder, when no folder
-/// is given on the command line.
-pub const TOOLS_DIR_ENV: &str = "CABINETOS_TOOLS_DIR";
-
 /// Environment variable naming the marketplace's own folder (the index
 /// cache, downloads in progress, the record of installs).
 pub const MARKETPLACE_DIR_ENV: &str = "CABINETOS_MARKETPLACE_DIR";
 
-/// The Tool Extensions folder: `explicit` wins, then [`TOOLS_DIR_ENV`], then
-/// `%LOCALAPPDATA%\CabinetOS\tools`.
+/// The folder of installed Tool Extensions: `explicit`, else
+/// `%LOCALAPPDATA%\CabinetOS\tools`, the folder the window reads installed
+/// tools from. There is no environment variable: the window's
+/// `CABINETOS_TOOLS_DIR` names a folder of tools in development, and the
+/// core, started by the window, inherits its environment.
 #[must_use]
 pub fn tools_dir(explicit: Option<PathBuf>) -> PathBuf {
-    resolve_dir(
-        explicit,
-        std::env::var_os(TOOLS_DIR_ENV),
-        std::env::var_os("LOCALAPPDATA"),
-        "tools",
-    )
+    resolve_dir(explicit, None, std::env::var_os("LOCALAPPDATA"), "tools")
 }
 
 /// The marketplace's own folder: `explicit` wins, then

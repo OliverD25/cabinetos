@@ -324,7 +324,7 @@ fn a_zip_that_points_outside_its_folder_is_refused() {
         &zip(&[
             (
                 "tool.json",
-                br#"{"id":"sneaky","name":"Sneaky","version":"1.0.0"}"#,
+                br#"{"id":"sneaky","name":"Sneaky","version":"1.0.0","author":"Me","description":"X."}"#,
             ),
             ("../escaped.txt", b"out"),
         ]),
@@ -415,7 +415,7 @@ fn a_tool_is_unpacked_listed_and_removed_with_its_empty_folders() {
         &zip(&[
             (
                 "tool.json",
-                br#"{"id":"md-preview","name":"Markdown Preview","version":"1.0.0","entry":"index.html"}"#,
+                br#"{"id":"md-preview","name":"Markdown Preview","version":"1.0.0","author":"Me","description":"Shows Markdown.","entry":"index.html","accepts":["*.md"],"placement":"pane"}"#,
             ),
             ("index.html", b"<!doctype html>"),
             ("assets/app.js", b"// app"),

@@ -1,7 +1,8 @@
 //! Tool Extensions as the core sees them: folders under the tools folder,
-//! each with a `tool.json`. The Tool Dock (the UI) hosts them; the core only
-//! installs, lists and removes them. It reads the keys below and leaves
-//! every other key of `tool.json` to the Tool Dock.
+//! each with a `tool.json` (`docs/tool-extensions.md`). The window hosts
+//! them; the core only installs, lists and removes them. It reads the keys
+//! below and leaves the others (`entry`, `accepts`, `placement`) to the
+//! window, which reads the file strictly.
 
 use std::path::Path;
 
@@ -19,11 +20,13 @@ pub(crate) struct ToolManifest {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) version: String,
-    #[serde(default)]
     pub(crate) author: String,
-    #[serde(default)]
     pub(crate) description: String,
 }
+
+/// The longest tool ID: the window makes it a host name, whose parts have
+/// at most 63 characters.
+const MAX_TOOL_ID: usize = 63;
 
 /// Reads and checks `<dir>/tool.json`.
 pub(crate) fn read_manifest(dir: &Path) -> Result<ToolManifest, String> {
@@ -36,8 +39,20 @@ pub(crate) fn read_manifest(dir: &Path) -> Result<ToolManifest, String> {
     if let Some(problem) = extension_id_problem(&manifest.id) {
         return Err(format!("{}: id: {problem}", path.display()));
     }
-    if manifest.name.trim().is_empty() {
-        return Err(format!("{}: `name` is empty", path.display()));
+    if manifest.id.len() > MAX_TOOL_ID {
+        return Err(format!(
+            "{}: a tool's id has at most {MAX_TOOL_ID} characters",
+            path.display()
+        ));
+    }
+    for (field, value) in [
+        ("name", &manifest.name),
+        ("author", &manifest.author),
+        ("description", &manifest.description),
+    ] {
+        if value.trim().is_empty() {
+            return Err(format!("{}: `{field}` is empty", path.display()));
+        }
     }
     if parse_version(&manifest.version).is_none() {
         return Err(format!(
@@ -106,11 +121,22 @@ mod tests {
         };
         write(
             "md-preview",
-            r#"{"id":"md-preview","name":"Markdown Preview","version":"1.0.0","entry":"index.html"}"#,
+            r#"{"id":"md-preview","name":"Markdown Preview","version":"1.0.0","author":"Me","description":"Shows Markdown.","entry":"index.html"}"#,
         );
         write(
             "other",
-            r#"{"id":"md-preview","name":"X","version":"1.0.0"}"#,
+            r#"{"id":"md-preview","name":"X","version":"1.0.0","author":"Me","description":"X."}"#,
+        );
+        write(
+            "no-author",
+            r#"{"id":"no-author","name":"X","version":"1.0.0","description":"X."}"#,
+        );
+        let long = "x".repeat(64);
+        write(
+            &long,
+            &format!(
+                r#"{{"id":"{long}","name":"X","version":"1.0.0","author":"Me","description":"X."}}"#
+            ),
         );
         write("broken", "{");
         fs::create_dir_all(dir.join("empty")).unwrap();
@@ -118,7 +144,7 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].id, "md-preview");
         assert_eq!(tools[0].name, "Markdown Preview");
-        assert!(tools[0].author.is_empty());
+        assert_eq!(tools[0].author, "Me");
         assert!(tools[0].dir.ends_with("md-preview"));
         assert!(list_tools(&dir.join("nothing")).is_empty());
     }

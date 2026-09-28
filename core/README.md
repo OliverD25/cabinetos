@@ -147,9 +147,10 @@ another file. It loads the Core Plugins from
 (or `CABINETOS_PLUGINS_DATA_DIR`) the folder of the plugins' own folders.
 It reads the colour themes from `%LOCALAPPDATA%\CabinetOS\themes`, and
 writes the shipped themes there when they are missing; `--themes-dir
-<path>` (or `CABINETOS_THEMES_DIR`) picks another folder. Tool Extensions
-live in `%LOCALAPPDATA%\CabinetOS\tools` (`--tools-dir`,
-`CABINETOS_TOOLS_DIR`), and the marketplace keeps its own files in
+<path>` (or `CABINETOS_THEMES_DIR`) picks another folder. The marketplace
+installs Tool Extensions into `%LOCALAPPDATA%\CabinetOS\tools`, where the
+window reads them (`--tools-dir` picks another folder; the core reads no
+`CABINETOS_TOOLS_DIR`, which is the window's), and keeps its own files in
 `%LOCALAPPDATA%\CabinetOS\marketplace` (`--marketplace-dir`,
 `CABINETOS_MARKETPLACE_DIR`).
 
