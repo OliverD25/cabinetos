@@ -64,6 +64,7 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _chordTimer;
     private readonly DispatcherQueueTimer _noticeTimer;
     private readonly DispatcherQueueTimer _speedTimer;
+    private readonly WindowArgs _args;
     private readonly bool _selfTestCrash;
     private readonly string? _toolsDir;
     private UiSettings _settings = UiSettings.Defaults;
@@ -81,14 +82,17 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Creates the window; the core starts once the content is loaded.
-    /// <paramref name="toolsDir"/> (<c>--tools-dir</c>) is a folder of Tool
-    /// Extensions read before the installed ones, for writing a tool.
+    /// <paramref name="args"/>: <c>--path</c> is the left pane's first folder
+    /// (a new window's, from <c>window.new</c>); <c>--tools-dir</c> is a
+    /// folder of Tool Extensions read before the installed ones, for writing
+    /// a tool.
     /// </summary>
-    public MainWindow(bool selfTestCrash, string? toolsDir = null)
+    public MainWindow(WindowArgs args)
     {
         InitializeComponent();
-        _selfTestCrash = selfTestCrash;
-        _toolsDir = toolsDir;
+        _args = args;
+        _selfTestCrash = args.SelfTestCrash;
+        _toolsDir = args.ToolsDir;
         _router = new CommandRouter(_session);
         // Both panes share what the core said per extension, and the icons.
         var known = new ExtensionDetails();
@@ -621,12 +625,14 @@ public sealed partial class MainWindow : Window
 
     private async Task OpenFirstFoldersAsync()
     {
-        // The folders of the last session (ui.lastPaths), else dual pane on first
+        // A new window's folder (--path, from window.new) on the left; else the
+        // folders of the last session (ui.lastPaths); else dual pane on first
         // start (PLAN.md, consistency check B): the profile on the left, its
         // Documents on the right when the profile lists one, else C:\.
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var last = _shell.LastPaths;
-        if (last.Count < 1 || !await _panes[0].NavigateAsync(last[0]))
+        if ((_args.Path is not { } start || !await _panes[0].NavigateAsync(start))
+            && (last.Count < 1 || !await _panes[0].NavigateAsync(last[0])))
         {
             await _panes[0].NavigateAsync(profile);
         }
@@ -699,10 +705,19 @@ public sealed partial class MainWindow : Window
         _settings = settings;
         if ((firstStart || settings.DualPane != previous.DualPane) && !IsOwnWrite(ShellState.DualPaneKey, settings.DualPane))
         {
+            if (!firstStart)
+            {
+                // Another window, or a hand edit of cabinetos.json: this window follows and writes nothing back.
+                Diag.Info(Target, "dual pane follows the configuration", new LogField("dual", settings.DualPane));
+            }
             ApplyDual(settings.DualPane);
         }
         if ((firstStart || settings.Sidebar != previous.Sidebar) && !IsOwnWrite(ShellState.SidebarKey, settings.Sidebar))
         {
+            if (!firstStart)
+            {
+                Diag.Info(Target, "the sidebar follows the configuration", new LogField("sidebar", settings.Sidebar));
+            }
             ApplySidebar(settings.Sidebar);
         }
         LayoutText.Text = settings.Layout switch
@@ -1061,6 +1076,8 @@ public sealed partial class MainWindow : Window
             _ = PersistAsync(ShellState.SidebarKey, _sidebarOpen);
         });
         _router.RegisterUiHandler("go.toPath", GoToPathAsync);
+        // Not in the core's registry yet: this handler runs it all the same (the router's rule for window commands).
+        _router.RegisterUiHandler("window.new", _ => OpenNewWindow());
 
         // The shell's own commands, in the core's registry since protocol 9
         // (target ui, keys in the keymap, so each one can be rebound).
@@ -1868,6 +1885,34 @@ public sealed partial class MainWindow : Window
     }
 
     // ----- Panes -----
+
+    // window.new (docs/ui.md, "Two windows"): another CabinetOS.exe at the active pane's folder. It
+    // starts a core of its own (PLAN.md, "Process layout") and shares the configuration and the logs.
+    private void OpenNewWindow()
+    {
+        if (Environment.ProcessPath is not { } exe)
+        {
+            return;
+        }
+        var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
+        foreach (var arg in _args.ForNewWindow(Active.Path))
+        {
+            start.ArgumentList.Add(arg);
+        }
+        // The snapshot aid's steps are this window's: a new window would run them again, window.new among them.
+        start.Environment.Remove(DevSnapshots.FolderEnv);
+        start.Environment.Remove(DevSnapshots.StepsEnv);
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(start);
+            Diag.Info(Target, "new window started", new LogField("pid", process?.Id), new LogField("path", Active.Path));
+        }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Diag.Warn(Target, "a new window could not start", new LogField("error", error.Message));
+            ShowNotice($"A new window could not start: {error.Message}", isError: true);
+        }
+    }
 
     private void ApplyDual(bool dual)
     {

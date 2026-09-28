@@ -9,7 +9,7 @@ public partial class App : Application
     private readonly string[] _args;
     private MainWindow? _window;
 
-    /// <summary>Creates the application; <c>--self-test-crash</c> proves the crash path.</summary>
+    /// <summary>Creates the application with its command line (<see cref="CabinetOS.Core.Platform.WindowArgs"/>); <c>--self-test-crash</c> proves the crash path.</summary>
     public App(string[] args)
     {
         _args = args;
@@ -34,8 +34,7 @@ public partial class App : Application
     {
         try
         {
-            var toolsDir = Array.IndexOf(_args, "--tools-dir") is var at and >= 0 && at + 1 < _args.Length ? _args[at + 1] : null;
-            _window = new MainWindow(selfTestCrash: _args.Contains("--self-test-crash"), toolsDir);
+            _window = new MainWindow(CabinetOS.Core.Platform.WindowArgs.Parse(_args));
             _window.Activate();
         }
         catch (Exception error)

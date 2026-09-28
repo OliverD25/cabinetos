@@ -1378,6 +1378,46 @@ a sync provider such as OneDrive.
 
 Tests: `LinksAndCloudFilesTests` (22).
 
+### Two windows
+
+A second window is a second `CabinetOS.exe` with a core of its own (PLAN.md,
+"Process layout"). Both read and write one `cabinetos.json`, one log
+folder and WebView2's data folders.
+
+- **`window.new`** starts another window at the active pane's folder
+  (`--path <folder>`; `WindowArgs`), with this window's `--tools-dir`. The
+  new window does not inherit the snapshot aid's variables, which would
+  make it run this window's steps again. The core does not list
+  `window.new` yet, so the palette has no row and no key for it; the
+  window's handler runs it all the same (from a tool, a plugin or the
+  snapshot aid) and will serve the row when the core adds it.
+- **Settings follow, and nothing fights.** A setting one window writes
+  (`set_value`) reaches the other as `config_changed`; the other applies
+  it and writes nothing back, and says so in its log ("dual pane follows
+  the configuration", "the sidebar follows the configuration"). The last
+  window to close writes `ui.lastPaths`.
+- **Closing one leaves the other**: its core ends with it, and the other
+  window, its core and its terminal go on.
+- **One log file, every line whole.** Each window's log writer holds
+  today's `ui.<date>.jsonl` with the right to append only, so Windows puts
+  every write at the file's end, and each batch of lines is one write.
+  Before, each writer wrote where it thought the end was: two writers kept
+  3,000 of 6,000 lines, the rest written over (`LogWriter`).
+- **One WebView2 data folder per page kind, shared**: both windows'
+  terminals run in one browser process (the same `browser_pid` in the log).
+  WebView2 supports this, and closing one window leaves the other's page
+  running. A crash of that browser process stops the terminal in both
+  windows; each brings its own back with Reload.
+
+Tests: `TwoWindowsTests` (2) and one in `DiagnosticsTests` (two writers
+on one file). The end-to-end test starts two real windows for about half
+a minute: B, then A, both opening the terminal; A turns dual pane off and
+closes; B follows, keeps its core, and runs a command after A is gone. It
+opens windows on the desktop, so it runs only with `CABINETOS_UI_E2E=1`
+(and skips otherwise). Checked with the snapshot aid: `window.new` in a
+pane at `names\Ґанок` started a window whose left pane opened there, with
+its own core.
+
 ## Not in this version
 
 | What | Why |

@@ -74,6 +74,51 @@ public class DiagnosticsTests
     }
 
     [Fact]
+    public void Two_windows_append_to_one_daily_file_without_losing_or_breaking_a_line()
+    {
+        // Two windows are two processes, each with its own handle on today's file (edge cases, class D).
+        var dir = Repo.NewTempFolder("diag");
+        try
+        {
+            const int each = 3000;
+            using (var first = new LogWriter(dir, LogFilter.Default, "ui", "0.1.0", () => At))
+            using (var second = new LogWriter(dir, LogFilter.Default, "ui", "0.1.0", () => At))
+            {
+                var writers = new[] { first, second };
+                Parallel.For(0, 2, w =>
+                {
+                    for (var i = 0; i < each; i++)
+                    {
+                        writers[w].Write(LogLevel.Info, "cabinetos_ui::test", $"window {w} line {i} " + new string('x', i % 700));
+                        if (i % 97 == 0)
+                        {
+                            // The writer thread takes lines in batches; pausing makes many of them, from both sides.
+                            Thread.Sleep(1);
+                        }
+                    }
+                });
+                Assert.True(first.Flush(TimeSpan.FromSeconds(10)));
+                Assert.True(second.Flush(TimeSpan.FromSeconds(10)));
+            }
+
+            var lines = File.ReadAllLines(Path.Combine(dir, "ui.2026-09-28.jsonl"));
+            var seen = new HashSet<string>();
+            foreach (var line in lines)
+            {
+                using var parsed = JsonDocument.Parse(line);
+                var message = parsed.RootElement.GetProperty("message").GetString()!;
+                seen.Add(string.Join(' ', message.Split(' ').Take(4)));
+            }
+            Assert.Equal(2 * each, lines.Length);
+            Assert.Equal(2 * each, seen.Count);
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(dir);
+        }
+    }
+
+    [Fact]
     public void The_ring_keeps_the_last_256_lines_oldest_first()
     {
         var dir = Repo.NewTempFolder("diag");

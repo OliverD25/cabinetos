@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.AccessControl;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -28,11 +29,14 @@ public sealed class LogWriter : IDisposable
     /// <summary>Daily files kept, today's included, as in the core.</summary>
     public const int KeptLogFiles = 14;
 
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
+
     private readonly ConcurrentQueue<string> _queue = new();
     private readonly string?[] _ring = new string?[RingCapacity];
     private readonly AutoResetEvent _signal = new(false);
     private readonly Thread _thread;
     private readonly Func<DateTime> _clock;
+    private readonly StringBuilder _batch = new();
     private long _ringNext;
     private int _queued;
     private long _dropped;
@@ -40,7 +44,7 @@ public sealed class LogWriter : IDisposable
     private int _sleeping;
     private int _busy;
     private volatile bool _stopping;
-    private StreamWriter? _file;
+    private FileStream? _file;
     private DateOnly _fileDate;
 
     /// <summary>Starts the writer thread for <paramref name="directory"/>.</summary>
@@ -286,24 +290,23 @@ public sealed class LogWriter : IDisposable
         Volatile.Write(ref _busy, 1);
         try
         {
-            var wrote = false;
+            _batch.Clear();
             while (_queue.TryDequeue(out var line))
             {
                 Interlocked.Decrement(ref _queued);
-                WriteToFile(line);
-                wrote = true;
+                _batch.Append(line).Append('\n');
             }
             var dropped = Interlocked.Read(ref _dropped);
             if (dropped != _droppedReported)
             {
                 var fields = new[] { new LogField("dropped", dropped - _droppedReported) };
                 _droppedReported = dropped;
-                WriteToFile(LogLine.Format(_clock(), LogLevel.Warn, "cabinetos_ui::diag", "the log writer fell behind and dropped lines", null, null, fields, LogLine.CurrentThreadLabel()));
-                wrote = true;
+                _batch.Append(LogLine.Format(_clock(), LogLevel.Warn, "cabinetos_ui::diag", "the log writer fell behind and dropped lines", null, null, fields, LogLine.CurrentThreadLabel()))
+                    .Append('\n');
             }
-            if (wrote)
+            if (_batch.Length > 0)
             {
-                _file?.Flush();
+                WriteToFile(_batch);
             }
         }
         catch (IOException)
@@ -323,20 +326,24 @@ public sealed class LogWriter : IDisposable
         }
     }
 
-    private void WriteToFile(string line)
+    // Two windows are two processes writing one daily file. A handle that may only append
+    // (FILE_APPEND_DATA without FILE_WRITE_DATA) has Windows put every write at the file's
+    // current end, and each batch is one write, so neither writes over the other's lines.
+    // A plain FileMode.Append handle writes where it thinks the end is: in a test, two
+    // writers kept 3,000 of 6,000 lines (edge cases, class D).
+    private void WriteToFile(StringBuilder batch)
     {
         var today = DateOnly.FromDateTime(_clock());
         if (_file is null || today != _fileDate)
         {
             _file?.Dispose();
-            var stream = new FileStream(FilePathFor(today), FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
-            _file = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { NewLine = "\n" };
+            _file = new FileInfo(FilePathFor(today)).Create(FileMode.Append, FileSystemRights.AppendData | FileSystemRights.Synchronize,
+                FileShare.ReadWrite | FileShare.Delete, bufferSize: 1, FileOptions.None, fileSecurity: null);
             _fileDate = today;
             // Today's file exists now, so it counts among the files kept.
             DeleteOldFiles();
         }
-        _file.Write(line);
-        _file.Write('\n');
+        _file.Write(Utf8.GetBytes(batch.ToString()));
     }
 
     private void DeleteOldFiles()
