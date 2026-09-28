@@ -79,5 +79,23 @@ public class KeyTests
     {
         Assert.Null(KeyNames.FromVirtualKey(0x2C));
         Assert.Null(KeyNames.FromVirtualKey(0xAD));
+        Assert.Null(KeyNames.ComboFor(0x2C, KeyModifiers.Ctrl));
+        Assert.Equal("ctrl+shift+p", KeyNames.ComboFor(0x50, KeyModifiers.Ctrl | KeyModifiers.Shift).ToString());
+    }
+
+    [Fact]
+    public void A_palette_row_shows_the_first_binding_and_counts_the_others()
+    {
+        var several = BindingSummary.Of(["ctrl+k v", "no+such+keys", "f2", "ctrl+shift+m"]);
+        Assert.Equal("ctrl+k v", several.First!.ToString());
+        Assert.Equal((2, "+2"), (several.Others, several.MoreText));
+        Assert.Equal("Ctrl+K then V, F2, Ctrl+Shift+M", several.All);
+
+        var one = BindingSummary.Of(["f5"]);
+        Assert.Equal((0, null, "F5"), (one.Others, one.MoreText, one.All));
+
+        var none = BindingSummary.Of([]);
+        Assert.Null(none.First);
+        Assert.Null(none.MoreText);
     }
 }

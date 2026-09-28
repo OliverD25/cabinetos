@@ -108,6 +108,15 @@ public static class KeyNames
     public static bool IsModifier(int virtualKey) =>
         virtualKey is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C or (>= 0xA0 and <= 0xA5);
 
+    /// <summary>
+    /// The combination a key press makes, or null for Ctrl, Shift, Alt or Win
+    /// pressed alone and for a key the grammar has no name for. Such presses
+    /// never reach the key state machine, so a chord keeps waiting while a
+    /// modifier is pressed again between its two halves.
+    /// </summary>
+    public static KeyCombo? ComboFor(int virtualKey, KeyModifiers modifiers) =>
+        IsModifier(virtualKey) || FromVirtualKey(virtualKey) is not { } name ? null : new KeyCombo(modifiers, name);
+
     private static FrozenDictionary<int, string> BuildVirtualKeys()
     {
         var keys = new Dictionary<int, string>

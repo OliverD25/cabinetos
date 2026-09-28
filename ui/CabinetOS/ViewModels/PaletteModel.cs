@@ -23,10 +23,17 @@ public sealed class PaletteRow : ObservableObject
     public PaletteRow(CommandInfo info)
     {
         Info = info;
-        Keycaps = info.Keys.Count > 0 && KeySequence.TryParse(info.Keys[0], out var keys)
-            ? Parts(keys.DisplayParts())
-            : [];
+        var bindings = BindingSummary.Of(info.Keys);
+        Keycaps = bindings.First is { } first ? Parts(first.DisplayParts()) : [];
+        MoreKeys = bindings.MoreText;
+        AllKeys = bindings.All;
     }
+
+    /// <summary>"+1" when the command has more bindings than the one shown; null otherwise.</summary>
+    public string? MoreKeys { get; }
+
+    /// <summary>Every binding, for the tooltip: "Ctrl+K then V, F2".</summary>
+    public string AllKeys { get; }
 
     /// <summary>The command.</summary>
     public CommandInfo Info { get; }

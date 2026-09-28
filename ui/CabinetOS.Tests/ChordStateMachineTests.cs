@@ -114,6 +114,58 @@ public class ChordStateMachineTests
     }
 
     [Fact]
+    public void A_chord_prefix_pressed_twice_runs_nothing_and_leaves_no_wait()
+    {
+        Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k"));
+        var twice = Assert.IsType<KeyOutcome.NotBound>(Press("ctrl+k"));
+        Assert.Equal((Combo("ctrl+k"), Combo("ctrl+k")), (twice.First, twice.Second));
+        Assert.Null(_keys.PendingFirst);
+        // The next press starts over from idle.
+        Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k"));
+        Assert.Equal("keys.open", Assert.IsType<KeyOutcome.Run>(Press("ctrl+s")).Command);
+    }
+
+    [Fact]
+    public void A_chord_that_timed_out_can_be_started_again_and_its_window_counts_from_the_new_press()
+    {
+        Press("ctrl+k");
+        _now += 1001;
+        Assert.True(_keys.ExpireIfDue());
+
+        Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k"));
+        _now += 1000;
+        Assert.Equal("workspace.switch", Assert.IsType<KeyOutcome.Run>(Press("ctrl+w")).Command);
+
+        // Late again, without the timer: the prefix pressed anew still starts a fresh wait.
+        Press("ctrl+k");
+        _now += 2000;
+        Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k"));
+        Assert.Equal("keys.open", Assert.IsType<KeyOutcome.Run>(Press("ctrl+s")).Command);
+    }
+
+    [Theory]
+    [InlineData(0x10)]
+    [InlineData(0x11)]
+    [InlineData(0x12)]
+    [InlineData(0x5B)]
+    [InlineData(0x5C)]
+    [InlineData(0xA0)]
+    [InlineData(0xA3)]
+    [InlineData(0xA5)]
+    public void A_modifier_pressed_alone_makes_no_combination_so_a_chord_keeps_waiting(int modifierKey)
+    {
+        Assert.Null(KeyNames.ComboFor(modifierKey, KeyModifiers.Ctrl));
+        Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k"));
+        // The window feeds the machine only what ComboFor returns: Ctrl pressed again between the halves is not a key.
+        if (KeyNames.ComboFor(modifierKey, KeyModifiers.Ctrl) is { } combo)
+        {
+            _keys.OnKey(combo, Nothing);
+        }
+        Assert.Equal(Combo("ctrl+k"), _keys.PendingFirst);
+        Assert.Equal("keys.open", Assert.IsType<KeyOutcome.Run>(_keys.OnKey(KeyNames.ComboFor(0x53, KeyModifiers.Ctrl)!.Value, Nothing)).Command);
+    }
+
+    [Fact]
     public void A_binding_with_a_context_applies_only_while_it_holds()
     {
         Assert.Equal("view.focusOtherPane", Assert.IsType<KeyOutcome.Run>(Press("tab", Files)).Command);

@@ -111,6 +111,37 @@ public class SelectionModelTests
     }
 
     [Fact]
+    public void Shift_after_a_refresh_extends_from_the_anchor_the_refresh_carried()
+    {
+        var selection = Create();
+        selection.MoveTo(2, SelectMode.Single);
+        selection.MoveTo(4, SelectMode.Extend);
+        Assert.Equal([2, 3, 4], selection.Selected);
+
+        // A file appeared at the top: the pane found the same entries one row lower (by their IDs).
+        selection.Restore(11, [3, 4, 5], focus: 5, anchor: 3);
+        selection.MoveTo(7, SelectMode.Extend);
+
+        Assert.Equal([3, 4, 5, 6, 7], selection.Selected);
+        Assert.Equal((7, 3), (selection.Focus, selection.Anchor));
+    }
+
+    [Fact]
+    public void Shift_after_a_refresh_that_lost_the_anchor_extends_from_the_focus()
+    {
+        var selection = Create();
+        selection.MoveTo(2, SelectMode.Single);
+        selection.MoveTo(4, SelectMode.Extend);
+
+        // The anchor's entry was deleted: the pane has no index for it.
+        selection.Restore(9, [2, 3], focus: 3, anchor: -1);
+        Assert.Equal(3, selection.Anchor);
+        selection.MoveTo(1, SelectMode.Extend);
+
+        Assert.Equal([1, 2, 3], selection.Selected);
+    }
+
+    [Fact]
     public void Every_change_is_announced()
     {
         var selection = Create();

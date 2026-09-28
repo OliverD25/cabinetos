@@ -155,5 +155,18 @@ public sealed partial class PaletteRowView : UserControl
                 });
             }
         }
+        // More bindings than the first: "+N" after its keycaps, and all of them in the tooltip.
+        if (row.MoreKeys is { } more)
+        {
+            Keycaps.Children.Add(new TextBlock
+            {
+                Text = more,
+                FontSize = 11,
+                Padding = new Thickness(2, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = ThemeResources.Brush("CbTextTertiaryBrush"),
+            });
+        }
+        ToolTipService.SetToolTip(Keycaps, row.MoreKeys is null ? null : row.AllKeys);
     }
 }
