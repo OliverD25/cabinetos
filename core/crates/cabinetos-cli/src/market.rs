@@ -90,14 +90,21 @@ fn level_name(level: CapabilityLevel) -> &'static str {
     }
 }
 
+/// What `install_finished` said.
+#[derive(Debug)]
+struct Finished {
+    message: String,
+    /// The version installed now, as the core's record of installs has it.
+    installed_version: Option<String>,
+}
+
 /// What `install` has heard about its extension.
 struct Follow<'a> {
     id: &'a str,
     terminal: bool,
     /// The last progress line.
     progress: Option<String>,
-    /// `install_finished`: whether it worked, and the core's message.
-    finished: Option<(bool, String)>,
+    finished: Option<Finished>,
 }
 
 impl Follow<'_> {
@@ -122,12 +129,31 @@ impl Follow<'_> {
             }
             Event::InstallFinished {
                 extension_id,
-                ok,
                 message,
-            } if extension_id == self.id => self.finished = Some((ok, message)),
+                installed_version,
+                ..
+            } if extension_id == self.id => {
+                self.finished = Some(Finished {
+                    message,
+                    installed_version,
+                });
+            }
             _ => {}
         }
     }
+}
+
+/// What `install` prints when the core says it worked: the core's message,
+/// and the version installed now.
+fn success_lines(id: &str, finished: Option<&Finished>) -> Vec<String> {
+    let Some(finished) = finished else {
+        return vec![format!("installed {id}")];
+    };
+    let mut lines = vec![finished.message.clone()];
+    if let Some(version) = &finished.installed_version {
+        lines.push(format!("installed version: {version}"));
+    }
+    lines
 }
 
 /// `market install`: sends the request and shows the download's progress
@@ -183,12 +209,18 @@ pub(crate) async fn install(
         _ => {}
     }
     if reply.body != Response::Ok {
+        if let Some(version) = follow
+            .finished
+            .as_ref()
+            .and_then(|finished| finished.installed_version.as_deref())
+        {
+            say(format_args!("{id} {version} stays installed"));
+        }
         return Err(failure(id, &reply.body));
     }
-    let message = follow
-        .finished
-        .map_or_else(|| format!("installed {id}"), |(_, message)| message);
-    say(format_args!("{message}"));
+    for line in success_lines(id, follow.finished.as_ref()) {
+        say(format_args!("{line}"));
+    }
     Ok(())
 }
 
@@ -237,6 +269,34 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn install_prints_the_version_install_finished_names() {
+        let mut follow = Follow {
+            id: "hello",
+            terminal: false,
+            progress: None,
+            finished: None,
+        };
+        follow.note(Event::InstallFinished {
+            extension_id: "other".to_owned(),
+            ok: true,
+            message: "installed other 1.0.0 (theme)".to_owned(),
+            installed_version: Some("1.0.0".to_owned()),
+        });
+        assert!(follow.finished.is_none(), "another extension's event");
+        assert_eq!(success_lines("hello", None), ["installed hello"]);
+        follow.note(Event::InstallFinished {
+            extension_id: "hello".to_owned(),
+            ok: true,
+            message: "installed hello 0.1.0 (plugin)".to_owned(),
+            installed_version: Some("0.1.0".to_owned()),
+        });
+        assert_eq!(
+            success_lines("hello", follow.finished.as_ref()),
+            ["installed hello 0.1.0 (plugin)", "installed version: 0.1.0"]
+        );
+    }
 
     #[test]
     fn an_item_reads_as_a_few_lines() {

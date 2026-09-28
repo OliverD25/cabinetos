@@ -1021,6 +1021,12 @@ pub enum Event {
         ok: bool,
         /// What happened, for the user: `installed hello 0.1.0`, or why not.
         message: String,
+        /// The version installed from the marketplace now that the install
+        /// ended: the new one when it worked; when it failed, the one
+        /// installed before, if any. Absent when none is installed. Added
+        /// within protocol version 11: a core from before it leaves it out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        installed_version: Option<String>,
     },
     /// A Tool Extension was installed or removed. Sent to every connection
     /// that said `hello`, with the list `list_tools` would answer now.
@@ -1740,11 +1746,43 @@ mod tests {
                 extension_id: "hello".to_owned(),
                 ok: true,
                 message: "installed hello 0.1.0".to_owned(),
+                installed_version: Some("0.1.0".to_owned()),
             },
             Event::ToolsChanged {
                 tools: vec![tool()],
             },
         ]
+    }
+
+    #[test]
+    fn install_finished_names_the_installed_version_when_there_is_one() {
+        let finished = |installed_version: Option<&str>| {
+            serde_json::to_value(Event::InstallFinished {
+                extension_id: "hello".to_owned(),
+                ok: false,
+                message: "the download of hello 0.2.0 has the wrong SHA-256".to_owned(),
+                installed_version: installed_version.map(str::to_owned),
+            })
+            .unwrap()
+        };
+        assert_eq!(finished(Some("0.1.0"))["installed_version"], "0.1.0");
+        assert!(finished(None).get("installed_version").is_none());
+        // A core from before the field leaves it out; a client reads that
+        // as none.
+        let older: Event = serde_json::from_value(json!({
+            "type": "install_finished",
+            "extension_id": "hello",
+            "ok": true,
+            "message": "installed hello 0.1.0"
+        }))
+        .unwrap();
+        assert!(matches!(
+            older,
+            Event::InstallFinished {
+                installed_version: None,
+                ..
+            }
+        ));
     }
 
     #[test]

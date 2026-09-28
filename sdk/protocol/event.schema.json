@@ -396,6 +396,13 @@
           "description": "The extension.",
           "type": "string"
         },
+        "installed_version": {
+          "description": "The version installed from the marketplace now that the install\nended: the new one when it worked; when it failed, the one\ninstalled before, if any. Absent when none is installed. Added\nwithin protocol version 11: a core from before it leaves it out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "message": {
           "description": "What happened, for the user: `installed hello 0.1.0`, or why not.",
           "type": "string"

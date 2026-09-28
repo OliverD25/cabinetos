@@ -304,7 +304,8 @@ async fn a_plugin_from_a_local_index_installs_for_review_and_uninstalls_exactly(
     )), "{seen:?}");
     assert!(seen.iter().any(|event| matches!(
         event,
-        Event::InstallFinished { extension_id, ok: true, message } if extension_id == "hello" && message.contains("installed hello 0.1.0")
+        Event::InstallFinished { extension_id, ok: true, message, installed_version }
+            if extension_id == "hello" && message.contains("installed hello 0.1.0") && installed_version.as_deref() == Some("0.1.0")
     )), "{seen:?}");
 
     let state = settled(&mut client, "hello").await;
@@ -371,14 +372,67 @@ async fn a_wrong_hash_fails_and_leaves_no_files() {
     assert!(message.contains("nothing was installed"), "{message}");
     let seen = events_within(&mut events, Duration::from_millis(300)).await;
     assert!(
-        seen.iter()
-            .any(|event| matches!(event, Event::InstallFinished { ok: false, .. })),
+        seen.iter().any(|event| matches!(
+            event,
+            Event::InstallFinished {
+                ok: false,
+                installed_version: None,
+                ..
+            }
+        )),
         "{seen:?}"
     );
     assert!(plugins(&mut client).await.is_empty());
     assert!(files_under(&core.path("plugins")).is_empty());
     assert!(files_under(&core.path("marketplace").join("downloads")).is_empty());
     assert!(!core.path("marketplace").join("installed.json").exists());
+}
+
+/// A client that did not ask (another window, the CLI with `--version`)
+/// learns from `install_finished` which version is installed now, also
+/// when an update fails and the version from before stays.
+#[tokio::test]
+async fn install_finished_names_the_version_installed_after_it() {
+    let core = start_core(
+        |dir| {
+            let good = hello_item(dir);
+            let mut broken = good.clone();
+            broken["version"] = json!("0.2.0");
+            broken["download"]["sha256"] = json!("f".repeat(64));
+            vec![good, broken]
+        },
+        &json!({}),
+    );
+    let (mut client, mut events) = greeted(&core).await;
+    let at = |version: &str| Request::InstallExtension {
+        extension_id: "hello".to_owned(),
+        version: Some(version.to_owned()),
+    };
+    let finished = |seen: &[Event]| {
+        seen.iter()
+            .find_map(|event| match event {
+                Event::InstallFinished {
+                    ok,
+                    installed_version,
+                    ..
+                } => Some((*ok, installed_version.clone())),
+                _ => None,
+            })
+            .expect("install_finished")
+    };
+
+    assert_eq!(ask(&mut client, at("0.1.0")).await, Response::Ok);
+    let seen = events_within(&mut events, Duration::from_millis(300)).await;
+    assert_eq!(finished(&seen), (true, Some("0.1.0".to_owned())));
+
+    let (error_code, _) = error_of(ask(&mut client, at("0.2.0")).await);
+    assert_eq!(error_code, ErrorCode::HashMismatch);
+    let seen = events_within(&mut events, Duration::from_millis(300)).await;
+    assert_eq!(
+        finished(&seen),
+        (false, Some("0.1.0".to_owned())),
+        "the version from before is still installed"
+    );
 }
 
 #[tokio::test]

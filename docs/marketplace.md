@@ -226,7 +226,10 @@ cabinetos-cli market uninstall <id>
 cabinetos-cli market tools
 ```
 
-`market install` shows the download's progress and then what the core did.
+`market install` shows the download's progress and then what the core did,
+with the version installed now from `install_finished`
+(`installed version: 0.1.0`); when an update fails, it says which version
+stays installed.
 
 ## Not yet
 

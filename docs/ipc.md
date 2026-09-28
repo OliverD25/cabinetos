@@ -91,7 +91,15 @@ and 9: `items_per_second` in `job_progress`; one `marketplace_index` item
 per extension, with `installedVersion`; each theme's `mica` in `themes`;
 and the theme kind `system` (follow Windows' light or dark mode), which
 the shipped `default` theme now has; and `tools_changed` sent again to a
-client that fell behind on events.
+client that fell behind on events. Later, still version 11:
+`installed_version` in `install_finished`.
+
+**What changes the version.** A new message, a new value of an existing
+kind or code, a new required field, or a changed meaning raises the
+version: a client built for the old one may not read them. An optional
+field added to an existing message keeps it: every client ignores a
+field it does not know, and a client that reads the new field treats it
+as absent from an older core.
 
 ## Requests and replies
 
@@ -946,7 +954,7 @@ configuration says where it is; the core reads it only when a client asks.
 ```json
 {"id":"01M…","type":"install_extension","extension_id":"hello"}
 {"id":"01M…","type":"install_progress","extension_id":"hello","bytes":27003,"total":27003}
-{"id":"01M…","type":"install_finished","extension_id":"hello","ok":true,"message":"installed hello 0.1.0 (plugin)"}
+{"id":"01M…","type":"install_finished","extension_id":"hello","ok":true,"message":"installed hello 0.1.0 (plugin)","installed_version":"0.1.0"}
 {"id":"01M…","type":"ok"}
 {"id":"01M…","type":"plugin_state_changed","plugin_id":"hello","state":{"type":"needs_review","missing":["cmd:register","events:emit"]}}
 ```
@@ -958,6 +966,12 @@ configuration says where it is; the core reads it only when a client asks.
   second, and always one when the download is complete) and
   `install_finished`, whichever client asked. `install_finished` and the
   reply travel apart, so either may come first.
+- `installed_version` is the version installed from the marketplace once
+  the install ended, as the record of installs has it: the new version
+  when it worked; after a failed update, the version from before. It is
+  absent when none is installed, and from cores older than the field. A
+  client that did not ask (another window, the CLI with a `version`)
+  updates the item's `installedVersion` from it without a refresh.
 - A plugin then waits in `needs_review`; a theme that `ui.theme` names
   brings `theme_changed`; a tool brings `tools_changed`.
 

@@ -95,10 +95,18 @@ impl Marketplace {
         if !ok {
             tracing::warn!(id, error = %message, "install failed");
         }
+        // From the record of installs, which a failed install leaves as it
+        // was: every client learns what is installed now, whoever asked.
+        let installed_version = self
+            .market
+            .installed()
+            .remove(id)
+            .map(|record| record.version);
         self.events.publish(Event::InstallFinished {
             extension_id: id.to_owned(),
             ok,
             message,
+            installed_version,
         });
         match outcome {
             Ok(_) => Response::Ok,
