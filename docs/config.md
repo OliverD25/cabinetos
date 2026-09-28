@@ -53,7 +53,8 @@ file itself shows everything that can be set:
   "keybindings": [],
   "logging": {
     "level": "info"
-  }
+  },
+  "plugins": {}
 }
 ```
 
@@ -90,6 +91,8 @@ while you type.
 | `terminal.profiles` | list of `{ "name", "command", "args" }` | pwsh, cmd, wsl | The shells a terminal can run. Names must be unique; `args` may be left out. |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
+| `plugins.<id>.enabled` | `true`, `false` | `true` | Run the Core Plugin with this ID ([plugins.md](plugins.md)) |
+| `plugins.<id>.granted` | list of capability names | empty | The capabilities the user granted it, such as `fs:read`. It runs only when it has every capability it asks for. |
 
 Who uses what:
 
@@ -101,6 +104,10 @@ Who uses what:
   `CABINETOS_LOG`, when set, wins over it ([diagnostics.md](diagnostics.md)).
 - `keybindings`: the core compiles the keymap from them and sends it to the
   UI.
+- `plugins`: the core, at once. A plugin that is not listed is on, with
+  nothing granted. A changed entry starts, stops or restarts that plugin;
+  an ID with no installed plugin is kept and noted in the log. Example:
+  `"plugins": { "reader": { "granted": ["cmd:register", "fs:read"] } }`.
 - `ui` and `terminal`: the UI (Phase 5) and the terminal (Phase 8). The core
   only checks, stores and announces them.
 
@@ -153,7 +160,10 @@ change as the core announces it, with the time since the file was written.
 ## When the core writes the file
 
 `set_keybinding` and `reset_keybinding` (the settings UI, or
-`cabinetos-cli keys set` and `keys reset`) change the file through the core:
+`cabinetos-cli keys set` and `keys reset`), and `grant_capabilities` and
+`set_plugin_enabled` (the permissions review dialog, or
+`cabinetos-cli plugins grant`, `enable` and `disable`) change the file
+through the core:
 
 - The core reads the file as it is on disk right now, so an edit saved a
   moment ago is kept. If that edit has an error, the core writes nothing and

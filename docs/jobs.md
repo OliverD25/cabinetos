@@ -46,8 +46,9 @@ queued ──► scanning ──► running ──► completed
 - `running`: working. Files that wait for a conflict decision do not
   change the state; `conflicts_open` in the progress counts them.
 - `failed`: an error that concerns the whole job, for example a
-  destination folder that cannot be created. A failing file does not fail
-  the job; it is counted in `files_failed`.
+  destination folder that cannot be created, or a plugin that stopped the
+  job before it started (`denied by plugin <id>: <reason>`). A failing file
+  does not fail the job; it is counted in `files_failed`.
 
 **Progress** (`job_progress`): `bytes_done` and `bytes_total`,
 `files_done` and `files_total` (folders count as items too),
@@ -101,7 +102,12 @@ extra workers).
 1. **Scanning.** The sources are walked with the Phase 2 enumeration
    (`NtQueryDirectoryFile`: names, sizes, times and attributes in one
    pass), hidden and system files included. A folder that cannot be read
-   counts as one failed item, and the job goes on.
+   counts as one failed item, and the job goes on. Then every Core Plugin
+   with the capability `jobs:intercept` sees the job with its totals
+   (`before-job`, [plugins.md](plugins.md)); one refusal fails the job
+   before anything is written, not even its destination folder. A plugin
+   that crashes or does not answer within its 500 ms deadline counts as
+   allowing it.
 2. **Folders.** For a copy or a move across volumes, the destination
    folders are created first, in order. A folder that already exists is
    merged into: its files meet the conflict rules one by one.

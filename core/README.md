@@ -8,13 +8,14 @@ protocol between UI and core, with the shared-memory layout:
 [../docs/ipc.md](../docs/ipc.md). The configuration file:
 [../docs/config.md](../docs/config.md). Commands, keys and chords:
 [../docs/keybindings.md](../docs/keybindings.md). Copy, move and delete:
-[../docs/jobs.md](../docs/jobs.md).
+[../docs/jobs.md](../docs/jobs.md). Core Plugins:
+[../docs/plugins.md](../docs/plugins.md).
 
 ## Crates
 
 | Crate | Kind | Responsibility | Constitution articles |
 |---|---|---|---|
-| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager and the event hub | 1, 5, 6, 7, 10, 12 |
+| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host and the event hub | 1, 5, 6, 7, 8, 10, 12 |
 | `cabinetos-protocol` | library | The IPC contract: message envelopes, request IDs, `#[repr(C)]` shared-memory layouts, JSON Schema export | 1, 12 |
 | `cabinetos-diag` | library | JSON Lines logs, ring buffer of recent events, crash traces ([../docs/diagnostics.md](../docs/diagnostics.md)) | 12, 1 |
 | `cabinetos-ipc` | library | Named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch | 1, 12 |
@@ -25,7 +26,7 @@ protocol between UI and core, with the shared-memory layout:
 | `cabinetos-indexer` | binary (stub) | `cabinetos-indexer.exe`: the elevated indexer process (Phase 6, ADR 0002) | 1 |
 | `cabinetos-config` | library | `cabinetos.json`: strict parsing with line and column errors, defaults, JSON Schema export, directory watch, diff, atomic rewrite ([../docs/config.md](../docs/config.md)) | 6 |
 | `cabinetos-commands` | library | Command registry, key grammar and chords, keymap compilation with the Immutable System Tier, palette search ([../docs/keybindings.md](../docs/keybindings.md)) | 7, 4 |
-| `cabinetos-plugins` | library (stub) | `wasmtime` host for Core Plugins, capability policy, trap handling (Phase 7) | 8, 10, 11 |
+| `cabinetos-plugins` | library | `PluginHost`: Core Plugins as WebAssembly components in `wasmtime`, strict manifests, capabilities, the WASI sandbox, fuel, deadline and memory limits per call, trap containment and restarts ([../docs/plugins.md](../docs/plugins.md)) | 8, 10, 11 |
 
 A stub holds only its crate documentation and the names of its future public
 types, so the shape of the engine can be reviewed before the code exists.
@@ -65,6 +66,14 @@ hidden files, a junction made with `mklink /J`). The CLI's own tests run
 builds it, and after `cargo test -p cabinetos-cli` alone, build it first
 with `cargo build -p cabinetos-core`.
 
+The plugin tests load the committed components in
+`../sdk/fixtures/plugins` (built from `../sdk/templates/plugins` with
+`../sdk/templates/build-fixtures.ps1`), so they need no WebAssembly
+toolchain. Every test that starts a core points `CABINETOS_PLUGINS_DIR` and
+`CABINETOS_PLUGINS_DATA_DIR` at its temporary folder, so no test sees the
+plugins installed on the machine. The `reader` fixture reads
+`%TEMP%\cabinetos-plugins-test\reader`, which its tests create and remove.
+
 The job tests (copy, move, delete) write only under
 `%TEMP%\cabinetos-jobs-test\` and remove what they wrote. Two of them run
 only on request: the move across volumes needs
@@ -97,10 +106,20 @@ Terminal 1, from `core/`: start the core on the pipe `demo`
 (`\\.\pipe\cabinetos-core-demo`). Without `--pipe` it uses `dev`. It reads
 and watches `%APPDATA%\CabinetOS\cabinetos.json`, and creates it with the
 defaults on first run; `--config <path>` (or `CABINETOS_CONFIG`) picks
-another file.
+another file. It loads the Core Plugins from
+`%LOCALAPPDATA%\CabinetOS\plugins`; `--plugins-dir <path>` (or
+`CABINETOS_PLUGINS_DIR`) picks another folder, and `--plugins-data-dir`
+(or `CABINETOS_PLUGINS_DATA_DIR`) the folder of the plugins' own folders.
 
 ```text
 cargo run -p cabinetos-core -- --pipe demo
+```
+
+To try the sample and test plugins with a configuration that is not your
+own (in cmd; in PowerShell write `$env:TEMP` for `%TEMP%`):
+
+```text
+cargo run -p cabinetos-core -- --pipe demo --plugins-dir ..\sdk\fixtures\plugins --plugins-data-dir %TEMP%\cabinetos-demo\plugins-data --config %TEMP%\cabinetos-demo\cabinetos.json
 ```
 
 Terminal 2, from `core/`:
@@ -116,10 +135,14 @@ cargo run -p cabinetos-cli -- --pipe demo keys watch
 cargo run -p cabinetos-cli -- --pipe demo commands search "dual"
 cargo run -p cabinetos-cli -- --pipe demo copy C:\Users\me\Pictures D:\backup --stats
 cargo run -p cabinetos-cli -- --pipe demo jobs
+cargo run -p cabinetos-cli -- --pipe demo plugins list
+cargo run -p cabinetos-cli -- --pipe demo plugins grant hello cmd:register events:emit
+cargo run -p cabinetos-cli -- --pipe demo commands exec hello.say
+cargo run -p cabinetos-cli -- --pipe demo events watch
 cargo run -p cabinetos-cli -- --pipe demo shutdown
 ```
 
-- `ping` prints `pong id=<ulid> protocol=4 core=<version> rtt=<ms>ms`.
+- `ping` prints `pong id=<ulid> protocol=5 core=<version> rtt=<ms>ms`.
 - `ls <path>` lists a directory the way the UI will: the core reads it into
   shared memory, the CLI maps the section and prints it. Options: `--long`
   (attributes, local modification time, size), `--hidden` (hidden and system
@@ -142,7 +165,13 @@ cargo run -p cabinetos-cli -- --pipe demo shutdown
   as they come (`--on-conflict`, `--resolve`), a summary at the end, and
   with `--stats` the progress events per second. `jobs` lists the jobs;
   `job pause|resume|cancel <id>` and `job resolve <job> <conflict>
-  <overwrite|skip|rename|retry|cancel>` control them.
+  <overwrite|skip|rename|retry|delete-permanently|cancel>` control them.
+- `plugins list [--json]` prints every plugin with its state, capabilities
+  and commands; `plugins grant <id> <capability>...`, `plugins enable|disable
+  <id>` (the core writes the file) and `plugins reload <id>` change one and
+  print its state once it has settled. `commands exec <command>
+  [json-args]` runs a command and prints its JSON result, and `events watch`
+  prints every event as one JSON line until Ctrl+C.
 - `shutdown` makes the core exit with code 0. The core also exits on Ctrl+C,
   and, when started with `--parent-pid <pid>`, as soon as that process exits.
 
@@ -163,8 +192,11 @@ configuration file: one waits for changes, one waits for them to settle and
 reads the file). In the log, the runtime's threads are named `core-rt-N`,
 listing watchers `watch-<listing id>`, the configuration watcher's
 threads `config-watch` and `config-debounce`, each running job `job-<id>`
-(and `job-<id>-<n>` for its extra copy workers), and the progress
-publisher of all jobs `job-progress`.
+(and `job-<id>-<n>` for its extra copy workers), the progress
+publisher of all jobs `job-progress`, each running plugin `plugin-<id>`,
+the plugins' deadline ticker `plugin-epoch` (it sleeps while no plugin call
+runs), and `plugin-<id>-restart` for the 5 s wait before a crashed plugin
+starts again.
 
 Release builds keep line tables in a separate `.pdb` file next to each `.exe`,
 so crash traces name file and line. Ship the `.pdb` with the `.exe`.

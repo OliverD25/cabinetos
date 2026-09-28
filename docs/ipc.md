@@ -50,16 +50,20 @@ Windows and refuses a mismatch with `protocol_error`. The core needs the PID
 because it duplicates shared-memory handles into that process. A
 `list_directory` before `hello` fails with `protocol_error`, message
 `hello required`. From `hello` on, the connection also receives the
-configuration events (`config_changed`, `config_error`, `keymap_changed`)
-and the job events (`job_progress`, `job_conflict`, `job_state_changed`),
-and right after `welcome` a `job_conflict` for every conflict that already
-waits for a decision. Every other request works without `hello`.
+configuration events (`config_changed`, `config_error`, `keymap_changed`),
+the job events (`job_progress`, `job_conflict`, `job_state_changed`) and
+the plugin events (`plugin_state_changed`, `plugin_crashed`,
+`plugin_event`), and right after `welcome` a `job_conflict` for every
+conflict that already waits for a decision. Every other request works
+without `hello`.
 
 Protocol version 3 (Phase 3) added the configuration, command and keymap
 messages, and made the `list_directory` options `include_hidden` and `sort`
 optional. Version 4 (Phase 4) added the jobs. Version 5 (Phase 7) added
 the Recycle Bin conflict (`recycle_bin_too_small`, `delete_permanently`,
-`invalid_resolution`).
+`invalid_resolution`) and the Core Plugins: four requests, the `plugins`
+reply, three events, the error codes `no_such_plugin` and `plugin_error`,
+and the plugin's `name` in a command's `source`.
 
 ## Requests and replies
 
@@ -82,6 +86,10 @@ the Recycle Bin conflict (`recycle_bin_too_small`, `delete_permanently`,
 | `list_jobs` | — | `jobs` |
 | `job_control` | `job_id`, `action` (`pause`, `resume`, `cancel`) | `ok` |
 | `resolve_conflict` | `job_id`, `conflict_id`, `resolution`; `apply_to_same_kind` (default `false`) | `ok` |
+| `list_plugins` | — | `plugins` |
+| `reload_plugin` | `plugin_id` | `ok` |
+| `set_plugin_enabled` | `plugin_id`, `enabled` | `ok` |
+| `grant_capabilities` | `plugin_id`, `capabilities` | `ok` |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -105,11 +113,15 @@ Any request can instead get `error` with a `code` and a `message`:
 | `no_such_job` | No job has that `job_id`. |
 | `no_such_conflict` | The job has no waiting conflict with that `conflict_id`. |
 | `invalid_resolution` | The resolution does not fit the conflict, such as `delete_permanently` for a file that exists. |
+| `no_such_plugin` | No plugin with that ID is installed, or the plugin host is not running. |
+| `plugin_error` | A plugin's command failed: the plugin answered with an error or with text that is not JSON, crashed, or is not running. Also a grant the core refuses: an unknown capability, or one it never grants. |
 
 Requests on one connection are independent: `list_directory`,
-`volume_info`, `set_keybinding`, `reset_keybinding` and `start_job` run in
-the background, so a slow directory does not hold up the next request, and
-their replies may come in any order. Match replies to requests by `id`.
+`volume_info`, `set_keybinding`, `reset_keybinding`, `start_job`,
+`reload_plugin`, `set_plugin_enabled`, `grant_capabilities`, and
+`execute_command` for a plugin's command run in the background, so a slow
+directory or plugin does not hold up the next request, and their replies
+may come in any order. Match replies to requests by `id`.
 
 ## Listing a directory
 
@@ -308,9 +320,11 @@ the chord state machine with `chord_window_ms` (keybindings.md, "Chords").
 {"id":"01M…","type":"search_results","hits":[{"id":"view.toggleDualPane","score":137}]}
 ```
 
-`source` is `{"kind":"core"}` or `{"kind":"plugin","id":"…"}`. The palette
-shows `category: title` and the `keys`; the ranking is in keybindings.md,
-"Palette search". `score` only orders the hits.
+`source` is `{"kind":"core"}` or
+`{"kind":"plugin","id":"reader","name":"Reader"}`. The palette shows
+`category: title` and the `keys`, and a plugin's `name` as a badge; the
+ranking is in keybindings.md, "Palette search". `score` only orders the
+hits.
 
 ```json
 {"id":"01M…","type":"execute_command","command":"help.about"}
@@ -421,10 +435,90 @@ disconnects, and `list_jobs` from any connection shows it.
 Each entry of `jobs` is a `job_progress` plus the job's `kind`, `sources`
 and `destination`, so a restarted UI can show what a running job does.
 
+## Plugins
+
+The core runs Core Plugins ([plugins.md](plugins.md)): WebAssembly
+components that do only what the user granted.
+
+```json
+{"id":"01M…","type":"list_plugins"}
+{"id":"01M…","type":"plugins","plugins":[{"id":"reader","name":"Reader","version":"0.1.0",
+ "author":"CabinetOS tests","description":"Reads the size of files in one folder.",
+ "state":{"type":"needs_review","missing":["fs:read"]},
+ "capabilities":[{"name":"cmd:register","level":"low","granted":true,"reason":"Adds the Size command."},
+                 {"name":"fs:read","level":"medium","granted":false,"reason":"Reads the size of files in its test folder.",
+                  "roots":["%TEMP%\\cabinetos-plugins-test\\reader"]}],
+ "commands":[]}]}
+```
+
+- `state` is an object tagged by `type`: `loading`, `active`, `disabled`,
+  `needs_review` (with `missing`), `failed` (with `message`), or `crashed`
+  (with `message` and `at_ms`, milliseconds since 1970-01-01 UTC).
+- `capabilities` lists what the plugin asks for, for the permissions
+  review dialog: `level` is `low`, `medium` or `high`, and `roots` appears
+  only for `fs:read` and `fs:write`, as the manifest wrote them.
+- `commands` holds the IDs the plugin registered; it is empty unless the
+  plugin is `active`.
+
+```json
+{"id":"01M…","type":"grant_capabilities","plugin_id":"reader","capabilities":["fs:read"]}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"set_plugin_enabled","plugin_id":"reader","enabled":false}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"reload_plugin","plugin_id":"crashy"}
+{"id":"01M…","type":"ok"}
+```
+
+- `grant_capabilities` adds to `plugins.<id>.granted` in the configuration
+  file, and `set_plugin_enabled` sets `plugins.<id>.enabled`. Both answer
+  `ok` once the file is written and the plugin is being started or stopped;
+  it may still be `loading`, so follow `plugin_state_changed`. An unknown
+  plugin gets `no_such_plugin`; an unknown capability, or one the core
+  never grants (`process:run`, `net`, `credentials`), gets `plugin_error`; a
+  file with an error to fix gets `config_error`.
+- `reload_plugin` reads the plugin's folder again and starts it. It also
+  brings back a plugin that stays crashed after three crashes in ten
+  minutes, and finds a plugin installed since the core started.
+
+A plugin's commands run like any other:
+
+```json
+{"id":"01M…","type":"execute_command","command":"reader.size","args":{"path":"C:\\data\\a.txt"}}
+{"id":"01M…","type":"command_result","result":{"size":5}}
+{"id":"01M…","type":"execute_command","command":"crashy.crash"}
+{"id":"01M…","type":"error","code":"plugin_error",
+ "message":"the plugin crashy crashed while running crashy.crash: wasm trap: …"}
+```
+
+The reply waits for the plugin: at most its 5 s deadline, and 2 s more for
+a plugin stuck in a host function. Other requests on the connection go on
+meanwhile. After a crash, the plugin's commands are gone: `execute_command`
+answers `unknown_command` and says which plugin crashed.
+
+**Events.**
+
+```json
+{"id":"01M…","type":"plugin_crashed","plugin_id":"crashy","message":"wasm trap: …"}
+{"id":"01M…","type":"plugin_state_changed","plugin_id":"crashy",
+ "state":{"type":"crashed","message":"wasm trap: …","at_ms":1790553600000}}
+{"id":"01M…","type":"plugin_event","plugin_id":"hello","name":"hello.said",
+ "payload":"{\"greeting\":\"hello\"}"}
+```
+
+- `plugin_state_changed` comes for every change of a plugin's state. A
+  client that fell behind on events gets one for every plugin.
+- `plugin_crashed` comes when an instance trapped or ran out of time, fuel
+  or memory, just before its `plugin_state_changed` to `crashed`. Its
+  commands have left `list_commands` by then.
+- `plugin_event` carries what a plugin sent with `emit` (capability
+  `events:emit`): a `name` the plugin chose, and the `payload` text as the
+  plugin wrote it, usually JSON.
+
 ## Trying it by hand
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
 `ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
 `config`, `commands` and `keys` cover the configuration messages (`keys
-watch` prints their events), and `copy`, `move`, `delete`, `jobs` and `job`
-cover the jobs. See [core/README.md](../core/README.md).
+watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`
+cover the jobs, and `plugins`, `commands exec` and `events watch` cover the
+plugins. See [core/README.md](../core/README.md).

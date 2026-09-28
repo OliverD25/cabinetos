@@ -11,10 +11,17 @@ What lives here, or will:
 - `config/` — the JSON Schema of `cabinetos.json`, exported from the Rust
   types in `core/crates/cabinetos-config` (Phase 3). The core writes a copy
   next to the configuration file for editors ([../docs/config.md](../docs/config.md)).
-- `wit/` — the WebAssembly Component Model interface (`cabinetos:plugin`) that
-  Core Plugins implement and the capabilities they may request (Phase 7).
-- `templates/` — starter projects for a Core Plugin and a Tool Extension
-  (Phase 7).
+- `wit/` — the WebAssembly Component Model interface that Core Plugins
+  implement: the package `cabinetos:plugin@0.1.0` and its world
+  `core-plugin` (Phase 7). The capabilities a plugin may ask for, the
+  sandbox and the limits are in [../docs/plugins.md](../docs/plugins.md).
+- `templates/` — starter projects (Phase 7): Rust Core Plugins built with
+  `wit-bindgen`, `hello` as the template and five test fixtures, and
+  `build-fixtures.ps1` ([templates/README.md](templates/README.md)). The
+  Tool Extension template comes with the Tool Dock (Phase 5).
+- `fixtures/plugins/` — those plugins built as components, with their
+  `plugin.json`. They are committed, so the core's tests and CI need no
+  WebAssembly toolchain.
 - `themes/` — the JSON theme format and the default theme (Phase 9).
 
 Extension architecture: Constitution Article 11 and brief §6.
