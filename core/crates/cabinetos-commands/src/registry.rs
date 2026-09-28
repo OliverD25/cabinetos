@@ -70,11 +70,11 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// (`docs/design/FileForge.dc.html`, `COMMANDS`) without its plugin commands,
 /// the shell's own navigation, file, edit and search commands, the window's
 /// own commands (the sidebar's pins, the editor tabs, the transfer panel,
-/// the plugin list, the terminal tabs), then the palette, overlays and
-/// About. Every one of them runs in the UI: the shell starts the file jobs
+/// the plugin list, the terminal tabs), then the palette, overlays, a new
+/// window and About. Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 51] = [
+const SEED: [Seed; 52] = [
     seed(
         "palette.show",
         "View",
@@ -288,6 +288,8 @@ const SEED: [Seed; 51] = [
         UI,
         None,
     ),
+    // Explorer's key for another window of the same folder.
+    seed("window.new", "Window", "New Window", "ctrl+n", UI, None),
     seed("help.about", "Help", "About CabinetOS", "", UI, None),
 ];
 
@@ -377,7 +379,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 51);
+        assert_eq!(registry.commands().len(), 52);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -394,6 +396,14 @@ mod tests {
         // sidebar hint "Ctrl+K W".
         assert_eq!(keys("workspace.switch"), ["ctrl+k ctrl+w"]);
         assert!(keys("help.about").is_empty());
+        // A second window, Explorer's key; the shell opens it.
+        assert_eq!(keys("window.new"), ["ctrl+n"]);
+        let new_window = registry.get("window.new").unwrap();
+        assert_eq!(new_window.target, CommandTarget::Ui);
+        assert_eq!(
+            (new_window.category.as_str(), new_window.title.as_str()),
+            ("Window", "New Window")
+        );
         assert_eq!(keys("editor.openMarkdownPreview"), ["ctrl+k v"]);
         for plugin_command in ["md", "hex", "gitcommit", "gitlog", "compress"] {
             assert!(

@@ -81,6 +81,7 @@ The core's commands, in palette order:
 | `terminal.show` | Terminal: Show Terminal | | | UI |
 | `terminal.close` | Terminal: Close Terminal | | | UI |
 | `terminal.reload` | Terminal: Reload Terminal | | | UI |
+| `window.new` | Window: New Window | `ctrl+n` | | UI |
 | `help.about` | Help: About CabinetOS | | | UI |
 
 - The list is the design's `COMMANDS` array without its plugin commands
@@ -89,7 +90,8 @@ The core's commands, in palette order:
   the window's own buttons and menus (the sidebar's pins, the editor tabs,
   the transfer panel, the plugin list, the terminal tabs). Plugin commands
   arrive with their plugins and register themselves (Article 10). The
-  palette, the overlay exit, the shortcut editor and About are added. The
+  palette, the overlay exit, the shortcut editor, a new window
+  (`window.new`, `ctrl+n` as in Explorer) and About are added. The
   shell's commands are in the registry so that each of them ranks in the
   palette and can be rebound like any other (Article 7); the window's
   buttons run the same commands, with arguments (a session, a path) that
