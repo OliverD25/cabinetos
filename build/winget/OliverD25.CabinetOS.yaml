@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.10.0.schema.json
+# The version manifest. build/release.ps1 writes a copy with the release's
+# version into dist/winget/<version>/; docs/release.md says how to submit it.
+
+PackageIdentifier: OliverD25.CabinetOS
+PackageVersion: 0.1.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.10.0
