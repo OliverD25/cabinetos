@@ -1,0 +1,22 @@
+[package]
+name = "cabinetos-themes"
+description = "Colour themes: the JSON theme format, the themes folder and the themes that ship with the core."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cabinetos-protocol.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# The schema export, to check the copy of theme.schema.json the crate embeds.
+cabinetos-protocol = { workspace = true, features = ["schema"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

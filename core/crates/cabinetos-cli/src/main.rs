@@ -5,7 +5,8 @@
 //! configuration (`config`), the command registry (`commands`), the keymap
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
-//! search (`search`, `index status`), and the terminal sessions (`term`).
+//! search (`search`, `index status`), the terminal sessions (`term`), and
+//! the colour themes (`themes`).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -24,6 +25,7 @@ mod plugins;
 mod search;
 mod settings;
 mod term;
+mod themes;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -217,6 +219,24 @@ enum Command {
     /// Run a shell in the core, attached to this console until it exits
     /// (Ctrl+] detaches), or list, close or move the shells the core runs.
     Term(TermArgs),
+    /// List the colour themes, or show one. `config set ui.theme <id>`
+    /// changes the theme in effect.
+    Themes {
+        #[command(subcommand)]
+        action: ThemesAction,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum ThemesAction {
+    /// Print every valid theme in the themes folder; `*` marks the one in
+    /// effect.
+    List,
+    /// Print a whole theme as JSON: the one named, or the one in effect.
+    Show {
+        /// The theme's ID, for example nord.
+        id: Option<String>,
+    },
 }
 
 /// `term`: a new session, or an action on the sessions.
@@ -680,6 +700,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             action: IndexAction::Status,
         } => search::status(&mut client).await?,
         Command::Term(arguments) => term_command(&mut client, arguments).await?,
+        Command::Themes { .. } => extension_command(&mut client, &cli.command).await?,
     }
     Ok(())
 }
@@ -760,6 +781,17 @@ async fn term_command(client: &mut PipeClient, arguments: &TermArgs) -> anyhow::
             };
             term::change(client, request, format_args!("session {id}: cd {path}")).await
         }
+    }
+}
+
+/// The extension commands: `themes list|show`.
+async fn extension_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
+    match command {
+        Command::Themes { action } => match action {
+            ThemesAction::List => themes::list(client).await,
+            ThemesAction::Show { id } => themes::show(client, id.as_deref()).await,
+        },
+        _ => unreachable!("only extension commands come here"),
     }
 }
 
@@ -1531,6 +1563,33 @@ mod tests {
         );
         assert!(parse(&["term", "close"]).is_err(), "an ID is required");
         assert!(parse(&["term", "cd", "3"]).is_err(), "a path is required");
+    }
+
+    #[test]
+    fn parses_themes() {
+        let cli = Cli::try_parse_from(["cabinetos-cli", "themes", "list"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Themes {
+                action: ThemesAction::List
+            }
+        );
+        let cli = Cli::try_parse_from(["cabinetos-cli", "themes", "show", "nord"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Themes {
+                action: ThemesAction::Show {
+                    id: Some("nord".to_owned())
+                }
+            }
+        );
+        let cli = Cli::try_parse_from(["cabinetos-cli", "themes", "show"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Themes {
+                action: ThemesAction::Show { id: None }
+            }
+        );
     }
 
     #[test]

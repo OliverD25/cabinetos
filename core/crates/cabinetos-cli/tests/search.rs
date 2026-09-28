@@ -61,6 +61,7 @@ fn start_core() -> Core {
             "CABINETOS_PLUGINS_DATA_DIR",
             dir.path().join("plugins-data"),
         )
+        .env("CABINETOS_THEMES_DIR", dir.path().join("themes"))
         .env(
             "CABINETOS_INDEXER_PIPE",
             format!(

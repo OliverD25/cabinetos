@@ -167,11 +167,21 @@ impl Settings {
     }
 
     /// The reply to `set_value`: changes one setting by its dotted path,
-    /// checked as a file would be, and writes the file. Blocking.
-    pub(crate) fn set_value(&self, path: &str, value: Value) -> Response {
+    /// checked as a file would be and by `check` (what this module cannot
+    /// see, such as whether a theme exists), and writes the file. Blocking.
+    pub(crate) fn set_value(
+        &self,
+        path: &str,
+        value: Value,
+        check: impl FnOnce(&Config) -> Result<(), String>,
+    ) -> Response {
         let mut store = self.lock_store();
         let mut compiled = None;
         let result = store.set_value(path, value, |config| {
+            check(config).map_err(|message| Rejection {
+                keybinding: None,
+                message,
+            })?;
             compiled = Some(compile(&self.registry(), &config.overrides())?);
             Ok(())
         });

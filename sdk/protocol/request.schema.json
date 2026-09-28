@@ -788,6 +788,39 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Asks for every valid theme in the themes folder. The core answers\n`themes`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "list_themes"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Asks for one whole theme. The core answers `theme`.",
+      "type": "object",
+      "properties": {
+        "theme_id": {
+          "description": "The theme's ID; without it, the theme in effect now. (Named\n`theme_id`, not `id`: `id` is the request's own ID in the same\nobject.)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "get_theme"
+        }
+      },
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [

@@ -1,8 +1,11 @@
-//! JSON Schema export of the control-channel messages (ADR 0006).
+//! JSON Schema export of the control-channel messages (ADR 0006), and of the
+//! theme files the messages carry.
 //!
-//! The schemas are checked into `sdk/protocol/` so the C# side can be validated
-//! against the Rust types. A test keeps the checked-in files equal to what the
-//! types produce. After changing a message, regenerate them from `core/`:
+//! The message schemas are checked into `sdk/protocol/` so the C# side can be
+//! validated against the Rust types; the theme schema into `sdk/themes/`,
+//! for editors. A test keeps the checked-in files equal to what the types
+//! produce. After changing a message or the theme format, regenerate them
+//! from `core/`:
 //!
 //! ```text
 //! CABINETOS_UPDATE_SCHEMA=1 cargo test -p cabinetos-protocol
@@ -10,7 +13,7 @@
 
 use schemars::{Schema, schema_for};
 
-use crate::{Envelope, Event, IndexerRequest, IndexerResponse, Request, Response};
+use crate::{Envelope, Event, IndexerRequest, IndexerResponse, Request, Response, Theme};
 
 /// The JSON Schema of a request: an [`Envelope`] around a [`Request`].
 #[must_use]
@@ -50,6 +53,12 @@ pub fn indexer_response_schema() -> Schema {
     )
 }
 
+/// The JSON Schema of a theme file, `<id>.json` in the themes folder.
+#[must_use]
+pub fn theme_schema() -> Schema {
+    titled(schema_for!(Theme), "CabinetOS theme")
+}
+
 /// The envelopes would otherwise be titled "Envelope". Code generators on
 /// the C# side turn the title into a class name, so each gets its own.
 fn titled(mut schema: Schema, title: &str) -> Schema {
@@ -64,19 +73,25 @@ mod tests {
 
     use super::*;
 
-    fn sdk_protocol_dir() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../sdk/protocol")
+    fn sdk_dir(folder: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../sdk")
+            .join(folder)
     }
 
-    /// Compares the checked-in schema with the generated one, or rewrites the
-    /// file when `CABINETOS_UPDATE_SCHEMA=1`.
+    /// Compares the checked-in schema in `sdk/protocol/` with the generated
+    /// one, or rewrites the file when `CABINETOS_UPDATE_SCHEMA=1`.
     fn check_snapshot(file_name: &str, schema: &Schema) {
-        let path = sdk_protocol_dir().join(file_name);
+        check_snapshot_in("protocol", file_name, schema);
+    }
+
+    fn check_snapshot_in(folder: &str, file_name: &str, schema: &Schema) {
+        let path = sdk_dir(folder).join(file_name);
         let mut generated = serde_json::to_string_pretty(schema).unwrap();
         generated.push('\n');
 
         if std::env::var_os("CABINETOS_UPDATE_SCHEMA").is_some_and(|value| value == "1") {
-            fs::create_dir_all(sdk_protocol_dir()).unwrap();
+            fs::create_dir_all(sdk_dir(folder)).unwrap();
             fs::write(&path, generated).unwrap();
             return;
         }
@@ -107,6 +122,30 @@ mod tests {
     #[test]
     fn event_schema_matches_sdk() {
         check_snapshot("event.schema.json", &event_schema());
+    }
+
+    #[test]
+    fn theme_schema_matches_sdk() {
+        check_snapshot_in("themes", "theme.schema.json", &theme_schema());
+    }
+
+    #[test]
+    fn the_theme_schema_rejects_unknown_keys() {
+        let schema = serde_json::to_value(theme_schema()).unwrap();
+        assert_eq!(schema["additionalProperties"], false);
+        assert_eq!(schema["$defs"]["Palette"]["additionalProperties"], false);
+        let required: Vec<&str> = schema["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect();
+        assert!(required.contains(&"palette") && !required.contains(&"accent"));
+        let ansi = &schema["$defs"]["TerminalColors"]["properties"]["ansi"];
+        assert_eq!(
+            (ansi["minItems"].as_u64(), ansi["maxItems"].as_u64()),
+            (Some(16), Some(16))
+        );
     }
 
     #[test]

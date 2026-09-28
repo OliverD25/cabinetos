@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "nord",
+  "name": "Nord",
+  "author": "CabinetOS",
+  "attribution": "Colours from the Nord palette by Sven Greb and Arctic Ice Studio (https://www.nordtheme.com), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#88C0D0",
+  "mica": {
+    "tint": "#2E3440",
+    "opacity": 0.88
+  },
+  "palette": {
+    "textPrimary": "#ECEFF4",
+    "textSecondary": "#D8DEE9",
+    "textTertiary": "#D8DEE98B",
+    "textDisabled": "#D8DEE95D",
+    "layerFill": "#3B425280",
+    "layerStroke": "#434C5E99",
+    "layerStrokeActive": "#4C566A",
+    "controlFill": "#3B4252B3",
+    "controlFillHover": "#434C5EB3",
+    "acrylicTint": "#2E3440B8",
+    "terminalBackground": "#2E344099",
+    "folderIcon": "#EBCB8B",
+    "folderIconFront": "#F2DDB4",
+    "fileTypeColors": {
+      "md": "#88C0D0",
+      "rs": "#D08770",
+      "toml": "#B48EAD",
+      "exe": "#A3BE8C",
+      "dll": "#A3BE8C",
+      "bin": "#BF616A",
+      "pdf": "#BF616A",
+      "zip": "#EBCB8B"
+    },
+    "permissionLow": "#A3BE8C",
+    "permissionMedium": "#EBCB8B",
+    "permissionHigh": "#BF616A"
+  },
+  "terminal": {
+    "foreground": "#D8DEE9",
+    "background": "#2E3440",
+    "cursor": "#D8DEE9",
+    "ansi": [
+      "#3B4252",
+      "#BF616A",
+      "#A3BE8C",
+      "#EBCB8B",
+      "#81A1C1",
+      "#B48EAD",
+      "#88C0D0",
+      "#E5E9F0",
+      "#4C566A",
+      "#BF616A",
+      "#A3BE8C",
+      "#EBCB8B",
+      "#81A1C1",
+      "#B48EAD",
+      "#8FBCBB",
+      "#ECEFF4"
+    ]
+  }
+}

@@ -23,6 +23,7 @@ cabinetos-jobs = { path = "crates/cabinetos-jobs" }
 cabinetos-plugins = { path = "crates/cabinetos-plugins" }
 cabinetos-protocol = { path = "crates/cabinetos-protocol" }
 cabinetos-terminal = { path = "crates/cabinetos-terminal" }
+cabinetos-themes = { path = "crates/cabinetos-themes" }
 
 # External crates. Each crate adds the features it needs on top of these.
 anyhow = "1.0"

@@ -100,6 +100,30 @@ impl schemars::JsonSchema for RequestId {
     }
 }
 
+/// Why `id` cannot name an extension (a plugin, a theme or a tool), or
+/// `None` when it can: 1 to 64 lower case letters, digits and `-`, starting
+/// with a letter. The ID is also a file or folder name, so the names Windows
+/// keeps for devices (`con`, `nul`, `com1`, ...) are refused too.
+#[must_use]
+pub fn extension_id_problem(id: &str) -> Option<String> {
+    let shaped = !id.is_empty()
+        && id.len() <= 64
+        && id.starts_with(|c: char| c.is_ascii_lowercase())
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if !shaped {
+        return Some(format!(
+            "`{id}` is not an extension ID: use 1 to 64 lower case letters, digits and `-`, starting with a letter"
+        ));
+    }
+    let device = matches!(id, "con" | "prn" | "aux" | "nul")
+        || ((id.starts_with("com") || id.starts_with("lpt"))
+            && id.len() == 4
+            && id.ends_with(|c: char| c.is_ascii_digit()));
+    device.then(|| format!("`{id}` is a name Windows keeps for a device"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,5 +164,40 @@ mod tests {
         assert_eq!(json, r#""01J9ZQ4X7K3M5N8P2R6S0T1V4W""#);
         assert_eq!(serde_json::from_str::<RequestId>(&json).unwrap(), id);
         assert!(serde_json::from_str::<RequestId>(r#""nope""#).is_err());
+    }
+
+    #[test]
+    fn extension_ids_are_safe_file_names() {
+        for good in [
+            "hello",
+            "rose-pine-moon",
+            "a",
+            "com",
+            "com10",
+            "console",
+            "lpt-1",
+        ] {
+            assert_eq!(extension_id_problem(good), None, "{good}");
+        }
+        for bad in [
+            "",
+            "Hello",
+            "1hello",
+            "-x",
+            "a_b",
+            "a.b",
+            "..",
+            r"..\x",
+            "a/b",
+            &"x".repeat(65),
+        ] {
+            assert!(extension_id_problem(bad).is_some(), "{bad:?}");
+        }
+        for device in ["con", "prn", "aux", "nul", "com1", "lpt9"] {
+            assert!(
+                extension_id_problem(device).unwrap().contains("device"),
+                "{device}"
+            );
+        }
     }
 }

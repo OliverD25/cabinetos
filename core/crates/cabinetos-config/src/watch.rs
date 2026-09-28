@@ -31,7 +31,8 @@ pub enum WatchEvent {
     Failed(String),
 }
 
-/// Watches the directory of the configuration file until dropped or stopped.
+/// Watches the directory of the configuration file (or another folder the
+/// core reads, see [`ConfigWatcher::watch_dir`]) until dropped or stopped.
 #[derive(Debug)]
 pub struct ConfigWatcher {
     watcher: Option<DirectoryWatcher>,
@@ -53,16 +54,26 @@ impl ConfigWatcher {
                 path: config_path.display().to_string(),
                 reason: "the configuration file has no directory".to_owned(),
             })?;
+        Self::watch_dir(&dir, "config", on_event)
+    }
+
+    /// Watches the folder `dir` itself, the same way: for a folder of files
+    /// the core reads, such as the themes. `name` names the watcher's
+    /// threads (`<name>-watch`, `<name>-debounce`).
+    pub fn watch_dir<F>(dir: &Path, name: &str, on_event: F) -> Result<Self, FsError>
+    where
+        F: FnMut(WatchEvent) + Send + 'static,
+    {
         let dir = dir.to_str().ok_or_else(|| FsError::InvalidPath {
             path: dir.display().to_string(),
             reason: "the path is not valid Unicode".to_owned(),
         })?;
         let (changes_tx, changes_rx) = mpsc::channel();
-        let watcher = DirectoryWatcher::start(dir, "config-watch".to_owned(), move |change| {
+        let watcher = DirectoryWatcher::start(dir, format!("{name}-watch"), move |change| {
             let _ = changes_tx.send(change);
         })?;
         let thread = std::thread::Builder::new()
-            .name("config-debounce".to_owned())
+            .name(format!("{name}-debounce"))
             .spawn(move || debounce(&changes_rx, on_event))
             .map_err(|source| FsError::Io {
                 path: dir.to_owned(),

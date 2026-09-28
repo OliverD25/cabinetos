@@ -1,6 +1,6 @@
 # sdk/ — the plugin and protocol SDK
 
-This folder fills up in Phases 1, 3 and 7 of
+This folder fills up in Phases 1, 3, 7 and 9 of
 [../docs/PLAN.md](../docs/PLAN.md).
 
 What lives here, or will:
@@ -23,6 +23,11 @@ What lives here, or will:
 - `fixtures/plugins/` — those plugins built as components, with their
   `plugin.json`. They are committed, so the core's tests and CI need no
   WebAssembly toolchain.
-- `themes/` — the JSON theme format and the default theme (Phase 9).
+- `themes/` — the JSON theme format (Phase 9): `theme.schema.json`,
+  exported from the Rust types in `core/crates/cabinetos-protocol`, and the
+  four themes that ship with the core (`default`, `nord`,
+  `catppuccin-mocha`, `rose-pine-moon`), which the core embeds and writes
+  into the themes folder when they are missing
+  ([../docs/themes.md](../docs/themes.md)).
 
 Extension architecture: Constitution Article 11 and brief §6.

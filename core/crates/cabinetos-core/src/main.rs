@@ -51,6 +51,13 @@ struct Args {
     #[arg(long, value_name = "PATH")]
     plugins_data_dir: Option<PathBuf>,
 
+    /// Read the colour themes from this folder instead of
+    /// %LOCALAPPDATA%\CabinetOS\themes (or the `CABINETOS_THEMES_DIR`
+    /// variable): one <id>.json per theme. The shipped themes that are
+    /// missing are written there at the start.
+    #[arg(long, value_name = "PATH")]
+    themes_dir: Option<PathBuf>,
+
     /// Log one event, then panic: tests crash traces.
     #[arg(long, hide = true)]
     self_test_panic: bool,
@@ -84,6 +91,7 @@ fn main() -> ExitCode {
         config_path: args.config,
         plugins_dir: args.plugins_dir,
         plugins_data_dir: args.plugins_data_dir,
+        themes_dir: args.themes_dir,
     };
     match runtime.block_on(run(config, CancellationToken::new())) {
         Ok(()) => ExitCode::SUCCESS,
@@ -145,6 +153,8 @@ mod tests {
             r"E:\plugins",
             "--plugins-data-dir",
             r"E:\plugins-data",
+            "--themes-dir",
+            r"E:\themes",
             "--self-test-panic",
         ])
         .unwrap();
@@ -157,6 +167,7 @@ mod tests {
             args.plugins_data_dir,
             Some(PathBuf::from(r"E:\plugins-data"))
         );
+        assert_eq!(args.themes_dir, Some(PathBuf::from(r"E:\themes")));
         assert!(args.self_test_panic);
     }
 }

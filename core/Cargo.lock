@@ -227,6 +227,7 @@ dependencies = [
  "cabinetos-plugins",
  "cabinetos-protocol",
  "cabinetos-terminal",
+ "cabinetos-themes",
  "clap",
  "png",
  "rand",
@@ -371,6 +372,16 @@ dependencies = [
  "tokio-util",
  "tracing",
  "windows",
+]
+
+[[package]]
+name = "cabinetos-themes"
+version = "0.1.0"
+dependencies = [
+ "cabinetos-protocol",
+ "serde_json",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]

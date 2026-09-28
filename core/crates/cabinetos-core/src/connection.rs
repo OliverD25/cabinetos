@@ -11,10 +11,12 @@
 //!   (`list_directory`, `describe_entries`, `get_icon`, `volume_info`,
 //!   `list_volumes`, `open_path`, `create_directory`, `rename`, `set_value`,
 //!   the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
-//!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`)
+//!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`,
+//!   `list_themes`, `get_theme` of a named theme)
 //!   as tasks, so one slow directory, plugin, search or shell never holds up
 //!   the next request. After `hello` it also forwards the configuration,
-//!   job, plugin, terminal and volume events every connection receives.
+//!   theme, job, plugin, terminal and volume events every connection
+//!   receives.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -318,6 +320,9 @@ impl Session {
                 | Request::TerminalClose { .. }
                 | Request::TerminalSyncCwd { .. }
                 | Request::TerminalList) => self.terminal_request(&id, &span, kind, request),
+                request @ (Request::ListThemes | Request::GetTheme { .. }) => {
+                    self.theme_request(&id, &span, kind, request)
+                }
             }
         };
         // Requests handled right here are done; the others log when they end.
@@ -539,8 +544,19 @@ impl Session {
                 Some(settings.search_commands(&query, limit))
             }
             Request::SetValue { path, value } => {
+                let themes = Arc::clone(&self.services.themes);
                 self.write_setting(id, span, kind, move |settings| {
-                    settings.set_value(&path, value)
+                    let current = settings.snapshot().config.ui.theme.clone();
+                    // A theme that cannot be used is refused here, so the
+                    // file never names it because of a client; a hand edit
+                    // that names one is reported instead.
+                    settings.set_value(&path, value, |config| {
+                        if config.ui.theme == current {
+                            Ok(())
+                        } else {
+                            themes.check(&config.ui.theme)
+                        }
+                    })
                 });
                 None
             }
@@ -554,6 +570,32 @@ impl Session {
                 self.write_setting(id, span, kind, move |settings| {
                     settings.reset_keybinding(&command)
                 });
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// `list_themes` and `get_theme` of a named theme read theme files, on
+    /// the blocking pool; the theme in effect answers at once.
+    fn theme_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        let themes = Arc::clone(&self.services.themes);
+        match request {
+            Request::ListThemes => {
+                self.spawn_reply(id, span, kind, move || themes.list());
+                None
+            }
+            Request::GetTheme { theme_id: None } => Some(themes.get(None)),
+            Request::GetTheme {
+                theme_id: Some(theme_id),
+            } => {
+                self.spawn_reply(id, span, kind, move || themes.get(Some(&theme_id)));
                 None
             }
             _ => None,
@@ -966,6 +1008,12 @@ impl Session {
                     RequestId::new(),
                     Event::KeymapChanged {
                         keymap: self.services.settings.snapshot().keymap.to_wire(),
+                    },
+                ));
+                self.out.send(&Envelope::new(
+                    RequestId::new(),
+                    Event::ThemeChanged {
+                        theme: Box::new(self.services.themes.applied()),
                     },
                 ));
                 for job in self.services.jobs.list() {

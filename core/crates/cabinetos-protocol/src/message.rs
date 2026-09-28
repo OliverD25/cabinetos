@@ -6,6 +6,7 @@ use crate::index::{FileHit, SearchSource, VolumeStatus, default_file_search_limi
 use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution};
 use crate::plugin::{PluginInfo, PluginState};
 use crate::terminal::TerminalSession;
+use crate::theme::{Theme, ThemeInfo};
 
 /// One message on the control channel: a request ID plus the message body.
 ///
@@ -297,6 +298,17 @@ pub enum Request {
     },
     /// Asks for every session. The core answers `terminal_sessions`.
     TerminalList,
+    /// Asks for every valid theme in the themes folder. The core answers
+    /// `themes`.
+    ListThemes,
+    /// Asks for one whole theme. The core answers `theme`.
+    GetTheme {
+        /// The theme's ID; without it, the theme in effect now. (Named
+        /// `theme_id`, not `id`: `id` is the request's own ID in the same
+        /// object.)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        theme_id: Option<String>,
+    },
 }
 
 fn default_search_limit() -> u32 {
@@ -343,6 +355,8 @@ impl Request {
         "terminal_close",
         "terminal_sync_cwd",
         "terminal_list",
+        "list_themes",
+        "get_theme",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -385,6 +399,8 @@ impl Request {
             Self::TerminalClose { .. } => "terminal_close",
             Self::TerminalSyncCwd { .. } => "terminal_sync_cwd",
             Self::TerminalList => "terminal_list",
+            Self::ListThemes => "list_themes",
+            Self::GetTheme { .. } => "get_theme",
         }
     }
 }
@@ -579,6 +595,16 @@ pub enum Response {
         /// The sessions.
         sessions: Vec<TerminalSession>,
     },
+    /// Reply to `list_themes`: every valid theme, by ID.
+    Themes {
+        /// The themes.
+        themes: Vec<ThemeInfo>,
+    },
+    /// Reply to `get_theme`.
+    Theme {
+        /// The whole theme, as its file has it.
+        theme: Box<Theme>,
+    },
 }
 
 impl Response {
@@ -607,6 +633,8 @@ impl Response {
         "index_status",
         "terminal_opened",
         "terminal_sessions",
+        "themes",
+        "theme",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -636,6 +664,8 @@ impl Response {
             Self::IndexStatus { .. } => "index_status",
             Self::TerminalOpened { .. } => "terminal_opened",
             Self::TerminalSessions { .. } => "terminal_sessions",
+            Self::Themes { .. } => "themes",
+            Self::Theme { .. } => "theme",
         }
     }
 }
@@ -897,6 +927,14 @@ pub enum Event {
         /// Each volume as `volume_info` describes it, by drive letter.
         volumes: Vec<VolumeDetails>,
     },
+    /// The theme in effect changed: `ui.theme` names another theme, or the
+    /// file of the theme in effect was saved. Sent to every connection that
+    /// said `hello`, with the whole theme, so a client applies it without
+    /// asking.
+    ThemeChanged {
+        /// The theme in effect now.
+        theme: Box<Theme>,
+    },
 }
 
 impl Event {
@@ -916,6 +954,7 @@ impl Event {
         "plugin_event",
         "terminal_exited",
         "volumes_changed",
+        "theme_changed",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -935,6 +974,7 @@ impl Event {
             Self::PluginEvent { .. } => "plugin_event",
             Self::TerminalExited { .. } => "terminal_exited",
             Self::VolumesChanged { .. } => "volumes_changed",
+            Self::ThemeChanged { .. } => "theme_changed",
         }
     }
 }
@@ -1029,6 +1069,8 @@ pub enum ErrorCode {
     /// folder does not exist, the session limit is reached, or Windows
     /// refused.
     SpawnFailed,
+    /// No valid theme has that ID in the themes folder.
+    NoSuchTheme,
 }
 
 #[cfg(test)]
@@ -1037,6 +1079,7 @@ mod tests {
 
     use super::*;
     use crate::job::{ConflictKind, ConflictPolicy, JobKind, JobOptions, LinkPolicy};
+    use crate::theme::ThemeKind;
 
     const ID: &str = "01J9ZQ4X7K3M5N8P2R6S0T1V4W";
 
@@ -1061,6 +1104,49 @@ mod tests {
             ],
             immutable: vec!["palette.show".to_owned()],
         }
+    }
+
+    /// A whole theme, every colour the same.
+    fn theme() -> Theme {
+        let gray = json!("#FFFFFF8B");
+        let palette: serde_json::Map<String, Value> = [
+            "textPrimary",
+            "textSecondary",
+            "textTertiary",
+            "textDisabled",
+            "layerFill",
+            "layerStroke",
+            "layerStrokeActive",
+            "controlFill",
+            "controlFillHover",
+            "acrylicTint",
+            "terminalBackground",
+            "folderIcon",
+            "folderIconFront",
+            "permissionLow",
+            "permissionMedium",
+            "permissionHigh",
+        ]
+        .into_iter()
+        .map(|key| (key.to_owned(), gray.clone()))
+        .chain([(
+            "fileTypeColors".to_owned(),
+            json!({"md": gray, "rs": gray, "toml": gray, "exe": gray, "dll": gray, "bin": gray, "pdf": gray, "zip": gray}),
+        )])
+        .collect();
+        serde_json::from_value(json!({
+            "id": "nord",
+            "name": "Nord",
+            "author": "CabinetOS",
+            "attribution": "Colours from Nord, MIT License.",
+            "version": "1.0.0",
+            "kind": "dark",
+            "accent": "#88c0d0",
+            "mica": {"tint": "#2E3440", "opacity": 0.88},
+            "palette": palette,
+            "terminal": {"foreground": gray, "background": "#2E3440", "cursor": gray, "ansi": vec![gray; 16]}
+        }))
+        .unwrap()
     }
 
     #[expect(clippy::too_many_lines, reason = "one example of every request")]
@@ -1189,6 +1275,10 @@ mod tests {
                 path: r"D:\docs".to_owned(),
             },
             Request::TerminalList,
+            Request::ListThemes,
+            Request::GetTheme {
+                theme_id: Some("nord".to_owned()),
+            },
         ]
     }
 
@@ -1385,6 +1475,12 @@ mod tests {
                     attached: true,
                 }],
             },
+            Response::Themes {
+                themes: vec![ThemeInfo::from(&theme())],
+            },
+            Response::Theme {
+                theme: Box::new(theme()),
+            },
         ]
     }
 
@@ -1452,6 +1548,9 @@ mod tests {
             },
             Event::VolumesChanged {
                 volumes: vec![volume()],
+            },
+            Event::ThemeChanged {
+                theme: Box::new(theme()),
             },
         ]
     }
@@ -1633,6 +1732,7 @@ mod tests {
             (ErrorCode::InvalidResolution, "invalid_resolution"),
             (ErrorCode::NoSuchPlugin, "no_such_plugin"),
             (ErrorCode::PluginError, "plugin_error"),
+            (ErrorCode::NoSuchTheme, "no_such_theme"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));
@@ -1807,6 +1907,48 @@ mod tests {
         })
         .unwrap();
         assert_eq!(control["action"], "resume");
+    }
+
+    #[test]
+    fn theme_messages_have_the_documented_wire_form() {
+        let json =
+            serde_json::to_string(&Envelope::new(id(), Request::GetTheme { theme_id: None }))
+                .unwrap();
+        assert_eq!(json, format!(r#"{{"id":"{ID}","type":"get_theme"}}"#));
+        let value = serde_json::to_value(Envelope::new(
+            id(),
+            Event::ThemeChanged {
+                theme: Box::new(theme()),
+            },
+        ))
+        .unwrap();
+        assert_eq!(value["type"], "theme_changed");
+        assert_eq!(value["theme"]["id"], "nord");
+        assert_eq!(value["theme"]["accent"], "#88C0D0");
+        assert_eq!(
+            value["theme"]["mica"],
+            json!({"tint": "#2E3440", "opacity": 0.88})
+        );
+        assert_eq!(
+            value["theme"]["palette"]["fileTypeColors"]["rs"],
+            "#FFFFFF8B"
+        );
+        assert_eq!(
+            value["theme"]["terminal"]["ansi"].as_array().unwrap().len(),
+            16
+        );
+        assert!(value["theme"].get("$schema").is_none());
+        let listed = serde_json::to_value(ThemeInfo::from(&theme())).unwrap();
+        assert_eq!(
+            listed,
+            json!({"id": "nord", "name": "Nord", "author": "CabinetOS", "version": "1.0.0", "kind": "dark", "accent": "#88C0D0"})
+        );
+        let mut plain = theme();
+        plain.accent = None;
+        plain.mica = None;
+        let value = serde_json::to_value(&plain).unwrap();
+        assert!(value["accent"].is_null() && value["mica"].is_null());
+        assert_eq!(plain.kind, ThemeKind::Dark);
     }
 
     #[test]

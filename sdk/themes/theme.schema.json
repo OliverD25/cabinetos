@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CabinetOS theme",
+  "description": "A colour theme: `<id>.json` in the themes folder.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "Where editors find the schema of the file: the core keeps\n`theme.schema.json` next to the themes. The core ignores it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "accent": {
+      "description": "The accent colour; `null` follows the Windows accent colour.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Rgb"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "attribution": {
+      "description": "Where the colours come from and under which license, when they are\nsomeone else's.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "author": {
+      "description": "Who made the theme.",
+      "type": "string"
+    },
+    "id": {
+      "description": "Lower case letters, digits and `-`, starting with a letter; also the\nfile's name without `.json`.",
+      "type": "string"
+    },
+    "kind": {
+      "description": "Whether the theme is for dark or light mode.",
+      "$ref": "#/$defs/ThemeKind"
+    },
+    "mica": {
+      "description": "A tint over the Mica backdrop; `null` shows plain Mica.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MicaTint"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "name": {
+      "description": "The name people see in the theme picker.",
+      "type": "string"
+    },
+    "palette": {
+      "description": "The colours of the window.",
+      "$ref": "#/$defs/Palette"
+    },
+    "terminal": {
+      "description": "The colours of the integrated terminal.",
+      "$ref": "#/$defs/TerminalColors"
+    },
+    "version": {
+      "description": "`major.minor.patch`.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "author",
+    "version",
+    "kind",
+    "palette",
+    "terminal"
+  ],
+  "$defs": {
+    "Color": {
+      "description": "A colour, #RRGGBB, or #RRGGBBAA with alpha (00 clear, FF solid).",
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+    },
+    "FileTypeColors": {
+      "description": "The stroke colour of a file's icon, by its extension.",
+      "type": "object",
+      "properties": {
+        "bin": {
+          "description": "`.bin`",
+          "$ref": "#/$defs/Color"
+        },
+        "dll": {
+          "description": "`.dll`",
+          "$ref": "#/$defs/Color"
+        },
+        "exe": {
+          "description": "`.exe`",
+          "$ref": "#/$defs/Color"
+        },
+        "md": {
+          "description": "`.md`",
+          "$ref": "#/$defs/Color"
+        },
+        "pdf": {
+          "description": "`.pdf`",
+          "$ref": "#/$defs/Color"
+        },
+        "rs": {
+          "description": "`.rs`",
+          "$ref": "#/$defs/Color"
+        },
+        "toml": {
+          "description": "`.toml`",
+          "$ref": "#/$defs/Color"
+        },
+        "zip": {
+          "description": "`.zip`",
+          "$ref": "#/$defs/Color"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "md",
+        "rs",
+        "toml",
+        "exe",
+        "dll",
+        "bin",
+        "pdf",
+        "zip"
+      ]
+    },
+    "MicaTint": {
+      "description": "A tint laid over the Mica backdrop.",
+      "type": "object",
+      "properties": {
+        "opacity": {
+          "description": "How much of the tint covers the backdrop: 0 (none) to 1 (all).",
+          "$ref": "#/$defs/Opacity"
+        },
+        "tint": {
+          "description": "The tint's colour.",
+          "$ref": "#/$defs/Rgb"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tint",
+        "opacity"
+      ]
+    },
+    "Opacity": {
+      "description": "From 0 (none) to 1 (all).",
+      "type": "number",
+      "maximum": 1,
+      "minimum": 0
+    },
+    "Palette": {
+      "description": "The colours of the window. Colours with an alpha part (`#RRGGBBAA`) are\nlaid over the backdrop.",
+      "type": "object",
+      "properties": {
+        "acrylicTint": {
+          "description": "The palette, context menus and flyouts (the design's acrylic).",
+          "$ref": "#/$defs/Color"
+        },
+        "controlFill": {
+          "description": "The fill of buttons and text fields.",
+          "$ref": "#/$defs/Color"
+        },
+        "controlFillHover": {
+          "description": "That fill under the mouse.",
+          "$ref": "#/$defs/Color"
+        },
+        "fileTypeColors": {
+          "description": "The stroke of file icons, by type.",
+          "$ref": "#/$defs/FileTypeColors"
+        },
+        "folderIcon": {
+          "description": "The body of the folder icon.",
+          "$ref": "#/$defs/Color"
+        },
+        "folderIconFront": {
+          "description": "The front flap of the folder icon.",
+          "$ref": "#/$defs/Color"
+        },
+        "layerFill": {
+          "description": "The fill of panes, cards and sidebar rows.",
+          "$ref": "#/$defs/Color"
+        },
+        "layerStroke": {
+          "description": "Their 1 px border.",
+          "$ref": "#/$defs/Color"
+        },
+        "layerStrokeActive": {
+          "description": "The border of the focused pane.",
+          "$ref": "#/$defs/Color"
+        },
+        "permissionHigh": {
+          "description": "A capability of level `high`.",
+          "$ref": "#/$defs/Color"
+        },
+        "permissionLow": {
+          "description": "A capability of level `low` in the review dialog.",
+          "$ref": "#/$defs/Color"
+        },
+        "permissionMedium": {
+          "description": "A capability of level `medium`.",
+          "$ref": "#/$defs/Color"
+        },
+        "terminalBackground": {
+          "description": "The terminal panel over the backdrop.",
+          "$ref": "#/$defs/Color"
+        },
+        "textDisabled": {
+          "description": "Commands that cannot run now.",
+          "$ref": "#/$defs/Color"
+        },
+        "textPrimary": {
+          "description": "Names, titles and everything the user reads first.",
+          "$ref": "#/$defs/Color"
+        },
+        "textSecondary": {
+          "description": "Details such as dates, types and sizes.",
+          "$ref": "#/$defs/Color"
+        },
+        "textTertiary": {
+          "description": "Section labels, hints and paths.",
+          "$ref": "#/$defs/Color"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "textPrimary",
+        "textSecondary",
+        "textTertiary",
+        "textDisabled",
+        "layerFill",
+        "layerStroke",
+        "layerStrokeActive",
+        "controlFill",
+        "controlFillHover",
+        "acrylicTint",
+        "terminalBackground",
+        "folderIcon",
+        "folderIconFront",
+        "fileTypeColors",
+        "permissionLow",
+        "permissionMedium",
+        "permissionHigh"
+      ]
+    },
+    "Rgb": {
+      "description": "An opaque colour, #RRGGBB.",
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "TerminalColors": {
+      "description": "The colours of the integrated terminal.",
+      "type": "object",
+      "properties": {
+        "ansi": {
+          "description": "The 16 ANSI colours: black, red, green, yellow, blue, magenta, cyan,\nwhite, then the bright ones in the same order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Color"
+          },
+          "maxItems": 16,
+          "minItems": 16
+        },
+        "background": {
+          "description": "The background of the colour scheme: reverse video, and cells drawn\nwhere the panel is opaque.",
+          "$ref": "#/$defs/Color"
+        },
+        "cursor": {
+          "description": "The cursor.",
+          "$ref": "#/$defs/Color"
+        },
+        "foreground": {
+          "description": "Text in the default colour.",
+          "$ref": "#/$defs/Color"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "foreground",
+        "background",
+        "cursor",
+        "ansi"
+      ]
+    },
+    "ThemeKind": {
+      "description": "Dark or light.",
+      "oneOf": [
+        {
+          "description": "Light text on a dark backdrop.",
+          "type": "string",
+          "const": "dark"
+        },
+        {
+          "description": "Dark text on a light backdrop.",
+          "type": "string",
+          "const": "light"
+        }
+      ]
+    }
+  }
+}

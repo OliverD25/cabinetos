@@ -44,7 +44,7 @@ connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":9,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":10,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
@@ -55,7 +55,8 @@ because it duplicates shared-memory handles into that process. A
 configuration events (`config_changed`, `config_error`, `keymap_changed`),
 the job events (`job_progress`, `job_conflict`, `job_state_changed`),
 the plugin events (`plugin_state_changed`, `plugin_crashed`,
-`plugin_event`), `terminal_exited` and `volumes_changed`, and right after
+`plugin_event`), `terminal_exited`, `volumes_changed` and
+`theme_changed`, and right after
 `welcome` a `job_conflict` for every conflict that already waits for a
 decision. Every other request works without `hello`.
 
@@ -75,7 +76,9 @@ Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
 with the reply `value`, `open_path`, `create_directory` and `rename`, and
 the error code `already_exists`. Version 9 added the shell's type names and
 icons: `describe_entries` with its reply `entry_details`, and `get_icon`
-with its reply `icon`.
+with its reply `icon`. Version 10 (Phase 9) added the colour themes:
+`list_themes` with its reply `themes`, `get_theme` with its reply `theme`,
+the event `theme_changed` and the error code `no_such_theme`.
 
 ## Requests and replies
 
@@ -117,6 +120,8 @@ with its reply `icon`.
 | `terminal_close` | `session_id` | `ok`, once the shell has ended |
 | `terminal_sync_cwd` | `session_id`, `path` | `ok` |
 | `terminal_list` | — | `terminal_sessions` (`sessions`) |
+| `list_themes` | — | `themes` (`themes`) |
+| `get_theme` | `theme_id` (without it: the theme in effect) | `theme` (`theme`) |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -137,7 +142,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `invalid_keys` | The keys do not follow the key grammar ([keybindings.md](keybindings.md)). |
 | `keybinding_conflict` | The keys are taken by another command in the same context, or a combination would be both a binding and the start of a chord. |
 | `immutable_binding` | The change touches the Immutable System Tier. |
-| `config_error` | The configuration file cannot be changed now: it has an error the user must fix first, or it cannot be written. |
+| `config_error` | The configuration file cannot be changed now: it has an error the user must fix first, or it cannot be written. Also a `set_value` of `ui.theme` to a theme with no valid file, and `get_theme` of a file that is not a valid theme. |
 | `no_such_job` | No job has that `job_id`. |
 | `no_such_conflict` | The job has no waiting conflict with that `conflict_id`. |
 | `invalid_resolution` | The resolution does not fit the conflict, such as `delete_permanently` for a file that exists. |
@@ -146,14 +151,15 @@ Any request can instead get `error` with a `code` and a `message`:
 | `no_such_session` | No terminal session has that `session_id`; or, for `terminal_resize` and `terminal_sync_cwd`, its shell has exited. |
 | `unknown_profile` | No profile in `terminal.profiles` has that name. The message lists the names. |
 | `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
+| `no_such_theme` | No theme with that ID is in the themes folder, or the ID cannot name a theme file. |
 
 Requests on one connection are independent: `list_directory`,
 `describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `create_directory`, `rename`,
 `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
-`terminal_open`, `terminal_close` and `terminal_sync_cwd` run in the
-background, so a slow directory, plugin, search or shell does not hold up
+`terminal_open`, `terminal_close`, `terminal_sync_cwd`, `list_themes` and
+`get_theme` of a named theme run in the background, so a slow directory, plugin, search or shell does not hold up
 the next request, and their replies may come in any order. Match replies to
 requests by `id`.
 
@@ -536,7 +542,7 @@ hits.
 ```json
 {"id":"01M…","type":"execute_command","command":"help.about"}
 {"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
- "core_version":"0.1.0","protocol_version":9,"config_path":"C:\\…\\cabinetos.json"}}
+ "core_version":"0.1.0","protocol_version":10,"config_path":"C:\\…\\cabinetos.json"}}
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
@@ -576,7 +582,8 @@ within a second of the file being saved.
   differs, with the whole new keymap.
 - `config_error` means the file cannot be used; the settings in effect stay.
   `line` and `column` count from 1 (columns in characters) and are `null`
-  when unknown, for example when the file was deleted.
+  when unknown, for example when the file was deleted. It also reports a
+  theme that cannot be used ("Colour themes" below).
 
 ## Jobs
 
@@ -826,6 +833,54 @@ which the shell sees as a hang-up, and forgets the session; the reply
 comes once the shell has ended (a shell still running 2 s later is ended
 by force). When the core stops, it closes every session.
 
+## Colour themes
+
+Themes are JSON files in the themes folder ([themes.md](themes.md) has the
+format, the folder and the shipped themes). `ui.theme` in the
+configuration names the theme in effect.
+
+```json
+{"id":"01M…","type":"list_themes"}
+{"id":"01M…","type":"themes","themes":[{"id":"catppuccin-mocha","name":"Catppuccin Mocha",
+ "author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#CBA6F7"},…]}
+{"id":"01M…","type":"get_theme"}
+{"id":"01M…","type":"theme","theme":{"id":"nord","name":"Nord","author":"CabinetOS",…,
+ "accent":"#88C0D0","mica":{"tint":"#2E3440","opacity":0.88},"palette":{…},"terminal":{…}}}
+```
+
+- `list_themes` lists every valid theme in the folder, by ID. A file that
+  is not a valid theme is left out; the core's log says why. `accent` is
+  `null` for a theme that follows the Windows accent colour.
+- `get_theme` without `theme_id` answers the theme in effect; with it, that
+  theme's file, read now. An ID with no file is `no_such_theme`; a file that
+  is not a valid theme is `config_error` with the reason. `theme` is the
+  file's object without its `$schema` key, with colours in upper case.
+
+A client changes the theme with `set_value` on `ui.theme`:
+
+```json
+{"id":"01M…","type":"set_value","path":"ui.theme","value":"nord"}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"config_changed","changed":["ui.theme"]}
+{"id":"01M…","type":"theme_changed","theme":{"id":"nord",…}}
+```
+
+- `theme_changed` carries the whole theme, so a client applies it without
+  asking. Every connection that said `hello` gets it whenever the theme in
+  effect changes: `ui.theme` names another theme (through `set_value` or an
+  edit of the file), or the file of the theme in effect was saved.
+  `config_changed` and `theme_changed` may come in either order.
+- `set_value` refuses a theme with no valid file with `config_error`; the
+  file is not touched.
+- A hand edit that names a theme with no valid file takes effect for the
+  other settings; the theme in effect stays, and a `config_error` event
+  (with `line` and `column` `null`) says why. A saved edit that makes the
+  theme in effect invalid is reported the same way: a theme is never applied
+  half-way. Each problem is reported once; when it is fixed (the file
+  appears, or is corrected), `theme_changed` follows.
+- A client that fell behind on events gets a `theme_changed` with the theme
+  in effect.
+
 ## Trying it by hand
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
@@ -838,5 +893,6 @@ by force). When the core stops, it closes every session.
 `config`, `commands` and `keys` cover the configuration messages (`keys
 watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`
 cover the jobs, `plugins`, `commands exec` and `events watch` cover the
-plugins, `search` and `index status` cover file search, and `term` covers
-the terminal sessions. See [core/README.md](../core/README.md).
+plugins, `search` and `index status` cover file search, `term` covers
+the terminal sessions, and `themes list` and `themes show` send
+`list_themes` and `get_theme`. See [core/README.md](../core/README.md).

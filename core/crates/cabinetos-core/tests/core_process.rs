@@ -43,6 +43,7 @@ fn core_command(pipe: &PipeName, log_dir: &Path) -> Command {
         // Never the real plugins folder, whatever is installed there.
         .env("CABINETOS_PLUGINS_DIR", log_dir.join("plugins"))
         .env("CABINETOS_PLUGINS_DATA_DIR", log_dir.join("plugins-data"))
+        .env("CABINETOS_THEMES_DIR", log_dir.join("themes"))
         .env(
             "CABINETOS_CONFIG",
             log_dir.join("config").join("cabinetos.json"),
@@ -144,7 +145,7 @@ async fn ping_round_trip_is_logged_with_its_request_id() {
             core_version,
         } => {
             assert_eq!(protocol_version, PROTOCOL_VERSION);
-            assert_eq!(protocol_version, 9);
+            assert_eq!(protocol_version, 10);
             assert_eq!(core_version, env!("CARGO_PKG_VERSION"));
         }
         other => panic!("expected pong, got {other:?}"),

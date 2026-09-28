@@ -1,6 +1,6 @@
 //! The events every connection that said `hello` receives, whoever caused
-//! them: configuration changes, job progress, plugin news, shells that
-//! exited and drive letters that changed.
+//! them: configuration and theme changes, job progress, plugin news, shells
+//! that exited and drive letters that changed.
 
 use std::sync::Arc;
 
@@ -13,6 +13,7 @@ use tokio::sync::broadcast;
 
 use crate::search::IndexerLink;
 use crate::settings::Settings;
+use crate::themes::Themes;
 
 /// Events a connection may fall behind by before it misses some: about ten
 /// seconds of progress from four jobs at once.
@@ -55,4 +56,6 @@ pub(crate) struct Services {
     pub(crate) terminals: Arc<Terminals>,
     /// Type names and icons, with their caches, for every connection.
     pub(crate) hydrator: Arc<Hydrator>,
+    /// The themes folder and the theme in effect.
+    pub(crate) themes: Arc<Themes>,
 }

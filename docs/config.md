@@ -85,7 +85,7 @@ while you type.
 | `ui.layout` | `classic`, `right`, `rail` | `classic` | Where sidebar, panes and terminal go: sidebar left with the terminal below, the terminal on the right, or a narrow activity rail instead of the sidebar |
 | `ui.dualPane` | `true`, `false` | `true` | Two file panes side by side, or one |
 | `ui.sidebar` | `true`, `false` | `true` | Show the sidebar |
-| `ui.theme` | text | `default` | The color theme's ID |
+| `ui.theme` | text | `default` | The colour theme's ID: `<id>.json` in the themes folder ([themes.md](themes.md)). `set_value` refuses a theme with no valid file; a hand edit that names one keeps the theme in effect and reports it with `config_error` |
 | `ui.lastPaths` | list of folder paths | empty | The folders the panes showed last, left pane first; the UI opens them again at the next start. Empty: the UI picks. |
 | `ui.pinned` | list of folder paths | empty | Folders the user pinned to the sidebar, in the sidebar's order |
 | `panes.showHidden` | `true`, `false` | `false` | Also list hidden and system entries |

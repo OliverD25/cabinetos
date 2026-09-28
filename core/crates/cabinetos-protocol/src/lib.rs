@@ -24,11 +24,12 @@ mod message;
 mod plugin;
 pub mod shm;
 mod terminal;
+mod theme;
 
 #[cfg(feature = "schema")]
 pub mod schema;
 
-pub use id::{InvalidRequestId, RequestId};
+pub use id::{InvalidRequestId, RequestId, extension_id_problem};
 pub use index::{
     FileHit, HitKind, INDEXER_PIPE_NAME, IndexState, IndexerErrorCode, IndexerRequest,
     IndexerResponse, SearchSource, VolumeStatus,
@@ -44,6 +45,10 @@ pub use message::{
 };
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 pub use terminal::{TerminalSession, TerminalState};
+pub use theme::{
+    Color, FileTypeColors, MicaTint, Opacity, Palette, Rgb, TerminalColors, Theme, ThemeInfo,
+    ThemeKind,
+};
 
 /// Version of the control-channel protocol. The core reports it in
 /// [`Response::Pong`] and [`Response::Welcome`]. Raise it whenever a message
@@ -60,5 +65,7 @@ pub use terminal::{TerminalSession, TerminalState};
 /// `set_value` (with the reply `value`), `open_path`, `create_directory`
 /// and `rename`, and the error code `already_exists`; version 9 the shell's
 /// type names and icons (`describe_entries` and `entry_details`, `get_icon`
-/// and `icon`).
-pub const PROTOCOL_VERSION: u32 = 9;
+/// and `icon`); version 10 colour themes (`list_themes` and `themes`,
+/// `get_theme` and `theme`, the event `theme_changed`, the error code
+/// `no_such_theme`).
+pub const PROTOCOL_VERSION: u32 = 10;

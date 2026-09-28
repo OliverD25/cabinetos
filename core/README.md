@@ -11,13 +11,14 @@ protocol between UI and core, with the shared-memory layout:
 [../docs/jobs.md](../docs/jobs.md). Core Plugins:
 [../docs/plugins.md](../docs/plugins.md). The indexer and search:
 [../docs/indexer.md](../docs/indexer.md). The terminal sessions:
-[../docs/terminal.md](../docs/terminal.md).
+[../docs/terminal.md](../docs/terminal.md). Colour themes:
+[../docs/themes.md](../docs/themes.md).
 
 ## Crates
 
 | Crate | Kind | Responsibility | Constitution articles |
 |---|---|---|---|
-| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host, the event hub, search (through the indexer, or a bounded walk without it), and the terminal sessions | 1, 5, 6, 7, 8, 9, 10, 12 |
+| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host, the event hub, search (through the indexer, or a bounded walk without it), the terminal sessions, and the theme in effect | 1, 5, 6, 7, 8, 9, 10, 12 |
 | `cabinetos-protocol` | library | The IPC contract: message envelopes, request IDs, `#[repr(C)]` shared-memory layouts, JSON Schema export | 1, 12 |
 | `cabinetos-diag` | library | JSON Lines logs, ring buffer of recent events, crash traces ([../docs/diagnostics.md](../docs/diagnostics.md)) | 12, 1 |
 | `cabinetos-ipc` | library | Named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch, and the byte pipes of terminal sessions | 1, 12 |
@@ -30,6 +31,7 @@ protocol between UI and core, with the shared-memory layout:
 | `cabinetos-commands` | library | Command registry, key grammar and chords, keymap compilation with the Immutable System Tier, palette search ([../docs/keybindings.md](../docs/keybindings.md)) | 7, 4 |
 | `cabinetos-plugins` | library | `PluginHost`: Core Plugins as WebAssembly components in `wasmtime`, strict manifests, capabilities, the WASI sandbox, fuel, deadline and memory limits per call, trap containment and restarts ([../docs/plugins.md](../docs/plugins.md)) | 8, 10, 11 |
 | `cabinetos-terminal` | library | `Terminals`: shells in pseudo-consoles (ConPTY), a byte pipe per session for one client at a time, output bounded to 1 MiB with backpressure, the change-directory line of each shell, and the console side of `cabinetos-cli term` ([../docs/terminal.md](../docs/terminal.md)) | 9, 4, 1 |
+| `cabinetos-themes` | library | `ThemeFolder`: the strict checks of the JSON theme format, the themes folder (the shipped themes written when missing, the schema for editors), listing and loading themes by ID ([../docs/themes.md](../docs/themes.md)) | 6, 8 |
 
 A stub holds only its crate documentation and the names of its future public
 types, so the shape of the engine can be reviewed before the code exists.
@@ -71,9 +73,10 @@ with `cargo build -p cabinetos-core`.
 The plugin tests load the committed components in
 `../sdk/fixtures/plugins` (built from `../sdk/templates/plugins` with
 `../sdk/templates/build-fixtures.ps1`), so they need no WebAssembly
-toolchain. Every test that starts a core points `CABINETOS_PLUGINS_DIR` and
-`CABINETOS_PLUGINS_DATA_DIR` at its temporary folder, so no test sees the
-plugins installed on the machine. The `reader` fixture reads
+toolchain. Every test that starts a core points `CABINETOS_PLUGINS_DIR`,
+`CABINETOS_PLUGINS_DATA_DIR` and `CABINETOS_THEMES_DIR` at its temporary
+folder, so no test sees the plugins installed on the machine or writes the
+shipped themes into the real themes folder. The `reader` fixture reads
 `%TEMP%\cabinetos-plugins-test\reader`, which its tests create and remove.
 
 The indexer's tests need Administrator rights to read the MFT and the
@@ -115,11 +118,12 @@ checks that both ways write the same section bytes, lists the same
 under `%TEMP%\cabinetos-fs-test\`, which it removes. CI only compiles the
 benchmarks.
 
-**Schemas.** `sdk/protocol/*.schema.json` (the messages) and
+**Schemas.** `sdk/protocol/*.schema.json` (the messages),
+`sdk/themes/theme.schema.json` (the theme files) and
 `sdk/config/cabinetos.schema.json` (the configuration file) are generated
 from the Rust types, and a test fails when a file is out of date. After
-changing a message or a setting, regenerate and commit them (from `core/`,
-in bash):
+changing a message, the theme format or a setting, regenerate and commit
+them (from `core/`, in bash):
 
 ```bash
 CABINETOS_UPDATE_SCHEMA=1 cargo test -p cabinetos-protocol
@@ -136,6 +140,9 @@ another file. It loads the Core Plugins from
 `%LOCALAPPDATA%\CabinetOS\plugins`; `--plugins-dir <path>` (or
 `CABINETOS_PLUGINS_DIR`) picks another folder, and `--plugins-data-dir`
 (or `CABINETOS_PLUGINS_DATA_DIR`) the folder of the plugins' own folders.
+It reads the colour themes from `%LOCALAPPDATA%\CabinetOS\themes`, and
+writes the shipped themes there when they are missing; `--themes-dir
+<path>` (or `CABINETOS_THEMES_DIR`) picks another folder.
 
 ```text
 cargo run -p cabinetos-core -- --pipe demo
@@ -145,7 +152,7 @@ To try the sample and test plugins with a configuration that is not your
 own (in cmd; in PowerShell write `$env:TEMP` for `%TEMP%`):
 
 ```text
-cargo run -p cabinetos-core -- --pipe demo --plugins-dir ..\sdk\fixtures\plugins --plugins-data-dir %TEMP%\cabinetos-demo\plugins-data --config %TEMP%\cabinetos-demo\cabinetos.json
+cargo run -p cabinetos-core -- --pipe demo --plugins-dir ..\sdk\fixtures\plugins --plugins-data-dir %TEMP%\cabinetos-demo\plugins-data --themes-dir %TEMP%\cabinetos-demo\themes --config %TEMP%\cabinetos-demo\cabinetos.json
 ```
 
 Terminal 2, from `core/`:
@@ -180,6 +187,9 @@ cargo run -p cabinetos-cli -- --pipe demo term --profile cmd
 cargo run -p cabinetos-cli -- --pipe demo term list
 cargo run -p cabinetos-cli -- --pipe demo term cd 1 D:\work
 cargo run -p cabinetos-cli -- --pipe demo term close 1
+cargo run -p cabinetos-cli -- --pipe demo themes list
+cargo run -p cabinetos-cli -- --pipe demo themes show nord
+cargo run -p cabinetos-cli -- --pipe demo config set ui.theme nord
 cargo run -p cabinetos-cli -- --pipe demo shutdown
 ```
 
@@ -190,7 +200,7 @@ terminal first (Run as administrator), in `core/`:
 cargo run --release -p cabinetos-indexer -- --console --volumes C
 ```
 
-- `ping` prints `pong id=<ulid> protocol=9 core=<version> rtt=<ms>ms`.
+- `ping` prints `pong id=<ulid> protocol=10 core=<version> rtt=<ms>ms`.
 - `ls <path>` lists a directory the way the UI will: the core reads it into
   shared memory, the CLI maps the section and prints it. Options: `--long`
   (attributes, local modification time, size), `--hidden` (hidden and system
@@ -244,6 +254,10 @@ cargo run --release -p cabinetos-indexer -- --console --volumes C
   for the shell to exit. `term list` prints every session, `term cd <id>
   <path>` types the shell's own change-directory command, and `term close
   <id>` ends a session.
+- `themes list` prints every valid theme, `*` marking the one in effect;
+  `themes show [<id>]` prints a whole theme as JSON (without an ID, the
+  one in effect). `config set ui.theme <id>` changes the theme, and
+  `events watch` shows the `theme_changed` that follows.
 - `shutdown` makes the core exit with code 0. The core also exits on Ctrl+C,
   and, when started with `--parent-pid <pid>`, as soon as that process exits.
 
@@ -263,7 +277,8 @@ directory, gets a dedicated thread (one per watched listing, and two for the
 configuration file: one waits for changes, one waits for them to settle and
 reads the file). In the log, the runtime's threads are named `core-rt-N`,
 listing watchers `watch-<listing id>`, the configuration watcher's
-threads `config-watch` and `config-debounce`, each running job `job-<id>`
+threads `config-watch` and `config-debounce` (and the themes folder's
+`themes-watch` and `themes-debounce`), each running job `job-<id>`
 (and `job-<id>-<n>` for its extra copy workers), the progress
 publisher of all jobs `job-progress`, each running plugin `plugin-<id>`,
 the plugins' deadline ticker `plugin-epoch` (it sleeps while no plugin call

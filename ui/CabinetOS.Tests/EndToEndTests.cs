@@ -46,13 +46,14 @@ public class EndToEndTests
                 ["CABINETOS_LOG_DIR"] = Path.Combine(root, "logs"),
                 ["CABINETOS_PLUGINS_DIR"] = Path.Combine(root, "plugins"),
                 ["CABINETOS_PLUGINS_DATA_DIR"] = Path.Combine(root, "plugins-data"),
+                ["CABINETOS_THEMES_DIR"] = Path.Combine(root, "themes"),
             };
 
             await using var core = await CoreLauncher.StartAsync(coreExe, TimeSpan.FromSeconds(10), environment);
             var client = core.Client;
 
             var welcome = await client.HelloAsync();
-            Assert.Equal(9u, welcome.ProtocolVersion);
+            Assert.Equal(10u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);
@@ -305,6 +306,7 @@ public class EndToEndTests
             ["CABINETOS_LOG_DIR"] = Path.Combine(root, "logs"),
             ["CABINETOS_PLUGINS_DIR"] = Path.Combine(root, "plugins"),
             ["CABINETOS_PLUGINS_DATA_DIR"] = Path.Combine(root, "plugins-data"),
+            ["CABINETOS_THEMES_DIR"] = Path.Combine(root, "themes"),
         };
         return CoreLauncher.StartAsync(coreExe, TimeSpan.FromSeconds(10), environment);
     }

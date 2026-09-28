@@ -14,7 +14,7 @@ public sealed record IncomingMessage(string? Id, string? Type, object? Body, boo
 /// <summary>Turns requests into JSON and JSON into replies and events.</summary>
 public static class MessageCodec
 {
-    /// <summary>Every event type of protocol version 8; everything else is a reply.</summary>
+    /// <summary>Every event type of protocol version 10; everything else is a reply.</summary>
     public static readonly FrozenSet<string> EventTypes = FrozenSet.ToFrozenSet(
     [
         "listing_refreshed",
@@ -30,6 +30,7 @@ public static class MessageCodec
         "plugin_event",
         "terminal_exited",
         "volumes_changed",
+        "theme_changed",
     ]);
 
     private static readonly FrozenDictionary<string, JsonTypeInfo> Known = new Dictionary<string, JsonTypeInfo>

@@ -20,6 +20,7 @@ cabinetos-jobs.workspace = true
 cabinetos-plugins.workspace = true
 cabinetos-protocol.workspace = true
 cabinetos-terminal.workspace = true
+cabinetos-themes.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

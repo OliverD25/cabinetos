@@ -4,16 +4,18 @@
 //! The UI is only a view (brief §1, the Dumb UI Rule): all work happens here,
 //! behind the named pipe. The core lists directories into shared memory,
 //! keeps watched listings current with events, reports volumes and disks,
-//! owns the configuration file, the commands and the keymap, runs the jobs,
-//! the Core Plugins and the terminal sessions, logs every request with its
-//! ID, and exits with its parent process. The protocol is in `docs/ipc.md`.
+//! owns the configuration file, the commands, the keymap and the colour
+//! themes, runs the jobs, the Core Plugins and the terminal sessions, logs
+//! every request with its ID, and exits with its parent process. The
+//! protocol is in `docs/ipc.md`.
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: every
 //! connection is served asynchronously, so no request waits on another),
-//! Article 6 (Universal Configuration: an edit to `cabinetos.json` takes
-//! effect at once), Article 7 (Absolute Keyboard Control: the keymap and
+//! Article 6 (Universal Configuration: an edit to `cabinetos.json` or to a
+//! theme file takes effect at once), Article 7 (Absolute Keyboard Control: the keymap and
 //! the Immutable System Tier live here), Article 8 (Sandboxed
-//! Extensibility: a plugin that crashes is removed and the core goes on),
+//! Extensibility: a plugin that crashes is removed and the core goes on;
+//! themes are JSON files),
 //! Article 9 (Workspace & Terminal Integration: shells in pseudo-consoles,
 //! started only when a client asks), Article 10 (The Zero-Bloat
 //! Foundation: the core is the bare navigation engine; features arrive as
@@ -28,6 +30,7 @@ mod plugins;
 mod search;
 mod settings;
 mod terminal;
+mod themes;
 mod volumes;
 
 use std::path::{Path, PathBuf};
@@ -106,6 +109,9 @@ pub struct CoreConfig {
     /// The folder of the plugins' own folders; `None` uses
     /// `CABINETOS_PLUGINS_DATA_DIR` or `%LOCALAPPDATA%\CabinetOS\plugins-data`.
     pub plugins_data_dir: Option<PathBuf>,
+    /// The themes folder; `None` uses `CABINETOS_THEMES_DIR` or
+    /// `%LOCALAPPDATA%\CabinetOS\themes`.
+    pub themes_dir: Option<PathBuf>,
 }
 
 /// Why the core stopped with an error.
@@ -156,6 +162,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         config_path,
         plugins_dir,
         plugins_data_dir,
+        themes_dir,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
     if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
@@ -177,6 +184,26 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         };
     // Dropping the watcher at the end stops it without waiting.
     let _watcher = settings.watch();
+    let wanted = settings.snapshot().config.ui.theme.clone();
+    let theme_events = Arc::clone(&events);
+    let themes = match tokio::task::spawn_blocking(move || {
+        themes::Themes::open(
+            cabinetos_themes::themes_dir(themes_dir),
+            &wanted,
+            theme_events,
+        )
+    })
+    .await
+    {
+        Ok(themes) => themes,
+        Err(error) => std::panic::resume_unwind(error.into_panic()),
+    };
+    // Dropping the watcher at the end stops it.
+    let _theme_watcher = themes.watch();
+    tokio::spawn(themes::follow_settings(
+        Arc::clone(&themes),
+        settings.subscribe(),
+    ));
     let job_events = Arc::clone(&events);
     let jobs = JobQueueManager::new(
         EngineConfig::default(),
@@ -206,6 +233,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         indexer: search::IndexerLink::from_env(),
         terminals,
         hydrator: Arc::new(cabinetos_fs::Hydrator::new()),
+        themes,
     });
     let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     // The shells get their hang-up; together they may take up to 2 s to end.
