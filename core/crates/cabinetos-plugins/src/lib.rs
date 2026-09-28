@@ -973,7 +973,7 @@ impl PluginHost {
     }
 
     /// Tells the plugins that may read `path` (`fs:read`) that a pane opened
-    /// it. Never waits.
+    /// it, with the path as the plugin sees it (`/C:/...`). Never waits.
     pub fn listing_opened(&self, path: &str, entries: u32) {
         let lowered = path.to_lowercase();
         let slots = lock(&self.inner.slots);
@@ -996,7 +996,7 @@ impl PluginHost {
             {
                 worker.activity.queued.fetch_add(1, Ordering::Relaxed);
                 let _ = worker.calls.send(Call::Listing {
-                    path: path.to_owned(),
+                    path: sandbox::guest_path(Path::new(path)),
                     entries,
                 });
             }

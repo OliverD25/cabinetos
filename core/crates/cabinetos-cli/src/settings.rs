@@ -8,7 +8,7 @@ use std::time::SystemTime;
 use anyhow::{Context, bail};
 use cabinetos_commands::{CommandRegistry, compile};
 use cabinetos_ipc::PipeClient;
-use cabinetos_protocol::{CommandInfo, Envelope, Event, Keymap, Request, Response};
+use cabinetos_protocol::{CommandInfo, CommandSource, Envelope, Event, Keymap, Request, Response};
 
 use crate::{expect_welcome, failure, say, send};
 
@@ -117,7 +117,8 @@ async fn list_commands(client: &mut PipeClient) -> anyhow::Result<Vec<CommandInf
     }
 }
 
-/// `view.toggleSidebar   ctrl+b   View: Toggle Sidebar`.
+/// `view.toggleSidebar   ctrl+b   View: Toggle Sidebar`; a plugin's
+/// command ends with the plugin's name, as the palette's badge shows it.
 fn command_line(command: &CommandInfo) -> String {
     let keys = if command.keys.is_empty() {
         "-".to_owned()
@@ -129,8 +130,12 @@ fn command_line(command: &CommandInfo) -> String {
     } else {
         ""
     };
+    let badge = match &command.source {
+        CommandSource::Plugin { name, .. } => format!("  [{name}]"),
+        CommandSource::Core => String::new(),
+    };
     format!(
-        "{:<30} {keys:<16} {}: {}{immutable}",
+        "{:<30} {keys:<16} {}: {}{immutable}{badge}",
         command.id, command.category, command.title
     )
 }

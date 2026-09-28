@@ -99,6 +99,7 @@ world core-plugin {
     /// A job is about to start (capability `jobs:intercept`); deny stops it.
     export before-job: func(job: job-summary) -> job-verdict;
     /// A folder the plugin may read (capability `fs:read`) was opened in a
-    /// pane. A notification: nothing is returned.
+    /// pane. `path` is as the plugin sees it (`/C:/...`), ready for its own
+    /// file calls. A notification: nothing is returned.
     export on-listing-opened: func(path: string, entry-count: u32);
 }

@@ -1,0 +1,611 @@
+//! Core Plugins end to end: the real `cabinetos-core.exe` with copies of the
+//! committed fixture plugins (`sdk/fixtures/plugins`), a real client.
+//! Everything the tests write lives under `%TEMP%\cabinetos-jobs-test\` (the
+//! reader fixture's folder under `%TEMP%\cabinetos-plugins-test\`) and is
+//! removed.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
+
+use cabinetos_ipc::{PipeClient, PipeName};
+use cabinetos_protocol::{
+    CommandInfo, CommandSource, Envelope, ErrorCode, Event, JobKind, JobOptions, JobRequest,
+    JobState, PluginInfo, PluginState, Request, Response,
+};
+use serde_json::{Value, json};
+use tempfile::TempDir;
+use tokio::sync::mpsc::UnboundedReceiver;
+
+const CORE_EXE: &str = env!("CARGO_BIN_EXE_cabinetos-core");
+const STARTUP_DEADLINE: Duration = Duration::from_secs(10);
+/// Long enough to compile a component in a debug build on a slow runner.
+const SETTLE_DEADLINE: Duration = Duration::from_secs(60);
+
+fn scratch(name: &str) -> TempDir {
+    let root = std::env::temp_dir().join("cabinetos-jobs-test");
+    fs::create_dir_all(&root).unwrap();
+    tempfile::Builder::new()
+        .prefix(name)
+        .tempdir_in(root)
+        .unwrap()
+}
+
+fn fixtures() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../sdk/fixtures/plugins")
+}
+
+/// A running core, killed at the end of the test. It owns its folder: the
+/// plugins, their data, the log and the configuration.
+struct Core {
+    child: Child,
+    pipe: PipeName,
+    dir: TempDir,
+}
+
+impl Drop for Core {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl Core {
+    fn config_path(&self) -> PathBuf {
+        self.dir.path().join("cabinetos.json")
+    }
+
+    fn log_dir(&self) -> PathBuf {
+        self.dir.path().join("logs")
+    }
+
+    /// Asks the core to exit and waits, so its log is complete.
+    async fn stop(&mut self, client: &mut PipeClient) {
+        assert_eq!(ask(client, Request::Shutdown).await, Response::Ok);
+        let until = Instant::now() + STARTUP_DEADLINE;
+        while self.child.try_wait().unwrap().is_none() {
+            assert!(Instant::now() < until, "the core did not exit");
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+
+    /// Every line of the core's log, parsed.
+    fn log_lines(&self) -> Vec<Value> {
+        let mut lines = Vec::new();
+        for entry in fs::read_dir(self.log_dir()).unwrap() {
+            let path = entry.unwrap().path();
+            if path
+                .extension()
+                .is_some_and(|extension| extension == "jsonl")
+            {
+                for line in fs::read_to_string(&path).unwrap().lines() {
+                    lines.push(serde_json::from_str(line).unwrap());
+                }
+            }
+        }
+        lines
+    }
+}
+
+/// Starts a core with copies of the fixture `plugins` and `config` as its
+/// configuration file.
+fn start_core(plugins: &[&str], config: &Value) -> Core {
+    let dir = scratch("plugins");
+    for id in plugins {
+        let to = dir.path().join("plugins").join(id);
+        fs::create_dir_all(&to).unwrap();
+        for file in ["plugin.json", "plugin.wasm"] {
+            fs::copy(fixtures().join(id).join(file), to.join(file)).unwrap();
+        }
+    }
+    let config_path = dir.path().join("cabinetos.json");
+    fs::write(&config_path, serde_json::to_string_pretty(config).unwrap()).unwrap();
+    let pipe = PipeName::random();
+    let child = Command::new(CORE_EXE)
+        .args(["--pipe", pipe.token()])
+        .arg("--config")
+        .arg(&config_path)
+        .arg("--plugins-dir")
+        .arg(dir.path().join("plugins"))
+        .env("CABINETOS_LOG_DIR", dir.path().join("logs"))
+        .env(
+            "CABINETOS_PLUGINS_DATA_DIR",
+            dir.path().join("plugins-data"),
+        )
+        .env_remove("CABINETOS_PLUGINS_DIR")
+        .env_remove("CABINETOS_CONFIG")
+        .env_remove("CABINETOS_LOG")
+        .env_remove("CABINETOS_LOG_STDERR")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    Core { child, pipe, dir }
+}
+
+fn grants(pairs: &[(&str, &[&str])]) -> Value {
+    let plugins: serde_json::Map<String, Value> = pairs
+        .iter()
+        .map(|(id, granted)| ((*id).to_owned(), json!({ "granted": granted })))
+        .collect();
+    json!({ "plugins": plugins })
+}
+
+async fn connect(pipe: &PipeName) -> PipeClient {
+    let deadline = Instant::now() + STARTUP_DEADLINE;
+    loop {
+        match PipeClient::connect(pipe, Duration::from_secs(1)).await {
+            Ok(client) => return client,
+            Err(_) if Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            Err(error) => panic!("the core's pipe did not appear: {error}"),
+        }
+    }
+}
+
+/// A client that said hello, with its event stream.
+async fn greeted(core: &Core) -> (PipeClient, UnboundedReceiver<Envelope<Event>>) {
+    let mut client = connect(&core.pipe).await;
+    let events = client.events().unwrap();
+    let welcome = client.hello("plugins-test").await.unwrap();
+    assert!(matches!(welcome.body, Response::Welcome { .. }));
+    (client, events)
+}
+
+async fn ask(client: &mut PipeClient, request: Request) -> Response {
+    client.request(request).await.unwrap().body
+}
+
+fn exec(command: &str, args: Value) -> Request {
+    Request::ExecuteCommand {
+        command: command.to_owned(),
+        args,
+    }
+}
+
+async fn plugins(client: &mut PipeClient) -> Vec<PluginInfo> {
+    match ask(client, Request::ListPlugins).await {
+        Response::Plugins { plugins } => plugins,
+        other => panic!("expected plugins, got {other:?}"),
+    }
+}
+
+async fn state(client: &mut PipeClient, id: &str) -> PluginState {
+    plugins(client)
+        .await
+        .into_iter()
+        .find(|plugin| plugin.id == id)
+        .unwrap_or_else(|| panic!("no plugin {id}"))
+        .state
+}
+
+async fn wait_state(
+    client: &mut PipeClient,
+    id: &str,
+    check: impl Fn(&PluginState) -> bool,
+) -> PluginState {
+    let deadline = Instant::now() + SETTLE_DEADLINE;
+    loop {
+        let now = state(client, id).await;
+        if check(&now) {
+            return now;
+        }
+        assert!(Instant::now() < deadline, "{id} stayed {now:?}");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+fn active(state: &PluginState) -> bool {
+    *state == PluginState::Active
+}
+
+/// The next event that passes `check`.
+async fn next_event(
+    events: &mut UnboundedReceiver<Envelope<Event>>,
+    check: impl Fn(&Event) -> bool,
+) -> Event {
+    let deadline = Instant::now() + SETTLE_DEADLINE;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let event = tokio::time::timeout(left, events.recv())
+            .await
+            .expect("the event did not come in time")
+            .expect("the event stream ended")
+            .body;
+        if check(&event) {
+            return event;
+        }
+    }
+}
+
+async fn commands(client: &mut PipeClient) -> Vec<CommandInfo> {
+    match ask(client, Request::ListCommands).await {
+        Response::Commands { commands } => commands,
+        other => panic!("expected commands, got {other:?}"),
+    }
+}
+
+fn error_of(reply: Response) -> (ErrorCode, String) {
+    match reply {
+        Response::Error { code, message } => (code, message),
+        other => panic!("expected an error, got {other:?}"),
+    }
+}
+
+/// Lists `C:\Windows` and closes the listing.
+async fn lists_windows(client: &mut PipeClient) {
+    let reply = ask(
+        client,
+        Request::ListDirectory {
+            path: r"C:\Windows".to_owned(),
+            include_hidden: None,
+            sort: None,
+            watch: false,
+        },
+    )
+    .await;
+    let Response::ListingOpened {
+        listing_id,
+        section_handle,
+        entry_count,
+        ..
+    } = reply
+    else {
+        panic!("expected listing_opened, got {reply:?}");
+    };
+    drop(client.take_section(section_handle));
+    assert!(entry_count > 10, "{entry_count}");
+    assert_eq!(
+        ask(client, Request::CloseListing { listing_id }).await,
+        Response::Ok
+    );
+}
+
+/// Phase 7's goal: a plugin that crashes is logged and removed while the
+/// core keeps serving listings.
+#[tokio::test]
+async fn a_crashing_plugin_is_removed_while_the_core_keeps_serving_listings() {
+    let mut core = start_core(
+        &["crashy", "hello"],
+        &grants(&[
+            ("crashy", &["cmd:register"]),
+            ("hello", &["cmd:register", "events:emit"]),
+        ]),
+    );
+    let (mut client, mut events) = greeted(&core).await;
+    wait_state(&mut client, "crashy", active).await;
+    wait_state(&mut client, "hello", active).await;
+    let listed = commands(&mut client).await;
+    let crash = listed
+        .iter()
+        .find(|command| command.id == "crashy.crash")
+        .expect("crashy registered its command");
+    assert_eq!(
+        crash.source,
+        CommandSource::Plugin {
+            id: "crashy".to_owned(),
+            name: "Crashy".to_owned()
+        }
+    );
+
+    let (error_code, message) = error_of(ask(&mut client, exec("crashy.crash", Value::Null)).await);
+    assert_eq!(error_code, ErrorCode::PluginError);
+    assert!(message.contains("crashy was asked to crash"), "{message}");
+    let crashed = next_event(
+        &mut events,
+        |event| matches!(event, Event::PluginCrashed { plugin_id, .. } if plugin_id == "crashy"),
+    )
+    .await;
+    assert!(
+        matches!(crashed, Event::PluginCrashed { message, .. } if message.contains("wasm trap"))
+    );
+    assert!(matches!(
+        state(&mut client, "crashy").await,
+        PluginState::Crashed { .. }
+    ));
+    assert!(
+        commands(&mut client)
+            .await
+            .iter()
+            .all(|command| command.id != "crashy.crash"),
+        "a crashed plugin's commands are unregistered"
+    );
+    let (error_code, message) = error_of(ask(&mut client, exec("crashy.crash", Value::Null)).await);
+    assert_eq!(error_code, ErrorCode::UnknownCommand);
+    assert!(
+        message.contains("its plugin crashy is crashed"),
+        "{message}"
+    );
+
+    // The same connection lists a directory right after, and the other
+    // plugin still answers.
+    lists_windows(&mut client).await;
+    assert_eq!(
+        ask(&mut client, exec("hello.say", Value::Null)).await,
+        Response::CommandResult {
+            result: json!({"message": "hello from Hello"})
+        }
+    );
+
+    // reload_plugin brings it back at once.
+    assert_eq!(
+        ask(
+            &mut client,
+            Request::ReloadPlugin {
+                plugin_id: "crashy".to_owned()
+            }
+        )
+        .await,
+        Response::Ok
+    );
+    wait_state(&mut client, "crashy", active).await;
+    assert!(
+        commands(&mut client)
+            .await
+            .iter()
+            .any(|command| command.id == "crashy.crash")
+    );
+
+    core.stop(&mut client).await;
+    let lines = core.log_lines();
+    let trap = lines
+        .iter()
+        .find(|line| line["level"] == "ERROR" && line["plugin_id"] == "crashy")
+        .expect("the crash is logged at ERROR with the plugin's ID");
+    assert_eq!(trap["boundary"], "plugin");
+    let details = trap["fields"]["details"].as_str().unwrap_or_default();
+    assert!(details.contains("wasm backtrace"), "{trap}");
+}
+
+#[tokio::test]
+async fn a_command_that_never_returns_is_stopped_at_its_deadline() {
+    let core = start_core(&["spinner"], &grants(&[("spinner", &["cmd:register"])]));
+    let (mut client, mut events) = greeted(&core).await;
+    wait_state(&mut client, "spinner", active).await;
+
+    let started = Instant::now();
+    let (error_code, message) = error_of(ask(&mut client, exec("spinner.spin", Value::Null)).await);
+    let took = started.elapsed();
+    assert_eq!(error_code, ErrorCode::PluginError);
+    assert!(
+        message.contains("did not finish within 5000 ms"),
+        "{message}"
+    );
+    assert!(
+        took >= Duration::from_millis(4900) && took < Duration::from_secs(8),
+        "{took:?}"
+    );
+    next_event(
+        &mut events,
+        |event| matches!(event, Event::PluginCrashed { plugin_id, .. } if plugin_id == "spinner"),
+    )
+    .await;
+    assert!(matches!(
+        ask(&mut client, Request::Ping).await,
+        Response::Pong { .. }
+    ));
+}
+
+#[tokio::test]
+async fn grants_and_saved_settings_take_effect_without_a_restart() {
+    let core = start_core(&["hello"], &grants(&[("hello", &["cmd:register"])]));
+    let (mut client, mut events) = greeted(&core).await;
+    assert_eq!(
+        wait_state(&mut client, "hello", |state| *state != PluginState::Loading).await,
+        PluginState::NeedsReview {
+            missing: vec!["events:emit".to_owned()]
+        }
+    );
+
+    let refused = |plugin: &str, capability: &str| Request::GrantCapabilities {
+        plugin_id: plugin.to_owned(),
+        capabilities: vec![capability.to_owned()],
+    };
+    let (error_code, message) = error_of(ask(&mut client, refused("hello", "net")).await);
+    assert_eq!(error_code, ErrorCode::PluginError);
+    assert!(message.contains("never granted"), "{message}");
+    let (error_code, _) = error_of(ask(&mut client, refused("nobody", "cmd:register")).await);
+    assert_eq!(error_code, ErrorCode::NoSuchPlugin);
+
+    assert_eq!(
+        ask(&mut client, refused("hello", "events:emit")).await,
+        Response::Ok
+    );
+    wait_state(&mut client, "hello", active).await;
+    let saved: Value =
+        serde_json::from_str(&fs::read_to_string(core.config_path()).unwrap()).unwrap();
+    assert_eq!(
+        saved["plugins"]["hello"]["granted"],
+        json!(["cmd:register", "events:emit"])
+    );
+
+    // An edit saved in the file, as a user would make it.
+    let mut edited = saved;
+    edited["plugins"]["hello"]["enabled"] = json!(false);
+    fs::write(
+        core.config_path(),
+        serde_json::to_string_pretty(&edited).unwrap(),
+    )
+    .unwrap();
+    next_event(&mut events, |event| {
+        matches!(event, Event::PluginStateChanged { plugin_id, state: PluginState::Disabled } if plugin_id == "hello")
+    })
+    .await;
+    assert!(
+        commands(&mut client)
+            .await
+            .iter()
+            .all(|command| command.id != "hello.say")
+    );
+
+    assert_eq!(
+        ask(
+            &mut client,
+            Request::SetPluginEnabled {
+                plugin_id: "hello".to_owned(),
+                enabled: true
+            }
+        )
+        .await,
+        Response::Ok
+    );
+    wait_state(&mut client, "hello", active).await;
+}
+
+#[tokio::test]
+async fn a_plugin_can_stop_a_job_before_it_starts() {
+    let core = start_core(&["vetoer"], &grants(&[("vetoer", &["jobs:intercept"])]));
+    let (mut client, mut events) = greeted(&core).await;
+    wait_state(&mut client, "vetoer", active).await;
+    let work = scratch("vetoer");
+    let source = work.path().join("a.txt");
+    fs::write(&source, "12345").unwrap();
+
+    let copy_to = |destination: &Path| {
+        Request::StartJob(JobRequest {
+            kind: JobKind::Copy,
+            sources: vec![source.display().to_string()],
+            destination: Some(destination.display().to_string()),
+            options: JobOptions::default(),
+        })
+    };
+    let finished = async |client: &mut PipeClient,
+                          events: &mut UnboundedReceiver<Envelope<Event>>,
+                          request: Request| {
+        let Response::JobStarted { job_id } = ask(client, request).await else {
+            panic!("the job did not start");
+        };
+        match next_event(events, |event| {
+            matches!(event, Event::JobStateChanged { job_id: id, state } if *id == job_id && state.is_terminal())
+        })
+        .await
+        {
+            Event::JobStateChanged { state, .. } => state,
+            _ => unreachable!(),
+        }
+    };
+
+    let forbidden = work.path().join("Forbidden");
+    let state = finished(&mut client, &mut events, copy_to(&forbidden)).await;
+    assert_eq!(
+        state,
+        JobState::Failed {
+            message: format!(
+                "denied by plugin vetoer: {} is a forbidden destination",
+                forbidden.display()
+            )
+        }
+    );
+    assert!(!forbidden.exists(), "a refused job creates nothing");
+
+    let fine = work.path().join("fine");
+    let state = finished(&mut client, &mut events, copy_to(&fine)).await;
+    assert_eq!(state, JobState::Completed);
+    assert!(fine.join("a.txt").is_file());
+}
+
+#[tokio::test]
+async fn a_plugin_s_output_reaches_the_core_log_marked_with_its_id() {
+    let mut core = start_core(
+        &["hello"],
+        &grants(&[("hello", &["cmd:register", "events:emit"])]),
+    );
+    let (mut client, mut events) = greeted(&core).await;
+    wait_state(&mut client, "hello", active).await;
+    assert_eq!(
+        ask(&mut client, exec("hello.say", json!({"loud": true}))).await,
+        Response::CommandResult {
+            result: json!({"message": "hello from Hello"})
+        }
+    );
+    assert_eq!(
+        next_event(&mut events, |event| matches!(
+            event,
+            Event::PluginEvent { .. }
+        ))
+        .await,
+        Event::PluginEvent {
+            plugin_id: "hello".to_owned(),
+            name: "hello.said".to_owned(),
+            payload: r#"{"greeting":"hello"}"#.to_owned(),
+        }
+    );
+    core.stop(&mut client).await;
+
+    let lines = core.log_lines();
+    let printed = lines
+        .iter()
+        .find(|line| line["message"] == "Hello says hello")
+        .expect("the plugin's stdout line is in the log");
+    assert_eq!(printed["boundary"], "plugin");
+    assert_eq!(printed["plugin_id"], "hello");
+    assert_eq!(printed["fields"]["stream"], "stdout");
+    let logged = lines
+        .iter()
+        .find(|line| {
+            line["message"]
+                .as_str()
+                .is_some_and(|message| message.starts_with("Hello is active"))
+        })
+        .expect("the plugin's log call is in the log");
+    assert_eq!(logged["boundary"], "plugin");
+    assert_eq!(logged["plugin_id"], "hello");
+    assert!(core.dir.path().join("plugins-data").join("hello").is_dir());
+}
+
+#[tokio::test]
+async fn a_reader_is_told_about_listings_of_its_folder() {
+    // The reader fixture's fs:read root.
+    let root = std::env::temp_dir().join(r"cabinetos-plugins-test\reader");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("inside.txt"), "12345").unwrap();
+    let mut core = start_core(
+        &["reader"],
+        &grants(&[("reader", &["cmd:register", "fs:read"])]),
+    );
+    let (mut client, _events) = greeted(&core).await;
+    wait_state(&mut client, "reader", active).await;
+
+    let size = ask(
+        &mut client,
+        exec("reader.size", json!({ "path": root.join("inside.txt") })),
+    )
+    .await;
+    let path = root.display().to_string();
+    let reply = ask(
+        &mut client,
+        Request::ListDirectory {
+            path: path.clone(),
+            include_hidden: None,
+            sort: None,
+            watch: false,
+        },
+    )
+    .await;
+    if let Response::ListingOpened { section_handle, .. } = &reply {
+        drop(client.take_section(*section_handle));
+    }
+    // The notification goes to the plugin's thread; give it a moment.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    core.stop(&mut client).await;
+    let _ = fs::remove_dir_all(root.parent().unwrap());
+
+    assert_eq!(
+        size,
+        Response::CommandResult {
+            result: json!({"size": 5})
+        }
+    );
+    assert!(matches!(reply, Response::ListingOpened { .. }), "{reply:?}");
+    let told = format!("a pane opened /{} with 1 entries", path.replace('\\', "/"));
+    let lines = core.log_lines();
+    assert!(
+        lines
+            .iter()
+            .any(|line| line["message"] == told.as_str() && line["plugin_id"] == "reader"),
+        "no `{told}` in the log"
+    );
+}

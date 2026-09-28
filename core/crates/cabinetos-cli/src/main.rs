@@ -1,8 +1,9 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
 //! UI will), `volume`, `shutdown`, the configuration (`config`), the command
-//! registry (`commands`), the keymap (`keys`), and jobs (`copy`, `move`,
-//! `delete`, `jobs`, `job`).
+//! registry (`commands`), the keymap (`keys`), jobs (`copy`, `move`,
+//! `delete`, `jobs`, `job`), the Core Plugins (`plugins`) and the events the
+//! core sends (`events watch`).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -16,6 +17,7 @@
 
 mod jobs;
 mod ls;
+mod plugins;
 mod settings;
 
 use std::io::Write;
@@ -135,6 +137,57 @@ enum Command {
         #[command(subcommand)]
         action: JobCommand,
     },
+    /// List the Core Plugins, or reload, turn on, turn off or grant one.
+    Plugins {
+        #[command(subcommand)]
+        action: PluginsAction,
+    },
+    /// Follow the events the core sends to every client.
+    Events {
+        #[command(subcommand)]
+        action: EventsAction,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum PluginsAction {
+    /// Print every installed plugin with its state, capabilities and
+    /// commands.
+    List {
+        /// Print the list as JSON, as the core sends it.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Start a plugin again from its folder, after a crash or a change.
+    Reload {
+        /// The plugin's ID.
+        id: String,
+    },
+    /// Turn a plugin on; the core writes the configuration file.
+    Enable {
+        /// The plugin's ID.
+        id: String,
+    },
+    /// Turn a plugin off; the core writes the configuration file.
+    Disable {
+        /// The plugin's ID.
+        id: String,
+    },
+    /// Grant capabilities a plugin asks for, for example: plugins grant
+    /// reader cmd:register fs:read. The core writes the configuration file.
+    Grant {
+        /// The plugin's ID.
+        id: String,
+        /// Capability names.
+        #[arg(required = true, value_name = "CAPABILITY")]
+        capabilities: Vec<String>,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum EventsAction {
+    /// Print each event as one JSON line, until Ctrl+C.
+    Watch,
 }
 
 /// The paths and options of `copy` and `move`.
@@ -320,6 +373,14 @@ enum CommandsAction {
         /// What the user would type into the palette.
         query: String,
     },
+    /// Run a command and print its JSON result, for example: commands exec
+    /// reader.size '{"path": "C:\\x.txt"}'.
+    Exec {
+        /// The command's ID.
+        command: String,
+        /// Its arguments, as JSON.
+        args: Option<String>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -480,8 +541,39 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         | Command::Delete { .. }
         | Command::Jobs
         | Command::Job { .. } => job_command(&mut client, &cli.command).await?,
+        Command::Plugins { action } => plugins_command(&mut client, action).await?,
+        Command::Events {
+            action: EventsAction::Watch,
+        } => plugins::watch(&mut client).await?,
     }
     Ok(())
+}
+
+/// The plugin commands: `plugins list|reload|enable|disable|grant`.
+async fn plugins_command(client: &mut PipeClient, action: &PluginsAction) -> anyhow::Result<()> {
+    match action {
+        PluginsAction::List { json } => plugins::list(client, *json).await,
+        PluginsAction::Reload { id } => {
+            let request = Request::ReloadPlugin {
+                plugin_id: id.clone(),
+            };
+            plugins::change(client, id, request).await
+        }
+        PluginsAction::Enable { id } | PluginsAction::Disable { id } => {
+            let request = Request::SetPluginEnabled {
+                plugin_id: id.clone(),
+                enabled: matches!(action, PluginsAction::Enable { .. }),
+            };
+            plugins::change(client, id, request).await
+        }
+        PluginsAction::Grant { id, capabilities } => {
+            let request = Request::GrantCapabilities {
+                plugin_id: id.clone(),
+                capabilities: capabilities.clone(),
+            };
+            plugins::change(client, id, request).await
+        }
+    }
 }
 
 /// The settings commands: `config`, `commands`, `keys`.
@@ -496,6 +588,9 @@ async fn settings_command(client: &mut PipeClient, command: &Command) -> anyhow:
             CommandsAction::List { json } => settings::commands_list(client, *json).await?,
             CommandsAction::Search { query } => {
                 settings::commands_search(client, query).await?;
+            }
+            CommandsAction::Exec { command, args } => {
+                plugins::exec(client, command, args.as_deref()).await?;
             }
         },
         Command::Keys { action } => match action {
@@ -933,6 +1028,74 @@ mod tests {
             parse(&["job", "cancel", "3"]).unwrap(),
             Command::Job {
                 action: JobCommand::Cancel { id: 3 }
+            }
+        );
+    }
+
+    #[test]
+    fn parses_plugins_commands_exec_and_events() {
+        let parse = |args: &[&str]| {
+            let mut full = vec!["cabinetos-cli"];
+            full.extend_from_slice(args);
+            Cli::try_parse_from(full).map(|cli| cli.command)
+        };
+        assert_eq!(
+            parse(&["plugins", "list"]).unwrap(),
+            Command::Plugins {
+                action: PluginsAction::List { json: false }
+            }
+        );
+        assert_eq!(
+            parse(&["plugins", "reload", "crashy"]).unwrap(),
+            Command::Plugins {
+                action: PluginsAction::Reload {
+                    id: "crashy".to_owned()
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["plugins", "disable", "hello"]).unwrap(),
+            Command::Plugins {
+                action: PluginsAction::Disable {
+                    id: "hello".to_owned()
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["plugins", "grant", "reader", "cmd:register", "fs:read"]).unwrap(),
+            Command::Plugins {
+                action: PluginsAction::Grant {
+                    id: "reader".to_owned(),
+                    capabilities: vec!["cmd:register".to_owned(), "fs:read".to_owned()],
+                }
+            }
+        );
+        assert!(
+            parse(&["plugins", "grant", "reader"]).is_err(),
+            "a capability is required"
+        );
+        assert_eq!(
+            parse(&["commands", "exec", "hello.say"]).unwrap(),
+            Command::Commands {
+                action: CommandsAction::Exec {
+                    command: "hello.say".to_owned(),
+                    args: None,
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["commands", "exec", "reader.size", r#"{"path":"C:\x"}"#]).unwrap(),
+            Command::Commands {
+                action: CommandsAction::Exec {
+                    command: "reader.size".to_owned(),
+                    args: Some(r#"{"path":"C:\x"}"#.to_owned()),
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["events", "watch"]).unwrap(),
+            Command::Events {
+                action: EventsAction::Watch
             }
         );
     }
