@@ -32,7 +32,7 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
 | `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
@@ -266,13 +266,16 @@ own controls: `transfer.pause`, `transfer.resume`, `transfer.cancel`,
 `transfer.next`, `conflict.resolve`, `sidebar.pin`, `sidebar.unpin`, and
 the terminal's `terminal.new` (`{"profile": …, "cwd": …}`),
 `terminal.show` and `terminal.close` (`{"session": …}`) and
-`terminal.reload`, and the search's `search.scope`
-(`{"wholeVolume": true}`) (`RegisterLocal`). They run through the router
-like the others, but they are not in the palette and cannot be rebound.
+`terminal.reload`, the search's `search.scope`
+(`{"wholeVolume": true}`), and the plugins' `plugins.review` and
+`plugins.reload` (`{"id": …}`) and `plugins.grant` (`RegisterLocal`).
+They run through the router like the others, but they are not in the
+palette and cannot be rebound. `plugins.list` is in the palette
+("Plugins").
 
 | Command | In this version |
 |---|---|
-| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, the context menu, a rename, the address box, the search results |
+| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, the plugin review, the plugin list, the context menu, a rename, the address box, the search results |
 | `search.focus` | Puts the keyboard in the search field ("Search") |
 | `keys.open` | Opens the palette: it lists every command with its keys and edits them |
 | `view.toggleDualPane`, `view.toggleSidebar`, `view.focusOtherPane` | As named; the first two are saved in `cabinetos.json` |
@@ -504,6 +507,61 @@ nothing.
 Measured on 2026-09-28 without the indexer: the core walked `docs/` in
 1.4 ms (its `took_us`), and the reply reached the window 4.6 ms after the
 request went out.
+
+## Plugins
+
+Core Plugins run in the core, in a WebAssembly sandbox
+([plugins.md](plugins.md)); the window lists them, reviews what they ask
+for, and says what they do (Constitution Article 8).
+
+- **The list.** "Plugins: Show Plugins" (`plugins.list`) in the palette
+  opens it over the window, like the palette: every installed plugin with
+  its version and ID, its state in words ("Active: 1 command", "Waits for
+  your review: fs:read", "Crashed at 12:03:04: …", "Cannot start: …"), and
+  each capability it asks for, with a dot and LEVEL in the level's color
+  (low green, medium yellow, high red; docs/design/README.md) and whether
+  it is allowed. A plugin that waits for grants offers "Review
+  permissions"; one that crashed or could not start offers "Reload"
+  (`reload_plugin`, which reads its folder again). Esc or a click outside
+  closes the list.
+- **The permissions review** (design view C): 440 px on a 40 % black
+  scrim. The plugin's tile (its initials on a color taken from its ID,
+  until plugins bring icons of their own), "Review permissions", "{name}
+  by {author}", "This plugin runs in a WebAssembly sandbox. It can only do
+  what you allow here.", one row per capability (level dot, name, LEVEL,
+  reason, and the folders for `fs:read` and `fs:write`), the box "Trust
+  {author} for future updates", disabled with the tooltip "Publisher
+  identities come with the marketplace.", and Cancel / "Allow and
+  install". Allow sends `grant_capabilities` with what the core says is
+  missing; the core writes it to `cabinetos.json` and starts the plugin.
+  Cancel, Esc and the scrim close the dialog. The keyboard starts on
+  Cancel, so Enter does not grant by accident. A refusal (for example a
+  `cabinetos.json` with an error) shows in red in the dialog.
+- **When it opens by itself.** When a plugin newly waits for review
+  (`plugin_state_changed` to `needs_review`, for example after
+  `reload_plugin` found a plugin copied in meanwhile), once per plugin per
+  session, so a Cancel holds until the next start; the list offers the
+  review any time. Plugins that already wait when the window starts are
+  not put in front of the user: the status bar says "Hello waits for your
+  review: run "Plugins: Show Plugins" in the palette."
+- **The status bar** says "{name} is active." when a plugin becomes active
+  (after a grant, a reload or a restart), and "{name} crashed: …" in red
+  when one crashes. Every `plugin_state_changed` and `plugin_crashed` makes
+  the window read `list_plugins` again and compare (`PluginWatch`,
+  tested); an open list follows.
+- `plugins.list` is the window's own command, because the core's registry
+  does not have it yet. The palette lists it after the core's hits, found
+  by a plain substring of its category, title or ID; this is a stopgap,
+  since the core ranks everything else. It cannot be rebound until the
+  core registers it (`RegisterWindowCommand`), and then the registry's
+  entry takes over.
+
+Checked on 2026-09-28 with the `hello` fixture of `sdk/fixtures/plugins`
+(`CABINETOS_PLUGINS_DIR`): the status bar named it at start, the review
+granted `cmd:register` and `events:emit` into `plugins.hello.granted`, the
+status bar said "Hello is active.", and the list showed "Active: 1
+command". Copied in while the window ran and reloaded, the plugin's review
+opened by itself.
 
 ## The terminal
 

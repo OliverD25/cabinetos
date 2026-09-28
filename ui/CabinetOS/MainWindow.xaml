@@ -390,5 +390,9 @@
         <views:FileContextMenu x:Name="FileMenu" />
 
         <views:CommandPalette x:Name="Palette" Visibility="Collapsed" />
+
+        <views:PluginsPanel x:Name="PluginsView" />
+
+        <views:ReviewDialog x:Name="ReviewView" />
     </Grid>
 </Window>

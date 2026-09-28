@@ -55,6 +55,7 @@ public sealed class CommandRouter(ICoreChannel core)
 
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _handlers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _local = new(StringComparer.Ordinal);
+    private readonly List<CommandInfo> _windowCommands = [];
     private Dictionary<string, CommandInfo> _byId = new(StringComparer.Ordinal);
 
     /// <summary>Raised on the calling thread when the command list changed.</summary>
@@ -90,6 +91,24 @@ public sealed class CommandRouter(ICoreChannel core)
 
     /// <summary>Registers a UI-only command that the core's registry does not list.</summary>
     public void RegisterLocal(string commandId, Func<CommandInvocation, Task> handler) => _local[commandId] = handler;
+
+    /// <summary>
+    /// Registers a window command the palette must list although the core's
+    /// registry does not have it yet (<c>plugins.list</c>): the palette shows
+    /// it after the core's hits. Its source kind is <c>window</c>, and it cannot
+    /// be rebound until the core registers it; then the registry's entry wins
+    /// and this handler serves it.
+    /// </summary>
+    public void RegisterWindowCommand(CommandInfo info, Func<CommandInvocation, Task> handler)
+    {
+        _local[info.Id] = handler;
+        _handlers[info.Id] = handler;
+        _windowCommands.RemoveAll(c => c.Id == info.Id);
+        _windowCommands.Add(info);
+    }
+
+    /// <summary>The window commands of <see cref="RegisterWindowCommand"/> that the registry does not list.</summary>
+    public IReadOnlyList<CommandInfo> WindowCommands => _windowCommands.Where(c => !_byId.ContainsKey(c.Id)).ToList();
 
     /// <summary>Reads the command list again (<c>list_commands</c>).</summary>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)

@@ -127,6 +127,29 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public async Task A_window_command_is_listed_for_the_palette_until_the_registry_has_it()
+    {
+        var (router, core) = Create();
+        var runs = 0;
+        var info = new CommandInfo("plugins.list", "Plugins", "Show Plugins", [], [], new CommandSource("window", null, null), "ui", null, false);
+        router.RegisterWindowCommand(info, _ =>
+        {
+            runs++;
+            return Task.CompletedTask;
+        });
+
+        Assert.Equal("plugins.list", Assert.Single(router.WindowCommands).Id);
+        Assert.Equal(CommandOutcomeKind.RanInUi, (await router.ExecuteAsync("plugins.list", trigger: "palette")).Kind);
+        Assert.Empty(core.Requests);
+
+        // Once the core registers it, the registry's entry is listed and the same handler runs it.
+        router.SetCommands([.. Registry, info with { Source = new CommandSource("core", null, null) }]);
+        Assert.Empty(router.WindowCommands);
+        Assert.Equal(CommandOutcomeKind.RanInUi, (await router.ExecuteAsync("plugins.list")).Kind);
+        Assert.Equal(2, runs);
+    }
+
+    [Fact]
     public async Task A_command_nobody_knows_is_asked_of_the_core_and_fails_there()
     {
         var (router, core) = Create();

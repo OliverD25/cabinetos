@@ -132,6 +132,7 @@ public sealed partial class MainWindow : Window
 
         SetUpTerminal();
         SetUpSearch();
+        SetUpPlugins();
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
@@ -470,6 +471,7 @@ public sealed partial class MainWindow : Window
                 }
             }
             await Task.WhenAll(keymap, commands, volumes, jobs);
+            await RefreshPluginsAsync();
         }
         catch (IOException error)
         {
@@ -659,6 +661,9 @@ public sealed partial class MainWindow : Window
             case TerminalExitedEvent exited:
                 _ = _terminal.OnExitedAsync(exited);
                 return;
+            case PluginStateChangedEvent or PluginCrashedEvent:
+                _ = RefreshPluginsAsync();
+                break;
             case JobProgressEvent or JobStateChangedEvent or JobConflictEvent:
                 _transfers.OnEvent(coreEvent);
                 OnJobEvent(coreEvent);
@@ -720,6 +725,11 @@ public sealed partial class MainWindow : Window
         _transfers.Reset();
         // The core closes its shells when it stops; the tabs go with them.
         _terminal.Reset();
+        // Its plugins start over too: what the review or the list showed is stale.
+        _plugins.Reset();
+        _pluginsUnavailable = false;
+        ReviewView.Close();
+        PluginsView.Close();
         if (_restarts.Count >= 3)
         {
             await ShowStartFailureAsync($"The core stopped three times within a minute. Last reason: {reason}");
@@ -853,6 +863,7 @@ public sealed partial class MainWindow : Window
         _router.RegisterLocal("sidebar.unpin", UnpinAsync);
         RegisterTerminalCommands();
         RegisterSearchCommands();
+        RegisterPluginCommands();
 
         _router.Completed += OnCommandCompleted;
     }
@@ -922,6 +933,9 @@ public sealed partial class MainWindow : Window
         {
             EndAddressEdit();
             FileMenu.Close();
+            // A review left open is a Cancel; the list comes back from the palette.
+            ReviewView.Close();
+            PluginsView.Close();
             // Ctrl+Shift+P from a shell: the keyboard goes back there when the palette closes.
             _paletteFromTerminal = Dock.HasTerminalFocus;
             _palette.Open();
@@ -941,12 +955,21 @@ public sealed partial class MainWindow : Window
     }
 
     // Esc: the palette, then the context menu, then an edit in place, then the address box
-    // (the design's order), then the search results (back to the folder).
+    // (the design's order), then the search results (back to the folder). The plugin review
+    // and the plugin list come right after the palette: they cover the window.
     private void CloseOverlay()
     {
         if (_palette.IsOpen)
         {
             _palette.Close();
+        }
+        else if (ReviewView.IsOpen)
+        {
+            CloseReview();
+        }
+        else if (PluginsView.IsOpen)
+        {
+            ClosePlugins();
         }
         else if (FileMenu.IsOpen)
         {
