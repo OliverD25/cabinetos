@@ -40,7 +40,7 @@ so nothing is hidden.
 - **Config file.** One file, `%APPDATA%\CabinetOS\cabinetos.json`, as the brief says. Keybindings live inside it. A JSON Schema is published so editors can autocomplete it (Article 6).
 - **Shared-memory strings.** File names in shared memory are stored as UTF-16. Windows APIs return UTF-16, and C# strings are UTF-16, so nobody converts anything.
 - **Tool Extensions and crash isolation.** Third-party Tool Extensions run in WebView2, which is a separate process, so a crash cannot take the window down. Native WinUI controls are allowed only for first-party tools that live in this repo (the terminal). Reason: the brief requires the window to survive a Tool Extension crash, and an in-process control cannot promise that.
-- **Log location.** `%LOCALAPPDATA%\CabinetOS\logs\` with one JSON Lines file per process: `core.jsonl`, `ui.jsonl`, `indexer.jsonl`.
+- **Log location.** `%LOCALAPPDATA%\CabinetOS\logs\` with one JSON Lines file per process and UTC day: `core.<date>.jsonl`, `ui.<date>.jsonl`, `indexer.<date>.jsonl` (the date is in the name because the appender rolls the file daily; see [diagnostics.md](diagnostics.md)).
 - **Development workflow.** This chat plans and reviews. The `coder` agent implements from self-contained prompts. One commit per finished unit of work.
 
 ## 3. Architecture summary
@@ -91,7 +91,7 @@ Constitution articles it serves. Phases 1–4 are core-only and testable from
 the command line, before any UI exists. That is deliberate: the Dumb UI Rule
 means the core must work on its own.
 
-### Phase 0 — Repository foundation (docs and hygiene, no code)
+### Phase 0 — Repository foundation (docs and hygiene, no code) — done 2026-09-28
 
 Goal: the repo holds every governing document and is ready for code.
 
@@ -101,11 +101,11 @@ Done when: everything above is committed and pushed, and a fresh clone shows the
 
 Articles: 2 (license), 6 and 12 indirectly (documents exist to be followed).
 
-### Phase 1 — Rust core scaffold (the first coding task)
+### Phase 1 — Rust core scaffold (the first coding task) — done 2026-09-28
 
 Goal: an empty but real core. Every crate exists with its responsibility written down, the diagnostics pipeline works, and a command-line client can talk to the core over the pipe. Detailed in section 6.
 
-Done when: `cargo build`, `cargo test`, `cargo clippy -- -D warnings` and `cargo fmt --check` pass locally and in CI; `cabinetos-cli ping` sends a request with an ID and the same ID appears in `core.jsonl`.
+Done when: `cargo build`, `cargo test`, `cargo clippy -- -D warnings` and `cargo fmt --check` pass locally and in CI; `cabinetos-cli ping` sends a request with an ID and the same ID appears in `core.<date>.jsonl`.
 
 Articles: 1 (non-blocking design from day one), 12 (diagnostics first).
 
@@ -229,7 +229,7 @@ In Phase 1 every crate exists with a `lib.rs` or `main.rs` whose module comment 
 
 1. `cargo build --workspace` and `cargo test --workspace` pass; clippy and fmt are clean; CI is green on `main`.
 2. `cabinetos-core` starts, creates the pipe with a user-only DACL, and exits cleanly when its parent handle is signalled or on `Ctrl+C`.
-3. `cabinetos-cli ping` sends `{ "id": "<ulid>", "type": "ping" }`, receives `pong` with the same ID, and that ID appears in `%LOCALAPPDATA%\CabinetOS\logs\core.jsonl` with `boundary: "engine"`.
+3. `cabinetos-cli ping` sends `{ "id": "<ulid>", "type": "ping" }`, receives `pong` with the same ID, and that ID appears in `%LOCALAPPDATA%\CabinetOS\logs\core.<date>.jsonl` with `boundary: "engine"`.
 4. A forced panic in the core produces `crash-<timestamp>.json` with a backtrace and the last events from the ring buffer, and the log file is flushed before exit.
 5. `cabinetos-protocol` has a test that pins the size and field offsets of every shared-memory struct, so a change is a deliberate, visible act.
 6. `docs/ARCHITECTURE.md` gets a "Crate map" section linking each brief section to its crate.

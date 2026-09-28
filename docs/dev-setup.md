@@ -29,11 +29,13 @@ where the tool exists on Windows alone.
 Build and test:
 
 ```bash
-cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos/core && cargo build --workspace && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check && cargo deny check
+cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos/core && cargo.exe build --workspace && cargo.exe test --workspace && cargo.exe clippy --workspace --all-targets -- -D warnings && cargo.exe fmt --all -- --check && cargo.exe deny check
 ```
 
-(From a Windows shell, the same commands run from `core\` with `cargo`
-on the PATH.)
+Inside WSL the command is `cargo.exe`, the Windows cargo, on purpose: plain
+`cargo` there is the Linux toolchain, which cannot build this Windows-only
+code. From a Windows shell (PowerShell, Git Bash) the same commands run from
+`core\` with plain `cargo`.
 
 ## Phase 5 and later: the WinUI 3 frontend
 
@@ -75,8 +77,10 @@ returned nothing; Visual Studio has only the C++ workload).
 
 ## Logs and config while developing
 
-- Logs: `%LOCALAPPDATA%\CabinetOS\logs\` (`core.jsonl`, `ui.jsonl`,
-  `indexer.jsonl`). Override with the `CABINETOS_LOG_DIR` environment
-  variable.
+- Logs: `%LOCALAPPDATA%\CabinetOS\logs\`, one file per process and UTC day
+  (`core.<date>.jsonl`, `ui.<date>.jsonl`, `indexer.<date>.jsonl`). Override
+  the directory with the `CABINETOS_LOG_DIR` environment variable, the level
+  with `CABINETOS_LOG` (default `info`), and set `CABINETOS_LOG_STDERR=1` to
+  also print to stderr. Format: [diagnostics.md](diagnostics.md).
 - Config: `%APPDATA%\CabinetOS\cabinetos.json`. Override with
   `CABINETOS_CONFIG`.
