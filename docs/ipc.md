@@ -229,13 +229,30 @@ directory attribute, junctions included) always come first. Then, by `key`:
 
 | Key | Order within each group |
 |---|---|
-| `name` | Explorer's natural order: case-insensitive, numbers by value (`file2` before `file10`) |
+| `name` | Explorer's natural order: case-insensitive, numbers by value (`file2` before `file10`); see below for names Explorer calls equal |
 | `size` | size, then name |
 | `modified` | last-write time, then name |
 | `kind` | directory, file, link, then name |
 
 `descending: true` reverses the order within each group; directories stay
 first.
+
+The natural order is `StrCmpLogicalW`'s, in the user's locale. Names it
+calls equal are ordered by their UTF-16 units, so the order is the same on
+every run: `Report.txt` before `report.txt` (in a folder that tells case
+apart), and `café` spelled decomposed (`e` and U+0301) before `café`
+composed (U+00E9). For the edge-case fixture's `names\` folder
+(`sdk/fixtures/edge-fixture.ps1`) that gives `case`, `Ґанок`, `📁 photos`,
+`中文文件夹`, then the 255-unit name, the two `café.txt` (decomposed first),
+`Звіт 2026.txt`, `Їжак і Єнот.md`, `مستند.txt`, `𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt`,
+`日本語のファイル.txt`. The client shows rows in the section's order and
+never sorts.
+
+Names are the file system's UTF-16 units, unchanged: nothing is normalized,
+so `café` composed and `café` decomposed are two entries with two names.
+NTFS also takes names that are not valid UTF-16 (a lone surrogate); the
+section's name arena holds them exactly, but a JSON message carries text,
+where such a unit becomes U+FFFD, so a request cannot name that file yet.
 
 ## The listing section
 

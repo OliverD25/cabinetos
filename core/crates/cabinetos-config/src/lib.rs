@@ -35,7 +35,7 @@ pub use model::{
     LogLevel, LoggingConfig, MarketplaceConfig, PanesConfig, PluginSettings, SCHEMA_REFERENCE,
     SortConfig, TerminalConfig, TerminalProfile, UiConfig,
 };
-pub use parse::{ConfigError, Rejection, parse, parse_checked};
+pub use parse::{ConfigError, Rejection, file_text, parse, parse_checked};
 pub use store::{
     CONFIG_ENV, ConfigStore, FILE_NAME, Opened, Reload, SCHEMA_FILE_NAME, UpdateError,
     default_path, resolve_path,

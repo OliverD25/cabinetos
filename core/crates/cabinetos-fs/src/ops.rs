@@ -262,6 +262,52 @@ mod tests {
     }
 
     #[test]
+    fn names_beyond_ascii_are_created_and_renamed() {
+        let dir = scratch();
+        for name in ["Ґанок", "中文文件夹", "📁 photos", "𝔘𝔫𝔦𝔠𝔬𝔡𝔢", "مستند"]
+        {
+            create_directory(&text(&dir.path().join(name))).unwrap();
+            assert!(dir.path().join(name).is_dir(), "{name}");
+        }
+        rename(&text(&dir.path().join("Ґанок")), "Їжак і Єнот").unwrap();
+        assert!(dir.path().join("Їжак і Єнот").is_dir());
+
+        // Composed and decomposed café are two names side by side.
+        fs::write(dir.path().join("caf\u{e9}.txt"), "NFC").unwrap();
+        fs::write(dir.path().join("x.txt"), "NFD").unwrap();
+        rename(&text(&dir.path().join("x.txt")), "cafe\u{301}.txt").unwrap();
+        let read = |name: &str| fs::read_to_string(dir.path().join(name)).unwrap();
+        assert_eq!(read("caf\u{e9}.txt"), "NFC");
+        assert_eq!(read("cafe\u{301}.txt"), "NFD");
+        // Back to the other form is a name that is taken, not a case change.
+        let taken =
+            rename(&text(&dir.path().join("cafe\u{301}.txt")), "caf\u{e9}.txt").unwrap_err();
+        assert!(matches!(taken, FsError::AlreadyExists { .. }), "{taken:?}");
+
+        // Only the case changes, beyond ASCII too.
+        fs::write(dir.path().join("звіт.txt"), "з").unwrap();
+        rename(&text(&dir.path().join("звіт.txt")), "ЗВІТ.txt").unwrap();
+        assert!(names(dir.path()).contains(&"ЗВІТ.txt".to_owned()));
+        assert!(!names(dir.path()).contains(&"звіт.txt".to_owned()));
+    }
+
+    #[test]
+    fn a_name_holds_255_utf16_units_and_a_surrogate_pair_counts_twice() {
+        let dir = scratch();
+        let most = "𝔘".repeat(127) + "a";
+        assert_eq!(most.encode_utf16().count(), 255);
+        create_directory(&text(&dir.path().join(&most))).unwrap();
+        let over = "𝔘".repeat(128);
+        assert_eq!(over.chars().count(), 128);
+        let error = create_directory(&text(&dir.path().join(&over))).unwrap_err();
+        assert!(matches!(error, FsError::InvalidPath { .. }), "{error:?}");
+        fs::write(dir.path().join("short.txt"), "s").unwrap();
+        let error = rename(&text(&dir.path().join("short.txt")), &over).unwrap_err();
+        assert!(matches!(error, FsError::InvalidPath { .. }), "{error:?}");
+        assert_eq!(names(dir.path()), ["short.txt".to_owned(), most]);
+    }
+
+    #[test]
     fn a_rename_needs_a_source_and_a_plain_name() {
         let dir = scratch();
         let missing = rename(&text(&dir.path().join("nothing.txt")), "x.txt").unwrap_err();

@@ -84,8 +84,9 @@ fn json_or_text(text: &str) -> Value {
 /// core's commands.
 pub(crate) fn config_validate(file: Option<&Path>) -> anyhow::Result<()> {
     let path = file.map_or_else(|| cabinetos_config::default_path(None), Path::to_path_buf);
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("cannot read {}", path.display()))?;
+    let bytes = std::fs::read(&path).with_context(|| format!("cannot read {}", path.display()))?;
+    let text = cabinetos_config::file_text(&bytes)
+        .map_err(|error| anyhow::anyhow!("{}: {error}", path.display()))?;
     let registry = CommandRegistry::core();
     let mut warnings = Vec::new();
     let checked = cabinetos_config::parse_checked(&text, |config| {

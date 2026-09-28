@@ -233,6 +233,23 @@ mod tests {
     }
 
     #[test]
+    fn names_beyond_ascii_are_quoted_like_any_other_character() {
+        let path = r"E:\Звіт 'проєкт' $HOME ’x’ 100%PATH% 日本語 📁 cafe".to_owned() + "\u{301}";
+        assert_eq!(
+            ShellKind::PowerShell.cd_line(&path),
+            "Set-Location -LiteralPath 'E:\\Звіт ''проєкт'' $HOME ’’x’’ 100%PATH% 日本語 📁 cafe\u{301}'\r"
+        );
+        assert_eq!(
+            ShellKind::Cmd.cd_line(&path),
+            "cd /d \"E:\\Звіт 'проєкт' $HOME ’x’ 100\"%^P\"ATH\"%^ \"日本語 📁 cafe\u{301}\"\r"
+        );
+        assert_eq!(
+            ShellKind::Wsl.cd_line(&path),
+            "cd \"$(wslpath -a 'E:\\Звіт '\\''проєкт'\\'' $HOME ’x’ 100%PATH% 日本語 📁 cafe\u{301}')\"\r"
+        );
+    }
+
+    #[test]
     fn arguments_are_quoted_like_the_c_runtime_expects() {
         let line = |args: &[&str]| {
             let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();

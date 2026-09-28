@@ -413,6 +413,68 @@ fn a_folder_change_is_typed_as_the_shell_own_cd() {
     );
 }
 
+/// A folder name beyond ASCII with the characters each shell's quoting
+/// must keep literal: `'` and `’` (PowerShell and bash quotes), `$`
+/// (PowerShell and bash variables), `%` (cmd variables).
+const BEYOND_ASCII: &str = "Звіт 'проєкт' $HOME ’q’ 100%PATH% Ґанок";
+
+#[test]
+fn cmd_follows_the_pane_into_a_folder_beyond_ascii() {
+    let dir = scratch("sync-names");
+    let harness = Harness::new();
+    let target = long_name(dir.path()).join(BEYOND_ASCII);
+    std::fs::create_dir(&target).unwrap();
+    let opened = harness.open(&cmd(), dir.path(), 300, 25);
+    let mut client = harness.attach(&opened);
+    harness.read_until(&mut client, at_prompt);
+
+    client.forget();
+    harness.sync_cwd(&opened, &target);
+    let prompt = format!("{}>", shown(&target));
+    harness.read_until(&mut client, |output| output.contains(&prompt));
+    client.forget();
+    harness.send(&mut client, "cd\r");
+    harness.read_until(&mut client, |output| has_line(output, &shown(&target)));
+    harness.wait_for(opened.session_id, |session| session.cwd == shown(&target));
+    harness.send(&mut client, "exit\r");
+    harness.read_to_end(&mut client);
+    assert_eq!(harness.exit_code(opened.session_id), 0);
+}
+
+#[test]
+fn powershell_follows_the_pane_into_a_folder_beyond_ascii_when_installed() {
+    let mut tested = 0;
+    for program in ["pwsh.exe", "powershell.exe"] {
+        if !on_path(program) {
+            println!("skipped {program}: it is not on the PATH");
+            continue;
+        }
+        let dir = scratch("powershell-names");
+        let harness = Harness::new();
+        let target = long_name(dir.path()).join(BEYOND_ASCII);
+        std::fs::create_dir(&target).unwrap();
+        let shell = profile("ps", program, &["-NoLogo", "-NoProfile"]);
+        let opened = harness.open(&shell, dir.path(), 300, 25);
+        let mut client = harness.attach(&opened);
+        harness.read_until(&mut client, |output| {
+            output.contains("PS ") && at_prompt(output)
+        });
+
+        client.forget();
+        harness.sync_cwd(&opened, &target);
+        let prompt = format!("PS {}>", shown(&target));
+        harness.read_until(&mut client, |output| output.contains(&prompt));
+        client.forget();
+        harness.send(&mut client, "(Get-Location).Path\r");
+        harness.read_until(&mut client, |output| has_line(output, &shown(&target)));
+        harness.send(&mut client, "exit\r");
+        harness.read_to_end(&mut client);
+        assert_eq!(harness.exit_code(opened.session_id), 0, "{program}");
+        tested += 1;
+    }
+    println!("{tested} PowerShell version(s) tested");
+}
+
 #[test]
 fn two_sessions_are_independent() {
     let dir = scratch("two");
@@ -699,6 +761,41 @@ fn wsl_follows_the_pane_when_installed() {
     harness.sync_cwd(&opened, &target);
     harness.send(&mut client, "pwd\r");
     let tail = format!("{folder}/it's here");
+    harness.read_until(&mut client, |output| in_linux(output, &tail));
+    harness.send(&mut client, "exit\r");
+    harness.read_to_end(&mut client);
+    assert_eq!(harness.exit_code(opened.session_id), 0);
+}
+
+#[test]
+fn wsl_translates_a_folder_beyond_ascii_when_installed() {
+    let dir = scratch("wsl-names");
+    if !wsl_runs(dir.path()) {
+        return;
+    }
+    let harness = Harness::new();
+    let target = dir.path().join(BEYOND_ASCII);
+    std::fs::create_dir(&target).unwrap();
+    let opened = harness.open(&profile("wsl", "wsl.exe", &[]), dir.path(), 300, 25);
+    let mut client = harness.attach(&opened);
+    let folder = dir
+        .path()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let in_linux = |output: &str, tail: &str| {
+        output
+            .lines()
+            .any(|line| line.starts_with("/mnt/") && line.trim_end().ends_with(tail))
+    };
+    harness.send(&mut client, "pwd\r");
+    harness.read_until(&mut client, |output| in_linux(output, &folder));
+
+    client.forget();
+    harness.sync_cwd(&opened, &target);
+    harness.send(&mut client, "pwd\r");
+    let tail = format!("{folder}/{BEYOND_ASCII}");
     harness.read_until(&mut client, |output| in_linux(output, &tail));
     harness.send(&mut client, "exit\r");
     harness.read_to_end(&mut client);

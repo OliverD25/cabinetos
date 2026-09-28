@@ -125,6 +125,25 @@ Each shell must read the path literally:
   (`/mnt/d/it's here`); a `'` is written `'\''` inside single quotes. This
   assumes a POSIX shell such as bash or zsh in the Linux distribution.
 
+Every other character goes into the line as it is: the line reaches the
+pseudo-console as UTF-8, which it turns into the shell's own input, so
+Cyrillic, Chinese, an emoji or a decomposed accent needs no quoting of its
+own and the console's code page plays no part. For
+`E:\Звіт 'проєкт' $HOME 100%PATH%` the lines are:
+
+| Program | Line typed |
+|---|---|
+| `pwsh`, `powershell` | `Set-Location -LiteralPath 'E:\Звіт ''проєкт'' $HOME 100%PATH%'` |
+| `cmd` | `cd /d "E:\Звіт 'проєкт' $HOME 100"%^P"ATH"%^""` |
+| `wsl` | `cd "$(wslpath -a 'E:\Звіт '\''проєкт'\'' $HOME 100%PATH%')"` |
+
+`$HOME` stays literal in PowerShell and bash because single quotes do not
+expand it, and in cmd because cmd has no `$` variables. The tests type a
+folder named `Звіт 'проєкт' $HOME ’q’ 100%PATH% Ґанок` into real cmd,
+PowerShell 7, Windows PowerShell 5.1 and WSL, and read the folder back from
+each shell (`cd`, `(Get-Location).Path`, `pwd`); WSL's `wslpath` turns it
+into `/mnt/c/…/Звіт 'проєкт' $HOME ’q’ 100%PATH% Ґанок`.
+
 The path must be an absolute path to a folder (`invalid_path`, `not_found`
 otherwise). Limits of typing a command: text already on the prompt line
 stays in front of it, and a program that runs in the shell (an editor, a

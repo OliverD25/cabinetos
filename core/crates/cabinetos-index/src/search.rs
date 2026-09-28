@@ -36,7 +36,7 @@ pub struct Rank(u32);
 impl Rank {
     const NOT_PREFIX: u32 = 1 << 31;
 
-    /// The rank of a name `len` bytes long (lowercase UTF-8) that starts with
+    /// The rank of a name `len` bytes long (folded UTF-8) that starts with
     /// the query (`prefix`) or only contains it.
     #[must_use]
     pub fn new(prefix: bool, len: usize) -> Self {
@@ -62,7 +62,7 @@ pub struct Matcher {
 }
 
 impl Matcher {
-    /// The matcher for `query`, lowercased the way names are; `None` when the
+    /// The matcher for `query`, folded the way names are; `None` when the
     /// query is empty or only white space.
     #[must_use]
     pub fn new(query: &str) -> Option<Self> {
@@ -75,13 +75,13 @@ impl Matcher {
         Some(Self { lower, finder })
     }
 
-    /// The query, lowercased.
+    /// The query, folded.
     #[must_use]
     pub fn query(&self) -> &str {
         &self.lower
     }
 
-    /// The rank of a name already lowercased (UTF-8), or `None` when it does
+    /// The rank of a name already folded (UTF-8), or `None` when it does
     /// not contain the query.
     #[must_use]
     pub fn rank_lower(&self, lower: &[u8]) -> Option<Rank> {
@@ -279,6 +279,52 @@ mod tests {
                 .search(&Matcher::new("mft").unwrap(), None, 10)
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn names_beyond_ascii_are_found_without_case_or_normal_form() {
+        let mut index = VolumeIndex::new('E');
+        index.upsert(ROOT, ROOT, &utf16("."), 0x10);
+        let names = [
+            "Звіт 2026.txt",
+            "Ґанок",
+            "Їжак і Єнот.md",
+            "日本語のファイル.txt",
+            "中文文件夹",
+            "📁 photos",
+            "𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt",
+            "caf\u{e9}.txt",
+            "cafe\u{301}.txt",
+            "مستند.txt",
+        ];
+        for (number, name) in (0x0001_0000_0000_1000..).zip(names) {
+            index.upsert(number, ROOT, &utf16(name), 0x20);
+        }
+        let found = |query: &str| {
+            let mut found: Vec<String> = index
+                .search(&Matcher::new(query).unwrap(), None, 20)
+                .iter()
+                .map(|hit| hit.path.strip_prefix(r"E:\").unwrap().to_owned())
+                .collect();
+            found.sort();
+            found
+        };
+        assert_eq!(found("звіт"), ["Звіт 2026.txt"]);
+        assert_eq!(found("ЗВІТ 2026"), ["Звіт 2026.txt"]);
+        assert_eq!(found("ґанок"), ["Ґанок"]);
+        assert_eq!(found("єнот"), ["Їжак і Єнот.md"]);
+        assert_eq!(found("ファイル"), ["日本語のファイル.txt"]);
+        assert_eq!(found("文件"), ["中文文件夹"]);
+        assert_eq!(found("📁"), ["📁 photos"]);
+        assert_eq!(found("𝔫𝔦𝔠"), ["𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt"]);
+        assert_eq!(found("مستند"), ["مستند.txt"]);
+        // Both spellings of café, whichever the query uses; each hit keeps
+        // its own spelling.
+        let mut both = ["caf\u{e9}.txt".to_owned(), "cafe\u{301}.txt".to_owned()];
+        both.sort();
+        assert_eq!(found("caf\u{e9}"), both);
+        assert_eq!(found("CAFE\u{301}"), both);
+        assert!(found("cafe").is_empty(), "an accent is not ignored");
     }
 
     #[test]

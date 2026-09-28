@@ -11,7 +11,7 @@ use cabinetos_commands::KeySequence;
 use serde_json::Value;
 
 use crate::diff::changed_paths;
-use crate::parse::{ConfigError, Rejection, check_values, parse, parse_checked};
+use crate::parse::{ConfigError, Rejection, check_values, file_text, parse, parse_checked};
 use crate::{Config, KeybindingEntry, Keys, SCHEMA_JSON, SCHEMA_REFERENCE};
 
 /// Environment variable with the full path of the configuration file.
@@ -248,7 +248,7 @@ impl ConfigStore {
         validate: impl FnOnce(&Config) -> Result<(), Rejection>,
     ) -> Result<Vec<String>, ConfigError> {
         let hash = content_hash(bytes);
-        let candidate = text_of(bytes).and_then(|text| parse_checked(text, validate));
+        let candidate = file_text(bytes).and_then(|text| parse_checked(&text, validate));
         match candidate {
             Ok(candidate) => {
                 let changed = changed_paths(&self.config, &candidate);
@@ -279,8 +279,8 @@ impl ConfigStore {
                 let base = if Some(hash) == self.applied {
                     self.config.clone()
                 } else {
-                    text_of(&bytes)
-                        .and_then(parse)
+                    file_text(&bytes)
+                        .and_then(|text| parse(&text))
                         .map_err(UpdateError::FileHasError)?
                 };
                 (base, Some(hash))
@@ -427,11 +427,6 @@ fn read(path: &Path) -> io::Result<Option<Vec<u8>>> {
             Err(error) => return Err(error),
         }
     }
-}
-
-fn text_of(bytes: &[u8]) -> Result<&str, ConfigError> {
-    std::str::from_utf8(bytes)
-        .map_err(|error| ConfigError::general(format!("the file is not UTF-8 text: {error}")))
 }
 
 fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -765,6 +760,128 @@ mod tests {
         });
         assert_eq!(opened, Opened::Invalid(ConfigError::general("no")));
         assert_eq!(*store.config(), Config::default());
+    }
+
+    /// Paths with the fixture's names beyond ASCII (docs/ui.md, "Edge
+    /// cases"), café decomposed among them.
+    fn paths_beyond_ascii() -> Vec<String> {
+        [
+            r"E:\Звіт 2026",
+            r"E:\Ґанок\Їжак і Єнот.md",
+            r"C:\中文文件夹\日本語のファイル.txt",
+            r"D:\📁 photos\𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt",
+            "E:\\caf\u{e9}",
+            "E:\\cafe\u{301}",
+            r"E:\مستند.txt",
+        ]
+        .map(String::from)
+        .to_vec()
+    }
+
+    #[test]
+    fn paths_beyond_ascii_round_trip_through_the_file() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let paths = paths_beyond_ascii();
+        store
+            .update(
+                |config| {
+                    config.ui.last_paths = paths[..2].to_vec();
+                    config.ui.pinned.clone_from(&paths);
+                    Ok::<(), Rejection>(())
+                },
+                accept,
+            )
+            .unwrap();
+        // The characters themselves, not `\u` escapes: the file stays
+        // readable and editable (Article 6).
+        let text = std::fs::read_to_string(&path).unwrap();
+        for wanted in [
+            "Звіт 2026",
+            "Їжак і Єнот",
+            "日本語",
+            "📁 photos",
+            "cafe\u{301}",
+            "مستند",
+        ] {
+            assert!(text.contains(wanted), "{wanted} in {text}");
+        }
+        let (reopened, opened) = ConfigStore::open(path, accept);
+        assert_eq!(opened, Opened::Loaded);
+        // Unit for unit: the decomposed café stays decomposed.
+        assert_eq!(reopened.config().ui.pinned, paths);
+        assert_eq!(reopened.config().ui.last_paths, paths[..2]);
+    }
+
+    #[test]
+    fn set_value_takes_text_beyond_ascii() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let index = r"E:\Ринок\індекс 📦.json";
+        let changed = store
+            .set_value("marketplace.index", Value::from(index), accept)
+            .unwrap();
+        assert_eq!(changed, ["marketplace.index"]);
+        let changed = store
+            .set_value(
+                "ui.lastPaths",
+                serde_json::json!(paths_beyond_ascii()),
+                accept,
+            )
+            .unwrap();
+        assert_eq!(changed, ["ui.lastPaths"]);
+        let (reopened, _) = ConfigStore::open(path, accept);
+        assert_eq!(reopened.config().marketplace.index, index);
+        assert_eq!(reopened.config().ui.last_paths, paths_beyond_ascii());
+    }
+
+    /// `text` as UTF-16 with its byte-order mark, the way Windows
+    /// PowerShell 5.1's `>` and `Out-File` write a file.
+    fn utf16_file(text: &str, big_endian: bool) -> Vec<u8> {
+        let mut bytes = if big_endian {
+            vec![0xFE, 0xFF]
+        } else {
+            vec![0xFF, 0xFE]
+        };
+        for unit in text.encode_utf16() {
+            bytes.extend(if big_endian {
+                unit.to_be_bytes()
+            } else {
+                unit.to_le_bytes()
+            });
+        }
+        bytes
+    }
+
+    #[test]
+    fn a_utf16_file_is_read_and_written_back_as_utf8() {
+        let text = "{\"ui\": {\"pinned\": [\"E:\\\\Звіт 2026\", \"D:\\\\📁 photos\"]}}";
+        for big_endian in [false, true] {
+            let (_dir, path) = temp_config();
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, utf16_file(text, big_endian)).unwrap();
+            let (mut store, opened) = ConfigStore::open(path.clone(), accept);
+            assert_eq!(opened, Opened::Loaded, "big endian: {big_endian}");
+            assert_eq!(store.config().ui.pinned, [r"E:\Звіт 2026", r"D:\📁 photos"]);
+            store
+                .set_value("ui.sidebar", Value::from(false), accept)
+                .unwrap();
+            let written = std::fs::read(&path).unwrap();
+            let written = String::from_utf8(written).expect("written as UTF-8");
+            assert!(!written.starts_with('\u{feff}'));
+            assert!(written.contains("Звіт 2026"), "{written}");
+        }
+        // Half a UTF-16 unit is not a file.
+        let (_dir, path) = temp_config();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut odd = utf16_file(text, false);
+        odd.push(b'{');
+        std::fs::write(&path, odd).unwrap();
+        let (_, opened) = ConfigStore::open(path, accept);
+        let Opened::Invalid(error) = opened else {
+            panic!("{opened:?}")
+        };
+        assert!(error.message.contains("UTF-16"), "{}", error.message);
     }
 
     #[test]

@@ -26,6 +26,11 @@ What lives here, or will:
 - `fixtures/plugins/` — those plugins built as components, with their
   `plugin.json`. They are committed, so the core's tests and CI need no
   WebAssembly toolchain.
+- `fixtures/edge-fixture.ps1` — makes the edge-case folder that the core's
+  and the shell's live checks share: names beyond ASCII, a path over 300
+  characters, a junction, symbolic links, and a junction that loops back
+  to its own folder (`-Root <folder>`; Windows PowerShell 5.1 or
+  PowerShell 7, no administrator rights).
 - `themes/` — the JSON theme format (Phase 9): `theme.schema.json`,
   exported from the Rust types in `core/crates/cabinetos-protocol`, and the
   four themes that ship with the core (`default`, `nord`,

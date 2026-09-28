@@ -370,6 +370,50 @@ mod tests {
     }
 
     #[test]
+    fn a_walk_finds_names_beyond_ascii_without_case_or_normal_form() {
+        let root = std::env::temp_dir().join("cabinetos-index-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("walk-names")
+            .tempdir_in(root)
+            .unwrap();
+        for relative in [
+            "Звіт 2026.txt",
+            r"Ґанок\Звіт 2026.txt",
+            "caf\u{e9}.txt",
+            "cafe\u{301}.txt",
+            r"中文文件夹\日本語のファイル.txt",
+            r"📁 photos\𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt",
+            "مستند.txt",
+        ] {
+            let path = dir.path().join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "x").unwrap();
+        }
+        let root = dir.path().display().to_string();
+        let found = |query: &str| {
+            let outcome = walk(&root, &Matcher::new(query).unwrap(), 50, WALK_LIMITS).unwrap();
+            assert!(outcome.complete);
+            let mut found: Vec<String> = outcome
+                .hits
+                .iter()
+                .map(|hit| hit.path[root.len() + 1..].to_owned())
+                .collect();
+            found.sort();
+            found
+        };
+        assert_eq!(found("звіт"), ["Звіт 2026.txt", r"Ґанок\Звіт 2026.txt"]);
+        assert_eq!(found("ҐАНОК"), ["Ґанок"]);
+        assert_eq!(found("ファイル"), [r"中文文件夹\日本語のファイル.txt"]);
+        assert_eq!(found("𝔫𝔦𝔠"), [r"📁 photos\𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt"]);
+        assert_eq!(found("مستند"), ["مستند.txt"]);
+        let mut both = ["caf\u{e9}.txt".to_owned(), "cafe\u{301}.txt".to_owned()];
+        both.sort();
+        assert_eq!(found("Caf\u{e9}"), both);
+        assert_eq!(found("cafe\u{301}"), both);
+    }
+
+    #[test]
     fn the_entry_limit_stops_the_walk() {
         let dir = tree();
         let root = dir.path().display().to_string();

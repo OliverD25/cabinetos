@@ -1,5 +1,6 @@
 //! Reading `cabinetos.json`: strict JSON, then the checks serde cannot make.
 
+use std::borrow::Cow;
 use std::fmt;
 
 use cabinetos_commands::KeymapError;
@@ -83,6 +84,37 @@ impl Rejection {
             ),
             None => ConfigError::general(self.message),
         }
+    }
+}
+
+/// The text of a configuration file's bytes: UTF-8, with or without a
+/// byte-order mark ([`parse`] drops it), or UTF-16 with its byte-order
+/// mark, which Windows PowerShell 5.1's `>` and `Out-File` write. The core
+/// writes UTF-8 back.
+///
+/// # Errors
+///
+/// When the bytes are neither.
+#[must_use = "the text or the reason there is none"]
+pub fn file_text(bytes: &[u8]) -> Result<Cow<'_, str>, ConfigError> {
+    let utf16 = |rest: &[u8], unit: fn([u8; 2]) -> u16| {
+        let (pairs, odd) = rest.as_chunks::<2>();
+        if !odd.is_empty() {
+            return Err(ConfigError::general(
+                "the file starts with the byte-order mark of UTF-16 text, \
+                 but its length is an odd number of bytes",
+            ));
+        }
+        String::from_utf16(&pairs.iter().map(|pair| unit(*pair)).collect::<Vec<u16>>())
+            .map(Cow::Owned)
+            .map_err(|error| ConfigError::general(format!("the file is not UTF-16 text: {error}")))
+    };
+    match bytes {
+        [0xFF, 0xFE, rest @ ..] => utf16(rest, u16::from_le_bytes),
+        [0xFE, 0xFF, rest @ ..] => utf16(rest, u16::from_be_bytes),
+        _ => std::str::from_utf8(bytes)
+            .map(Cow::Borrowed)
+            .map_err(|error| ConfigError::general(format!("the file is not UTF-8 text: {error}"))),
     }
 }
 

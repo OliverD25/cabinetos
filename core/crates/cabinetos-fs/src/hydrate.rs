@@ -55,6 +55,12 @@ use crate::com::Apartment;
 use crate::section::{EntryView, LayoutError, ListingReader};
 use crate::{FsError, attributes};
 
+/// Icons are drawn one at a time in the whole process: the system image
+/// lists belong to the process, not to a hydrator, and two drawings at once
+/// make `SHGetFileInfoW` answer that there is no icon (two hydrators in
+/// the tests did, every run).
+static DRAWING: Mutex<()> = Mutex::new(());
+
 /// The icon sizes [`Hydrator::icon_png`] makes, in pixels.
 pub const ICON_SIZES: [u32; 4] = [16, 24, 32, 48];
 
@@ -81,9 +87,6 @@ pub struct Hydrator {
     type_names: Mutex<Bounded<TypeKey, String>>,
     paths: Mutex<Bounded<String, String>>,
     icons: Mutex<IconCache>,
-    /// Icons are drawn one at a time: the system image lists are not known
-    /// to be safe to use from several threads at once.
-    drawing: Mutex<()>,
 }
 
 /// What a type name depends on.
@@ -119,7 +122,6 @@ impl Hydrator {
             type_names: Mutex::new(Bounded::new(TYPE_NAMES_KEPT)),
             paths: Mutex::new(Bounded::new(PATHS_KEPT)),
             icons: Mutex::new(Bounded::new(ICONS_KEPT)),
-            drawing: Mutex::new(()),
         }
     }
 
@@ -223,7 +225,7 @@ impl Hydrator {
             source: io::Error::other(message),
         };
         let png: Arc<[u8]> = {
-            let _one_at_a_time = lock(&self.drawing);
+            let _one_at_a_time = lock(&DRAWING);
             let rgba = draw_icon(&source, size).map_err(failed)?;
             encode_png(&rgba, size).map_err(failed)?.into()
         };
@@ -723,6 +725,72 @@ mod tests {
             .unwrap();
         assert_eq!(tail.len(), 2);
         assert_eq!(tail[0].icon_key, "generic");
+    }
+
+    #[test]
+    fn names_beyond_ascii_get_type_names_and_icons() {
+        let dir = scratch();
+        fs::create_dir(dir.path().join("Ґанок")).unwrap();
+        for name in [
+            "Звіт 2026.txt",
+            "Їжак і Єнот.md",
+            "日本語のファイル.txt",
+            "𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt",
+            "cafe\u{301}.txt",
+            "مستند.txt",
+            "Документ.ТХТ",
+            "📁 без розширення",
+        ] {
+            fs::write(dir.path().join(name), "x").unwrap();
+        }
+        fs::copy(
+            std::env::current_exe().unwrap(),
+            dir.path().join("Програма.exe"),
+        )
+        .unwrap();
+        let folder = dir.path().to_str().unwrap();
+        let listing = list_directory(folder, &ListOptions::default()).unwrap();
+        let writer = ListingWriter::new(&listing).unwrap();
+        let mut section = vec![0u8; writer.section_size()];
+        writer.write(&mut section, 1).unwrap();
+        let hydrator = Hydrator::new();
+        let (_, details) = hydrator.describe(&section, folder, 0, 20).unwrap();
+        assert_eq!(details.len(), listing.len());
+        let detail = |name: &str| {
+            let index = listing
+                .entries()
+                .iter()
+                .position(|entry| listing.name_string(entry) == name)
+                .unwrap_or_else(|| panic!("{name} is not listed"));
+            &details[index]
+        };
+
+        assert_eq!(detail("Ґанок").icon_key, "folder");
+        for text in [
+            "Звіт 2026.txt",
+            "日本語のファイル.txt",
+            "𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt",
+            "cafe\u{301}.txt",
+            "مستند.txt",
+        ] {
+            assert_eq!(detail(text).icon_key, "ext:.txt", "{text}");
+            assert_eq!(detail(text).type_name, detail("Звіт 2026.txt").type_name);
+        }
+        assert_eq!(detail("Їжак і Єнот.md").icon_key, "ext:.md");
+        // An extension beyond ASCII is lowercased like any other.
+        assert_eq!(detail("Документ.ТХТ").icon_key, "ext:.тхт");
+        assert_eq!(detail("📁 без розширення").icon_key, "generic");
+        let program = &detail("Програма.exe").icon_key;
+        assert!(program.starts_with("path:"), "{program}");
+
+        for entry in &details {
+            assert!(!entry.type_name.is_empty(), "{entry:?}");
+            let png = hydrator.icon_png(&entry.icon_key, 16).unwrap();
+            assert!(!png.is_empty(), "{entry:?}");
+        }
+        if is_english() {
+            assert_eq!(detail("Документ.ТХТ").type_name, "ТХТ File");
+        }
     }
 
     #[test]

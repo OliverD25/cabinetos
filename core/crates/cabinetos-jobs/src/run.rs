@@ -642,7 +642,7 @@ impl Run<'_> {
                         dest_size: info.size,
                         dest_modified: info.times.modified,
                     },
-                    destination: Some(destination),
+                    destination: Some(win::spelled(&destination)),
                 },
                 Err(error) => conflict_for(error, &item.source, Some(destination)),
             },
@@ -972,7 +972,9 @@ fn delete_moved_source(item: &FileItem) -> Outcome {
     }
 }
 
-/// A "file exists" conflict with both sides described.
+/// A "file exists" conflict with both sides described. The destination is
+/// named as its folder spells it: on a folder that ignores case, the file
+/// in the way may be `report.txt` when `Report.txt` was asked for.
 fn exists(source_size: u64, source_modified: i64, destination: &str) -> Outcome {
     let existing = win::info(destination).ok();
     Outcome::Conflict {
@@ -982,7 +984,7 @@ fn exists(source_size: u64, source_modified: i64, destination: &str) -> Outcome 
             dest_size: existing.map_or(0, |info| info.size),
             dest_modified: existing.map_or(0, |info| info.times.modified),
         },
-        destination: Some(destination.to_owned()),
+        destination: Some(win::spelled(destination)),
     }
 }
 

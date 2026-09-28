@@ -56,7 +56,8 @@ with a message: the indexer never creates one, because it writes nothing.
 - A map from FRN to a slot, and per slot the parent's FRN, a name ID and the
   attributes, in parallel arrays.
 - Each distinct name once, twice over: in UTF-16 as NTFS stores it (for
-  paths) and in lowercase UTF-8 (for search). A system drive repeats names a
+  paths) and folded in UTF-8 (for search; see "Case and accents" below). A
+  system drive repeats names a
   lot (`index.js`, `LICENSE`, the component store), so this saves much of the
   memory.
 - No paths. A path is rebuilt by walking the parents up to the root (MFT
@@ -85,6 +86,25 @@ Passes 1 and 2 run on several threads. The rank: names that start with the
 query first, then shorter names, then paths in order. An exact name is the
 shortest name that starts with the query, so it comes first. `limit` is at
 most 1,000.
+
+### Case and accents
+
+Names and the query are folded the same way before they are compared:
+lowercased by Unicode's rules (`ЗВІТ` finds `звіт`, `Ґ` finds `ґ`), then
+composed (Unicode's NFC, by Windows' `NormalizeString`). Composing makes
+the two spellings of an accented letter one text: `é` as one character
+(U+00E9, what a keyboard types) and `e` followed by a combining accent
+(U+0301, what macOS and some downloads write). So `café` finds both
+`café.txt` files, whichever spelling the query has. Each hit keeps the name
+as NTFS stores it.
+
+What folding does not do: it keeps accents (`cafe` does not find `café`),
+and it keeps compatibility forms apart (`𝔘` is not `U`, the ligature `ﬁ` is
+not `fi`). ASCII names, most of a system drive, are lowercased without a
+call to Windows, and so is any name whose letters all lie below U+0300,
+where no combining accent can appear. The core's own walk
+(["Without the indexer"](#without-the-indexer)) ranks with the same
+matcher, so both searches find the same names.
 
 A radix tree or a trigram index would make searches faster still. That
 waits until the scan is measured too slow; at 11.5 ms for 1.36 million

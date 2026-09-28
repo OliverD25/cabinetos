@@ -5,9 +5,11 @@
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
 use windows::Win32::Foundation::{
-    ERROR_ACCESS_DENIED, ERROR_HANDLE_EOF, ERROR_JOURNAL_DELETE_IN_PROGRESS,
-    ERROR_JOURNAL_ENTRY_DELETED, ERROR_JOURNAL_NOT_ACTIVE, GENERIC_READ, HANDLE,
+    ERROR_ACCESS_DENIED, ERROR_HANDLE_EOF, ERROR_INSUFFICIENT_BUFFER,
+    ERROR_JOURNAL_DELETE_IN_PROGRESS, ERROR_JOURNAL_ENTRY_DELETED, ERROR_JOURNAL_NOT_ACTIVE,
+    GENERIC_READ, GetLastError, HANDLE,
 };
+use windows::Win32::Globalization::{NormalizationC, NormalizeString};
 use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
 use windows::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAGS_AND_ATTRIBUTES,
@@ -342,6 +344,39 @@ pub(crate) fn is_access_denied(error: &windows::core::Error) -> bool {
 pub(crate) fn is_no_journal(error: &windows::core::Error) -> bool {
     error.code() == ERROR_JOURNAL_NOT_ACTIVE.to_hresult()
         || error.code() == ERROR_JOURNAL_DELETE_IN_PROGRESS.to_hresult()
+}
+
+/// `text` (valid UTF-16) in Unicode's composed form, NFC, by Windows'
+/// `NormalizeString`; `None` if Windows cannot say.
+pub(crate) fn composed(text: &[u16]) -> Option<Vec<u16>> {
+    if text.is_empty() {
+        return Some(Vec::new());
+    }
+    // SAFETY: `text` is a valid slice; without a destination the call only
+    // estimates the length the result needs.
+    let estimate = unsafe { NormalizeString(NormalizationC, text, None) };
+    let mut length = usize::try_from(estimate).ok()?.max(text.len());
+    // Windows' estimate may fall short; it then says how much it needs.
+    for _ in 0..3 {
+        let mut out = vec![0u16; length];
+        // SAFETY: `text` and `out` are valid slices that outlive the call;
+        // the call writes at most `out.len()` units.
+        let written = unsafe { NormalizeString(NormalizationC, text, Some(&mut out)) };
+        if let Ok(written) = usize::try_from(written)
+            && written > 0
+        {
+            out.truncate(written);
+            return Some(out);
+        }
+        // SAFETY: a plain call, right after the failed one.
+        if unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER {
+            return None;
+        }
+        length = usize::try_from(written.unsigned_abs())
+            .ok()?
+            .max(length * 2);
+    }
+    None
 }
 
 #[cfg(test)]

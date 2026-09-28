@@ -161,6 +161,17 @@ line 3, column 5: palette.show belongs to the Immutable System Tier; its keys ca
 A syntax or value error points just after the text at fault; a keybinding
 error points at the start of its entry.
 
+The file is read as UTF-8, with or without a byte-order mark (Notepad may
+write one), or as UTF-16 with its byte-order mark, which is what Windows
+PowerShell 5.1's `>` and `Out-File` write. Any other encoding, such as an
+ANSI code page (Windows PowerShell 5.1's `Set-Content` writes that), is an
+error that names the first byte that is not UTF-8. When the core writes the
+file, it writes UTF-8 without a byte-order mark, and text beyond ASCII as
+the characters themselves (`"E:\\Звіт 2026"`, not `\u0417…`), so the file
+stays readable. Paths keep their exact characters: `café` spelled
+decomposed stays decomposed through `ui.lastPaths`, `ui.pinned` and
+`set_value`.
+
 It does not matter how the editor saves. Writing the file in place and
 writing a temporary file that then replaces it (as many editors do) are both
 seen. A file that is deleted is reported as an error and not recreated; the

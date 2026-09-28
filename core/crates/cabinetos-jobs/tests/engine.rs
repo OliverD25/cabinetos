@@ -293,6 +293,173 @@ fn copies_a_tree_with_empty_folders_a_big_file_a_junction_and_a_long_path() {
     }
 }
 
+/// A tree of the fixture's names beyond ASCII (docs/ui.md, "Edge cases"):
+/// folders, files, café composed and decomposed side by side, and a name
+/// of 255 UTF-16 units.
+fn names_tree(root: &Path) {
+    let files = [
+        "Звіт 2026.txt",
+        "Їжак і Єнот.md",
+        "日本語のファイル.txt",
+        "𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt",
+        "caf\u{e9}.txt",
+        "cafe\u{301}.txt",
+        "مستند.txt",
+    ];
+    for folder in ["", "Ґанок", "中文文件夹", "📁 photos"] {
+        let folder = root.join(folder);
+        fs::create_dir_all(&folder).unwrap();
+        for (seed, file) in (1..).zip(files) {
+            write_file(
+                &folder.join(file),
+                100 + usize::try_from(seed).unwrap(),
+                seed,
+            );
+        }
+    }
+    write_file(&root.join("a".repeat(251) + ".txt"), 255, 255);
+}
+
+#[test]
+fn names_beyond_ascii_are_copied_moved_and_deleted() {
+    let dir = scratch("names");
+    let source = dir.path().join("Звіт і фото");
+    names_tree(&source);
+    let before = describe(&source);
+    assert_eq!(before.len(), 3 + 4 * 7 + 1);
+    let engine = engine();
+
+    let copies = dir.path().join("копії");
+    fs::create_dir(&copies).unwrap();
+    let job = engine.start(
+        JobKind::Copy,
+        &[&source],
+        Some(&copies),
+        JobOptions::default(),
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(conflicts.is_empty(), "{conflicts:?}");
+    let copy = copies.join("Звіт і фото");
+    assert_eq!(describe(&copy), before);
+
+    let moved_into = dir.path().join("中文文件夹 📁");
+    fs::create_dir(&moved_into).unwrap();
+    let job = engine.start(
+        JobKind::Move,
+        &[&copy],
+        Some(&moved_into),
+        JobOptions::default(),
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(conflicts.is_empty(), "{conflicts:?}");
+    assert!(!copy.exists());
+    let moved = moved_into.join("Звіт і фото");
+    assert_eq!(describe(&moved), before);
+
+    let job = engine.start(
+        JobKind::Delete { permanent: true },
+        &[&moved],
+        None,
+        JobOptions::default(),
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(conflicts.is_empty(), "{conflicts:?}");
+    assert!(!moved.exists());
+    assert_eq!(describe(&source), before, "the source is untouched");
+}
+
+#[test]
+fn a_case_only_twin_is_a_conflict_that_names_the_file_there() {
+    let dir = scratch("case");
+    let (source, destination) = (dir.path().join("src"), dir.path().join("dst"));
+    fs::create_dir_all(&source).unwrap();
+    fs::create_dir_all(&destination).unwrap();
+    let names = ["Report.txt", "ЗВІТ.txt"];
+    let there = ["report.txt", "звіт.txt"];
+    for (name, existing) in names.iter().zip(there) {
+        fs::write(source.join(name), "new").unwrap();
+        fs::write(destination.join(existing), "old").unwrap();
+    }
+    let engine = engine();
+    let listed = |folder: &Path| {
+        let mut names: Vec<String> = fs::read_dir(folder)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        names
+    };
+
+    // A copy: the folder is case-insensitive, so each name is taken.
+    let sources: Vec<PathBuf> = names.iter().map(|name| source.join(name)).collect();
+    let sources: Vec<&Path> = sources.iter().map(PathBuf::as_path).collect();
+    let job = engine.start(
+        JobKind::Copy,
+        &sources,
+        Some(&destination),
+        JobOptions::default(),
+    );
+    let mut conflicts = engine.conflicts_and_progress(job, 2, 0);
+    conflicts.sort_by(|a, b| a.source.cmp(&b.source));
+    for (conflict, existing) in conflicts.iter().zip(there) {
+        assert!(
+            matches!(conflict.kind, ConflictKind::FileExists { dest_size: 3, .. }),
+            "{conflict:?}"
+        );
+        // The card names the file that is there, as the folder spells it.
+        assert_eq!(
+            conflict.destination.as_deref(),
+            Some(destination.join(existing).display().to_string().as_str()),
+            "{conflict:?}"
+        );
+    }
+    // Keep both: the new name is free in any case. Overwrite: the file
+    // there keeps its spelling and takes the new content.
+    engine
+        .manager
+        .resolve(
+            job,
+            conflicts[0].conflict_id,
+            &Resolution::Rename { new_name: None },
+            false,
+        )
+        .unwrap();
+    engine
+        .manager
+        .resolve(job, conflicts[1].conflict_id, &Resolution::Overwrite, false)
+        .unwrap();
+    let (last, _) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert_eq!(
+        listed(&destination),
+        ["Report (2).txt", "report.txt", "звіт.txt"]
+    );
+    let read = |name: &str| fs::read_to_string(destination.join(name)).unwrap();
+    assert_eq!(read("Report (2).txt"), "new");
+    assert_eq!(read("report.txt"), "old");
+    assert_eq!(read("звіт.txt"), "new");
+
+    // A move on one volume that overwrites is a rename: the moved file's
+    // spelling replaces the one there.
+    let job = engine.start(
+        JobKind::Move,
+        &[&source.join("Report.txt")],
+        Some(&destination),
+        options(ConflictPolicy::Overwrite),
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(conflicts.is_empty(), "{conflicts:?}");
+    assert_eq!(
+        listed(&destination),
+        ["Report (2).txt", "Report.txt", "звіт.txt"]
+    );
+    assert_eq!(read("Report.txt"), "new");
+}
+
 #[test]
 fn a_file_that_exists_waits_while_the_rest_completes() {
     let dir = scratch("conflicts");
@@ -755,6 +922,64 @@ fn the_recycle_bin_takes_a_file() {
         }
     }
     assert!(!file.exists());
+}
+
+#[test]
+fn the_recycle_bin_takes_names_beyond_ascii() {
+    // Puts files into the Recycle Bin of the machine running the test: CI
+    // only, as above.
+    if std::env::var_os("CABINETOS_TEST_RECYCLE_BIN").is_none_or(|value| value != "1") {
+        eprintln!(
+            "skipped: set CABINETOS_TEST_RECYCLE_BIN=1 to send test files to the Recycle Bin"
+        );
+        return;
+    }
+    let dir = scratch("recycle-names");
+    let folder = dir.path().join("Ґанок 📁");
+    fs::create_dir(&folder).unwrap();
+    let files = ["Звіт 2026.txt", "cafe\u{301}.txt", "𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt"];
+    for file in files {
+        fs::write(folder.join(file), "to the bin").unwrap();
+    }
+    let paths: Vec<PathBuf> = files.iter().map(|file| folder.join(file)).collect();
+    let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
+    let engine = engine();
+    let job = engine.start(
+        JobKind::Delete { permanent: false },
+        &paths,
+        None,
+        JobOptions::default(),
+    );
+    let deadline = Instant::now() + JOB_DEADLINE;
+    loop {
+        match engine.next(job, deadline) {
+            Some(Event::JobConflict(conflict)) => {
+                assert!(
+                    matches!(conflict.kind, ConflictKind::RecycleBinTooSmall { .. }),
+                    "{conflict:?}"
+                );
+                eprintln!("this account has no usable Recycle Bin here");
+                engine
+                    .manager
+                    .resolve(
+                        job,
+                        conflict.conflict_id,
+                        &Resolution::DeletePermanently,
+                        false,
+                    )
+                    .unwrap();
+            }
+            Some(Event::JobStateChanged { state, .. }) if state.is_terminal() => {
+                assert_eq!(state, JobState::Completed);
+                break;
+            }
+            Some(_) => {}
+            None => panic!("the delete did not end"),
+        }
+    }
+    for path in paths {
+        assert!(!path.exists(), "{}", path.display());
+    }
 }
 
 #[test]

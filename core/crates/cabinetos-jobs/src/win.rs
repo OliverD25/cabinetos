@@ -13,10 +13,11 @@ use windows::Win32::Storage::FileSystem::{
     FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_READONLY, FILE_CREATION_DISPOSITION,
     FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAGS_AND_ATTRIBUTES,
     FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    FILE_WRITE_ATTRIBUTES, GetFileAttributesExW, GetFileExInfoStandard,
+    FILE_WRITE_ATTRIBUTES, FIND_FIRST_EX_FLAGS, FindClose, FindExInfoBasic, FindExSearchNameMatch,
+    FindFirstFileExW, GetFileAttributesExW, GetFileExInfoStandard,
     LPPROGRESS_ROUTINE_CALLBACK_REASON, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, MOVE_FILE_FLAGS,
     MOVEFILE_REPLACE_EXISTING, MoveFileExW, OPEN_EXISTING, PROGRESS_CANCEL, PROGRESS_CONTINUE,
-    RemoveDirectoryW, SetFileAttributesW, SetFileTime, WIN32_FILE_ATTRIBUTE_DATA,
+    RemoveDirectoryW, SetFileAttributesW, SetFileTime, WIN32_FILE_ATTRIBUTE_DATA, WIN32_FIND_DATAW,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 use windows::Win32::System::Ioctl::{FSCTL_GET_REPARSE_POINT, FSCTL_SET_REPARSE_POINT};
@@ -130,6 +131,45 @@ pub(crate) fn info(path: &str) -> Result<Info, Code> {
 /// Whether anything exists at `path`.
 pub(crate) fn exists(path: &str) -> bool {
     info(path).is_ok()
+}
+
+/// `path` with its last name spelled as its folder stores it, which may
+/// differ in case from the name asked for (`Report.txt` asked, `report.txt`
+/// there); `path` itself when nothing is there.
+pub(crate) fn spelled(path: &str) -> String {
+    let Ok(wide) = wide(path) else {
+        return path.to_owned();
+    };
+    let mut data = WIN32_FIND_DATAW::default();
+    // SAFETY: `wide` is NUL-terminated and outlives the call; `data` is the
+    // structure FindExInfoBasic fills.
+    let found = unsafe {
+        FindFirstFileExW(
+            PCWSTR(wide.as_ptr()),
+            FindExInfoBasic,
+            (&raw mut data).cast::<c_void>(),
+            FindExSearchNameMatch,
+            None,
+            FIND_FIRST_EX_FLAGS(0),
+        )
+    };
+    let Ok(search) = found else {
+        return path.to_owned();
+    };
+    // SAFETY: the search handle is open and is not used after this.
+    let _ = unsafe { FindClose(search) };
+    let end = data
+        .cFileName
+        .iter()
+        .position(|&unit| unit == 0)
+        .unwrap_or(data.cFileName.len());
+    let Ok(name) = String::from_utf16(&data.cFileName[..end]) else {
+        return path.to_owned();
+    };
+    match path.rfind(['\\', '/']) {
+        Some(separator) => format!("{}{name}", &path[..=separator]),
+        None => name,
+    }
 }
 
 /// What the progress callback tells a running copy.

@@ -3,7 +3,8 @@
 //! A system drive repeats names a lot (`index.js`, `LICENSE`, the side-by-side
 //! store), so each entry holds a 4-byte name ID instead of its own copy. A
 //! name is kept twice: in UTF-16 as NTFS stores it, for paths, and in
-//! lowercase UTF-8, for case-insensitive substring search.
+//! folded UTF-8 (lowercase and composed, see [`lowercase`]), for
+//! case-insensitive substring search.
 
 use std::hash::BuildHasher;
 
@@ -15,9 +16,9 @@ pub(crate) struct NameTable {
     units: Vec<u16>,
     /// Name `id` is `units[starts[id]..starts[id + 1]]`.
     starts: Vec<u32>,
-    /// Every name lowercased, UTF-8, back to back.
+    /// Every name folded, UTF-8, back to back.
     lower: Vec<u8>,
-    /// Name `id` lowercased is `lower[lower_starts[id]..lower_starts[id + 1]]`.
+    /// Name `id` folded is `lower[lower_starts[id]..lower_starts[id + 1]]`.
     lower_starts: Vec<u32>,
     /// Name IDs, hashed by their UTF-16 units.
     table: HashTable<u32>,
@@ -83,7 +84,7 @@ impl NameTable {
         &self.units[self.starts[id] as usize..self.starts[id + 1] as usize]
     }
 
-    /// The name lowercased, UTF-8.
+    /// The name folded (lowercase and composed), UTF-8.
     pub(crate) fn lower(&self, id: u32) -> &[u8] {
         let id = id as usize;
         &self.lower[self.lower_starts[id] as usize..self.lower_starts[id + 1] as usize]
@@ -132,9 +133,12 @@ pub(crate) fn hash_table_bytes(capacity: usize, value_size: usize) -> usize {
     buckets * (value_size + 1) + 16
 }
 
-/// Appends `name` lowercased, as UTF-8. ASCII names (most of them) take a
-/// fast path; others go through Unicode lowercasing, and invalid UTF-16
-/// becomes U+FFFD.
+/// Appends `name` folded for search, as UTF-8: lowercased, then composed
+/// (Unicode's NFC), so the two spellings of an accented letter, `é` as one
+/// character or `e` and a combining accent, are the same text. ASCII names
+/// (most of them) take a fast path; others go through Unicode lowercasing,
+/// and invalid UTF-16 becomes U+FFFD. Compatibility forms are not folded:
+/// `𝔘` is not `U`, `ﬁ` is not `fi`.
 pub(crate) fn lowercase_utf8(name: &[u16], out: &mut Vec<u8>) {
     if name.iter().all(|&unit| unit < 0x80) {
         out.extend(name.iter().map(|&unit| {
@@ -144,16 +148,29 @@ pub(crate) fn lowercase_utf8(name: &[u16], out: &mut Vec<u8>) {
         }));
         return;
     }
-    let mut buffer = [0u8; 4];
+    let mut lower = Vec::with_capacity(name.len());
+    let mut pair = [0u16; 2];
     for decoded in char::decode_utf16(name.iter().copied()) {
         let c = decoded.unwrap_or(char::REPLACEMENT_CHARACTER);
-        for lower in c.to_lowercase() {
-            out.extend_from_slice(lower.encode_utf8(&mut buffer).as_bytes());
+        for lower_c in c.to_lowercase() {
+            lower.extend_from_slice(lower_c.encode_utf16(&mut pair));
         }
+    }
+    // Below U+0300 (where the combining accents begin) text is already
+    // composed; above, Windows composes it.
+    if lower.iter().any(|&unit| unit >= 0x300)
+        && let Some(composed) = crate::win::composed(&lower)
+    {
+        lower = composed;
+    }
+    let mut buffer = [0u8; 4];
+    for decoded in char::decode_utf16(lower) {
+        let c = decoded.unwrap_or(char::REPLACEMENT_CHARACTER);
+        out.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
     }
 }
 
-/// `text` lowercased the same way as names are.
+/// `text` folded the same way as names are.
 #[must_use]
 pub fn lowercase(text: &str) -> String {
     let units: Vec<u16> = text.encode_utf16().collect();
@@ -205,6 +222,33 @@ mod tests {
         let mut out = Vec::new();
         lowercase_utf8(&[0x0041, 0xD800, 0x0042], &mut out);
         assert_eq!(String::from_utf8(out).unwrap(), "a\u{FFFD}b");
+    }
+
+    #[test]
+    fn folding_ignores_case_and_normal_form_beyond_ascii() {
+        assert_eq!(lowercase("Звіт 2026.TXT"), "звіт 2026.txt");
+        assert_eq!(lowercase("ҐАНОК"), "ґанок");
+        assert_eq!(lowercase("ЇЖАК І ЄНОТ"), "їжак і єнот");
+        // Composed é (U+00E9) and e with a combining acute (U+0301) are
+        // the same text to Unicode; both fold to the composed form.
+        assert_eq!(lowercase("CAFE\u{301}"), "caf\u{e9}");
+        assert_eq!(lowercase("Caf\u{e9}"), "caf\u{e9}");
+        // The Angstrom sign is Å by canonical equivalence.
+        assert_eq!(lowercase("\u{212b}"), "\u{e5}");
+        // Compatibility forms stay themselves: 𝔘 is not U, ﬁ is not fi.
+        assert_eq!(lowercase("𝔘𝔫𝔦"), "𝔘𝔫𝔦");
+        assert_eq!(lowercase("\u{fb01}le"), "\u{fb01}le");
+        assert_eq!(lowercase("日本語 📁"), "日本語 📁");
+        assert_eq!(lowercase("مستند"), "مستند");
+        // The table keeps the name as written and folds the copy it
+        // searches.
+        let mut names = NameTable::default();
+        let decomposed = names.intern(&utf16("Cafe\u{301}.txt"));
+        assert_eq!(
+            String::from_utf16_lossy(names.units(decomposed)),
+            "Cafe\u{301}.txt"
+        );
+        assert_eq!(names.lower(decomposed), "caf\u{e9}.txt".as_bytes());
     }
 
     #[test]

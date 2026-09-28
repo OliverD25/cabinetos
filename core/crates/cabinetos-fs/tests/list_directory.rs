@@ -2,7 +2,7 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::os::windows::fs::OpenOptionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use cabinetos_fs::{FsError, ListOptions, Listing, ListingReader, ListingWriter, list_directory};
@@ -269,4 +269,196 @@ fn a_real_listing_round_trips_through_a_section() {
             ("Привіт.txt".to_owned(), EntryKind::File, 5),
         ]
     );
+}
+
+/// The fixture's folders beyond ASCII (docs/ui.md, "Edge cases").
+const FOLDERS: [&str; 3] = ["Ґанок", "中文文件夹", "📁 photos"];
+
+/// The fixture's files beyond ASCII: Cyrillic, Ukrainian letters, Japanese,
+/// surrogate pairs, café composed (NFC) and decomposed (NFD, e + U+0301)
+/// side by side, and right to left.
+const FILES: [&str; 7] = [
+    "Звіт 2026.txt",
+    "Їжак і Єнот.md",
+    "日本語のファイル.txt",
+    "𝔘𝔫𝔦𝔠𝔬𝔡𝔢.txt",
+    "caf\u{e9}.txt",
+    "cafe\u{301}.txt",
+    "مستند.txt",
+];
+
+/// A name of 255 UTF-16 units, the most NTFS takes.
+fn longest_name() -> String {
+    "a".repeat(251) + ".txt"
+}
+
+fn scratch(prefix: &str) -> tempfile::TempDir {
+    let root = std::env::temp_dir().join("cabinetos-fs-test");
+    fs::create_dir_all(&root).unwrap();
+    tempfile::Builder::new()
+        .prefix(prefix)
+        .tempdir_in(root)
+        .unwrap()
+}
+
+/// The fixture's names in `dir`; each file holds its own name, so a size
+/// tells which file an entry is.
+fn names_fixture(dir: &Path) -> Vec<String> {
+    for folder in FOLDERS {
+        fs::create_dir(dir.join(folder)).unwrap();
+    }
+    let longest = longest_name();
+    assert_eq!(longest.encode_utf16().count(), 255);
+    for file in FILES.iter().copied().chain([longest.as_str()]) {
+        touch(&dir.join(file), file.as_bytes());
+    }
+    FOLDERS
+        .iter()
+        .chain(&FILES)
+        .map(|name| (*name).to_owned())
+        .chain([longest])
+        .collect()
+}
+
+fn units(text: &str) -> Vec<u16> {
+    text.encode_utf16().collect()
+}
+
+#[test]
+fn names_beyond_ascii_come_back_unit_for_unit() {
+    let dir = scratch("names");
+    let made = names_fixture(dir.path());
+    let listing = list(dir.path());
+
+    let mut listed: Vec<Vec<u16>> = listing
+        .entries()
+        .iter()
+        .map(|entry| listing.name(entry).to_vec())
+        .collect();
+    let mut expected: Vec<Vec<u16>> = made.iter().map(|name| units(name)).collect();
+    listed.sort();
+    expected.sort();
+    // NFC and NFD café are two names; nothing is normalized on the way.
+    assert_eq!(listed, expected);
+    for entry in listing.entries() {
+        let name = listing.name_string(entry);
+        if entry.kind == EntryKind::File {
+            assert_eq!(entry.meta.size, name.len() as u64, "{name}");
+        }
+    }
+
+    // The same names, unit for unit, through the shared-memory section.
+    let writer = ListingWriter::new(&listing).unwrap();
+    let mut section = vec![0u8; writer.section_size()];
+    writer.write(&mut section, 1).unwrap();
+    let reader = ListingReader::new(&section).unwrap();
+    let read: Vec<String> = reader.entries().map(|entry| entry.unwrap().name).collect();
+    assert_eq!(read, names(&listing));
+}
+
+/// Explorer's comparison of two names.
+#[allow(unsafe_code)]
+fn explorer_order(a: &str, b: &str) -> i32 {
+    let a: Vec<u16> = a.encode_utf16().chain([0]).collect();
+    let b: Vec<u16> = b.encode_utf16().chain([0]).collect();
+    // SAFETY: both strings are NUL-terminated and outlive the call.
+    unsafe {
+        windows::Win32::UI::Shell::StrCmpLogicalW(
+            windows::core::PCWSTR(a.as_ptr()),
+            windows::core::PCWSTR(b.as_ptr()),
+        )
+    }
+}
+
+/// Checks that `group` is in Explorer's order, with a tie (names Explorer
+/// calls equal) ordered by their UTF-16 units.
+fn assert_explorer_order(group: &[String]) {
+    for pair in group.windows(2) {
+        let order = explorer_order(&pair[0], &pair[1]);
+        assert!(
+            order < 0 || (order == 0 && units(&pair[0]) < units(&pair[1])),
+            "{:?} before {:?}, Explorer says {order}; the whole group: {group:#?}",
+            pair[0],
+            pair[1]
+        );
+    }
+}
+
+#[test]
+fn names_beyond_ascii_sort_as_explorer_sorts_them() {
+    let dir = scratch("order");
+    names_fixture(dir.path());
+    let listing = list(dir.path());
+    let listed = names(&listing);
+    let (folders, files) = listed.split_at(FOLDERS.len());
+    let mut expected_folders: Vec<&str> = FOLDERS.to_vec();
+    let mut got_folders: Vec<&str> = folders.iter().map(String::as_str).collect();
+    expected_folders.sort_unstable();
+    got_folders.sort_unstable();
+    assert_eq!(got_folders, expected_folders, "folders come first");
+    assert_explorer_order(folders);
+    assert_explorer_order(files);
+    println!("the order: {listed:#?}");
+}
+
+/// A folder where Windows tells names apart by case, or `None` when this
+/// user may not make one (`fsutil` needs Windows 10 1803 or later; an
+/// older build or a policy may refuse).
+fn case_sensitive_folder(parent: &Path) -> Option<PathBuf> {
+    let folder = parent.join("case");
+    fs::create_dir(&folder).unwrap();
+    let output = Command::new("fsutil.exe")
+        .args(["file", "setCaseSensitiveInfo"])
+        .arg(&folder)
+        .arg("enable")
+        .output()
+        .unwrap();
+    if output.status.success() {
+        Some(folder)
+    } else {
+        println!(
+            "skipped: fsutil cannot make a case-sensitive folder here: {}",
+            String::from_utf8_lossy(&output.stdout).trim()
+        );
+        None
+    }
+}
+
+#[test]
+fn names_that_differ_only_by_case_are_two_rows_in_a_case_sensitive_folder() {
+    let dir = scratch("case");
+    let Some(folder) = case_sensitive_folder(dir.path()) else {
+        return;
+    };
+    for (name, text) in [
+        ("report.txt", "lower"),
+        ("Report.txt", "upper"),
+        ("ЗВІТ.txt", "ЗВІТ"),
+        ("звіт.txt", "звіт"),
+    ] {
+        touch(&folder.join(name), text.as_bytes());
+    }
+    // Explorer calls each pair equal; the units decide: capitals first.
+    assert_eq!(
+        names(&list(&folder)),
+        ["Report.txt", "report.txt", "ЗВІТ.txt", "звіт.txt"]
+    );
+}
+
+#[test]
+fn a_name_with_a_lone_surrogate_keeps_its_units_in_the_listing() {
+    use std::os::windows::ffi::OsStringExt;
+    let dir = scratch("surrogate");
+    // Not valid UTF-16, but NTFS takes any units: `a`, a lone high
+    // surrogate, `.txt`.
+    let raw: Vec<u16> = [0x61, 0xD800].into_iter().chain(units(".txt")).collect();
+    touch(
+        &dir.path().join(std::ffi::OsString::from_wide(&raw)),
+        b"odd",
+    );
+    let listing = list(dir.path());
+    assert_eq!(listing.len(), 1);
+    assert_eq!(listing.name(&listing.entries()[0]), raw.as_slice());
+    // As text (the protocol's JSON), the lone surrogate becomes U+FFFD.
+    assert_eq!(listing.name_string(&listing.entries()[0]), "a\u{FFFD}.txt");
 }

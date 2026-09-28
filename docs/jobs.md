@@ -198,6 +198,30 @@ Decisions (`resolve_conflict`):
   may get one twice (raised while it connected); conflicts are keyed by
   `conflict_id`.
 
+### Names that differ only by case
+
+Windows folders ignore case unless a folder was made case-sensitive
+(`fsutil file setCaseSensitiveInfo`, WSL's folders). So `Report.txt` copied
+into a folder that holds `report.txt` is a `file_exists` conflict, as it
+would be with the same spelling, and the conflict's `destination` names the
+file that is there as the folder spells it (`…\report.txt`), which may
+differ from the name being copied. The answers work as for any conflict:
+
+- **Overwrite** by a copy writes into the file that is there, which keeps
+  its spelling (`report.txt`). Overwrite by a move on one volume is a
+  rename that replaces it, so the moved file's spelling (`Report.txt`)
+  takes its place.
+- **Rename** (keep both) gives `Report (2).txt`, a name that is free in any
+  case.
+
+A copy does not carry a folder's case sensitivity: the folder it makes is
+an ordinary one, like any new folder under an ordinary parent, as Explorer
+and robocopy do. So the twins of a case-sensitive folder meet: the second
+one is a `file_exists` conflict with the first, decided like any other.
+Names beyond ASCII behave the same way (`ЗВІТ.txt` and `звіт.txt` are one
+name in an ordinary folder), and a name is never normalized: `café`
+composed and `café` decomposed are two names, so both copy side by side.
+
 ## The 30 Hz rule
 
 Brief §3: progress must not flood the pipe. The copying threads only add

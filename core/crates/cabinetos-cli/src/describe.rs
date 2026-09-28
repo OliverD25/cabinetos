@@ -59,8 +59,10 @@ pub(crate) async fn describe(
     for (offset, detail) in details.iter().enumerate() {
         let index = from as usize + offset;
         let name = names.get(index).map_or("?", String::as_str);
+        // The name goes last: padding counts characters, and a wide one
+        // (日本語) or a combining accent would shift the columns after it.
         if !say(format_args!(
-            "{index:>5}  {name:<32} {:<28} {}",
+            "{index:>5}  {:<28} {:<21} {name}",
             detail.type_name, detail.icon_key
         )) {
             return Ok(());
