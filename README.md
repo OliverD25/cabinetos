@@ -45,6 +45,7 @@ tests, CI green). Phase 5, the WinUI 3 shell, is next.
 | [docs/plugins.md](docs/plugins.md) | Core Plugins: manifest, capabilities, sandbox, limits, crashes. |
 | [docs/indexer.md](docs/indexer.md) | The indexer: how volumes are indexed and kept current, the read-only pipe, the service, search without it. |
 | [docs/terminal.md](docs/terminal.md) | The integrated terminal: profiles, the byte pipe of each session, following the active pane, closing, the `term` CLI. |
+| [docs/ui.md](docs/ui.md) | The WinUI 3 shell: the solution, running and debugging, the core launcher, listings in shared memory, keys and the command router, the palette, what is not built yet. |
 | [docs/log/](docs/log/2026-09-28/README.md) | The build log: one report per phase, with every decision and its undo. |
 
 ## Layout
