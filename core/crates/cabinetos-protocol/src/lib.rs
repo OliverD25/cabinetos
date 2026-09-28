@@ -23,6 +23,7 @@ mod job;
 mod message;
 mod plugin;
 pub mod shm;
+mod terminal;
 
 #[cfg(feature = "schema")]
 pub mod schema;
@@ -42,6 +43,7 @@ pub use message::{
     VolumeDetails,
 };
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
+pub use terminal::{TerminalSession, TerminalState};
 
 /// Version of the control-channel protocol. The core reports it in
 /// [`Response::Pong`] and [`Response::Welcome`]. Raise it whenever a message

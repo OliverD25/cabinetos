@@ -35,7 +35,9 @@ use std::time::Duration;
 
 pub use client::{PipeClient, exchange};
 pub use frame::MAX_FRAME;
-pub use pipe::{PipeConnection, PipeName, PipeReader, PipeServer, PipeWriter};
+pub use pipe::{
+    PipeConnection, PipeName, PipeReader, PipeServer, PipeWriter, byte_pipe, stored_security,
+};
 pub use shm::{MappedView, RawHandleValue, ReadOnlyView, SharedSection};
 
 /// Everything that can go wrong on the transport.

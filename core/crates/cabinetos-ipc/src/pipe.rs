@@ -78,6 +78,29 @@ fn server_options(first_instance: bool) -> ServerOptions {
     options
 }
 
+/// One instance of a raw byte pipe for one client at a time, such as a
+/// terminal session's: the current user only, no remote clients, at most
+/// two instances. The owner keeps a single instance listening or connected,
+/// so a second client gets `ERROR_PIPE_BUSY` while one is attached, and
+/// creates the next instance before it drops the last, so the name never
+/// disappears between two clients. The `first` instance fails if the name
+/// exists, so no other process can own the pipe. Must run inside a Tokio
+/// runtime.
+pub fn byte_pipe(name: &PipeName, first: bool) -> Result<NamedPipeServer, IpcError> {
+    let security = PipeSecurity::for_current_user()?;
+    let mut options = server_options(first);
+    options.max_instances(2);
+    Ok(security.create_pipe(&options, name.as_str())?)
+}
+
+/// The DACL and the mandatory label Windows stored on the pipe behind
+/// `handle` (either end), in SDDL. A client handle needs read access.
+pub fn stored_security(
+    handle: &impl std::os::windows::io::AsRawHandle,
+) -> Result<String, IpcError> {
+    security::stored_sddl(handle)
+}
+
 /// The server end of a pipe. It accepts any number of clients, one pipe
 /// instance each. The core's pipe admits only the current user
 /// ([`bind`](Self::bind)); the indexer's has its own descriptor

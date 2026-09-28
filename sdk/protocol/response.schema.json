@@ -717,6 +717,21 @@
           "description": "A plugin's command failed: the plugin reported an error, crashed, or\nis not running.",
           "type": "string",
           "const": "plugin_error"
+        },
+        {
+          "description": "No terminal session has that `session_id` (or its shell has exited,\nfor a request that needs it running).",
+          "type": "string",
+          "const": "no_such_session"
+        },
+        {
+          "description": "No terminal profile has that name.",
+          "type": "string",
+          "const": "unknown_profile"
+        },
+        {
+          "description": "The shell could not be started: its program is not on the `PATH`, the\nfolder does not exist, the session limit is reached, or Windows\nrefused.",
+          "type": "string",
+          "const": "spawn_failed"
         }
       ]
     },

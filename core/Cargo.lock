@@ -340,6 +340,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cabinetos-terminal"
+version = "0.1.0"
+dependencies = [
+ "cabinetos-ipc",
+ "cabinetos-protocol",
+ "rand",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "windows",
+]
+
+[[package]]
 name = "cap-primitives"
 version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

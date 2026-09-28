@@ -289,6 +289,33 @@
         "name",
         "payload"
       ]
+    },
+    {
+      "description": "A terminal session's shell exited. Sent to every connection that said\n`hello`. Its last output is on the byte pipe before it closes.",
+      "type": "object",
+      "properties": {
+        "exit_code": {
+          "description": "The shell's exit code.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_exited"
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "exit_code"
+      ]
     }
   ],
   "required": [

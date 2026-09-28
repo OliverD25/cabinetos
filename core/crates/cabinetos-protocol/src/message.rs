@@ -679,6 +679,14 @@ pub enum Event {
         /// Its payload, as the plugin wrote it (usually JSON).
         payload: String,
     },
+    /// A terminal session's shell exited. Sent to every connection that said
+    /// `hello`. Its last output is on the byte pipe before it closes.
+    TerminalExited {
+        /// The session.
+        session_id: u64,
+        /// The shell's exit code.
+        exit_code: u32,
+    },
 }
 
 impl Event {
@@ -696,6 +704,7 @@ impl Event {
         "plugin_state_changed",
         "plugin_crashed",
         "plugin_event",
+        "terminal_exited",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -713,6 +722,7 @@ impl Event {
             Self::PluginStateChanged { .. } => "plugin_state_changed",
             Self::PluginCrashed { .. } => "plugin_crashed",
             Self::PluginEvent { .. } => "plugin_event",
+            Self::TerminalExited { .. } => "terminal_exited",
         }
     }
 }
@@ -796,6 +806,15 @@ pub enum ErrorCode {
     /// A plugin's command failed: the plugin reported an error, crashed, or
     /// is not running.
     PluginError,
+    /// No terminal session has that `session_id` (or its shell has exited,
+    /// for a request that needs it running).
+    NoSuchSession,
+    /// No terminal profile has that name.
+    UnknownProfile,
+    /// The shell could not be started: its program is not on the `PATH`, the
+    /// folder does not exist, the session limit is reached, or Windows
+    /// refused.
+    SpawnFailed,
 }
 
 #[cfg(test)]
@@ -1109,6 +1128,10 @@ mod tests {
                 plugin_id: "hello".to_owned(),
                 name: "hello.said".to_owned(),
                 payload: r#"{"greeting":"hello"}"#.to_owned(),
+            },
+            Event::TerminalExited {
+                session_id: 3,
+                exit_code: 0,
             },
         ]
     }
