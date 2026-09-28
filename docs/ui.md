@@ -1,8 +1,9 @@
 # The WinUI 3 shell
 
 `CabinetOS.exe` is the window: design views A (the main workspace), B (the
-command palette), D (the context menu) and E (the file operations flyout)
-of [design/README.md](design/README.md). It draws pixels and captures
+command palette), C (the marketplace and the permissions review), D (the
+context menu and the editor tabs) and E (the file operations flyout) of
+[design/README.md](design/README.md). It draws pixels and captures
 keystrokes, and nothing else (brief §1, the Dumb UI Rule). It starts its
 own `cabinetos-core.exe`, asks it for every listing, setting, command and
 file operation, and reads directory listings straight from the core's
@@ -32,8 +33,8 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper and the theme picker's model, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
-| `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, the editor tabs of Tool Extensions, the plugin list and review, the theme applier (brushes, WinUI's accent, the tinted Mica backdrop) and the theme picker, and `Assets/xterm` (the terminal page and xterm.js). |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper and the theme picker's model, the marketplace view's model and card texts, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
+| `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, the editor tabs of Tool Extensions, the plugin list and review, the theme applier (brushes, WinUI's accent, the tinted Mica backdrop) and the theme picker, the marketplace view, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
 Shared settings: `ui/Directory.Build.props` (target
@@ -67,9 +68,11 @@ memory; 200 files copied through `TransferCenter` with one conflict
 answered Skip, which must end `completed` with that file untouched; a
 folder made and renamed; the type names and icon keys of a listing's rows,
 and the icon PNGs at every offered size; a `cmd` session whose echo
-comes back through the terminal's byte pump; and the theme picker choosing
+comes back through the terminal's byte pump; the theme picker choosing
 Nord, whose `theme_changed` the mapper turns into Nord's accent and Mica
-tint. They run when
+tint; and the marketplace model over the local index of
+`sdk/marketplace/build-index.ps1` (read, search, install Hello with its
+review's grant until it is active, uninstall). They run when
 `CABINETOS_CORE_EXE` is set or the core is built in `core/target`, and
 skip themselves otherwise (as in the CI job `ui`, which builds no core).
 
@@ -82,6 +85,7 @@ skip themselves otherwise (as in the CI job `ui`, which builds no core).
 | `CABINETOS_LOG` | The level filter, in the core's syntax: `debug`, or `info,cabinetos_ui::pipe=trace` |
 | `CABINETOS_CONFIG` | Not read by the UI; the core it starts inherits it and uses that `cabinetos.json` |
 | `CABINETOS_THEMES_DIR` | Not read by the UI; the core it starts inherits it and reads the themes there ([themes.md](themes.md)) |
+| `CABINETOS_PLUGINS_DIR`, `CABINETOS_MARKETPLACE_DIR` | Not read by the UI, except the plugins folder for the empty plugin list's hint; the core it starts inherits them and installs there ([marketplace.md](marketplace.md), "Folders"). Set both to a scratch folder to try installs without touching `%LOCALAPPDATA%\CabinetOS` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` for a light theme) with the theme's Mica tint over it. |
 | `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
@@ -94,7 +98,7 @@ a background thread with a bounded, lock-free queue; it keeps 14 daily
 files, as the core does. Targets are `cabinetos_ui::<area>`: `app`,
 `session`, `launcher`, `pipe`, `commands`, `keys`, `pane`, `palette`,
 `jobs`, `settings`, `shell`, `frames`, `xaml`, `icons`, `terminal`,
-`webview`, `theme`, `snapshot`. The UI thread is named `ui`.
+`webview`, `theme`, `market`, `snapshot`. The UI thread is named `ui`.
 
 Every request the UI sends is logged under its request ID (`request sent`,
 then `reply received` or `request failed`). A command started by a key or a
@@ -538,9 +542,12 @@ for, and says what they do (Constitution Article 8).
   what you allow here.", one row per capability (level dot, name, LEVEL,
   reason, and the folders for `fs:read` and `fs:write`), the box "Trust
   {author} for future updates", disabled with the tooltip "Publisher
-  identities come with the marketplace.", and Cancel / "Allow and
-  install". Allow sends `grant_capabilities` with what the core says is
-  missing; the core writes it to `cabinetos.json` and starts the plugin.
+  identities come in a later version; until then every update is
+  reviewed.", and Cancel / "Allow and install". Allow sends
+  `grant_capabilities` with what the core says is missing; the core writes
+  it to `cabinetos.json` and starts the plugin. Opened from the
+  marketplace, the same dialog shows what the index lists, and Allow
+  installs first ("The marketplace", below).
   Cancel, Esc and the scrim close the dialog. The keyboard starts on
   Cancel, so Enter does not grant by accident. A refusal (for example a
   `cabinetos.json` with an error) shows in red in the dialog.
@@ -831,14 +838,126 @@ What a theme does not change:
   opens again.
 - Tool Extension pages get light or dark only. The tool messages have no
   theme colours yet ([tool-extensions.md](tool-extensions.md)).
-- Menus and tooltips have not been checked under a light theme, because
-  none ships. Dialogs take the window's light or dark when they open.
+- No light theme ships. A light one from a scratch index turned the
+  window, WinUI's own controls, the marketplace and the picker light at
+  once (2026-09-28). Menus and tooltips were not opened under it. Dialogs
+  take the window's light or dark when they open.
+
+## The marketplace
+
+The marketplace view (design view C) lists the extensions of the index the
+core reads, and installs and removes them through the core.
+[marketplace.md](marketplace.md) has the index format, the folders and the
+trust rules (Constitution Articles 2, 8 and 10). The core does every
+download, hash check and file operation; the view only asks and follows
+the core's events.
+
+- **Opening.** "Marketplace: Browse Plugins and Themes"
+  (`marketplace.browse`, Ctrl+Shift+X) or the command bar's store button
+  puts the view in place of the main column. The sidebar and the status
+  bar stay, and the button turns to the accent colour. The same keys or
+  button close the view.
+- **Reading the index.** The first look asks the core to read it
+  (`marketplace_refresh`); the Refresh button asks again. When
+  `marketplace.index` changes in `cabinetos.json`, the next look reads the
+  new index, or at once while the view is shown. The core goes to the
+  network only for these requests (trust rule 6).
+- **The nav** (180 px): Discover (everything), Plugins (Core Plugins and
+  Tool Extensions, since both add function; the chip on each card tells
+  them apart), Themes, and Installed (items of the index that are
+  installed, whoever installed them), each with its count.
+- **Search.** The field ("Search plugins and themes") sends
+  `marketplace_search` once typing pauses for 150 ms. Only the newest
+  text's hits show, best first, narrowed by the tab. The caption says
+  "{n} results · WebAssembly, sandboxed". An empty field shows the whole
+  index again without asking the core.
+- **Cards** (the design's grid: as many 230 px columns as fit, sharing the
+  width, 10 px apart): the 40 px tile, the name with the verified check
+  when the index says so, the author, two lines of description, the star
+  rating and its count (or "No ratings"), the installs when the index
+  knows them, and the kind chip ("WASM plugin", "Theme", "Tool"). The top
+  right corner says "Installing 45%", "Installed" or "Applied". The tile
+  shows the first letters of the name on a colour: a theme's own accent,
+  else a colour taken from the ID. When the index lists several versions
+  of one ID, the card shows the newest.
+- **The detail column** (340 px, slides in over 180 ms) of the selected
+  card: the 52 px tile, the name, "author · v{version}", the primary
+  button, Source, Uninstall when installed, three tiles (rating, installs,
+  download size), the long description, and for a plugin "Requested
+  capabilities" with level dots and reasons (the core adds the levels). ×
+  or Esc closes it.
+- **The primary button** says "Install", or "Install and apply" for a
+  theme. While installing it says "Installing…", and a 2 px bar under the
+  words follows `install_progress`. Installed, it says "Installed", or
+  "Applied" for the theme in effect, and is disabled.
+- **Installing a plugin.** The review dialog of "Plugins" opens first,
+  with what the index says the plugin asks for. Nothing is downloaded
+  before "Allow and install" (trust rule 1). Allow closes the dialog and
+  sends `install_extension`. Once the core answers `ok`,
+  `grant_capabilities` grants exactly those capabilities, so the core
+  starts the plugin, and the status bar says "Hello is active.". The core
+  installs every plugin waiting for review; this review counts as that
+  review, so no second one opens. A plugin that asks for nothing installs
+  without a review. Cancel or Esc installs nothing.
+- **Installing a theme** installs it and makes it the theme in effect
+  (`set_value ui.theme`); `theme_changed` then repaints the window.
+- **Installing a tool.** The window reads its tools again at
+  `tools_changed`, so the new tool opens files at once. An editor whose
+  tool was removed closes.
+- **Failures** show in red under the buttons and in the status bar, in the
+  core's words: a download whose SHA-256 is not the index's, a CabinetOS
+  that is too old, or something already there that the marketplace did not
+  install.
+- **Uninstall** asks first ("Uninstall Hello?", with Cancel as the default
+  button), then sends `uninstall_extension`. The theme in effect cannot be
+  removed; its button is disabled and its tooltip says why. An extension
+  the marketplace did not install (a shipped theme, a plugin copied by
+  hand) is refused by the core, and the view says so.
+- **Source** opens the author's web page in the default browser with
+  `Launcher.LaunchUriAsync`. It is the one call the view makes outside the
+  core (a launch, not file I/O). Only an `http` or `https` address is
+  opened, never a file or another scheme from an index. Without one, the
+  button is disabled.
+- **Empty and error states** say what happened and what to do:
+  - "No marketplace index is set.", with the key `marketplace.index`;
+  - "The marketplace index is not published yet.", for the placeholder
+    address (a host ending in `.invalid`), with a hint to build a local
+    index with `sdk/marketplace/build-index.ps1`;
+  - "Cannot read the marketplace index.", with the core's reason;
+  - "This core has no marketplace yet.", for a core before protocol 10;
+  - "Nothing from this index is installed." and "No results for …".
+- **Keys.** The keyboard starts in the search field; Tab reaches the tabs
+  and the cards, and Enter or Space selects one. Esc closes the detail
+  column, then the view. A command that works on the panes (a sidebar
+  folder, `go.*`, `pane.*`, `file.*`, `edit.*`, `search.*`, `terminal.*`,
+  `editor.*`, Ctrl+`, Ctrl+Shift+D) closes the view first, so that what it
+  does can be seen.
+- **Logs.** Target `cabinetos_ui::market`: "marketplace shown",
+  "marketplace index read" with the source and the number of items,
+  "marketplace index not read" with the reason, "plugin installed and
+  granted", "source page opened".
+
+Checked on 2026-09-28 (release builds, locked screen) with the local index
+of `build-index.ps1` and one light theme added to it for the check. The
+grid listed the 6 fixture plugins and 5 themes; the 4 shipped themes showed
+as installed, Default as applied. Hello's review listed `cmd:register` and
+`events:emit`; "Allow and install" installed and granted it, and the status
+bar said "Hello is active.". "Install and apply" of the light theme turned
+the window light at once. The default placeholder index showed "not
+published yet". Esc closed the detail column, then the view, and `go.toPath`
+closed the view and went to the folder. An end-to-end test does the same
+against the real core without a window: it builds the local index, reads
+and searches it, installs Hello with its review's grant, waits until the
+plugin is active, and uninstalls it.
 
 ## Not in this version
 
 | What | Why |
 |---|---|
-| The marketplace button | Disabled; Phase 9 |
+| Publisher identities, "Trust {author}", rating an extension, update checks | Not in Phase 9 ([marketplace.md](marketplace.md), "Not yet") |
+| Telling what the marketplace installed | The view counts as installed what `list_plugins`, `list_themes` and `list_tools` list; no request says which of them the marketplace installed, so Uninstall of a shipped theme is offered and the core refuses it |
+| A newer version of an installed extension | The card says "Installed" whatever its version |
+| A virtualized card grid | Every card of the tab is made; fine for an index of hundreds |
 | Tools in the Tool Dock, and tools opened without a file | The dock holds the terminal; tools open as editor tabs ([tool-extensions.md](tool-extensions.md), "Not yet") |
 | Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
 | Saving the dock's dragged size | No setting for it yet |

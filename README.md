@@ -53,8 +53,10 @@ unlocked screen.
 | [docs/plugins.md](docs/plugins.md) | Core Plugins: manifest, capabilities, sandbox, limits, crashes. |
 | [docs/indexer.md](docs/indexer.md) | The indexer: how volumes are indexed and kept current, the read-only pipe, the service, search without it. |
 | [docs/terminal.md](docs/terminal.md) | The integrated terminal: profiles, the byte pipe of each session, following the active pane, closing, the `term` CLI. |
-| [docs/ui.md](docs/ui.md) | The WinUI 3 shell: the solution, running and debugging, the core launcher, listings in shared memory, keys and the command router, the palette, file operations, search, plugins, the terminal, Tool Extensions, what is not built yet. |
+| [docs/ui.md](docs/ui.md) | The WinUI 3 shell: the solution, running and debugging, the core launcher, listings in shared memory, keys and the command router, the palette, file operations, search, plugins, the terminal, Tool Extensions, themes, the marketplace view, what is not built yet. |
 | [docs/tool-extensions.md](docs/tool-extensions.md) | Tool Extensions: `tool.json`, where tools live, the page's rules, the messages between the window and a tool, Markdown Preview. |
+| [docs/themes.md](docs/themes.md) | Colour themes: the JSON format, the shipped themes, the themes folder, live editing. |
+| [docs/marketplace.md](docs/marketplace.md) | The marketplace: the index format, where installs go, the trust rules, a local index for testing. |
 | [docs/log/](docs/log/2026-09-28/README.md) | The build log: one report per phase, with every decision and its undo. |
 
 ## Layout

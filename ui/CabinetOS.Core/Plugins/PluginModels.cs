@@ -127,7 +127,7 @@ public sealed class PermissionReview(PluginInfo plugin)
     public const string Sandbox = "This plugin runs in a WebAssembly sandbox. It can only do what you allow here.";
 
     /// <summary>Why "Trust …" cannot be ticked yet.</summary>
-    public const string TrustNotYet = "Publisher identities come with the marketplace.";
+    public const string TrustNotYet = "Publisher identities come in a later version; until then every update is reviewed.";
 
     /// <summary>The plugin under review.</summary>
     public PluginInfo Plugin { get; } = plugin;
