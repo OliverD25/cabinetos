@@ -86,11 +86,30 @@ impl Rejection {
     }
 }
 
-/// Parses and checks the text of a configuration file.
+/// Parses and checks the text of a configuration file. A byte-order mark at
+/// the start, which Notepad and others may write, is ignored.
 pub fn parse(text: &str) -> Result<Config, ConfigError> {
+    let text = without_byte_order_mark(text);
     let config: Config = serde_json::from_str(text).map_err(|error| serde_error(text, &error))?;
     check(text, &config)?;
     Ok(config)
+}
+
+/// Parses the text like [`parse`], then runs the caller's checks on the
+/// result, such as keybinding conflicts. A refusal that names a
+/// `keybindings` entry points at that entry's line.
+pub fn parse_checked(
+    text: &str,
+    validate: impl FnOnce(&Config) -> Result<(), Rejection>,
+) -> Result<Config, ConfigError> {
+    let text = without_byte_order_mark(text);
+    let config = parse(text)?;
+    validate(&config).map_err(|rejection| rejection.into_error(text))?;
+    Ok(config)
+}
+
+fn without_byte_order_mark(text: &str) -> &str {
+    text.strip_prefix('\u{feff}').unwrap_or(text)
 }
 
 /// The checks that go beyond the shape of the file.
@@ -251,5 +270,21 @@ mod tests {
         .into_error(text);
         assert_eq!((error.line, error.column), (Some(4), Some(5)));
         assert_eq!(error.to_string(), "line 4, column 5: conflict");
+    }
+
+    #[test]
+    fn parse_checked_runs_the_callers_check_and_ignores_a_byte_order_mark() {
+        let text =
+            "\u{feff}{\n  \"keybindings\": [\n    {\"command\": \"a\", \"keys\": \"f1\"}\n  ]\n}";
+        let error = parse_checked(text, |config| {
+            assert_eq!(config.keybindings.len(), 1);
+            Err(Rejection {
+                keybinding: Some(0),
+                message: "no".to_owned(),
+            })
+        })
+        .unwrap_err();
+        assert_eq!((error.line, error.column), (Some(3), Some(5)));
+        assert!(parse_checked(text, |_| Ok(())).is_ok());
     }
 }

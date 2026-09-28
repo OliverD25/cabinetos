@@ -1,6 +1,7 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
-//! UI will), `volume`, `shutdown`; `copy` in a later phase.
+//! UI will), `volume`, `shutdown`, the configuration (`config`), the command
+//! registry (`commands`) and the keymap (`keys`); `copy` in a later phase.
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -13,6 +14,7 @@
 #![forbid(unsafe_code)]
 
 mod ls;
+mod settings;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -87,6 +89,72 @@ enum Command {
         /// Any path on the volume; it does not have to exist.
         path: String,
     },
+    /// Show or check the configuration file (cabinetos.json).
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+    /// List the commands, or rank them as the command palette does.
+    Commands {
+        #[command(subcommand)]
+        action: CommandsAction,
+    },
+    /// Show, change or follow the keybindings.
+    Keys {
+        #[command(subcommand)]
+        action: KeysAction,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum ConfigAction {
+    /// Print the path of the configuration file the core reads.
+    Path,
+    /// Print the settings in effect, defaults included.
+    Show,
+    /// Check a configuration file the way the core would, without a core.
+    /// Without FILE, checks the file a core would read by default.
+    Validate {
+        /// The file to check.
+        file: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum CommandsAction {
+    /// Print every command with its keys.
+    List {
+        /// Print the list as JSON, as the core sends it.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Rank the commands against QUERY, best first, as the palette does.
+    Search {
+        /// What the user would type into the palette.
+        query: String,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum KeysAction {
+    /// Print every binding in effect.
+    List,
+    /// Bind COMMAND to KEYS, for example: keys set view.toggleSidebar "ctrl+alt+b".
+    /// Empty KEYS ("") leave the command without keys. The core writes the
+    /// change into the configuration file.
+    Set {
+        /// The command's ID.
+        command: String,
+        /// One combination, or a chord of two separated by a space.
+        keys: String,
+    },
+    /// Give COMMAND its default keys back.
+    Reset {
+        /// The command's ID.
+        command: String,
+    },
+    /// Print configuration and keymap changes as they happen, until Ctrl+C.
+    Watch,
 }
 
 /// Sort keys on the command line.
@@ -144,6 +212,12 @@ fn main() -> ExitCode {
 }
 
 async fn execute(cli: &Cli) -> anyhow::Result<()> {
+    if let Command::Config {
+        action: ConfigAction::Validate { file },
+    } = &cli.command
+    {
+        return settings::config_validate(file.as_deref());
+    }
     let pipe = PipeName::new(&cli.pipe);
     let mut client = PipeClient::connect(&pipe, CONNECT_TIMEOUT)
         .await
@@ -211,6 +285,27 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
                 other => return Err(failure(path, &other)),
             }
         }
+        Command::Config { action } => match action {
+            ConfigAction::Path => settings::config_path(&mut client).await?,
+            ConfigAction::Show => settings::config_show(&mut client).await?,
+            ConfigAction::Validate { .. } => unreachable!("handled without a connection"),
+        },
+        Command::Commands { action } => match action {
+            CommandsAction::List { json } => settings::commands_list(&mut client, *json).await?,
+            CommandsAction::Search { query } => {
+                settings::commands_search(&mut client, query).await?;
+            }
+        },
+        Command::Keys { action } => match action {
+            KeysAction::List => settings::keys_list(&mut client).await?,
+            KeysAction::Set { command, keys } => {
+                settings::keys_change(&mut client, command, Some(keys)).await?;
+            }
+            KeysAction::Reset { command } => {
+                settings::keys_change(&mut client, command, None).await?;
+            }
+            KeysAction::Watch => settings::keys_watch(&mut client).await?,
+        },
     }
     Ok(())
 }
@@ -436,6 +531,83 @@ mod tests {
             Command::Volume {
                 path: r"H:\".to_owned()
             }
+        );
+    }
+
+    #[test]
+    fn parses_config_commands_and_keys() {
+        let parse = |args: &[&str]| {
+            let mut full = vec!["cabinetos-cli"];
+            full.extend_from_slice(args);
+            Cli::try_parse_from(full).map(|cli| cli.command)
+        };
+        assert_eq!(
+            parse(&["config", "path"]).unwrap(),
+            Command::Config {
+                action: ConfigAction::Path
+            }
+        );
+        assert_eq!(
+            parse(&["config", "validate", r"D:\c.json"]).unwrap(),
+            Command::Config {
+                action: ConfigAction::Validate {
+                    file: Some(PathBuf::from(r"D:\c.json"))
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["config", "validate"]).unwrap(),
+            Command::Config {
+                action: ConfigAction::Validate { file: None }
+            }
+        );
+        assert_eq!(
+            parse(&["commands", "list", "--json"]).unwrap(),
+            Command::Commands {
+                action: CommandsAction::List { json: true }
+            }
+        );
+        assert_eq!(
+            parse(&["commands", "search", "dual"]).unwrap(),
+            Command::Commands {
+                action: CommandsAction::Search {
+                    query: "dual".to_owned()
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["keys", "set", "view.toggleSidebar", "ctrl+k ctrl+b"]).unwrap(),
+            Command::Keys {
+                action: KeysAction::Set {
+                    command: "view.toggleSidebar".to_owned(),
+                    keys: "ctrl+k ctrl+b".to_owned()
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["keys", "set", "view.toggleSidebar", ""]).unwrap(),
+            Command::Keys {
+                action: KeysAction::Set {
+                    command: "view.toggleSidebar".to_owned(),
+                    keys: String::new()
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["keys", "reset", "view.toggleSidebar"]).unwrap(),
+            Command::Keys {
+                action: KeysAction::Reset {
+                    command: "view.toggleSidebar".to_owned()
+                }
+            }
+        );
+        assert!(
+            parse(&["keys", "set", "view.toggleSidebar"]).is_err(),
+            "keys are required"
+        );
+        assert!(
+            parse(&["commands", "search"]).is_err(),
+            "a query is required"
         );
     }
 

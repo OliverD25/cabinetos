@@ -10,6 +10,8 @@ publish.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+cabinetos-commands.workspace = true
+cabinetos-config.workspace = true
 cabinetos-diag.workspace = true
 cabinetos-fs.workspace = true
 cabinetos-ipc.workspace = true
@@ -18,6 +20,9 @@ clap.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "signal", "time"] }
 tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

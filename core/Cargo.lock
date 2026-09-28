@@ -111,12 +111,15 @@ name = "cabinetos-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cabinetos-commands",
+ "cabinetos-config",
  "cabinetos-diag",
  "cabinetos-fs",
  "cabinetos-ipc",
  "cabinetos-protocol",
  "clap",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]

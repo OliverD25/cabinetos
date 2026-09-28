@@ -34,7 +34,7 @@ pub use model::{
     Config, FORMAT_VERSION, KeybindingEntry, Keys, Layout, LogLevel, LoggingConfig, PanesConfig,
     SCHEMA_REFERENCE, SortConfig, TerminalConfig, TerminalProfile, UiConfig,
 };
-pub use parse::{ConfigError, Rejection, parse};
+pub use parse::{ConfigError, Rejection, parse, parse_checked};
 pub use store::{
     CONFIG_ENV, ConfigStore, FILE_NAME, Opened, Reload, SCHEMA_FILE_NAME, UpdateError,
     default_path, resolve_path,

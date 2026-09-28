@@ -11,7 +11,7 @@ use cabinetos_commands::KeySequence;
 use serde_json::Value;
 
 use crate::diff::changed_paths;
-use crate::parse::{ConfigError, Rejection, parse};
+use crate::parse::{ConfigError, Rejection, parse, parse_checked};
 use crate::{Config, KeybindingEntry, Keys, SCHEMA_JSON, SCHEMA_REFERENCE};
 
 /// Environment variable with the full path of the configuration file.
@@ -241,11 +241,7 @@ impl ConfigStore {
         validate: impl FnOnce(&Config) -> Result<(), Rejection>,
     ) -> Result<Vec<String>, ConfigError> {
         let hash = content_hash(bytes);
-        let candidate = text_of(bytes).and_then(|text| {
-            let candidate = parse(text)?;
-            validate(&candidate).map_err(|rejection| rejection.into_error(text))?;
-            Ok(candidate)
-        });
+        let candidate = text_of(bytes).and_then(|text| parse_checked(text, validate));
         match candidate {
             Ok(candidate) => {
                 let changed = changed_paths(&self.config, &candidate);
@@ -419,10 +415,8 @@ fn read(path: &Path) -> io::Result<Option<Vec<u8>>> {
 }
 
 fn text_of(bytes: &[u8]) -> Result<&str, ConfigError> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|error| ConfigError::general(format!("the file is not UTF-8 text: {error}")))?;
-    // Notepad and others may start the file with a byte-order mark.
-    Ok(text.strip_prefix('\u{feff}').unwrap_or(text))
+    std::str::from_utf8(bytes)
+        .map_err(|error| ConfigError::general(format!("the file is not UTF-8 text: {error}")))
 }
 
 fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
