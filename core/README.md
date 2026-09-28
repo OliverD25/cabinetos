@@ -155,6 +155,12 @@ cargo run -p cabinetos-cli -- --pipe demo ping --count 3
 cargo run -p cabinetos-cli -- --pipe demo ls C:\Windows\System32 --long
 cargo run -p cabinetos-cli -- --pipe demo ls C:\Users --watch
 cargo run -p cabinetos-cli -- --pipe demo volume C:\
+cargo run -p cabinetos-cli -- --pipe demo volumes
+cargo run -p cabinetos-cli -- --pipe demo config get ui.dualPane
+cargo run -p cabinetos-cli -- --pipe demo config set ui.dualPane false
+cargo run -p cabinetos-cli -- --pipe demo mkdir "D:\work\New folder"
+cargo run -p cabinetos-cli -- --pipe demo rename D:\work\draft.txt final.txt
+cargo run -p cabinetos-cli -- --pipe demo open D:\work\final.txt
 cargo run -p cabinetos-cli -- --pipe demo keys list
 cargo run -p cabinetos-cli -- --pipe demo keys set view.toggleSidebar "ctrl+alt+b"
 cargo run -p cabinetos-cli -- --pipe demo keys watch
@@ -182,7 +188,7 @@ terminal first (Run as administrator), in `core/`:
 cargo run --release -p cabinetos-indexer -- --console --volumes C
 ```
 
-- `ping` prints `pong id=<ulid> protocol=7 core=<version> rtt=<ms>ms`.
+- `ping` prints `pong id=<ulid> protocol=8 core=<version> rtt=<ms>ms`.
 - `ls <path>` lists a directory the way the UI will: the core reads it into
   shared memory, the CLI maps the section and prints it. Options: `--long`
   (attributes, local modification time, size), `--hidden` (hidden and system
@@ -190,10 +196,18 @@ cargo run --release -p cabinetos-indexer -- --console --volumes C
   (print a line for each refresh until Ctrl+C). The last two lines are the
   core's time to read, sort and write the listing, and the CLI's time to map
   and decode it.
-- `volume <path>` prints which volume and physical disk the path is on.
+- `volume <path>` prints which volume and physical disk the path is on;
+  `volumes` prints every drive letter's volume as a table, with each
+  disk's bus and media type.
 - `config path` and `config show` print the configuration file the core
-  reads and the settings in effect; `config validate [file]` checks a file
-  without a core.
+  reads and the settings in effect; `config get <path>` prints one setting
+  and `config set <path> <value>` changes one (the value is JSON, or a
+  bare word as text; the core writes the file); `config validate [file]`
+  checks a file without a core.
+- `mkdir <path>` creates a folder, `rename <path> <new name>` renames a
+  file or folder in place (never replacing anything), and `open <path>`
+  opens a file or folder with its default application, as a double-click
+  in Explorer does.
 - `commands list [--json]` prints every command with its keys, and
   `commands search <query>` ranks them as the palette does.
 - `keys list` prints the keymap; `keys set <command> "<keys>"` and
