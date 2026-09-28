@@ -35,7 +35,11 @@ file itself shows everything that can be set:
     "sidebar": true,
     "theme": "default",
     "lastPaths": [],
-    "pinned": []
+    "pinned": [],
+    "dockSize": {
+      "bottom": null,
+      "right": null
+    }
   },
   "panes": {
     "showHidden": false,
@@ -92,6 +96,8 @@ while you type.
 | `ui.theme` | text | `default` | The colour theme's ID: `<id>.json` in the themes folder ([themes.md](themes.md)). `set_value` refuses a theme with no valid file; a hand edit that names one keeps the theme in effect and reports it with `config_error` |
 | `ui.lastPaths` | list of folder paths | empty | The folders the panes showed last, left pane first; the UI opens them again at the next start. Empty: the UI picks. |
 | `ui.pinned` | list of folder paths | empty | Folders the user pinned to the sidebar, in the sidebar's order |
+| `ui.dockSize.bottom` | pixels, or `null` | `null` | The Tool Dock's height under the panes, as the user last dragged it; `null` gives the design's size. The window keeps it within the design's limits. |
+| `ui.dockSize.right` | pixels, or `null` | `null` | The Tool Dock's width beside the panes, the same way |
 | `panes.showHidden` | `true`, `false` | `false` | Also list hidden and system entries |
 | `panes.sort.key` | `name`, `size`, `modified`, `kind` | `name` | The order of a listing ([ipc.md](ipc.md), "Listing a directory"); directories always come first |
 | `panes.sort.descending` | `true`, `false` | `false` | Reverse the order |

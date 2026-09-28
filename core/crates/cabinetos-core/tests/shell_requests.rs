@@ -304,6 +304,23 @@ async fn set_value_writes_one_setting_and_tells_every_client() {
         get_value(&mut client, "ui.lastPaths").await,
         Response::Value { value: folders }
     );
+
+    // A dragged dock size, one level deeper, survives in the file.
+    assert_eq!(
+        get_value(&mut client, "ui.dockSize").await,
+        Response::Value {
+            value: json!({"bottom": null, "right": null})
+        }
+    );
+    assert_eq!(
+        set_value(&mut client, "ui.dockSize.bottom", json!(320)).await,
+        Response::Ok
+    );
+    assert_eq!(config_changed(&mut events).await, ["ui.dockSize.bottom"]);
+    assert_eq!(
+        read_config(&core)["ui"]["dockSize"],
+        json!({"bottom": 320, "right": null})
+    );
     // The same value again changes nothing and says nothing.
     assert_eq!(
         set_value(&mut client, "ui.dualPane", json!(false)).await,

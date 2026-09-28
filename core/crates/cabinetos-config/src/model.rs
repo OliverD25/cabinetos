@@ -99,6 +99,21 @@ pub struct UiConfig {
     pub last_paths: Vec<String>,
     /// Folders the user pinned to the sidebar, in the sidebar's order.
     pub pinned: Vec<String>,
+    /// The Tool Dock's size as the user last dragged it, so it survives a
+    /// restart.
+    pub dock_size: DockSize,
+}
+
+/// The Tool Dock's size, in pixels, for each place it can sit. `null`: the
+/// design's size, within the design's limits.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default)]
+pub struct DockSize {
+    /// Its height when it sits under the panes.
+    pub bottom: Option<u32>,
+    /// Its width when it sits beside the panes.
+    pub right: Option<u32>,
 }
 
 impl Default for UiConfig {
@@ -110,6 +125,7 @@ impl Default for UiConfig {
             theme: "default".to_owned(),
             last_paths: Vec::new(),
             pinned: Vec::new(),
+            dock_size: DockSize::default(),
         }
     }
 }
@@ -358,6 +374,11 @@ mod tests {
         assert!(config.ui.dual_pane && config.ui.sidebar);
         assert_eq!(config.ui.theme, "default");
         assert!(config.ui.last_paths.is_empty() && config.ui.pinned.is_empty());
+        assert_eq!(config.ui.dock_size, DockSize::default());
+        assert_eq!(
+            (config.ui.dock_size.bottom, config.ui.dock_size.right),
+            (None, None)
+        );
         assert!(!config.panes.show_hidden);
         assert_eq!(SortSpec::from(config.panes.sort), SortSpec::default());
         assert_eq!(config.terminal.default_profile, "pwsh");
@@ -405,6 +426,16 @@ mod tests {
         assert!(positions.is_sorted(), "{text}");
         assert!(text.contains("\"dualPane\":true"));
         assert!(text.contains("\"lastPaths\":[],\"pinned\":[]"));
+        assert!(text.contains("\"dockSize\":{\"bottom\":null,\"right\":null}"));
+        let dragged: UiConfig = serde_json::from_str(r#"{"dockSize": {"bottom": 320}}"#).unwrap();
+        assert_eq!(
+            dragged.dock_size,
+            DockSize {
+                bottom: Some(320),
+                right: None
+            }
+        );
+        assert!(serde_json::from_str::<UiConfig>(r#"{"dockSize": {"left": 1}}"#).is_err());
         assert!(text.contains("\"showHidden\":false"));
         assert!(text.contains("\"defaultProfile\":\"pwsh\""));
         assert!(text.contains("\"allowInsecure\":false"));

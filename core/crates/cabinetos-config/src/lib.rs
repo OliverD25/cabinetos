@@ -31,9 +31,9 @@ mod watch;
 
 pub use diff::changed_paths;
 pub use model::{
-    Config, DEFAULT_MARKETPLACE_INDEX, FORMAT_VERSION, KeybindingEntry, Keys, Layout, LogLevel,
-    LoggingConfig, MarketplaceConfig, PanesConfig, PluginSettings, SCHEMA_REFERENCE, SortConfig,
-    TerminalConfig, TerminalProfile, UiConfig,
+    Config, DEFAULT_MARKETPLACE_INDEX, DockSize, FORMAT_VERSION, KeybindingEntry, Keys, Layout,
+    LogLevel, LoggingConfig, MarketplaceConfig, PanesConfig, PluginSettings, SCHEMA_REFERENCE,
+    SortConfig, TerminalConfig, TerminalProfile, UiConfig,
 };
 pub use parse::{ConfigError, Rejection, parse, parse_checked};
 pub use store::{

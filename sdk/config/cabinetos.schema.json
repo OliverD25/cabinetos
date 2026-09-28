@@ -83,6 +83,10 @@
       "description": "The window.",
       "$ref": "#/$defs/UiConfig",
       "default": {
+        "dockSize": {
+          "bottom": null,
+          "right": null
+        },
         "dualPane": true,
         "lastPaths": [],
         "layout": "classic",
@@ -101,6 +105,33 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "DockSize": {
+      "description": "The Tool Dock's size, in pixels, for each place it can sit. `null`: the\ndesign's size, within the design's limits.",
+      "type": "object",
+      "properties": {
+        "bottom": {
+          "description": "Its height when it sits under the panes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "right": {
+          "description": "Its width when it sits beside the panes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
     "KeybindingEntry": {
       "description": "One change to a key binding.",
       "type": "object",
@@ -361,6 +392,14 @@
       "description": "The window.",
       "type": "object",
       "properties": {
+        "dockSize": {
+          "description": "The Tool Dock's size as the user last dragged it, so it survives a\nrestart.",
+          "$ref": "#/$defs/DockSize",
+          "default": {
+            "bottom": null,
+            "right": null
+          }
+        },
         "dualPane": {
           "description": "Two file panes side by side, or one.",
           "type": "boolean",
