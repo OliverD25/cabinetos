@@ -376,7 +376,7 @@
       ]
     },
     {
-      "description": "Runs a command. The core answers `command_result` for commands it\nruns itself and `command_routed` for commands the UI runs.",
+      "description": "Runs a command. The core answers `command_result` for the commands\nit runs (a plugin's) and `command_routed` for commands the UI runs.",
       "type": "object",
       "properties": {
         "args": {
@@ -384,7 +384,7 @@
           "default": null
         },
         "command": {
-          "description": "The command's ID, for example `help.about`. (Named `command`,\nnot `id`: `id` is the request's own ID in the same object.)",
+          "description": "The command's ID, for example `view.toggleSidebar`. (Named\n`command`, not `id`: `id` is the request's own ID in the same\nobject.)",
           "type": "string"
         },
         "type": {

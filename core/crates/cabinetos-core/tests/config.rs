@@ -490,18 +490,25 @@ async fn commands_are_listed_searched_and_run() {
     assert_eq!(hits[0].id, "view.toggleDualPane");
     assert!(hits.len() <= 5);
 
-    match ask(&mut client, execute("help.about")).await {
-        Response::CommandResult { result } => {
-            assert_eq!(result["core_version"], env!("CARGO_PKG_VERSION"));
-        }
-        other => panic!("expected command_result, got {other:?}"),
-    }
+    // About is the window's view: the versions come from `welcome` and the
+    // file's path from `get_config`.
+    let about = commands
+        .iter()
+        .find(|command| command.id == "help.about")
+        .unwrap();
     assert_eq!(
-        ask(&mut client, execute("view.toggleSidebar")).await,
-        Response::CommandRouted {
-            target: CommandTarget::Ui
-        }
+        (about.title.as_str(), about.target, about.keys.is_empty()),
+        ("About CabinetOS", CommandTarget::Ui, true)
     );
+    for command in ["help.about", "view.toggleSidebar"] {
+        assert_eq!(
+            ask(&mut client, execute(command)).await,
+            Response::CommandRouted {
+                target: CommandTarget::Ui
+            },
+            "{command}"
+        );
+    }
     // The shell starts the file jobs itself, so these are its commands too.
     for command in [
         "file.newFolder",

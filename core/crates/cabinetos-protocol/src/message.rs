@@ -162,11 +162,12 @@ pub enum Request {
         #[serde(default = "default_search_limit")]
         limit: u32,
     },
-    /// Runs a command. The core answers `command_result` for commands it
-    /// runs itself and `command_routed` for commands the UI runs.
+    /// Runs a command. The core answers `command_result` for the commands
+    /// it runs (a plugin's) and `command_routed` for commands the UI runs.
     ExecuteCommand {
-        /// The command's ID, for example `help.about`. (Named `command`,
-        /// not `id`: `id` is the request's own ID in the same object.)
+        /// The command's ID, for example `view.toggleSidebar`. (Named
+        /// `command`, not `id`: `id` is the request's own ID in the same
+        /// object.)
         command: String,
         /// Arguments, if the command takes any.
         #[serde(default)]

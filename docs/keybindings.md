@@ -81,7 +81,7 @@ The core's commands, in palette order:
 | `terminal.show` | Terminal: Show Terminal | | | UI |
 | `terminal.close` | Terminal: Close Terminal | | | UI |
 | `terminal.reload` | Terminal: Reload Terminal | | | UI |
-| `help.about` | Help: About CabinetOS | | | core |
+| `help.about` | Help: About CabinetOS | | | UI |
 
 - The list is the design's `COMMANDS` array without its plugin commands
   (hex view, Git, compression), and the shell's own commands: moving
@@ -106,11 +106,14 @@ The core's commands, in palette order:
   (`file.rename`), in the open palette it records new keys for the chosen
   command (`keys.rebind`). Two commands may share keys only this way
   ("Contexts" below).
-- Every command but `help.about` runs in the UI. The core runs `help.about`
-  and the plugins' commands; asking it to run a UI command
-  (`execute_command`) returns `command_routed`, and the core does nothing.
-  The file commands are the shell's too: it starts their jobs itself
-  (`start_job`) and makes a folder with `create_directory`.
+- Every command here runs in the UI. The core runs only the plugins'
+  commands; asking it to run a UI command (`execute_command`) returns
+  `command_routed`, and the core does nothing. The file commands are the
+  shell's too: it starts their jobs itself (`start_job`) and makes a folder
+  with `create_directory`. `help.about` is the window's About view, which
+  takes the versions from `welcome` and the configuration file's path
+  from `get_config`; until 2026-09-29 the core answered it with those
+  values.
 
 ## Writing keys
 

@@ -92,7 +92,9 @@ per extension, with `installedVersion`; each theme's `mica` in `themes`;
 and the theme kind `system` (follow Windows' light or dark mode), which
 the shipped `default` theme now has; and `tools_changed` sent again to a
 client that fell behind on events. Later, still version 11:
-`installed_version` in `install_finished`.
+`installed_version` in `install_finished`; and `help.about` became a
+command of the UI (its About view), so the core answers it with
+`command_routed` instead of a `command_result` with its versions.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -578,16 +580,16 @@ ranking is in keybindings.md, "Palette search". `score` only orders the
 hits.
 
 ```json
-{"id":"01M…","type":"execute_command","command":"help.about"}
-{"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
- "core_version":"0.1.0","protocol_version":11,"config_path":"C:\\…\\cabinetos.json"}}
+{"id":"01M…","type":"execute_command","command":"hello.say"}
+{"id":"01M…","type":"command_result","result":{"message":"hello from Hello"}}
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
 
 The field is `command`, not `id`, because `id` is already the request's own
-ID in the same object. The core runs its own commands (`target` `core`) and
-answers `command_result`; a UI command comes back as `command_routed`, for
+ID in the same object. The core runs a plugin's command and answers
+`command_result` with what the plugin returned; a UI command, which every
+command of the core's own registry is, comes back as `command_routed`, for
 the UI to run.
 
 ```json

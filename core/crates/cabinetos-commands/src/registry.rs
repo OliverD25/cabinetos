@@ -63,7 +63,6 @@ const fn seed(
 }
 
 const UI: CommandTarget = CommandTarget::Ui;
-const CORE: CommandTarget = CommandTarget::Core;
 const FILES: Option<&str> = Some("filesView");
 const PALETTE: Option<&str> = Some("paletteOpen");
 
@@ -72,9 +71,9 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// the shell's own navigation, file, edit and search commands, the window's
 /// own commands (the sidebar's pins, the editor tabs, the transfer panel,
 /// the plugin list, the terminal tabs), then the palette, overlays and
-/// About. Every one of them runs in the UI except `help.about`: the shell
-/// starts the file jobs itself (`start_job`) and makes a folder with
-/// `create_directory`.
+/// About. Every one of them runs in the UI: the shell starts the file jobs
+/// itself (`start_job`), makes a folder with `create_directory`, and shows
+/// About with the versions from `welcome`.
 const SEED: [Seed; 51] = [
     seed(
         "palette.show",
@@ -289,7 +288,7 @@ const SEED: [Seed; 51] = [
         UI,
         None,
     ),
-    seed("help.about", "Help", "About CabinetOS", "", CORE, None),
+    seed("help.about", "Help", "About CabinetOS", "", UI, None),
 ];
 
 /// Every command, in a stable order.
@@ -462,6 +461,7 @@ mod tests {
             "conflict.resolve",
             "sidebar.pin",
             "sidebar.unpin",
+            "help.about",
         ] {
             let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
             assert_eq!(command.target, CommandTarget::Ui, "{id}");
@@ -475,14 +475,15 @@ mod tests {
                 .map(|command| command.title.as_str()),
             Some("Show Plugins")
         );
-        // The core runs only About; the file jobs are started by the shell.
+        // The core runs none of them: the file jobs are started by the
+        // shell, and About is the shell's view.
         let core: Vec<&str> = registry
             .commands()
             .iter()
             .filter(|command| command.target == CommandTarget::Core)
             .map(|command| command.id.as_str())
             .collect();
-        assert_eq!(core, ["help.about"]);
+        assert!(core.is_empty(), "{core:?}");
     }
 
     #[test]

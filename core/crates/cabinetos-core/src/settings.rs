@@ -25,13 +25,10 @@ use cabinetos_config::{
     Reload, UpdateError, WatchEvent,
 };
 use cabinetos_plugins::PluginCommand;
-use cabinetos_protocol::{
-    CommandSource, CommandTarget, ErrorCode, Event, PROTOCOL_VERSION, Response,
-};
-use serde_json::{Value, json};
+use cabinetos_protocol::{CommandSource, CommandTarget, ErrorCode, Event, Response};
+use serde_json::Value;
 use tokio::sync::watch;
 
-use crate::CORE_VERSION;
 use crate::events::EventHub;
 
 /// The settings in effect.
@@ -230,27 +227,19 @@ impl Settings {
     }
 
     /// The reply to `execute_command` for a command that is not a plugin's
-    /// (the connection sends those to the plugin host): the core runs its
-    /// own commands and hands the UI's back. Of the registry's commands only
-    /// `help.about` runs here; the shell runs the others, the file jobs too
-    /// (it starts them with `start_job`).
+    /// (the connection sends those to the plugin host): the UI's commands
+    /// are handed back. Every command of the registry is the shell's, the
+    /// file jobs and About too (the shell starts jobs with `start_job` and
+    /// shows About from `welcome` and `get_config`).
     pub(crate) fn execute(&self, command: &str) -> Response {
         let Some(target) = self.registry().get(command).map(|found| found.target) else {
             return unknown_command(command);
         };
-        match (target, command) {
-            (CommandTarget::Ui, _) => Response::CommandRouted {
+        match target {
+            CommandTarget::Ui => Response::CommandRouted {
                 target: CommandTarget::Ui,
             },
-            (CommandTarget::Core, "help.about") => Response::CommandResult {
-                result: json!({
-                    "name": "CabinetOS",
-                    "core_version": CORE_VERSION,
-                    "protocol_version": PROTOCOL_VERSION,
-                    "config_path": self.path.display().to_string(),
-                }),
-            },
-            (CommandTarget::Core, _) => error_reply(
+            CommandTarget::Core => error_reply(
                 ErrorCode::NotImplemented,
                 format!("{command} is not implemented yet; it arrives in a later phase"),
             ),
