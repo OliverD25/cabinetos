@@ -29,8 +29,10 @@ jobs:
   core:
     name: Rust core (fmt, clippy, test, release build, benches compile)
     runs-on: windows-latest
-    # A hung test must not burn hours of paid Windows minutes.
-    timeout-minutes: 30
+    # A hung test must not burn hours of paid Windows minutes. A run without
+    # the cache builds wasmtime twice (debug and release) and took 33 minutes
+    # on 2026-09-28; with the cache it is much shorter.
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
