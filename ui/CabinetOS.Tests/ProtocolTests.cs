@@ -255,6 +255,8 @@ public class ProtocolTests
                 b => Assert.Equal(new PluginCrashedEvent("crashy", "wasm trap: unreachable"), b)),
             ($$$"""{"id":"{{{Id}}}","type":"terminal_exited","session_id":3,"exit_code":0}""",
                 b => Assert.Equal(new TerminalExitedEvent(3, 0), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"volumes_changed","volumes":[{"drive_letter":"F","volume_guid_path":"\\\\?\\Volume{2}\\","filesystem":"exFAT","label":"STICK","total_bytes":64000000000,"free_bytes":1000,"disk":null}]}""",
+                b => Assert.Equal(("F", "STICK"), (((VolumesChangedEvent)b).Volumes.Single().DriveLetter, ((VolumesChangedEvent)b).Volumes.Single().Label))),
             ($$$"""{"id":"{{{Id}}}","type":"job_state_changed","job_id":7,"state":{"type":"completed_with_errors"}}""",
                 b =>
                 {

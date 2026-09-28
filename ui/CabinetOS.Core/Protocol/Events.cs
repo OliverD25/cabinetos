@@ -102,5 +102,8 @@ public sealed record PluginStateChangedEvent(string PluginId, JsonElement State)
 /// <summary>A plugin trapped; its commands are gone. Parsed only.</summary>
 public sealed record PluginCrashedEvent(string PluginId, string Message) : CoreEvent;
 
+/// <summary>A drive letter came or went; the list is what <c>list_volumes</c> would answer now.</summary>
+public sealed record VolumesChangedEvent(IReadOnlyList<VolumeDetails> Volumes) : CoreEvent;
+
 /// <summary>A terminal session's shell exited. Parsed only; the terminal pane comes later.</summary>
 public sealed record TerminalExitedEvent(ulong SessionId, uint ExitCode) : CoreEvent;

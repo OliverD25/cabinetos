@@ -61,6 +61,7 @@ public static class MessageCodec
         ["plugin_state_changed"] = ProtocolJson.Default.PluginStateChangedEvent,
         ["plugin_crashed"] = ProtocolJson.Default.PluginCrashedEvent,
         ["terminal_exited"] = ProtocolJson.Default.TerminalExitedEvent,
+        ["volumes_changed"] = ProtocolJson.Default.VolumesChangedEvent,
     }.ToFrozenDictionary();
 
     /// <summary>The request as UTF-8 JSON, <c>id</c> and <c>type</c> first.</summary>

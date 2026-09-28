@@ -568,6 +568,10 @@ public sealed partial class MainWindow : Window
             case KeymapChangedEvent keymap:
                 _keys.SetKeymap(Keymap.From(keymap.Keymap));
                 break;
+            case VolumesChangedEvent volumes:
+                // A USB stick or a mapped share came or went: the Drives section follows.
+                _sidebar.SetDrives(volumes.Volumes);
+                return;
             case JobProgressEvent or JobStateChangedEvent or JobConflictEvent:
                 _transfers.OnEvent(coreEvent);
                 OnJobEvent(coreEvent);

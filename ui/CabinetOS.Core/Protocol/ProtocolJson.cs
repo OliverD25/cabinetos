@@ -59,4 +59,5 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(PluginStateChangedEvent))]
 [JsonSerializable(typeof(PluginCrashedEvent))]
 [JsonSerializable(typeof(TerminalExitedEvent))]
+[JsonSerializable(typeof(VolumesChangedEvent))]
 internal sealed partial class ProtocolJson : JsonSerializerContext;
