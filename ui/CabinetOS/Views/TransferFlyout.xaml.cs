@@ -140,7 +140,7 @@ public sealed partial class TransferFlyout : UserControl
             ConflictSides.Visibility = Visibility.Collapsed;
         }
 
-        var options = ConflictText.Options(conflict.Kind);
+        var options = ConflictText.Options(conflict);
         ConflictButtons.Children.Clear();
         foreach (var option in options.Where(o => o != Resolution.CancelJobType))
         {

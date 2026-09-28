@@ -100,4 +100,21 @@ public class ConflictTests
         Assert.Equal("Delete permanently", ConflictText.Label(Resolution.DeletePermanentlyType));
         Assert.Equal("Cancel job", ConflictText.Label(Resolution.CancelJobType));
     }
+
+    [Fact]
+    public void A_path_too_long_for_the_recycle_bin_offers_to_delete_it_for_good()
+    {
+        // The core stops a delete to the Recycle Bin at a path of 260 characters or more (docs/jobs.md):
+        // the shell's own delete would make it final without asking. A delete has no destination.
+        var deep = @"C:\edge\long\" + string.Join('\\', Enumerable.Repeat("segment-of-a-long-path-0123456789", 9));
+        var bin = new JobConflictEvent(1, 7, new ConflictKind(ConflictKind.PathTooLong), deep, null);
+
+        Assert.Equal("has a path too long for the Recycle Bin", ConflictText.KindText(bin));
+        Assert.Equal(["delete_permanently", "skip", "retry"], ConflictText.Options(bin));
+
+        // In a copy or a move the destination refuses the length: nothing to delete.
+        var copy = bin with { Destination = @"D:\dst\" + ConflictText.Name(bin) };
+        Assert.Equal("the path is too long for the destination", ConflictText.KindText(copy));
+        Assert.Equal(["retry", "skip", "cancel_job"], ConflictText.Options(copy));
+    }
 }

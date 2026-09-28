@@ -20,6 +20,7 @@ public static class ConflictText
         ConflictKind.FileExists => "already exists",
         ConflictKind.AccessDenied => "access denied",
         ConflictKind.SharingViolation => "is open in another program",
+        ConflictKind.PathTooLong when IsRecycleBinDelete(conflict) => "has a path too long for the Recycle Bin",
         ConflictKind.PathTooLong => "the path is too long for the destination",
         ConflictKind.DiskFull => "the destination disk is full; the job is paused",
         ConflictKind.SourceVanished => "is gone",
@@ -41,6 +42,20 @@ public static class ConflictText
         }
         return (Side(kind.SourceSize, kind.SourceModified, nowLocal, culture), Side(kind.DestSize, kind.DestModified, nowLocal, culture));
     }
+
+    /// <summary>
+    /// The decisions the card offers for a conflict, in button order. A path
+    /// too long for the Recycle Bin is answered like a bin too small: the core
+    /// stops such a delete before the shell's own delete could make it final
+    /// without asking (docs/jobs.md, "The Recycle Bin and long paths").
+    /// </summary>
+    public static IReadOnlyList<string> Options(JobConflictEvent conflict) =>
+        conflict.Kind.Type == ConflictKind.PathTooLong && IsRecycleBinDelete(conflict)
+            ? [Resolution.DeletePermanentlyType, Resolution.SkipType, Resolution.RetryType]
+            : Options(conflict.Kind);
+
+    // A delete has no destination; a copy or a move always has one.
+    private static bool IsRecycleBinDelete(JobConflictEvent conflict) => conflict.Destination is null;
 
     /// <summary>The decisions the card offers for a kind, in button order.</summary>
     public static IReadOnlyList<string> Options(ConflictKind kind) => kind.Type switch
