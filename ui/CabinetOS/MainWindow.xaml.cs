@@ -245,13 +245,27 @@ public sealed partial class MainWindow : Window
     private async Task TakeSnapshotsAsync()
     {
         await Task.Delay(1500);
-        await DevSnapshots.RenderAsync(RootGrid, "window");
-        if (DevSnapshots.Query is { } query)
+        foreach (var step in DevSnapshots.Steps())
         {
-            await _router.ExecuteAsync("palette.show", trigger: "snapshot");
-            Palette.TypeQuery(query);
-            await Task.Delay(800);
-            await DevSnapshots.RenderAsync(RootGrid, "palette");
+            switch (step.Kind)
+            {
+                case "cmd":
+                    await _router.ExecuteAsync(step.Argument, trigger: "snapshot");
+                    break;
+                case "path":
+                    await _router.ExecuteAsync("go.toPath", CommandArgs.With("path", step.Argument), "snapshot");
+                    break;
+                case "type":
+                    Palette.TypeQuery(step.Argument);
+                    break;
+                case "wait" when int.TryParse(step.Argument, out var milliseconds):
+                    await Task.Delay(milliseconds);
+                    break;
+                case "shot":
+                    await Task.Delay(400);
+                    await DevSnapshots.RenderAsync(RootGrid, step.Argument);
+                    break;
+            }
         }
     }
 

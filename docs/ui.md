@@ -71,7 +71,8 @@ is set or the core is built in `core/target`, and skips itself otherwise
 | `CABINETOS_LOG` | The level filter, in the core's syntax: `debug`, or `info,cabinetos_ui::pipe=trace` |
 | `CABINETOS_CONFIG` | Not read by the UI; the core it starts inherits it and uses that `cabinetos.json` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
-| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, renders the window to `window.png` there; with `CABINETOS_UI_SNAPSHOT_QUERY=<text>` it then opens the palette with that text and renders `palette.png`. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content and comes out transparent. |
+| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content and comes out transparent. |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command>` runs a command through the router, `path:<folder>` goes to a folder, `type:<text>` types into the palette, `wait:<ms>` waits, `shot:<name>` writes `<name>.png`. Example: `cmd:palette.show;type:dual;shot:palette` |
 
 ### Logs and crashes
 
