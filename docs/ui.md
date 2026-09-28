@@ -704,7 +704,10 @@ variable `CABINETOS_TOOLS_DIR`).
   folder, the tool's process ends), the tool's name beside a green dot,
   and "Open in Terminal" (a shell in the file's folder). One tool per
   pane; a tool that is open shows the next file where it is. Showing one
-  pane closes the other pane's editor.
+  pane closes the other pane's editor. When the editor covers the active
+  pane (one pane shown), the keyboard that would go back to the pane (after
+  the palette, a menu, the terminal) goes to the tool's page, and typing a
+  search closes the tool first, because the hits need the pane.
 - **Reading tools.** The window reads `<folder>\<id>\tool.json` of each
   tools folder once, at start, on a background thread. This is the one
   file the UI process reads itself (brief §1 forbids file I/O in the UI;
