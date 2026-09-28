@@ -221,8 +221,53 @@ mod tests {
             LocalFree(Some(HLOCAL(descriptor.0)));
         }
 
-        // Windows maps generic-all (GA) to the pipe's full access (FA).
-        let sid = current_user_sid().unwrap();
-        assert_eq!(sddl, format!("D:P(A;;FA;;;{sid})"));
+        // Exactly one ACE: allow, no inheritance flags, full access (Windows
+        // maps generic-all, GA, to the pipe's full access, FA).
+        let ace_sid = sddl
+            .strip_prefix("D:P(A;;FA;;;")
+            .and_then(|rest| rest.strip_suffix(')'))
+            .filter(|sid| !sid.contains('('))
+            .unwrap_or_else(|| panic!("unexpected DACL: {sddl}"));
+        assert_eq!(
+            canonical_sid(ace_sid),
+            current_user_sid().unwrap(),
+            "{sddl}"
+        );
+    }
+
+    /// Windows writes some SIDs as SDDL aliases, for example `LA` for the
+    /// built-in Administrator that CI runners use. Converting through a
+    /// binary SID gives the `S-1-…` form for either spelling.
+    fn canonical_sid(text: &str) -> String {
+        let mut sid = windows::Win32::Security::PSID::default();
+        // SAFETY: the HSTRING is a valid NUL-terminated wide string for the
+        // whole call, and `sid` is a valid output location; the SID is
+        // LocalAlloc'd on success and freed below.
+        unsafe {
+            windows::Win32::Security::Authorization::ConvertStringSidToSidW(
+                &HSTRING::from(text),
+                &raw mut sid,
+            )
+        }
+        .unwrap();
+        let mut canonical = PWSTR::null();
+        // SAFETY: `sid` is a valid SID (see above); `canonical` is a valid
+        // output location, LocalAlloc'd on success and freed below.
+        unsafe { ConvertSidToStringSidW(sid, &raw mut canonical) }.unwrap();
+        // SAFETY: `canonical` is a valid NUL-terminated wide string.
+        let result = unsafe { canonical.to_string() }.unwrap();
+        // SAFETY: both were allocated with LocalAlloc and are not used again.
+        unsafe {
+            LocalFree(Some(HLOCAL(canonical.0.cast())));
+            LocalFree(Some(HLOCAL(sid.0)));
+        }
+        result
+    }
+
+    #[test]
+    fn sid_aliases_resolve_to_the_full_form() {
+        assert_eq!(canonical_sid("SY"), "S-1-5-18");
+        let user = current_user_sid().unwrap();
+        assert_eq!(canonical_sid(&user), user);
     }
 }
