@@ -1,0 +1,27 @@
+{
+  "id": "hello",
+  "name": "Hello",
+  "version": "0.1.0",
+  "author": "CabinetOS",
+  "description": "The sample Core Plugin: a Say Hello command that answers, writes a log line and sends an event.",
+  "apiVersion": "0.1.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "cmd:register",
+      "reason": "Adds the Say Hello command to the palette."
+    },
+    {
+      "name": "events:emit",
+      "reason": "Tells the window each time it said hello."
+    }
+  ],
+  "commands": [
+    {
+      "id": "hello.say",
+      "title": "Say Hello",
+      "category": "Hello",
+      "defaultKeys": []
+    }
+  ]
+}

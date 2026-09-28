@@ -1,0 +1,13 @@
+[package]
+name = "hello"
+description = "The sample Core Plugin and the template for new ones: one command that answers, logs and sends an event."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen.workspace = true

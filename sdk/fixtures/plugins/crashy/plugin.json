@@ -1,0 +1,23 @@
+{
+  "id": "crashy",
+  "name": "Crashy",
+  "version": "0.1.0",
+  "author": "CabinetOS tests",
+  "description": "A test fixture whose only command crashes the plugin.",
+  "apiVersion": "0.1.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "cmd:register",
+      "reason": "Adds the Crash command."
+    }
+  ],
+  "commands": [
+    {
+      "id": "crashy.crash",
+      "title": "Crash",
+      "category": "Crashy",
+      "defaultKeys": []
+    }
+  ]
+}

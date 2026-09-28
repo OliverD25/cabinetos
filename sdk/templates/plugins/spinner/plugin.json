@@ -1,0 +1,29 @@
+{
+  "id": "spinner",
+  "name": "Spinner",
+  "version": "0.1.0",
+  "author": "CabinetOS tests",
+  "description": "A test fixture whose commands never end.",
+  "apiVersion": "0.1.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "cmd:register",
+      "reason": "Adds the Spin and Burn commands."
+    }
+  ],
+  "commands": [
+    {
+      "id": "spinner.spin",
+      "title": "Spin",
+      "category": "Spinner",
+      "defaultKeys": []
+    },
+    {
+      "id": "spinner.burn",
+      "title": "Burn",
+      "category": "Spinner",
+      "defaultKeys": []
+    }
+  ]
+}

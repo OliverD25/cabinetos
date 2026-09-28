@@ -1,0 +1,24 @@
+# The sample Core Plugins and the test fixtures, built as WebAssembly
+# components. `hello` is the template for new plugins; the others exist to
+# test the host (docs/plugins.md). Rebuild the committed fixtures with
+# ../build-fixtures.ps1.
+[workspace]
+resolver = "3"
+members = ["crashy", "hello", "hog", "reader", "spinner", "vetoer"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+serde_json = "1.0"
+wit-bindgen = "0.61.1"
+
+[profile.release]
+# Small components: size matters more than speed for these.
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

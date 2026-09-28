@@ -1,0 +1,6 @@
+# The same Rust as the core, plus the WebAssembly target: Rust's
+# wasm32-wasip2 target writes components directly.
+[toolchain]
+channel = "1.98.1"
+targets = ["wasm32-wasip2"]
+profile = "minimal"

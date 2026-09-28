@@ -1,0 +1,13 @@
+[package]
+name = "hog"
+description = "A test fixture: its command asks for more memory than a plugin may have."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen.workspace = true

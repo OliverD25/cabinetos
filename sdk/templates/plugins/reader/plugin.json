@@ -1,0 +1,36 @@
+{
+  "id": "reader",
+  "name": "Reader",
+  "version": "0.1.0",
+  "author": "CabinetOS tests",
+  "description": "A test fixture that reads the size of files in one folder, and tries to write there.",
+  "apiVersion": "0.1.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "cmd:register",
+      "reason": "Adds the Size and Write commands."
+    },
+    {
+      "name": "fs:read",
+      "roots": [
+        "%TEMP%\\cabinetos-plugins-test\\reader"
+      ],
+      "reason": "Reads the size of files in its test folder."
+    }
+  ],
+  "commands": [
+    {
+      "id": "reader.size",
+      "title": "File Size",
+      "category": "Reader",
+      "defaultKeys": []
+    },
+    {
+      "id": "reader.write",
+      "title": "Write a File",
+      "category": "Reader",
+      "defaultKeys": []
+    }
+  ]
+}

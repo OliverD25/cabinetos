@@ -1,0 +1,104 @@
+/// The interface between the CabinetOS core and a Core Plugin: a headless
+/// WebAssembly component with no UI (Constitution Articles 8 and 11,
+/// brief §6). The guide is docs/plugins.md.
+package cabinetos:plugin@0.1.0;
+
+/// The records the core and a plugin exchange.
+interface types {
+    /// What a plugin says about itself. It must match its plugin.json.
+    record plugin-info {
+        id: string,
+        name: string,
+        version: string,
+        /// The version of this interface the plugin was built against.
+        api-version: string,
+    }
+
+    /// What a plugin gets when it starts. Paths are as the plugin sees them
+    /// inside its sandbox: a Windows path `C:\a\b` is `/C:/a/b`.
+    record activation {
+        /// The core's version.
+        core-version: string,
+        /// The plugin's own folder, readable and writable: always `/data`.
+        data-dir: string,
+        /// Folders the plugin may read (capability `fs:read`).
+        read-roots: list<string>,
+        /// Folders the plugin may read and write (capability `fs:write`).
+        write-roots: list<string>,
+    }
+
+    /// What a job does.
+    enum job-kind {
+        copy,
+        move,
+        /// A delete to the Recycle Bin.
+        delete,
+        delete-permanently,
+    }
+
+    /// A job about to start working, after its sources were counted.
+    record job-summary {
+        job-id: u64,
+        kind: job-kind,
+        /// Windows paths, as the user gave them.
+        sources: list<string>,
+        destination: option<string>,
+        files-total: u64,
+        bytes-total: u64,
+    }
+
+    /// A plugin's answer to a job about to start.
+    variant job-verdict {
+        allow,
+        /// Stop the job; the text says why and is shown to the user.
+        deny(string),
+    }
+}
+
+/// What the core offers a plugin.
+interface host {
+    enum log-level {
+        trace,
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    /// Registers a command declared in plugin.json (capability
+    /// `cmd:register`). Only during `activate`; anything else traps.
+    register-command: func(id: string, title: string, category: string, default-keys: list<string>);
+
+    /// Writes a line to the core's log, marked with the plugin's ID.
+    log: func(level: log-level, message: string);
+
+    /// A setting of cabinetos.json as JSON, by dotted path such as
+    /// `ui.theme` (capability `config:read`). None without the capability
+    /// or for a path that does not exist.
+    config-get: func(path: string) -> option<string>;
+
+    /// Sends an event to every connected client as `plugin_event`
+    /// (capability `events:emit`); dropped without it.
+    emit: func(name: string, payload: string);
+}
+
+/// A Core Plugin.
+world core-plugin {
+    use types.{plugin-info, activation, job-summary, job-verdict};
+
+    import host;
+
+    /// Who the plugin is. Called once, before `activate`.
+    export info: func() -> plugin-info;
+    /// Starts the plugin; it registers its commands here.
+    export activate: func(ctx: activation) -> result<_, string>;
+    /// The plugin is about to stop.
+    export deactivate: func();
+    /// Runs one of the plugin's commands. `args` and the result are JSON.
+    export on-command: func(id: string, args: string) -> result<string, string>;
+    /// A job is about to start (capability `jobs:intercept`); deny stops it.
+    export before-job: func(job: job-summary) -> job-verdict;
+    /// A folder the plugin may read (capability `fs:read`) was opened in a
+    /// pane. A notification: nothing is returned.
+    export on-listing-opened: func(path: string, entry-count: u32);
+}

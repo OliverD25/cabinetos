@@ -1,0 +1,16 @@
+{
+  "id": "vetoer",
+  "name": "Vetoer",
+  "version": "0.1.0",
+  "author": "CabinetOS tests",
+  "description": "A test fixture that stops every job whose destination contains \"forbidden\".",
+  "apiVersion": "0.1.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "jobs:intercept",
+      "reason": "Checks each job before it starts, and stops the ones going to a forbidden folder."
+    }
+  ],
+  "commands": []
+}
