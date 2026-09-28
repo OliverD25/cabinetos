@@ -8,10 +8,12 @@
 //!   queued, so a `listing_opened` always goes out before the events of that
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
-//!   (`list_directory`, `volume_info`) as tasks, so one slow directory never
-//!   holds up the next request.
+//!   (`list_directory`, `volume_info`, the keybinding writes) as tasks, so
+//!   one slow directory never holds up the next request. After `hello` it
+//!   also forwards the configuration events every connection receives.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
@@ -19,15 +21,17 @@ use cabinetos_diag::span_for_request;
 use cabinetos_fs::{DirectoryWatcher, ListOptions};
 use cabinetos_ipc::{IpcError, PipeConnection, SharedSection};
 use cabinetos_protocol::{
-    Envelope, ErrorCode, PROTOCOL_VERSION, Request, RequestId, Response, SortSpec,
+    Envelope, ErrorCode, Event, PROTOCOL_VERSION, Request, RequestId, Response, SortSpec,
 };
 use serde::Serialize;
+use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
 use tokio::task::{AbortHandle, JoinError, JoinSet};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::listing::{self, Failure, Published, WatchedListing};
+use crate::settings::{Settings, every_section};
 use crate::{CORE_VERSION, decode_request};
 
 /// How long the writer may take to send what is still queued when the
@@ -101,7 +105,11 @@ struct Opened {
 }
 
 /// Serves one client until it disconnects or sends a malformed frame.
-pub(crate) async fn handle_connection(connection: PipeConnection, shutdown: CancellationToken) {
+pub(crate) async fn handle_connection(
+    connection: PipeConnection,
+    shutdown: CancellationToken,
+    settings: Arc<Settings>,
+) {
     tracing::debug!("client connected");
     let client_pid_from_windows = connection.client_process_id().ok();
     let (mut reader, mut writer) = connection.into_split();
@@ -134,6 +142,8 @@ pub(crate) async fn handle_connection(connection: PipeConnection, shutdown: Canc
         listings: HashMap::new(),
         tasks: JoinSet::new(),
         shutdown,
+        settings,
+        events: None,
     };
     loop {
         tokio::select! {
@@ -153,6 +163,7 @@ pub(crate) async fn handle_connection(connection: PipeConnection, shutdown: Canc
                 }
             },
             Some(done) = session.tasks.join_next() => session.task_done(done),
+            event = next_event(session.events.as_mut()) => session.forward_event(event),
         }
     }
 
@@ -166,6 +177,17 @@ pub(crate) async fn handle_connection(connection: PipeConnection, shutdown: Canc
         rethrow_panic(result);
     } else {
         tracing::debug!("the client stopped reading; dropping unsent messages");
+    }
+}
+
+/// The next configuration event, once the client said `hello`; until then,
+/// never.
+async fn next_event(
+    events: Option<&mut broadcast::Receiver<Envelope<Event>>>,
+) -> Result<Envelope<Event>, RecvError> {
+    match events {
+        Some(events) => events.recv().await,
+        None => std::future::pending().await,
     }
 }
 
@@ -186,6 +208,9 @@ struct Session {
     listings: HashMap<u64, ListingSlot>,
     tasks: JoinSet<TaskDone>,
     shutdown: CancellationToken,
+    settings: Arc<Settings>,
+    /// Configuration events, from `hello` on.
+    events: Option<broadcast::Receiver<Envelope<Event>>>,
 }
 
 impl Session {
@@ -237,16 +262,28 @@ impl Session {
                     self.volume_info(&id, &span, path);
                     None
                 }
-                Request::GetConfig
-                | Request::GetKeymap
-                | Request::ListCommands
-                | Request::SearchCommands { .. }
-                | Request::ExecuteCommand { .. }
-                | Request::SetKeybinding { .. }
-                | Request::ResetKeybinding { .. } => Some(Response::Error {
-                    code: ErrorCode::NotImplemented,
-                    message: format!("{kind} is not implemented yet"),
-                }),
+                Request::GetConfig => Some(self.settings.get_config()),
+                Request::GetKeymap => Some(self.settings.get_keymap()),
+                Request::ListCommands => Some(self.settings.list_commands()),
+                Request::SearchCommands { query, limit } => {
+                    Some(self.settings.search_commands(&query, limit))
+                }
+                Request::ExecuteCommand { command, args: _ } => {
+                    tracing::info!(command = %command, "command requested");
+                    Some(self.settings.execute(&command))
+                }
+                Request::SetKeybinding { command, keys } => {
+                    self.write_keybinding(&id, &span, kind, move |settings| {
+                        settings.set_keybinding(&command, &keys)
+                    });
+                    None
+                }
+                Request::ResetKeybinding { command } => {
+                    self.write_keybinding(&id, &span, kind, move |settings| {
+                        settings.reset_keybinding(&command)
+                    });
+                    None
+                }
             }
         };
         // Requests handled right here are done; the others log when they end.
@@ -270,6 +307,7 @@ impl Session {
         }
         tracing::info!(client_pid, client_name, "client said hello");
         self.client = Some(Client { pid: client_pid });
+        self.events = Some(self.settings.subscribe());
         Response::Welcome {
             protocol_version: PROTOCOL_VERSION,
             core_version: CORE_VERSION.to_owned(),
@@ -308,9 +346,11 @@ impl Session {
         };
         let client_pid = client.pid;
         let listing_id = NEXT_LISTING_ID.fetch_add(1, Ordering::Relaxed);
+        // What the request leaves out, the `panes` settings decide.
+        let panes = &self.settings.snapshot().config.panes;
         let options = ListOptions {
-            include_hidden: include_hidden.unwrap_or(false),
-            sort: sort.unwrap_or_default(),
+            include_hidden: include_hidden.unwrap_or(panes.show_hidden),
+            sort: sort.unwrap_or_else(|| panes.sort.into()),
             ..ListOptions::default()
         };
         let request_id = id.clone();
@@ -354,6 +394,61 @@ impl Session {
             }
             .instrument(span.clone()),
         );
+    }
+
+    /// Changes a keybinding on the blocking pool: it reads and writes the
+    /// configuration file.
+    fn write_keybinding(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        write: impl FnOnce(&Settings) -> Response + Send + 'static,
+    ) {
+        let out = self.out.clone();
+        let settings = Arc::clone(&self.settings);
+        let request_id = id.clone();
+        let started = Instant::now();
+        self.tasks.spawn(
+            async move {
+                let reply = match tokio::task::spawn_blocking(move || write(&settings)).await {
+                    Ok(reply) => reply,
+                    Err(error) => {
+                        rethrow_panic(Err(error));
+                        failure_reply((ErrorCode::Internal, "the request was cancelled".to_owned()))
+                    }
+                };
+                log_handled(kind, started, &reply);
+                out.reply(request_id, reply);
+                TaskDone::Replied
+            }
+            .instrument(span.clone()),
+        );
+    }
+
+    /// Passes a configuration event on to the client.
+    fn forward_event(&mut self, event: Result<Envelope<Event>, RecvError>) {
+        match event {
+            Ok(event) => self.out.send(&event),
+            Err(RecvError::Lagged(missed)) => {
+                // The events are gone; telling the client to read everything
+                // again is as good as the events it missed.
+                tracing::warn!(missed, "the client fell behind on configuration events");
+                self.out.send(&Envelope::new(
+                    RequestId::new(),
+                    Event::ConfigChanged {
+                        changed: every_section(),
+                    },
+                ));
+                self.out.send(&Envelope::new(
+                    RequestId::new(),
+                    Event::KeymapChanged {
+                        keymap: self.settings.snapshot().keymap.to_wire(),
+                    },
+                ));
+            }
+            Err(RecvError::Closed) => self.events = None,
+        }
     }
 
     fn task_done(&mut self, done: Result<TaskDone, JoinError>) {

@@ -107,11 +107,12 @@ pub enum Request {
         args: Value,
     },
     /// Binds a command to new keys, replacing its current binding. The core
-    /// writes the configuration file and answers `keymap`.
+    /// writes the configuration file and answers `keymap`. Needs no `hello`.
     SetKeybinding {
         /// The command's ID.
         command: String,
-        /// The keys, for example `ctrl+alt+b` or `ctrl+k ctrl+b`.
+        /// The keys, for example `ctrl+alt+b` or `ctrl+k ctrl+b`; an empty
+        /// string leaves the command without a binding.
         keys: String,
     },
     /// Returns a command to its default binding. The core writes the

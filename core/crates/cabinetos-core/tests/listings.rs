@@ -39,6 +39,7 @@ fn start_core() -> Core {
     let child = Command::new(CORE_EXE)
         .args(["--pipe", pipe.token()])
         .env("CABINETOS_LOG_DIR", log_dir.path())
+        .env("CABINETOS_CONFIG", log_dir.path().join("cabinetos.json"))
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
         .stdin(Stdio::null())

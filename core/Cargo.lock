@@ -148,6 +148,8 @@ dependencies = [
 name = "cabinetos-core"
 version = "0.1.0"
 dependencies = [
+ "cabinetos-commands",
+ "cabinetos-config",
  "cabinetos-diag",
  "cabinetos-fs",
  "cabinetos-ipc",

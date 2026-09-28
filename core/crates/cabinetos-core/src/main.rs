@@ -33,6 +33,12 @@ struct Args {
     #[arg(long, value_name = "PATH")]
     log_dir: Option<PathBuf>,
 
+    /// Read and watch this configuration file instead of
+    /// %APPDATA%\CabinetOS\cabinetos.json (or the `CABINETOS_CONFIG`
+    /// variable). It is created with the defaults if it does not exist.
+    #[arg(long, value_name = "PATH")]
+    config: Option<PathBuf>,
+
     /// Log one event, then panic: tests crash traces.
     #[arg(long, hide = true)]
     self_test_panic: bool,
@@ -63,6 +69,7 @@ fn main() -> ExitCode {
         pipe: PipeName::new(&args.pipe),
         parent_pid: args.parent_pid,
         log_dir: args.log_dir,
+        config_path: args.config,
     };
     match runtime.block_on(run(config, CancellationToken::new())) {
         Ok(()) => ExitCode::SUCCESS,
@@ -118,12 +125,15 @@ mod tests {
             "42",
             "--log-dir",
             r"C:\logs",
+            "--config",
+            r"D:\c.json",
             "--self-test-panic",
         ])
         .unwrap();
         assert_eq!(args.pipe, "abc");
         assert_eq!(args.parent_pid, Some(42));
         assert_eq!(args.log_dir, Some(PathBuf::from(r"C:\logs")));
+        assert_eq!(args.config, Some(PathBuf::from(r"D:\c.json")));
         assert!(args.self_test_panic);
     }
 }

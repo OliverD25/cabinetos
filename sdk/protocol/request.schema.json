@@ -227,7 +227,7 @@
       ]
     },
     {
-      "description": "Binds a command to new keys, replacing its current binding. The core\nwrites the configuration file and answers `keymap`.",
+      "description": "Binds a command to new keys, replacing its current binding. The core\nwrites the configuration file and answers `keymap`. Needs no `hello`.",
       "type": "object",
       "properties": {
         "command": {
@@ -235,7 +235,7 @@
           "type": "string"
         },
         "keys": {
-          "description": "The keys, for example `ctrl+alt+b` or `ctrl+k ctrl+b`.",
+          "description": "The keys, for example `ctrl+alt+b` or `ctrl+k ctrl+b`; an empty\nstring leaves the command without a binding.",
           "type": "string"
         },
         "type": {

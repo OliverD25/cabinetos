@@ -4,20 +4,26 @@
 //! The UI is only a view (brief §1, the Dumb UI Rule): all work happens here,
 //! behind the named pipe. The core lists directories into shared memory,
 //! keeps watched listings current with events, reports volumes and disks,
-//! logs every request with its ID, and exits with its parent process. The
-//! protocol is in `docs/ipc.md`.
+//! owns the configuration file, the commands and the keymap, logs every
+//! request with its ID, and exits with its parent process. The protocol is
+//! in `docs/ipc.md`.
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: every
 //! connection is served asynchronously, so no request waits on another),
-//! Article 10 (The Zero-Bloat Foundation: the core is the bare navigation
-//! engine; features arrive as extensions) and Article 12 (Unified
-//! Diagnostics: each request is handled inside a span carrying its ID).
+//! Article 6 (Universal Configuration: an edit to `cabinetos.json` takes
+//! effect at once), Article 7 (Absolute Keyboard Control: the keymap and
+//! the Immutable System Tier live here), Article 10 (The Zero-Bloat
+//! Foundation: the core is the bare navigation engine; features arrive as
+//! extensions) and Article 12 (Unified Diagnostics: each request is handled
+//! inside a span carrying its ID).
 #![forbid(unsafe_code)]
 
 mod connection;
 mod listing;
+mod settings;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use cabinetos_diag::{Boundary, DiagConfig, DiagError};
@@ -27,6 +33,8 @@ use serde_json::Value;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
+
+use crate::settings::Settings;
 
 /// The core's version, reported in `pong`.
 pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -75,6 +83,9 @@ pub struct CoreConfig {
     pub parent_pid: Option<u32>,
     /// Log directory; `None` uses `CABINETOS_LOG_DIR` or the default.
     pub log_dir: Option<PathBuf>,
+    /// The configuration file; `None` uses `CABINETOS_CONFIG` or
+    /// `%APPDATA%\CabinetOS\cabinetos.json`.
+    pub config_path: Option<PathBuf>,
 }
 
 /// Why the core stopped with an error.
@@ -122,6 +133,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         pipe,
         parent_pid,
         log_dir,
+        config_path,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
     if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
@@ -130,7 +142,15 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
             "ignoring {WORKERS_ENV}: expected a whole number from 1 to {MAX_WORKERS}; using {DEFAULT_WORKERS}"
         );
     }
-    let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir()).await;
+    let config_path = cabinetos_config::default_path(config_path);
+    let config_path = std::path::absolute(&config_path).unwrap_or(config_path);
+    let settings = match tokio::task::spawn_blocking(move || Settings::open(config_path)).await {
+        Ok(settings) => settings,
+        Err(error) => std::panic::resume_unwind(error.into_panic()),
+    };
+    // Dropping the watcher at the end stops it without waiting.
+    let _watcher = settings.watch();
+    let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &settings).await;
     match &result {
         Ok(()) => tracing::info!("core stopped"),
         Err(error) => tracing::error!(%error, "core stopped with an error"),
@@ -144,6 +164,7 @@ async fn serve(
     parent_pid: Option<u32>,
     shutdown: &CancellationToken,
     log_dir: &Path,
+    settings: &Arc<Settings>,
 ) -> Result<(), CoreError> {
     let mut server = PipeServer::bind(pipe)?;
 
@@ -175,6 +196,7 @@ async fn serve(
         parent_pid,
         workers = tokio::runtime::Handle::current().metrics().num_workers(),
         log_dir = %log_dir.display(),
+        config = %settings.path().display(),
         "core started"
     );
 
@@ -188,7 +210,12 @@ async fn serve(
                     connection_number += 1;
                     let span = tracing::debug_span!("connection", connection = connection_number);
                     connections.spawn(
-                        connection::handle_connection(connection, shutdown.clone()).instrument(span),
+                        connection::handle_connection(
+                            connection,
+                            shutdown.clone(),
+                            Arc::clone(settings),
+                        )
+                        .instrument(span),
                     );
                 }
                 Err(error) => {

@@ -1,8 +1,9 @@
 //! End-to-end tests against the real `cabinetos-core.exe`.
 //!
 //! Every test starts its own core on a random pipe with its own temporary log
-//! directory, so the tests can run in parallel and never touch the real
-//! `%LOCALAPPDATA%\CabinetOS\logs`.
+//! directory and configuration file, so the tests can run in parallel and
+//! never touch the real `%LOCALAPPDATA%\CabinetOS\logs` or
+//! `%APPDATA%\CabinetOS\cabinetos.json`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -39,6 +40,10 @@ fn core_command(pipe: &PipeName, log_dir: &Path) -> Command {
     command
         .args(["--pipe", pipe.token()])
         .env("CABINETOS_LOG_DIR", log_dir)
+        .env(
+            "CABINETOS_CONFIG",
+            log_dir.join("config").join("cabinetos.json"),
+        )
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
         .stdin(Stdio::null())
