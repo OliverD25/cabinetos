@@ -23,13 +23,13 @@ use cabinetos_protocol::{
 };
 
 use crate::bin;
-use crate::{Engine, JobPreview};
 use crate::job::{Counters, DirState, DirStatus, Job, Parked, Phase, Target, Work, lock};
 use crate::plan::{
     self, FileItem, FileKind, Plan, PlanError, RemoveKind, RenameItem, Transfer, file_name, join,
 };
 use crate::recycle::{self, Apartment};
 use crate::win::{self, CopyFlags, Step, code};
+use crate::{Engine, JobPreview};
 
 /// How many automatic decisions (job rules, the conflict policy) one piece
 /// of work may take before it is set aside for the user.

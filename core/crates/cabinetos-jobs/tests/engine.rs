@@ -870,10 +870,18 @@ fn a_gate_can_refuse_a_job_before_anything_is_written() {
     write_file(&source, 10, 1);
     let engine = engine();
     assert!(engine.manager.set_gate(Arc::new(Vetoer)));
-    assert!(!engine.manager.set_gate(Arc::new(Vetoer)), "only the first gate counts");
+    assert!(
+        !engine.manager.set_gate(Arc::new(Vetoer)),
+        "only the first gate counts"
+    );
 
     let refused = root.path().join("forbidden");
-    let job = engine.start(JobKind::Copy, &[&source], Some(&refused), options(ConflictPolicy::Ask));
+    let job = engine.start(
+        JobKind::Copy,
+        &[&source],
+        Some(&refused),
+        options(ConflictPolicy::Ask),
+    );
     assert_eq!(
         engine.finish(job).0.state,
         JobState::Failed {
@@ -883,7 +891,12 @@ fn a_gate_can_refuse_a_job_before_anything_is_written() {
     assert!(!refused.exists(), "a refused job creates nothing");
 
     let allowed = root.path().join("fine");
-    let job = engine.start(JobKind::Copy, &[&source], Some(&allowed), options(ConflictPolicy::Ask));
+    let job = engine.start(
+        JobKind::Copy,
+        &[&source],
+        Some(&allowed),
+        options(ConflictPolicy::Ask),
+    );
     assert_eq!(engine.finish(job).0.state, JobState::Completed);
     assert!(allowed.join("a.txt").is_file());
 }
