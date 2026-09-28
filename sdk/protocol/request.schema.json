@@ -172,6 +172,47 @@
       ]
     },
     {
+      "description": "Creates a folder; its parent must exist. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The new folder, as an absolute path.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "create_directory"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
+      "description": "Renames a file or folder in the folder it is in, never replacing\nanything. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "new_name": {
+          "description": "Its new name: one name, without a folder.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file or folder, as an absolute path.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "rename"
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "new_name"
+      ]
+    },
+    {
       "description": "Asks for the configuration in effect and the path of its file. The\ncore answers `config`.",
       "type": "object",
       "properties": {

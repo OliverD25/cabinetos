@@ -93,6 +93,19 @@ pub enum Request {
         /// The file or folder, as an absolute path.
         path: String,
     },
+    /// Creates a folder; its parent must exist. The core answers `ok`.
+    CreateDirectory {
+        /// The new folder, as an absolute path.
+        path: String,
+    },
+    /// Renames a file or folder in the folder it is in, never replacing
+    /// anything. The core answers `ok`.
+    Rename {
+        /// The file or folder, as an absolute path.
+        path: String,
+        /// Its new name: one name, without a folder.
+        new_name: String,
+    },
     /// Asks for the configuration in effect and the path of its file. The
     /// core answers `config`.
     GetConfig,
@@ -282,6 +295,8 @@ impl Request {
         "volume_info",
         "list_volumes",
         "open_path",
+        "create_directory",
+        "rename",
         "get_config",
         "get_value",
         "set_value",
@@ -320,6 +335,8 @@ impl Request {
             Self::VolumeInfo { .. } => "volume_info",
             Self::ListVolumes => "list_volumes",
             Self::OpenPath { .. } => "open_path",
+            Self::CreateDirectory { .. } => "create_directory",
+            Self::Rename { .. } => "rename",
             Self::GetConfig => "get_config",
             Self::GetValue { .. } => "get_value",
             Self::SetValue { .. } => "set_value",
@@ -996,6 +1013,13 @@ mod tests {
             Request::ListVolumes,
             Request::OpenPath {
                 path: r"C:\Users\me\notes.txt".to_owned(),
+            },
+            Request::CreateDirectory {
+                path: r"C:\Users\me\New folder".to_owned(),
+            },
+            Request::Rename {
+                path: r"C:\Users\me\notes.txt".to_owned(),
+                new_name: "notes 2026.txt".to_owned(),
             },
             Request::GetConfig,
             Request::GetValue {

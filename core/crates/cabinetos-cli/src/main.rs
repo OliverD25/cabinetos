@@ -105,6 +105,18 @@ enum Command {
         /// The file or folder.
         path: String,
     },
+    /// Create a folder; its parent must exist.
+    Mkdir {
+        /// The new folder.
+        path: String,
+    },
+    /// Rename a file or folder in the folder it is in; nothing is replaced.
+    Rename {
+        /// The file or folder.
+        path: String,
+        /// Its new name, without a folder.
+        new_name: String,
+    },
     /// Show or check the configuration file (cabinetos.json).
     Config {
         #[command(subcommand)]
@@ -615,7 +627,9 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Volume { .. } | Command::Volumes => {
             volume_command(&mut client, &cli.command).await?;
         }
-        Command::Open { .. } => file_command(&mut client, &cli.command).await?,
+        Command::Open { .. } | Command::Mkdir { .. } | Command::Rename { .. } => {
+            file_command(&mut client, &cli.command).await?;
+        }
         Command::Config { .. } | Command::Commands { .. } | Command::Keys { .. } => {
             settings_command(&mut client, &cli.command).await?;
         }
@@ -662,19 +676,37 @@ async fn volume_command(client: &mut PipeClient, command: &Command) -> anyhow::R
     Ok(())
 }
 
-/// The file commands: `open`.
+/// The file commands: `open`, `mkdir`, `rename`.
 async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
-    match command {
+    let (path, request) = match command {
         Command::Open { path } => {
             let path = absolute(path)?;
-            let reply = send(client, Request::OpenPath { path: path.clone() }).await?;
-            if reply.body != Response::Ok {
-                return Err(failure(&path, &reply.body));
-            }
-            say(format_args!("opened {path}"));
+            (path.clone(), Request::OpenPath { path })
+        }
+        Command::Mkdir { path } => {
+            let path = absolute(path)?;
+            (path.clone(), Request::CreateDirectory { path })
+        }
+        Command::Rename { path, new_name } => {
+            let path = absolute(path)?;
+            let request = Request::Rename {
+                path: path.clone(),
+                new_name: new_name.clone(),
+            };
+            (path, request)
         }
         _ => unreachable!("only file commands come here"),
+    };
+    let reply = send(client, request).await?;
+    if reply.body != Response::Ok {
+        return Err(failure(&path, &reply.body));
     }
+    match command {
+        Command::Open { .. } => say(format_args!("opened {path}")),
+        Command::Mkdir { .. } => say(format_args!("created {path}")),
+        Command::Rename { new_name, .. } => say(format_args!("renamed {path} to {new_name}")),
+        _ => true,
+    };
     Ok(())
 }
 
@@ -1082,6 +1114,25 @@ mod tests {
             }
         );
         assert!(Cli::try_parse_from(["cabinetos-cli", "open"]).is_err());
+        let cli = Cli::try_parse_from(["cabinetos-cli", "mkdir", r"E:\new"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Mkdir {
+                path: r"E:\new".to_owned()
+            }
+        );
+        let cli = Cli::try_parse_from(["cabinetos-cli", "rename", "a.txt", "b 2.txt"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Rename {
+                path: "a.txt".to_owned(),
+                new_name: "b 2.txt".to_owned()
+            }
+        );
+        assert!(
+            Cli::try_parse_from(["cabinetos-cli", "rename", "a.txt"]).is_err(),
+            "a new name is required"
+        );
     }
 
     #[test]

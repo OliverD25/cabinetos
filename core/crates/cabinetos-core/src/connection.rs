@@ -9,7 +9,8 @@
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
 //!   (`list_directory`, `volume_info`, `list_volumes`, `open_path`,
-//!   `set_value`, the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
+//!   `create_directory`, `rename`, `set_value`, the keybinding and plugin
+//!   settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`)
 //!   as tasks, so one slow directory, plugin, search or shell never holds up
 //!   the next request. After `hello` it also forwards the configuration,
@@ -272,7 +273,9 @@ impl Session {
                 } => self.list_directory(&id, &span, path, include_hidden, sort, watch),
                 request @ (Request::VolumeInfo { .. }
                 | Request::ListVolumes
-                | Request::OpenPath { .. }) => self.file_request(&id, &span, kind, request),
+                | Request::OpenPath { .. }
+                | Request::CreateDirectory { .. }
+                | Request::Rename { .. }) => self.file_request(&id, &span, kind, request),
                 request @ (Request::GetConfig
                 | Request::GetValue { .. }
                 | Request::SetValue { .. }
@@ -421,6 +424,24 @@ impl Session {
                 }
                 self.spawn_reply(id, span, kind, move || {
                     answer_fs(cabinetos_fs::open_path(&path))
+                });
+            }
+            // Neither needs a job: one name, done at once. A watched listing
+            // of the folder hears about it from its watcher.
+            Request::CreateDirectory { path } => {
+                if let Some(refusal) = not_absolute(&path) {
+                    return Some(refusal);
+                }
+                self.spawn_reply(id, span, kind, move || {
+                    answer_fs(cabinetos_fs::create_directory(&path))
+                });
+            }
+            Request::Rename { path, new_name } => {
+                if let Some(refusal) = not_absolute(&path) {
+                    return Some(refusal);
+                }
+                self.spawn_reply(id, span, kind, move || {
+                    answer_fs(cabinetos_fs::rename(&path, &new_name))
                 });
             }
             _ => {}

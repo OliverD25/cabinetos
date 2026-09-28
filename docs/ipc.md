@@ -72,7 +72,8 @@ file search (`search`, `file_search_results`) and `index_status`. Version 7
 the error codes `no_such_session`, `unknown_profile` and `spawn_failed`.
 Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
 `volumes`, `get_value` and `set_value` with the reply `value`,
-`open_path`, and the error code `already_exists`.
+`open_path`, `create_directory` and `rename`, and the error code
+`already_exists`.
 
 ## Requests and replies
 
@@ -86,6 +87,8 @@ Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
 | `volume_info` | `path` (need not exist) | `volume_info` |
 | `list_volumes` | — | `volumes` (`volumes`) |
 | `open_path` | `path` (absolute) | `ok` |
+| `create_directory` | `path` (absolute; the parent must exist) | `ok` |
+| `rename` | `path` (absolute), `new_name` (a name, without a folder) | `ok` |
 | `get_config` | — | `config` (`path`, `config`) |
 | `get_value` | `path` (a dotted path, such as `ui.dualPane`) | `value` (`value`) |
 | `set_value` | `path`, `value` | `ok` |
@@ -141,7 +144,8 @@ Any request can instead get `error` with a `code` and a `message`:
 | `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
 
 Requests on one connection are independent: `list_directory`,
-`volume_info`, `list_volumes`, `open_path`, `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
+`volume_info`, `list_volumes`, `open_path`, `create_directory`, `rename`,
+`set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
 `terminal_open`, `terminal_close` and `terminal_sync_cwd` run in the
@@ -331,7 +335,34 @@ takes more than 2 s. A drive left out for time is not asked again until
 its first query has ended, so a share whose server is gone holds one
 thread in the core, not one per request.
 
-## Opening files
+## Files and folders
+
+A new folder and a rename touch one name and finish at once, so they need
+no job; copy, move and delete are jobs ("Jobs" below).
+
+```json
+{"id":"01M…","type":"create_directory","path":"D:\\work\\New folder"}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"rename","path":"D:\\work\\draft.txt","new_name":"final.txt"}
+{"id":"01M…","type":"ok"}
+```
+
+- `create_directory` creates one folder. Its parent must exist
+  (`not_found` otherwise), and nothing may have its name yet
+  (`already_exists`, also for a file of that name).
+- `rename` gives a file or folder a new name in the folder it is in.
+  `new_name` is one name: empty, `.`, `..` or a name with `\` or `/` is
+  `invalid_path`. Nothing is replaced: a taken name is `already_exists`,
+  and the message names it. Changing only the case of letters works.
+- Both take any length of path, and so refuse (`invalid_path`, with the
+  reason) a name that Windows could not open again later: one that ends
+  in a dot or a space, contains `<>:"|?*` or a control character, or is a
+  device name such as `CON`, `NUL` or `COM1` (with any extension).
+- Both paths must be absolute (`invalid_path`). Other failures are
+  `access_denied`, or `io` with the Windows error in the message (a file
+  in use cannot be renamed, for example).
+- A watched listing of the folder refreshes through its watcher, as for
+  any other change (`listing_refreshed`).
 
 ```json
 {"id":"01M…","type":"open_path","path":"C:\\Users\\me\\notes.txt"}
@@ -723,7 +754,8 @@ by force). When the core stops, it closes every session.
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
 `ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
-`volumes` prints `volumes`, `open` sends `open_path`, `config get` and
+`volumes` prints `volumes`, `open`, `mkdir` and `rename` send
+`open_path`, `create_directory` and `rename`, `config get` and
 `config set` send `get_value` and `set_value`,
 `config`, `commands` and `keys` cover the configuration messages (`keys
 watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`

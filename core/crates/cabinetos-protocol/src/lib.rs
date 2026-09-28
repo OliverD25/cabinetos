@@ -57,5 +57,6 @@ pub use terminal::{TerminalSession, TerminalState};
 /// (`index_status`); version 7 terminal sessions (`terminal_open` and the
 /// other `terminal_*` messages); version 8 what the shell needs beyond
 /// listing: `list_volumes`, `get_value` and `set_value` (with the reply
-/// `value`), `open_path`, and the error code `already_exists`.
+/// `value`), `open_path`, `create_directory` and `rename`, and the error
+/// code `already_exists`.
 pub const PROTOCOL_VERSION: u32 = 8;

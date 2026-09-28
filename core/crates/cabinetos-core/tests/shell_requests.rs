@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use cabinetos_fs::ListingReader;
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{Envelope, ErrorCode, Event, Request, Response};
 use serde_json::{Value, json};
@@ -35,6 +36,13 @@ impl Drop for Core {
 impl Core {
     fn config_path(&self) -> PathBuf {
         self.dir.path().join("config").join("cabinetos.json")
+    }
+
+    /// A folder for the test's files and folders.
+    fn files(&self) -> PathBuf {
+        let files = self.dir.path().join("files");
+        std::fs::create_dir_all(&files).unwrap();
+        files
     }
 }
 
@@ -136,6 +144,42 @@ async fn config_changed(events: &mut UnboundedReceiver<Envelope<Event>>) -> Vec<
         Event::ConfigChanged { changed } => changed,
         other => panic!("expected config_changed, got {other:?}"),
     }
+}
+
+/// The names in a section, read the way the CLI reads them.
+fn names_in(client: &PipeClient, section_handle: u64) -> Vec<String> {
+    let section = client.take_section(section_handle).unwrap();
+    let view = section.map_readonly().unwrap();
+    let reader = ListingReader::new(view.as_slice()).unwrap();
+    reader.entries().map(|entry| entry.unwrap().name).collect()
+}
+
+/// Waits for a `listing_refreshed` with these names. One change may come
+/// as more than one refresh.
+async fn refreshed_to(
+    client: &PipeClient,
+    events: &mut UnboundedReceiver<Envelope<Event>>,
+    expected: &[&str],
+) {
+    let deadline = Instant::now() + EVENT_DEADLINE;
+    let mut last = Vec::new();
+    while Instant::now() < deadline {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let Ok(Some(event)) = tokio::time::timeout(left, events.recv()).await else {
+            break;
+        };
+        if let Event::ListingRefreshed { section_handle, .. } = event.body {
+            last = names_in(client, section_handle);
+            if last == expected {
+                return;
+            }
+        }
+    }
+    panic!("no refresh showed {expected:?}; the last showed {last:?}");
+}
+
+fn text(path: &std::path::Path) -> String {
+    path.to_str().unwrap().to_owned()
 }
 
 fn read_config(core: &Core) -> Value {
@@ -307,4 +351,106 @@ async fn a_value_the_file_could_not_hold_is_refused_and_the_file_kept() {
             "{path}: {reply:?}"
         );
     }
+}
+
+#[tokio::test]
+async fn a_new_folder_and_a_rename_reach_a_watched_listing() {
+    let core = start_core();
+    let (mut client, mut events) = greeted(&core).await;
+    let files = core.files();
+    std::fs::write(files.join("a.txt"), "a").unwrap();
+    let reply = ask(
+        &mut client,
+        Request::ListDirectory {
+            path: text(&files),
+            include_hidden: None,
+            sort: None,
+            watch: true,
+        },
+    )
+    .await;
+    let Response::ListingOpened { section_handle, .. } = reply else {
+        panic!("expected listing_opened, got {reply:?}")
+    };
+    assert_eq!(names_in(&client, section_handle), ["a.txt"]);
+
+    let folder = files.join("New folder");
+    let reply = ask(
+        &mut client,
+        Request::CreateDirectory {
+            path: text(&folder),
+        },
+    )
+    .await;
+    assert_eq!(reply, Response::Ok);
+    assert!(folder.is_dir());
+    refreshed_to(&client, &mut events, &["New folder", "a.txt"]).await;
+
+    let reply = ask(
+        &mut client,
+        Request::Rename {
+            path: text(&files.join("a.txt")),
+            new_name: "b.txt".to_owned(),
+        },
+    )
+    .await;
+    assert_eq!(reply, Response::Ok);
+    refreshed_to(&client, &mut events, &["New folder", "b.txt"]).await;
+}
+
+#[tokio::test]
+async fn new_folders_and_renames_are_refused_with_the_reason() {
+    let core = start_core();
+    let mut client = connect(&core.pipe).await;
+    let files = core.files();
+    std::fs::write(files.join("a.txt"), "a").unwrap();
+    std::fs::write(files.join("b.txt"), "b").unwrap();
+    let mkdir = |path: String| Request::CreateDirectory { path };
+    let rename = |path: String, new_name: &str| Request::Rename {
+        path,
+        new_name: new_name.to_owned(),
+    };
+
+    for (request, expected) in [
+        (mkdir(text(&files.join("b.txt"))), ErrorCode::AlreadyExists),
+        (
+            mkdir(text(&files.join("gone").join("child"))),
+            ErrorCode::NotFound,
+        ),
+        (mkdir(text(&files.join("dot."))), ErrorCode::InvalidPath),
+        (mkdir("relative".to_owned()), ErrorCode::InvalidPath),
+        (
+            rename(text(&files.join("a.txt")), "b.txt"),
+            ErrorCode::AlreadyExists,
+        ),
+        (
+            rename(text(&files.join("a.txt")), ""),
+            ErrorCode::InvalidPath,
+        ),
+        (
+            rename(text(&files.join("a.txt")), r"sub\c.txt"),
+            ErrorCode::InvalidPath,
+        ),
+        (
+            rename(text(&files.join("a.txt")), "../c.txt"),
+            ErrorCode::InvalidPath,
+        ),
+        (
+            rename(text(&files.join("none.txt")), "c.txt"),
+            ErrorCode::NotFound,
+        ),
+        (rename("a.txt".to_owned(), "c.txt"), ErrorCode::InvalidPath),
+    ] {
+        let reply = ask(&mut client, request.clone()).await;
+        assert_eq!(error_code(&reply), Some(expected), "{request:?}: {reply:?}");
+    }
+    // Nothing was replaced or created.
+    assert_eq!(std::fs::read_to_string(files.join("a.txt")).unwrap(), "a");
+    assert_eq!(std::fs::read_to_string(files.join("b.txt")).unwrap(), "b");
+    let mut names: Vec<String> = std::fs::read_dir(&files)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["a.txt", "b.txt"]);
 }
