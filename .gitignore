@@ -31,3 +31,6 @@ launchSettings.json
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Release builds (build/release.ps1)
+/dist/
