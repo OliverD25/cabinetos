@@ -15,12 +15,17 @@ public static class ThemeMapper
 {
     /// <summary>
     /// Maps <paramref name="theme"/>. <paramref name="systemAccent"/> is the
-    /// Windows accent's shades, used when the theme's accent is null.
-    /// Throws <see cref="ThemeFormatException"/> for a colour that is not one.
+    /// Windows accent's shades, used when the theme's accent is null;
+    /// <paramref name="systemIsLight"/> is Windows' mode, which a theme of
+    /// kind <c>system</c> follows: in light mode with the colours of
+    /// <see cref="SystemLight"/>. Throws <see cref="ThemeFormatException"/>
+    /// for a colour that is not one.
     /// </summary>
-    public static ThemeLook Map(ColorTheme theme, AccentShades systemAccent)
+    public static ThemeLook Map(ColorTheme theme, AccentShades systemAccent, bool systemIsLight = false)
     {
-        var p = theme.Palette;
+        var followsMode = theme.FollowsSystemMode;
+        var isLight = followsMode ? systemIsLight : theme.IsLight;
+        var (p, terminal) = followsMode && systemIsLight ? (SystemLight.Palette, SystemLight.Terminal) : (theme.Palette, theme.Terminal);
         var text = Parse(p.TextPrimary, "palette.textPrimary");
         var secondary = Parse(p.TextSecondary, "palette.textSecondary");
         var tertiary = Parse(p.TextTertiary, "palette.textTertiary");
@@ -39,7 +44,6 @@ public static class ThemeMapper
             Parse(p.PermissionMedium, "palette.permissionMedium"),
             Parse(p.PermissionHigh, "palette.permissionHigh"));
 
-        var isLight = theme.IsLight;
         var followsSystem = theme.Accent is null;
         var shades = followsSystem ? systemAccent : Shades(Parse(theme.Accent, "accent"), isLight);
         // What WinUI fills accent controls with: Light2 in dark mode, Dark1 in light mode.
@@ -48,9 +52,10 @@ public static class ThemeMapper
         // Text-derived overlays: the design's white at an alpha, here the theme's text at that alpha.
         Argb Text(byte alpha) => text.ScaleAlpha(alpha / 255.0);
 
-        // The surfaces under dialogs and notes: the Acrylic tint, opaque, and darker.
+        // The surfaces under dialogs and notes: the Acrylic tint, opaque, and a step darker: the
+        // design's #202020 under #2C2C2C in dark mode, Windows' #F3F3F3 under #FCFCFC in light mode.
         var surface = acrylic.WithAlpha(0xFF);
-        var surfaceDark = surface.ScaleRgb(0x20 / (double)0x2C);
+        var surfaceDark = surface.ScaleRgb(isLight ? 0xF3 / (double)0xFC : 0x20 / (double)0x2C);
 
         var brushes = new Dictionary<string, Argb>(StringComparer.Ordinal)
         {
@@ -108,7 +113,7 @@ public static class ThemeMapper
 
         // The palette's Acrylic alpha is how much luminosity it lays over the blur (0xB8, the design's .72);
         // menus and the transfer flyout sit a little denser, and the flyout a little darker.
-        var flyoutTint = surface.ScaleRgb(0x28 / (double)0x2C);
+        var flyoutTint = surface.ScaleRgb(isLight ? 0xF9 / (double)0xFC : 0x28 / (double)0x2C);
         var acrylics = new Dictionary<string, AcrylicLook>(StringComparer.Ordinal)
         {
             ["CbPaletteAcrylicBrush"] = new(surface, 0.15, acrylic.Opacity, surface.WithAlpha(0xF2)),
@@ -138,6 +143,7 @@ public static class ThemeMapper
             Id = theme.Id,
             Name = theme.Name,
             IsLight = isLight,
+            FollowsSystemMode = followsMode,
             FollowsSystemAccent = followsSystem,
             Accent = accent,
             AccentShades = shades,
@@ -147,7 +153,7 @@ public static class ThemeMapper
             Gradients = gradients,
             FileTypes = fileTypes,
             Levels = levels,
-            Terminal = Terminal(theme.Terminal, accent),
+            Terminal = Terminal(terminal, accent),
         };
     }
 

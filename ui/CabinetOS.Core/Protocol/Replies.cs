@@ -344,13 +344,24 @@ public sealed record ColorTheme(
     public const string Dark = "dark";
     public const string Light = "light";
 
-    /// <summary>Whether it is a theme for light mode.</summary>
+    /// <summary>Light or dark as Windows is set (protocol 11); the window decides which.</summary>
+    public const string System = "system";
+
+    /// <summary>Whether it is a theme for light mode. A <see cref="System"/> theme is not: the window asks Windows.</summary>
     [JsonIgnore]
     public bool IsLight => Kind == Light;
+
+    /// <summary>Whether it follows Windows' light or dark mode (kind <see cref="System"/>).</summary>
+    [JsonIgnore]
+    public bool FollowsSystemMode => Kind == System;
 }
 
-/// <summary>What the theme picker shows of a theme (<c>list_themes</c>): no palette, no tint.</summary>
-public sealed record ThemeInfo(string Id, string Name, string Author, string Version, string Kind, string? Accent = null);
+/// <summary>
+/// What the theme picker shows of a theme (<c>list_themes</c>): no palette.
+/// <see cref="Mica"/> came with protocol 11; a core before it leaves it
+/// out, and null also means plain Mica.
+/// </summary>
+public sealed record ThemeInfo(string Id, string Name, string Author, string Version, string Kind, string? Accent = null, MicaTint? Mica = null);
 
 /// <summary>Reply to <c>list_themes</c>: every valid theme, by ID.</summary>
 public sealed record ThemesReply(IReadOnlyList<ThemeInfo> Themes) : CoreReply;

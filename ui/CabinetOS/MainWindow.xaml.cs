@@ -404,6 +404,10 @@ public sealed partial class MainWindow : Window
                     ResizeDock(dockSize);
                     EndDockDrag();
                     break;
+                case "mode":
+                    // Windows' light or dark mode as the window sees it, through the path a change there takes.
+                    ForceSystemMode(step.Argument);
+                    break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
                     var shown = Active.View?.IndexOfName(step.Argument) ?? -1;

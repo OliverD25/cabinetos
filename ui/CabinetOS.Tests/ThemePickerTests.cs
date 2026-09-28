@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Themes;
 using CabinetOS.Tests.Support;
@@ -10,20 +9,14 @@ public class ThemePickerTests
 {
     private static readonly ThemeInfo[] Themes =
     [
-        new("default", "Default", "CabinetOS", "1.0.0", ColorTheme.Dark),
-        new("nord", "Nord", "CabinetOS", "1.0.0", ColorTheme.Dark, "#88C0D0"),
+        new("default", "Default", "CabinetOS", "1.1.0", ColorTheme.System),
+        new("nord", "Nord", "CabinetOS", "1.0.0", ColorTheme.Dark, "#88C0D0", new MicaTint("#2E3440", 0.88)),
         new("paper", "Paper", "Someone", "0.1.0", ColorTheme.Light, "#0F6CBD"),
     ];
 
-    private static ColorTheme Shipped(string id) =>
-        JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(Repo.Root, "sdk", "themes", id + ".json")), ProtocolJson.Default.ColorTheme)!;
-
-    // A core with three themes; "paper" has no readable file, so its swatch stays plain.
     private static FakeChannel Core(Func<SetValueRequest, CoreReply>? setValue = null) => new(request => request switch
     {
         ListThemesRequest => new ThemesReply(Themes),
-        GetThemeRequest { ThemeId: "paper" } => new ErrorReply(ErrorCodes.ConfigError, "paper.json line 2: expected `,`"),
-        GetThemeRequest { ThemeId: var id } => new ThemeReply(Shipped(id!)),
         SetValueRequest set => setValue?.Invoke(set) ?? new OkReply(),
         _ => new ErrorReply(ErrorCodes.UnknownRequest, request.Type),
     });
@@ -40,10 +33,9 @@ public class ThemePickerTests
         Assert.Equal([false, true, false], picker.Rows.Select(r => r.IsCurrent));
         Assert.Equal(1, picker.Highlight);
         Assert.Null(picker.Error);
-        // The swatches: the tint from each theme's file; plain Mica, or a file that cannot be read, has none.
+        // The swatches' tints come with the list (protocol 11): one request, no theme file read.
         Assert.Equal([null, "#2E3440", null], picker.Rows.Select(r => r.Tint));
-        Assert.IsType<ListThemesRequest>(core.Requests[0]);
-        Assert.Equal(["default", "nord", "paper"], core.Requests.OfType<GetThemeRequest>().Select(r => r.ThemeId).Order());
+        Assert.IsType<ListThemesRequest>(Assert.Single(core.Requests));
     }
 
     [Fact]

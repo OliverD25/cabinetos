@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Themes;
 using CabinetOS.Services;
 using Microsoft.UI.Xaml;
@@ -46,6 +47,9 @@ public sealed partial class ThemePicker : UserControl
     /// <summary>The accent a theme without one shows: the Windows accent.</summary>
     public Func<Argb>? SystemAccent { get; set; }
 
+    /// <summary>Whether Windows is in light mode, which a theme of kind <c>system</c> shows.</summary>
+    public Func<bool>? SystemIsLight { get; set; }
+
     /// <summary>Whether the picker is shown.</summary>
     public bool IsOpen => Visibility == Visibility.Visible;
 
@@ -79,6 +83,18 @@ public sealed partial class ThemePicker : UserControl
 
     /// <summary>Hides the picker.</summary>
     public void Close() => Visibility = Visibility.Collapsed;
+
+    /// <summary>
+    /// Draws the rows again: their swatches take the Windows accent and, for
+    /// a theme of kind <c>system</c>, Windows' mode, when they are made.
+    /// </summary>
+    public void Repaint()
+    {
+        if (IsOpen)
+        {
+            Render();
+        }
+    }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -127,7 +143,11 @@ public sealed partial class ThemePicker : UserControl
     private Grid RowFor(ThemeChoice choice, int index, bool highlighted)
     {
         var accent = choice.Info.Accent is { } own && Argb.TryParse(own, out var parsed) ? parsed : SystemAccent?.Invoke() ?? new Argb(0xFF, 0x60, 0xCD, 0xFF);
-        var tint = choice.Tint is { } tintText && Argb.TryParse(tintText, out var tintColor) ? tintColor : new Argb(0xFF, 0x20, 0x20, 0x20);
+        // Plain Mica: its light or dark base, as the theme would show it now.
+        var light = choice.Info.Kind == ColorTheme.Light || (choice.Info.Kind == ColorTheme.System && SystemIsLight?.Invoke() == true);
+        var tint = choice.Tint is { } tintText && Argb.TryParse(tintText, out var tintColor)
+            ? tintColor
+            : light ? new Argb(0xFF, 0xF3, 0xF3, 0xF3) : new Argb(0xFF, 0x20, 0x20, 0x20);
         var swatch = new Border
         {
             Width = 40,
@@ -157,9 +177,15 @@ public sealed partial class ThemePicker : UserControl
             Foreground = ThemeResources.Brush("CbHintTextBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         });
-        if (choice.Info.Kind == "light")
+        if (choice.Info.Kind is ColorTheme.Light or ColorTheme.System)
         {
-            name.Children.Add(new TextBlock { Text = "light", FontSize = 11, Foreground = ThemeResources.Brush("CbHintTextBrush"), VerticalAlignment = VerticalAlignment.Center });
+            name.Children.Add(new TextBlock
+            {
+                Text = choice.Info.Kind == ColorTheme.Light ? "light" : "light or dark, as Windows is set",
+                FontSize = 11,
+                Foreground = ThemeResources.Brush("CbHintTextBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
         }
 
         var check = new FontIcon

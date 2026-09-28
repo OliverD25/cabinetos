@@ -280,12 +280,14 @@ public class ProtocolTests
                     Assert.Equal(("fs:read", "medium", false), (plugin.Capabilities[1].Name, plugin.Capabilities[1].Level, plugin.Capabilities[1].Granted));
                     Assert.Single(plugin.Capabilities[1].Roots!);
                 }),
-            ($$$"""{"id":"{{{Id}}}","type":"themes","themes":[{"id":"default","name":"Default","author":"CabinetOS","version":"1.0.0","kind":"dark","accent":null},{"id":"nord","name":"Nord","author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#88C0D0"}]}""",
+            ($$$"""{"id":"{{{Id}}}","type":"themes","themes":[{"id":"default","name":"Default","author":"CabinetOS","version":"1.1.0","kind":"system","accent":null,"mica":null},{"id":"nord","name":"Nord","author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#88C0D0","mica":{"tint":"#2E3440","opacity":0.88}}]}""",
                 b =>
                 {
                     var themes = Assert.IsType<ThemesReply>(b).Themes;
-                    Assert.Equal(new ThemeInfo("default", "Default", "CabinetOS", "1.0.0", "dark"), themes[0]);
+                    Assert.Equal(new ThemeInfo("default", "Default", "CabinetOS", "1.1.0", ColorTheme.System), themes[0]);
                     Assert.Equal("#88C0D0", themes[1].Accent);
+                    // Protocol 11: the Mica tint comes with the list.
+                    Assert.Equal(new MicaTint("#2E3440", 0.88), themes[1].Mica);
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"theme","theme":{{{NordTheme}}}}""",
                 b =>

@@ -16,7 +16,8 @@ namespace CabinetOS.Services;
 /// brushes' colours in place and everything repaints at once, without a
 /// restart and without walking the visual tree. WinUI's own accent brushes
 /// are changed the same way. The theme's kind switches the content between
-/// dark and light, the Mica tint goes to the backdrop, and the terminal gets
+/// dark and light (kind <c>system</c>: as Windows is set, again whenever
+/// that changes), the Mica tint goes to the backdrop, and the terminal gets
 /// its colours through <see cref="Applied"/>.
 /// </summary>
 internal sealed class ThemeApplier
@@ -45,14 +46,8 @@ internal sealed class ThemeApplier
     {
         _root = root;
         _backdrop = backdrop;
-        // The Windows accent changed: a theme that follows it is applied again.
-        _system.ColorValuesChanged += (_, _) => root.DispatcherQueue.TryEnqueue(() =>
-        {
-            if (Theme is { } theme && Current is { FollowsSystemAccent: true })
-            {
-                Apply(theme);
-            }
-        });
+        // Windows' accent or its light or dark mode changed (it says which only by the values).
+        _system.ColorValuesChanged += (_, _) => root.DispatcherQueue.TryEnqueue(SystemColorsChanged);
     }
 
     /// <summary>A theme was applied: the terminal and anything else that paints outside the brushes follow.</summary>
@@ -65,6 +60,42 @@ internal sealed class ThemeApplier
     public ThemeLook? Current { get; private set; }
 
     /// <summary>
+    /// Whether Windows' apps are in light mode now. Windows' own background
+    /// colour for apps is white in light mode and black in dark mode.
+    /// </summary>
+    public bool SystemIsLight
+    {
+        get
+        {
+            if (ModeOverride is { } forced)
+            {
+                return forced;
+            }
+            var background = _system.GetColorValue(UIColorType.Background);
+            return (5 * background.G) + (2 * background.R) + background.B > 8 * 128;
+        }
+    }
+
+    /// <summary>
+    /// Development only (the snapshot aid's <c>mode:</c> step): the mode the
+    /// window takes as Windows', so light mode can be seen without changing
+    /// the PC's setting; null asks Windows.
+    /// </summary>
+    public bool? ModeOverride { get; set; }
+
+    /// <summary>
+    /// Windows' colours changed: a theme that follows its accent, or its mode
+    /// when the mode is now another, is applied again.
+    /// </summary>
+    public void SystemColorsChanged()
+    {
+        if (Theme is { } theme && Current is { } look && (look.FollowsSystemAccent || (look.FollowsSystemMode && look.IsLight != SystemIsLight)))
+        {
+            Apply(theme);
+        }
+    }
+
+    /// <summary>
     /// Applies <paramref name="theme"/>. A theme with a colour that is not one
     /// is not applied, not even in part (as the core does); the log says why.
     /// </summary>
@@ -73,7 +104,8 @@ internal sealed class ThemeApplier
         ThemeLook look;
         try
         {
-            look = ThemeMapper.Map(theme, SystemAccent(theme.IsLight));
+            var light = SystemIsLight;
+            look = ThemeMapper.Map(theme, SystemAccent(theme.FollowsSystemMode ? light : theme.IsLight), light);
         }
         catch (ThemeFormatException error)
         {
@@ -116,6 +148,7 @@ internal sealed class ThemeApplier
         Theme = theme;
         Current = look;
         Diag.Info(Target, "theme applied", new LogField("theme", look.Id), new LogField("kind", theme.Kind),
+            new LogField("mode", look.IsLight ? "light" : "dark"),
             new LogField("accent", look.FollowsSystemAccent ? "system" : look.Accent.ToString()),
             new LogField("mica", look.Mica is { } mica ? $"{mica.Tint} at {mica.Opacity}" : "plain"));
         Applied?.Invoke(look);

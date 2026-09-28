@@ -100,8 +100,11 @@ public sealed class ThemeLook
     /// <summary>The theme's name.</summary>
     public required string Name { get; init; }
 
-    /// <summary>Whether WinUI's own controls are drawn in light mode.</summary>
+    /// <summary>Whether WinUI's own controls are drawn in light mode: the theme's kind, or Windows' mode for kind <c>system</c>.</summary>
     public required bool IsLight { get; init; }
+
+    /// <summary>Whether it follows Windows' light or dark mode (kind <c>system</c>), so a change there maps it again.</summary>
+    public bool FollowsSystemMode { get; init; }
 
     /// <summary>Whether the accent is the Windows accent colour (the theme's is null).</summary>
     public required bool FollowsSystemAccent { get; init; }

@@ -25,6 +25,7 @@ public sealed partial class MainWindow
             PluginsView.Repaint();
             ReviewView.Repaint();
             MarketView.Repaint();
+            ThemesView.Repaint();
         };
         _picker = new ThemePickerModel(_session);
         ThemesView.Model = _picker;
@@ -35,6 +36,19 @@ public sealed partial class MainWindow
             var shades = _themes.SystemAccent(light);
             return light ? shades.Dark1 : shades.Light2;
         };
+        ThemesView.SystemIsLight = () => _themes.SystemIsLight;
+    }
+
+    // The snapshot aid's mode: step: light or dark as if Windows were set so, or "windows" to ask Windows again.
+    private void ForceSystemMode(string mode)
+    {
+        _themes.ModeOverride = mode switch
+        {
+            "light" => true,
+            "dark" => false,
+            _ => null,
+        };
+        _themes.SystemColorsChanged();
     }
 
     private void RegisterThemeCommands()

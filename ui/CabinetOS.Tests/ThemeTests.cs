@@ -132,6 +132,35 @@ public class ThemeTests
     }
 
     [Fact]
+    public void A_system_theme_takes_the_Windows_mode_and_its_own_colours_only_in_dark_mode()
+    {
+        var shipped = Shipped("default");
+        Assert.Equal((ColorTheme.System, true, false), (shipped.Kind, shipped.FollowsSystemMode, shipped.IsLight));
+
+        var dark = ThemeMapper.Map(shipped, DesignAccent, systemIsLight: false);
+        Assert.Equal((false, true), (dark.IsLight, dark.FollowsSystemMode));
+        Assert.Equal(Flatten(ThemeMapper.Map(shipped with { Kind = ColorTheme.Dark }, DesignAccent)), Flatten(dark));
+
+        // Light mode: the window's light colours, the Windows accent's light-mode shade, the theme's (plain) Mica.
+        var systemLight = ThemeMapper.Shades(new Argb(0xFF, 0x00, 0x5F, 0xB8), light: true);
+        var light = ThemeMapper.Map(shipped, systemLight, systemIsLight: true);
+        Assert.Equal((true, true), (light.IsLight, light.FollowsSystemMode));
+        Assert.Equal("#FF1B1B1B", light.Brushes["CbTextPrimaryBrush"].ToString());
+        Assert.Equal(systemLight.Dark1, light.Accent);
+        Assert.Null(light.Mica);
+        Assert.Equal(("#383A42FF", "#FAFAFA00"), (light.Terminal.Foreground, light.Terminal.Background));
+        // The dialog's footer and the notes sit a step darker than the dialog, as Windows' light surfaces do.
+        Assert.Equal(("#FFFCFCFC", "#FFF3F3F3"), (light.Brushes["CbDialogFillBrush"].ToString(), light.Brushes["CbDialogFooterFillBrush"].ToString()));
+        // Dark text on light layers.
+        Assert.True(Luma(light.Brushes["CbTextPrimaryBrush"]) < 40 && Luma(light.Brushes["CbDialogFillBrush"]) > 240);
+
+        // A theme with a mode of its own keeps it, whatever Windows is set to.
+        var nord = ThemeMapper.Map(Shipped("nord"), DesignAccent, systemIsLight: true);
+        Assert.Equal((false, false), (nord.IsLight, nord.FollowsSystemMode));
+        Assert.Equal(Flatten(ThemeMapper.Map(Shipped("nord"), DesignAccent)), Flatten(nord));
+    }
+
+    [Fact]
     public void No_mica_is_plain_Mica_and_a_tint_keeps_its_colour_and_opacity()
     {
         Assert.Null(ThemeMapper.Map(Shipped("default"), DesignAccent).Mica);

@@ -8,8 +8,7 @@ namespace CabinetOS.Core.Themes;
 
 /// <summary>
 /// One theme in the picker: what <c>list_themes</c> says, the Mica tint of
-/// its swatch once its file was read (null: plain Mica, or not read yet),
-/// and whether it is the theme in effect.
+/// its swatch (null: plain Mica), and whether it is the theme in effect.
 /// </summary>
 public sealed record ThemeChoice(ThemeInfo Info, string? Tint, bool IsCurrent);
 
@@ -17,9 +16,9 @@ public sealed record ThemeChoice(ThemeInfo Info, string? Tint, bool IsCurrent);
 /// The theme picker (<c>preferences.selectColorTheme</c>, docs/ui.md,
 /// "Themes"): the core's themes in its order, the highlight the keys move,
 /// and applying one through <c>set_value ui.theme</c>. The core then sends
-/// <c>theme_changed</c>, which the window applies. The swatches' tints need
-/// each theme's file (<c>list_themes</c> has only the accent), so every theme
-/// is read once when the picker opens.
+/// <c>theme_changed</c>, which the window applies. <c>list_themes</c> carries
+/// each theme's Mica tint since protocol 11, so opening the picker is one
+/// request; with an older core every swatch shows plain Mica.
 /// </summary>
 public sealed class ThemePickerModel(ICoreChannel core)
 {
@@ -44,8 +43,7 @@ public sealed class ThemePickerModel(ICoreChannel core)
 
     /// <summary>
     /// Lists the themes with <paramref name="currentId"/> marked and
-    /// highlighted, then reads each theme's tint. False when the core has no
-    /// themes (the error says so).
+    /// highlighted. False when the core has no themes (the error says so).
     /// </summary>
     public async Task<bool> LoadAsync(string? currentId)
     {
@@ -67,17 +65,10 @@ public sealed class ThemePickerModel(ICoreChannel core)
         switch (reply)
         {
             case ThemesReply themes:
-                Rows = themes.Themes.Select(t => new ThemeChoice(t, null, t.Id == currentId)).ToList();
+                Rows = themes.Themes.Select(t => new ThemeChoice(t, t.Mica?.Tint, t.Id == currentId)).ToList();
                 var current = Rows.ToList().FindIndex(r => r.IsCurrent);
                 Highlight = Rows.Count == 0 ? -1 : Math.Max(0, current);
                 Changed?.Invoke();
-                // The core answers these on its own threads, in any order: the tints are set together once all came.
-                var tints = await Task.WhenAll(Rows.Select(r => ReadTintAsync(r.Info.Id)));
-                if (load == _load && tints.Any(t => t is not null))
-                {
-                    Rows = Rows.Select((row, i) => row with { Tint = tints[i] }).ToList();
-                    Changed?.Invoke();
-                }
                 return true;
             case ErrorReply { Code: ErrorCodes.UnknownRequest }:
                 return Fail("This core has no themes yet (list_themes).");
@@ -143,19 +134,6 @@ public sealed class ThemePickerModel(ICoreChannel core)
         finally
         {
             IsApplying = false;
-        }
-    }
-
-    // The theme's Mica tint; null for plain Mica, and for a file that cannot be read (list_themes listed it anyway).
-    private async Task<string?> ReadTintAsync(string id)
-    {
-        try
-        {
-            return await core.RequestAsync(new GetThemeRequest { ThemeId = id }) is ThemeReply { Theme.Mica.Tint: var tint } ? tint : null;
-        }
-        catch (IOException)
-        {
-            return null;
         }
     }
 
