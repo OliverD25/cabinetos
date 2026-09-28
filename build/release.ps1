@@ -16,9 +16,9 @@
 #  1. cargo build --release of cabinetos-core, cabinetos-indexer and
 #     cabinetos-cli (core\.cargo\config.toml links the C runtime in).
 #  2. dotnet publish of ui\CabinetOS: Release, win-x64, framework-dependent
-#     on .NET and on the Windows App Runtime of the machine. The Windows App
-#     SDK's MSIX tooling is turned on for this command only, because it
-#     writes CabinetOS.pri, the compiled XAML; the app stays unpackaged.
+#     on .NET and on the Windows App Runtime of the machine. The project
+#     keeps the Windows App SDK's MSIX tooling on, which writes CabinetOS.pri,
+#     the compiled XAML, into the publish; the app stays unpackaged.
 #  3. The three programs and their .pdb files next to CabinetOS.exe, where
 #     the window's launcher looks first; crash traces read the .pdb files
 #     for file and line.
@@ -109,7 +109,7 @@ if (-not $PackageOnly) {
 
     # 1-2. Build.
     Invoke-Native 'cargo' @('build', '--release', '--locked', '-p', 'cabinetos-core', '-p', 'cabinetos-indexer', '-p', 'cabinetos-cli') (Join-Path $repo 'core')
-    Invoke-Native 'dotnet' @('publish', 'CabinetOS\CabinetOS.csproj', '-c', 'Release', '-r', 'win-x64', '--self-contained', 'false', '-p:EnableMsixTooling=true', '-o', $folder) (Join-Path $repo 'ui')
+    Invoke-Native 'dotnet' @('publish', 'CabinetOS\CabinetOS.csproj', '-c', 'Release', '-r', 'win-x64', '--self-contained', 'false', '-o', $folder) (Join-Path $repo 'ui')
     if (-not (Test-Path -LiteralPath (Join-Path $folder 'CabinetOS.pri'))) {
         throw 'The publish has no CabinetOS.pri, so the window could not load its XAML.'
     }

@@ -8,9 +8,12 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <UseWinUI>true</UseWinUI>
     <!-- Unpackaged, so dotnet run works without MSIX; the Windows App Runtime
-         2.5 is used from the machine (docs/dev-setup.md, "Phase 5"). -->
+         2.5 is used from the machine (docs/dev-setup.md, "Phase 5"). The MSIX
+         tooling stays on for its resource step alone: without it a publish has
+         no CabinetOS.pri, the compiled XAML, and the published window stops at
+         start ("Cannot locate resource from 'ms-appx:///MainWindow.xaml'"). -->
     <WindowsPackageType>None</WindowsPackageType>
-    <EnableMsixTooling>false</EnableMsixTooling>
+    <EnableMsixTooling>true</EnableMsixTooling>
     <!-- Program.Main names the UI thread and starts diagnostics before WinUI. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
