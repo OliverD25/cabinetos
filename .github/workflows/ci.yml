@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   core:
-    name: Rust core (fmt, clippy, test, release build)
+    name: Rust core (fmt, clippy, test, release build, benches compile)
     runs-on: windows-latest
     # A hung test must not burn hours of paid Windows minutes.
     timeout-minutes: 30
@@ -51,6 +51,11 @@ jobs:
 
       - name: Release build
         run: cargo build --workspace --release
+
+      # Benchmarks need a quiet machine and a 100,000-file fixture; CI only
+      # checks that they still compile. Run them locally (core/README.md).
+      - name: Benchmarks compile
+        run: cargo bench --workspace --no-run
 
   deny:
     name: cargo-deny (licenses, advisories, bans, sources)
