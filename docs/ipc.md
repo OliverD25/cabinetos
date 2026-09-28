@@ -86,7 +86,8 @@ marketplace: `marketplace_refresh` and `marketplace_search` with the reply
 `install_finished` and `tools_changed`, and the error codes
 `no_such_extension`, `marketplace_error`, `hash_mismatch` and
 `incompatible`. Version 11 added what the shell asked for after Phases 5
-and 9: `items_per_second` in `job_progress`.
+and 9: `items_per_second` in `job_progress`; one `marketplace_index` item
+per extension, with `installedVersion`.
 
 ## Requests and replies
 
@@ -921,10 +922,12 @@ configuration says where it is; the core reads it only when a client asks.
 ```
 
 - `items` are in the index file's own format (camelCase keys); the core
-  adds each capability's `level`. After `marketplace_refresh` they come in
-  index order; after `marketplace_search`, best first, ranked as the
-  palette ranks commands, by name, ID and publisher. An empty `query` keeps
-  every item.
+  adds each capability's `level`, and `installedVersion` when the
+  marketplace installed that extension. There is one item per extension:
+  the newest version this core can run (one it cannot run is left out).
+  After `marketplace_refresh` they come in index order; after
+  `marketplace_search`, best first, ranked as the palette ranks commands,
+  by name, ID and publisher. An empty `query` keeps every item.
 - `marketplace_search` searches the index read last; it reads the index
   first when there is none yet, or when `marketplace.index` changed.
 - `source` is the index's file or URL; `fetched_at_ms` is when it was read

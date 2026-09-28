@@ -1291,6 +1291,7 @@ mod tests {
             }],
             min_core_version: "0.1.0".to_owned(),
             license: "MIT".to_owned(),
+            installed_version: Some("0.1.0".to_owned()),
         }
     }
 
@@ -2184,6 +2185,7 @@ mod tests {
         assert_eq!(item["minCoreVersion"], "0.1.0");
         assert_eq!(item["download"]["url"], "files/hello-0.1.0.zip");
         assert_eq!(item["capabilities"][0]["level"], "low");
+        assert_eq!(item["installedVersion"], "0.1.0");
         assert!(item.get("rating").is_none());
     }
 

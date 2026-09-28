@@ -68,6 +68,10 @@ pub struct MarketItem {
     pub min_core_version: String,
     /// Its license, for example `MIT`.
     pub license: String,
+    /// The version installed from the marketplace, when it is installed.
+    /// The core fills it in; an index leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
 }
 
 /// What an extension is.
@@ -234,6 +238,7 @@ mod tests {
         assert_eq!(item.kind, ExtensionKind::Plugin);
         assert!(!item.author.verified);
         assert_eq!((&item.rating, item.installs), (&None, None));
+        assert_eq!(item.installed_version, None);
         assert!(item.long.is_empty() && item.capabilities.is_empty());
         let wire = serde_json::to_value(&item).unwrap();
         assert_eq!(wire["minCoreVersion"], "0.1.0");

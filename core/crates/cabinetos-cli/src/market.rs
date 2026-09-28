@@ -46,8 +46,12 @@ fn describe(item: &MarketItem) -> Vec<String> {
     } else {
         ""
     };
+    let installed = item
+        .installed_version
+        .as_ref()
+        .map_or_else(String::new, |version| format!(", installed {version}"));
     let mut lines = vec![format!(
-        "{:<18} {:<8} {:<6} {} by {}{verified}, {}",
+        "{:<18} {:<8} {:<6} {} by {}{verified}, {}{installed}",
         item.id,
         item.version,
         kind_name(item.kind),
@@ -251,13 +255,14 @@ mod tests {
                 {"name": "events:emit", "reason": "Events."}
             ],
             "minCoreVersion": "0.1.0",
-            "license": "MIT"
+            "license": "MIT",
+            "installedVersion": "0.1.0"
         }))
         .unwrap();
         assert_eq!(
             describe(&item),
             [
-                "hello              0.1.0    plugin Hello by CabinetOS (verified), 2.00 KiB",
+                "hello              0.1.0    plugin Hello by CabinetOS (verified), 2.00 KiB, installed 0.1.0",
                 "  Says hello.",
                 "  asks for: cmd:register (low), events:emit",
             ]

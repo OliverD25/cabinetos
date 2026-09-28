@@ -95,11 +95,21 @@ its own download and staging folder when it ends, whether it worked or not.
 | `items[].capabilities` | For a plugin: the capabilities its `plugin.json` asks for (`name`, `reason`, `roots`). The core adds each one's `level` when it sends the item to a client. |
 | `items[].minCoreVersion` | The oldest CabinetOS it runs on, `major.minor.patch`. |
 | `items[].license` | Its license, for example `MIT`. |
+| `items[].installedVersion` | Left out of an index. The core fills it in when it sends the item to a client: the version installed from the marketplace, if one is. |
 
 An item that does not follow the format (an unknown `kind` from a newer
 index, a missing key, a bad ID, version or hash, a second copy of one ID and
 version) is left out, and the core's log says why; the other items stay.
 Keys the core does not know are ignored, so a newer index still works.
+
+A client is offered one item per extension: the newest version this core
+can run, in the order the index first lists each extension. An extension
+none of whose versions this core can run is not offered.
+`install_extension` still sees every version: it can install an older one
+by `version`, and says `incompatible` for one this core cannot run. Each
+offered item carries `installedVersion` when the marketplace installed
+that extension; an extension that is there but was not installed from the
+marketplace (a shipped theme) has none.
 
 What a download is, by kind:
 

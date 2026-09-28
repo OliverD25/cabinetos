@@ -78,5 +78,6 @@ pub use theme::{
 /// the events `install_progress`, `install_finished` and `tools_changed`,
 /// the error codes `no_such_extension`, `marketplace_error`,
 /// `hash_mismatch` and `incompatible`); version 11 the shell's small
-/// requests: `items_per_second` in `job_progress`.
+/// requests: `items_per_second` in `job_progress`; one `marketplace_index`
+/// item per extension, with `installedVersion`.
 pub const PROTOCOL_VERSION: u32 = 11;

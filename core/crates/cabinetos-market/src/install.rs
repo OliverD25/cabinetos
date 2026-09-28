@@ -167,6 +167,34 @@ impl Market {
         read_record(&self.dirs.market)
     }
 
+    /// What a client is offered of `items`: one item per extension, the
+    /// newest version this core can run (an extension none of whose
+    /// versions it can run is left out), in the order the index first
+    /// lists each, with the version installed from the marketplace, if
+    /// any. Reads the record of installs.
+    #[must_use]
+    pub fn offers(&self, items: &[MarketItem]) -> Vec<MarketItem> {
+        let core = parse_version(&self.core_version);
+        let installed = self.installed();
+        let mut offered: Vec<MarketItem> = Vec::new();
+        for item in items {
+            if parse_version(&item.min_core_version) > core {
+                continue;
+            }
+            match offered.iter_mut().find(|known| known.id == item.id) {
+                Some(known) if parse_version(&item.version) > parse_version(&known.version) => {
+                    known.clone_from(item);
+                }
+                Some(_) => {}
+                None => offered.push(item.clone()),
+            }
+        }
+        for item in &mut offered {
+            item.installed_version = installed.get(&item.id).map(|record| record.version.clone());
+        }
+        offered
+    }
+
     /// Every Tool Extension in the tools folder.
     #[must_use]
     pub fn tools(&self) -> Vec<ToolInfo> {

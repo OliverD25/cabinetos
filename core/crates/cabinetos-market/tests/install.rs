@@ -448,6 +448,55 @@ fn a_tool_is_unpacked_listed_and_removed_with_its_empty_folders() {
 }
 
 #[test]
+fn a_client_is_offered_one_version_per_extension_and_sees_what_is_installed() {
+    let mut setup = Setup::new();
+    let package = zip(&[
+        ("plugin.json", &fixture("plugin.json")),
+        ("plugin.wasm", &fixture("plugin.wasm")),
+    ]);
+    setup.offer_hello(&package);
+    let mut newer = setup.items[0].clone();
+    newer["version"] = json!("0.3.0");
+    newer["minCoreVersion"] = json!("9.0.0");
+    setup.items.push(newer);
+    setup.offer("theme", "nord-test", "1.0.0", b"{}", &json!({}));
+    setup.offer("theme", "nord-test", "1.2.0", b"{}", &json!({}));
+    setup.offer("theme", "nord-test", "1.1.0", b"{}", &json!({}));
+    setup.offer(
+        "tool",
+        "too-new",
+        "1.0.0",
+        b"PK",
+        &json!({"minCoreVersion": "9.0.0"}),
+    );
+    setup.write_index();
+    let market = setup.market();
+    let index = market
+        .fetch(&Source::Local(setup.index_dir()), false)
+        .unwrap();
+    assert_eq!(index.items.len(), 6);
+
+    let offered = market.offers(&index.items);
+    let shown: Vec<(&str, &str)> = offered
+        .iter()
+        .map(|item| (item.id.as_str(), item.version.as_str()))
+        .collect();
+    // hello 0.3.0 and the tool need a newer core; the newest theme wins.
+    assert_eq!(shown, [("hello", "0.1.0"), ("nord-test", "1.2.0")]);
+    assert!(offered.iter().all(|item| item.installed_version.is_none()));
+
+    let hello = market.choose(&index, "hello", None).unwrap();
+    market
+        .install(&index, hello, false, &check_plugin, &mut |_, _, _| {})
+        .unwrap();
+    let offered = market.offers(&index.items);
+    assert_eq!(offered[0].installed_version.as_deref(), Some("0.1.0"));
+    assert_eq!(offered[1].installed_version, None);
+    market.uninstall("hello", |_| Ok(())).unwrap();
+    assert_eq!(market.offers(&index.items)[0].installed_version, None);
+}
+
+#[test]
 fn the_newest_version_this_core_runs_is_chosen() {
     let mut setup = Setup::new();
     let package = zip(&[

@@ -314,6 +314,12 @@ async fn a_plugin_from_a_local_index_installs_for_review_and_uninstalls_exactly(
             missing: vec!["cmd:register".to_owned(), "events:emit".to_owned()]
         }
     );
+    let Response::MarketplaceIndex { items, .. } =
+        ask(&mut client, Request::MarketplaceRefresh).await
+    else {
+        panic!("expected the index");
+    };
+    assert_eq!(items[0].installed_version.as_deref(), Some("0.1.0"));
     let config: Value =
         serde_json::from_str(&fs::read_to_string(core.path("cabinetos.json")).unwrap()).unwrap();
     assert_eq!(config["plugins"]["hello"]["granted"], json!([]));
@@ -327,6 +333,18 @@ async fn a_plugin_from_a_local_index_installs_for_review_and_uninstalls_exactly(
     fs::write(installed.join("notes.txt"), "mine").unwrap();
     assert_eq!(ask(&mut client, uninstall("hello")).await, Response::Ok);
     assert!(plugins(&mut client).await.is_empty());
+    let Response::MarketplaceIndex { items, .. } = ask(
+        &mut client,
+        Request::MarketplaceSearch {
+            query: "hello".to_owned(),
+            kind: None,
+        },
+    )
+    .await
+    else {
+        panic!("expected search results");
+    };
+    assert_eq!(items[0].installed_version, None);
     assert_eq!(
         files_under(&installed),
         [installed.join("notes.txt")],

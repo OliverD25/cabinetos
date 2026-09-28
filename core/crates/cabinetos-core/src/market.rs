@@ -62,7 +62,7 @@ impl Marketplace {
     /// The reply to `marketplace_refresh`: reads the index now. Blocking.
     pub(crate) fn refresh(&self) -> Response {
         match self.read_index() {
-            Ok(index) => index_reply(&index, index.items.clone()),
+            Ok(index) => index_reply(&index, self.market.offers(&index.items)),
             Err(error) => failure(error),
         }
     }
@@ -70,7 +70,10 @@ impl Marketplace {
     /// The reply to `marketplace_search`. Blocking when it reads the index.
     pub(crate) fn search(&self, query: &str, kind: Option<ExtensionKind>) -> Response {
         match self.current_index() {
-            Ok(index) => index_reply(&index, cabinetos_market::search(&index.items, query, kind)),
+            Ok(index) => {
+                let offered = self.market.offers(&index.items);
+                index_reply(&index, cabinetos_market::search(&offered, query, kind))
+            }
             Err(error) => failure(error),
         }
     }
