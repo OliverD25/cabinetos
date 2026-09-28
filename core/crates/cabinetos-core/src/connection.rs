@@ -174,6 +174,17 @@ pub(crate) async fn handle_connection(
                     session.reject_frame_too_large(len, max);
                     break;
                 }
+                // The pipe ended inside a frame: the client went away (a
+                // window that crashed while it wrote), which breaks no rule.
+                Some(Err(IpcError::Io(error)))
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::BrokenPipe
+                    ) =>
+                {
+                    tracing::info!(%error, "the client left in the middle of a frame");
+                    break;
+                }
                 Some(Err(error)) => {
                     tracing::warn!(%error, "malformed frame; closing the connection");
                     break;

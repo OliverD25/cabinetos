@@ -391,6 +391,41 @@ async fn bad_frames_get_error_replies() {
     assert_eq!(status.code(), Some(0));
 }
 
+/// A client that goes away halfway through a frame (a window that crashed
+/// while writing) broke no rule of the protocol: the log says it left, not
+/// that a frame was malformed.
+#[tokio::test]
+async fn a_client_that_leaves_in_the_middle_of_a_frame_is_logged_as_leaving() {
+    let mut core = start_core(&[]);
+    let mut client = connect(&core.pipe).await;
+    let mut raw = open_raw(&core.pipe).await;
+    // A frame that announces 100 bytes; 9 of them arrive.
+    let mut half = 100u32.to_le_bytes().to_vec();
+    half.extend_from_slice(br#"{"id":"01"#);
+    tokio::io::AsyncWriteExt::write_all(&mut raw, &half)
+        .await
+        .unwrap();
+    drop(raw);
+    // The core notices before it stops.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    client.request(Request::Shutdown).await.unwrap();
+    drop(client);
+    let status = wait_for_exit(&mut core.child, EXIT_DEADLINE).await;
+    assert_eq!(status.code(), Some(0));
+
+    let lines = read_log_lines(core.log_dir.path(), "core");
+    assert!(
+        lines
+            .iter()
+            .any(|line| line["message"] == "the client left in the middle of a frame"),
+        "{lines:#?}"
+    );
+    assert!(
+        !lines.iter().any(|line| line["level"] == "WARN"),
+        "{lines:#?}"
+    );
+}
+
 #[tokio::test]
 async fn a_missing_log_directory_is_created_without_noise() {
     let dir = tempfile::tempdir().unwrap();

@@ -26,7 +26,8 @@ There are three channels:
 - Framing: every message is a 4-byte little-endian length, then that many
   bytes of UTF-8 JSON. A frame may be at most 16 MiB; a longer one gets a
   `frame_too_large` error and the connection is closed. Large data belongs in
-  shared memory.
+  shared memory. A connection that ends inside a frame is closed too; the
+  log says the client left in the middle of a frame.
 - Every message is one flat JSON object with an `id` (a ULID) and a `type`:
 
   ```json
