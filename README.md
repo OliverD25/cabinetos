@@ -16,15 +16,17 @@ workspace architecture of VS Code.
 - **The mouse is optional.** Every action is a named command with a shortcut,
   reachable from a command palette, with chord keybindings.
 
-Status: pre-alpha. Phases 0 to 4 and 6 to 8 of [the plan](docs/PLAN.md) are
+Status: pre-alpha. Phases 0 to 4 and 6 to 9 of [the plan](docs/PLAN.md) are
 done: the governing documents, and a Rust core that lists and watches
 directories in shared memory, serves its configuration, commands and keymap,
 runs copy, move and delete jobs on per-disk queues, runs sandboxed
 WebAssembly plugins whose crashes it contains, searches whole NTFS volumes
-through an elevated indexer (or walks folders without it), and runs shells
-in pseudo-consoles, all over a user-only named pipe, with the indexer behind
-a read-only pipe of its own and each shell's bytes on a pipe of their own
-(`core/`, 434 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 395
+through an elevated indexer (or walks folders without it), runs shells in
+pseudo-consoles, applies JSON colour themes live, and installs plugins,
+themes and tools from a static marketplace index with each download's
+SHA-256 checked, all over a user-only named pipe, with the indexer behind a
+read-only pipe of its own and each shell's bytes on a pipe of their own
+(`core/`, 477 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 412
 tests): two panes over the core's shared-memory listings with the shell's
 type names and icons, breadcrumbs, a status bar, the command palette with
 chord keys and inline rebinding, copy, move, delete, rename, new folder and
