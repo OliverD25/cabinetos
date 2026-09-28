@@ -60,8 +60,8 @@ Studio still has only the C++ workload, which command-line builds do not need.
   ```
 
 - **Windows App SDK**: command-line builds (`dotnet build`) get it as the
-  `Microsoft.WindowsAppSDK` NuGet package during restore; nothing to install
-  for building. Running the window needs the Windows App Runtime (see
+  Windows App SDK NuGet packages (the WinUI, Foundation, InteractiveExperiences
+  and Runtime components) during restore; nothing to install for building. Running the window needs the Windows App Runtime (see
   "Phase 5" below).
   The Visual Studio workload is only needed for the XAML designer and the
   project templates inside Visual Studio. To add it, in the Visual Studio
@@ -81,7 +81,7 @@ Checked on 2026-09-28 on the main PC (Windows 11 25H2, build 26200).
 | Tool or package | Version | License | Used for |
 |---|---|---|---|
 | .NET SDK | 10.0.401, pinned in `ui/global.json` (a newer 10.0 feature band is accepted) | MIT | building and testing |
-| `Microsoft.WindowsAppSDK` (NuGet) | 2.5.1 | Microsoft Software License Terms (redistributable; not an open-source license) | WinUI 3, Mica, the window |
+| `Microsoft.WindowsAppSDK.WinUI` 2.3.9, `.Foundation` 2.3.12, `.InteractiveExperiences` 2.1.9, `.Runtime` 2.5.1 (NuGet) | Windows App SDK 2.5.1 | Microsoft Software License Terms (redistributable; not an open-source license) | WinUI 3, Mica, the window |
 | Windows App Runtime | 2.5 (x64), installed on the machine | same as above | running `CabinetOS.exe` |
 | `CommunityToolkit.Mvvm` | 8.4.2 | MIT | `ObservableObject` in the view models |
 | `Microsoft.Windows.CsWin32` | 0.3.335 (build time only) | MIT | generated calls to `MapViewOfFile`, `UnmapViewOfFile`, `CloseHandle`, `MessageBox` |

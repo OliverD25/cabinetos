@@ -55,12 +55,12 @@ What it runs, in order:
    in `core\`. `core\.cargo\config.toml` links the C runtime into the
    programs (`+crt-static`), so they do not need the Visual C++
    Redistributable, which a clean Windows 11 lacks.
-2. `dotnet publish CabinetOS\CabinetOS.csproj -c Release -r win-x64 --self-contained false -p:EnableMsixTooling=true -o <release folder>`
+2. `dotnet publish CabinetOS\CabinetOS.csproj -c Release -r win-x64 --self-contained false -o <release folder>`
    in `ui\`. Framework-dependent: .NET 10 and the Windows App Runtime come
-   from the machine. `-p:EnableMsixTooling=true` makes the Windows App SDK
-   write `CabinetOS.pri` into the publish folder; without it the window stops
-   at start with "Cannot locate resource from 'ms-appx:///MainWindow.xaml'".
-   The app stays unpackaged. The script stops if the `.pri` file is missing.
+   from the machine. The project keeps the Windows App SDK's MSIX tooling on,
+   which writes `CabinetOS.pri`, the compiled XAML, into the publish; without
+   it the window stops at start. The app stays unpackaged. The script stops
+   if the `.pri` file is missing.
 3. Copies the three programs and their `.pdb` files, the themes, Markdown
    Preview, `LICENSE` and the two install scripts; writes `release.json`
    from the publish output and the Windows App SDK package (the minimum
