@@ -27,6 +27,7 @@ with the reason and the way to undo it.
 | 9, core | [phase-9-core-report.md](phase-9-core-report.md) | Themes as one Rust type with four shipped themes and live apply; the marketplace client with SHA-256-checked installs. 477 tests. |
 | 9, UI | [phase-9-ui-report.md](phase-9-ui-report.md) | Themes applied live, the theme picker, the marketplace view. 395 UI tests. A light theme ended the window; fixed. |
 | UI self-review | [ui-self-review-report.md](ui-self-review-report.md) | A review pass over the whole shell: 13 fixes (a file probe off the UI thread, focus order in overlays, stale colours, Esc in the flyout). 412 UI tests. |
+| live check | [live-check.md](live-check.md) | Real keys and mouse clicks on the shell, screen unlocked: 100,000 entries shown 88 ms after Enter; PageDown held 5 s at 53–61 frames per second, worst frame 78 ms; the file keys checked on disk; the terminal, the palette from inside it, search and Markdown Preview; five findings for the shell. |
 | core for the UI, v11 | [protocol-11-report.md](protocol-11-report.md) | The window's own commands in the registry, `ui.dockSize`, readable type names, `items_per_second`, one marketplace item per extension with `installedVersion`, the Mica tint in `list_themes`, the `system` theme kind. 482 tests. |
 
 Phase 5 (the WinUI 3 shell) waited for the .NET SDK, which was installed in

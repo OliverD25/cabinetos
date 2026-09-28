@@ -35,8 +35,8 @@ plugin list and permissions review, the integrated terminal in a Tool Dock,
 Tool Extensions each in a WebView2 process of its own, with Markdown
 Preview as the first (opt-in, in `sdk/tools`), colour themes applied live
 with a theme picker, and the marketplace view, which installs plugins and
-themes from an index through the core; its scrolling check and the
-real-key run still wait for an unlocked screen.
+themes from an index through the core; checked with real keys on
+2026-09-28, with five findings queued for the shell.
 
 ## Documents
 
