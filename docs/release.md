@@ -81,8 +81,9 @@ Switches:
 - `-PackageOnly`: builds nothing; zips the existing release folder again and
   writes a new hash and new manifests. For after signing (below).
 
-The build warns when the working tree has uncommitted changes, and
-`release.json` records the commit and whether the tree was clean.
+The build warns when `core`, `ui`, `sdk` or `build` hold uncommitted
+changes or new files, and `release.json` records the commit and whether
+they were clean.
 
 ### In GitHub Actions
 

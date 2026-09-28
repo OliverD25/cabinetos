@@ -98,7 +98,9 @@ if (-not $PackageOnly) {
     $dirty = $false
     if (Get-Command git -ErrorAction SilentlyContinue) {
         $commit = (git -C $repo rev-parse HEAD).Trim()
-        $dirty = [bool](git -C $repo status --porcelain)
+        # Only the folders the build reads; untracked files count, because
+        # the C# projects compile every .cs file in their folders.
+        $dirty = [bool](git -C $repo status --porcelain -- core ui sdk build LICENSE)
         if ($dirty) { Write-Warning 'The working tree has uncommitted changes, and this build includes them.' }
     }
     foreach ($old in $folder, $zip, "$zip.sha256", $wingetOut) {
