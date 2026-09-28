@@ -265,6 +265,77 @@ public class TransferCenterTests
     }
 
     [Fact]
+    public async Task A_quiet_end_while_minimized_hands_the_pill_to_the_job_still_running()
+    {
+        var (center, _) = Create();
+        var older = (await center.StartAsync(JobKind.Copy, [@"C:\a"], @"D:\x")).Job!;
+        await center.StartAsync(JobKind.Move, [@"C:\b"], @"D:\y");
+        center.OnEvent(Progress(7, JobState.Running, 10, 100));
+        center.Minimize();
+
+        center.OnEvent(Progress(8, JobState.Completed, 100, 100));
+
+        Assert.Same(older, center.Shown);
+        Assert.True(center.IsPillVisible);
+        Assert.Equal([7UL], center.Visible.Select(j => j.Id));
+    }
+
+    [Fact]
+    public async Task An_end_with_errors_while_minimized_opens_the_flyout()
+    {
+        var (center, _) = Create();
+        var job = (await center.StartAsync(JobKind.Copy, [@"C:\a"], @"D:\x")).Job!;
+        center.Minimize();
+
+        center.OnEvent(Progress(7, JobState.CompletedWithErrors, 100, 100, failed: 2));
+
+        Assert.Same(job, center.Shown);
+        Assert.True(center.IsFlyoutOpen);
+        Assert.Equal("Close", TransferText.EndLabel(job));
+    }
+
+    [Fact]
+    public async Task A_late_conflict_for_an_ended_job_is_not_queued_and_opens_nothing()
+    {
+        var (center, _) = Create();
+        await center.StartAsync(JobKind.Copy, [@"C:\a"], @"D:\x");
+        await center.StartAsync(JobKind.Copy, [@"C:\b"], @"D:\y");
+        center.OnEvent(new JobStateChangedEvent(7, new JobState(JobState.Completed)));
+        center.Minimize();
+        var shown = center.Shown;
+
+        center.OnEvent(Conflict(4, 7));
+
+        Assert.Null(center.Conflicts.Current);
+        Assert.Same(shown, center.Shown);
+        Assert.True(center.IsPillVisible);
+    }
+
+    [Fact]
+    public async Task A_conflict_for_a_job_the_core_no_longer_has_leaves_with_the_job_after_the_decision()
+    {
+        var core = new FakeChannel(request => request switch
+        {
+            StartJobRequest => new JobStartedReply(7),
+            ResolveConflictRequest => new ErrorReply(ErrorCodes.NoSuchJob, "no job 12"),
+            _ => new JobsReply([]),
+        });
+        var center = new TransferCenter(core);
+        var mine = (await center.StartAsync(JobKind.Copy, [@"C:\a"], @"D:\x")).Job!;
+
+        // A job this window never saw, which the core does not list: only its conflict arrived.
+        center.OnEvent(Conflict(1, 12));
+        Assert.Equal(12UL, center.Shown!.Id);
+
+        Assert.Null(await center.ResolveAsync(center.Conflicts.Current!, new Resolution(Resolution.SkipType), false));
+
+        Assert.Null(center.Conflicts.Current);
+        Assert.Null(center.Find(12));
+        Assert.Same(mine, center.Shown);
+        Assert.Equal([7UL], center.Visible.Select(j => j.Id));
+    }
+
+    [Fact]
     public async Task A_job_started_elsewhere_is_learned_with_list_jobs_and_shows_in_the_pill()
     {
         var running = new JobInfo(JobKind.Copy, [@"C:\photos"], @"E:\backup", 3, new JobState(JobState.Running),

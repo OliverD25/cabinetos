@@ -173,7 +173,9 @@ public sealed class TransferCenter(ICoreChannel core)
             }
             case JobConflictEvent conflict:
             {
-                if (!Conflicts.Add(conflict))
+                // An ended job waits for no decision: such a conflict came late, and the
+                // core would refuse any answer to it.
+                if (Find(conflict.JobId) is { IsFinal: true } || !Conflicts.Add(conflict))
                 {
                     return true;
                 }
@@ -252,8 +254,13 @@ public sealed class TransferCenter(ICoreChannel core)
                 FollowConflict();
                 Raise();
                 return null;
-            case ErrorReply { Code: ErrorCodes.NoSuchConflict or ErrorCodes.NoSuchJob }:
+            case ErrorReply { Code: ErrorCodes.NoSuchConflict or ErrorCodes.NoSuchJob } gone:
                 Conflicts.Resolve(conflict, applyToSameKind: false);
+                if (gone.Code == ErrorCodes.NoSuchJob && Find(conflict.JobId) is { IsFinal: false } job)
+                {
+                    // The core no longer has the job; it would stay on screen as waiting forever.
+                    Forget(job);
+                }
                 FollowConflict();
                 Raise();
                 return null;
@@ -326,6 +333,16 @@ public sealed class TransferCenter(ICoreChannel core)
         Shown = null;
         IsMinimized = false;
         Raise();
+    }
+
+    private void Forget(TransferJob job)
+    {
+        _jobs.Remove(job.Id);
+        Conflicts.RemoveJob(job.Id);
+        if (Shown == job)
+        {
+            Shown = Visible.FirstOrDefault();
+        }
     }
 
     private TransferJob Track(ulong jobId)
