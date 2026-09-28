@@ -280,7 +280,9 @@ fn decimal(bytes: u64) -> String {
     }
 }
 
-/// `45%  1.2 GB / 2.7 GB  610 MB/s  eta 3 s  files 8412/10001  conflicts 1`
+/// `45%  1.2 GB / 2.7 GB  610 MB/s  eta 3 s  files 8412/10001  conflicts 1`;
+/// a job that moves no bytes (a delete, a move on one volume) shows its
+/// pace instead: `84%  412 items/s  files 8412/10001`.
 fn progress_line(progress: &JobProgress) -> String {
     use std::fmt::Write as _;
     let mut line = format!("{:>3}%", percent(progress));
@@ -292,6 +294,13 @@ fn progress_line(progress: &JobProgress) -> String {
             decimal(progress.bytes_total),
             decimal(progress.speed_bps)
         );
+    } else if let Some(rate) = progress.items_per_second {
+        let rate = rate.get();
+        let _ = if rate >= 10.0 {
+            write!(line, "  {rate:.0} items/s")
+        } else {
+            write!(line, "  {rate:.1} items/s")
+        };
     }
     if let Some(eta) = progress.eta_seconds {
         let _ = write!(line, "  eta {eta} s");
@@ -439,6 +448,8 @@ impl Stats {
 
 #[cfg(test)]
 mod tests {
+    use cabinetos_protocol::Rate;
+
     use super::*;
 
     fn progress() -> JobProgress {
@@ -472,6 +483,21 @@ mod tests {
         delete.eta_seconds = None;
         delete.conflicts_open = 0;
         assert_eq!(progress_line(&delete), " 84%  files 8412/10001");
+        // A job without bytes shows its pace in items.
+        delete.items_per_second = Rate::new(412.25);
+        assert_eq!(
+            progress_line(&delete),
+            " 84%  412 items/s  files 8412/10001"
+        );
+        delete.items_per_second = Rate::new(7.3);
+        assert_eq!(
+            progress_line(&delete),
+            " 84%  7.3 items/s  files 8412/10001"
+        );
+        // A copy shows bytes per second, not items.
+        let mut copy = progress();
+        copy.items_per_second = Rate::new(412.25);
+        assert!(!progress_line(&copy).contains("items/s"));
     }
 
     #[test]

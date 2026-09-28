@@ -281,7 +281,9 @@ cabinetos-cli job resolve 3 9 overwrite
 `copy` and `move` take the sources, then the folder they go into. The
 CLI follows the job: on a terminal one progress line is rewritten in place
 (`45%  1.2 GB / 2.7 GB  610.0 MB/s  eta 3 s  files 8412/10001
-conflicts 1`); into a file or a pipe it prints one line per second.
+conflicts 1`); a job that moves no bytes, such as a delete, shows its pace
+in items instead (`84%  412 items/s  files 8412/10001`). Into a file or a
+pipe it prints one line per second.
 Conflicts appear on their own lines, with the command that answers them;
 `--resolve overwrite|skip|rename` answers them all automatically. Ctrl+C
 stops following, not the job.
