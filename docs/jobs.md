@@ -1,0 +1,252 @@
+# Jobs: copy, move, delete
+
+How the core copies, moves and deletes files. File operations never block
+the interface and never stall on one bad file. Constitution Article 1
+(Zero-Compromise Performance) and Article 5 (Dual-Pane Foundation); brief
+§3; the design's file operations flyout (view E in
+[design/README.md](design/README.md)).
+
+The source of truth is the Rust crate `core/crates/cabinetos-jobs`. The
+messages are in [ipc.md](ipc.md), section "Jobs".
+
+## The job model
+
+A client starts a **job** with `start_job`:
+
+| Field | Meaning |
+|---|---|
+| `kind` | `{"type":"copy"}`, `{"type":"move"}`, or `{"type":"delete","permanent":false}`. A delete goes to the Recycle Bin unless `permanent` is `true`. |
+| `sources` | Absolute paths of the files and folders. |
+| `destination` | For a copy or a move: the absolute path of the folder they go into. The core creates it when it does not exist. A delete has none. |
+| `options.on_conflict` | What to do when a file already exists at the destination: `ask` (default), `overwrite`, `overwrite_if_newer`, `skip`, `rename`. |
+| `options.copy_links` | `as_link` (default): a symbolic link or junction is copied as a link that points where the original points. `follow_target`: what it points to is copied instead. |
+| `options.verify` | After each copy, compare the sizes and sampled bytes of the source and the copy. Default `false`. |
+| `options.preserve_timestamps` | Give each copy the creation, last-access and last-write times of its source. Default `true`. |
+
+The core checks the request before it answers `job_started`. It refuses
+with `invalid_path` a job with no sources, a relative path, a volume root
+(`C:\`) as a source, a copy or move without a destination, a destination
+that is a file, a folder copied into itself, a source that is already in
+the destination folder, one source inside another, and a delete with a
+destination. A source that does not exist gets `not_found`.
+
+**States.** `job_state_changed` reports each change:
+
+```text
+queued ──► scanning ──► running ──► completed
+   │           │           │    ├─► completed_with_errors  (some files failed)
+   │           │           │    ├─► cancelled
+   │           │           │    └─► failed {message}       (the job as a whole)
+   └───────────┴─────┬─────┘
+          paused ◄───┘  (pause, or a full disk; resume goes back)
+```
+
+- `queued`: waiting for its disks (see "The scheduler").
+- `scanning`: walking the sources to count files and bytes.
+- `running`: working. Files that wait for a conflict decision do not
+  change the state; `conflicts_open` in the progress counts them.
+- `failed`: an error that concerns the whole job, for example a
+  destination folder that cannot be created. A failing file does not fail
+  the job; it is counted in `files_failed`.
+
+**Progress** (`job_progress`): `bytes_done` and `bytes_total`,
+`files_done` and `files_total` (folders count as items too),
+`files_skipped` and `files_failed` (both included in `files_done`),
+`conflicts_open`, `current_path`, `speed_bps`, `eta_seconds` and
+`elapsed_ms`. A skipped or failed file leaves `bytes_total`, so the
+percentage still ends at 100. A delete and a move on one volume count
+items, not bytes: their `bytes_total` is 0.
+
+## The scheduler
+
+Brief §3 asks for drive-aware queuing: copies on one spinning disk take
+turns, and copies on different fast disks run together.
+
+- **Disks.** When a job is queued, the core finds the physical disk under
+  each source and under the destination, with the Phase 2 volume query:
+  the disk number and its seek penalty (spinning or solid state). A disk
+  that does not answer, such as a network share or some USB bridges,
+  counts as spinning. Several sources in one folder are looked up once.
+- **Slots.** A spinning disk runs one job at a time; a solid state disk
+  runs up to four. A job takes a slot on every disk it touches, and it
+  starts only when it can take all of them at once. A disk listed twice
+  counts once.
+- **Order.** Waiting jobs keep their order on each disk. A job that cannot
+  start yet reserves a slot on each of its disks, so a later job cannot
+  overtake it there and keep it waiting forever. Deletes and moves on one
+  volume do little I/O, so they go ahead of copies on the same disk; within
+  each group it is first come, first served.
+- **Pause while waiting.** A queued job that is paused is passed over and
+  reserves nothing. A running job that is paused keeps its slots.
+- **Files in flight.** Inside one job, files go one at a time when the
+  job touches a spinning or unknown disk. When all its disks are solid
+  state, four files are copied at once. Measured on this PC (NVMe, 10,101
+  files of 1–64 KiB, release build):
+
+  | Files in flight | Time | Files per second |
+  |---|---|---|
+  | 1 | 6.2–6.8 s | 1,480–1,620 |
+  | 2 | 4.4–4.6 s | 2,210–2,310 |
+  | 4 | 3.3–3.7 s | 2,760–3,020 |
+  | 8 | 3.4–3.7 s | 2,700–2,970 |
+
+  Eight gave nothing more than four. The test is
+  `measure_files_in_flight` in `cabinetos-jobs/tests/engine.rs`.
+
+## Inside a job
+
+A job runs on a thread of its own (`job-<id>`, and `job-<id>-<n>` for the
+extra workers).
+
+1. **Scanning.** The sources are walked with the Phase 2 enumeration
+   (`NtQueryDirectoryFile`: names, sizes, times and attributes in one
+   pass), hidden and system files included. A folder that cannot be read
+   counts as one failed item, and the job goes on.
+2. **Folders.** For a copy or a move across volumes, the destination
+   folders are created first, in order. A folder that already exists is
+   merged into: its files meet the conflict rules one by one.
+3. **Files.** The workers take the files from the job's queue.
+4. **Finishing.** Folders get their source's times, deepest first (their
+   contents changed them until then). A move removes the source folders it
+   emptied; a folder that still holds a skipped file stays.
+
+**Copy** uses `CopyFileExW`. **A move on one volume** is a rename of each
+source with `MoveFileExW`: a folder of 1,000 files moves in a few
+milliseconds, and its files keep their file IDs. When a folder of that
+name already exists at the destination and the decision is `overwrite`,
+the move merges instead: the folder's files are renamed one by one, each
+with its own conflict. **A move across volumes** copies a file, verifies
+it when asked, and only then deletes the source file. A read-only source
+is moved too.
+
+**Delete** to the Recycle Bin uses the shell's `IFileOperation`, as
+Explorer does, on the job's thread in a single-threaded COM apartment, one
+source at a time (a folder is one operation). A permanent delete removes
+files with `DeleteFileW` and folders with `RemoveDirectoryW`, contents
+before their folder. A link (symbolic link or junction) is removed, never
+followed, so what it points to is safe. A read-only file is an
+`access_denied` conflict unless the policy or the decision is `overwrite`,
+which clears the read-only attribute first. A file that is already gone
+counts as deleted. A folder that is not empty when its turn comes is tried
+again at the end; if something in it was skipped, it stays and counts as
+skipped.
+
+## Conflicts
+
+Brief §3: a file that hits a problem must not block the rest. It is set
+aside, the clients hear about it, and the job goes on.
+
+```text
+worker                          core                            client (UI)
+copy a.txt: FILE_EXISTS
+  on_conflict is ask:
+  set a.txt aside ──────────►  job_conflict {conflict_id 9} ──► shows "a.txt exists"
+copy b.txt, c.txt, ...          the job stays running;
+                                progress: conflicts_open 1 ───► shows the count
+                                                          ◄──── resolve_conflict {9, overwrite}
+a.txt back in the queue ◄─────
+copy a.txt, replacing: done
+                                job_progress, ... ────────────►
+                                job_state_changed completed ──►
+```
+
+| Conflict kind | When | Notes |
+|---|---|---|
+| `file_exists` | The destination has that name. Carries both sizes and write times. | With `on_conflict` other than `ask`, the policy decides at once and no event is sent. |
+| `access_denied` | Windows refused, for example a read-only file. | `overwrite` clears the read-only attribute, then tries again. |
+| `sharing_violation` | Another program has the file open. | `retry` once it is closed. |
+| `path_too_long` | The destination file system refuses the length. | |
+| `disk_full` | The destination is full. | The whole job pauses: every other file would fail the same way. Any decision on this conflict resumes the job. |
+| `source_vanished` | The source disappeared after the scan. | No event: the file counts as failed. |
+| `io` | Any other error, with the Windows code and text. | Also used when `verify` finds a difference (code 23); the bad copy is removed first. |
+
+Decisions (`resolve_conflict`):
+
+| Resolution | Effect |
+|---|---|
+| `overwrite` | Replace the existing file. For `access_denied`, clear the read-only attribute first. |
+| `skip` | Leave the file out; it counts in `files_skipped`. A skipped folder skips everything in it. |
+| `rename` | Copy or move under another name in the same folder: `new_name`, or without it a free name `name (2).ext`. |
+| `retry` | Try once more, the same way. |
+| `cancel_job` | Stop the whole job. |
+
+- `apply_to_same_kind: true` also answers the job's other waiting
+  conflicts of the same kind, and makes the decision a rule for later ones
+  in that job. A rule from `rename` picks free names.
+- A folder that waits for a decision holds its contents with it; they go
+  on when the folder does.
+- A job whose only remaining work is waiting files stays `running` with
+  `conflicts_open` above 0 until the files are decided or the job is
+  cancelled. Cancelling drops the waiting files.
+- Waiting conflicts outlive the client that saw them: a client that says
+  `hello` later gets every waiting conflict as a `job_conflict` event. It
+  may get one twice (raised while it connected); conflicts are keyed by
+  `conflict_id`.
+
+## The 30 Hz rule
+
+Brief §3: progress must not flood the pipe. The copying threads only add
+to atomic counters after each chunk. One publisher thread reads them on a
+34 ms clock and sends a job's `job_progress` only when something changed
+(the clock alone does not count). The gap between two events of one job is
+never under 34 ms, so no one-second window holds more than 30 of them.
+When a job ends, one final event with the final state always follows,
+after the same gap, and then `job_state_changed`.
+
+- **Speed** (`speed_bps`) is a moving average over about the last second:
+  each reading weighs in by the time it covers. It drops to 0 while
+  paused.
+- **Time left** (`eta_seconds`) is the remaining bytes divided by the
+  speed. It is absent for the first two seconds, while the speed settles,
+  and for jobs with no bytes to count.
+- `cabinetos-cli copy ... --stats` prints how many events arrived in each
+  second, by arrival and by the core's clock. A test copies 10,000 files
+  and checks both counts.
+
+## Backends and flags
+
+| What | How |
+|---|---|
+| Copy a file | `CopyFileExW` with a progress routine. `COPY_FILE_FAIL_IF_EXISTS` unless the decision is to overwrite. `COPY_FILE_NO_BUFFERING` for files of 256 MiB and more: a huge copy does not push everything else out of the file cache. |
+| Copy a link to a file | `CopyFileExW` with `COPY_FILE_COPY_SYMLINK`. |
+| Copy a link to a folder | The reparse data is read with `FSCTL_GET_REPARSE_POINT` and written to a new folder with `FSCTL_SET_REPARSE_POINT`: the copy points where the original points. A junction needs no rights; a symbolic link needs the right to create one. |
+| Pause | The progress routine blocks on a condition variable. The copying thread is the job's own, so blocking it stalls nothing else. |
+| Cancel | The progress routine returns `PROGRESS_CANCEL`; Windows deletes the partial destination. |
+| Times | `CopyFileExW` keeps the last-write time by itself (a test checks this); the copy's creation time is the moment of the copy. With `preserve_timestamps`, `SetFileTime` gives the copy the source's creation and last-access times too; folders get theirs at the end. |
+| Verify | Sizes, then the whole content up to 1 MiB, or 16 samples of 64 KiB (first and last included) above. |
+| Long paths | Every file call uses the verbatim form (`\\?\C:\...`), so any length works. The shell (Recycle Bin) takes plain paths. |
+| Recycle Bin | `IFileOperation` with `FOF_ALLOWUNDO`, `FOF_NOCONFIRMATION`, `FOF_NOERRORUI`, `FOF_SILENT` and `FOFX_RECYCLEONDELETE`. |
+
+## Jobs and clients
+
+- Jobs belong to the core, not to the connection that started them. A UI
+  that restarts finds its running copy with `list_jobs`, which also tells
+  each job's kind, sources and destination.
+- Job events go to every connection that said `hello`, like the
+  configuration events.
+- Job IDs and conflict IDs are unique for the life of the core. The core
+  keeps the last 100 finished jobs for `list_jobs`.
+- Pausing, resuming or cancelling a job that has ended does nothing and
+  answers `ok`.
+- When the core shuts down, it cancels every job and gives the running
+  ones two seconds, so a cancelled copy removes its partial file.
+
+## From the command line
+
+```text
+cabinetos-cli copy C:\photos D:\backup --stats
+cabinetos-cli copy C:\photos D:\backup --on-conflict ask --resolve skip
+cabinetos-cli move C:\inbox\report.pdf C:\archive
+cabinetos-cli delete C:\old-folder --permanent
+cabinetos-cli jobs
+cabinetos-cli job pause 3
+cabinetos-cli job resolve 3 9 overwrite
+```
+
+`copy` and `move` take the sources, then the folder they go into. The
+CLI follows the job: on a terminal one progress line is rewritten in place
+(`45%  1.2 GB / 2.7 GB  610.0 MB/s  eta 3 s  files 8412/10001
+conflicts 1`); into a file or a pipe it prints one line per second.
+Conflicts appear on their own lines, with the command that answers them;
+`--resolve overwrite|skip|rename` answers them all automatically. Ctrl+C
+stops following, not the job.

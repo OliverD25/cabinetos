@@ -7,19 +7,20 @@ here, behind a named pipe. Which crate implements which part of the brief:
 protocol between UI and core, with the shared-memory layout:
 [../docs/ipc.md](../docs/ipc.md). The configuration file:
 [../docs/config.md](../docs/config.md). Commands, keys and chords:
-[../docs/keybindings.md](../docs/keybindings.md).
+[../docs/keybindings.md](../docs/keybindings.md). Copy, move and delete:
+[../docs/jobs.md](../docs/jobs.md).
 
 ## Crates
 
 | Crate | Kind | Responsibility | Constitution articles |
 |---|---|---|---|
-| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events) | 1, 6, 7, 10, 12 |
+| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager and the event hub | 1, 5, 6, 7, 10, 12 |
 | `cabinetos-protocol` | library | The IPC contract: message envelopes, request IDs, `#[repr(C)]` shared-memory layouts, JSON Schema export | 1, 12 |
 | `cabinetos-diag` | library | JSON Lines logs, ring buffer of recent events, crash traces ([../docs/diagnostics.md](../docs/diagnostics.md)) | 12, 1 |
 | `cabinetos-ipc` | library | Named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch | 1, 12 |
 | `cabinetos-fs` | library | Directory enumeration (NT API), sorting, the listing section writer and reader, volume and disk detection, change watching | 1, 5 |
 | `cabinetos-cli` | binary | `cabinetos-cli.exe`: command-line client for the pipe, to test the core with no UI | 4, 12 |
-| `cabinetos-jobs` | library (stub) | `JobQueueManager`: drive-aware copy, move and delete queues (Phase 4) | 1, 5 |
+| `cabinetos-jobs` | library | `JobQueueManager`: per-disk queues, copy (`CopyFileExW`), move, delete (Recycle Bin or permanent), per-file conflicts, progress throttled to 30 events per second ([../docs/jobs.md](../docs/jobs.md)) | 1, 5 |
 | `cabinetos-index` | library (stub) | In-memory volume index, MFT reader, USN Journal tailer (Phase 6) | 1 |
 | `cabinetos-indexer` | binary (stub) | `cabinetos-indexer.exe`: the elevated indexer process (Phase 6, ADR 0002) | 1 |
 | `cabinetos-config` | library | `cabinetos.json`: strict parsing with line and column errors, defaults, JSON Schema export, directory watch, diff, atomic rewrite ([../docs/config.md](../docs/config.md)) | 6 |
@@ -30,9 +31,9 @@ A stub holds only its crate documentation and the names of its future public
 types, so the shape of the engine can be reviewed before the code exists.
 
 **Unsafe code** is denied in every crate. Crates that will never need it
-forbid it outright. Only the crates that call Windows APIs directly (`ipc` and
-`fs` now; `jobs` and `index` later) allow it, and only in the module that
-needs it; every `unsafe` block carries a `// SAFETY:` comment, which clippy
+forbid it outright. Only the crates that call Windows APIs directly (`ipc`,
+`fs` and `jobs` now; `index` later) allow it, and only in the modules that
+need it; every `unsafe` block carries a `// SAFETY:` comment, which clippy
 enforces.
 
 ## Build and test
@@ -63,6 +64,15 @@ hidden files, a junction made with `mklink /J`). The CLI's own tests run
 `cabinetos-core.exe` from the same target directory; `cargo test --workspace`
 builds it, and after `cargo test -p cabinetos-cli` alone, build it first
 with `cargo build -p cabinetos-core`.
+
+The job tests (copy, move, delete) write only under
+`%TEMP%\cabinetos-jobs-test\` and remove what they wrote. Two of them run
+only on request: the move across volumes needs
+`CABINETOS_TEST_SECOND_VOLUME` (a folder on another volume) and
+`--ignored`; the Recycle Bin test needs `CABINETOS_TEST_RECYCLE_BIN=1`,
+because it puts a real file into the Recycle Bin (CI sets it; its runner is
+thrown away). `cargo test -p cabinetos-jobs --release --test engine --
+--ignored --nocapture measure` repeats the files-in-flight measurement.
 
 **Benchmarks.** `cargo bench -p cabinetos-fs` measures listing 1,000 and
 100,000 files (and the whole path into shared memory) against
@@ -104,10 +114,12 @@ cargo run -p cabinetos-cli -- --pipe demo keys list
 cargo run -p cabinetos-cli -- --pipe demo keys set view.toggleSidebar "ctrl+alt+b"
 cargo run -p cabinetos-cli -- --pipe demo keys watch
 cargo run -p cabinetos-cli -- --pipe demo commands search "dual"
+cargo run -p cabinetos-cli -- --pipe demo copy C:\Users\me\Pictures D:\backup --stats
+cargo run -p cabinetos-cli -- --pipe demo jobs
 cargo run -p cabinetos-cli -- --pipe demo shutdown
 ```
 
-- `ping` prints `pong id=<ulid> protocol=3 core=<version> rtt=<ms>ms`.
+- `ping` prints `pong id=<ulid> protocol=4 core=<version> rtt=<ms>ms`.
 - `ls <path>` lists a directory the way the UI will: the core reads it into
   shared memory, the CLI maps the section and prints it. Options: `--long`
   (attributes, local modification time, size), `--hidden` (hidden and system
@@ -125,6 +137,12 @@ cargo run -p cabinetos-cli -- --pipe demo shutdown
   `keys reset <command>` change a binding (the core writes the file);
   `keys watch` prints each configuration and keymap change until Ctrl+C,
   with the time since the file was written.
+- `copy <src>... <dst>`, `move <src>... <dst>` and `delete <path>...
+  [--permanent]` start a job and follow it: one progress line, conflicts
+  as they come (`--on-conflict`, `--resolve`), a summary at the end, and
+  with `--stats` the progress events per second. `jobs` lists the jobs;
+  `job pause|resume|cancel <id>` and `job resolve <job> <conflict>
+  <overwrite|skip|rename|retry|cancel>` control them.
 - `shutdown` makes the core exit with code 0. The core also exits on Ctrl+C,
   and, when started with `--parent-pid <pid>`, as soon as that process exits.
 
@@ -143,8 +161,10 @@ that finishes on its own, such as reading a directory, goes through Tokio's
 directory, gets a dedicated thread (one per watched listing, and two for the
 configuration file: one waits for changes, one waits for them to settle and
 reads the file). In the log, the runtime's threads are named `core-rt-N`,
-listing watchers `watch-<listing id>`, and the configuration watcher's
-threads `config-watch` and `config-debounce`.
+listing watchers `watch-<listing id>`, the configuration watcher's
+threads `config-watch` and `config-debounce`, each running job `job-<id>`
+(and `job-<id>-<n>` for its extra copy workers), and the progress
+publisher of all jobs `job-progress`.
 
 Release builds keep line tables in a separate `.pdb` file next to each `.exe`,
 so crash traces name file and line. Ship the `.pdb` with the `.exe`.

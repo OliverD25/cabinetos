@@ -42,7 +42,7 @@ connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":3,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":4,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
@@ -50,12 +50,14 @@ Windows and refuses a mismatch with `protocol_error`. The core needs the PID
 because it duplicates shared-memory handles into that process. A
 `list_directory` before `hello` fails with `protocol_error`, message
 `hello required`. From `hello` on, the connection also receives the
-configuration events (`config_changed`, `config_error`, `keymap_changed`).
-Every other request works without `hello`.
+configuration events (`config_changed`, `config_error`, `keymap_changed`)
+and the job events (`job_progress`, `job_conflict`, `job_state_changed`),
+and right after `welcome` a `job_conflict` for every conflict that already
+waits for a decision. Every other request works without `hello`.
 
 Protocol version 3 (Phase 3) added the configuration, command and keymap
 messages, and made the `list_directory` options `include_hidden` and `sort`
-optional.
+optional. Version 4 (Phase 4) added the jobs.
 
 ## Requests and replies
 
@@ -74,6 +76,10 @@ optional.
 | `execute_command` | `command`; `args` (default `null`) | `command_result` or `command_routed` |
 | `set_keybinding` | `command`, `keys` (`""` for none) | `keymap` |
 | `reset_keybinding` | `command` | `keymap` |
+| `start_job` | `kind`, `sources`; `destination` (copy and move); `options` (every field has a default) | `job_started` (`job_id`) |
+| `list_jobs` | — | `jobs` |
+| `job_control` | `job_id`, `action` (`pause`, `resume`, `cancel`) | `ok` |
+| `resolve_conflict` | `job_id`, `conflict_id`, `resolution`; `apply_to_same_kind` (default `false`) | `ok` |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -94,11 +100,13 @@ Any request can instead get `error` with a `code` and a `message`:
 | `keybinding_conflict` | The keys are taken by another command in the same context, or a combination would be both a binding and the start of a chord. |
 | `immutable_binding` | The change touches the Immutable System Tier. |
 | `config_error` | The configuration file cannot be changed now: it has an error the user must fix first, or it cannot be written. |
+| `no_such_job` | No job has that `job_id`. |
+| `no_such_conflict` | The job has no waiting conflict with that `conflict_id`. |
 
 Requests on one connection are independent: `list_directory`,
-`volume_info`, `set_keybinding` and `reset_keybinding` run in the
-background, so a slow directory does not hold up the next request, and their
-replies may come in any order. Match replies to requests by `id`.
+`volume_info`, `set_keybinding`, `reset_keybinding` and `start_job` run in
+the background, so a slow directory does not hold up the next request, and
+their replies may come in any order. Match replies to requests by `id`.
 
 ## Listing a directory
 
@@ -346,9 +354,71 @@ within a second of the file being saved.
   `line` and `column` count from 1 (columns in characters) and are `null`
   when unknown, for example when the file was deleted.
 
+## Jobs
+
+Copy, move and delete run as jobs in the core ([jobs.md](jobs.md) has the
+model, the scheduler and the conflict rules). A job belongs to the core,
+not to the connection that started it: it goes on when the client
+disconnects, and `list_jobs` from any connection shows it.
+
+```json
+{"id":"01M…","type":"start_job","kind":{"type":"copy"},
+ "sources":["C:\\photos"],"destination":"D:\\backup",
+ "options":{"on_conflict":"ask","copy_links":"as_link","verify":false,"preserve_timestamps":true}}
+{"id":"01M…","type":"job_started","job_id":7}
+```
+
+- `kind` is `{"type":"copy"}`, `{"type":"move"}` or
+  `{"type":"delete","permanent":false}`. Paths are absolute. `options` and
+  each of its fields may be left out; the defaults are shown above.
+- `job_started` means the paths were checked and the job is queued. The
+  work itself is reported by events.
+
+```json
+{"id":"01M…","type":"job_state_changed","job_id":7,"state":{"type":"running"}}
+{"id":"01M…","type":"job_progress","job_id":7,"state":{"type":"running"},
+ "bytes_done":1200000000,"bytes_total":2700000000,"files_done":8412,"files_total":10001,
+ "files_skipped":0,"files_failed":0,"conflicts_open":1,"current_path":"C:\\photos\\big.raw",
+ "speed_bps":610000000,"eta_seconds":3,"elapsed_ms":2400}
+{"id":"01M…","type":"job_conflict","conflict_id":9,"job_id":7,
+ "kind":{"type":"file_exists","source_size":10,"source_modified":133000000000000000,
+         "dest_size":12,"dest_modified":132000000000000000},
+ "source":"C:\\photos\\a.jpg","destination":"D:\\backup\\photos\\a.jpg"}
+{"id":"01M…","type":"resolve_conflict","job_id":7,"conflict_id":9,
+ "resolution":{"type":"overwrite"},"apply_to_same_kind":false}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"job_state_changed","job_id":7,"state":{"type":"completed"}}
+```
+
+- `state` is an object tagged by `type`: `queued`, `scanning`, `running`,
+  `paused`, `completed`, `completed_with_errors`, `cancelled`, or `failed`
+  with a `message`. After a final state no more events follow for the job.
+- `job_progress` comes at most 30 times per second per job, and only when
+  something changed; the last one of a job carries its final state and
+  comes just before the final `job_state_changed`. `current_path` and
+  `eta_seconds` are absent when there is nothing to say.
+- `job_conflict`: `kind` is `file_exists` (with both sizes and write times
+  as FILETIME ticks), `access_denied`, `sharing_violation`,
+  `path_too_long`, `disk_full`, `source_vanished` or `io` (with `code` and
+  `message`). The file waits; the job goes on.
+- `resolution` is `{"type":"overwrite"}`, `{"type":"skip"}`,
+  `{"type":"rename"}` (a free name) or `{"type":"rename","new_name":"b.txt"}`,
+  `{"type":"retry"}` or `{"type":"cancel_job"}`. A bad `new_name` gets
+  `invalid_path`.
+
+```json
+{"id":"01M…","type":"list_jobs"}
+{"id":"01M…","type":"jobs","jobs":[{"kind":{"type":"copy"},"sources":["C:\\photos"],
+ "destination":"D:\\backup","job_id":7,"state":{"type":"completed"},"bytes_done":…}]}
+```
+
+Each entry of `jobs` is a `job_progress` plus the job's `kind`, `sources`
+and `destination`, so a restarted UI can show what a running job does.
+
 ## Trying it by hand
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
 `ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
-and `config`, `commands` and `keys` cover the messages above (`keys watch`
-prints the events). See [core/README.md](../core/README.md).
+`config`, `commands` and `keys` cover the configuration messages (`keys
+watch` prints their events), and `copy`, `move`, `delete`, `jobs` and `job`
+cover the jobs. See [core/README.md](../core/README.md).
