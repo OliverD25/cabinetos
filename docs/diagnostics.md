@@ -34,6 +34,12 @@ The Rust processes (core, indexer, CLI) get all of this from the
 - **Never blocking.** The calling thread formats the line and hands it to a
   background writer thread; it never waits for the disk. If that thread falls
   far behind, new lines are dropped rather than stalling the caller.
+- **Two cores, one file.** Two windows are two cores that write the same
+  `core.<date>.jsonl`. The writer opens it for appending
+  (`FILE_APPEND_DATA`), so each write lands at the end of the file, and it
+  writes each line in one write, so two cores' lines never mix or overwrite
+  each other. Tested with two cores answering 300 requests each: every
+  line is whole JSON and every request has its one line.
 - **Lock-free.** The calling thread takes no lock. Besides going to the file,
   every line goes into the ring buffer of recent events: a bounded lock-free
   queue of the last 256 lines that drops its oldest line when full. Reading

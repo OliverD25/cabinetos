@@ -295,8 +295,23 @@ impl Market {
         Ok(installed)
     }
 
-    fn lock(&self) -> MutexGuard<'_, ()> {
-        self.busy.lock().unwrap_or_else(PoisonError::into_inner)
+    /// One install or uninstall at a time: in this process, and among the
+    /// cores that share the marketplace folder (two windows), which read
+    /// and write the same `installed.json`.
+    fn lock(&self) -> Busy<'_> {
+        let process = self.busy.lock().unwrap_or_else(PoisonError::into_inner);
+        let cores = lock_beside(&self.dirs.market.join(RECORD_FILE))
+            .map_err(|error| {
+                tracing::warn!(
+                    %error,
+                    "cannot lock the record of installs; another core may write it at the same time"
+                );
+            })
+            .ok();
+        Busy {
+            _process: process,
+            _cores: cores,
+        }
     }
 
     /// The folder of a kind.
@@ -763,6 +778,37 @@ fn remove_files(root: &Path, files: &[String]) -> Vec<(String, io::Error)> {
         let _ = fs::remove_dir(root.join(folder));
     }
     failed
+}
+
+/// The locks an install or uninstall holds until it is dropped.
+struct Busy<'a> {
+    _process: MutexGuard<'a, ()>,
+    /// The lock file next to `installed.json`; `None` when it could not be
+    /// taken (the install goes on, as before cores could share a folder).
+    _cores: Option<fs::File>,
+}
+
+/// Locks `.<name>.lock` next to `path` for this process until the returned
+/// file is dropped, waiting while another process holds it. Windows
+/// releases the lock when a process ends, however it ends. The lock file
+/// stays, empty: removing it could race a process that is about to lock it.
+fn lock_beside(path: &Path) -> io::Result<fs::File> {
+    let name = path.file_name().map_or_else(
+        || RECORD_FILE.into(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let lock = path.with_file_name(format!(".{name}.lock"));
+    if let Some(dir) = lock.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock)?;
+    file.lock()?;
+    Ok(file)
 }
 
 fn read_record(market: &Path) -> BTreeMap<String, Installed> {

@@ -160,6 +160,12 @@ which are dark-mode ones; what it shows in light mode is the window's
 choice ([ui.md](ui.md), "Themes"). Each named theme keeps an attribution
 line for the palette it uses; their palettes are dark.
 
+Two cores that start at the same moment on an empty themes folder (two
+windows opened together) both write the shipped themes. Each writes a
+temporary file named with its process ID and renames it into place, so
+every theme file is whole whichever rename comes last, and both write the
+same bytes (tested five times over with two real cores).
+
 ## Live editing
 
 The core watches the themes folder. When the file of the theme in effect is

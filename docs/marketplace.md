@@ -191,6 +191,15 @@ After an install: a plugin is loaded (and waits for review); a theme that
 `ui.theme` names applies at once (`theme_changed`); a tool install or
 uninstall sends `tools_changed`.
 
+One install or uninstall runs at a time, also between two cores that share
+the marketplace folder (two windows). Both read and write
+`installed.json`, and without a lock the later write dropped the earlier
+install from the record, so uninstalling it would not find it (a test with
+two real cores installing two themes at the same moment showed it). Each
+install and uninstall holds `.installed.json.lock` in the marketplace
+folder (`LockFileEx`) from its first read of the record to its last write;
+Windows releases it if a core ends.
+
 ## A local index
 
 `sdk/marketplace/build-index.ps1` builds an index from the fixture plugins

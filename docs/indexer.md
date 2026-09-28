@@ -186,7 +186,10 @@ the indexer stops within a moment.
 machine, and a second one cannot take the pipe (it is created as the first
 instance, and fails if the name exists). The framing is the core's: a 4-byte
 little-endian length, then a JSON object with `id` and `type`
-([ipc.md](ipc.md)).
+([ipc.md](ipc.md)). Every core asks it, one connection per request, each
+served on its own pipe instance, so two windows (two cores) searching at
+the same moment are both answered from the index (tested with two real
+cores and 20 searches each at once).
 
 Its security descriptor:
 

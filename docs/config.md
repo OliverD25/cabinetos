@@ -216,6 +216,28 @@ through the core:
 - It does not report its own write back as a change: it remembers a hash of
   what it wrote, and the watcher finds the same content.
 
+### Two cores on one file
+
+Two windows are two cores, and they share `cabinetos.json`. A change by one
+reaches the other as a change on disk: its watcher reloads the file and
+its clients get `config_changed`, as for a hand edit.
+
+Two changes at the same moment must not lose one another. Each change
+reads the file, applies itself and writes the result; a core that read
+before the other one wrote would write the other's change away. So the
+core locks `.cabinetos.json.lock`, next to the file, from the read to the
+write (`LockFileEx` through Rust's `File::lock`), and the other core waits
+for it; the wait is as long as one write. Windows releases the lock when a
+process ends, even in a crash, so a core that dies cannot leave the other
+waiting. The lock file stays, empty. Tested with two real cores setting
+two settings at the same moment, 25 times in a row: before the lock, the
+first round already lost one core's change; with it, every round keeps
+both, and each core hears the other's.
+
+A hand edit takes no lock; the atomic write above means an editor never
+reads half a file, and the rule that the core writes over the file as it is
+on disk right now keeps an edit saved a moment before a change.
+
 ## The schema
 
 `sdk/config/cabinetos.schema.json` is generated from the Rust types, and a

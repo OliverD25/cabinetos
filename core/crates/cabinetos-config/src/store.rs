@@ -273,6 +273,10 @@ impl ConfigStore {
         change: impl FnOnce(&mut Config) -> Result<(), E>,
         validate: impl FnOnce(&Config) -> Result<(), E>,
     ) -> Result<Vec<String>, UpdateError<E>> {
+        // Another core on this file (a second window) may be between its
+        // read and its write; until it is done, reading would lose its
+        // change when this one is written.
+        let _cores = lock_beside(&self.path).map_err(UpdateError::Io)?;
         let (base, base_hash) = match read(&self.path).map_err(UpdateError::Io)? {
             Some(bytes) => {
                 let hash = content_hash(&bytes);
@@ -427,6 +431,29 @@ fn read(path: &Path) -> io::Result<Option<Vec<u8>>> {
             Err(error) => return Err(error),
         }
     }
+}
+
+/// Locks `.<name>.lock` next to `path` for this process until the returned
+/// file is dropped, waiting while another process holds it. Windows
+/// releases the lock when a process ends, however it ends. The lock file
+/// stays, empty: removing it could race a process that is about to lock it.
+fn lock_beside(path: &Path) -> io::Result<std::fs::File> {
+    let name = path.file_name().map_or_else(
+        || "config".into(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let lock = path.with_file_name(format!(".{name}.lock"));
+    if let Some(dir) = lock.parent().filter(|dir| !dir.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock)?;
+    file.lock()?;
+    Ok(file)
 }
 
 fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
