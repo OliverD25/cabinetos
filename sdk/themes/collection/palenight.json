@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "palenight",
+  "name": "Palenight",
+  "author": "Olaolu Olawuyi, port by CabinetOS",
+  "attribution": "Colours from the Palenight Theme by Olaolu Olawuyi (https://github.com/whizkydee/vscode-palenight-theme), after Material Theme's Palenight, used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#C792EA",
+  "mica": {
+    "tint": "#292D3E",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#EEFFFF",
+    "textSecondary": "#EEFFFFC8",
+    "textTertiary": "#EEFFFF8B",
+    "textDisabled": "#4C5374",
+    "layerFill": "#31364A80",
+    "layerStroke": "#4C537499",
+    "layerStrokeActive": "#676E95",
+    "controlFill": "#31364AB3",
+    "controlFillHover": "#4C537480",
+    "acrylicTint": "#31364AB8",
+    "terminalBackground": "#292D3E99",
+    "folderIcon": "#FFCB6B",
+    "folderIconFront": "#FFDD9F",
+    "fileTypeColors": {
+      "md": "#82AAFF",
+      "rs": "#F78C6C",
+      "toml": "#C792EA",
+      "exe": "#C3E88D",
+      "dll": "#C3E88D",
+      "bin": "#FF5572",
+      "pdf": "#FF5572",
+      "zip": "#FFCB6B"
+    },
+    "permissionLow": "#C3E88D",
+    "permissionMedium": "#FFCB6B",
+    "permissionHigh": "#EF5350"
+  },
+  "terminal": {
+    "foreground": "#BFC7D5",
+    "background": "#292D3E",
+    "cursor": "#BFC7D5",
+    "ansi": [
+      "#676E95",
+      "#FF5572",
+      "#A9C77D",
+      "#FFCB6B",
+      "#82AAFF",
+      "#C792EA",
+      "#89DDFF",
+      "#FFFFFF",
+      "#676E95",
+      "#FF5572",
+      "#C3E88D",
+      "#FFCB6B",
+      "#82AAFF",
+      "#C792EA",
+      "#89DDFF",
+      "#FFFFFF"
+    ]
+  }
+}

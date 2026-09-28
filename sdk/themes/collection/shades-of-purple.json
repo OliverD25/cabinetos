@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "shades-of-purple",
+  "name": "Shades of Purple",
+  "author": "Ahmad Awais, port by CabinetOS",
+  "attribution": "Colours from Shades of Purple by Ahmad Awais (https://github.com/ahmadawais/shades-of-purple-vscode), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#FAD000",
+  "mica": {
+    "tint": "#1E1E3F",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#FFFFFF",
+    "textSecondary": "#FFFFFFC8",
+    "textTertiary": "#A599E9",
+    "textDisabled": "#A599E980",
+    "layerFill": "#2D2B5580",
+    "layerStroke": "#6943FF62",
+    "layerStrokeActive": "#A599E9",
+    "controlFill": "#2D2B55B3",
+    "controlFillHover": "#6943FF62",
+    "acrylicTint": "#222244B8",
+    "terminalBackground": "#1E1E3F99",
+    "folderIcon": "#FAD000",
+    "folderIconFront": "#FCE059",
+    "fileTypeColors": {
+      "md": "#9EFFFF",
+      "rs": "#FF9D00",
+      "toml": "#B362FF",
+      "exe": "#A5FF90",
+      "dll": "#A5FF90",
+      "bin": "#FF628C",
+      "pdf": "#FF628C",
+      "zip": "#FAD000"
+    },
+    "permissionLow": "#3AD900",
+    "permissionMedium": "#FAD000",
+    "permissionHigh": "#EC3A37"
+  },
+  "terminal": {
+    "foreground": "#FFFFFF",
+    "background": "#1E1E3F",
+    "cursor": "#FAD000",
+    "ansi": [
+      "#000000",
+      "#EC3A37",
+      "#3AD900",
+      "#FAD000",
+      "#7857FE",
+      "#FF2C70",
+      "#80FCFF",
+      "#FFFFFF",
+      "#5C5C61",
+      "#EC3A37",
+      "#3AD900",
+      "#FAD000",
+      "#6943FF",
+      "#FB94FF",
+      "#80FCFF",
+      "#FFFFFF"
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "noctis",
+  "name": "Noctis",
+  "author": "Liviu Schera, port by CabinetOS",
+  "attribution": "Colours from Noctis by Liviu Schera (https://github.com/liviuschera/noctis), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#40D4E7",
+  "mica": {
+    "tint": "#03191B",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#B2CACD",
+    "textSecondary": "#B2CACD",
+    "textTertiary": "#929EA0",
+    "textDisabled": "#4E6B6E",
+    "layerFill": "#07394080",
+    "layerStroke": "#0E667199",
+    "layerStrokeActive": "#169FB1",
+    "controlFill": "#0B515B80",
+    "controlFillHover": "#0E667180",
+    "acrylicTint": "#073940B8",
+    "terminalBackground": "#03191B99",
+    "folderIcon": "#E4B781",
+    "folderIconFront": "#EDD0AD",
+    "fileTypeColors": {
+      "md": "#49ACE9",
+      "rs": "#E66533",
+      "toml": "#7060EB",
+      "exe": "#49E9A6",
+      "dll": "#49E9A6",
+      "bin": "#E34E1C",
+      "pdf": "#E34E1C",
+      "zip": "#E69533"
+    },
+    "permissionLow": "#49E9A6",
+    "permissionMedium": "#E69533",
+    "permissionHigh": "#E34E1C"
+  },
+  "terminal": {
+    "foreground": "#B2CACD",
+    "background": "#03191B",
+    "cursor": "#B2CACD",
+    "ansi": [
+      "#324A4D",
+      "#E66533",
+      "#49E9A6",
+      "#E4B781",
+      "#49ACE9",
+      "#DF769B",
+      "#49D6E9",
+      "#B2CACD",
+      "#47686C",
+      "#E97749",
+      "#60EBB1",
+      "#E69533",
+      "#60B6EB",
+      "#E798B3",
+      "#60DBEB",
+      "#C1D4D7"
+    ]
+  }
+}

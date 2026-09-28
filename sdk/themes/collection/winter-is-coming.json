@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "winter-is-coming",
+  "name": "Winter is Coming (Dark Blue)",
+  "author": "John Papa, port by CabinetOS",
+  "attribution": "Colours from Winter is Coming (Dark Blue) by John Papa (https://github.com/johnpapa/vscode-winteriscoming), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#219FD5",
+  "mica": {
+    "tint": "#011627",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#A7DBF7",
+    "textSecondary": "#D6DEEB",
+    "textTertiary": "#7799BB",
+    "textDisabled": "#5F7E97",
+    "layerFill": "#0B294280",
+    "layerStroke": "#219FD544",
+    "layerStrokeActive": "#219FD5",
+    "controlFill": "#0B253AB3",
+    "controlFillHover": "#103362B3",
+    "acrylicTint": "#0B2942B8",
+    "terminalBackground": "#01162799",
+    "folderIcon": "#FFCB6B",
+    "folderIconFront": "#FFDD9F",
+    "fileTypeColors": {
+      "md": "#82AAFF",
+      "rs": "#FFCA28",
+      "toml": "#C792EA",
+      "exe": "#22DA6E",
+      "dll": "#22DA6E",
+      "bin": "#EF5350",
+      "pdf": "#EF5350",
+      "zip": "#F7ECB5"
+    },
+    "permissionLow": "#22DA6E",
+    "permissionMedium": "#FFCA28",
+    "permissionHigh": "#EF5350"
+  },
+  "terminal": {
+    "foreground": "#D6DEEB",
+    "background": "#011627",
+    "cursor": "#219FD5",
+    "ansi": [
+      "#011627",
+      "#EF5350",
+      "#22DA6E",
+      "#F7ECB5",
+      "#219FD5",
+      "#C792EA",
+      "#80CBC4",
+      "#D6DEEB",
+      "#5F7E97",
+      "#EF9A9A",
+      "#ADDB67",
+      "#FFCB6B",
+      "#82AAFF",
+      "#C792EA",
+      "#7FDBCA",
+      "#FFFFFF"
+    ]
+  }
+}

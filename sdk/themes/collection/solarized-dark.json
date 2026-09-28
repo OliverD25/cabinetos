@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "solarized-dark",
+  "name": "Solarized Dark",
+  "author": "Ethan Schoonover, port by CabinetOS",
+  "attribution": "Colours from Solarized by Ethan Schoonover (https://ethanschoonover.com/solarized), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#268BD2",
+  "mica": {
+    "tint": "#002B36",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#BDC3BB",
+    "textSecondary": "#BDC3BB",
+    "textTertiary": "#93A1A1",
+    "textDisabled": "#586E75",
+    "layerFill": "#07364280",
+    "layerStroke": "#586E7599",
+    "layerStrokeActive": "#657B83",
+    "controlFill": "#073642B3",
+    "controlFillHover": "#586E7566",
+    "acrylicTint": "#073642B8",
+    "terminalBackground": "#002B3699",
+    "folderIcon": "#B58900",
+    "folderIconFront": "#CFB259",
+    "fileTypeColors": {
+      "md": "#268BD2",
+      "rs": "#CB4B16",
+      "toml": "#6C71C4",
+      "exe": "#859900",
+      "dll": "#859900",
+      "bin": "#DC322F",
+      "pdf": "#DC322F",
+      "zip": "#B58900"
+    },
+    "permissionLow": "#859900",
+    "permissionMedium": "#B58900",
+    "permissionHigh": "#DC322F"
+  },
+  "terminal": {
+    "foreground": "#839496",
+    "background": "#002B36",
+    "cursor": "#93A1A1",
+    "ansi": [
+      "#073642",
+      "#DC322F",
+      "#859900",
+      "#B58900",
+      "#268BD2",
+      "#D33682",
+      "#2AA198",
+      "#EEE8D5",
+      "#002B36",
+      "#CB4B16",
+      "#586E75",
+      "#657B83",
+      "#839496",
+      "#6C71C4",
+      "#93A1A1",
+      "#FDF6E3"
+    ]
+  }
+}

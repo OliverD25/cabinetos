@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "houston",
+  "name": "Houston",
+  "author": "Astro, port by CabinetOS",
+  "attribution": "Colours from Houston by the Astro Technology Company (https://github.com/withastro/houston-vscode), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#4BF3C8",
+  "mica": {
+    "tint": "#17191E",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#EEF0F9",
+    "textSecondary": "#BFC1C9",
+    "textTertiary": "#858B98",
+    "textDisabled": "#545864",
+    "layerFill": "#23262D80",
+    "layerStroke": "#34384199",
+    "layerStrokeActive": "#545864",
+    "controlFill": "#343841B3",
+    "controlFillHover": "#2D4860B3",
+    "acrylicTint": "#23262DB8",
+    "terminalBackground": "#23262D99",
+    "folderIcon": "#FFC368",
+    "folderIconFront": "#FFD89D",
+    "fileTypeColors": {
+      "md": "#54B9FF",
+      "rs": "#F4587E",
+      "toml": "#ACAFFF",
+      "exe": "#23D18B",
+      "dll": "#23D18B",
+      "bin": "#DC3657",
+      "pdf": "#DC3657",
+      "zip": "#FFD493"
+    },
+    "permissionLow": "#23D18B",
+    "permissionMedium": "#FBC23B",
+    "permissionHigh": "#F4587E"
+  },
+  "terminal": {
+    "foreground": "#CCCCCC",
+    "background": "#23262D",
+    "cursor": "#FFFFFF",
+    "ansi": [
+      "#17191E",
+      "#DC3657",
+      "#23D18B",
+      "#FFC368",
+      "#2B7ECA",
+      "#AD5DCA",
+      "#24C0CF",
+      "#EEF0F9",
+      "#545864",
+      "#F4587E",
+      "#4BF3C8",
+      "#FFD493",
+      "#54B9FF",
+      "#CC75F4",
+      "#00DAEF",
+      "#FAFAFA"
+    ]
+  }
+}

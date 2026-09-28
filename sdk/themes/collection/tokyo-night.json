@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "tokyo-night",
+  "name": "Tokyo Night",
+  "author": "Enkia, port by CabinetOS",
+  "attribution": "Colours from Tokyo Night by Enkia (https://github.com/enkia/tokyo-night-vscode-theme), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#7AA2F7",
+  "mica": {
+    "tint": "#16161E",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#A9B1D6",
+    "textSecondary": "#A9B1D6",
+    "textTertiary": "#A9B1D6B3",
+    "textDisabled": "#363B54",
+    "layerFill": "#1E202E80",
+    "layerStroke": "#10101499",
+    "layerStrokeActive": "#545C7E",
+    "controlFill": "#202330B3",
+    "controlFillHover": "#3B3E52B3",
+    "acrylicTint": "#16161EB8",
+    "terminalBackground": "#16161E99",
+    "folderIcon": "#E0AF68",
+    "folderIconFront": "#EBCB9D",
+    "fileTypeColors": {
+      "md": "#7AA2F7",
+      "rs": "#FF9E64",
+      "toml": "#BB9AF7",
+      "exe": "#9ECE6A",
+      "dll": "#9ECE6A",
+      "bin": "#F7768E",
+      "pdf": "#F7768E",
+      "zip": "#E0AF68"
+    },
+    "permissionLow": "#9ECE6A",
+    "permissionMedium": "#E0AF68",
+    "permissionHigh": "#F7768E"
+  },
+  "terminal": {
+    "foreground": "#A9B1D6",
+    "background": "#16161E",
+    "cursor": "#C0CAF5",
+    "ansi": [
+      "#363B54",
+      "#F7768E",
+      "#73DACA",
+      "#E0AF68",
+      "#7AA2F7",
+      "#BB9AF7",
+      "#7DCFFF",
+      "#787C99",
+      "#363B54",
+      "#F7768E",
+      "#73DACA",
+      "#E0AF68",
+      "#7AA2F7",
+      "#BB9AF7",
+      "#7DCFFF",
+      "#ACB0D0"
+    ]
+  }
+}

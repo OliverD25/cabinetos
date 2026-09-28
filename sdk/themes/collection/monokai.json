@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "monokai",
+  "name": "Monokai",
+  "author": "Wimer Hazenberg, port by CabinetOS",
+  "attribution": "Colours from the classic Monokai colour theme by Wimer Hazenberg as Visual Studio Code ships it (https://github.com/microsoft/vscode, extensions/theme-monokai, (c) Microsoft Corporation), used under the MIT License. This is not Monokai Pro.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#F92672",
+  "mica": {
+    "tint": "#1E1F1C",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#F8F8F2",
+    "textSecondary": "#F8F8F2C8",
+    "textTertiary": "#90908A",
+    "textDisabled": "#75715E",
+    "layerFill": "#34352F80",
+    "layerStroke": "#41433999",
+    "layerStrokeActive": "#75715E",
+    "controlFill": "#3E3D32B3",
+    "controlFillHover": "#414339",
+    "acrylicTint": "#1E1F1CB8",
+    "terminalBackground": "#27282299",
+    "folderIcon": "#E6DB74",
+    "folderIconFront": "#EFE8A5",
+    "fileTypeColors": {
+      "md": "#66D9EF",
+      "rs": "#FD971F",
+      "toml": "#AE81FF",
+      "exe": "#A6E22E",
+      "dll": "#A6E22E",
+      "bin": "#F92672",
+      "pdf": "#F92672",
+      "zip": "#E6DB74"
+    },
+    "permissionLow": "#A6E22E",
+    "permissionMedium": "#E6DB74",
+    "permissionHigh": "#F92672"
+  },
+  "terminal": {
+    "foreground": "#F8F8F2",
+    "background": "#272822",
+    "cursor": "#F8F8F2",
+    "ansi": [
+      "#333333",
+      "#C4265E",
+      "#86B42B",
+      "#B3B42B",
+      "#6A7EC8",
+      "#8C6BC8",
+      "#56ADBC",
+      "#E3E3DD",
+      "#666666",
+      "#F92672",
+      "#A6E22E",
+      "#E2E22E",
+      "#819AFF",
+      "#AE81FF",
+      "#66D9EF",
+      "#F8F8F2"
+    ]
+  }
+}

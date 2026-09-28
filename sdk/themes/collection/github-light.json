@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "github-light",
+  "name": "GitHub Light",
+  "author": "GitHub (Primer), port by CabinetOS",
+  "attribution": "Colours from GitHub Light Default of the GitHub VS Code Theme and Primer Primitives by GitHub (https://github.com/primer/github-vscode-theme), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#0969DA",
+  "mica": {
+    "tint": "#F6F8FA",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#1F2328",
+    "textSecondary": "#1F2328E6",
+    "textTertiary": "#656D76",
+    "textDisabled": "#8C959F",
+    "layerFill": "#FFFFFFB3",
+    "layerStroke": "#D0D7DE",
+    "layerStrokeActive": "#6E7781",
+    "controlFill": "#EAEEF280",
+    "controlFillHover": "#AFB8C133",
+    "acrylicTint": "#FFFFFFD9",
+    "terminalBackground": "#F6F8FA99",
+    "folderIcon": "#BF8700",
+    "folderIconFront": "#D5B159",
+    "fileTypeColors": {
+      "md": "#0969DA",
+      "rs": "#BC4C00",
+      "toml": "#8250DF",
+      "exe": "#1A7F37",
+      "dll": "#1A7F37",
+      "bin": "#CF222E",
+      "pdf": "#CF222E",
+      "zip": "#9A6700"
+    },
+    "permissionLow": "#1A7F37",
+    "permissionMedium": "#9A6700",
+    "permissionHigh": "#CF222E"
+  },
+  "terminal": {
+    "foreground": "#1F2328",
+    "background": "#F6F8FA",
+    "cursor": "#1F2328",
+    "ansi": [
+      "#24292F",
+      "#CF222E",
+      "#116329",
+      "#4D2D00",
+      "#0969DA",
+      "#8250DF",
+      "#1B7C83",
+      "#6E7781",
+      "#57606A",
+      "#A40E26",
+      "#1A7F37",
+      "#633C01",
+      "#218BFF",
+      "#A475F9",
+      "#3192AA",
+      "#8C959F"
+    ]
+  }
+}

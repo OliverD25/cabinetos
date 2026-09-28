@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "ayu-mirage",
+  "name": "Ayu Mirage",
+  "author": "Ike Kurghinyan and Konstantin Pschera (ayu), port by CabinetOS",
+  "attribution": "Colours from Ayu Mirage of the ayu theme for Visual Studio Code by Ike Kurghinyan and ayu-colors by Konstantin Pschera (https://github.com/ayu-theme/vscode-ayu), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#FFCC66",
+  "mica": {
+    "tint": "#1F2430",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#CCCAC2",
+    "textSecondary": "#CCCAC2",
+    "textTertiary": "#CCCAC2B3",
+    "textDisabled": "#707A8C80",
+    "layerFill": "#282E3B80",
+    "layerStroke": "#171B2499",
+    "layerStrokeActive": "#707A8C",
+    "controlFill": "#63759926",
+    "controlFillHover": "#63759940",
+    "acrylicTint": "#1C212CB8",
+    "terminalBackground": "#1F243099",
+    "folderIcon": "#FFCD66",
+    "folderIconFront": "#FFDE9C",
+    "fileTypeColors": {
+      "md": "#73D0FF",
+      "rs": "#FFA659",
+      "toml": "#DFBFFF",
+      "exe": "#D5FF80",
+      "dll": "#D5FF80",
+      "bin": "#F28779",
+      "pdf": "#F28779",
+      "zip": "#FFCD66"
+    },
+    "permissionLow": "#87D96C",
+    "permissionMedium": "#FFCC66",
+    "permissionHigh": "#FF6666"
+  },
+  "terminal": {
+    "foreground": "#CCCAC2",
+    "background": "#1F2430",
+    "cursor": "#CCCAC2",
+    "ansi": [
+      "#171B24",
+      "#F28273",
+      "#87D96C",
+      "#FCCA60",
+      "#6ACDFF",
+      "#DDBBFF",
+      "#93E2C8",
+      "#C7C7C7",
+      "#686868",
+      "#F28779",
+      "#D5FF80",
+      "#FFCD66",
+      "#73D0FF",
+      "#DFBFFF",
+      "#95E6CB",
+      "#FFFFFF"
+    ]
+  }
+}

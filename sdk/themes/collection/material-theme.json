@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "material-theme",
+  "name": "Material Theme",
+  "author": "Mattia Astorino, port by CabinetOS",
+  "attribution": "Colours from the default variant of Material Theme by Mattia Astorino (https://github.com/SublimeText/material-theme), used under the MIT License. The background is Google Material's Blue Grey 900.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#80CBC4",
+  "mica": {
+    "tint": "#263238",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#EEFFFF",
+    "textSecondary": "#EEFFFFE6",
+    "textTertiary": "#B2CCD6",
+    "textDisabled": "#546E7A",
+    "layerFill": "#37474F80",
+    "layerStroke": "#546E7A99",
+    "layerStrokeActive": "#546E7A",
+    "controlFill": "#37474FB3",
+    "controlFillHover": "#37474F",
+    "acrylicTint": "#263238B8",
+    "terminalBackground": "#26323899",
+    "folderIcon": "#FFCB6B",
+    "folderIconFront": "#FFDD9F",
+    "fileTypeColors": {
+      "md": "#82AAFF",
+      "rs": "#F78C6C",
+      "toml": "#C792EA",
+      "exe": "#C3E88D",
+      "dll": "#C3E88D",
+      "bin": "#FF5370",
+      "pdf": "#FF5370",
+      "zip": "#FFCB6B"
+    },
+    "permissionLow": "#C3E88D",
+    "permissionMedium": "#FFCB6B",
+    "permissionHigh": "#FF5370"
+  },
+  "terminal": {
+    "foreground": "#EEFFFF",
+    "background": "#263238",
+    "cursor": "#FFCC00",
+    "ansi": [
+      "#000000",
+      "#FF5370",
+      "#C3E88D",
+      "#FFCB6B",
+      "#82AAFF",
+      "#C792EA",
+      "#89DDFF",
+      "#EEFFFF",
+      "#546E7A",
+      "#F07178",
+      "#C3E88D",
+      "#F78C6C",
+      "#B2CCD6",
+      "#BB80B3",
+      "#89DDFF",
+      "#FFFFFF"
+    ]
+  }
+}

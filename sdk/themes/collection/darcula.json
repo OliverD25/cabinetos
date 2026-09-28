@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "darcula",
+  "name": "Darcula",
+  "author": "Youngrok Kim (rokoroku), port by CabinetOS",
+  "attribution": "Colours from the Darcula theme for Visual Studio Code by Youngrok Kim (https://github.com/rokoroku/vscode-theme-darcula), a community port of JetBrains' Darcula, used under the MIT License. The theme has no terminal colours; these are built from its syntax colours.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#CC8242",
+  "mica": {
+    "tint": "#242424",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#CCCCCC",
+    "textSecondary": "#CCCCCC",
+    "textTertiary": "#CCCCCCB3",
+    "textDisabled": "#CCCCCC5D",
+    "layerFill": "#FFFFFF0B",
+    "layerStroke": "#FFFFFF1A",
+    "layerStrokeActive": "#707070",
+    "controlFill": "#FFFFFF10",
+    "controlFillHover": "#FFFFFF1A",
+    "acrylicTint": "#303030B8",
+    "terminalBackground": "#24242499",
+    "folderIcon": "#FFC66D",
+    "folderIconFront": "#FFDAA0",
+    "fileTypeColors": {
+      "md": "#7A9EC2",
+      "rs": "#CC8242",
+      "toml": "#9E7BB0",
+      "exe": "#A5C261",
+      "dll": "#A5C261",
+      "bin": "#F44747",
+      "pdf": "#F44747",
+      "zip": "#FFC66D"
+    },
+    "permissionLow": "#A5C261",
+    "permissionMedium": "#CD9731",
+    "permissionHigh": "#F44747"
+  },
+  "terminal": {
+    "foreground": "#CCCCCC",
+    "background": "#242424",
+    "cursor": "#CCCCCC",
+    "ansi": [
+      "#303030",
+      "#F44747",
+      "#6A8759",
+      "#CD9731",
+      "#7A9EC2",
+      "#9E7BB0",
+      "#0C7D9D",
+      "#CCCCCC",
+      "#707070",
+      "#F44747",
+      "#A5C261",
+      "#FFC66D",
+      "#6796E6",
+      "#B267E6",
+      "#0C7D9D",
+      "#FFFFFF"
+    ]
+  }
+}

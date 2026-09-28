@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "snazzy-light",
+  "name": "Snazzy Light",
+  "author": "Florian Reuschel, port by CabinetOS",
+  "attribution": "Colours from Snazzy Light by Florian Reuschel (https://github.com/loilo/vscode-snazzy-light), after Hyper Snazzy, used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#09A1ED",
+  "mica": {
+    "tint": "#F3F4F5",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#40424F",
+    "textSecondary": "#40424F",
+    "textTertiary": "#40424FC8",
+    "textDisabled": "#ADB1C2",
+    "layerFill": "#FAFBFCB3",
+    "layerStroke": "#DEDFE0",
+    "layerStrokeActive": "#9194A2",
+    "controlFill": "#E9EAEBB3",
+    "controlFillHover": "#DEDFE0",
+    "acrylicTint": "#FAFBFCD9",
+    "terminalBackground": "#FAFBFC99",
+    "folderIcon": "#F5B900",
+    "folderIconFront": "#F8D259",
+    "fileTypeColors": {
+      "md": "#09A1ED",
+      "rs": "#F5B900",
+      "toml": "#F767BB",
+      "exe": "#2DAE58",
+      "dll": "#2DAE58",
+      "bin": "#FF5C57",
+      "pdf": "#FF5C57",
+      "zip": "#CF9C00"
+    },
+    "permissionLow": "#2DAE58",
+    "permissionMedium": "#CF9C00",
+    "permissionHigh": "#FF5C57"
+  },
+  "terminal": {
+    "foreground": "#565869",
+    "background": "#FAFBFC",
+    "cursor": "#565869",
+    "ansi": [
+      "#565869",
+      "#FF5C57",
+      "#2DAE58",
+      "#CF9C00",
+      "#09A1ED",
+      "#F767BB",
+      "#13BBB7",
+      "#FAFBF9",
+      "#75798F",
+      "#FFAEAC",
+      "#35CF68",
+      "#F5B900",
+      "#14B1FF",
+      "#FF94D2",
+      "#13BBB7",
+      "#FFFFFF"
+    ]
+  }
+}

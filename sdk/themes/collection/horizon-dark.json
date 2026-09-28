@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "horizon-dark",
+  "name": "Horizon Dark",
+  "author": "Jonathan Olaleye, port by CabinetOS",
+  "attribution": "Colours from Horizon by Jonathan Olaleye (https://github.com/jolaleye/horizon-theme-vscode), used under the MIT License; the ANSI colours the theme leaves unset are Visual Studio Code's defaults (MIT).",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#E95378",
+  "mica": {
+    "tint": "#1C1E26",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#D5D8DA",
+    "textSecondary": "#D5D8DA",
+    "textTertiary": "#D5D8DAB3",
+    "textDisabled": "#D5D8DA4D",
+    "layerFill": "#2E303E80",
+    "layerStroke": "#1A1C2399",
+    "layerStrokeActive": "#6C6F93",
+    "controlFill": "#2E303E80",
+    "controlFillHover": "#2E303EB3",
+    "acrylicTint": "#232530B8",
+    "terminalBackground": "#1C1E2699",
+    "folderIcon": "#FAB795",
+    "folderIconFront": "#FBC3A7",
+    "fileTypeColors": {
+      "md": "#26BBD9",
+      "rs": "#F09483",
+      "toml": "#B877DB",
+      "exe": "#29D398",
+      "dll": "#29D398",
+      "bin": "#E95678",
+      "pdf": "#E95678",
+      "zip": "#FAB795"
+    },
+    "permissionLow": "#27D797",
+    "permissionMedium": "#FAB795",
+    "permissionHigh": "#F43E5C"
+  },
+  "terminal": {
+    "foreground": "#D5D8DA",
+    "background": "#1C1E26",
+    "cursor": "#6C6F93",
+    "ansi": [
+      "#000000",
+      "#E95678",
+      "#29D398",
+      "#FAB795",
+      "#26BBD9",
+      "#EE64AC",
+      "#59E1E3",
+      "#E5E5E5",
+      "#666666",
+      "#EC6A88",
+      "#3FDAA4",
+      "#FBC3A7",
+      "#3FC4DE",
+      "#F075B5",
+      "#6BE4E6",
+      "#E5E5E5"
+    ]
+  }
+}

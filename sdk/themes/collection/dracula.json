@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "dracula",
+  "name": "Dracula",
+  "author": "Zeno Rocha, port by CabinetOS",
+  "attribution": "Colours from the Dracula theme for Visual Studio Code by Zeno Rocha and the Dracula Theme contributors (https://draculatheme.com), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#BD93F9",
+  "mica": {
+    "tint": "#21222C",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#F8F8F2",
+    "textSecondary": "#F8F8F2C8",
+    "textTertiary": "#F8F8F28B",
+    "textDisabled": "#F8F8F25D",
+    "layerFill": "#34374680",
+    "layerStroke": "#44475A99",
+    "layerStrokeActive": "#6272A4",
+    "controlFill": "#343746B3",
+    "controlFillHover": "#44475AB3",
+    "acrylicTint": "#21222CB8",
+    "terminalBackground": "#282A3699",
+    "folderIcon": "#F1FA8C",
+    "folderIconFront": "#F6FCB4",
+    "fileTypeColors": {
+      "md": "#8BE9FD",
+      "rs": "#FFB86C",
+      "toml": "#BD93F9",
+      "exe": "#50FA7B",
+      "dll": "#50FA7B",
+      "bin": "#FF5555",
+      "pdf": "#FF5555",
+      "zip": "#F1FA8C"
+    },
+    "permissionLow": "#50FA7B",
+    "permissionMedium": "#F1FA8C",
+    "permissionHigh": "#FF5555"
+  },
+  "terminal": {
+    "foreground": "#F8F8F2",
+    "background": "#282A36",
+    "cursor": "#F8F8F2",
+    "ansi": [
+      "#21222C",
+      "#FF5555",
+      "#50FA7B",
+      "#F1FA8C",
+      "#BD93F9",
+      "#FF79C6",
+      "#8BE9FD",
+      "#F8F8F2",
+      "#6272A4",
+      "#FF6E6E",
+      "#69FF94",
+      "#FFFFA5",
+      "#D6ACFF",
+      "#FF92DF",
+      "#A4FFFF",
+      "#FFFFFF"
+    ]
+  }
+}

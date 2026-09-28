@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "catppuccin-frappe",
+  "name": "Catppuccin Frappé",
+  "author": "Catppuccin, port by CabinetOS",
+  "attribution": "Colours from the Catppuccin Frappé palette by the Catppuccin organization (https://catppuccin.com), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#CA9EE6",
+  "mica": {
+    "tint": "#303446",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#D1D9F7",
+    "textSecondary": "#D1D9F7",
+    "textTertiary": "#A5ADCE",
+    "textDisabled": "#737994",
+    "layerFill": "#41455980",
+    "layerStroke": "#51576D99",
+    "layerStrokeActive": "#737994",
+    "controlFill": "#414559B3",
+    "controlFillHover": "#51576DB3",
+    "acrylicTint": "#292C3CB8",
+    "terminalBackground": "#23263499",
+    "folderIcon": "#E5C890",
+    "folderIconFront": "#EEDBB7",
+    "fileTypeColors": {
+      "md": "#8CAAEE",
+      "rs": "#EF9F76",
+      "toml": "#CA9EE6",
+      "exe": "#A6D189",
+      "dll": "#A6D189",
+      "bin": "#E78284",
+      "pdf": "#E78284",
+      "zip": "#E5C890"
+    },
+    "permissionLow": "#A6D189",
+    "permissionMedium": "#E5C890",
+    "permissionHigh": "#E78284"
+  },
+  "terminal": {
+    "foreground": "#C6D0F5",
+    "background": "#303446",
+    "cursor": "#F2D5CF",
+    "ansi": [
+      "#51576D",
+      "#E78284",
+      "#A6D189",
+      "#E5C890",
+      "#8CAAEE",
+      "#F4B8E4",
+      "#81C8BE",
+      "#B5BFE2",
+      "#626880",
+      "#E78284",
+      "#A6D189",
+      "#E5C890",
+      "#8CAAEE",
+      "#F4B8E4",
+      "#81C8BE",
+      "#A5ADCE"
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "ayu-light",
+  "name": "Ayu Light",
+  "author": "Ike Kurghinyan and Konstantin Pschera (ayu), port by CabinetOS",
+  "attribution": "Colours from Ayu Light of the ayu theme for Visual Studio Code by Ike Kurghinyan and ayu-colors by Konstantin Pschera (https://github.com/ayu-theme/vscode-ayu), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#F29718",
+  "mica": {
+    "tint": "#F8F9FA",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#3C3F42",
+    "textSecondary": "#3C3F42",
+    "textTertiary": "#3C3F42C8",
+    "textDisabled": "#828E9F80",
+    "layerFill": "#FCFCFCB3",
+    "layerStroke": "#6B7D8F33",
+    "layerStrokeActive": "#828E9F",
+    "controlFill": "#6B7D8F24",
+    "controlFillHover": "#6B7D8F33",
+    "acrylicTint": "#FFFFFFD9",
+    "terminalBackground": "#F8F9FA99",
+    "folderIcon": "#EBA400",
+    "folderIconFront": "#F2C459",
+    "fileTypeColors": {
+      "md": "#55B4D4",
+      "rs": "#FA8532",
+      "toml": "#A37ACC",
+      "exe": "#86B300",
+      "dll": "#86B300",
+      "bin": "#E65050",
+      "pdf": "#E65050",
+      "zip": "#EBA400"
+    },
+    "permissionLow": "#86B300",
+    "permissionMedium": "#EBA400",
+    "permissionHigh": "#E65050"
+  },
+  "terminal": {
+    "foreground": "#5C6166",
+    "background": "#F8F9FA",
+    "cursor": "#5C6166",
+    "ansi": [
+      "#000000",
+      "#F06B6C",
+      "#6CBF43",
+      "#E7A100",
+      "#21A1E2",
+      "#A176CB",
+      "#4ABC96",
+      "#C7C7C7",
+      "#686868",
+      "#F07171",
+      "#86B300",
+      "#EBA400",
+      "#22A4E6",
+      "#A37ACC",
+      "#4CBF99",
+      "#D1D1D1"
+    ]
+  }
+}

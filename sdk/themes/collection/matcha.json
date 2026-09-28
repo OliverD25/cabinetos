@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "matcha",
+  "name": "Matcha",
+  "author": "Luca Falasco, port by CabinetOS",
+  "attribution": "Colours from Matcha by Luca Falasco (https://github.com/lucafalasco/matcha), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#A4B07E",
+  "mica": {
+    "tint": "#1C2427",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#D1DED3",
+    "textSecondary": "#D9D4B8",
+    "textTertiary": "#7EB0A3",
+    "textDisabled": "#D1DED350",
+    "layerFill": "#323E4580",
+    "layerStroke": "#707C4F99",
+    "layerStrokeActive": "#D9D4B880",
+    "controlFill": "#D9D4B820",
+    "controlFillHover": "#D9D4B833",
+    "acrylicTint": "#1C2427B8",
+    "terminalBackground": "#1C242799",
+    "folderIcon": "#C0AE69",
+    "folderIconFront": "#D6CA9E",
+    "fileTypeColors": {
+      "md": "#7EA4B0",
+      "rs": "#C6A685",
+      "toml": "#8A7EB0",
+      "exe": "#A4B07E",
+      "dll": "#A4B07E",
+      "bin": "#C6A685",
+      "pdf": "#C6A685",
+      "zip": "#C0AE69"
+    },
+    "permissionLow": "#A4B07E",
+    "permissionMedium": "#C0AE69",
+    "permissionHigh": "#C6A685"
+  },
+  "terminal": {
+    "foreground": "#D1DED3",
+    "background": "#1C2427",
+    "cursor": "#A4B07E",
+    "ansi": [
+      "#323E45",
+      "#C6A685",
+      "#A4B07E",
+      "#C0AE69",
+      "#7EA4B0",
+      "#8A7EB0",
+      "#7EB0A3",
+      "#D1DED3",
+      "#323E45",
+      "#C6A685",
+      "#A4B07E",
+      "#C0AE69",
+      "#7EA4B0",
+      "#8A7EB0",
+      "#7EB0A3",
+      "#D1DED3"
+    ]
+  }
+}

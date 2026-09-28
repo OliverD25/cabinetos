@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "ayu-dark",
+  "name": "Ayu Dark",
+  "author": "Ike Kurghinyan and Konstantin Pschera (ayu), port by CabinetOS",
+  "attribution": "Colours from Ayu Dark of the ayu theme for Visual Studio Code by Ike Kurghinyan and ayu-colors by Konstantin Pschera (https://github.com/ayu-theme/vscode-ayu), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#E6B450",
+  "mica": {
+    "tint": "#0D1017",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#BFBDB6",
+    "textSecondary": "#BFBDB6E6",
+    "textTertiary": "#BFBDB6B3",
+    "textDisabled": "#5A637880",
+    "layerFill": "#14182180",
+    "layerStroke": "#1B1F2999",
+    "layerStrokeActive": "#5A6378",
+    "controlFill": "#47526640",
+    "controlFillHover": "#47526666",
+    "acrylicTint": "#0F131AB8",
+    "terminalBackground": "#0D101799",
+    "folderIcon": "#FFB454",
+    "folderIconFront": "#FFCE90",
+    "fileTypeColors": {
+      "md": "#59C2FF",
+      "rs": "#FF8F40",
+      "toml": "#D2A6FF",
+      "exe": "#AAD94C",
+      "dll": "#AAD94C",
+      "bin": "#F07178",
+      "pdf": "#F07178",
+      "zip": "#FFB454"
+    },
+    "permissionLow": "#AAD94C",
+    "permissionMedium": "#E6B450",
+    "permissionHigh": "#D95757"
+  },
+  "terminal": {
+    "foreground": "#BFBDB6",
+    "background": "#0D1017",
+    "cursor": "#BFBDB6",
+    "ansi": [
+      "#1B1F29",
+      "#F06B73",
+      "#70BF56",
+      "#FDB04C",
+      "#4FBFFF",
+      "#D0A1FF",
+      "#93E2C8",
+      "#C7C7C7",
+      "#686868",
+      "#F07178",
+      "#AAD94C",
+      "#FFB454",
+      "#59C2FF",
+      "#D2A6FF",
+      "#95E6CB",
+      "#FFFFFF"
+    ]
+  }
+}

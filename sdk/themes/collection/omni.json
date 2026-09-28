@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "omni",
+  "name": "Omni",
+  "author": "Rocketseat (Omni Theme), port by CabinetOS",
+  "attribution": "Colours from the Omni theme for Visual Studio Code by Rocketseat and the Omni Theme contributors (https://github.com/getomni/visual-studio-code), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#988BC7",
+  "mica": {
+    "tint": "#13111B",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#E1E1E6",
+    "textSecondary": "#E1E1E6C8",
+    "textTertiary": "#E1E1E68B",
+    "textDisabled": "#5A4B81",
+    "layerFill": "#201B2D80",
+    "layerStroke": "#41414D99",
+    "layerStrokeActive": "#5A4B81",
+    "controlFill": "#252131B3",
+    "controlFillHover": "#41414DA6",
+    "acrylicTint": "#13111BB8",
+    "terminalBackground": "#19162299",
+    "folderIcon": "#E7DE79",
+    "folderIconFront": "#EFEAA8",
+    "fileTypeColors": {
+      "md": "#78D1E1",
+      "rs": "#E89E64",
+      "toml": "#988BC7",
+      "exe": "#67E480",
+      "dll": "#67E480",
+      "bin": "#E96379",
+      "pdf": "#E96379",
+      "zip": "#E7DE79"
+    },
+    "permissionLow": "#67E480",
+    "permissionMedium": "#E7DE79",
+    "permissionHigh": "#E96379"
+  },
+  "terminal": {
+    "foreground": "#E1E1E6",
+    "background": "#191622",
+    "cursor": "#E1E1E6",
+    "ansi": [
+      "#201B2D",
+      "#FF79C6",
+      "#67E480",
+      "#E7DE79",
+      "#78D1E1",
+      "#988BC7",
+      "#A1EFE4",
+      "#E1E1E6",
+      "#626483",
+      "#ED4556",
+      "#00F769",
+      "#E7DE79",
+      "#78D1E1",
+      "#988BC7",
+      "#A4FFFF",
+      "#F7F7FB"
+    ]
+  }
+}

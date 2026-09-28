@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "synthwave-84",
+  "name": "SynthWave '84",
+  "author": "Robb Owen, port by CabinetOS",
+  "attribution": "Colours from SynthWave '84 by Robb Owen (https://github.com/robb0wen/synthwave-vscode), used under the MIT License; the ANSI colours the theme leaves unset are Visual Studio Code's defaults (MIT).",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#FF7EDB",
+  "mica": {
+    "tint": "#241B2F",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#FFFFFF",
+    "textSecondary": "#FFFFFFCC",
+    "textTertiary": "#848BBD",
+    "textDisabled": "#FFFFFF59",
+    "layerFill": "#2A213980",
+    "layerStroke": "#49549599",
+    "layerStrokeActive": "#848BBD",
+    "controlFill": "#37294D99",
+    "controlFillHover": "#463465B3",
+    "acrylicTint": "#171520B8",
+    "terminalBackground": "#26233599",
+    "folderIcon": "#FEDE5D",
+    "folderIconFront": "#FEEA96",
+    "fileTypeColors": {
+      "md": "#36F9F6",
+      "rs": "#FF8B39",
+      "toml": "#B893CE",
+      "exe": "#72F1B8",
+      "dll": "#72F1B8",
+      "bin": "#FE4450",
+      "pdf": "#FE4450",
+      "zip": "#FEDE5D"
+    },
+    "permissionLow": "#72F1B8",
+    "permissionMedium": "#FEDE5D",
+    "permissionHigh": "#FE4450"
+  },
+  "terminal": {
+    "foreground": "#FFFFFF",
+    "background": "#262335",
+    "cursor": "#03EDF9",
+    "ansi": [
+      "#000000",
+      "#FE4450",
+      "#72F1B8",
+      "#F3E70F",
+      "#03EDF9",
+      "#FF7EDB",
+      "#03EDF9",
+      "#E5E5E5",
+      "#666666",
+      "#FE4450",
+      "#72F1B8",
+      "#FEDE5D",
+      "#03EDF9",
+      "#FF7EDB",
+      "#03EDF9",
+      "#E5E5E5"
+    ]
+  }
+}

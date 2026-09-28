@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "gruvbox-dark",
+  "name": "Gruvbox Dark",
+  "author": "Pavel Pertsev (morhetz), port by CabinetOS",
+  "attribution": "Colours from gruvbox by Pavel Pertsev (https://github.com/morhetz/gruvbox), dark mode with medium contrast, used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#FE8019",
+  "mica": {
+    "tint": "#282828",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#EBDBB2",
+    "textSecondary": "#EBDBB2E6",
+    "textTertiary": "#A89984",
+    "textDisabled": "#7C6F64",
+    "layerFill": "#3C383680",
+    "layerStroke": "#50494599",
+    "layerStrokeActive": "#7C6F64",
+    "controlFill": "#3C3836B3",
+    "controlFillHover": "#504945B3",
+    "acrylicTint": "#1D2021B8",
+    "terminalBackground": "#28282899",
+    "folderIcon": "#FABD2F",
+    "folderIconFront": "#FCD478",
+    "fileTypeColors": {
+      "md": "#83A598",
+      "rs": "#FE8019",
+      "toml": "#D3869B",
+      "exe": "#B8BB26",
+      "dll": "#B8BB26",
+      "bin": "#FB4934",
+      "pdf": "#FB4934",
+      "zip": "#FABD2F"
+    },
+    "permissionLow": "#B8BB26",
+    "permissionMedium": "#FABD2F",
+    "permissionHigh": "#FB4934"
+  },
+  "terminal": {
+    "foreground": "#EBDBB2",
+    "background": "#282828",
+    "cursor": "#EBDBB2",
+    "ansi": [
+      "#282828",
+      "#CC241D",
+      "#98971A",
+      "#D79921",
+      "#458588",
+      "#B16286",
+      "#689D6A",
+      "#A89984",
+      "#928374",
+      "#FB4934",
+      "#B8BB26",
+      "#FABD2F",
+      "#83A598",
+      "#D3869B",
+      "#8EC07C",
+      "#EBDBB2"
+    ]
+  }
+}

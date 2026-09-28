@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "solarized-light",
+  "name": "Solarized Light",
+  "author": "Ethan Schoonover, port by CabinetOS",
+  "attribution": "Colours from Solarized by Ethan Schoonover (https://ethanschoonover.com/solarized), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#268BD2",
+  "mica": {
+    "tint": "#EEE8D5",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#23464F",
+    "textSecondary": "#23464F",
+    "textTertiary": "#23464FC8",
+    "textDisabled": "#93A1A1",
+    "layerFill": "#FDF6E3B3",
+    "layerStroke": "#93A1A166",
+    "layerStrokeActive": "#93A1A1",
+    "controlFill": "#EEE8D5B3",
+    "controlFillHover": "#93A1A140",
+    "acrylicTint": "#FDF6E3D9",
+    "terminalBackground": "#FDF6E399",
+    "folderIcon": "#B58900",
+    "folderIconFront": "#CFB259",
+    "fileTypeColors": {
+      "md": "#268BD2",
+      "rs": "#CB4B16",
+      "toml": "#6C71C4",
+      "exe": "#859900",
+      "dll": "#859900",
+      "bin": "#DC322F",
+      "pdf": "#DC322F",
+      "zip": "#B58900"
+    },
+    "permissionLow": "#859900",
+    "permissionMedium": "#B58900",
+    "permissionHigh": "#DC322F"
+  },
+  "terminal": {
+    "foreground": "#586E75",
+    "background": "#FDF6E3",
+    "cursor": "#586E75",
+    "ansi": [
+      "#073642",
+      "#DC322F",
+      "#859900",
+      "#B58900",
+      "#268BD2",
+      "#D33682",
+      "#2AA198",
+      "#EEE8D5",
+      "#002B36",
+      "#CB4B16",
+      "#586E75",
+      "#657B83",
+      "#839496",
+      "#6C71C4",
+      "#93A1A1",
+      "#FDF6E3"
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "sublime-material",
+  "name": "Sublime Material",
+  "author": "Mattia Astorino and Jarvis Prestidge, port by CabinetOS",
+  "attribution": "Colours from Sublime Material Theme - Dark by Jarvis Prestidge (https://github.com/JarvisPrestidge/vscode-material-theme), a port of Mattia Astorino's Material Theme for Sublime Text, used under the MIT License. The theme has no terminal colours; these are built from its syntax colours.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#80CBC4",
+  "mica": {
+    "tint": "#252526",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#EEFFFF",
+    "textSecondary": "#EEFFFFC8",
+    "textTertiary": "#B2CCD6",
+    "textDisabled": "#546E7A",
+    "layerFill": "#37474F80",
+    "layerStroke": "#37474F",
+    "layerStrokeActive": "#65737E",
+    "controlFill": "#37474FB3",
+    "controlFillHover": "#546E7A99",
+    "acrylicTint": "#252526B8",
+    "terminalBackground": "#25252699",
+    "folderIcon": "#FFCB6B",
+    "folderIconFront": "#FFDD9F",
+    "fileTypeColors": {
+      "md": "#82AAFF",
+      "rs": "#F78C6C",
+      "toml": "#C792EA",
+      "exe": "#C3E88D",
+      "dll": "#C3E88D",
+      "bin": "#FF5370",
+      "pdf": "#FF5370",
+      "zip": "#FFCB6B"
+    },
+    "permissionLow": "#C3E88D",
+    "permissionMedium": "#FFCB6B",
+    "permissionHigh": "#FF5370"
+  },
+  "terminal": {
+    "foreground": "#EEFFFF",
+    "background": "#252526",
+    "cursor": "#FFCC00",
+    "ansi": [
+      "#37474F",
+      "#FF5370",
+      "#C3E88D",
+      "#FFCB6B",
+      "#82AAFF",
+      "#C792EA",
+      "#89DDFF",
+      "#EEFFFF",
+      "#546E7A",
+      "#F07178",
+      "#C3E88D",
+      "#F78C6C",
+      "#B2CCD6",
+      "#C792EA",
+      "#89DDFF",
+      "#FFFFFF"
+    ]
+  }
+}

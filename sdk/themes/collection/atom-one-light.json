@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "atom-one-light",
+  "name": "Atom One Light",
+  "author": "Mahmoud Ali (akamud), port by CabinetOS",
+  "attribution": "Colours from Atom One Light for Visual Studio Code by Mahmoud Ali (https://github.com/akamud/vscode-theme-onelight), after Atom's One Light, used under the MIT License. The theme has no terminal colours; these are built from its syntax colours.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#526FFF",
+  "mica": {
+    "tint": "#EAEAEB",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#383A42",
+    "textSecondary": "#383A42",
+    "textTertiary": "#383A42C8",
+    "textDisabled": "#AFB2BB",
+    "layerFill": "#FAFAFAB3",
+    "layerStroke": "#DBDBDC",
+    "layerStrokeActive": "#A0A1A7",
+    "controlFill": "#DBDBDC66",
+    "controlFillHover": "#DBDBDCB3",
+    "acrylicTint": "#FFFFFFD9",
+    "terminalBackground": "#FAFAFA99",
+    "folderIcon": "#C18401",
+    "folderIconFront": "#D7AF5A",
+    "fileTypeColors": {
+      "md": "#4078F2",
+      "rs": "#986801",
+      "toml": "#A626A4",
+      "exe": "#50A14F",
+      "dll": "#50A14F",
+      "bin": "#E45649",
+      "pdf": "#E45649",
+      "zip": "#C18401"
+    },
+    "permissionLow": "#50A14F",
+    "permissionMedium": "#C18401",
+    "permissionHigh": "#E45649"
+  },
+  "terminal": {
+    "foreground": "#383A42",
+    "background": "#FAFAFA",
+    "cursor": "#383A42",
+    "ansi": [
+      "#383A42",
+      "#E45649",
+      "#50A14F",
+      "#C18401",
+      "#4078F2",
+      "#A626A4",
+      "#0184BC",
+      "#A0A1A7",
+      "#696C77",
+      "#CA1243",
+      "#50A14F",
+      "#986801",
+      "#4078F2",
+      "#A626A4",
+      "#0184BC",
+      "#FAFAFA"
+    ]
+  }
+}

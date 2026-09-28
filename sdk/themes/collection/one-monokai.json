@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "one-monokai",
+  "name": "One Monokai",
+  "author": "Joshua Azemoh, port by CabinetOS",
+  "attribution": "Colours from One Monokai by Joshua Azemoh (https://github.com/azemoh/vscode-one-monokai), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#528BFF",
+  "mica": {
+    "tint": "#21252B",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#D7DAE0",
+    "textSecondary": "#D7DAE0E6",
+    "textTertiary": "#D7DAE0B3",
+    "textDisabled": "#495162",
+    "layerFill": "#2C313A80",
+    "layerStroke": "#383E4A99",
+    "layerStrokeActive": "#676F7D",
+    "controlFill": "#2C313AB3",
+    "controlFillHover": "#383E4AB3",
+    "acrylicTint": "#21252BB8",
+    "terminalBackground": "#282C3499",
+    "folderIcon": "#E5C07B",
+    "folderIconFront": "#EED6A9",
+    "fileTypeColors": {
+      "md": "#61AFEF",
+      "rs": "#E06C75",
+      "toml": "#C678DD",
+      "exe": "#98C379",
+      "dll": "#98C379",
+      "bin": "#C24038",
+      "pdf": "#C24038",
+      "zip": "#E5C07B"
+    },
+    "permissionLow": "#98C379",
+    "permissionMedium": "#E5C07B",
+    "permissionHigh": "#E06C75"
+  },
+  "terminal": {
+    "foreground": "#ABB2BF",
+    "background": "#282C34",
+    "cursor": "#ABB2BF",
+    "ansi": [
+      "#2D3139",
+      "#E06C75",
+      "#98C379",
+      "#E5C07B",
+      "#528BFF",
+      "#C678DD",
+      "#56B6C2",
+      "#D7DAE0",
+      "#7F848E",
+      "#F44747",
+      "#98C379",
+      "#E5C07B",
+      "#528BFF",
+      "#7E0097",
+      "#56B6C2",
+      "#D7DAE0"
+    ]
+  }
+}

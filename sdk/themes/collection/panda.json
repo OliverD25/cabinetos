@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "panda",
+  "name": "Panda",
+  "author": "Siamak Mokhtari, port by CabinetOS",
+  "attribution": "Colours from Panda Syntax by Siamak Mokhtari (https://github.com/siamak/atom-panda-syntax and https://github.com/siamak/hyperterm-panda), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#FF75B5",
+  "mica": {
+    "tint": "#292A2B",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#E6E6E6",
+    "textSecondary": "#CCCCCC",
+    "textTertiary": "#E6E6E6B3",
+    "textDisabled": "#676B79",
+    "layerFill": "#373B4180",
+    "layerStroke": "#676B7980",
+    "layerStrokeActive": "#757575",
+    "controlFill": "#373B41B3",
+    "controlFillHover": "#676B7980",
+    "acrylicTint": "#292A2BB8",
+    "terminalBackground": "#292A2B99",
+    "folderIcon": "#FFB86C",
+    "folderIconFront": "#FFCC95",
+    "fileTypeColors": {
+      "md": "#45A9F9",
+      "rs": "#FFB86C",
+      "toml": "#B084EB",
+      "exe": "#19F9D8",
+      "dll": "#19F9D8",
+      "bin": "#FF2C6D",
+      "pdf": "#FF2C6D",
+      "zip": "#FFCC95"
+    },
+    "permissionLow": "#19F9D8",
+    "permissionMedium": "#FFB86C",
+    "permissionHigh": "#FF2C6D"
+  },
+  "terminal": {
+    "foreground": "#E6E6E6",
+    "background": "#292A2B",
+    "cursor": "#E6E6E6",
+    "ansi": [
+      "#292A2B",
+      "#FF2C6D",
+      "#19F9D8",
+      "#FFB86C",
+      "#45A9F9",
+      "#FF75B5",
+      "#6FC1FF",
+      "#E6E6E6",
+      "#676B79",
+      "#FF2C6D",
+      "#19F9D8",
+      "#FFCC95",
+      "#6FC1FF",
+      "#FF9AC1",
+      "#6FC1FF",
+      "#FFFFFF"
+    ]
+  }
+}

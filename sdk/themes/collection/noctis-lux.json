@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "noctis-lux",
+  "name": "Noctis Lux",
+  "author": "Liviu Schera, port by CabinetOS",
+  "attribution": "Colours from Noctis Lux, the warm light variant of Noctis by Liviu Schera (https://github.com/liviuschera/noctis), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#0099AD",
+  "mica": {
+    "tint": "#F6EDDA",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#004952",
+    "textSecondary": "#004952",
+    "textTertiary": "#004952C8",
+    "textDisabled": "#A0ABAC",
+    "layerFill": "#FEF8ECB3",
+    "layerStroke": "#F0E7D1",
+    "layerStrokeActive": "#A0ABAC",
+    "controlFill": "#D2F3F9B3",
+    "controlFillHover": "#B6E1E7B3",
+    "acrylicTint": "#F2EDDED9",
+    "terminalBackground": "#F6EDDA99",
+    "folderIcon": "#F49725",
+    "folderIconFront": "#F8BB71",
+    "fileTypeColors": {
+      "md": "#0094F0",
+      "rs": "#E64100",
+      "toml": "#5842FF",
+      "exe": "#00B368",
+      "dll": "#00B368",
+      "bin": "#FF4000",
+      "pdf": "#FF4000",
+      "zip": "#F49725"
+    },
+    "permissionLow": "#00B368",
+    "permissionMedium": "#E69533",
+    "permissionHigh": "#FF4000"
+  },
+  "terminal": {
+    "foreground": "#005661",
+    "background": "#F6EDDA",
+    "cursor": "#005661",
+    "ansi": [
+      "#003B42",
+      "#E34E1C",
+      "#00B368",
+      "#F49725",
+      "#0094F0",
+      "#FF5792",
+      "#00BDD6",
+      "#8CA6A6",
+      "#004D57",
+      "#FF4000",
+      "#00D17A",
+      "#FF8C00",
+      "#0FA3FF",
+      "#FF6B9F",
+      "#00CBE6",
+      "#BBC3C4"
+    ]
+  }
+}

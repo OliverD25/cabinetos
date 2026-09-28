@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "cobalt2",
+  "name": "Cobalt2",
+  "author": "Wes Bos, port by CabinetOS",
+  "attribution": "Colours from Cobalt2 by Wes Bos and Roberto Achar (https://github.com/wesbos/cobalt2-vscode), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#FFC600",
+  "mica": {
+    "tint": "#15232D",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#FFFFFF",
+    "textSecondary": "#FFFFFFC8",
+    "textTertiary": "#AAAAAA",
+    "textDisabled": "#AAAAAA80",
+    "layerFill": "#1F466280",
+    "layerStroke": "#0D3A5899",
+    "layerStrokeActive": "#0088FF",
+    "controlFill": "#1F4662B3",
+    "controlFillHover": "#0050A480",
+    "acrylicTint": "#15232DB8",
+    "terminalBackground": "#12273899",
+    "folderIcon": "#FFC600",
+    "folderIconFront": "#FFDA59",
+    "fileTypeColors": {
+      "md": "#9EFFFF",
+      "rs": "#FF9D00",
+      "toml": "#FB94FF",
+      "exe": "#3AD900",
+      "dll": "#3AD900",
+      "bin": "#FF628C",
+      "pdf": "#FF628C",
+      "zip": "#FFC600"
+    },
+    "permissionLow": "#3AD900",
+    "permissionMedium": "#FFC600",
+    "permissionHigh": "#FF628C"
+  },
+  "terminal": {
+    "foreground": "#FFFFFF",
+    "background": "#122738",
+    "cursor": "#FFC600",
+    "ansi": [
+      "#000000",
+      "#FF628C",
+      "#3AD900",
+      "#FFC600",
+      "#0088FF",
+      "#FB94FF",
+      "#80FCFF",
+      "#FFFFFF",
+      "#0050A4",
+      "#FF628C",
+      "#3AD900",
+      "#FFC600",
+      "#0088FF",
+      "#FB94FF",
+      "#80FCFF",
+      "#FFFFFF"
+    ]
+  }
+}

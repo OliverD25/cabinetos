@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "catppuccin-latte",
+  "name": "Catppuccin Latte",
+  "author": "Catppuccin, port by CabinetOS",
+  "attribution": "Colours from the Catppuccin Latte palette by the Catppuccin organization (https://catppuccin.com), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#8839EF",
+  "mica": {
+    "tint": "#EFF1F5",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#313344",
+    "textSecondary": "#313344",
+    "textTertiary": "#5C5F77",
+    "textDisabled": "#9CA0B0",
+    "layerFill": "#CCD0DA80",
+    "layerStroke": "#BCC0CC99",
+    "layerStrokeActive": "#9CA0B0",
+    "controlFill": "#CCD0DAB3",
+    "controlFillHover": "#BCC0CCB3",
+    "acrylicTint": "#E6E9EFD9",
+    "terminalBackground": "#DCE0E899",
+    "folderIcon": "#DF8E1D",
+    "folderIconFront": "#EAB66C",
+    "fileTypeColors": {
+      "md": "#1E66F5",
+      "rs": "#FE640B",
+      "toml": "#8839EF",
+      "exe": "#40A02B",
+      "dll": "#40A02B",
+      "bin": "#D20F39",
+      "pdf": "#D20F39",
+      "zip": "#DF8E1D"
+    },
+    "permissionLow": "#40A02B",
+    "permissionMedium": "#DF8E1D",
+    "permissionHigh": "#D20F39"
+  },
+  "terminal": {
+    "foreground": "#4C4F69",
+    "background": "#EFF1F5",
+    "cursor": "#DC8A78",
+    "ansi": [
+      "#5C5F77",
+      "#D20F39",
+      "#40A02B",
+      "#DF8E1D",
+      "#1E66F5",
+      "#EA76CB",
+      "#179299",
+      "#ACB0BE",
+      "#ACB0BE",
+      "#D20F39",
+      "#40A02B",
+      "#DF8E1D",
+      "#1E66F5",
+      "#EA76CB",
+      "#179299",
+      "#BCC0CC"
+    ]
+  }
+}
