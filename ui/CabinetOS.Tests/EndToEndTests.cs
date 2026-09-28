@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
+using CabinetOS.Core.Commands;
 using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Jobs;
 using CabinetOS.Core.Keys;
@@ -412,6 +413,43 @@ public class EndToEndTests
                 return true;
             });
             await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    [Fact]
+    public async Task The_real_core_lists_help_about_for_the_window_and_the_router_runs_the_windows_handler()
+    {
+        var coreExe = FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-about");
+        try
+        {
+            string requestId;
+            await using (var core = await StartCoreAsync(coreExe, root))
+            {
+                await core.Client.HelloAsync();
+                var router = new CommandRouter(core.Client);
+                await router.RefreshAsync();
+                var about = router.Find("help.about");
+                Assert.NotNull(about);
+                if (about.Target != "ui")
+                {
+                    Assert.Skip("This core runs help.about itself (before 2c80d5f): build the core again.");
+                }
+                // The palette's row runs the id through the router, which runs what the window registered.
+                var opened = 0;
+                router.RegisterUiHandler("help.about", _ => opened++);
+                var outcome = await router.ExecuteAsync("help.about", trigger: "palette");
+                Assert.Equal((CommandOutcomeKind.RanInUi, 1), (outcome.Kind, opened));
+                requestId = outcome.RequestId;
+                await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+            }
+            // The core was never asked to run it.
+            var coreLog = Directory.GetFiles(Path.Combine(root, "logs"), "core.*.jsonl").Single();
+            Assert.DoesNotContain(requestId, File.ReadAllText(coreLog));
         }
         finally
         {

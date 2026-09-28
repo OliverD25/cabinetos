@@ -386,7 +386,7 @@ search hit. From the context menu it gets the menu's rows
 | `keys.open` | Opens the palette: it lists every command with its keys and edits them |
 | `view.toggleDualPane`, `view.toggleSidebar`, `view.focusOtherPane` | As named; the first two are saved in `cabinetos.json` |
 | `go.toPath` | With `{"path": …}` goes there; without, turns the crumbs into a text box |
-| `help.about` | Shows About CabinetOS ("About", below); a core that still runs it itself answers `command_result`, and the window shows the same view |
+| `help.about` | The window's command (target `ui`): its handler shows About CabinetOS ("About", below). An older core that ran it itself answered `command_result`; the window shows the same view for that |
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
 | `view.toggleTerminal` | Shows the terminal, gives the keyboard back to the pane, or hides it ("The terminal") |
 | `marketplace.browse`, `preferences.selectColorTheme` | Open the marketplace and the theme picker ("The marketplace", "Themes") |
@@ -451,10 +451,18 @@ few hundred bytes next to the program, read off the UI thread when the
 view opens (`ReleaseFolder`, tested). A file that cannot be read shows as
 such.
 
-A core whose registry still runs `help.about` itself (target `core`, as
-up to now) answers `command_result`; the window then shows this view
-instead of the raw result. Once the core lists it for the window
-(target `ui`), the window's handler runs it.
+The core lists `help.about` for the window (target `ui`, and answers
+`command_routed` if asked to run it), so the palette row, a key and the
+menu all reach the window's handler through the router
+(`MainWindow.RegisterAboutCommand`). A router test checks that the
+handler opens the view and the core is asked nothing, and an end-to-end
+test checks the same against the real core's own list. An older core ran
+it itself (target `core`) and answered `command_result`; the window shows
+this view for that result too. Checked with the snapshot aid and the
+current core (2026-09-29): "about" in the palette finds "Help: About
+CabinetOS", and `help.about` run through the router logged target `ui`,
+"about shown" and "dialog shown", while the core's log has no line for
+it.
 
 Checked on 2026-09-29 (release builds, snapshot aid): in a published folder
 with a stand-in `release.json`, `LICENSE` and notices, the view showed

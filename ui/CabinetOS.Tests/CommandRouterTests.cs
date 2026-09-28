@@ -145,6 +145,29 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public async Task Help_about_listed_for_the_window_opens_through_its_handler_not_on_a_core_result()
+    {
+        // Registry above: help.about as a core older than 2c80d5f listed it. Since then it is the window's.
+        var (router, core) = Create();
+        router.SetCommands([.. Registry.Where(c => c.Id != "help.about"), Command("help.about", "ui")]);
+        var opened = new List<string>();
+        // What MainWindow.RegisterAboutCommand registers: the About view.
+        router.RegisterUiHandler("help.about", invocation =>
+        {
+            opened.Add(invocation.Trigger);
+            return Task.CompletedTask;
+        });
+
+        var fromPalette = await router.ExecuteAsync("help.about", trigger: "palette");
+        var fromMenu = await router.ExecuteAsync("help.about", trigger: "menu");
+
+        Assert.Equal((CommandOutcomeKind.RanInUi, CommandOutcomeKind.RanInUi), (fromPalette.Kind, fromMenu.Kind));
+        Assert.Null(fromPalette.Result);
+        Assert.Equal(["palette", "menu"], opened);
+        Assert.Empty(core.Requests);
+    }
+
+    [Fact]
     public async Task A_plugin_command_from_the_palette_gets_the_active_panes_files_and_one_from_the_menu_keeps_its_own()
     {
         var (router, core) = Create(request => request is ExecuteCommandRequest
