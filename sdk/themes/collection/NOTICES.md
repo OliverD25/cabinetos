@@ -9,8 +9,9 @@ there. Each theme file repeats its source and license in `attribution`.
 How the sources were read: on 2026-09-29, from each project's public
 repository at the commit named below (a raw file at a fixed commit), and
 from the npm package named for GitHub's colours. Each license file was read
-at the same commit and checked to be the MIT License text. No value was
-written from memory, so nothing here is marked "to verify".
+at the same commit and checked to be the MIT License text; gruvbox has no
+license file, and Shades of Purple adds one condition, as their rows say.
+No value was written from memory, so nothing here is marked "to verify".
 
 ## Sources
 
