@@ -13,6 +13,7 @@ publish = false
 [workspace.dependencies]
 # Workspace crates
 cabinetos-diag = { path = "crates/cabinetos-diag" }
+cabinetos-fs = { path = "crates/cabinetos-fs" }
 cabinetos-ipc = { path = "crates/cabinetos-ipc" }
 cabinetos-protocol = { path = "crates/cabinetos-protocol" }
 

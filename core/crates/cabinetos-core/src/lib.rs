@@ -2,8 +2,10 @@
 //! lifetime, and the wiring of every library crate.
 //!
 //! The UI is only a view (brief §1, the Dumb UI Rule): all work happens here,
-//! behind the named pipe. In Phase 1 the core answers `ping` and `shutdown`,
-//! logs every request with its ID, and exits with its parent process.
+//! behind the named pipe. The core lists directories into shared memory,
+//! keeps watched listings current with events, reports volumes and disks,
+//! logs every request with its ID, and exits with its parent process. The
+//! protocol is in `docs/ipc.md`.
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: every
 //! connection is served asynchronously, so no request waits on another),
@@ -12,12 +14,15 @@
 //! Diagnostics: each request is handled inside a span carrying its ID).
 #![forbid(unsafe_code)]
 
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+mod connection;
+mod listing;
 
-use cabinetos_diag::{Boundary, DiagConfig, DiagError, span_for_request};
-use cabinetos_ipc::{IpcError, PipeConnection, PipeName, PipeServer};
-use cabinetos_protocol::{Envelope, ErrorCode, PROTOCOL_VERSION, Request, RequestId, Response};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use cabinetos_diag::{Boundary, DiagConfig, DiagError};
+use cabinetos_ipc::{IpcError, PipeName, PipeServer};
+use cabinetos_protocol::{Envelope, ErrorCode, PROTOCOL_VERSION, Request, RequestId};
 use serde_json::Value;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -183,7 +188,7 @@ async fn serve(
                     connection_number += 1;
                     let span = tracing::debug_span!("connection", connection = connection_number);
                     connections.spawn(
-                        handle_connection(connection, shutdown.clone()).instrument(span),
+                        connection::handle_connection(connection, shutdown.clone()).instrument(span),
                     );
                 }
                 Err(error) => {
@@ -222,123 +227,19 @@ async fn serve(
     outcome
 }
 
-/// Serves one client until it disconnects or sends a malformed frame.
-async fn handle_connection(mut connection: PipeConnection, shutdown: CancellationToken) {
-    tracing::debug!("client connected");
-    loop {
-        let frame = match connection.read_frame().await {
-            Ok(frame) => frame,
-            Err(IpcError::Closed) => {
-                tracing::debug!("client disconnected");
-                return;
-            }
-            Err(IpcError::FrameTooLarge { len, max }) => {
-                // The request's ID is inside the payload that was never read,
-                // so the error reply gets a fresh ID.
-                let id = RequestId::new();
-                let span = span_for_request(&id);
-                let message = format!(
-                    "frame of {len} bytes is larger than the {max}-byte limit; \
-                     large data belongs in shared memory"
-                );
-                tracing::warn!(parent: &span, len, max, "frame too large; closing the connection");
-                let reply = Envelope::new(
-                    id,
-                    Response::Error {
-                        code: ErrorCode::FrameTooLarge,
-                        message,
-                    },
-                );
-                let _ = connection.send(&reply).await;
-                return;
-            }
-            Err(error) => {
-                tracing::warn!(%error, "malformed frame; closing the connection");
-                return;
-            }
-        };
-        if let Err(error) = handle_frame(&mut connection, &frame, &shutdown).await {
-            tracing::warn!(%error, "cannot send the reply; closing the connection");
-            return;
-        }
-    }
-}
-
-/// Answers one frame: the request's reply, or an error reply if the frame is
-/// not a valid request.
-async fn handle_frame(
-    connection: &mut PipeConnection,
-    frame: &[u8],
-    shutdown: &CancellationToken,
-) -> Result<(), IpcError> {
-    let started = Instant::now();
-    match decode_request(frame) {
-        Ok(Envelope { id, body: request }) => {
-            let span = span_for_request(&id);
-            async {
-                let reply = match request {
-                    Request::Ping => Response::Pong {
-                        protocol_version: PROTOCOL_VERSION,
-                        core_version: CORE_VERSION.to_owned(),
-                    },
-                    Request::Shutdown => Response::Ok,
-                    Request::Hello { .. }
-                    | Request::ListDirectory { .. }
-                    | Request::CloseListing { .. }
-                    | Request::VolumeInfo { .. } => Response::Error {
-                        code: ErrorCode::Internal,
-                        message: format!("{} is not implemented yet", request.type_tag()),
-                    },
-                };
-                connection.send(&Envelope::new(id, reply)).await?;
-                tracing::info!(
-                    request = request.type_tag(),
-                    elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
-                    "request handled"
-                );
-                if request == Request::Shutdown {
-                    tracing::info!("shutdown requested by a client");
-                    shutdown.cancel();
-                }
-                Ok(())
-            }
-            .instrument(span)
-            .await
-        }
-        Err(rejection) => {
-            let id = rejection.id.unwrap_or_else(RequestId::new);
-            let span = span_for_request(&id);
-            async {
-                tracing::warn!(
-                    code = ?rejection.code,
-                    error = %rejection.message,
-                    "request rejected"
-                );
-                let reply = Response::Error {
-                    code: rejection.code,
-                    message: rejection.message,
-                };
-                connection.send(&Envelope::new(id, reply)).await
-            }
-            .instrument(span)
-            .await
-        }
-    }
-}
-
 /// A frame that is not a valid request.
 #[derive(Debug)]
-struct Rejection {
+pub(crate) struct Rejection {
     /// The frame's ID, when it had a valid one; the reply echoes it.
-    id: Option<RequestId>,
-    code: ErrorCode,
-    message: String,
+    pub(crate) id: Option<RequestId>,
+    pub(crate) code: ErrorCode,
+    pub(crate) message: String,
 }
 
 /// Parses a frame as a request envelope, and classifies a failure:
 /// `unknown_request` when the envelope is fine but its `type` is not one this
 /// core knows (a newer UI, for example), `protocol_error` for everything else.
-fn decode_request(frame: &[u8]) -> Result<Envelope<Request>, Rejection> {
+pub(crate) fn decode_request(frame: &[u8]) -> Result<Envelope<Request>, Rejection> {
     let value: Value = serde_json::from_slice(frame).map_err(|error| Rejection {
         id: None,
         code: ErrorCode::ProtocolError,

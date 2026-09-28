@@ -132,9 +132,11 @@ name = "cabinetos-core"
 version = "0.1.0"
 dependencies = [
  "cabinetos-diag",
+ "cabinetos-fs",
  "cabinetos-ipc",
  "cabinetos-protocol",
  "clap",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror",
