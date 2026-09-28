@@ -517,6 +517,29 @@ fn serve(files: BTreeMap<String, Vec<u8>>, requests: usize) -> (u16, Arc<Mutex<V
     (port, seen)
 }
 
+/// The HTTPS client sets up rustls with its crypto provider and the Windows
+/// certificate store when it first connects. A local port that hangs up
+/// makes the handshake start and fail: an error, not a panic about a
+/// missing provider, and nothing leaves the machine.
+#[test]
+fn the_https_client_sets_up_its_tls_and_reports_a_failed_handshake() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        if let Ok((stream, _)) = listener.accept() {
+            drop(stream);
+        }
+    });
+    let setup = Setup::new();
+    let source = Source::parse(&format!("https://127.0.0.1:{port}/index.json"), false).unwrap();
+    let error = setup.market().fetch(&source, false).unwrap_err();
+    assert_eq!(error.code, ErrorCode::MarketplaceError);
+    assert!(
+        error.message.contains("cannot fetch the index"),
+        "{error}"
+    );
+}
+
 #[test]
 fn a_web_index_is_refused_over_plain_http_unless_allowed_and_then_cached() {
     let mut setup = Setup::new();
