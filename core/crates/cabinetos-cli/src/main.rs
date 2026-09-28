@@ -1,5 +1,6 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
-//! core be tested with no UI: `ping` now, `ls` and `copy` in later phases.
+//! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
+//! UI will), `volume`, `shutdown`; `copy` in a later phase.
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -11,21 +12,27 @@
 //! client through the pipe into the core).
 #![forbid(unsafe_code)]
 
+mod ls;
+
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use cabinetos_diag::{Boundary, DiagConfig, span_for_request};
 use cabinetos_ipc::{PipeClient, PipeName};
-use cabinetos_protocol::{Envelope, Request, RequestId, Response};
-use clap::{Parser, Subcommand};
+use cabinetos_protocol::{
+    Envelope, Request, RequestId, Response, SortKey, SortSpec, VolumeDetails,
+};
+use clap::{Parser, Subcommand, ValueEnum};
 use tracing::Instrument;
 
 /// How long to wait for a busy pipe.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-/// How long to wait for one reply.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long to wait for one reply. Listing a huge directory on a slow network
+/// share may take a while.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Talks to a running cabinetos-core over its named pipe.
 #[derive(Debug, Parser)]
@@ -53,6 +60,52 @@ enum Command {
     },
     /// Ask the core to exit cleanly.
     Shutdown,
+    /// List a directory: the core reads it into shared memory, this client
+    /// maps it and prints it.
+    Ls {
+        /// The directory to list.
+        path: String,
+        /// Also show attributes, modification time (local) and size.
+        #[arg(long)]
+        long: bool,
+        /// Include hidden and system entries.
+        #[arg(long)]
+        hidden: bool,
+        /// What to sort by; directories always come first.
+        #[arg(long, value_enum, default_value_t = SortArg::Name)]
+        sort: SortArg,
+        /// Reverse the order within directories and within the rest.
+        #[arg(long)]
+        desc: bool,
+        /// Keep watching and print a line for each refresh, until Ctrl+C.
+        #[arg(long)]
+        watch: bool,
+    },
+    /// Show which volume and physical disk a path is on.
+    Volume {
+        /// Any path on the volume; it does not have to exist.
+        path: String,
+    },
+}
+
+/// Sort keys on the command line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum SortArg {
+    Name,
+    Size,
+    Modified,
+    Kind,
+}
+
+impl From<SortArg> for SortKey {
+    fn from(sort: SortArg) -> Self {
+        match sort {
+            SortArg::Name => Self::Name,
+            SortArg::Size => Self::Size,
+            SortArg::Modified => Self::Modified,
+            SortArg::Kind => Self::Kind,
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -100,9 +153,9 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             )
         })?;
 
-    match cli.command {
+    match &cli.command {
         Command::Ping { count } => {
-            for _ in 0..count {
+            for _ in 0..*count {
                 let started = Instant::now();
                 let reply = send(&mut client, Request::Ping).await?;
                 let rtt = started.elapsed();
@@ -113,11 +166,13 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
                 else {
                     bail!("expected pong, got {:?} (id={})", reply.body, reply.id);
                 };
-                println!(
+                if !say(format_args!(
                     "pong id={} protocol={protocol_version} core={core_version} rtt={:.2}ms",
                     reply.id,
                     rtt.as_secs_f64() * 1000.0
-                );
+                )) {
+                    break;
+                }
             }
         }
         Command::Shutdown => {
@@ -125,15 +180,145 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             if reply.body != Response::Ok {
                 bail!("expected ok, got {:?} (id={})", reply.body, reply.id);
             }
-            println!("shutdown acknowledged id={}", reply.id);
+            say(format_args!("shutdown acknowledged id={}", reply.id));
+        }
+        Command::Ls {
+            path,
+            long,
+            hidden,
+            sort,
+            desc,
+            watch,
+        } => {
+            let args = ls::LsArgs {
+                path: path.clone(),
+                long: *long,
+                include_hidden: *hidden,
+                sort: SortSpec {
+                    key: (*sort).into(),
+                    descending: *desc,
+                },
+                watch: *watch,
+            };
+            ls::ls(&mut client, args).await?;
+        }
+        Command::Volume { path } => {
+            let reply = send(&mut client, Request::VolumeInfo { path: path.clone() }).await?;
+            match reply.body {
+                Response::VolumeInfo(details) => print_volume(&details),
+                other => return Err(failure(path, &other)),
+            }
         }
     }
     Ok(())
 }
 
-/// Sends one request inside its request span and waits for the reply. The
-/// client rejects a reply whose ID differs from the request's.
-async fn send(client: &mut PipeClient, request: Request) -> anyhow::Result<Envelope<Response>> {
+/// Sends `hello` and checks for `welcome`.
+pub(crate) async fn expect_welcome(client: &mut PipeClient) -> anyhow::Result<()> {
+    let reply = send(
+        client,
+        Request::Hello {
+            client_pid: std::process::id(),
+            client_name: "cabinetos-cli".to_owned(),
+        },
+    )
+    .await?;
+    match reply.body {
+        Response::Welcome { .. } => Ok(()),
+        other => Err(failure("hello", &other)),
+    }
+}
+
+/// An error for a reply that is not what the request expects.
+pub(crate) fn failure(subject: &str, reply: &Response) -> anyhow::Error {
+    match reply {
+        Response::Error { code, message } => {
+            let code = serde_json::to_value(code)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .unwrap_or_default();
+            if message.starts_with(subject) {
+                anyhow!("{message} ({code})")
+            } else {
+                anyhow!("{subject}: {message} ({code})")
+            }
+        }
+        other => anyhow!("{subject}: unexpected reply {}", other.type_tag()),
+    }
+}
+
+/// The volume fields, one per line.
+fn print_volume(details: &VolumeDetails) {
+    let unknown = || "unknown".to_owned();
+    let mut lines = vec![
+        format!(
+            "drive_letter: {}",
+            details.drive_letter.map_or_else(unknown, String::from)
+        ),
+        format!("volume_guid_path: {}", details.volume_guid_path),
+        format!("filesystem: {}", details.filesystem),
+        format!("label: {}", details.label),
+        format!(
+            "total_bytes: {} ({})",
+            details.total_bytes,
+            binary_size(details.total_bytes)
+        ),
+        format!(
+            "free_bytes: {} ({})",
+            details.free_bytes,
+            binary_size(details.free_bytes)
+        ),
+    ];
+    match &details.disk {
+        Some(disk) => lines.extend([
+            format!("disk.device_number: {}", disk.device_number),
+            format!("disk.bus_type: {}", disk.bus_type),
+            format!(
+                "disk.seek_penalty: {}",
+                disk.seek_penalty
+                    .map_or_else(unknown, |slow| slow.to_string())
+            ),
+            format!(
+                "disk.media_type: {}",
+                disk.media_type.clone().unwrap_or_else(unknown)
+            ),
+        ]),
+        None => lines.push("disk: unknown".to_owned()),
+    }
+    for line in lines {
+        if !say(format_args!("{line}")) {
+            break;
+        }
+    }
+}
+
+/// Prints one line to stdout. Returns `false` once stdout is closed (the
+/// output was piped into `head`, say), so the caller can stop quietly
+/// instead of panicking like `println!`.
+pub(crate) fn say(line: std::fmt::Arguments<'_>) -> bool {
+    let mut out = std::io::stdout().lock();
+    writeln!(out, "{line}").and_then(|()| out.flush()).is_ok()
+}
+
+/// `1999433101312` → `1.82 TiB`.
+#[expect(clippy::cast_precision_loss, reason = "a size rounded for display")]
+fn binary_size(bytes: u64) -> String {
+    let units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < units.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    format!("{value:.2} {}", units[unit])
+}
+
+/// Sends one request inside its request span and waits for the reply with its
+/// ID.
+pub(crate) async fn send(
+    client: &mut PipeClient,
+    request: Request,
+) -> anyhow::Result<Envelope<Response>> {
     let id = RequestId::new();
     let kind = request.type_tag();
     let exchange = async {
@@ -197,6 +382,66 @@ mod tests {
         assert_eq!(cli.pipe, "demo");
         assert_eq!(cli.log_dir, Some(PathBuf::from(r"C:\logs")));
         assert_eq!(cli.command, Command::Shutdown);
+    }
+
+    #[test]
+    fn parses_ls_with_every_option() {
+        let cli = Cli::try_parse_from([
+            "cabinetos-cli",
+            "ls",
+            r"C:\Windows",
+            "--long",
+            "--hidden",
+            "--sort",
+            "modified",
+            "--desc",
+            "--watch",
+        ])
+        .unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Ls {
+                path: r"C:\Windows".to_owned(),
+                long: true,
+                hidden: true,
+                sort: SortArg::Modified,
+                desc: true,
+                watch: true,
+            }
+        );
+        let plain = Cli::try_parse_from(["cabinetos-cli", "ls", "."]).unwrap();
+        assert!(matches!(
+            plain.command,
+            Command::Ls {
+                sort: SortArg::Name,
+                long: false,
+                watch: false,
+                ..
+            }
+        ));
+        assert!(
+            Cli::try_parse_from(["cabinetos-cli", "ls"]).is_err(),
+            "path is required"
+        );
+        assert!(Cli::try_parse_from(["cabinetos-cli", "ls", ".", "--sort", "colour"]).is_err());
+    }
+
+    #[test]
+    fn parses_volume() {
+        let cli = Cli::try_parse_from(["cabinetos-cli", "volume", r"H:\"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Volume {
+                path: r"H:\".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn formats_binary_sizes() {
+        assert_eq!(binary_size(512), "512.00 B");
+        assert_eq!(binary_size(1536), "1.50 KiB");
+        assert_eq!(binary_size(1_999_433_101_312), "1.82 TiB");
     }
 
     #[test]
