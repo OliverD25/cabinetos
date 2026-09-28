@@ -14,6 +14,7 @@ public static class Diag
     public const string LogFilterEnv = "CABINETOS_LOG";
 
     private static LogWriter? _writer;
+    private static int _crashed;
 
     /// <summary>The writer, once initialized.</summary>
     public static LogWriter? Writer => Volatile.Read(ref _writer);
@@ -101,6 +102,12 @@ public static class Diag
             return null;
         }
         writer.Write(LogLevel.Error, "cabinetos_ui::app", message, fields: [new LogField("error", exception?.ToString())]);
+        if (Interlocked.Exchange(ref _crashed, 1) == 1)
+        {
+            // Two hooks can see the same failure; one trace per process.
+            writer.Flush(TimeSpan.FromSeconds(2));
+            return null;
+        }
         return writer.WriteCrashReport(exception, message);
     }
 

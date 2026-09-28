@@ -1,6 +1,7 @@
 using System.Reflection;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Platform;
+using CabinetOS.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -51,7 +52,7 @@ public static class Program
             try
             {
                 SynchronizationContext.SetSynchronizationContext(
-                    new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
+                    new UiSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
                 _ = new App(args);
             }
             catch (Exception error)

@@ -226,12 +226,20 @@ public sealed partial class MainWindow : Window
         await LoadAsync(firstStart: true);
         if (_selfTestCrash)
         {
-            DispatcherQueue.TryEnqueue(() => throw new InvalidOperationException("self-test crash (--self-test-crash)"));
+            CrashForSelfTest();
         }
         if (DevSnapshots.Folder is not null)
         {
             await TakeSnapshotsAsync();
         }
+    }
+
+    // Fails the way a real bug in an async handler would: after an await, on the UI thread.
+    private static async void CrashForSelfTest()
+    {
+        await Task.Yield();
+        Diag.Info(Target, "about to crash (self-test)");
+        throw new InvalidOperationException("self-test crash (--self-test-crash)");
     }
 
     private async Task TakeSnapshotsAsync()

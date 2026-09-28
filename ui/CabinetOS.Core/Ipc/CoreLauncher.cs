@@ -115,14 +115,20 @@ public sealed class CoreLauncher
                 Diag.Info(Target, "connected to the core", new LogField("pipe", pipeName), new LogField("waited_ms", watch.ElapsedMilliseconds));
                 return new CoreConnection(process, client, token, stderr);
             }
-            catch (TimeoutException) when (watch.Elapsed < pipeDeadline)
+            catch (Exception error) when (error is TimeoutException or IOException or UnauthorizedAccessException)
             {
-            }
-            catch (TimeoutException)
-            {
+                if (watch.Elapsed < pipeDeadline)
+                {
+                    if (error is not TimeoutException)
+                    {
+                        await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+                    }
+                    continue;
+                }
                 TryKill(process);
                 throw new CoreLaunchException(
-                    $"The core did not open its pipe within {pipeDeadline.TotalSeconds:0} s.{stderr.Describe()}");
+                    $"The core did not accept a connection within {pipeDeadline.TotalSeconds:0} s ({error.Message}).{stderr.Describe()}",
+                    error);
             }
         }
     }
