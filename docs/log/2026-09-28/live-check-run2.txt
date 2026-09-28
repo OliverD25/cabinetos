@@ -1,0 +1,37 @@
+23:40:33.758 start
+app pid: 73328
+foreground ok: True
+23:40:40.648 the window is in front
+23:40:40.648 left pane: src; right pane: dst
+23:40:48.531 1. F5 on report.txt, then Skip by a real mouse click
+23:40:51.193 Skip clicked with the mouse at 3048,1550
+focused element: '' (ControlType.Pane, class InputSiteWindowClass)
+23:40:53.376 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-2\1-after-skip-click.png
+F5 with Skip left the destination's file alone: True
+23:40:53.381 1b. Shift+F10 right after the decision: the context menu of the focused row?
+23:40:54.314 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-2\1b-context-menu-after-skip.png
+23:40:54.829 1c. Alt+Enter: Properties, or does it press the Back button?
+23:40:55.977 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-2\1c-alt-enter-after-skip.png
+23:40:56.480 2. Ctrl+Backquote, then typing with ordinary key events
+23:41:01.386 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-2\2-terminal-virtual-keys.png
+23:41:01.386 2b. the same line typed with Unicode injection (as the touch keyboard sends it)
+23:41:03.179 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-2\2b-terminal-unicode.png
+23:41:04.616 3. Enter on readme.md: Markdown Preview; then Ctrl+K V on the same file
+23:41:11.593 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-2\3-markdown-enter.png
+23:41:13.912 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-2\3b-markdown-chord.png
+23:41:13.912 3c. Ctrl+K V again, 2 s later
+23:41:16.197 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-2\3c-markdown-chord-again.png
+23:41:16.197 close
+app exited: True, code 0
+UI log lines about the preview tool and the chord:
+{"ts":"2026-09-28T20:40:34.470Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::tools","message":"tools found","fields":{"count":1,"tools":"markdown-preview@E:\\codespace\\_claude_code\\_rde\\_cabinetos_windows_system_manager\\cabinetos\\sdk\\tools\\markdown-preview","roots":"E:\\codespace\\_claude_code\\_rde\\_cabinetos_windows_system_manager\\cabinetos\\sdk\\tools;C:\\Users\\Admin\\AppData\\Local\\CabinetOS\\tools"},"thread":"ui"}
+{"ts":"2026-09-28T20:40:56.838Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::webview","message":"WebView2 started","fields":{"host":"terminal","browser_pid":78380,"url":"https://terminal.cabinetos.example/terminal.html?build=26200"},"thread":"ui"}
+{"ts":"2026-09-28T20:41:08.850Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::webview","message":"WebView2 started","fields":{"host":"tool-markdown-preview","browser_pid":8528,"url":"https://markdown-preview.tool.cabinetos.example/index.html"},"thread":"ui"}
+{"ts":"2026-09-28T20:41:08.850Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::tools","message":"file opened in a tool","fields":{"tool":"markdown-preview","path":"C:\\Users\\Admin\\AppData\\Local\\Temp\\cabinetos-ui-test\\live2\\files\\src\\readme.md","pane":1},"thread":"ui"}
+{"ts":"2026-09-28T20:41:08.881Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::tools","message":"tool ready","fields":{"tool":"markdown-preview","path":"C:\\Users\\Admin\\AppData\\Local\\Temp\\cabinetos-ui-test\\live2\\files\\src\\readme.md"},"thread":"ui"}
+{"ts":"2026-09-28T20:41:11.768Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::commands","message":"command executed","request_id":"01M3MW02ARF1V30P3SMC5E49B3","span":"request","fields":{"command":"editor.openMarkdownPreview","target":"ui","trigger":"key"},"thread":"ui"}
+{"ts":"2026-09-28T20:41:11.769Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::tools","message":"file opened in a tool","fields":{"tool":"markdown-preview","path":"C:\\Users\\Admin\\AppData\\Local\\Temp\\cabinetos-ui-test\\live2\\files\\src\\readme.md","pane":1},"thread":"ui"}
+{"ts":"2026-09-28T20:41:14.081Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::commands","message":"command executed","request_id":"01M3MW04K1YT7RAD4VVDSV0A4B","span":"request","fields":{"command":"editor.openMarkdownPreview","target":"ui","trigger":"key"},"thread":"ui"}
+{"ts":"2026-09-28T20:41:14.081Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::tools","message":"file opened in a tool","fields":{"tool":"markdown-preview","path":"C:\\Users\\Admin\\AppData\\Local\\Temp\\cabinetos-ui-test\\live2\\files\\src\\readme.md","pane":1},"thread":"ui"}
+UI log: warnings and errors:
+23:41:16.550 done

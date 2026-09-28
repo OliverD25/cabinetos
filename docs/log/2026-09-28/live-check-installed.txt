@@ -1,0 +1,70 @@
+tools dir: C:\Users\Admin\AppData\Local\Programs\CabinetOS\extras\tools (exists: True)
+00:13:23.847 start
+app pid: 101024
+foreground ok: True
+00:13:30.794 the window is in front
+00:13:30.933 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5-window.png
+00:13:30.933 palette, type dual
+00:13:32.640 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5-palette.png
+00:13:33.063 single pane, then dual again
+00:13:33.897 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\single.png
+00:13:34.412 tab to the other pane and back
+00:13:35.239 enter the selected folder, then backspace
+00:13:37.064 rebind View: Toggle Sidebar through the pencil
+00:13:39.569 pencil found by UI Automation
+00:13:39.569 click pencil at 2355,392 (scale 1.5)
+00:13:41.896 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\rebound.png
+00:13:42.311 go to the bench folder
+00:13:45.884 enter 100000
+00:13:47.890 pagedown held for 5 s
+00:13:52.897 pagedown done
+00:13:54.537 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\scrolled.png
+00:13:54.548 left pane: the source folder; right pane: the destination
+00:14:02.577 F7: a new folder, named in place
+F7 made the folder and named it: True
+00:14:05.978 F2: notes.md becomes readme.md (only 'notes' is selected, as in Explorer)
+F2 renamed it: True
+00:14:08.720 Delete: the test file goes to the Recycle Bin
+Delete removed it: True
+00:14:12.058 F5: copy report.txt; the conflict card answers Skip
+00:14:14.532 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5b-conflict-live.png
+00:14:14.630 Skip pressed through UI Automation
+00:14:16.752 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5b-flyout-live.png
+F5 with Skip left the destination's file alone: True
+00:14:16.756 Shift+F10: the context menu of the focused row
+00:14:17.602 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5b-context-menu-live.png
+00:14:18.015 Alt+Enter: Properties of report.txt (a dialog: the snapshot aid cannot draw it)
+00:14:19.058 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5b-properties-live.png
+00:14:19.561 Ctrl+Backquote: the terminal opens and takes the keyboard
+00:14:24.289 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-terminal-live.png
+00:14:24.289 Ctrl+Shift+P from the terminal: the page passes it to the window
+00:14:25.154 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-palette-from-terminal.png
+00:14:25.784 Esc closed the palette; the keyboard is back in the terminal
+00:14:27.602 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-terminal-after-palette.png
+00:14:27.602 Ctrl+Backquote in the terminal: the keyboard goes back to the pane; again: the terminal hides
+00:14:29.471 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-terminal-hidden.png
+00:14:29.471 Ctrl+F: search 'report', Enter to the hits, Enter to go there
+00:14:31.423 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-search-live.png
+00:14:33.091 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-search-opened.png
+00:14:33.091 Ctrl+F, type, Esc: back to the folder
+00:14:35.330 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-search-left.png
+00:14:35.330 Enter on readme.md: Markdown Preview in the other pane (tools from sdk\tools)
+00:14:42.361 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-markdown-live.png
+00:14:42.361 Ctrl+K V on readme.md: the same file, in the open preview
+00:14:44.164 screenshot C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live-shots-installed\phase-5c-markdown-chord.png
+00:14:44.164 close
+app exited: True, code 0; cores this app started: 21940
+core 21940 still running: False
+all cabinetos-core processes now (other agents may run their own): ''
+config keybindings:
+{"command":"view.toggleSidebar","keys":"ctrl+alt+b"}
+config ui.lastPaths: C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\liveinst\files\src | C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\liveinst\files\dst; ui.dualPane: True
+one start_job, request_id 01M3MXWD8RYVRQDF41G1D5N3WX, in the UI log:
+{"ts":"2026-09-28T21:14:09.048Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::commands","message":"command executed","request_id":"01M3MXWD8RYVRQDF41G1D5N3WX","span":"request","fields":{"command":"file.delete","target":"ui","trigger":"key"},"thread":"ui"}
+{"ts":"2026-09-28T21:14:09.055Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::pipe","message":"request sent","request_id":"01M3MXWD8RYVRQDF41G1D5N3WX","span":"request","fields":{"request":"start_job","bytes":227},"thread":"ui"}
+{"ts":"2026-09-28T21:14:09.059Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::pipe","message":"reply received","request_id":"01M3MXWD8RYVRQDF41G1D5N3WX","span":"request","fields":{"request":"start_job","reply":"job_started","elapsed_us":7441},"thread":".NET TP Worker"}
+{"ts":"2026-09-28T21:14:09.063Z","level":"INFO","boundary":"frontend","target":"cabinetos_ui::jobs","message":"job started","request_id":"01M3MXWD8RYVRQDF41G1D5N3WX","span":"request","fields":{"job_id":1,"kind":"delete","sources":1,"destination":null},"thread":"ui"}
+and in the core log:
+{"ts":"2026-09-28T21:14:09.058Z","level":"INFO","boundary":"engine","target":"cabinetos_jobs","message":"job queued","request_id":"01M3MXWD8RYVRQDF41G1D5N3WX","span":"request","fields":{"destination":"","disks":"[Disk { key: Device(1), solid_state: true }]","job_id":1,"kind":"Delete { permanent: false }","sources":1},"thread":"core-rt-10"}
+{"ts":"2026-09-28T21:14:09.059Z","level":"INFO","boundary":"engine","target":"cabinetos_core::connection","message":"request handled","request_id":"01M3MXWD8RYVRQDF41G1D5N3WX","span":"request","fields":{"elapsed_us":3780,"request":"start_job"},"thread":"core-rt-2"}
+00:14:45.212 done

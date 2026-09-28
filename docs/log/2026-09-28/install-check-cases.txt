@@ -1,0 +1,193 @@
+Marked the unpacked CabinetOS.exe as downloaded (a Zone.Identifier stream, zone 3)
+Shell: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe (5.1.26100.9444)
+Unpacked the zip into %TEMP%\cabinetos-install-test\mine51\unpacked
+
+== Install into a temp folder
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -Destination %TEMP%\cabinetos-install-test\mine51\CabinetOS
+   CabinetOS 0.1.0 is installed for Admin in %TEMP%\cabinetos-install-test\mine51\CabinetOS
+     Start it:  & '%TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.exe'
+     Remove it: powershell -ExecutionPolicy Bypass -File '%TEMP%\cabinetos-install-test\mine51\CabinetOS\uninstall.ps1'
+   
+   These files carry the mark Windows gives downloads, and CabinetOS is not signed yet,
+   so SmartScreen may warn before the first start. If you trust this download, remove the mark:
+     Get-ChildItem -LiteralPath '%TEMP%\cabinetos-install-test\mine51\CabinetOS' -Recurse -File | Unblock-File
+   (exit code 0)
+   %TEMP%\cabinetos-install-test\mine51\CabinetOS: 83 files, 246.1 MB
+   record: version 0.1.0, scope user, 82 files, shortcut , path , indexer False
+
+== Start the installed CabinetOS.exe (every data folder redirected to a scratch folder)
+   RESULT: window.png written (372489 bytes)
+   ui log: core started {"exe":"C:\\Users\\Admin\\AppData\\Local\\Temp\\cabinetos-install-test\\mine51\\CabinetOS\\cabinetos-core.exe","pid":125536,"pipe_token":"4b90d15304875db9"}
+   ui log: core ready {"protocol_version":11,"core_version":"0.1.0","pid":125536}
+
+== Install again over the same folder (an update); the record also lists old-file.txt, which this version lacks
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -Destination %TEMP%\cabinetos-install-test\mine51\CabinetOS
+   CabinetOS 0.1.0 is installed for Admin in %TEMP%\cabinetos-install-test\mine51\CabinetOS
+     Start it:  & '%TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.exe'
+     Remove it: powershell -ExecutionPolicy Bypass -File '%TEMP%\cabinetos-install-test\mine51\CabinetOS\uninstall.ps1'
+   
+   These files carry the mark Windows gives downloads, and CabinetOS is not signed yet,
+   so SmartScreen may warn before the first start. If you trust this download, remove the mark:
+     Get-ChildItem -LiteralPath '%TEMP%\cabinetos-install-test\mine51\CabinetOS' -Recurse -File | Unblock-File
+   (exit code 0)
+   old-file.txt still there: False
+   %TEMP%\cabinetos-install-test\mine51\CabinetOS: 83 files, 246.1 MB
+
+== What -StartMenu and -AddToPath would do (-WhatIf changes nothing)
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -Destination %TEMP%\cabinetos-install-test\mine51\CabinetOS -StartMenu -AddToPath -WhatIf
+   What if: Performing the operation "Create Directory" on target "Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS".
+   What if: Performing the operation "Set Content" on target "Path: %TEMP%\cabinetos-install-test\mine51\CabinetOS\.cabinetos-install.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\cabinetos-cli.exe Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\cabinetos-cli.exe".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\cabinetos-core.exe Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\cabinetos-core.exe".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\cabinetos-indexer.exe Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\cabinetos-indexer.exe".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CabinetOS.Core.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.Core.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CabinetOS.Core.pdb Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.Core.pdb".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CabinetOS.deps.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.deps.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CabinetOS.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CabinetOS.exe Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.exe".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CabinetOS.pdb Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.pdb".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CabinetOS.pri Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.pri".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CabinetOS.runtimeconfig.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.runtimeconfig.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\cabinetos_cli.pdb Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\cabinetos_cli.pdb".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\cabinetos_core.pdb Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\cabinetos_core.pdb".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\cabinetos_indexer.pdb Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\cabinetos_indexer.pdb".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\CommunityToolkit.Mvvm.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\CommunityToolkit.Mvvm.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\DirectML.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\DirectML.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\LICENSE Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\LICENSE".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Graphics.Imaging.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Graphics.Imaging.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.InteractiveExperiences.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.InteractiveExperiences.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.ML.OnnxRuntime.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.ML.OnnxRuntime.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Security.Authentication.OAuth.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Security.Authentication.OAuth.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Web.WebView2.Core.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Web.WebView2.Core.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Web.WebView2.Core.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Web.WebView2.Core.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AI.ContentSafety.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AI.ContentSafety.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AI.Foundation.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AI.Foundation.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AI.Imaging.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AI.Imaging.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AI.MachineLearning.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AI.MachineLearning.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AI.MachineLearning.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AI.MachineLearning.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AI.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AI.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AI.Text.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AI.Text.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AI.Video.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AI.Video.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.ApplicationModel.Background.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.ApplicationModel.Background.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.ApplicationModel.Background.UniversalBGTask.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.ApplicationModel.Background.UniversalBGTask.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.ApplicationModel.DynamicDependency.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.ApplicationModel.DynamicDependency.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.ApplicationModel.Resources.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.ApplicationModel.Resources.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.ApplicationModel.WindowsAppRuntime.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.ApplicationModel.WindowsAppRuntime.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AppLifecycle.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AppLifecycle.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AppNotifications.Builder.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AppNotifications.Builder.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.AppNotifications.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.AppNotifications.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.BadgeNotifications.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.BadgeNotifications.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.Foundation.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.Foundation.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.Management.Deployment.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.Management.Deployment.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.Media.Capture.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.Media.Capture.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.PushNotifications.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.PushNotifications.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.SDK.NET.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.SDK.NET.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.Search.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.Search.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.Security.AccessControl.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.Security.AccessControl.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.Storage.Pickers.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.Storage.Pickers.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.Storage.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.Storage.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.System.Power.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.System.Power.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.System.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.System.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.Windows.Widgets.Projection.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.Windows.Widgets.Projection.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.WindowsAppRuntime.Bootstrap.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.WindowsAppRuntime.Bootstrap.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.WindowsAppRuntime.Bootstrap.Net.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.WindowsAppRuntime.Bootstrap.Net.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Microsoft.WinUI.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Microsoft.WinUI.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\onnxruntime.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\onnxruntime.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\release.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\release.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\System.Numerics.Tensors.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\System.Numerics.Tensors.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\THIRD-PARTY-NOTICES.md Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\THIRD-PARTY-NOTICES.md".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\uninstall.ps1 Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\uninstall.ps1".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\WebView2Loader.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\WebView2Loader.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\WinRT.Runtime.dll Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\WinRT.Runtime.dll".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Assets\xterm\terminal.css Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Assets\xterm\terminal.css".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Assets\xterm\terminal.html Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Assets\xterm\terminal.html".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Assets\xterm\terminal.js Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Assets\xterm\terminal.js".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Assets\xterm\addon-fit\addon-fit.js Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Assets\xterm\addon-fit\addon-fit.js".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Assets\xterm\addon-fit\LICENSE Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Assets\xterm\addon-fit\LICENSE".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Assets\xterm\xterm\LICENSE Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Assets\xterm\xterm\LICENSE".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Assets\xterm\xterm\xterm.css Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Assets\xterm\xterm\xterm.css".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\Assets\xterm\xterm\xterm.js Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\Assets\xterm\xterm\xterm.js".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\themes\catppuccin-mocha.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\themes\catppuccin-mocha.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\themes\default.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\themes\default.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\themes\nord.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\themes\nord.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\themes\rose-pine-moon.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\themes\rose-pine-moon.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\themes\theme.schema.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\themes\theme.schema.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\tools\markdown-preview\index.html Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\tools\markdown-preview\index.html".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\tools\markdown-preview\preview.css Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\tools\markdown-preview\preview.css".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\tools\markdown-preview\preview.js Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\tools\markdown-preview\preview.js".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\tools\markdown-preview\README.md Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\tools\markdown-preview\README.md".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\tools\markdown-preview\tool.json Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\tools\markdown-preview\tool.json".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\tools\markdown-preview\marked\LICENSE Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\tools\markdown-preview\marked\LICENSE".
+   What if: Performing the operation "Copy File" on target "Item: %TEMP%\cabinetos-install-test\mine51\unpacked\extras\tools\markdown-preview\marked\marked.umd.js Destination: %TEMP%\cabinetos-install-test\mine51\CabinetOS\extras\tools\markdown-preview\marked\marked.umd.js".
+   What if: Performing the operation "Create the Start Menu shortcut" on target "C:\Users\Admin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\CabinetOS.lnk".
+   What if: Performing the operation "Add %TEMP%\cabinetos-install-test\mine51\CabinetOS" on target "the User PATH".
+   What if: Performing the operation "Set Content" on target "Path: %TEMP%\cabinetos-install-test\mine51\CabinetOS\.cabinetos-install.json".
+   What if: nothing was changed.
+   (exit code 0)
+
+== Refused: -Indexer without -AllUsers
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -Destination %TEMP%\cabinetos-install-test\mine51\CabinetOS-indexer -Indexer
+   install.ps1: -Indexer needs -AllUsers. The indexer service runs as LocalSystem, so its program must sit in a folder only administrators can change, such as Program Files.
+   (exit code 1)
+
+== Refused: -AllUsers without administrator rights
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -AllUsers -WhatIf
+   install.ps1: installing for all users (and the indexer service) needs administrator rights. Start PowerShell with "Run as administrator" and run this script again.
+   (exit code 1)
+
+== Refused: a drive root
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -Destination C:\ -WhatIf
+   install.ps1: C: is the root of a drive; choose a folder inside it.
+   (exit code 1)
+
+== Refused: a folder that holds other files
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -Destination %TEMP%\cabinetos-install-test\mine51\someone-elses-folder
+   install.ps1: %TEMP%\cabinetos-install-test\mine51\someone-elses-folder already holds files that are not a CabinetOS install. Choose a new or empty folder with -Destination.
+   (exit code 1)
+
+== Refused: started from the repository instead of a release folder
+> powershell.exe -File E:\codespace\_claude_code\_rde\_cabinetos_windows_system_manager\cabinetos\build\install.ps1 -Destination %TEMP%\cabinetos-install-test\mine51\CabinetOS-repo
+   install.ps1: run this script from the unpacked release folder, the one with CabinetOS.exe and release.json in it. build\release.ps1 makes that folder from the source code.
+   (exit code 1)
+
+== Refused: prerequisites missing (release.json edited to ask for .NET 99 and Windows App Runtime 9.9.9.9)
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -Destination %TEMP%\cabinetos-install-test\mine51\CabinetOS-prereq
+   install.ps1: CabinetOS needs these first:
+     - .NET 99 runtime (Microsoft.NETCore.App 99.0.0 or a newer 99.x)
+         winget install --id Microsoft.DotNet.Runtime.99 --exact
+         or: https://dotnet.microsoft.com/download/dotnet/99.0
+     - Windows App Runtime 9.9.9.9 or newer (x64)
+         winget install --id Microsoft.WindowsAppRuntime.2 --exact
+         If winget offers a version older than 9.9.9.9, use Microsoft's installer instead:
+         https://aka.ms/windowsappsdk/2.5/latest/windowsappruntimeinstall-x64.exe
+   Install them, then run this script again (or add -SkipPrerequisiteCheck to install anyway).
+   (exit code 1)
+   %TEMP%\cabinetos-install-test\mine51\CabinetOS-prereq: does not exist
+   %TEMP%\cabinetos-install-test\mine51\CabinetOS-indexer: does not exist
+
+== Uninstall
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\CabinetOS\uninstall.ps1 
+   CabinetOS 0.1.0 is removed from %TEMP%\cabinetos-install-test\mine51\CabinetOS.
+     Settings, plugins, themes and logs stay in C:\Users\Admin\AppData\Roaming\CabinetOS and C:\Users\Admin\AppData\Local\CabinetOS; -RemoveData deletes them.
+   (exit code 0)
+   %TEMP%\cabinetos-install-test\mine51\CabinetOS: does not exist
+
+== Install again, for the -RemoveData case
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\unpacked\install.ps1 -Destination %TEMP%\cabinetos-install-test\mine51\CabinetOS
+   CabinetOS 0.1.0 is installed for Admin in %TEMP%\cabinetos-install-test\mine51\CabinetOS
+     Start it:  & '%TEMP%\cabinetos-install-test\mine51\CabinetOS\CabinetOS.exe'
+     Remove it: powershell -ExecutionPolicy Bypass -File '%TEMP%\cabinetos-install-test\mine51\CabinetOS\uninstall.ps1'
+   
+   These files carry the mark Windows gives downloads, and CabinetOS is not signed yet,
+   so SmartScreen may warn before the first start. If you trust this download, remove the mark:
+     Get-ChildItem -LiteralPath '%TEMP%\cabinetos-install-test\mine51\CabinetOS' -Recurse -File | Unblock-File
+   (exit code 0)
+
+== Uninstall -RemoveData (LOCALAPPDATA and APPDATA point at scratch folders)
+> powershell.exe -File %TEMP%\cabinetos-install-test\mine51\CabinetOS\uninstall.ps1 -RemoveData
+   CabinetOS 0.1.0 is removed from %TEMP%\cabinetos-install-test\mine51\CabinetOS.
+     Its data is removed too: %TEMP%\cabinetos-install-test\mine51\fake-localappdata\CabinetOS, %TEMP%\cabinetos-install-test\mine51\fake-appdata\CabinetOS.
+   (exit code 0)
+   %TEMP%\cabinetos-install-test\mine51\CabinetOS: does not exist
+   %TEMP%\cabinetos-install-test\mine51\fake-localappdata\CabinetOS: does not exist
+   %TEMP%\cabinetos-install-test\mine51\fake-appdata\CabinetOS: does not exist

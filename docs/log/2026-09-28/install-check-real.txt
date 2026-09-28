@@ -1,0 +1,32 @@
+unpacked files: 83
+=== before: Programs folder exists: False; shortcut exists: False
+=== install.ps1 -StartMenu, Windows PowerShell 5.1, as a stranger would run it
+CabinetOS 0.1.0 is installed for Admin in C:\Users\Admin\AppData\Local\Programs\CabinetOS
+  Start it:  & 'C:\Users\Admin\AppData\Local\Programs\CabinetOS\CabinetOS.exe', or from the Start Menu
+  Remove it: powershell -ExecutionPolicy Bypass -File 'C:\Users\Admin\AppData\Local\Programs\CabinetOS\uninstall.ps1'
+install exit: 0
+=== after
+installed files: 83; bytes: 258095664
+record: {
+    "product":  "CabinetOS",
+    "version":  "0.1.0",
+    "installedUtc":  "2026-09-28T21:13:04Z",
+    "scope":  "user",
+    "files":  [
+                  "cabinetos-cli.exe",
+                  "cabinetos-core.exe",
+                  "cabinetos-indexer.exe",
+                  "CabinetOS.Core.dll",
+                  "CabinetOS.Core.pdb",
+                  "CabinetOS.deps.json",
+                  "CabinetOS.dll",
+                  "CabinetOS.exe",
+                  "CabinetOS.pdb",
+                  "CabinetOS.pri",
+                  "CabinetOS.runtimeconfig.json",
+                  "cabinetos_cli.pdb",
+                  "cabinetos_core.pdb",
+                  "cabinetos_i
+shortcut exists: True
+shortcut target: C:\Users\Admin\AppData\Local\Programs\CabinetOS\CabinetOS.exe  start in: C:\Users\Admin\AppData\Local\Programs\CabinetOS
+core next to the exe: True; extras tools: True

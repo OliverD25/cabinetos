@@ -4,9 +4,9 @@ Step 1 of the next steps the creator chose: a stranger's install, for real,
 on the development PC. The zip was the one `build/release.ps1` built from
 ca02dfd (77 MB; its SHA-256 matched the `.sha256` file and the core agent's
 report). Everything ran in Windows PowerShell 5.1, the way the README tells
-a stranger to. Logs: [install-check-real.log](install-check-real.log) (the
-real install), [live-check-installed.log](live-check-installed.log) (the live
-check on the installed copy), [install-check-cases.log](install-check-cases.log)
+a stranger to. Logs: [install-check-real.txt](install-check-real.txt) (the
+real install), [live-check-installed.txt](live-check-installed.txt) (the live
+check on the installed copy), [install-check-cases.txt](install-check-cases.txt)
 (the scripted cases).
 
 ## The real install

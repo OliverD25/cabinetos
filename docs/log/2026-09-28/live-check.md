@@ -11,8 +11,8 @@ Build under test: the shell from `main` at 23:16 (the first half of the
 protocol 11 adoption: the window's commands from the registry, the items
 graph, the dock size) and the core at 9eea7cd (protocol 11), both copied to a
 folder outside the repository. Transcripts:
-[live-check-run1.log](live-check-run1.log),
-[live-check-run2.log](live-check-run2.log).
+[live-check-run1.txt](live-check-run1.txt),
+[live-check-run2.txt](live-check-run2.txt).
 
 ## What passed
 
@@ -97,9 +97,44 @@ folder outside the repository. Transcripts:
    palette closes** while the mouse rests where the pencil was
    ([live-scrolled.png](live-scrolled.png), above the right pane's title).
 
+## Run 3: after the fixes, 2026-09-29, 00:19 to 00:21
+
+The UI agent fixed the five findings (commits b5044ec to e548db8) and put
+the scripts into the repository as `ui/livecheck/`. The planning session
+ran `ui/livecheck/livecheck.ps1` from `main` at a4582ba (a Release build in
+a worktree of its own, the core from protocol 11) with real keys, screen
+unlocked. Transcript: [live-check-run3.txt](live-check-run3.txt). Every
+step passed again, exit code 0. On the findings:
+
+1. **Fixed.** Ctrl+K V on the open preview: "the preview said ready for each
+   open (2 expected): 2", and the file is on screen
+   ([live-run3-markdown-chord-fixed.png](live-run3-markdown-chord-fixed.png)).
+2. **Fixed.** Esc closed the Properties dialog ("dialog shown" at
+   21:20:36.101, "dialog closed" at 21:20:37.925 UTC, result None), and the
+   Ctrl+` pressed while it was open did nothing: no command line between the
+   two, no terminal under the dialog. The script's own check printed
+   "refused: False" only because it looks for a "command refused" log line
+   that this design never writes; the check is to be adjusted.
+3. **Fixed.** `echo live-5c` typed as Unicode key events answered `live-5c`,
+   and `echo back-in-the-shell` after the palette answered too
+   ([live-run3-terminal-unicode-fixed.png](live-run3-terminal-unicode-fixed.png)).
+4. **Fixed.** After Skip through UI Automation, Shift+F10 opened the row's
+   context menu and Alt+Enter opened Properties.
+5. **Still open.** The pencil's tooltip is on screen 1.3 s after Esc closed
+   the palette ([live-run3-tooltip-still-open.png](live-run3-tooltip-still-open.png))
+   and stays in every later screenshot of the run. Closing the open
+   tooltips at the moment the overlay closes is not enough; the tooltip
+   most likely opens afterwards, from the hover timer started while the
+   pencil was under the mouse.
+
+Frame statistics during this run's PageDown: 40 to 56 frames per second,
+worst frame 114 ms, four to six frames over 33 ms per second. Both coder
+agents were compiling on this PC at the time; the scroll's own cost is
+measured on a quiet machine in a later step.
+
 ## Leftovers
 
 - One test file in the Recycle Bin, `cabinetos-live-check-delete-me.txt`
-  (3 bytes), from run 1.
+  (3 bytes), from run 1, and one more from run 3.
 - The runs' folders `%TEMP%\cabinetos-ui-test\live` and `live2`
   (configuration, logs, test files, full-size screenshots).
