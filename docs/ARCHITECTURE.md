@@ -115,9 +115,36 @@ match; the records are the source of truth for each point.
 | §6 Layer 2 "UserControls or WebView2" | Crash isolation of Tool Extensions | [PLAN.md](PLAN.md) section 2: WebView2 for third-party tools; native controls only for first-party ones |
 | §7 "terminal panels" | Terminal in core or as extension | [ADR 0005](decisions/0005-terminal-in-core-hidden.md): core, hidden by default |
 
+## Crate map
+
+The Rust core is one Cargo workspace in `core/`, with every crate under
+`core/crates/`. This table shows which crate implements which section of the
+brief. Responsibilities, Constitution articles and build commands per crate:
+[core/README.md](../core/README.md).
+
+| Brief section | Crate | State |
+|---|---|---|
+| §2 Rust Core Engine | `cabinetos-fs`: directory enumeration, metadata hydration, volume and disk detection, change watching | stub until Phase 2 |
+| §2 Rust Core Engine | `cabinetos-index`: in-memory volume index, MFT reader, USN Journal tailer | stub until Phase 6 |
+| §2 Rust Core Engine | `cabinetos-indexer`: the elevated indexer process ([ADR 0002](decisions/0002-separate-elevated-indexer.md)) | stub until Phase 6 |
+| §3 Copy/Move Queues | `cabinetos-jobs`: `JobQueueManager`, copy/move/delete backends, progress throttling, conflict states | stub until Phase 4 |
+| §4 UI-Core Bridge (IPC) | `cabinetos-protocol`: message envelopes, request IDs, shared-memory layouts, JSON Schema export to `sdk/protocol/` | Phase 1 |
+| §4 UI-Core Bridge (IPC) | `cabinetos-ipc`: named pipe with a user-only DACL, length-prefixed framing, shared-memory sections, process watch | Phase 1 |
+| §5 WinUI 3 Frontend | no crate: the C# solution in `ui/` | Phase 5 |
+| §6 Extension Architecture | `cabinetos-plugins`: Layer 1, the `wasmtime` host for Core Plugins | stub until Phase 7 |
+| §7 Config, Keyboard & Command Palette | `cabinetos-config`: `cabinetos.json` load, schema, defaults, watch, diff | stub until Phase 3 |
+| §7 Config, Keyboard & Command Palette | `cabinetos-commands`: command registry, keybindings, immutable tier | stub until Phase 3 |
+| §8 Logging & Crash Diagnostics | `cabinetos-diag`: JSON Lines logs, ring buffer, crash traces ([diagnostics.md](diagnostics.md)) | Phase 1 |
+
+Two crates serve every section rather than one: `cabinetos-core` builds
+`cabinetos-core.exe`, which starts the process and wires the libraries
+together, and `cabinetos-cli` is the command-line client that tests the core
+without a UI.
+
 ## Change log
 
 | Date | Change | Why |
 |---|---|---|
 | 2026-09-28 | Copied from the creator's brief. | First version in the repo (ADR 0008). |
 | 2026-09-28 | §8, first sentence: "telemetry" → "diagnostics". | Article 12 of the Constitution was renamed by the creator on 2026-09-28 to avoid the word "telemetry", which suggests data sent to the developer. The brief describes only local logs and crash traces. Recorded in PLAN.md, consistency check row A. |
+| 2026-09-28 | Added the "Crate map" section. | Phase 1 created the Rust workspace. The map links each brief section to the crate that implements it (PLAN.md §6, definition of done item 6). |
