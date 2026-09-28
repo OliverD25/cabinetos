@@ -173,18 +173,7 @@ public sealed class CoreConnection : IAsyncDisposable
     public async Task ShutdownAsync(TimeSpan wait)
     {
         var watch = Stopwatch.StartNew();
-        if (Client.IsConnected)
-        {
-            try
-            {
-                using var timeout = new CancellationTokenSource(wait);
-                await Client.RequestAsync(new ShutdownRequest(), timeout.Token).ConfigureAwait(false);
-            }
-            catch (Exception error) when (error is IOException or OperationCanceledException)
-            {
-                Diag.Info(Target, "shutdown request not answered", new LogField("error", error.Message));
-            }
-        }
+        await Client.ShutdownCoreAsync(wait).ConfigureAwait(false);
         var remaining = wait - watch.Elapsed;
         var exited = Process.HasExited;
         if (!exited && remaining > TimeSpan.Zero)

@@ -67,6 +67,7 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private Task _reader = Task.CompletedTask;
     private int _ended;
+    private int _disposed;
     private string? _endReason;
 
     private CoreClient(Stream stream) => _stream = stream;
@@ -196,9 +197,36 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
         return await completion.Task.ConfigureAwait(false);
     }
 
-    /// <summary>Ends the connection and closes every section handle nobody took.</summary>
+    /// <summary>
+    /// Asks the core to exit (<c>shutdown</c>), waiting at most
+    /// <paramref name="timeout"/> for its answer, then closes this connection.
+    /// The core gives open connections up to 2 s to finish before it exits, so
+    /// the client closes its own at once instead of making the core wait.
+    /// </summary>
+    public async Task ShutdownCoreAsync(TimeSpan timeout)
+    {
+        if (IsConnected)
+        {
+            try
+            {
+                using var deadline = new CancellationTokenSource(timeout);
+                await RequestAsync(new ShutdownRequest(), deadline.Token).ConfigureAwait(false);
+            }
+            catch (Exception error) when (error is IOException or OperationCanceledException)
+            {
+                Diag.Info(Target, "shutdown request not answered", new LogField("error", error.Message));
+            }
+        }
+        await DisposeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Ends the connection and closes every section handle nobody took. Safe to call twice.</summary>
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
         _stop.Cancel();
         await _stream.DisposeAsync().ConfigureAwait(false);
         try

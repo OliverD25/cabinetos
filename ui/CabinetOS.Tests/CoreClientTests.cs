@@ -177,6 +177,29 @@ public class CoreClientTests
     }
 
     [Fact]
+    public async Task Closing_right_after_a_reply_on_the_ui_thread_closes_the_pipe_at_once()
+    {
+        await using var core = new FakeCore();
+        using var ui = new UiThread();
+        var client = await ui.RunAsync(core.ConnectClientAsync);
+
+        var closed = ui.RunAsync(async () =>
+        {
+            await client.ShutdownCoreAsync(TimeSpan.FromSeconds(5));
+            return true;
+        });
+        var shutdown = await core.ReadRequestAsync();
+        Assert.Equal("shutdown", shutdown.GetProperty("type").GetString());
+        await core.ReplyAsync(shutdown, "ok");
+        Assert.True(await closed.WaitAsync(Step));
+
+        // The core waits for its connections before it exits; the pipe must end now.
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        await Assert.ThrowsAnyAsync<Exception>(async () => await core.ReadRequestAsync());
+        Assert.True(watch.ElapsedMilliseconds < 1000, $"the pipe ended after {watch.ElapsedMilliseconds} ms");
+    }
+
+    [Fact]
     public async Task A_frame_that_is_not_json_is_skipped_and_the_connection_goes_on()
     {
         await using var core = new FakeCore();

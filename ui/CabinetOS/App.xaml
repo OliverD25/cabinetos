@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="CabinetOS.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!--
+              Design tokens (docs/design/README.md, "Design tokens (dark mode)").
+              Dark uses the design's values. Light has no design yet, so each token
+              falls back to the Windows light-theme brush with the same role.
+            -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="CbLayerFillBrush" Color="#0DFFFFFF" />
+                    <SolidColorBrush x:Key="CbLayerStrokeBrush" Color="#12FFFFFF" />
+                    <SolidColorBrush x:Key="CbLayerStrokeActiveBrush" Color="#2EFFFFFF" />
+                    <SolidColorBrush x:Key="CbDividerBrush" Color="#0FFFFFFF" />
+                    <SolidColorBrush x:Key="CbControlFillBrush" Color="#0FFFFFFF" />
+                    <SolidColorBrush x:Key="CbControlStrokeBrush" Color="#12FFFFFF" />
+                    <Color x:Key="CbFieldBottomColor">#33FFFFFF</Color>
+                    <Color x:Key="CbFieldStrokeColor">#12FFFFFF</Color>
+                    <SolidColorBrush x:Key="CbHoverFillBrush" Color="#0FFFFFFF" />
+                    <SolidColorBrush x:Key="CbCrumbHoverFillBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbPressedFillBrush" Color="#0AFFFFFF" />
+                    <SolidColorBrush x:Key="CbSelectedFillBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbTextPrimaryBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="CbTextSecondaryBrush" Color="#C8FFFFFF" />
+                    <SolidColorBrush x:Key="CbTextTertiaryBrush" Color="#8BFFFFFF" />
+                    <SolidColorBrush x:Key="CbTextDisabledBrush" Color="#5DFFFFFF" />
+                    <SolidColorBrush x:Key="CbRowTextBrush" Color="#E6FFFFFF" />
+                    <SolidColorBrush x:Key="CbRowMetaBrush" Color="#99FFFFFF" />
+                    <SolidColorBrush x:Key="CbPaneTitleInactiveBrush" Color="#B3FFFFFF" />
+                    <SolidColorBrush x:Key="CbStatusTextBrush" Color="#99FFFFFF" />
+                    <SolidColorBrush x:Key="CbHintTextBrush" Color="#73FFFFFF" />
+                    <SolidColorBrush x:Key="CbKeycapFillBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbKeycapTextBrush" Color="#E6FFFFFF" />
+                    <Color x:Key="CbKeycapStrokeColor">#1AFFFFFF</Color>
+                    <Color x:Key="CbKeycapBottomColor">#38FFFFFF</Color>
+                    <SolidColorBrush x:Key="CbBadgeFillBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbPencilHoverFillBrush" Color="#1FFFFFFF" />
+                    <SolidColorBrush x:Key="CbOverlayStrokeBrush" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="CbPaletteInputFillBrush" Color="#0FFFFFFF" />
+                    <SolidColorBrush x:Key="CbPaletteInputStrokeBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbTabActiveFillBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbUsageTrackBrush" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="CbErrorTextBrush" Color="#FFF27A6C" />
+                    <AcrylicBrush x:Key="CbPaletteAcrylicBrush" TintColor="#FF2C2C2C" TintOpacity="0.15" TintLuminosityOpacity="0.72" FallbackColor="#F22C2C2C" />
+                    <StaticResource x:Key="CbAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <StaticResource x:Key="CbLayerFillBrush" ResourceKey="LayerFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbLayerStrokeBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbLayerStrokeActiveBrush" ResourceKey="ControlStrongStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbDividerBrush" ResourceKey="DividerStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbControlFillBrush" ResourceKey="ControlFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbControlStrokeBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbFieldBottomColor" ResourceKey="ControlStrongStrokeColorDefault" />
+                    <StaticResource x:Key="CbFieldStrokeColor" ResourceKey="ControlStrokeColorDefault" />
+                    <StaticResource x:Key="CbHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbCrumbHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbPressedFillBrush" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="CbSelectedFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbTextPrimaryBrush" ResourceKey="TextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="CbTextSecondaryBrush" ResourceKey="TextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbTextTertiaryBrush" ResourceKey="TextFillColorTertiaryBrush" />
+                    <StaticResource x:Key="CbTextDisabledBrush" ResourceKey="TextFillColorDisabledBrush" />
+                    <StaticResource x:Key="CbRowTextBrush" ResourceKey="TextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="CbRowMetaBrush" ResourceKey="TextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbPaneTitleInactiveBrush" ResourceKey="TextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbStatusTextBrush" ResourceKey="TextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbHintTextBrush" ResourceKey="TextFillColorTertiaryBrush" />
+                    <StaticResource x:Key="CbKeycapFillBrush" ResourceKey="ControlFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbKeycapTextBrush" ResourceKey="TextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="CbKeycapStrokeColor" ResourceKey="ControlStrokeColorDefault" />
+                    <StaticResource x:Key="CbKeycapBottomColor" ResourceKey="ControlStrokeColorSecondary" />
+                    <StaticResource x:Key="CbBadgeFillBrush" ResourceKey="ControlFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbPencilHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbOverlayStrokeBrush" ResourceKey="SurfaceStrokeColorFlyoutBrush" />
+                    <StaticResource x:Key="CbPaletteInputFillBrush" ResourceKey="ControlFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbPaletteInputStrokeBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbTabActiveFillBrush" ResourceKey="LayerFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbUsageTrackBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbErrorTextBrush" ResourceKey="SystemFillColorCriticalBrush" />
+                    <StaticResource x:Key="CbPaletteAcrylicBrush" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- Content colors: the same in both themes. -->
+            <SolidColorBrush x:Key="CbFolderBrush" Color="#FFF2C063" />
+            <SolidColorBrush x:Key="CbOnAccentBrush" Color="#FF111111" />
+            <FontFamily x:Key="CbMonoFont">Cascadia Code, Cascadia Mono, Consolas</FontFamily>
+
+            <x:Double x:Key="CbRowHeight">30</x:Double>
+
+            <!-- A 1 px lighter bottom edge, as on a Fluent text field. -->
+            <LinearGradientBrush x:Key="CbFieldStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">
+                <LinearGradientBrush.RelativeTransform>
+                    <ScaleTransform CenterY="0.5" ScaleY="-1" />
+                </LinearGradientBrush.RelativeTransform>
+                <GradientStop Offset="0.5" Color="{ThemeResource CbFieldBottomColor}" />
+                <GradientStop Offset="0.5" Color="{ThemeResource CbFieldStrokeColor}" />
+            </LinearGradientBrush>
+
+            <LinearGradientBrush x:Key="CbKeycapStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">
+                <LinearGradientBrush.RelativeTransform>
+                    <ScaleTransform CenterY="0.5" ScaleY="-1" />
+                </LinearGradientBrush.RelativeTransform>
+                <GradientStop Offset="0.5" Color="{ThemeResource CbKeycapBottomColor}" />
+                <GradientStop Offset="0.5" Color="{ThemeResource CbKeycapStrokeColor}" />
+            </LinearGradientBrush>
+
+            <Style x:Key="CbSectionLabelStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="CharacterSpacing" Value="60" />
+                <Setter Property="Foreground" Value="{ThemeResource CbTextTertiaryBrush}" />
+            </Style>
+
+            <Style x:Key="CbKeycapTextStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource CbMonoFont}" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Foreground" Value="{ThemeResource CbKeycapTextBrush}" />
+            </Style>
+
+            <!-- A flat 32 x 32 button: command bar, pane and palette icons. -->
+            <Style x:Key="CbSubtleButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource CbTextSecondaryBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="MinWidth" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid
+                                x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                                <ContentPresenter
+                                    x:Name="Presenter"
+                                    Padding="{TemplateBinding Padding}"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                    Content="{TemplateBinding Content}"
+                                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                                    Foreground="{TemplateBinding Foreground}" />
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="Root.Background" Value="{ThemeResource CbHoverFillBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="Root.Background" Value="{ThemeResource CbPressedFillBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="Presenter.Foreground" Value="{ThemeResource CbTextDisabledBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- A crumb of the address bar. -->
+            <Style x:Key="CbCrumbButtonStyle" BasedOn="{StaticResource CbSubtleButtonStyle}" TargetType="Button">
+                <Setter Property="Foreground" Value="{ThemeResource CbRowTextBrush}" />
+                <Setter Property="Padding" Value="6,2" />
+                <Setter Property="CornerRadius" Value="3" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Height" Value="24" />
+            </Style>
+
+            <!-- A sidebar row: pinned folder or drive. -->
+            <Style x:Key="CbSidebarRowButtonStyle" BasedOn="{StaticResource CbSubtleButtonStyle}" TargetType="Button">
+                <Setter Property="Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Height" Value="Auto" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="Margin" Value="4,0" />
+                <Setter Property="Padding" Value="0" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

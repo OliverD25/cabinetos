@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.PaletteRowView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <Storyboard x:Key="Pulse" RepeatBehavior="Forever">
+            <DoubleAnimation
+                AutoReverse="True"
+                Storyboard.TargetName="RecordingPanel"
+                Storyboard.TargetProperty="Opacity"
+                From="0.5"
+                To="1"
+                Duration="0:0:0.6" />
+        </Storyboard>
+    </UserControl.Resources>
+
+    <Grid
+        x:Name="Root"
+        Height="36"
+        Background="Transparent"
+        CornerRadius="4">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="HighlightStates">
+                <VisualState x:Name="Plain" />
+                <VisualState x:Name="Highlighted">
+                    <VisualState.Setters>
+                        <Setter Target="Root.Background" Value="{ThemeResource CbSelectedFillBrush}" />
+                        <Setter Target="Pill.Visibility" Value="Visible" />
+                        <Setter Target="PencilButton.Opacity" Value="1" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Rectangle
+            x:Name="Pill"
+            Width="3"
+            Height="16"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            Fill="{ThemeResource CbAccentBrush}"
+            RadiusX="1.5"
+            RadiusY="1.5"
+            Visibility="Collapsed" />
+
+        <Grid Padding="10,0" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="CategoryText"
+                VerticalAlignment="Center"
+                FontSize="12"
+                Foreground="{ThemeResource CbTextTertiaryBrush}" />
+            <TextBlock
+                x:Name="TitleText"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <Border
+                x:Name="Badge"
+                Grid.Column="2"
+                Padding="6,1"
+                VerticalAlignment="Center"
+                Background="{ThemeResource CbBadgeFillBrush}"
+                CornerRadius="3"
+                Visibility="Collapsed">
+                <TextBlock
+                    x:Name="BadgeText"
+                    FontSize="10"
+                    Foreground="{ThemeResource CbTextSecondaryBrush}" />
+            </Border>
+            <StackPanel
+                x:Name="Keycaps"
+                Grid.Column="3"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="4" />
+            <StackPanel
+                x:Name="RecordingPanel"
+                Grid.Column="3"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8"
+                Visibility="Collapsed">
+                <TextBlock
+                    x:Name="RecordingText"
+                    FontFamily="{StaticResource CbMonoFont}"
+                    FontSize="12"
+                    Foreground="{ThemeResource CbAccentBrush}" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{ThemeResource CbTextTertiaryBrush}"
+                    Text="Esc to cancel" />
+            </StackPanel>
+            <TextBlock
+                x:Name="ErrorText"
+                Grid.Column="3"
+                MaxWidth="300"
+                VerticalAlignment="Center"
+                FontSize="12"
+                Foreground="{ThemeResource CbErrorTextBrush}"
+                TextTrimming="CharacterEllipsis"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="PencilButton"
+                Grid.Column="4"
+                Width="24"
+                MinWidth="24"
+                Height="24"
+                AutomationProperties.Name="Change keybinding"
+                Opacity="0.25"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Change keybinding (F2)">
+                <FontIcon FontSize="13" Glyph="&#xE70F;" />
+            </Button>
+            <FontIcon
+                x:Name="LockIcon"
+                Grid.Column="4"
+                Width="24"
+                FontSize="13"
+                Foreground="{ThemeResource CbTextTertiaryBrush}"
+                Glyph="&#xE72E;"
+                ToolTipService.ToolTip="Part of the Immutable System Tier"
+                Visibility="Collapsed" />
+        </Grid>
+    </Grid>
+</UserControl>
