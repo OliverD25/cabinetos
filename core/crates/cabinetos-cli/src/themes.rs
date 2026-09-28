@@ -35,8 +35,12 @@ fn line(theme: &ThemeInfo, in_effect: bool) -> String {
         .accent
         .as_ref()
         .map_or("system", |accent| accent.as_str());
+    let mica = theme.mica.as_ref().map_or_else(
+        || "plain".to_owned(),
+        |mica| format!("{} {}", mica.tint.as_str(), mica.opacity.get()),
+    );
     format!(
-        "{} {:<18} {:<18} {kind:<5} accent {accent:<7}  {} by {}",
+        "{} {:<18} {:<18} {kind:<6} accent {accent:<7}  mica {mica:<12}  {} by {}",
         if in_effect { '*' } else { ' ' },
         theme.id,
         theme.name,
@@ -74,18 +78,20 @@ mod tests {
     fn a_theme_reads_as_one_line() {
         let theme: ThemeInfo = serde_json::from_value(serde_json::json!({
             "id": "nord", "name": "Nord", "author": "CabinetOS", "version": "1.0.0",
-            "kind": "dark", "accent": "#88C0D0"
+            "kind": "dark", "accent": "#88C0D0", "mica": {"tint": "#2E3440", "opacity": 0.88}
         }))
         .unwrap();
         assert_eq!(
             line(&theme, true),
-            "* nord               Nord               dark  accent #88C0D0  1.0.0 by CabinetOS"
+            "* nord               Nord               dark   accent #88C0D0  mica #2E3440 0.88  1.0.0 by CabinetOS"
         );
         let plain = ThemeInfo {
             accent: None,
+            mica: None,
             ..theme
         };
         assert!(line(&plain, false).starts_with("  nord"));
         assert!(line(&plain, false).contains("accent system "));
+        assert!(line(&plain, false).contains("mica plain "));
     }
 }

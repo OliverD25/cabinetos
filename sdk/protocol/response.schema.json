@@ -2348,6 +2348,17 @@
           "description": "Dark or light.",
           "$ref": "#/$defs/ThemeKind"
         },
+        "mica": {
+          "description": "Its tint over the Mica backdrop; `null` shows plain Mica.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MicaTint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "description": "Its name.",
           "type": "string"

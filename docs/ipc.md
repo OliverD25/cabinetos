@@ -87,7 +87,7 @@ marketplace: `marketplace_refresh` and `marketplace_search` with the reply
 `no_such_extension`, `marketplace_error`, `hash_mismatch` and
 `incompatible`. Version 11 added what the shell asked for after Phases 5
 and 9: `items_per_second` in `job_progress`; one `marketplace_index` item
-per extension, with `installedVersion`.
+per extension, with `installedVersion`; each theme's `mica` in `themes`.
 
 ## Requests and replies
 
@@ -865,15 +865,18 @@ configuration names the theme in effect.
 ```json
 {"id":"01M…","type":"list_themes"}
 {"id":"01M…","type":"themes","themes":[{"id":"catppuccin-mocha","name":"Catppuccin Mocha",
- "author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#CBA6F7"},…]}
+ "author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#CBA6F7",
+ "mica":{"tint":"#1E1E2E","opacity":0.9}},…]}
 {"id":"01M…","type":"get_theme"}
 {"id":"01M…","type":"theme","theme":{"id":"nord","name":"Nord","author":"CabinetOS",…,
  "accent":"#88C0D0","mica":{"tint":"#2E3440","opacity":0.88},"palette":{…},"terminal":{…}}}
 ```
 
-- `list_themes` lists every valid theme in the folder, by ID. A file that
-  is not a valid theme is left out; the core's log says why. `accent` is
-  `null` for a theme that follows the Windows accent colour.
+- `list_themes` lists every valid theme in the folder, by ID, with what a
+  picker shows of it: its accent and its Mica tint. A file that is not a
+  valid theme is left out; the core's log says why. `accent` is `null` for
+  a theme that follows the Windows accent colour, and `mica` for one that
+  shows plain Mica.
 - `get_theme` without `theme_id` answers the theme in effect; with it, that
   theme's file, read now. An ID with no file is `no_such_theme`; a file that
   is not a valid theme is `config_error` with the reason. `theme` is the

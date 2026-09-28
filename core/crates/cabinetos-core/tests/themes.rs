@@ -172,6 +172,15 @@ async fn a_theme_applies_live_and_a_broken_edit_never_applies() {
         ids,
         ["catppuccin-mocha", "default", "nord", "rose-pine-moon"]
     );
+    // The picker gets each tint without asking for the whole theme.
+    let tints: Vec<Option<&str>> = themes
+        .iter()
+        .map(|theme| theme.mica.as_ref().map(|mica| mica.tint.as_str()))
+        .collect();
+    assert_eq!(
+        tints,
+        [Some("#1E1E2E"), None, Some("#2E3440"), Some("#232136")]
+    );
     assert!(core.themes_dir().join("theme.schema.json").is_file());
     let default = theme(&mut client, None).await;
     assert_eq!(default.id, "default");

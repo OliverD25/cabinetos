@@ -160,6 +160,8 @@ pub struct ThemeInfo {
     pub kind: ThemeKind,
     /// Its accent colour; `null` follows the Windows accent colour.
     pub accent: Option<Rgb>,
+    /// Its tint over the Mica backdrop; `null` shows plain Mica.
+    pub mica: Option<MicaTint>,
 }
 
 impl From<&Theme> for ThemeInfo {
@@ -171,6 +173,7 @@ impl From<&Theme> for ThemeInfo {
             version: theme.version.clone(),
             kind: theme.kind,
             accent: theme.accent.clone(),
+            mica: theme.mica.clone(),
         }
     }
 }

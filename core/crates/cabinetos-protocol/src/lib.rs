@@ -79,5 +79,6 @@ pub use theme::{
 /// the error codes `no_such_extension`, `marketplace_error`,
 /// `hash_mismatch` and `incompatible`); version 11 the shell's small
 /// requests: `items_per_second` in `job_progress`; one `marketplace_index`
-/// item per extension, with `installedVersion`.
+/// item per extension, with `installedVersion`; each theme's `mica` in
+/// `themes`.
 pub const PROTOCOL_VERSION: u32 = 11;
