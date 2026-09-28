@@ -80,5 +80,6 @@ pub use theme::{
 /// `hash_mismatch` and `incompatible`); version 11 the shell's small
 /// requests: `items_per_second` in `job_progress`; one `marketplace_index`
 /// item per extension, with `installedVersion`; each theme's `mica` in
-/// `themes`; the theme kind `system`.
+/// `themes`; the theme kind `system`; `tools_changed` sent again to a client
+/// that fell behind.
 pub const PROTOCOL_VERSION: u32 = 11;

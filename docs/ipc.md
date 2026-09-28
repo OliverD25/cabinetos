@@ -89,7 +89,8 @@ marketplace: `marketplace_refresh` and `marketplace_search` with the reply
 and 9: `items_per_second` in `job_progress`; one `marketplace_index` item
 per extension, with `installedVersion`; each theme's `mica` in `themes`;
 and the theme kind `system` (follow Windows' light or dark mode), which
-the shipped `default` theme now has.
+the shipped `default` theme now has; and `tools_changed` sent again to a
+client that fell behind on events.
 
 ## Requests and replies
 
@@ -969,8 +970,9 @@ configuration says where it is; the core reads it only when a client asks.
   place. A plugin leaves `list_plugins`; there is no event for it.
 - `tools` lists every tool in the tools folder with a valid `tool.json`,
   by ID; `dir` is its folder. `tools_changed` carries the same list after
-  a tool install or uninstall. A client that fell behind on events asks
-  `list_tools` again.
+  a tool install or uninstall. A client that fell behind on events gets a
+  `tools_changed` with the tools as they are, after the other events sent
+  again.
 
 ## Trying it by hand
 

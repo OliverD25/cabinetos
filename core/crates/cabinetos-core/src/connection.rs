@@ -105,7 +105,7 @@ enum TaskDone {
     },
     /// A watched listing was lost and its refresh task ended.
     RefreshEnded { listing_id: u64 },
-    /// The task sent its own reply.
+    /// The task sent what it had to: its reply, or events sent again.
     Replied,
 }
 
@@ -1107,9 +1107,28 @@ impl Session {
                         ));
                     }
                 }
+                self.resend_tools();
             }
             Err(RecvError::Closed) => self.events = None,
         }
+    }
+
+    /// Sends the tools as they are now, for a client that may have missed a
+    /// `tools_changed`. Reading the tools folder is disk work, so it runs on
+    /// the blocking pool, and the event follows the others.
+    fn resend_tools(&mut self) {
+        let market = Arc::clone(&self.services.market);
+        let out = self.out.clone();
+        self.tasks.spawn(async move {
+            match tokio::task::spawn_blocking(move || market.tools()).await {
+                Ok(tools) => out.send(&Envelope::new(
+                    RequestId::new(),
+                    Event::ToolsChanged { tools },
+                )),
+                Err(error) => rethrow_panic(Err(error)),
+            }
+            TaskDone::Replied
+        });
     }
 
     fn task_done(&mut self, done: Result<TaskDone, JoinError>) {
