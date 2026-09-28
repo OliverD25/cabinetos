@@ -243,6 +243,29 @@ changing either file.
   JSON; it comes back as `command_result`. Its `err` text comes back as
   `plugin_error`: `reader.size failed: …`.
 
+### What the shell passes
+
+When the user runs a plugin's command from the window, the shell sends
+the files it concerns as `args`:
+
+```json
+{"path": "C:\\Users\\me\\report.pdf", "paths": ["C:\\Users\\me\\report.pdf", "C:\\Users\\me\\notes.txt"]}
+```
+
+- `path` is the entry the user right-clicked, when the command comes from
+  the context menu, or the focused row of the active pane, when it comes
+  from the palette or a key.
+- `paths` is the selection of that pane, in its order.
+- Both are full Windows paths. Either key may be missing: an empty folder
+  has no focused row, and nothing may be selected. A plugin must treat a
+  missing key as "no selection" and answer sensibly (with an `err` that
+  says what to select, for example), not fail on it.
+- A command run by another client, such as `cabinetos-cli commands exec`,
+  gets whatever that client sends, often `{}`.
+
+The paths reach the plugin as text; reading the files still needs
+`fs:read` for their folder.
+
 ## Jobs: `before-job`
 
 A plugin with `jobs:intercept` sees every job after the scan has counted
