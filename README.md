@@ -26,7 +26,7 @@ pseudo-consoles, applies JSON colour themes live, and installs plugins,
 themes and tools from a static marketplace index with each download's
 SHA-256 checked, all over a user-only named pipe, with the indexer behind a
 read-only pipe of its own and each shell's bytes on a pipe of their own
-(`core/`, 482 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 412
+(`core/`, 482 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 418
 tests): two panes over the core's shared-memory listings with the shell's
 type names and icons, breadcrumbs, a status bar, the command palette with
 chord keys and inline rebinding, copy, move, delete, rename, new folder and
