@@ -328,7 +328,10 @@ impl Job {
 /// Whether a resolution can be kept as the job's rule for a conflict kind.
 pub(crate) fn as_policy(resolution: &Resolution) -> Option<Resolution> {
     match resolution {
-        Resolution::Overwrite | Resolution::Skip | Resolution::Retry => Some(resolution.clone()),
+        Resolution::Overwrite
+        | Resolution::Skip
+        | Resolution::Retry
+        | Resolution::DeletePermanently => Some(resolution.clone()),
         // A chosen name fits one file only; the rule picks free names.
         Resolution::Rename { .. } => Some(Resolution::Rename { new_name: None }),
         Resolution::CancelJob => None,

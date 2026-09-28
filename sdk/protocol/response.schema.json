@@ -557,6 +557,11 @@
           "description": "The job has no waiting conflict with that `conflict_id`.",
           "type": "string",
           "const": "no_such_conflict"
+        },
+        {
+          "description": "The resolution does not fit the conflict, such as\n`delete_permanently` for a file that exists.",
+          "type": "string",
+          "const": "invalid_resolution"
         }
       ]
     },

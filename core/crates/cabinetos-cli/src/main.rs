@@ -189,6 +189,8 @@ enum ResolveArg {
     Overwrite,
     Skip,
     Rename,
+    /// For a delete: what the Recycle Bin cannot take is deleted for good.
+    DeletePermanently,
 }
 
 impl From<ResolveArg> for Resolution {
@@ -197,6 +199,7 @@ impl From<ResolveArg> for Resolution {
             ResolveArg::Overwrite => Self::Overwrite,
             ResolveArg::Skip => Self::Skip,
             ResolveArg::Rename => Self::Rename { new_name: None },
+            ResolveArg::DeletePermanently => Self::DeletePermanently,
         }
     }
 }
@@ -239,6 +242,8 @@ enum ResolutionArg {
     Rename,
     /// Try once more, the same way.
     Retry,
+    /// Delete for good what the Recycle Bin cannot take.
+    DeletePermanently,
     /// Stop the whole job.
     Cancel,
 }
@@ -250,6 +255,7 @@ impl From<ResolutionArg> for Resolution {
             ResolutionArg::Skip => Self::Skip,
             ResolutionArg::Rename => Self::Rename { new_name: None },
             ResolutionArg::Retry => Self::Retry,
+            ResolutionArg::DeletePermanently => Self::DeletePermanently,
             ResolutionArg::Cancel => Self::CancelJob,
         }
     }

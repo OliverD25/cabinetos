@@ -42,5 +42,6 @@ pub use message::{
 /// volume information and events; version 3 the configuration, the keymap
 /// and commands, and made `list_directory`'s `include_hidden` and `sort`
 /// optional (the configuration fills them in); version 4 the jobs (copy,
-/// move, delete).
-pub const PROTOCOL_VERSION: u32 = 4;
+/// move, delete); version 5 the Recycle Bin conflict
+/// (`recycle_bin_too_small`, `delete_permanently`).
+pub const PROTOCOL_VERSION: u32 = 5;

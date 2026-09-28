@@ -22,6 +22,7 @@ use cabinetos_protocol::{
 };
 
 use crate::Engine;
+use crate::bin;
 use crate::job::{Counters, DirState, DirStatus, Job, Parked, Phase, Target, Work, lock};
 use crate::plan::{
     self, FileItem, FileKind, Plan, PlanError, RemoveKind, RenameItem, Transfer, file_name, join,
@@ -371,7 +372,7 @@ impl Run<'_> {
             Target::File(index) => self.transfer(index, work),
             Target::Rename(index) => self.rename_root(index, work),
             Target::Remove(index) => self.remove(index, work),
-            Target::Recycle(index) => self.recycle(index, apartment),
+            Target::Recycle(index) => self.recycle(index, work, apartment),
         }
     }
 
@@ -797,6 +798,30 @@ impl Run<'_> {
         Outcome::Expanded
     }
 
+    /// Turns the Recycle Bin delete of `path` into a permanent one, contents
+    /// before their folders, as the user decided.
+    fn expand_permanent(&self, path: &str) -> Outcome {
+        let stop = || self.job.control.is_cancelled();
+        let added = {
+            let mut plan = lock(&self.plan);
+            let before = plan.removals.len();
+            match plan::add_removal_root(&mut plan, path, &stop) {
+                Ok(()) => before..plan.removals.len(),
+                Err(PlanError::Cancelled) => return Outcome::Cancelled,
+                Err(PlanError::Source(_)) => return Outcome::Done,
+            }
+        };
+        Counters::add(&self.job.counters.files_total, added.len() as u64);
+        {
+            let mut queue = lock(&self.job.queue);
+            for index in added.rev() {
+                queue.items.push_front(Work::new(Target::Remove(index)));
+            }
+        }
+        self.job.work_ready.notify_all();
+        Outcome::Expanded
+    }
+
     fn remove(&self, index: usize, work: &Work) -> Outcome {
         let item = lock(&self.plan).removals[index].clone();
         *lock(&self.job.current_path) = Some(item.path.clone());
@@ -819,9 +844,31 @@ impl Run<'_> {
         }
     }
 
-    fn recycle(&self, index: usize, apartment: Option<&Apartment>) -> Outcome {
+    fn recycle(&self, index: usize, work: &Work, apartment: Option<&Apartment>) -> Outcome {
         let path = lock(&self.plan).recycles[index].clone();
         *lock(&self.job.current_path) = Some(path.clone());
+        if matches!(work.resolution, Some(Resolution::DeletePermanently)) {
+            return self.expand_permanent(&path);
+        }
+        // The shell would delete for good, silently, what its bin cannot
+        // take; ask first.
+        let stop = || self.job.control.is_cancelled();
+        let size = match plan::tree_size(&path, &stop) {
+            Ok(size) => size,
+            Err(PlanError::Cancelled) => return Outcome::Cancelled,
+            Err(PlanError::Source(_)) => return Outcome::Done,
+        };
+        let capacity = self
+            .engine
+            .config
+            .recycle_bin_capacity
+            .map_or_else(|| bin::capacity(&path), bin::Capacity::Bytes);
+        if !capacity.fits(size) {
+            return Outcome::Conflict {
+                kind: ConflictKind::RecycleBinTooSmall { size },
+                destination: None,
+            };
+        }
         let Some(apartment) = apartment else {
             tracing::error!("a Recycle Bin delete ran without COM");
             return Outcome::Failed;

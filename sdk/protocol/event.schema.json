@@ -368,6 +368,26 @@
           ]
         },
         {
+          "description": "The Recycle Bin cannot take the item: it is bigger than the bin, the\nbin is turned off, or the drive has none. Nothing was deleted; only\n`delete_permanently` or `skip` answer this.",
+          "type": "object",
+          "properties": {
+            "size": {
+              "description": "The item's size in bytes (a folder's whole contents).",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "recycle_bin_too_small"
+            }
+          },
+          "required": [
+            "type",
+            "size"
+          ]
+        },
+        {
           "description": "Any other error.",
           "type": "object",
           "properties": {

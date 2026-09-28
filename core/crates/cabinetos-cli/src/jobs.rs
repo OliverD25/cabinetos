@@ -68,8 +68,9 @@ pub(crate) async fn run(client: &mut PipeClient, job: JobRun) -> anyhow::Result<
                                 }
                             }
                             None => screen.line(&format!(
-                                "  decide with: cabinetos-cli job resolve {job_id} {} overwrite|skip|rename",
-                                conflict.conflict_id
+                                "  decide with: cabinetos-cli job resolve {job_id} {} {}",
+                                conflict.conflict_id,
+                                answers(&conflict.kind)
                             )),
                         }
                     }
@@ -222,6 +223,10 @@ fn describe_conflict(conflict: &Conflict) -> String {
         ConflictKind::PathTooLong => "path too long".to_owned(),
         ConflictKind::DiskFull => "disk full; the job is paused".to_owned(),
         ConflictKind::SourceVanished => "the source is gone".to_owned(),
+        ConflictKind::RecycleBinTooSmall { size } => format!(
+            "the Recycle Bin cannot take it ({}); nothing was deleted",
+            decimal(*size)
+        ),
         ConflictKind::Io { code, message } => format!("error {code}: {message}"),
     };
     let target = conflict
@@ -233,6 +238,14 @@ fn describe_conflict(conflict: &Conflict) -> String {
         "conflict {}: {what}: {}{target}",
         conflict.conflict_id, conflict.source
     )
+}
+
+/// The answers that fit a conflict.
+fn answers(kind: &ConflictKind) -> &'static str {
+    match kind {
+        ConflictKind::RecycleBinTooSmall { .. } => "delete-permanently|skip",
+        _ => "overwrite|skip|rename|retry",
+    }
 }
 
 /// `45%`, by bytes when there are bytes to count, else by files.

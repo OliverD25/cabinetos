@@ -42,7 +42,7 @@ connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":4,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":5,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
@@ -57,7 +57,9 @@ waits for a decision. Every other request works without `hello`.
 
 Protocol version 3 (Phase 3) added the configuration, command and keymap
 messages, and made the `list_directory` options `include_hidden` and `sort`
-optional. Version 4 (Phase 4) added the jobs.
+optional. Version 4 (Phase 4) added the jobs. Version 5 (Phase 7) added
+the Recycle Bin conflict (`recycle_bin_too_small`, `delete_permanently`,
+`invalid_resolution`).
 
 ## Requests and replies
 
@@ -102,6 +104,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `config_error` | The configuration file cannot be changed now: it has an error the user must fix first, or it cannot be written. |
 | `no_such_job` | No job has that `job_id`. |
 | `no_such_conflict` | The job has no waiting conflict with that `conflict_id`. |
+| `invalid_resolution` | The resolution does not fit the conflict, such as `delete_permanently` for a file that exists. |
 
 Requests on one connection are independent: `list_directory`,
 `volume_info`, `set_keybinding`, `reset_keybinding` and `start_job` run in
@@ -399,12 +402,15 @@ disconnects, and `list_jobs` from any connection shows it.
   `eta_seconds` are absent when there is nothing to say.
 - `job_conflict`: `kind` is `file_exists` (with both sizes and write times
   as FILETIME ticks), `access_denied`, `sharing_violation`,
-  `path_too_long`, `disk_full`, `source_vanished` or `io` (with `code` and
-  `message`). The file waits; the job goes on.
+  `path_too_long`, `disk_full`, `source_vanished`, `recycle_bin_too_small`
+  (with the item's `size`) or `io` (with `code` and `message`). The file
+  waits; the job goes on.
 - `resolution` is `{"type":"overwrite"}`, `{"type":"skip"}`,
   `{"type":"rename"}` (a free name) or `{"type":"rename","new_name":"b.txt"}`,
-  `{"type":"retry"}` or `{"type":"cancel_job"}`. A bad `new_name` gets
-  `invalid_path`.
+  `{"type":"retry"}`, `{"type":"delete_permanently"}` (only for
+  `recycle_bin_too_small`) or `{"type":"cancel_job"}`. A bad `new_name`
+  gets `invalid_path`; an answer that does not fit the conflict gets
+  `invalid_resolution`.
 
 ```json
 {"id":"01M…","type":"list_jobs"}

@@ -121,7 +121,14 @@ is moved too.
 
 **Delete** to the Recycle Bin uses the shell's `IFileOperation`, as
 Explorer does, on the job's thread in a single-threaded COM apartment, one
-source at a time (a folder is one operation). A permanent delete removes
+source at a time (a folder is one operation). The shell, told not to ask,
+would delete for good whatever its bin cannot take, without a word. So the
+engine checks first: an item bigger than the volume's bin (its
+`MaxCapacity`, or 5% of the volume when Windows has no size on record), an
+item on a drive whose bin is turned off (`NukeOnDelete`), and an item on a
+drive without a bin (removable and network drives) become a
+`recycle_bin_too_small` conflict, and nothing is deleted until the user
+answers `delete_permanently` or `skip`. A permanent delete removes
 files with `DeleteFileW` and folders with `RemoveDirectoryW`, contents
 before their folder. A link (symbolic link or junction) is removed, never
 followed, so what it points to is safe. A read-only file is an
@@ -158,6 +165,7 @@ copy a.txt, replacing: done
 | `path_too_long` | The destination file system refuses the length. | |
 | `disk_full` | The destination is full. | The whole job pauses: every other file would fail the same way. Any decision on this conflict resumes the job. |
 | `source_vanished` | The source disappeared after the scan. | No event: the file counts as failed. |
+| `recycle_bin_too_small` | A Recycle Bin delete of an item the bin cannot take. Carries the item's `size`. | Nothing is deleted. Only `delete_permanently` or `skip` answer it (`retry` checks again, for example after the bin was made bigger); any other answer gets `invalid_resolution`. No policy answers it on its own; a rule made with `apply_to_same_kind` does. |
 | `io` | Any other error, with the Windows code and text. | Also used when `verify` finds a difference (code 23); the bad copy is removed first. |
 
 Decisions (`resolve_conflict`):
@@ -168,6 +176,7 @@ Decisions (`resolve_conflict`):
 | `skip` | Leave the file out; it counts in `files_skipped`. A skipped folder skips everything in it. |
 | `rename` | Copy or move under another name in the same folder: `new_name`, or without it a free name `name (2).ext`. |
 | `retry` | Try once more, the same way. |
+| `delete_permanently` | Delete for good what the Recycle Bin cannot take. Answers only `recycle_bin_too_small`. |
 | `cancel_job` | Stop the whole job. |
 
 - `apply_to_same_kind: true` also answers the job's other waiting

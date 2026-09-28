@@ -721,9 +721,134 @@ fn the_recycle_bin_takes_a_file() {
         None,
         JobOptions::default(),
     );
-    let (last, conflicts) = engine.finish(job);
-    assert_eq!(last.state, JobState::Completed, "{conflicts:?}");
+    // An account without a Recycle Bin (possible on a CI runner) gets the
+    // conflict instead of a silent permanent delete.
+    let deadline = Instant::now() + JOB_DEADLINE;
+    loop {
+        match engine.next(job, deadline) {
+            Some(Event::JobConflict(conflict)) => {
+                assert!(
+                    matches!(conflict.kind, ConflictKind::RecycleBinTooSmall { size: 10 }),
+                    "{conflict:?}"
+                );
+                eprintln!(
+                    "this account has no usable Recycle Bin here; deleting for good as decided"
+                );
+                engine
+                    .manager
+                    .resolve(
+                        job,
+                        conflict.conflict_id,
+                        &Resolution::DeletePermanently,
+                        false,
+                    )
+                    .unwrap();
+            }
+            Some(Event::JobStateChanged { state, .. }) if state.is_terminal() => {
+                assert_eq!(state, JobState::Completed);
+                break;
+            }
+            Some(_) => {}
+            None => panic!("the delete did not end"),
+        }
+    }
     assert!(!file.exists());
+}
+
+#[test]
+fn a_file_too_big_for_the_recycle_bin_waits_for_an_explicit_decision() {
+    // The bin is made 1 MiB; nothing here reaches the real Recycle Bin: the
+    // check comes before the shell, skip keeps the file, and a permanent
+    // delete uses DeleteFileW.
+    let dir = scratch("toobig");
+    let big = dir.path().join("big.bin");
+    write_file(&big, 2 * 1024 * 1024, 1);
+    let engine = engine_with(EngineConfig {
+        recycle_bin_capacity: Some(1024 * 1024),
+        ..EngineConfig::default()
+    });
+    let recycle = |engine: &Engine| {
+        engine.start(
+            JobKind::Delete { permanent: false },
+            &[&big],
+            None,
+            JobOptions::default(),
+        )
+    };
+
+    let job = recycle(&engine);
+    let conflicts = engine.conflicts_and_progress(job, 1, 0);
+    assert_eq!(
+        conflicts[0].kind,
+        ConflictKind::RecycleBinTooSmall {
+            size: 2 * 1024 * 1024
+        }
+    );
+    assert!(big.exists(), "nothing is deleted before the decision");
+    for wrong in [Resolution::Overwrite, Resolution::Rename { new_name: None }] {
+        assert!(matches!(
+            engine
+                .manager
+                .resolve(job, conflicts[0].conflict_id, &wrong, false),
+            Err(JobError {
+                code: ErrorCode::InvalidResolution,
+                ..
+            })
+        ));
+    }
+    engine
+        .manager
+        .resolve(job, conflicts[0].conflict_id, &Resolution::Skip, false)
+        .unwrap();
+    let (last, _) = engine.finish(job);
+    assert_eq!((last.state, last.files_skipped), (JobState::Completed, 1));
+    assert!(big.exists(), "skip keeps the file");
+
+    let job = recycle(&engine);
+    let conflicts = engine.conflicts_and_progress(job, 1, 0);
+    engine
+        .manager
+        .resolve(
+            job,
+            conflicts[0].conflict_id,
+            &Resolution::DeletePermanently,
+            false,
+        )
+        .unwrap();
+    let (last, _) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(!big.exists(), "deleted for good, as decided");
+
+    // Delete permanently answers only this conflict.
+    let other = dir.path().join("other.txt");
+    fs::write(&other, "x").unwrap();
+    let destination = dir.path().join("dst");
+    fs::create_dir_all(&destination).unwrap();
+    fs::write(destination.join("other.txt"), "old").unwrap();
+    let job = engine.start(
+        JobKind::Copy,
+        &[&other],
+        Some(&destination),
+        JobOptions::default(),
+    );
+    let conflicts = engine.conflicts_and_progress(job, 1, 0);
+    assert!(matches!(
+        engine.manager.resolve(
+            job,
+            conflicts[0].conflict_id,
+            &Resolution::DeletePermanently,
+            false
+        ),
+        Err(JobError {
+            code: ErrorCode::InvalidResolution,
+            ..
+        })
+    ));
+    engine
+        .manager
+        .resolve(job, conflicts[0].conflict_id, &Resolution::Skip, false)
+        .unwrap();
+    engine.finish(job);
 }
 
 #[test]

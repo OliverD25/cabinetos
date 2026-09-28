@@ -234,6 +234,13 @@ pub enum ConflictKind {
     DiskFull,
     /// The source disappeared before it was handled.
     SourceVanished,
+    /// The Recycle Bin cannot take the item: it is bigger than the bin, the
+    /// bin is turned off, or the drive has none. Nothing was deleted; only
+    /// `delete_permanently` or `skip` answer this.
+    RecycleBinTooSmall {
+        /// The item's size in bytes (a folder's whole contents).
+        size: u64,
+    },
     /// Any other error.
     Io {
         /// The Windows error code.
@@ -254,6 +261,7 @@ impl ConflictKind {
             Self::PathTooLong => "path_too_long",
             Self::DiskFull => "disk_full",
             Self::SourceVanished => "source_vanished",
+            Self::RecycleBinTooSmall { .. } => "recycle_bin_too_small",
             Self::Io { .. } => "io",
         }
     }
@@ -278,6 +286,9 @@ pub enum Resolution {
     },
     /// Try once more, the same way.
     Retry,
+    /// Delete for good what the Recycle Bin cannot take. Answers only a
+    /// `recycle_bin_too_small` conflict.
+    DeletePermanently,
     /// Stop the whole job.
     CancelJob,
 }

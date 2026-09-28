@@ -668,6 +668,9 @@ pub enum ErrorCode {
     NoSuchJob,
     /// The job has no waiting conflict with that `conflict_id`.
     NoSuchConflict,
+    /// The resolution does not fit the conflict, such as
+    /// `delete_permanently` for a file that exists.
+    InvalidResolution,
 }
 
 #[cfg(test)]
@@ -1067,6 +1070,7 @@ mod tests {
             (ErrorCode::ConfigError, "config_error"),
             (ErrorCode::NoSuchJob, "no_such_job"),
             (ErrorCode::NoSuchConflict, "no_such_conflict"),
+            (ErrorCode::InvalidResolution, "invalid_resolution"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));
@@ -1261,5 +1265,13 @@ mod tests {
         ];
         assert!(!alive.iter().any(JobState::is_terminal));
         assert_eq!(ConflictKind::DiskFull.tag(), "disk_full");
+        assert_eq!(
+            ConflictKind::RecycleBinTooSmall { size: 1 }.tag(),
+            "recycle_bin_too_small"
+        );
+        assert_eq!(
+            serde_json::to_value(Resolution::DeletePermanently).unwrap(),
+            json!({"type": "delete_permanently"})
+        );
     }
 }

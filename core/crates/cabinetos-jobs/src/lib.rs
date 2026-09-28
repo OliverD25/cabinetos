@@ -20,9 +20,11 @@
 //! Serves Constitution Article 1 (Zero-Compromise Performance: the interface
 //! never freezes during heavy file operations; the engine never blocks the
 //! caller) and Article 5 (Dual-Pane Foundation: transfers between panes).
-//! Brief §3. Unsafe code is allowed only in `win` and `recycle`, each block
-//! with a `SAFETY:` comment.
+//! Brief §3. Unsafe code is allowed only in `win`, `recycle` and `bin`, each
+//! block with a `SAFETY:` comment.
 
+#[allow(unsafe_code)]
+mod bin;
 mod job;
 mod plan;
 pub mod progress;
@@ -68,6 +70,9 @@ pub struct EngineConfig {
     pub progress_gap: Duration,
     /// Finished jobs `list_jobs` still shows; older ones are forgotten.
     pub finished_jobs_kept: usize,
+    /// The size of every volume's Recycle Bin, instead of what Windows
+    /// says. For tests; the core leaves it `None`.
+    pub recycle_bin_capacity: Option<u64>,
 }
 
 impl Default for EngineConfig {
@@ -78,6 +83,7 @@ impl Default for EngineConfig {
             unbuffered_from: 256 * 1024 * 1024,
             progress_gap: progress::MIN_PROGRESS_GAP,
             finished_jobs_kept: 100,
+            recycle_bin_capacity: None,
         }
     }
 }
@@ -444,6 +450,28 @@ impl JobQueueManager {
         }
         let resolved_disk_full = {
             let mut queue = lock(&job.queue);
+            let kind = queue
+                .parked
+                .get(&conflict_id)
+                .map(|parked| kind_tag(&parked.conflict))
+                .ok_or_else(no_conflict)?;
+            // Only an explicit answer to the Recycle Bin conflict may turn a
+            // recoverable delete into a permanent one, and that conflict
+            // takes no other answer.
+            let fits = match (resolution, kind) {
+                (
+                    Resolution::DeletePermanently | Resolution::Skip | Resolution::Retry,
+                    "recycle_bin_too_small",
+                ) => true,
+                (Resolution::DeletePermanently, _) | (_, "recycle_bin_too_small") => false,
+                _ => true,
+            };
+            if !fits {
+                return Err(JobError::new(
+                    ErrorCode::InvalidResolution,
+                    format!("{resolution:?} does not answer a {kind} conflict"),
+                ));
+            }
             let parked = queue.parked.remove(&conflict_id).ok_or_else(no_conflict)?;
             let tag = kind_tag(&parked.conflict);
             let mut resolved = vec![(parked.work, resolution.clone())];

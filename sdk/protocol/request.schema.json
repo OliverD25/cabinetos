@@ -607,6 +607,19 @@
           ]
         },
         {
+          "description": "Delete for good what the Recycle Bin cannot take. Answers only a\n`recycle_bin_too_small` conflict.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "delete_permanently"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
           "description": "Stop the whole job.",
           "type": "object",
           "properties": {
