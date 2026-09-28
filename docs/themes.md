@@ -27,6 +27,9 @@ How the window applies a theme, and its theme picker:
   when the theme in effect changes, and when its file is saved.
 - A theme that is not valid is never applied, not even in part: the last
   good theme stays, and a `config_error` event says why.
+- 36 more themes, ported from the most popular editor themes, are in
+  `sdk/themes/collection` for the marketplace, not in the core (see "The
+  collection").
 
 ## The folder
 
@@ -190,6 +193,93 @@ cabinetos-cli events watch
 `themes list` marks the theme in effect with `*`. `themes show` prints a
 whole theme as JSON: the one named, or the one in effect.
 
+## The collection
+
+`sdk/themes/collection` holds 36 themes ported from 27 of the 30 most
+popular editor themes (the creator's list of 2026-09-28): GitHub, One Dark
+Pro, Dracula, Material Theme, Ayu, Monokai, Night Owl, Tokyo Night,
+Solarized, Gruvbox, Catppuccin and more, with their well-known light and
+dark variants. 27 are dark and 9 are light. The folder has:
+
+- `<id>.json`: one theme per file, in the format above.
+- [README.md](../sdk/themes/collection/README.md): the list, with each
+  theme's kind and source, how a palette becomes a theme, and the contrast
+  of each.
+- [NOTICES.md](../sdk/themes/collection/NOTICES.md): the source, author,
+  license and exact commit of every theme, what the port derives, and
+  what was left out and why (City Lights, whose license forbids ports;
+  Dainty, whose colours are not published anywhere).
+- `marketplace.csv`: each theme's line in the marketplace: `id`,
+  `license`, `source` and `description`.
+
+**Why not in the core.** Constitution Article 10 (the Zero-Bloat
+Foundation): the core ships the four themes above, and everything else is
+opt-in through the marketplace. The core neither embeds these files nor
+writes them into the themes folder. A user installs the themes they want,
+one by one.
+
+**Installing one.** In the marketplace view: the Themes tab, then "Install
+and apply". From the command line:
+
+```text
+cabinetos-cli market install dracula
+cabinetos-cli config set ui.theme dracula
+```
+
+A theme installed this way lands in the themes folder like any other and
+can be uninstalled again (`cabinetos-cli market uninstall dracula`, once
+another theme is in effect). The marketplace needs an index that offers
+the collection. The public index does not exist yet
+([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)); when
+the creator publishes it, the collection goes with it. Until then,
+`build-index.ps1` builds a local one with `-Collection`:
+
+```text
+powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> -Collection
+cabinetos-cli config set marketplace.index "<folder>"
+cabinetos-cli market refresh
+```
+
+Without `-Collection` the script builds the index it always did: the
+fixture plugins and the four shipped themes. With it, each collection
+theme becomes one more item, in the order of `marketplace.csv`, whose row
+gives the item's description, license and source link (the marketplace
+view's Source button opens it). Copying a file by hand into the themes
+folder works too; the marketplace then leaves that theme alone, as it
+does a shipped one ([marketplace.md](marketplace.md), trust rule 7).
+
+**How the colours were chosen.** Every colour comes from the theme's own
+repository at a fixed commit, under an open license (all MIT). The same
+mapping serves every theme: the backdrop's Mica tint is the darkest of the
+source's editor, side bar and panel backgrounds; the panes are a step
+lighter; the accent is the theme's signature colour; the terminal gets the
+theme's terminal colours. Every theme reaches 4.5:1 for body text as the
+window draws it: row names and details on a plain, hovered and selected
+row, the status bar, menus, dialogs and the terminal. Where a theme's own
+muted colours are too dim for that, the collection uses its main text at
+a lower alpha instead; the README lists each case.
+
+**Adding a theme.**
+
+1. Take the colours only from a source under an open license (MIT, BSD,
+   Apache-2.0, CC0, or terms of the theme's own that allow a port), and
+   read its license file at a fixed commit. A theme whose license cannot
+   be established stays out.
+2. Write `sdk/themes/collection/<id>.json` in the format above: `version`
+   `1.0.0`, `author` as "<the palette's author>, port by CabinetOS", and an
+   `attribution` that names the source and its license. The ID must not
+   be a shipped theme's.
+3. Check it: a core with `CABINETOS_THEMES_DIR` at a scratch copy of the
+   collection lists it (`cabinetos-cli themes list`) and applies it
+   (`cabinetos-cli config set ui.theme <id>`), and its text reaches the
+   contrast above.
+4. Add its row to `NOTICES.md` (source, files read, copyright notice,
+   license, version and commit) and to `README.md`, and its line to
+   `marketplace.csv`. `build-index.ps1 -Collection` stops when a theme has
+   no line there.
+
 ## Not yet
 
-- There are no light themes yet; `light` is there for them.
+- No light theme ships with the core; the collection has nine.
+- The collection can be installed only from a local index until the
+  public one exists ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)).
