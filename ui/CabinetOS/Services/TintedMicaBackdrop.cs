@@ -48,6 +48,20 @@ internal sealed partial class TintedMicaBackdrop : SystemBackdrop
         _controller.SetSystemBackdropConfiguration(GetDefaultSystemBackdropConfiguration(connectedTarget, xamlRoot));
     }
 
+    /// <summary>
+    /// The window's light or dark changed (a theme's <c>kind</c>): Mica
+    /// follows. The base version is not called: on Windows App SDK 2.5 it
+    /// throws "The parameter is incorrect" for this target, which ended the
+    /// window when a light theme was applied (seen 2026-09-28).
+    /// </summary>
+    protected override void OnDefaultSystemBackdropConfigurationChanged(ICompositionSupportsSystemBackdrop target, XamlRoot xamlRoot)
+    {
+        if (_controller is { } controller && target is not null && xamlRoot is not null)
+        {
+            controller.SetSystemBackdropConfiguration(GetDefaultSystemBackdropConfiguration(target, xamlRoot));
+        }
+    }
+
     /// <inheritdoc/>
     protected override void OnTargetDisconnected(ICompositionSupportsSystemBackdrop disconnectedTarget)
     {

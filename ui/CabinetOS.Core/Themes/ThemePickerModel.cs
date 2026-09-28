@@ -71,7 +71,13 @@ public sealed class ThemePickerModel(ICoreChannel core)
                 var current = Rows.ToList().FindIndex(r => r.IsCurrent);
                 Highlight = Rows.Count == 0 ? -1 : Math.Max(0, current);
                 Changed?.Invoke();
-                await Task.WhenAll(Rows.Select(r => ReadTintAsync(r.Info.Id, load)));
+                // The core answers these on its own threads, in any order: the tints are set together once all came.
+                var tints = await Task.WhenAll(Rows.Select(r => ReadTintAsync(r.Info.Id)));
+                if (load == _load && tints.Any(t => t is not null))
+                {
+                    Rows = Rows.Select((row, i) => row with { Tint = tints[i] }).ToList();
+                    Changed?.Invoke();
+                }
                 return true;
             case ErrorReply { Code: ErrorCodes.UnknownRequest }:
                 return Fail("This core has no themes yet (list_themes).");
@@ -140,29 +146,16 @@ public sealed class ThemePickerModel(ICoreChannel core)
         }
     }
 
-    private async Task ReadTintAsync(string id, int load)
+    // The theme's Mica tint; null for plain Mica, and for a file that cannot be read (list_themes listed it anyway).
+    private async Task<string?> ReadTintAsync(string id)
     {
-        CoreReply reply;
         try
         {
-            reply = await core.RequestAsync(new GetThemeRequest { ThemeId = id });
+            return await core.RequestAsync(new GetThemeRequest { ThemeId = id }) is ThemeReply { Theme.Mica.Tint: var tint } ? tint : null;
         }
         catch (IOException)
         {
-            return;
-        }
-        if (load != _load || reply is not ThemeReply { Theme: var theme })
-        {
-            // A theme whose file cannot be read keeps a plain swatch; list_themes listed it anyway.
-            return;
-        }
-        var rows = Rows.ToList();
-        var index = rows.FindIndex(r => r.Info.Id == id);
-        if (index >= 0 && theme.Mica is { Tint: var tint })
-        {
-            rows[index] = rows[index] with { Tint = tint };
-            Rows = rows;
-            Changed?.Invoke();
+            return null;
         }
     }
 
