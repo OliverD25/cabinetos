@@ -14,14 +14,16 @@ The code is in `ui/`, a C# solution on .NET 10 and the Windows App SDK 2.5
 
 ## At a glance
 
-Measured on 2026-09-28 on the development PC (Windows 11 25H2, debug builds
-of the UI and the core):
+Measured on 2026-09-28 on the development PC (Windows 11 25H2, release
+builds of the UI and the core). The screen was locked during these runs,
+and Windows then draws only about 33 frames per second, so a time that ends
+at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | What | Result |
 |---|---|
-| Start to both panes shown (profile and Documents) | see "Live check" in the Phase 5 report |
-| Enter on a folder of 100,000 entries, until its first rows are drawn | see "Live check" in the Phase 5 report |
-| Scrolling that folder with PageDown held for 5 s | see "Live check" in the Phase 5 report |
+| Start of `Main` to both panes shown (profile and Documents) | 0.82–0.87 s |
+| Going to a folder of 100,000 entries, until its first rows are drawn | 82 ms: the core lists it in 38 ms, the reply arrives at 39 ms, the first row is made at 61 ms |
+| Scrolling that folder with PageDown held for 5 s | not measured yet: it needs an unlocked screen |
 | Closing the window, until the core has exited | 0.4 s |
 
 ## The solution
@@ -50,8 +52,8 @@ cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabineto
 ```
 
 The window needs the Windows App Runtime 2.5 (x64) on the machine; it is
-used from there, not copied next to the program (see "Decisions" in the
-Phase 5 report). The tests run from `ui/`, where `global.json` switches
+used from there, not copied next to the program (why, and how to install
+it: [dev-setup.md](dev-setup.md), "Phase 5"). The tests run from `ui/`, where `global.json` switches
 `dotnet test` to the Microsoft.Testing.Platform mode that xunit v3 needs:
 
 ```bash
