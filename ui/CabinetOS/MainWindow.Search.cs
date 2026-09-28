@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CabinetOS.Core.Commands;
 using CabinetOS.Core.Search;
 using CabinetOS.Services;
@@ -37,10 +38,14 @@ public sealed partial class MainWindow
             SearchBox.Focus(FocusState.Keyboard);
             SearchBox.SelectAll();
         });
-        // The pane's "Whole volume" box; not in the core's registry.
-        _router.RegisterLocal("search.scope", invocation =>
+        // The pane's "Whole volume" box passes its state; from the palette or a key it toggles.
+        _router.RegisterUiHandler("search.scope", invocation =>
         {
-            _search.SetWholeVolume(CommandArgs.Bool(invocation.Args, "wholeVolume"));
+            var wanted = invocation.Args is { ValueKind: JsonValueKind.Object } args
+                && args.TryGetProperty("wholeVolume", out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False
+                    ? value.GetBoolean()
+                    : !_search.WholeVolume;
+            _search.SetWholeVolume(wanted);
             return SearchWhenDueAsync(now: true);
         });
     }

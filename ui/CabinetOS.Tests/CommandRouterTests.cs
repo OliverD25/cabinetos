@@ -127,26 +127,44 @@ public class CommandRouterTests
     }
 
     [Fact]
-    public async Task A_window_command_is_listed_for_the_palette_until_the_registry_has_it()
+    public async Task A_window_command_runs_its_handler_before_the_registry_lists_it_and_after()
     {
         var (router, core) = Create();
         var runs = 0;
-        var info = new CommandInfo("plugins.list", "Plugins", "Show Plugins", [], [], new CommandSource("window", null, null), "ui", null, false);
-        router.RegisterWindowCommand(info, _ =>
-        {
-            runs++;
-            return Task.CompletedTask;
-        });
+        router.RegisterUiHandler("transfer.pause", _ => runs++);
 
-        Assert.Equal("plugins.list", Assert.Single(router.WindowCommands).Id);
-        Assert.Equal(CommandOutcomeKind.RanInUi, (await router.ExecuteAsync("plugins.list", trigger: "palette")).Kind);
+        // Before list_commands answered, or from a core older than protocol 11.
+        Assert.Equal(CommandOutcomeKind.RanInUi, (await router.ExecuteAsync("transfer.pause", trigger: "button")).Kind);
         Assert.Empty(core.Requests);
 
-        // Once the core registers it, the registry's entry is listed and the same handler runs it.
-        router.SetCommands([.. Registry, info with { Source = new CommandSource("core", null, null) }]);
-        Assert.Empty(router.WindowCommands);
-        Assert.Equal(CommandOutcomeKind.RanInUi, (await router.ExecuteAsync("plugins.list")).Kind);
+        // Protocol 11 lists it with target ui: the same handler runs it.
+        router.SetCommands([.. Registry, Command("transfer.pause", "ui")]);
+        Assert.Equal(CommandOutcomeKind.RanInUi, (await router.ExecuteAsync("transfer.pause", trigger: "palette")).Kind);
         Assert.Equal(2, runs);
+        Assert.Empty(core.Requests);
+    }
+
+    [Fact]
+    public async Task A_plugin_command_from_the_palette_gets_the_active_panes_files_and_one_from_the_menu_keeps_its_own()
+    {
+        var (router, core) = Create(request => request is ExecuteCommandRequest
+            ? new CommandResultReply(JsonDocument.Parse("{}").RootElement.Clone())
+            : new ErrorReply(ErrorCodes.UnknownRequest, request.Type));
+        var size = new CommandInfo("reader.size", "Reader", "Size", [], [], new CommandSource("plugin", "reader", "Reader"), "core", "filesView", false);
+        router.SetCommands([.. Registry, size]);
+        using var files = JsonDocument.Parse("""{"path":"C:\\data\\a.txt","paths":["C:\\data\\a.txt","C:\\data\\b.txt"]}""");
+        router.PluginArgs = _ => files.RootElement.Clone();
+
+        await router.ExecuteAsync("reader.size", trigger: "palette");
+        using var menu = JsonDocument.Parse("""{"path":"C:\\data\\c.txt"}""");
+        await router.ExecuteAsync("reader.size", menu.RootElement.Clone(), "menu");
+        await router.ExecuteAsync("help.about", trigger: "palette");
+
+        var sent = core.Requests.OfType<ExecuteCommandRequest>().ToList();
+        Assert.Equal(2, sent[0].Args!.Value.GetProperty("paths").GetArrayLength());
+        Assert.Equal(@"C:\data\c.txt", sent[1].Args!.Value.GetProperty("path").GetString());
+        // Only plugin commands get the files: a core command keeps no arguments.
+        Assert.Null(sent[2].Args);
     }
 
     [Fact]

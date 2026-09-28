@@ -50,28 +50,9 @@ public sealed partial class MainWindow
 
     private void RegisterToolCommands()
     {
-        // Ctrl+K V, a binding of the window's own until the core registers the command (ApplyKeymap).
-        _router.RegisterWindowCommand(
-            new CommandInfo("editor.openMarkdownPreview", "Editor", "Open Markdown Preview", ["ctrl+k v"], ["ctrl+k v"],
-                new CommandSource("window", null, null), "ui", KeyContexts.FilesView, false),
-            OpenMarkdownPreviewAsync);
-        _router.RegisterLocal("editor.close", invocation => CloseEditor(EditorPaneOf(invocation.Args), focusPane: true));
-        _router.RegisterLocal("editor.reload", invocation => ReloadEditorAsync(EditorPaneOf(invocation.Args)));
-    }
-
-    // The window's own bindings, added to the core's keymap where they take nothing from it.
-    private static Keymap WithWindowBindings(Keymap keymap)
-    {
-        if (!KeySequence.TryParse("ctrl+k v", out var keys))
-        {
-            return keymap;
-        }
-        if (keymap.With(new Binding(keys, "editor.openMarkdownPreview", KeyContexts.FilesView)) is { } merged)
-        {
-            return merged;
-        }
-        Diag.Info(ToolsTarget, "ctrl+k v is taken in the keymap; Open Markdown Preview keeps no keys");
-        return keymap;
+        _router.RegisterUiHandler("editor.openMarkdownPreview", OpenMarkdownPreviewAsync);
+        _router.RegisterUiHandler("editor.close", invocation => CloseEditor(EditorPaneOf(invocation.Args), focusPane: true));
+        _router.RegisterUiHandler("editor.reload", invocation => ReloadEditorAsync(EditorPaneOf(invocation.Args)));
     }
 
     private void ApplyToolKeys(Keymap keymap)

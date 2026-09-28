@@ -550,7 +550,7 @@ public sealed partial class MainWindow : Window
     // The window's keys (with its own bindings), and the few a terminal or a tool passes back to it.
     private void ApplyKeymap(Keymap keymap)
     {
-        _keys.SetKeymap(WithWindowBindings(keymap));
+        _keys.SetKeymap(keymap);
         _terminal.SetKeymap(keymap);
         ApplyToolKeys(keymap);
     }
@@ -906,17 +906,18 @@ public sealed partial class MainWindow : Window
             }
         });
 
-        // Commands of the window's own controls, not in the core's registry.
-        _router.RegisterLocal("transfer.pause", invocation => ControlShownAsync(JobActions.Pause, invocation));
-        _router.RegisterLocal("transfer.resume", invocation => ControlShownAsync(JobActions.Resume, invocation));
-        _router.RegisterLocal("transfer.cancel", invocation => ControlShownAsync(JobActions.Cancel, invocation));
-        _router.RegisterLocal("transfer.close", _ => _transfers.Close());
-        _router.RegisterLocal("transfer.minimize", _ => _transfers.Minimize());
-        _router.RegisterLocal("transfer.restore", _ => _transfers.Restore());
-        _router.RegisterLocal("transfer.next", _ => _transfers.ShowNext());
-        _router.RegisterLocal("conflict.resolve", ResolveConflictAsync);
-        _router.RegisterLocal("sidebar.pin", PinAsync);
-        _router.RegisterLocal("sidebar.unpin", UnpinAsync);
+        // The window's own buttons and menus, in the core's registry since protocol 11: the
+        // buttons pass arguments (a path, a decision) that the palette and keys leave out.
+        _router.RegisterUiHandler("transfer.pause", invocation => ControlShownAsync(JobActions.Pause, invocation));
+        _router.RegisterUiHandler("transfer.resume", invocation => ControlShownAsync(JobActions.Resume, invocation));
+        _router.RegisterUiHandler("transfer.cancel", invocation => ControlShownAsync(JobActions.Cancel, invocation));
+        _router.RegisterUiHandler("transfer.close", _ => _transfers.Close());
+        _router.RegisterUiHandler("transfer.minimize", _ => _transfers.Minimize());
+        _router.RegisterUiHandler("transfer.restore", _ => _transfers.Restore());
+        _router.RegisterUiHandler("transfer.next", _ => _transfers.ShowNext());
+        _router.RegisterUiHandler("conflict.resolve", ResolveConflictAsync);
+        _router.RegisterUiHandler("sidebar.pin", PinAsync);
+        _router.RegisterUiHandler("sidebar.unpin", UnpinAsync);
         RegisterTerminalCommands();
         RegisterSearchCommands();
         RegisterPluginCommands();
@@ -925,6 +926,32 @@ public sealed partial class MainWindow : Window
         RegisterMarketCommands();
 
         _router.Completed += OnCommandCompleted;
+        // A plugin's command from the palette or a key gets the active pane's files, as the
+        // context menu passes them (docs/plugins.md, "What the shell passes").
+        _router.PluginArgs = _ => ActivePaneFiles();
+    }
+
+    private JsonElement ActivePaneFiles()
+    {
+        var pane = Active;
+        var fields = new List<(string Name, object? Value)>();
+        if (pane.Search is null)
+        {
+            if (pane.EntryAt(pane.FocusIndex) is { } focused)
+            {
+                fields.Add(("path", focused.Path));
+            }
+            if (pane.Selection.SelectedCount > 0)
+            {
+                fields.Add(("paths", pane.Targets().Select(t => t.Path).ToList()));
+            }
+        }
+        else if (pane.FocusedHit is { } hit)
+        {
+            fields.Add(("path", hit.Hit.Path));
+            fields.Add(("paths", new List<string> { hit.Hit.Path }));
+        }
+        return CommandArgs.Object([.. fields]);
     }
 
     private void OnCommandCompleted(CommandOutcome outcome)
@@ -1465,8 +1492,20 @@ public sealed partial class MainWindow : Window
     {
         var id = CommandArgs.Number(invocation.Args, "conflict_id");
         var resolution = CommandArgs.Text(invocation.Args, "resolution");
-        if (id is null || resolution is null
-            || _transfers.Conflicts.Waiting.FirstOrDefault(c => c.ConflictId == id) is not { } conflict)
+        if (id is null || resolution is null)
+        {
+            // From the palette or a key: no decision given, so the flyout shows the waiting conflict.
+            if (_transfers.Conflicts.Current is not null)
+            {
+                _transfers.Restore();
+            }
+            else
+            {
+                ShowNotice("No conflict waits for a decision.");
+            }
+            return;
+        }
+        if (_transfers.Conflicts.Waiting.FirstOrDefault(c => c.ConflictId == id) is not { } conflict)
         {
             return;
         }
@@ -1491,8 +1530,14 @@ public sealed partial class MainWindow : Window
 
     private async Task UnpinAsync(CommandInvocation invocation)
     {
-        if (CommandArgs.Text(invocation.Args, "path") is not { } path)
+        // The sidebar's menu names the row; the palette and keys mean the active pane's folder.
+        var path = CommandArgs.Text(invocation.Args, "path") ?? Active.Path;
+        if (!_sidebar.IsPinned(path))
         {
+            if (invocation.Args is null)
+            {
+                ShowNotice($"{DisplayFormat.FolderName(path)} is not pinned to the sidebar.");
+            }
             return;
         }
         _shell = _shell with { Pinned = _shell.Pinned.Where(p => !string.Equals(p, path, StringComparison.OrdinalIgnoreCase)).ToList() };

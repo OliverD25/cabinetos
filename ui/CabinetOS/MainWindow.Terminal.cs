@@ -57,20 +57,23 @@ public sealed partial class MainWindow
     private void RegisterTerminalCommands()
     {
         _router.RegisterUiHandler("view.toggleTerminal", ToggleTerminalAsync);
-        // The dock's own buttons and the menu's "Open in Terminal"; not in the core's registry yet.
-        _router.RegisterLocal("terminal.new", invocation =>
+        // The dock's own buttons and the menu's "Open in Terminal" pass a session or a folder;
+        // from the palette or a key they come without, and act on the shown shell.
+        _router.RegisterUiHandler("terminal.new", invocation =>
             NewTerminalAsync(CommandArgs.Text(invocation.Args, "profile"), CommandArgs.Text(invocation.Args, "cwd"), invocation.RequestId));
-        _router.RegisterLocal("terminal.show", invocation =>
+        _router.RegisterUiHandler("terminal.show", async invocation =>
         {
-            if (CommandArgs.Number(invocation.Args, "session") is { } session)
+            if (CommandArgs.Number(invocation.Args, "session") is not { } session)
             {
-                _terminal.Show(session);
-                FocusTerminal();
+                await ShowDockAsync(invocation.RequestId);
+                return;
             }
+            _terminal.Show(session);
+            FocusTerminal();
         });
-        _router.RegisterLocal("terminal.close", invocation =>
-            CommandArgs.Number(invocation.Args, "session") is { } session ? _terminal.CloseAsync(session) : Task.CompletedTask);
-        _router.RegisterLocal("terminal.reload", _ => ReloadTerminalAsync());
+        _router.RegisterUiHandler("terminal.close", invocation =>
+            (CommandArgs.Number(invocation.Args, "session") ?? _terminal.Shown?.SessionId) is { } session ? _terminal.CloseAsync(session) : Task.CompletedTask);
+        _router.RegisterUiHandler("terminal.reload", _ => ReloadTerminalAsync());
     }
 
     // Ctrl+`: hidden -> shown, with the keyboard; shown with the keyboard -> the keyboard goes

@@ -22,10 +22,8 @@ public sealed partial class MainWindow
 
     private void RegisterPluginCommands()
     {
-        // In the palette although the core's registry does not have it yet.
-        _router.RegisterWindowCommand(
-            new CommandInfo("plugins.list", "Plugins", "Show Plugins", [], [], new CommandSource("window", null, null), "ui", null, false),
-            _ => ShowPluginsAsync());
+        _router.RegisterUiHandler("plugins.list", _ => ShowPluginsAsync());
+        // The list's and the review's own buttons, not in the core's registry.
         _router.RegisterLocal("plugins.review", invocation =>
             CommandArgs.Text(invocation.Args, "id") is { } id ? ReviewPluginAsync(id) : Task.CompletedTask);
         _router.RegisterLocal("plugins.reload", invocation =>

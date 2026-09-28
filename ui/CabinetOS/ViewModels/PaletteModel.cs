@@ -217,17 +217,6 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
             // A plugin registered a command since the list was read.
             _ = RefreshCommandsAsync();
         }
-        // The window's own commands the core does not list yet (plugins.list), after its hits.
-        // A plain substring match: a stopgap until the core registers and ranks them.
-        foreach (var info in router.WindowCommands)
-        {
-            if (query.Length == 0
-                || $"{info.Category}: {info.Title}".Contains(query, StringComparison.OrdinalIgnoreCase)
-                || info.Id.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                Rows.Add(new PaletteRow(info));
-            }
-        }
         var keep = highlightedId is null ? -1 : IndexOf(highlightedId);
         _highlight = -1;
         SetHighlight(keepHighlight && keep >= 0 ? keep : 0);

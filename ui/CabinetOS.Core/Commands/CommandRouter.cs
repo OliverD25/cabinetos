@@ -55,7 +55,6 @@ public sealed class CommandRouter(ICoreChannel core)
 
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _handlers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _local = new(StringComparer.Ordinal);
-    private readonly List<CommandInfo> _windowCommands = [];
     private Dictionary<string, CommandInfo> _byId = new(StringComparer.Ordinal);
 
     /// <summary>Raised on the calling thread when the command list changed.</summary>
@@ -96,22 +95,12 @@ public sealed class CommandRouter(ICoreChannel core)
     public void RegisterLocal(string commandId, Func<CommandInvocation, Task> handler) => _local[commandId] = handler;
 
     /// <summary>
-    /// Registers a window command the palette must list although the core's
-    /// registry does not have it yet (<c>plugins.list</c>): the palette shows
-    /// it after the core's hits. Its source kind is <c>window</c>, and it cannot
-    /// be rebound until the core registers it; then the registry's entry wins
-    /// and this handler serves it.
+    /// What a plugin's command gets when it runs without arguments (from the
+    /// palette or a key): the files it concerns, as <c>path</c> and
+    /// <c>paths</c> (docs/plugins.md, "What the shell passes"). Null leaves
+    /// the arguments out.
     /// </summary>
-    public void RegisterWindowCommand(CommandInfo info, Func<CommandInvocation, Task> handler)
-    {
-        _local[info.Id] = handler;
-        _handlers[info.Id] = handler;
-        _windowCommands.RemoveAll(c => c.Id == info.Id);
-        _windowCommands.Add(info);
-    }
-
-    /// <summary>The window commands of <see cref="RegisterWindowCommand"/> that the registry does not list.</summary>
-    public IReadOnlyList<CommandInfo> WindowCommands => _windowCommands.Where(c => !_byId.ContainsKey(c.Id)).ToList();
+    public Func<CommandInfo, JsonElement?>? PluginArgs { get; set; }
 
     /// <summary>Reads the command list again (<c>list_commands</c>).</summary>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -163,11 +152,17 @@ public sealed class CommandRouter(ICoreChannel core)
     public async Task<CommandOutcome> ExecuteAsync(string commandId, JsonElement? args = null, string trigger = "api")
     {
         var requestId = Ulid.NewId();
+        var info = Find(commandId);
+        if (args is null && info is { Source.Kind: "plugin" } && PluginArgs?.Invoke(info) is { } files)
+        {
+            args = files;
+        }
         var invocation = new CommandInvocation(commandId, args, requestId, trigger);
         Executing?.Invoke(invocation);
-        var info = Find(commandId);
         CommandOutcome outcome;
-        if (info is null && _local.TryGetValue(commandId, out var local))
+        // A window command the registry does not list (yet: before list_commands answers, or
+        // from an older core) still runs its handler here instead of failing in the core.
+        if (info is null && (_local.TryGetValue(commandId, out var local) || _handlers.TryGetValue(commandId, out local)))
         {
             Log(requestId, commandId, "ui", trigger);
             outcome = await RunHandler(local, invocation);
