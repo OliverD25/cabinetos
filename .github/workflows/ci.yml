@@ -66,6 +66,13 @@ jobs:
       - name: Release build
         run: cargo build --workspace --release
 
+      # Reading the MFT and the change journal needs Administrator rights.
+      # These tests are ignored elsewhere and skip when not elevated; the
+      # runner is an Administrator, so they run here, in release mode for
+      # realistic build and search times (printed in the log).
+      - name: Elevated tests (index, indexer)
+        run: cargo test --release -p cabinetos-index -p cabinetos-indexer -- --ignored --nocapture
+
       # Benchmarks need a quiet machine and a 100,000-file fixture; CI only
       # checks that they still compile. Run them locally (core/README.md).
       - name: Benchmarks compile
