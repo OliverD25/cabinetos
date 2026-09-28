@@ -18,11 +18,15 @@ public sealed record PaneEntry(int Index, string Name, string Path, bool IsFolde
 /// One file pane: its folder, its listing in shared memory, the selection and
 /// the history. The core lists, sorts and watches; the pane only asks and shows.
 /// </summary>
-public sealed class PaneModel : ObservableObject
+public sealed class PaneModel : ObservableObject, IRowDetails
 {
     private const string Target = "cabinetos_ui::pane";
 
     private readonly ICoreChannel _core;
+    private readonly EntryDetailsCache _details = new();
+    private readonly ExtensionDetails _known;
+    private readonly Services.IconCache _icons;
+    private bool _detailsUnavailable;
     private readonly Stack<string> _back = new();
     private readonly Stack<string> _forward = new();
     private ListingView? _view;
@@ -36,11 +40,17 @@ public sealed class PaneModel : ObservableObject
     private string? _expectedName;
     private TaskCompletionSource<int>? _expectedListed;
 
-    /// <summary>Creates pane <paramref name="index"/>, asking <paramref name="core"/> for its listings.</summary>
-    public PaneModel(int index, ICoreChannel core)
+    /// <summary>
+    /// Creates pane <paramref name="index"/>, asking <paramref name="core"/> for
+    /// its listings; <paramref name="known"/> and <paramref name="icons"/> are
+    /// shared by both panes.
+    /// </summary>
+    internal PaneModel(int index, ICoreChannel core, ExtensionDetails known, Services.IconCache icons)
     {
         Index = index;
         _core = core;
+        _known = known;
+        _icons = icons;
         Selection.Changed += () =>
         {
             OnPropertyChanged(nameof(Selection));
@@ -50,6 +60,80 @@ public sealed class PaneModel : ObservableObject
 
     /// <summary>Raised when something the user should read goes to the status bar.</summary>
     public event Action<string>? Notice;
+
+    /// <summary>Raised with (first row, count) when type names and icon keys arrived for rows.</summary>
+    public event Action<int, int>? DetailsArrived;
+
+    /// <inheritdoc/>
+    public EntryDetail? Detail(int index, ReadOnlySpan<char> name, bool isFolder) =>
+        _details.Get(index) ?? _known.Guess(name, isFolder);
+
+    /// <inheritdoc/>
+    public Microsoft.UI.Xaml.Media.ImageSource? Icon(string key) => _icons.Get(key);
+
+    /// <summary>
+    /// Asks the core for the type names and icons of rows <paramref name="first"/>
+    /// to <paramref name="last"/>, a page at a time, each page once per section
+    /// (<c>describe_entries</c>, protocol 9).
+    /// </summary>
+    public void EnsureDetails(int first, int last)
+    {
+        if (_detailsUnavailable || _view is not { } view || _listingId == 0)
+        {
+            return;
+        }
+        foreach (var (from, count) in _details.TakePagesToRequest(first, last, view.Count))
+        {
+            _ = FetchDetailsAsync(from, count);
+        }
+    }
+
+    private async Task FetchDetailsAsync(uint from, uint count)
+    {
+        var listing = _details.ListingId;
+        var generation = _details.Generation;
+        CoreReply reply;
+        try
+        {
+            reply = await _core.RequestAsync(new DescribeEntriesRequest(listing, from, count));
+        }
+        catch (IOException)
+        {
+            ForgetIfCurrent();
+            return;
+        }
+        switch (reply)
+        {
+            case EntryDetailsReply details when _details.Apply(details) && _view is { } view:
+                for (var i = 0; i < details.Details.Count; i++)
+                {
+                    var index = (int)details.From + i;
+                    _known.Learn(view.NameSpan(index), view.IsFolder(index), details.Details[i]);
+                }
+                DetailsArrived?.Invoke((int)details.From, details.Details.Count);
+                break;
+            case EntryDetailsReply:
+                // For a section that has been replaced meanwhile; the new one asks again.
+                break;
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                // A core before protocol 9: the built-in type text and glyphs stay.
+                _detailsUnavailable = true;
+                break;
+            case ErrorReply { Code: ErrorCodes.NoSuchListing }:
+                break;
+            default:
+                ForgetIfCurrent();
+                break;
+        }
+
+        void ForgetIfCurrent()
+        {
+            if (_details.ListingId == listing && _details.Generation == generation)
+            {
+                _details.Forget(from);
+            }
+        }
+    }
 
     /// <summary>0 for the left pane, 1 for the right.</summary>
     public int Index { get; }
@@ -333,10 +417,11 @@ public sealed class PaneModel : ObservableObject
         var oldListing = _listingId;
         _view = view;
         _listingId = opened.ListingId;
+        _details.Reset(opened.ListingId, view.Generation);
         PendingTiming = new NavigationTiming(request.Id, path, view.Count, opened.ElapsedUs, started, Stopwatch.GetTimestamp());
         Path = path;
         Message = view.Count == 0 ? "This folder is empty." : null;
-        Rows = new ListingRows(view);
+        Rows = new ListingRows(view, this);
         var select = selectName is null ? -1 : view.IndexOfName(selectName);
         Selection.Reset(view.Count, select >= 0 ? select : 0);
         RaiseHistoryChanged();
@@ -399,8 +484,9 @@ public sealed class PaneModel : ObservableObject
         var previousFocus = Selection.Focus;
 
         _view = view;
+        _details.Reset(_listingId, view.Generation);
         Message = view.Count == 0 ? "This folder is empty." : null;
-        Rows = new ListingRows(view);
+        Rows = new ListingRows(view, this);
 
         var expected = _expectedName is { } name ? view.IndexOfName(name) : -1;
         if (expected >= 0)
@@ -448,9 +534,14 @@ public sealed class PaneModel : ObservableObject
 
     /// <summary>
     /// The core was started again: its listing IDs start over, so the old ID
-    /// could name another pane's new listing and must not be closed.
+    /// could name another pane's new listing and must not be closed. The new
+    /// core may know <c>describe_entries</c> even if the old one did not.
     /// </summary>
-    public void ForgetListing() => _listingId = 0;
+    public void ForgetListing()
+    {
+        _listingId = 0;
+        _detailsUnavailable = false;
+    }
 
     /// <summary>Releases the listing, at shutdown.</summary>
     public void Release()

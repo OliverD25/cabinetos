@@ -80,6 +80,32 @@ public sealed class ListVolumesRequest() : CoreRequest("list_volumes");
 /// <summary>Asks for the configuration in effect; the reply is <c>config</c>.</summary>
 public sealed class GetConfigRequest() : CoreRequest("get_config");
 
+/// <summary>
+/// Asks for the type names and icon keys of a range of a listing (protocol
+/// version 9); the reply is <c>entry_details</c>.
+/// </summary>
+public sealed class DescribeEntriesRequest(ulong listingId, uint from, uint count) : CoreRequest("describe_entries")
+{
+    /// <summary>The listing, from <c>listing_opened</c>.</summary>
+    public ulong ListingId { get; } = listingId;
+
+    /// <summary>The first entry, in section order.</summary>
+    public uint From { get; } = from;
+
+    /// <summary>How many entries, at most 512.</summary>
+    public uint Count { get; } = count;
+}
+
+/// <summary>Asks for an icon as a PNG (version 9); the reply is <c>icon</c>.</summary>
+public sealed class GetIconRequest(string key, uint size) : CoreRequest("get_icon")
+{
+    /// <summary>The icon key from <c>entry_details</c>.</summary>
+    public string Key { get; } = key;
+
+    /// <summary>16, 24, 32 or 48 pixels.</summary>
+    public uint Size { get; } = size;
+}
+
 /// <summary>Asks for one setting in effect (version 8); the reply is <c>value</c>.</summary>
 public sealed class GetValueRequest(string path) : CoreRequest("get_value")
 {

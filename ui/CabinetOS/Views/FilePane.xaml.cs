@@ -33,6 +33,9 @@ public sealed partial class FilePane : UserControl
 
     private readonly HashSet<FileRow> _realized = [];
     private readonly DispatcherQueueTimer _noteTimer;
+    private int _preparedFirst = int.MaxValue;
+    private int _preparedLast = -1;
+    private bool _detailsQueued;
     private PaneModel? _model;
     private string? _shownPath;
     private NavigationTiming? _timing;
@@ -90,11 +93,13 @@ public sealed partial class FilePane : UserControl
             if (_model is not null)
             {
                 _model.PropertyChanged -= OnModelChanged;
+                _model.DetailsArrived -= OnDetailsArrived;
             }
             _model = value;
             if (_model is not null)
             {
                 _model.PropertyChanged += OnModelChanged;
+                _model.DetailsArrived += OnDetailsArrived;
             }
             UpdateHeader();
             UpdateActivity();
@@ -249,6 +254,27 @@ public sealed partial class FilePane : UserControl
         MarkSelection();
     }
 
+    /// <summary>Shows the icon of <paramref name="key"/> in the rows that wait for it.</summary>
+    public void RefreshIcon(string key)
+    {
+        foreach (var row in _realized)
+        {
+            if (string.Equals(row.IconKey, key, StringComparison.Ordinal))
+            {
+                row.RefreshDetails();
+            }
+        }
+    }
+
+    /// <summary>Binds every row's type name and icon again (the screen's scale changed the icon size).</summary>
+    public void RefreshDetails()
+    {
+        foreach (var row in _realized)
+        {
+            row.RefreshDetails();
+        }
+    }
+
     private void OnElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
     {
         if (args.Element is FileRow row)
@@ -259,6 +285,36 @@ public sealed partial class FilePane : UserControl
         if (_timing is not null && _firstRowTicks == 0)
         {
             _firstRowTicks = Stopwatch.GetTimestamp();
+        }
+        // One describe_entries per layout pass for all the rows it made, not one per row.
+        _preparedFirst = Math.Min(_preparedFirst, args.Index);
+        _preparedLast = Math.Max(_preparedLast, args.Index);
+        if (!_detailsQueued)
+        {
+            _detailsQueued = DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, AskForDetails);
+        }
+    }
+
+    private void AskForDetails()
+    {
+        _detailsQueued = false;
+        var (first, last) = (_preparedFirst, _preparedLast);
+        _preparedFirst = int.MaxValue;
+        _preparedLast = -1;
+        if (last >= first)
+        {
+            _model?.EnsureDetails(first, last);
+        }
+    }
+
+    private void OnDetailsArrived(int from, int count)
+    {
+        foreach (var row in _realized)
+        {
+            if (row.Index >= from && row.Index < from + count)
+            {
+                row.RefreshDetails();
+            }
         }
     }
 

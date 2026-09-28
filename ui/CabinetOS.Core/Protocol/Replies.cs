@@ -98,6 +98,15 @@ public sealed record ConfigReply(string Path, JsonElement Config) : CoreReply;
 /// <summary>Reply to <c>get_value</c>: one setting in effect, in the file's own format.</summary>
 public sealed record ValueReply(JsonElement Value) : CoreReply;
 
+/// <summary>What the shell shows beside a name: its type name and the key of its icon.</summary>
+public sealed record EntryDetail(string TypeName, string IconKey);
+
+/// <summary>Reply to <c>describe_entries</c>: one detail per entry from <see cref="From"/> on.</summary>
+public sealed record EntryDetailsReply(ulong ListingId, uint Generation, uint From, IReadOnlyList<EntryDetail> Details) : CoreReply;
+
+/// <summary>Reply to <c>get_icon</c>: a PNG of <see cref="Size"/> pixels square, with alpha.</summary>
+public sealed record IconReply(string Key, uint Size, string PngBase64) : CoreReply;
+
 /// <summary>Reply to <c>start_job</c>: the paths were checked and the job is queued.</summary>
 public sealed record JobStartedReply(ulong JobId) : CoreReply;
 

@@ -64,10 +64,12 @@ cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabineto
 
 The end-to-end tests start the real core: a listing read from shared
 memory; 200 files copied through `TransferCenter` with one conflict
-answered Skip, which must end `completed` with that file untouched; and a
-folder made and renamed. They run when `CABINETOS_CORE_EXE` is set or the
-core is built in `core/target`, and skip themselves otherwise (as in the CI
-job `ui`, which builds no core).
+answered Skip, which must end `completed` with that file untouched; a
+folder made and renamed; the type names and icon keys of a listing's rows,
+and the icon PNGs at every offered size; and a `cmd` session whose echo
+comes back through the terminal's byte pump. They run when
+`CABINETOS_CORE_EXE` is set or the core is built in `core/target`, and
+skip themselves otherwise (as in the CI job `ui`, which builds no core).
 
 ### Environment variables
 
@@ -154,8 +156,28 @@ A pane shows the rows in an `ItemsRepeater` with a virtualizing
 `StackLayout`, 30 px per row, over `ListingRows`: a read-only list that
 makes a small row object (the view and an index) only when the repeater
 asks for that index. A folder of 100,000 entries has as many row objects
-as there are rows on screen. Each row reads its name, kind, time, type and
-size from shared memory when it is shown.
+as there are rows on screen. Each row reads its name, kind, time and size
+from shared memory when it is shown.
+
+The Type column and the icons are the shell's, asked for through the core
+(`describe_entries` and `get_icon`, protocol 9; [ipc.md](ipc.md), "Type
+names and icons"):
+
+- When the repeater makes rows, the pane asks for the pages of 128
+  entries that cover them: one request per layout pass, each page once
+  per listing and section generation. A refresh brings a new generation,
+  and the pages are asked for again.
+- Until a row's page arrives, it shows what the core said about the same
+  extension before (both panes share that memory; not for `.exe`, `.ico`
+  and `.lnk`, which have icons of their own), else the built-in
+  `EXT File` and a Segoe Fluent glyph.
+- Icons are kept by key and size for the window's life, one request per
+  key. The size is the smallest the core offers that covers 16 px at the
+  screen's scale: 16 at 100 %, 24 up to 150 %, 32 up to 200 %, 48 above.
+  On a screen with another scale, rows ask for the new size and show the
+  old one until it arrives.
+- A core before protocol 9 answers `unknown_request`; the built-in text
+  and glyphs then stay, until a restarted core is asked again.
 
 Each pane lists with `watch: true`. A `listing_refreshed` swaps the view:
 the new section is mapped, the rows are replaced, the selection follows its
@@ -193,25 +215,31 @@ Every key press goes first to the window (`PreviewKeyDown`), then to the
   shortcut, and Esc and Ctrl+Shift+P always work. A text box inside a pane
   (the rename box) is text input, not `filesView`: F5 does not start a
   copy while a name is being typed.
-- A key nobody bound goes on to the focused control. In a pane, the keys
-  below move the selection or run the file commands.
+- A key nobody bound goes on to the focused control. In a pane, that is
+  the list keys every Windows list has (the rows marked "the pane" below);
+  they are not commands.
 
-| Keys in a pane | What they do |
-|---|---|
-| Up, Down, Home, End, PageUp, PageDown | Move the focus; only the new row is selected |
-| the same with Shift | Select from the anchor to the new row |
-| the same with Ctrl | Move the focus and keep the selection |
-| Insert | Select or unselect the focused row and move down (Total Commander) |
-| Ctrl+A | Select every row |
-| Enter, double-click | `file.open`: a folder opens in the pane, a file in its default application |
-| Ctrl+Enter | `file.openInOtherPane` (folders) |
-| Alt+Enter | `file.properties` |
-| Backspace, Alt+Up | `go.up`; Alt+Left and Alt+Right: `go.back`, `go.forward` |
-| F2 | `file.rename` (in the palette, F2 rebinds instead) |
-| Delete, Shift+Delete | `file.delete` to the Recycle Bin; for good, after a dialog |
-| Ctrl+X, Ctrl+C, Ctrl+V | `edit.cut`, `edit.copy`, `edit.paste` |
-| Shift+F10, the Menu key | The context menu of the focused row |
-| F5, F6, F7 | From the keymap: `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` |
+| Keys in a pane | What they do | From |
+|---|---|---|
+| Up, Down, Home, End, PageUp, PageDown | Move the focus; only the new row is selected | the pane |
+| the same with Shift | Select from the anchor to the new row | the pane |
+| the same with Ctrl | Move the focus and keep the selection | the pane |
+| Backspace | `go.up` | the pane |
+| Shift+F10, the Menu key | The context menu of the focused row | the pane |
+| Insert | `edit.toggleSelection`: select or unselect the focused row and move down (Total Commander) | keymap |
+| Ctrl+A | `edit.selectAll` | keymap |
+| Enter, double-click | `pane.openSelected`: a folder opens in the pane, a file in its default application | keymap |
+| Ctrl+Enter | `file.openInOtherPane` (folders) | keymap |
+| Alt+Enter | `file.properties` | keymap |
+| Alt+Up, Alt+Left, Alt+Right | `go.up`, `go.back`, `go.forward` | keymap |
+| Tab | `view.focusOtherPane` | keymap |
+| F2 | `file.rename` (in the palette, F2 is `keys.rebind`) | keymap |
+| Delete, Shift+Delete | `file.delete` to the Recycle Bin; `file.deletePermanently`, after a dialog | keymap |
+| Ctrl+X, Ctrl+C, Ctrl+V | `edit.cut`, `edit.copy`, `edit.paste` | keymap |
+| F5, F6, F7 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | keymap |
+
+The keys marked "keymap" are the core's defaults; each can be rebound in
+the palette or in `cabinetos.json`.
 
 Click selects one row, Ctrl+Click adds or removes one, Shift+Click selects
 a range. A right-click inside the selection keeps it; outside, it selects
@@ -225,22 +253,18 @@ palette row, menu row and flyout button goes through. A command the
 registry marks `target: ui` runs its handler in the window; any other goes
 to the core as `execute_command`, whose `command_result` is shown in a
 dialog and whose error in the status bar. Each run is logged with its own
-ULID. Three registry commands are marked `target: core` but the core
-answers `not_implemented` for them: `file.copyToOtherPane`,
-`file.moveToOtherPane` and `file.newFolder`. The router runs them in the
-window instead (`RegisterUiOverride`), which starts the job or makes the
-folder itself.
+ULID. Since protocol 9 the registry lists the shell's own commands
+(navigation, file, edit, search, `keys.rebind`) with `target: ui` and
+their keys, so each of them is in the palette and can be rebound; the
+window registers a handler for each one (`RegisterUiHandler`).
+`file.properties` takes `{"scope": "folder"}` for the folder itself.
 
-These commands exist only in the UI, because the core's registry does not
-list them yet: `go.back`, `go.forward`, `go.up`, `file.open`,
-`file.openInOtherPane`, `file.delete` (`{"permanent": true}` for
-Shift+Delete), `file.rename`, `file.properties` (`{"scope": "folder"}` for
-the folder itself), `edit.cut`, `edit.copy`, `edit.paste`,
-`transfer.pause`, `transfer.resume`, `transfer.cancel`, `transfer.close`,
-`transfer.minimize`, `transfer.restore`, `transfer.next`,
-`conflict.resolve`, `sidebar.pin`, `sidebar.unpin` and `keys.rebind`. They
-run through the router like the others, but they are not in the palette
-and cannot be rebound until the core registers them.
+These commands exist only in the UI, because they belong to the window's
+own controls: `transfer.pause`, `transfer.resume`, `transfer.cancel`,
+`transfer.close`, `transfer.minimize`, `transfer.restore`,
+`transfer.next`, `conflict.resolve`, `sidebar.pin` and `sidebar.unpin`
+(`RegisterLocal`). They run through the router like the others, but they
+are not in the palette and cannot be rebound.
 
 | Command | In this version |
 |---|---|
@@ -437,6 +461,5 @@ pencil.
 | The marketplace button, the Tool Dock | Disabled or absent; Phase 5c and 9 |
 | Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |
 | Sorting by a column | The column headers are static; the order is `panes.sort` from `cabinetos.json` |
-| Shell type names and icons | The Type column shows `EXT File`; the core does not send shell type names yet |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
 | A shell property sheet | Properties shows the listing's metadata |

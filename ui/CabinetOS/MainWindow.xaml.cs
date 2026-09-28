@@ -50,6 +50,7 @@ public sealed partial class MainWindow : Window
     private readonly ChordStateMachine _keys = new(() => Environment.TickCount64);
     private readonly PaneModel[] _panes;
     private readonly FilePane[] _paneViews;
+    private readonly IconCache _icons;
     private readonly SidebarModel _sidebar = new();
     private readonly PaletteModel _palette;
     private readonly TransferCenter _transfers;
@@ -80,8 +81,18 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         _selfTestCrash = selfTestCrash;
         _router = new CommandRouter(_session);
-        _panes = [new PaneModel(0, _session), new PaneModel(1, _session)];
+        // Both panes share what the core said per extension, and the icons.
+        var known = new ExtensionDetails();
+        _icons = new IconCache(_session);
+        _panes = [new PaneModel(0, _session, known, _icons), new PaneModel(1, _session, known, _icons)];
         _paneViews = [LeftPane, RightPane];
+        _icons.Loaded += key =>
+        {
+            foreach (var view in _paneViews)
+            {
+                view.RefreshIcon(key);
+            }
+        };
         _palette = new PaletteModel(_session, _router);
         _transfers = new TransferCenter(_session);
         _settingsWriter = new SettingsWriter(_session);
@@ -198,7 +209,26 @@ public sealed partial class MainWindow : Window
         if (!_started)
         {
             _started = true;
+            if (RootGrid.XamlRoot is { } xamlRoot)
+            {
+                _icons.Size = IconSizes.For(xamlRoot.RasterizationScale);
+                xamlRoot.Changed += OnXamlRootChanged;
+            }
             _ = StartAsync();
+        }
+    }
+
+    // A move to a screen with another scale: rows ask for the icon size that is sharp there.
+    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
+    {
+        var size = IconSizes.For(sender.RasterizationScale);
+        if (size != _icons.Size)
+        {
+            _icons.Size = size;
+            foreach (var view in _paneViews)
+            {
+                view.RefreshDetails();
+            }
         }
     }
 
@@ -389,6 +419,7 @@ public sealed partial class MainWindow : Window
             }
             else
             {
+                _icons.Reset();
                 foreach (var pane in _panes)
                 {
                     pane.ForgetListing();

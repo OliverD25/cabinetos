@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Jobs;
@@ -177,6 +178,63 @@ public class EndToEndTests
             Directory.CreateDirectory(Path.Combine(root, "taken"));
             var refused = Assert.IsType<ErrorReply>(await client.RequestAsync(new RenameRequest(Path.Combine(root, "Reports 2026"), "taken")));
             Assert.Equal(ErrorCodes.AlreadyExists, refused.Code);
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    [Fact]
+    public async Task The_real_core_names_the_types_and_draws_the_icons_of_the_rows()
+    {
+        var coreExe = FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-details");
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root, "listing")).FullName;
+            Directory.CreateDirectory(Path.Combine(folder, "a folder"));
+            File.WriteAllText(Path.Combine(folder, "notes.txt"), "x");
+            File.WriteAllText(Path.Combine(folder, "README"), "x");
+
+            await using var core = await StartCoreAsync(coreExe, root);
+            var client = core.Client;
+            await client.HelloAsync();
+            var opened = await client.RequestAsync<ListingOpenedReply>(new ListDirectoryRequest(folder));
+            using var view = ListingView.Open(opened.TakeSection()!, opened.SectionSize);
+
+            // The pane's way: the pages that cover the rows on screen, each asked once.
+            var cache = new EntryDetailsCache();
+            cache.Reset(opened.ListingId, view.Generation);
+            var (from, count) = Assert.Single(cache.TakePagesToRequest(0, view.Count - 1, view.Count));
+            Assert.Empty(cache.TakePagesToRequest(0, view.Count - 1, view.Count));
+            var reply = await client.RequestAsync(new DescribeEntriesRequest(opened.ListingId, from, count));
+            if (reply is ErrorReply { Code: ErrorCodes.UnknownRequest })
+            {
+                Assert.Skip("This core does not answer describe_entries yet: build the core again.");
+            }
+            var details = Assert.IsType<EntryDetailsReply>(reply);
+            Assert.True(cache.Apply(details));
+            Assert.Equal(3, details.Details.Count);
+            Assert.Equal("folder", cache.Get(view.IndexOfName("a folder"))!.IconKey);
+            Assert.Equal("ext:.txt", cache.Get(view.IndexOfName("notes.txt"))!.IconKey);
+            Assert.Equal("generic", cache.Get(view.IndexOfName("README"))!.IconKey);
+            // The shell's names are in the user's language: only that there is one.
+            Assert.All(details.Details, detail => Assert.False(string.IsNullOrWhiteSpace(detail.TypeName)));
+
+            foreach (var size in IconSizes.Offered)
+            {
+                var icon = await client.RequestAsync<IconReply>(new GetIconRequest("ext:.txt", size));
+                var png = Convert.FromBase64String(icon.PngBase64);
+                Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A], png[..8]);
+                // The IHDR chunk's width and height.
+                Assert.Equal((size, size), (BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(16)), BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(20))));
+            }
+            var unknown = Assert.IsType<ErrorReply>(await client.RequestAsync(new GetIconRequest("path:0000000000000000", 16)));
+            Assert.Equal(ErrorCodes.NotFound, unknown.Code);
+
+            Assert.IsType<OkReply>(await client.RequestAsync(new CloseListingRequest(opened.ListingId)));
             await core.ShutdownAsync(TimeSpan.FromSeconds(5));
         }
         finally

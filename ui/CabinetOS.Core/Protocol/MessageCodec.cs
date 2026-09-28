@@ -55,6 +55,8 @@ public static class MessageCodec
         ["file_search_results"] = ProtocolJson.Default.FileSearchResultsReply,
         ["index_status"] = ProtocolJson.Default.IndexStatusReply,
         ["plugins"] = ProtocolJson.Default.PluginsReply,
+        ["entry_details"] = ProtocolJson.Default.EntryDetailsReply,
+        ["icon"] = ProtocolJson.Default.IconReply,
         ["listing_refreshed"] = ProtocolJson.Default.ListingRefreshedEvent,
         ["listing_lost"] = ProtocolJson.Default.ListingLostEvent,
         ["config_changed"] = ProtocolJson.Default.ConfigChangedEvent,

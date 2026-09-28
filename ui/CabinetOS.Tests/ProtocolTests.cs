@@ -60,6 +60,8 @@ public class ProtocolTests
             new ReloadPluginRequest("crashy"),
             new SetPluginEnabledRequest("reader", false),
             new GrantCapabilitiesRequest("reader", ["fs:read"]),
+            new DescribeEntriesRequest(7, 0, 128),
+            new GetIconRequest("ext:.txt", 24),
         ];
     }
 
@@ -93,7 +95,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(31, checkedTypes.Count);
+        Assert.Equal(33, checkedTypes.Count);
     }
 
     [Fact]
@@ -224,6 +226,15 @@ public class ProtocolTests
                     Assert.Equal((7UL, 3UL, 9UL), (job.ToProgress().JobId, job.ToProgress().FilesDone, job.ToProgress().FilesTotal));
                     Assert.Null(job.EtaSeconds);
                 }),
+            ($$$"""{"id":"{{{Id}}}","type":"entry_details","listing_id":7,"generation":1,"from":0,"details":[{"type_name":"File folder","icon_key":"folder"},{"type_name":"Application","icon_key":"path:396bbcd455199596"}]}""",
+                b =>
+                {
+                    var details = Assert.IsType<EntryDetailsReply>(b);
+                    Assert.Equal((7UL, 1U, 0U), (details.ListingId, details.Generation, details.From));
+                    Assert.Equal(new EntryDetail("Application", "path:396bbcd455199596"), details.Details[1]);
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"icon","key":"ext:.txt","size":32,"png_base64":"iVBORw0KGgo="}""",
+                b => Assert.Equal(new IconReply("ext:.txt", 32, "iVBORw0KGgo="), b)),
             ($$$"""{"id":"{{{Id}}}","type":"terminal_opened","session_id":3,"pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","pid":4242}""",
                 b => Assert.Equal(new TerminalOpenedReply(3, @"\\.\pipe\cabinetos-term-9f3c01a2b4d5e6f7", 4242), b)),
             ($$$"""{"id":"{{{Id}}}","type":"terminal_sessions","sessions":[{"session_id":3,"profile":"pwsh","cwd":"E:\\work","cols":120,"rows":30,"pid":4242,"state":{"type":"exited","code":3221225786},"pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","attached":false}]}""",

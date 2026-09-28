@@ -63,6 +63,13 @@
                     VerticalAlignment="Center"
                     FontSize="16"
                     Foreground="{ThemeResource CbRowMetaBrush}" />
+                <!-- The shell's icon (get_icon) replaces the glyph once it arrives. -->
+                <Image
+                    x:Name="IconImage"
+                    Width="16"
+                    Height="16"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed" />
                 <TextBlock
                     x:Name="NameText"
                     Grid.Column="1"
