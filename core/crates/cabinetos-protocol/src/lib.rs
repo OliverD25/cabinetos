@@ -20,6 +20,7 @@
 mod id;
 mod index;
 mod job;
+mod market;
 mod message;
 mod plugin;
 pub mod shm;
@@ -37,6 +38,10 @@ pub use index::{
 pub use job::{
     Conflict, ConflictKind, ConflictPolicy, JobAction, JobInfo, JobKind, JobOptions, JobProgress,
     JobRequest, JobState, LinkPolicy, Resolution,
+};
+pub use market::{
+    Author, Download, ExtensionKind, INDEX_SCHEMA_VERSION, MarketCapability, MarketIndex,
+    MarketItem, Rating, Stars, ToolInfo,
 };
 pub use message::{
     CommandInfo, CommandSource, CommandTarget, DiskIdentity, EntryDetail, Envelope, ErrorCode,
@@ -67,5 +72,10 @@ pub use theme::{
 /// type names and icons (`describe_entries` and `entry_details`, `get_icon`
 /// and `icon`); version 10 colour themes (`list_themes` and `themes`,
 /// `get_theme` and `theme`, the event `theme_changed`, the error code
-/// `no_such_theme`).
+/// `no_such_theme`) and the marketplace (`marketplace_refresh` and
+/// `marketplace_search` with the reply `marketplace_index`,
+/// `install_extension`, `uninstall_extension`, `list_tools` and `tools`,
+/// the events `install_progress`, `install_finished` and `tools_changed`,
+/// the error codes `no_such_extension`, `marketplace_error`,
+/// `hash_mismatch` and `incompatible`).
 pub const PROTOCOL_VERSION: u32 = 10;

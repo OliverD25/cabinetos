@@ -15,6 +15,11 @@ pub const SCHEMA_REFERENCE: &str = "./cabinetos.schema.json";
 /// The version of the file format this build reads.
 pub const FORMAT_VERSION: u32 = 1;
 
+/// The default `marketplace.index`: a placeholder until a public index
+/// exists. `.invalid` is a name reserved never to resolve, so nothing is
+/// ever fetched from it.
+pub const DEFAULT_MARKETPLACE_INDEX: &str = "https://marketplace.cabinetos.invalid/index.json";
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -40,6 +45,8 @@ pub struct Config {
     /// Core Plugins, by ID: which run, and what they may do. A plugin that
     /// is not listed is on, with nothing granted.
     pub plugins: BTreeMap<String, PluginSettings>,
+    /// Where extensions and themes come from.
+    pub marketplace: MarketplaceConfig,
 }
 
 impl Default for Config {
@@ -53,6 +60,7 @@ impl Default for Config {
             keybindings: Vec::new(),
             logging: LoggingConfig::default(),
             plugins: BTreeMap::new(),
+            marketplace: MarketplaceConfig::default(),
         }
     }
 }
@@ -273,6 +281,29 @@ impl Default for PluginSettings {
     }
 }
 
+/// The marketplace (docs/marketplace.md).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default, rename_all = "camelCase")]
+pub struct MarketplaceConfig {
+    /// Where the index is: an `https:` URL, a `file:` URL, or the path of an
+    /// `index.json` or of its folder. The core reads it only when a client
+    /// asks.
+    pub index: String,
+    /// Also accept a plain `http:` index and downloads, which anyone on the
+    /// network could change on the way. For testing only.
+    pub allow_insecure: bool,
+}
+
+impl Default for MarketplaceConfig {
+    fn default() -> Self {
+        Self {
+            index: DEFAULT_MARKETPLACE_INDEX.to_owned(),
+            allow_insecure: false,
+        }
+    }
+}
+
 /// Diagnostics.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -339,6 +370,8 @@ mod tests {
         assert_eq!(names, ["pwsh", "cmd", "wsl"]);
         assert!(config.keybindings.is_empty());
         assert_eq!(config.logging.level, LogLevel::Info);
+        assert_eq!(config.marketplace.index, DEFAULT_MARKETPLACE_INDEX);
+        assert!(!config.marketplace.allow_insecure);
     }
 
     #[test]
@@ -366,6 +399,7 @@ mod tests {
             "\"terminal\"",
             "\"keybindings\"",
             "\"logging\"",
+            "\"marketplace\"",
         ];
         let positions: Vec<usize> = order.iter().map(|key| text.find(key).unwrap()).collect();
         assert!(positions.is_sorted(), "{text}");
@@ -373,5 +407,6 @@ mod tests {
         assert!(text.contains("\"lastPaths\":[],\"pinned\":[]"));
         assert!(text.contains("\"showHidden\":false"));
         assert!(text.contains("\"defaultProfile\":\"pwsh\""));
+        assert!(text.contains("\"allowInsecure\":false"));
     }
 }

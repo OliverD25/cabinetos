@@ -55,8 +55,9 @@ because it duplicates shared-memory handles into that process. A
 configuration events (`config_changed`, `config_error`, `keymap_changed`),
 the job events (`job_progress`, `job_conflict`, `job_state_changed`),
 the plugin events (`plugin_state_changed`, `plugin_crashed`,
-`plugin_event`), `terminal_exited`, `volumes_changed` and
-`theme_changed`, and right after
+`plugin_event`), `terminal_exited`, `volumes_changed`,
+`theme_changed`, and the marketplace events (`install_progress`,
+`install_finished`, `tools_changed`), and right after
 `welcome` a `job_conflict` for every conflict that already waits for a
 decision. Every other request works without `hello`.
 
@@ -78,7 +79,13 @@ the error code `already_exists`. Version 9 added the shell's type names and
 icons: `describe_entries` with its reply `entry_details`, and `get_icon`
 with its reply `icon`. Version 10 (Phase 9) added the colour themes:
 `list_themes` with its reply `themes`, `get_theme` with its reply `theme`,
-the event `theme_changed` and the error code `no_such_theme`.
+the event `theme_changed` and the error code `no_such_theme`; and the
+marketplace: `marketplace_refresh` and `marketplace_search` with the reply
+`marketplace_index`, `install_extension`, `uninstall_extension`,
+`list_tools` with its reply `tools`, the events `install_progress`,
+`install_finished` and `tools_changed`, and the error codes
+`no_such_extension`, `marketplace_error`, `hash_mismatch` and
+`incompatible`.
 
 ## Requests and replies
 
@@ -122,6 +129,11 @@ the event `theme_changed` and the error code `no_such_theme`.
 | `terminal_list` | — | `terminal_sessions` (`sessions`) |
 | `list_themes` | — | `themes` (`themes`) |
 | `get_theme` | `theme_id` (without it: the theme in effect) | `theme` (`theme`) |
+| `list_tools` | — | `tools` (`tools`) |
+| `marketplace_refresh` | — | `marketplace_index` (`items`, `source`, `fetched_at_ms`) |
+| `marketplace_search` | `query`; `kind` (`plugin`, `theme` or `tool`) | `marketplace_index` |
+| `install_extension` | `extension_id`; `version` (without it: the newest this core runs) | `ok`, once it is in place |
+| `uninstall_extension` | `extension_id` | `ok` |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -134,7 +146,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `not_found` | The path does not exist. |
 | `access_denied` | Windows denied access. |
 | `invalid_path` | The path is malformed, or names a file where a directory is needed. |
-| `already_exists` | Something with that name is already there. |
+| `already_exists` | Something with that name is already there. Also an extension the marketplace did not install, in the place an install would use. |
 | `no_such_listing` | No open listing on this connection has that `listing_id`. |
 | `io` | Reading from the disk or the network failed. |
 | `unknown_command` | No command has that ID. |
@@ -152,14 +164,19 @@ Any request can instead get `error` with a `code` and a `message`:
 | `unknown_profile` | No profile in `terminal.profiles` has that name. The message lists the names. |
 | `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
 | `no_such_theme` | No theme with that ID is in the themes folder, or the ID cannot name a theme file. |
+| `no_such_extension` | The index has no extension with that ID (or not that version); or, for `uninstall_extension`, the marketplace did not install one with that ID. |
+| `marketplace_error` | The index cannot be read or is refused (plain `http:` without `marketplace.allowInsecure`, another `schemaVersion`), a download failed or is not what its kind needs, the files cannot be put in place, or the theme to uninstall is in effect. |
+| `hash_mismatch` | The download's SHA-256 is not the one the index gives. It was deleted, and nothing was installed. |
+| `incompatible` | The extension needs a newer CabinetOS (`minCoreVersion`). |
 
 Requests on one connection are independent: `list_directory`,
 `describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `create_directory`, `rename`,
 `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
-`terminal_open`, `terminal_close`, `terminal_sync_cwd`, `list_themes` and
-`get_theme` of a named theme run in the background, so a slow directory, plugin, search or shell does not hold up
+`terminal_open`, `terminal_close`, `terminal_sync_cwd`, `list_themes`,
+`get_theme` of a named theme, `list_tools` and the marketplace requests
+run in the background, so a slow directory, plugin, search or shell does not hold up
 the next request, and their replies may come in any order. Match replies to
 requests by `id`.
 
@@ -881,6 +898,67 @@ A client changes the theme with `set_value` on `ui.theme`:
 - A client that fell behind on events gets a `theme_changed` with the theme
   in effect.
 
+## The marketplace
+
+Extensions come from an index ([marketplace.md](marketplace.md) has the
+format, the folders and the trust rules). `marketplace.index` in the
+configuration says where it is; the core reads it only when a client asks.
+
+```json
+{"id":"01M…","type":"marketplace_refresh"}
+{"id":"01M…","type":"marketplace_index","source":"C:\\market\\index.json","fetched_at_ms":1790000000000,
+ "items":[{"id":"hello","kind":"plugin","name":"Hello","author":{"name":"CabinetOS","verified":false},
+ "version":"0.1.0","description":"…","long":"…","size":27003,
+ "download":{"url":"files/hello-0.1.0.zip","sha256":"8818…cac3"},"manifest":{…},
+ "capabilities":[{"name":"cmd:register","reason":"…","level":"low"},…],
+ "minCoreVersion":"0.1.0","license":"MIT"},…]}
+{"id":"01M…","type":"marketplace_search","query":"nord","kind":"theme"}
+```
+
+- `items` are in the index file's own format (camelCase keys); the core
+  adds each capability's `level`. After `marketplace_refresh` they come in
+  index order; after `marketplace_search`, best first, ranked as the
+  palette ranks commands, by name, ID and publisher. An empty `query` keeps
+  every item.
+- `marketplace_search` searches the index read last; it reads the index
+  first when there is none yet, or when `marketplace.index` changed.
+- `source` is the index's file or URL; `fetched_at_ms` is when it was read
+  or confirmed unchanged, in milliseconds since 1970-01-01 UTC.
+
+```json
+{"id":"01M…","type":"install_extension","extension_id":"hello"}
+{"id":"01M…","type":"install_progress","extension_id":"hello","bytes":27003,"total":27003}
+{"id":"01M…","type":"install_finished","extension_id":"hello","ok":true,"message":"installed hello 0.1.0 (plugin)"}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"plugin_state_changed","plugin_id":"hello","state":{"type":"needs_review","missing":["cmd:register","events:emit"]}}
+```
+
+- The field is `extension_id`, not `id`, because `id` is the request's own
+  ID in the same object.
+- The reply comes once the extension is in place (or with the error).
+  Every connection that said `hello` gets `install_progress` (at most 30 a
+  second, and always one when the download is complete) and
+  `install_finished`, whichever client asked. `install_finished` and the
+  reply travel apart, so either may come first.
+- A plugin then waits in `needs_review`; a theme that `ui.theme` names
+  brings `theme_changed`; a tool brings `tools_changed`.
+
+```json
+{"id":"01M…","type":"uninstall_extension","extension_id":"hello"}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"list_tools"}
+{"id":"01M…","type":"tools","tools":[{"id":"md-preview","name":"Markdown Preview",
+ "version":"1.0.0","author":"CabinetOS","description":"…","dir":"C:\\…\\tools\\md-preview"}]}
+{"id":"01M…","type":"tools_changed","tools":[…]}
+```
+
+- `uninstall_extension` removes exactly the files the install put in
+  place. A plugin leaves `list_plugins`; there is no event for it.
+- `tools` lists every tool in the tools folder with a valid `tool.json`,
+  by ID; `dir` is its folder. `tools_changed` carries the same list after
+  a tool install or uninstall. A client that fell behind on events asks
+  `list_tools` again.
+
 ## Trying it by hand
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
@@ -894,5 +972,6 @@ A client changes the theme with `set_value` on `ui.theme`:
 watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`
 cover the jobs, `plugins`, `commands exec` and `events watch` cover the
 plugins, `search` and `index status` cover file search, `term` covers
-the terminal sessions, and `themes list` and `themes show` send
-`list_themes` and `get_theme`. See [core/README.md](../core/README.md).
+the terminal sessions, `themes list` and `themes show` send
+`list_themes` and `get_theme`, and `market` covers the marketplace. See
+[core/README.md](../core/README.md).

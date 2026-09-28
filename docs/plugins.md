@@ -32,10 +32,13 @@ plugin: [sdk/templates/README.md](../sdk/templates/README.md).
 | The plugins | `%LOCALAPPDATA%\CabinetOS\plugins\<id>\` | `--plugins-dir <path>` | `CABINETOS_PLUGINS_DIR` |
 | Each plugin's own folder | `%LOCALAPPDATA%\CabinetOS\plugins-data\<id>\` | `--plugins-data-dir <path>` | `CABINETOS_PLUGINS_DATA_DIR` |
 
-The flag wins over the variable. The core only reads the plugins folder. It
-creates a plugin's own folder the first time the plugin starts. Installing
-means copying the plugin's folder into the plugins folder; the core finds it
-at its next start, or at once with `reload_plugin`.
+The flag wins over the variable. The core reads the plugins folder, and
+writes it only to install or uninstall from the marketplace. It creates a
+plugin's own folder the first time the plugin starts. A plugin is installed
+from the marketplace (`install_extension`, [marketplace.md](marketplace.md)),
+which checks its SHA-256 and leaves it waiting for review; or by copying
+its folder into the plugins folder, and the core finds it at its next
+start, or at once with `reload_plugin`.
 
 ## The manifest: `plugin.json`
 

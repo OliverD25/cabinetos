@@ -31,6 +31,9 @@ public static class MessageCodec
         "terminal_exited",
         "volumes_changed",
         "theme_changed",
+        "install_progress",
+        "install_finished",
+        "tools_changed",
     ]);
 
     private static readonly FrozenDictionary<string, JsonTypeInfo> Known = new Dictionary<string, JsonTypeInfo>

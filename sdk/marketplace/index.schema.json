@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CabinetOS marketplace index",
+  "description": "A marketplace index: `index.json`, a static file on a web server or in\na folder.",
+  "type": "object",
+  "properties": {
+    "generatedAt": {
+      "description": "When the index was built: an ISO 8601 date and time in UTC, for\nexample `2026-09-28T02:00:00Z`.",
+      "type": "string"
+    },
+    "items": {
+      "description": "What it offers. An index may list several versions of one extension.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MarketItem"
+      }
+    },
+    "schemaVersion": {
+      "description": "The format of this file; always 1 for now.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "items"
+  ],
+  "$defs": {
+    "Author": {
+      "description": "Who publishes an extension.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The publisher's name.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The publisher's web page.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verified": {
+          "description": "Whether the index vouches for the publisher. Shown only; publisher\nidentities are checked in a later version.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "CapabilityLevel": {
+      "description": "How much a capability lets a plugin do, as the review dialog colors it.",
+      "oneOf": [
+        {
+          "description": "Little risk: registering commands, reading the settings.",
+          "type": "string",
+          "const": "low"
+        },
+        {
+          "description": "Access to the user's files.",
+          "type": "string",
+          "const": "medium"
+        },
+        {
+          "description": "Reaching outside the machine or the user's secrets.",
+          "type": "string",
+          "const": "high"
+        }
+      ]
+    },
+    "Download": {
+      "description": "A download.",
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "description": "The SHA-256 of the download, 64 hex digits. A download that does not\nmatch is deleted and not installed.",
+          "type": "string"
+        },
+        "url": {
+          "description": "An `https:` URL, or a path relative to the index. A plugin is a zip\nof `plugin.json` and `plugin.wasm`, or the `plugin.wasm` alone (its\n`plugin.json` is then the item's `manifest`); a theme is its JSON\nfile; a tool is a zip of its folder.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "sha256"
+      ]
+    },
+    "ExtensionKind": {
+      "description": "What an extension is.",
+      "oneOf": [
+        {
+          "description": "A Core Plugin: a WebAssembly component with its `plugin.json`.",
+          "type": "string",
+          "const": "plugin"
+        },
+        {
+          "description": "A colour theme: one JSON file.",
+          "type": "string",
+          "const": "theme"
+        },
+        {
+          "description": "A Tool Extension: a folder the Tool Dock hosts.",
+          "type": "string",
+          "const": "tool"
+        }
+      ]
+    },
+    "MarketCapability": {
+      "description": "A capability a plugin asks for, as the index lists it.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "description": "How much it lets the plugin do. The core fills it in; an index\nleaves it out.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CapabilityLevel"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "For example `fs:read`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The plugin's own plain-language reason.",
+          "type": "string"
+        },
+        "roots": {
+          "description": "The folders it concerns, for `fs:read` and `fs:write`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "reason"
+      ]
+    },
+    "MarketItem": {
+      "description": "One extension, in one version, as the index offers it.",
+      "type": "object",
+      "properties": {
+        "author": {
+          "description": "Who publishes it.",
+          "$ref": "#/$defs/Author"
+        },
+        "capabilities": {
+          "description": "For a plugin: the capabilities it asks for, as its `plugin.json`\nlists them. The core adds each one's `level`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MarketCapability"
+          }
+        },
+        "description": {
+          "description": "One or two sentences, for the card.",
+          "type": "string"
+        },
+        "download": {
+          "description": "Where to get it and how to check it.",
+          "$ref": "#/$defs/Download"
+        },
+        "id": {
+          "description": "Lower case letters, digits and `-`, starting with a letter: the\nplugin's ID, the theme's ID or the tool's ID.",
+          "type": "string"
+        },
+        "installs": {
+          "description": "How often it was installed, when the index knows.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "What it is.",
+          "$ref": "#/$defs/ExtensionKind"
+        },
+        "license": {
+          "description": "Its license, for example `MIT`.",
+          "type": "string"
+        },
+        "long": {
+          "description": "The long description, for the detail view.",
+          "type": "string",
+          "default": ""
+        },
+        "manifest": {
+          "description": "Its own manifest: the plugin's `plugin.json`, the tool's `tool.json`,\nor the theme's header (`id`, `name`, `author`, `version`, `kind`,\n`accent`)."
+        },
+        "minCoreVersion": {
+          "description": "The oldest CabinetOS it runs on, `major.minor.patch`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name people see.",
+          "type": "string"
+        },
+        "rating": {
+          "description": "What users think of it, when the index knows.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rating"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "description": "The size of the download in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "version": {
+          "description": "`major.minor.patch`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "author",
+        "version",
+        "description",
+        "size",
+        "download",
+        "manifest",
+        "minCoreVersion",
+        "license"
+      ]
+    },
+    "Rating": {
+      "description": "What users think of an extension.",
+      "type": "object",
+      "properties": {
+        "average": {
+          "description": "The average, from 0 to 5 stars.",
+          "$ref": "#/$defs/Stars"
+        },
+        "count": {
+          "description": "How many ratings the average is of.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "average",
+        "count"
+      ]
+    },
+    "Stars": {
+      "description": "From 0 to 5 stars.",
+      "type": "number",
+      "maximum": 5,
+      "minimum": 0
+    }
+  }
+}

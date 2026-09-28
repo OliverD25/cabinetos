@@ -26,6 +26,14 @@
         "level": "info"
       }
     },
+    "marketplace": {
+      "description": "Where extensions and themes come from.",
+      "$ref": "#/$defs/MarketplaceConfig",
+      "default": {
+        "allowInsecure": false,
+        "index": "https://marketplace.cabinetos.invalid/index.json"
+      }
+    },
     "panes": {
       "description": "The file panes.",
       "$ref": "#/$defs/PanesConfig",
@@ -181,6 +189,23 @@
           "description": "The least important level written to the log. The environment\nvariable `CABINETOS_LOG` overrides it.",
           "$ref": "#/$defs/LogLevel",
           "default": "info"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MarketplaceConfig": {
+      "description": "The marketplace (docs/marketplace.md).",
+      "type": "object",
+      "properties": {
+        "allowInsecure": {
+          "description": "Also accept a plain `http:` index and downloads, which anyone on the\nnetwork could change on the way. For testing only.",
+          "type": "boolean",
+          "default": false
+        },
+        "index": {
+          "description": "Where the index is: an `https:` URL, a `file:` URL, or the path of an\n`index.json` or of its folder. The core reads it only when a client\nasks.",
+          "type": "string",
+          "default": "https://marketplace.cabinetos.invalid/index.json"
         }
       },
       "additionalProperties": false

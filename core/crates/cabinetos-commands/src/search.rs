@@ -31,39 +31,53 @@ const MAX_LEADING_PENALTY: i32 = 15;
 /// query returns every command in registry order, with score 0.
 #[must_use]
 pub fn search(registry: &CommandRegistry, query: &str, limit: usize) -> Vec<SearchHit> {
+    let commands = registry.commands();
+    rank(commands, query, |command| {
+        vec![
+            format!("{}: {}", command.category, command.title),
+            command.id.clone(),
+        ]
+    })
+    .into_iter()
+    .take(limit)
+    .map(|(index, score)| SearchHit {
+        id: commands[index].id.clone(),
+        score,
+    })
+    .collect()
+}
+
+/// Ranks any list the way the palette ranks commands, for other searches
+/// that should feel the same (the marketplace). An item matches when the
+/// query matches one of its `labels`, and its best label counts; ties go to
+/// the shorter first label, then to the order of `items`. Returns the
+/// indexes of the matching items with their scores, best first. An empty
+/// query returns every index in order, with score 0.
+pub fn rank<T>(items: &[T], query: &str, labels: impl Fn(&T) -> Vec<String>) -> Vec<(usize, i32)> {
     let query: Vec<char> = query
         .chars()
         .filter(|c| !c.is_whitespace())
         .flat_map(char::to_lowercase)
         .collect();
     if query.is_empty() {
-        return registry
-            .commands()
-            .iter()
-            .take(limit)
-            .map(|command| SearchHit {
-                id: command.id.clone(),
-                score: 0,
-            })
-            .collect();
+        return (0..items.len()).map(|index| (index, 0)).collect();
     }
-    let mut hits: Vec<(i32, usize, usize, &str)> = registry
-        .commands()
+    let mut hits: Vec<(i32, usize, usize)> = items
         .iter()
         .enumerate()
-        .filter_map(|(order, command)| {
-            let label = format!("{}: {}", command.category, command.title);
-            let score = score(&query, &label).max(score(&query, &command.id))?;
-            Some((score, label.chars().count(), order, command.id.as_str()))
+        .filter_map(|(order, item)| {
+            let labels = labels(item);
+            let best = labels
+                .iter()
+                .filter_map(|label| score(&query, label))
+                .max()?;
+            let length = labels.first().map_or(0, |label| label.chars().count());
+            Some((best, length, order))
         })
         .collect();
     hits.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
     hits.into_iter()
-        .take(limit)
-        .map(|(score, _, _, id)| SearchHit {
-            id: id.to_owned(),
-            score,
-        })
+        .map(|(score, _, order)| (order, score))
         .collect()
 }
 
@@ -170,6 +184,23 @@ mod tests {
         assert_eq!(hits.len(), CommandRegistry::core().commands().len());
         assert_eq!(hits[0].id, "palette.show");
         assert!(hits.iter().all(|hit| hit.score == 0));
+    }
+
+    #[test]
+    fn any_list_ranks_like_the_palette() {
+        let names = ["Rosé Pine Moon", "Nord", "Hello", "Nord Light"];
+        let ranked = rank(&names, "nord", |name| vec![(*name).to_owned()]);
+        assert_eq!(
+            ranked.iter().map(|(index, _)| *index).collect::<Vec<_>>(),
+            [1, 3]
+        );
+        assert!(ranked[0].1 > 0);
+        // Only the second label has the `-`.
+        let by_second_label = rank(&names, "-m", |name| {
+            vec![(*name).to_owned(), name.to_lowercase().replace(' ', "-")]
+        });
+        assert_eq!(by_second_label.first().map(|(index, _)| *index), Some(0));
+        assert_eq!(rank(&names, " ", |name| vec![(*name).to_owned()]).len(), 4);
     }
 
     #[test]

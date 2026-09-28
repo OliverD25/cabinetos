@@ -1,11 +1,12 @@
 //! JSON Schema export of the control-channel messages (ADR 0006), and of the
-//! theme files the messages carry.
+//! file formats the messages carry: theme files and marketplace indexes.
 //!
 //! The message schemas are checked into `sdk/protocol/` so the C# side can be
 //! validated against the Rust types; the theme schema into `sdk/themes/`,
-//! for editors. A test keeps the checked-in files equal to what the types
-//! produce. After changing a message or the theme format, regenerate them
-//! from `core/`:
+//! for editors; the index schema into `sdk/marketplace/`, for whoever
+//! publishes an index. A test keeps the checked-in files equal to what the
+//! types produce. After changing a message or a file format, regenerate
+//! them from `core/`:
 //!
 //! ```text
 //! CABINETOS_UPDATE_SCHEMA=1 cargo test -p cabinetos-protocol
@@ -13,7 +14,9 @@
 
 use schemars::{Schema, schema_for};
 
-use crate::{Envelope, Event, IndexerRequest, IndexerResponse, Request, Response, Theme};
+use crate::{
+    Envelope, Event, IndexerRequest, IndexerResponse, MarketIndex, Request, Response, Theme,
+};
 
 /// The JSON Schema of a request: an [`Envelope`] around a [`Request`].
 #[must_use]
@@ -57,6 +60,12 @@ pub fn indexer_response_schema() -> Schema {
 #[must_use]
 pub fn theme_schema() -> Schema {
     titled(schema_for!(Theme), "CabinetOS theme")
+}
+
+/// The JSON Schema of a marketplace index, `index.json`.
+#[must_use]
+pub fn market_index_schema() -> Schema {
+    titled(schema_for!(MarketIndex), "CabinetOS marketplace index")
 }
 
 /// The envelopes would otherwise be titled "Envelope". Code generators on
@@ -146,6 +155,11 @@ mod tests {
             (ansi["minItems"].as_u64(), ansi["maxItems"].as_u64()),
             (Some(16), Some(16))
         );
+    }
+
+    #[test]
+    fn market_index_schema_matches_sdk() {
+        check_snapshot_in("marketplace", "index.schema.json", &market_index_schema());
     }
 
     #[test]

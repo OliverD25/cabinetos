@@ -12,6 +12,8 @@ on:
       - "sdk/fixtures/**"
       # The core embeds the shipped themes; a test checks the theme schema.
       - "sdk/themes/**"
+      # A test checks the marketplace index schema.
+      - "sdk/marketplace/**"
       # The WinUI shell; its tests also read sdk/protocol and sdk/config.
       - "ui/**"
       # Tool Extensions; the shell's tests check the shipped tool.json against its schema.
@@ -27,6 +29,8 @@ on:
       - "sdk/fixtures/**"
       # The core embeds the shipped themes; a test checks the theme schema.
       - "sdk/themes/**"
+      # A test checks the marketplace index schema.
+      - "sdk/marketplace/**"
       # The WinUI shell; its tests also read sdk/protocol and sdk/config.
       - "ui/**"
       # Tool Extensions; the shell's tests check the shipped tool.json against its schema.
@@ -74,7 +78,7 @@ jobs:
             if printf '%s\n' "$changed" | grep -Eq "$1"; then echo true; else echo false; fi
           }
           # The same paths as the trigger above, split by the job that needs them.
-          echo "core=$(touches '^(core/|sdk/(protocol|config|wit|fixtures|themes)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "core=$(touches '^(core/|sdk/(protocol|config|wit|fixtures|themes|marketplace)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           echo "ui=$(touches '^(ui/|sdk/(protocol|config|tools)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 

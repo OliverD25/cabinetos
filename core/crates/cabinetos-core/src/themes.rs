@@ -17,7 +17,7 @@ use cabinetos_themes::{ThemeError, ThemeFolder, default_theme};
 use tokio::sync::watch;
 
 use crate::events::EventHub;
-use crate::settings::Snapshot;
+use crate::settings::{Settings, Snapshot};
 
 /// The themes folder and the theme in effect.
 pub(crate) struct Themes {
@@ -125,6 +125,12 @@ impl Themes {
         self.lock().applied.clone()
     }
 
+    /// Whether `id` is the theme in effect, or the one `ui.theme` names.
+    pub(crate) fn in_use(&self, id: &str) -> bool {
+        let state = self.lock();
+        state.wanted == id || state.applied.id == id
+    }
+
     /// Whether `ui.theme` may name `id`: its file is a valid theme. Checked
     /// before `set_value` writes the file. Blocking: it reads the file.
     pub(crate) fn check(&self, id: &str) -> Result<(), String> {
@@ -181,6 +187,26 @@ impl Themes {
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
+}
+
+/// Opens the themes folder with the theme `ui.theme` names, watches the
+/// folder, and follows `ui.theme` from now on. The watching stops when the
+/// returned watcher drops.
+pub(crate) async fn start(
+    dir: PathBuf,
+    settings: &Arc<Settings>,
+    events: &Arc<EventHub>,
+) -> (Arc<Themes>, Option<ConfigWatcher>) {
+    let wanted = settings.snapshot().config.ui.theme.clone();
+    let theme_events = Arc::clone(events);
+    let themes =
+        match tokio::task::spawn_blocking(move || Themes::open(dir, &wanted, theme_events)).await {
+            Ok(themes) => themes,
+            Err(error) => std::panic::resume_unwind(error.into_panic()),
+        };
+    let watcher = themes.watch();
+    tokio::spawn(follow_settings(Arc::clone(&themes), settings.subscribe()));
+    (themes, watcher)
 }
 
 /// Keeps the theme in effect in step with `ui.theme`, whether a client or an

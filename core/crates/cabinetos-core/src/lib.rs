@@ -5,9 +5,10 @@
 //! behind the named pipe. The core lists directories into shared memory,
 //! keeps watched listings current with events, reports volumes and disks,
 //! owns the configuration file, the commands, the keymap and the colour
-//! themes, runs the jobs, the Core Plugins and the terminal sessions, logs
-//! every request with its ID, and exits with its parent process. The
-//! protocol is in `docs/ipc.md`.
+//! themes, runs the jobs, the Core Plugins and the terminal sessions,
+//! installs extensions from the marketplace, logs every request with its
+//! ID, and exits with its parent process. The protocol is in
+//! `docs/ipc.md`.
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: every
 //! connection is served asynchronously, so no request waits on another),
@@ -15,7 +16,7 @@
 //! theme file takes effect at once), Article 7 (Absolute Keyboard Control: the keymap and
 //! the Immutable System Tier live here), Article 8 (Sandboxed
 //! Extensibility: a plugin that crashes is removed and the core goes on;
-//! themes are JSON files),
+//! themes are JSON files; an installed plugin waits for the user's review),
 //! Article 9 (Workspace & Terminal Integration: shells in pseudo-consoles,
 //! started only when a client asks), Article 10 (The Zero-Bloat
 //! Foundation: the core is the bare navigation engine; features arrive as
@@ -26,6 +27,7 @@
 mod connection;
 mod events;
 mod listing;
+mod market;
 mod plugins;
 mod search;
 mod settings;
@@ -112,6 +114,13 @@ pub struct CoreConfig {
     /// The themes folder; `None` uses `CABINETOS_THEMES_DIR` or
     /// `%LOCALAPPDATA%\CabinetOS\themes`.
     pub themes_dir: Option<PathBuf>,
+    /// The Tool Extensions folder; `None` uses `CABINETOS_TOOLS_DIR` or
+    /// `%LOCALAPPDATA%\CabinetOS\tools`.
+    pub tools_dir: Option<PathBuf>,
+    /// The marketplace's own folder (the index cache, downloads, the record
+    /// of installs); `None` uses `CABINETOS_MARKETPLACE_DIR` or
+    /// `%LOCALAPPDATA%\CabinetOS\marketplace`.
+    pub marketplace_dir: Option<PathBuf>,
 }
 
 /// Why the core stopped with an error.
@@ -163,6 +172,8 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         plugins_dir,
         plugins_data_dir,
         themes_dir,
+        tools_dir,
+        marketplace_dir,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
     if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
@@ -182,35 +193,22 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
             Ok(settings) => settings,
             Err(error) => std::panic::resume_unwind(error.into_panic()),
         };
-    // Dropping the watcher at the end stops it without waiting.
+    // Dropping the watchers at the end stops them without waiting.
     let _watcher = settings.watch();
-    let wanted = settings.snapshot().config.ui.theme.clone();
-    let theme_events = Arc::clone(&events);
-    let themes = match tokio::task::spawn_blocking(move || {
-        themes::Themes::open(
-            cabinetos_themes::themes_dir(themes_dir),
-            &wanted,
-            theme_events,
-        )
-    })
-    .await
-    {
-        Ok(themes) => themes,
-        Err(error) => std::panic::resume_unwind(error.into_panic()),
+    let dirs = cabinetos_market::Dirs {
+        plugins: cabinetos_plugins::plugins_dir(plugins_dir),
+        themes: cabinetos_themes::themes_dir(themes_dir),
+        tools: cabinetos_market::tools_dir(tools_dir),
+        market: cabinetos_market::marketplace_dir(marketplace_dir),
     };
-    // Dropping the watcher at the end stops it.
-    let _theme_watcher = themes.watch();
-    tokio::spawn(themes::follow_settings(
-        Arc::clone(&themes),
-        settings.subscribe(),
-    ));
+    let (themes, _theme_watcher) = themes::start(dirs.themes.clone(), &settings, &events).await;
     let job_events = Arc::clone(&events);
     let jobs = JobQueueManager::new(
         EngineConfig::default(),
         Arc::new(move |event| job_events.publish(event)),
     );
     let plugins = plugins::start(
-        cabinetos_plugins::plugins_dir(plugins_dir),
+        dirs.plugins.clone(),
         cabinetos_plugins::plugins_data_dir(plugins_data_dir),
         &settings,
         &events,
@@ -222,6 +220,13 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
             settings.subscribe(),
         ));
     }
+    let market = Arc::new(market::Marketplace::new(
+        cabinetos_market::Market::new(dirs, CORE_VERSION),
+        Arc::clone(&settings),
+        Arc::clone(&events),
+        plugins.clone(),
+        Arc::clone(&themes),
+    ));
     let terminals = terminal::start(&events);
     // Dropping the watcher at the end stops it.
     let _drives = volumes::watch(Arc::clone(&events));
@@ -234,6 +239,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         terminals,
         hydrator: Arc::new(cabinetos_fs::Hydrator::new()),
         themes,
+        market,
     });
     let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     // The shells get their hang-up; together they may take up to 2 s to end.

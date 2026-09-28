@@ -12,9 +12,10 @@
 //!   `list_volumes`, `open_path`, `create_directory`, `rename`, `set_value`,
 //!   the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`,
-//!   `list_themes`, `get_theme` of a named theme)
-//!   as tasks, so one slow directory, plugin, search or shell never holds up
-//!   the next request. After `hello` it also forwards the configuration,
+//!   `list_themes`, `get_theme` of a named theme, `list_tools` and the
+//!   marketplace requests)
+//!   as tasks, so one slow directory, plugin, search, shell or download
+//!   never holds up the next request. After `hello` it also forwards the configuration,
 //!   theme, job, plugin, terminal and volume events every connection
 //!   receives.
 
@@ -45,7 +46,7 @@ use crate::listing::{self, CurrentSection, Failure, Published, WatchedListing};
 use crate::plugins::check_grants;
 use crate::search;
 use crate::settings::{Settings, every_section};
-use crate::{CORE_VERSION, decode_request, terminal, volumes};
+use crate::{CORE_VERSION, Rejection, decode_request, terminal, volumes};
 
 /// How long the writer may take to send what is still queued when the
 /// connection ends.
@@ -238,16 +239,7 @@ impl Session {
         let envelope = match decode_request(frame) {
             Ok(envelope) => envelope,
             Err(rejection) => {
-                let id = rejection.id.unwrap_or_else(RequestId::new);
-                let _entered = span_for_request(&id).entered();
-                tracing::warn!(code = ?rejection.code, error = %rejection.message, "request rejected");
-                self.out.reply(
-                    id,
-                    Response::Error {
-                        code: rejection.code,
-                        message: rejection.message,
-                    },
-                );
+                self.reject(rejection);
                 return;
             }
         };
@@ -320,8 +312,14 @@ impl Session {
                 | Request::TerminalClose { .. }
                 | Request::TerminalSyncCwd { .. }
                 | Request::TerminalList) => self.terminal_request(&id, &span, kind, request),
-                request @ (Request::ListThemes | Request::GetTheme { .. }) => {
-                    self.theme_request(&id, &span, kind, request)
+                request @ (Request::ListThemes
+                | Request::GetTheme { .. }
+                | Request::ListTools
+                | Request::MarketplaceRefresh
+                | Request::MarketplaceSearch { .. }
+                | Request::InstallExtension { .. }
+                | Request::UninstallExtension { .. }) => {
+                    self.extension_request(&id, &span, kind, request)
                 }
             }
         };
@@ -331,6 +329,20 @@ impl Session {
             log_handled(kind, started, &reply);
             self.out.reply(id, reply);
         }
+    }
+
+    /// Answers a frame that is not a valid request.
+    fn reject(&self, rejection: Rejection) {
+        let id = rejection.id.unwrap_or_else(RequestId::new);
+        let _entered = span_for_request(&id).entered();
+        tracing::warn!(code = ?rejection.code, error = %rejection.message, "request rejected");
+        self.out.reply(
+            id,
+            Response::Error {
+                code: rejection.code,
+                message: rejection.message,
+            },
+        );
     }
 
     fn hello(&mut self, client_pid: u32, client_name: &str) -> Response {
@@ -576,6 +588,21 @@ impl Session {
         }
     }
 
+    /// The theme, tool and marketplace requests.
+    fn extension_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        if let Request::ListThemes | Request::GetTheme { .. } = request {
+            return self.theme_request(id, span, kind, request);
+        }
+        self.market_request(id, span, kind, request);
+        None
+    }
+
     /// `list_themes` and `get_theme` of a named theme read theme files, on
     /// the blocking pool; the theme in effect answers at once.
     fn theme_request(
@@ -599,6 +626,40 @@ impl Session {
                 None
             }
             _ => None,
+        }
+    }
+
+    /// The marketplace requests and `list_tools`, on the blocking pool: each
+    /// reads folders, and a refresh, a search or an install may wait for
+    /// the network.
+    fn market_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) {
+        let market = Arc::clone(&self.services.market);
+        match request {
+            Request::ListTools => self.spawn_reply(id, span, kind, move || Response::Tools {
+                tools: market.tools(),
+            }),
+            Request::MarketplaceRefresh => {
+                self.spawn_reply(id, span, kind, move || market.refresh());
+            }
+            Request::MarketplaceSearch { query, kind: only } => {
+                self.spawn_reply(id, span, kind, move || market.search(&query, only));
+            }
+            Request::InstallExtension {
+                extension_id,
+                version,
+            } => self.spawn_reply(id, span, kind, move || {
+                market.install(&extension_id, version.as_deref())
+            }),
+            Request::UninstallExtension { extension_id } => {
+                self.spawn_reply(id, span, kind, move || market.uninstall(&extension_id));
+            }
+            _ => {}
         }
     }
 

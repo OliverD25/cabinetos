@@ -1,0 +1,30 @@
+[package]
+name = "cabinetos-market"
+description = "The marketplace client: the index, downloads checked by SHA-256, installing and removing plugins, themes and tools."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cabinetos-commands.workspace = true
+cabinetos-protocol.workspace = true
+cabinetos-themes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+# rustls on ring, with the Windows certificate store (rustls-platform-verifier).
+ureq = { workspace = true, features = ["rustls-no-provider", "_ring", "platform-verifier"] }
+url.workspace = true
+# Reading zips with Deflate only.
+zip = { workspace = true, features = ["deflate-flate2-zlib-rs"] }
+
+[dev-dependencies]
+cabinetos-protocol = { workspace = true, features = ["schema"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

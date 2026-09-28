@@ -355,6 +355,87 @@
         "type",
         "theme"
       ]
+    },
+    {
+      "description": "How far a download for `install_extension` has come. At most 30 per\nsecond, and always one when the download is complete.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "description": "Bytes downloaded so far.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "extension_id": {
+          "description": "The extension.",
+          "type": "string"
+        },
+        "total": {
+          "description": "The download's size, as the index gives it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "install_progress"
+        }
+      },
+      "required": [
+        "type",
+        "extension_id",
+        "bytes",
+        "total"
+      ]
+    },
+    {
+      "description": "An `install_extension` ended. Sent to every connection that said\n`hello`, whichever asked.",
+      "type": "object",
+      "properties": {
+        "extension_id": {
+          "description": "The extension.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What happened, for the user: `installed hello 0.1.0`, or why not.",
+          "type": "string"
+        },
+        "ok": {
+          "description": "Whether it is installed now.",
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "const": "install_finished"
+        }
+      },
+      "required": [
+        "type",
+        "extension_id",
+        "ok",
+        "message"
+      ]
+    },
+    {
+      "description": "A Tool Extension was installed or removed. Sent to every connection\nthat said `hello`, with the list `list_tools` would answer now.",
+      "type": "object",
+      "properties": {
+        "tools": {
+          "description": "Every installed tool.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ToolInfo"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "tools_changed"
+        }
+      },
+      "required": [
+        "type",
+        "tools"
+      ]
     }
   ],
   "required": [
@@ -1292,6 +1373,44 @@
           "type": "string",
           "const": "light"
         }
+      ]
+    },
+    "ToolInfo": {
+      "description": "An installed Tool Extension: `tools/<id>/tool.json`.",
+      "type": "object",
+      "properties": {
+        "author": {
+          "description": "Who made it.",
+          "type": "string"
+        },
+        "description": {
+          "description": "What it does.",
+          "type": "string"
+        },
+        "dir": {
+          "description": "Its folder, from which the Tool Dock loads it.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The tool's ID; also its folder's name.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Its version.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "author",
+        "description",
+        "dir"
       ]
     },
     "VolumeDetails": {

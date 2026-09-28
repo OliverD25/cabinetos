@@ -58,6 +58,19 @@ struct Args {
     #[arg(long, value_name = "PATH")]
     themes_dir: Option<PathBuf>,
 
+    /// Keep the Tool Extensions in this folder instead of
+    /// %LOCALAPPDATA%\CabinetOS\tools (or the `CABINETOS_TOOLS_DIR`
+    /// variable).
+    #[arg(long, value_name = "PATH")]
+    tools_dir: Option<PathBuf>,
+
+    /// Keep the marketplace's own files (the index cache, downloads while
+    /// they run, the record of installs) in this folder instead of
+    /// %LOCALAPPDATA%\CabinetOS\marketplace (or the
+    /// `CABINETOS_MARKETPLACE_DIR` variable).
+    #[arg(long, value_name = "PATH")]
+    marketplace_dir: Option<PathBuf>,
+
     /// Log one event, then panic: tests crash traces.
     #[arg(long, hide = true)]
     self_test_panic: bool,
@@ -92,6 +105,8 @@ fn main() -> ExitCode {
         plugins_dir: args.plugins_dir,
         plugins_data_dir: args.plugins_data_dir,
         themes_dir: args.themes_dir,
+        tools_dir: args.tools_dir,
+        marketplace_dir: args.marketplace_dir,
     };
     match runtime.block_on(run(config, CancellationToken::new())) {
         Ok(()) => ExitCode::SUCCESS,
@@ -155,6 +170,10 @@ mod tests {
             r"E:\plugins-data",
             "--themes-dir",
             r"E:\themes",
+            "--tools-dir",
+            r"E:\tools",
+            "--marketplace-dir",
+            r"E:\marketplace",
             "--self-test-panic",
         ])
         .unwrap();
@@ -168,6 +187,8 @@ mod tests {
             Some(PathBuf::from(r"E:\plugins-data"))
         );
         assert_eq!(args.themes_dir, Some(PathBuf::from(r"E:\themes")));
+        assert_eq!(args.tools_dir, Some(PathBuf::from(r"E:\tools")));
+        assert_eq!(args.marketplace_dir, Some(PathBuf::from(r"E:\marketplace")));
         assert!(args.self_test_panic);
     }
 }

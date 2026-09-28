@@ -36,7 +36,9 @@ folder, writes each shipped theme whose file is missing, and keeps
 `theme.schema.json` next to the themes, so an editor completes and checks
 the keys (a theme file starts with `"$schema": "./theme.schema.json"`). A
 shipped theme the user edited stays as it is; one the user deleted comes
-back at the next start.
+back at the next start. A theme installed from the marketplace lands here
+too ([marketplace.md](marketplace.md)); it applies at once when `ui.theme`
+names it.
 
 ## The format
 

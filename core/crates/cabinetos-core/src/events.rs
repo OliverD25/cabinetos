@@ -11,6 +11,7 @@ use cabinetos_protocol::{Envelope, Event, RequestId};
 use cabinetos_terminal::Terminals;
 use tokio::sync::broadcast;
 
+use crate::market::Marketplace;
 use crate::search::IndexerLink;
 use crate::settings::Settings;
 use crate::themes::Themes;
@@ -58,4 +59,6 @@ pub(crate) struct Services {
     pub(crate) hydrator: Arc<Hydrator>,
     /// The themes folder and the theme in effect.
     pub(crate) themes: Arc<Themes>,
+    /// The marketplace: the index, installs and uninstalls.
+    pub(crate) market: Arc<Marketplace>,
 }

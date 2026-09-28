@@ -788,6 +788,19 @@ impl PluginHost {
         lock(&self.inner.slots).contains_key(id)
     }
 
+    /// Forgets a plugin whose files are about to be removed: stops its
+    /// instance and unregisters its commands. `list_plugins` no longer shows
+    /// it. Returns whether the host knew it.
+    pub fn remove(&self, id: &str) -> bool {
+        let mut slots = lock(&self.inner.slots);
+        let Some(mut slot) = slots.remove(id) else {
+            return false;
+        };
+        self.inner.stop(id, &mut slot);
+        tracing::info!(plugin_id = id, "plugin removed");
+        true
+    }
+
     /// Runs one of a plugin's commands and waits for its JSON result.
     /// Blocking: up to the call deadline.
     pub fn execute(

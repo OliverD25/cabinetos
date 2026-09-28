@@ -5,8 +5,8 @@
 //! configuration (`config`), the command registry (`commands`), the keymap
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
-//! search (`search`, `index status`), the terminal sessions (`term`), and
-//! the colour themes (`themes`).
+//! search (`search`, `index status`), the terminal sessions (`term`), the
+//! colour themes (`themes`), and the marketplace (`market`).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -21,6 +21,7 @@
 mod describe;
 mod jobs;
 mod ls;
+mod market;
 mod plugins;
 mod search;
 mod settings;
@@ -36,8 +37,8 @@ use anyhow::{Context, anyhow, bail};
 use cabinetos_diag::{Boundary, DiagConfig, span_for_request};
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
-    ConflictPolicy, Envelope, JobAction, JobKind, JobOptions, JobRequest, Request, RequestId,
-    Resolution, Response, SortKey, SortSpec, VolumeDetails,
+    ConflictPolicy, Envelope, ExtensionKind, JobAction, JobKind, JobOptions, JobRequest, Request,
+    RequestId, Resolution, Response, SortKey, SortSpec, VolumeDetails,
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use tracing::Instrument;
@@ -225,6 +226,59 @@ enum Command {
         #[command(subcommand)]
         action: ThemesAction,
     },
+    /// Browse the marketplace index (marketplace.index in the
+    /// configuration), and install or remove extensions.
+    Market {
+        #[command(subcommand)]
+        action: MarketAction,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum MarketAction {
+    /// Read the index now and print its items.
+    Refresh,
+    /// Search the index (read first when needed), best first.
+    Search {
+        /// Text to look for in the name, the ID or the publisher.
+        query: String,
+        /// Only items of this kind.
+        #[arg(long, value_enum)]
+        kind: Option<KindArg>,
+    },
+    /// Download an extension, check its SHA-256 and install it, with a
+    /// progress line. A plugin then waits for review (plugins list).
+    Install {
+        /// The extension's ID in the index.
+        id: String,
+        /// The version; without it, the newest this core can run.
+        #[arg(long)]
+        version: Option<String>,
+    },
+    /// Remove exactly the files an install put in place.
+    Uninstall {
+        /// The extension's ID.
+        id: String,
+    },
+    /// List the installed Tool Extensions.
+    Tools,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum KindArg {
+    Plugin,
+    Theme,
+    Tool,
+}
+
+impl From<KindArg> for ExtensionKind {
+    fn from(kind: KindArg) -> Self {
+        match kind {
+            KindArg::Plugin => Self::Plugin,
+            KindArg::Theme => Self::Theme,
+            KindArg::Tool => Self::Tool,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -621,27 +675,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         })?;
 
     match &cli.command {
-        Command::Ping { count } => {
-            for _ in 0..*count {
-                let started = Instant::now();
-                let reply = send(&mut client, Request::Ping).await?;
-                let rtt = started.elapsed();
-                let Response::Pong {
-                    protocol_version,
-                    core_version,
-                } = reply.body
-                else {
-                    bail!("expected pong, got {:?} (id={})", reply.body, reply.id);
-                };
-                if !say(format_args!(
-                    "pong id={} protocol={protocol_version} core={core_version} rtt={:.2}ms",
-                    reply.id,
-                    rtt.as_secs_f64() * 1000.0
-                )) {
-                    break;
-                }
-            }
-        }
+        Command::Ping { count } => ping(&mut client, *count).await?,
         Command::Shutdown => {
             let reply = send(&mut client, Request::Shutdown).await?;
             if reply.body != Response::Ok {
@@ -700,7 +734,34 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             action: IndexAction::Status,
         } => search::status(&mut client).await?,
         Command::Term(arguments) => term_command(&mut client, arguments).await?,
-        Command::Themes { .. } => extension_command(&mut client, &cli.command).await?,
+        Command::Themes { .. } | Command::Market { .. } => {
+            extension_command(&mut client, &cli.command).await?;
+        }
+    }
+    Ok(())
+}
+
+/// `ping`: `count` pings, one after another, each printed with its round
+/// trip.
+async fn ping(client: &mut PipeClient, count: u32) -> anyhow::Result<()> {
+    for _ in 0..count {
+        let started = Instant::now();
+        let reply = send(client, Request::Ping).await?;
+        let rtt = started.elapsed();
+        let Response::Pong {
+            protocol_version,
+            core_version,
+        } = reply.body
+        else {
+            bail!("expected pong, got {:?} (id={})", reply.body, reply.id);
+        };
+        if !say(format_args!(
+            "pong id={} protocol={protocol_version} core={core_version} rtt={:.2}ms",
+            reply.id,
+            rtt.as_secs_f64() * 1000.0
+        )) {
+            break;
+        }
     }
     Ok(())
 }
@@ -784,12 +845,28 @@ async fn term_command(client: &mut PipeClient, arguments: &TermArgs) -> anyhow::
     }
 }
 
-/// The extension commands: `themes list|show`.
+/// The extension commands: `themes list|show`, `market
+/// refresh|search|install|uninstall|tools`.
 async fn extension_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
     match command {
         Command::Themes { action } => match action {
             ThemesAction::List => themes::list(client).await,
             ThemesAction::Show { id } => themes::show(client, id.as_deref()).await,
+        },
+        Command::Market { action } => match action {
+            MarketAction::Refresh => market::list(client, Request::MarketplaceRefresh).await,
+            MarketAction::Search { query, kind } => {
+                let request = Request::MarketplaceSearch {
+                    query: query.clone(),
+                    kind: kind.map(ExtensionKind::from),
+                };
+                market::list(client, request).await
+            }
+            MarketAction::Install { id, version } => {
+                market::install(client, id, version.as_deref()).await
+            }
+            MarketAction::Uninstall { id } => market::uninstall(client, id).await,
+            MarketAction::Tools => market::tools(client).await,
         },
         _ => unreachable!("only extension commands come here"),
     }
@@ -1033,7 +1110,7 @@ pub(crate) fn say(line: std::fmt::Arguments<'_>) -> bool {
 
 /// `1999433101312` → `1.82 TiB`.
 #[expect(clippy::cast_precision_loss, reason = "a size rounded for display")]
-fn binary_size(bytes: u64) -> String {
+pub(crate) fn binary_size(bytes: u64) -> String {
     let units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
     let mut value = bytes as f64;
     let mut unit = 0;
@@ -1590,6 +1667,41 @@ mod tests {
                 action: ThemesAction::Show { id: None }
             }
         );
+    }
+
+    #[test]
+    fn parses_market() {
+        let parse = |args: &[&str]| {
+            let mut all = vec!["cabinetos-cli", "market"];
+            all.extend_from_slice(args);
+            match Cli::try_parse_from(all).unwrap().command {
+                Command::Market { action } => action,
+                other => panic!("expected market, got {other:?}"),
+            }
+        };
+        assert_eq!(parse(&["refresh"]), MarketAction::Refresh);
+        assert_eq!(
+            parse(&["search", "nord", "--kind", "theme"]),
+            MarketAction::Search {
+                query: "nord".to_owned(),
+                kind: Some(KindArg::Theme)
+            }
+        );
+        assert_eq!(
+            parse(&["install", "hello", "--version", "0.1.0"]),
+            MarketAction::Install {
+                id: "hello".to_owned(),
+                version: Some("0.1.0".to_owned())
+            }
+        );
+        assert_eq!(
+            parse(&["uninstall", "hello"]),
+            MarketAction::Uninstall {
+                id: "hello".to_owned()
+            }
+        );
+        assert_eq!(parse(&["tools"]), MarketAction::Tools);
+        assert!(Cli::try_parse_from(["cabinetos-cli", "market", "install"]).is_err());
     }
 
     #[test]

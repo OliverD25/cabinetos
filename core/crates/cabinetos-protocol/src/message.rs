@@ -4,6 +4,7 @@ use serde_json::Value;
 use crate::RequestId;
 use crate::index::{FileHit, SearchSource, VolumeStatus, default_file_search_limit};
 use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution};
+use crate::market::{ExtensionKind, MarketItem, ToolInfo};
 use crate::plugin::{PluginInfo, PluginState};
 use crate::terminal::TerminalSession;
 use crate::theme::{Theme, ThemeInfo};
@@ -309,6 +310,42 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         theme_id: Option<String>,
     },
+    /// Asks for every installed Tool Extension. The core answers `tools`.
+    ListTools,
+    /// Reads the marketplace index named by `marketplace.index` in the
+    /// configuration: from disk, or from the web. The core answers
+    /// `marketplace_index`. The core reaches the network only for this
+    /// request, `marketplace_search` and `install_extension`.
+    MarketplaceRefresh,
+    /// Searches the index read last (read first when there is none, or when
+    /// `marketplace.index` changed). The core answers `marketplace_index`
+    /// with the matching items, best first.
+    MarketplaceSearch {
+        /// Text to look for in the name, the ID or the publisher, ranked as
+        /// the palette ranks commands; empty for every item.
+        query: String,
+        /// Only items of this kind.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<ExtensionKind>,
+    },
+    /// Downloads an extension from the index, checks its SHA-256, and
+    /// installs it. The core answers `ok` once it is in place; a plugin then
+    /// waits in `needs_review`. `install_progress` and `install_finished`
+    /// follow its way.
+    InstallExtension {
+        /// The extension's ID in the index. (Named `extension_id`, not `id`:
+        /// `id` is the request's own ID in the same object.)
+        extension_id: String,
+        /// The version; without it, the newest version this core can run.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        version: Option<String>,
+    },
+    /// Removes exactly the files an install put in place (a plugin's own
+    /// data folder stays). The core answers `ok`.
+    UninstallExtension {
+        /// The extension's ID.
+        extension_id: String,
+    },
 }
 
 fn default_search_limit() -> u32 {
@@ -357,6 +394,11 @@ impl Request {
         "terminal_list",
         "list_themes",
         "get_theme",
+        "list_tools",
+        "marketplace_refresh",
+        "marketplace_search",
+        "install_extension",
+        "uninstall_extension",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -401,6 +443,11 @@ impl Request {
             Self::TerminalList => "terminal_list",
             Self::ListThemes => "list_themes",
             Self::GetTheme { .. } => "get_theme",
+            Self::ListTools => "list_tools",
+            Self::MarketplaceRefresh => "marketplace_refresh",
+            Self::MarketplaceSearch { .. } => "marketplace_search",
+            Self::InstallExtension { .. } => "install_extension",
+            Self::UninstallExtension { .. } => "uninstall_extension",
         }
     }
 }
@@ -605,6 +652,22 @@ pub enum Response {
         /// The whole theme, as its file has it.
         theme: Box<Theme>,
     },
+    /// Reply to `list_tools`: every installed Tool Extension, by ID.
+    Tools {
+        /// The tools.
+        tools: Vec<ToolInfo>,
+    },
+    /// Reply to `marketplace_refresh` and `marketplace_search`.
+    MarketplaceIndex {
+        /// The items, in the index's own format (camelCase keys): in index
+        /// order after a refresh, best first after a search.
+        items: Vec<MarketItem>,
+        /// Where the index came from: its URL or its file.
+        source: String,
+        /// When the index was read or confirmed unchanged, in milliseconds
+        /// since 1970-01-01 UTC.
+        fetched_at_ms: u64,
+    },
 }
 
 impl Response {
@@ -635,6 +698,8 @@ impl Response {
         "terminal_sessions",
         "themes",
         "theme",
+        "tools",
+        "marketplace_index",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -666,6 +731,8 @@ impl Response {
             Self::TerminalSessions { .. } => "terminal_sessions",
             Self::Themes { .. } => "themes",
             Self::Theme { .. } => "theme",
+            Self::Tools { .. } => "tools",
+            Self::MarketplaceIndex { .. } => "marketplace_index",
         }
     }
 }
@@ -935,6 +1002,32 @@ pub enum Event {
         /// The theme in effect now.
         theme: Box<Theme>,
     },
+    /// How far a download for `install_extension` has come. At most 30 per
+    /// second, and always one when the download is complete.
+    InstallProgress {
+        /// The extension.
+        extension_id: String,
+        /// Bytes downloaded so far.
+        bytes: u64,
+        /// The download's size, as the index gives it.
+        total: u64,
+    },
+    /// An `install_extension` ended. Sent to every connection that said
+    /// `hello`, whichever asked.
+    InstallFinished {
+        /// The extension.
+        extension_id: String,
+        /// Whether it is installed now.
+        ok: bool,
+        /// What happened, for the user: `installed hello 0.1.0`, or why not.
+        message: String,
+    },
+    /// A Tool Extension was installed or removed. Sent to every connection
+    /// that said `hello`, with the list `list_tools` would answer now.
+    ToolsChanged {
+        /// Every installed tool.
+        tools: Vec<ToolInfo>,
+    },
 }
 
 impl Event {
@@ -955,6 +1048,9 @@ impl Event {
         "terminal_exited",
         "volumes_changed",
         "theme_changed",
+        "install_progress",
+        "install_finished",
+        "tools_changed",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -975,6 +1071,9 @@ impl Event {
             Self::TerminalExited { .. } => "terminal_exited",
             Self::VolumesChanged { .. } => "volumes_changed",
             Self::ThemeChanged { .. } => "theme_changed",
+            Self::InstallProgress { .. } => "install_progress",
+            Self::InstallFinished { .. } => "install_finished",
+            Self::ToolsChanged { .. } => "tools_changed",
         }
     }
 }
@@ -1071,6 +1170,19 @@ pub enum ErrorCode {
     SpawnFailed,
     /// No valid theme has that ID in the themes folder.
     NoSuchTheme,
+    /// The index has no extension with that ID (or not that version), or
+    /// none with that ID was installed from the marketplace.
+    NoSuchExtension,
+    /// The marketplace cannot do it: the index cannot be read or is refused
+    /// (plain `http:` without `marketplace.allowInsecure`), a download
+    /// failed, the download is not what its kind needs, or something is in
+    /// the way.
+    MarketplaceError,
+    /// The download's SHA-256 is not the one the index gives. The download
+    /// was deleted and nothing was installed.
+    HashMismatch,
+    /// The extension needs a newer CabinetOS (`minCoreVersion`).
+    Incompatible,
 }
 
 #[cfg(test)]
@@ -1079,6 +1191,7 @@ mod tests {
 
     use super::*;
     use crate::job::{ConflictKind, ConflictPolicy, JobKind, JobOptions, LinkPolicy};
+    use crate::market::{Author, Download, MarketCapability};
     use crate::theme::ThemeKind;
 
     const ID: &str = "01J9ZQ4X7K3M5N8P2R6S0T1V4W";
@@ -1147,6 +1260,49 @@ mod tests {
             "terminal": {"foreground": gray, "background": "#2E3440", "cursor": gray, "ansi": vec![gray; 16]}
         }))
         .unwrap()
+    }
+
+    fn market_item() -> MarketItem {
+        MarketItem {
+            id: "hello".to_owned(),
+            kind: ExtensionKind::Plugin,
+            name: "Hello".to_owned(),
+            author: Author {
+                name: "CabinetOS".to_owned(),
+                verified: false,
+                url: None,
+            },
+            version: "0.1.0".to_owned(),
+            description: "Says hello.".to_owned(),
+            long: "The sample Core Plugin.".to_owned(),
+            rating: None,
+            installs: Some(12),
+            size: 73_347,
+            download: Download {
+                url: "files/hello-0.1.0.zip".to_owned(),
+                sha256: "ab".repeat(32),
+            },
+            manifest: json!({"id": "hello", "name": "Hello"}),
+            capabilities: vec![MarketCapability {
+                name: "cmd:register".to_owned(),
+                reason: "Adds the Say Hello command.".to_owned(),
+                roots: Vec::new(),
+                level: Some(crate::plugin::CapabilityLevel::Low),
+            }],
+            min_core_version: "0.1.0".to_owned(),
+            license: "MIT".to_owned(),
+        }
+    }
+
+    fn tool() -> ToolInfo {
+        ToolInfo {
+            id: "md-preview".to_owned(),
+            name: "Markdown Preview".to_owned(),
+            version: "1.0.0".to_owned(),
+            author: "CabinetOS".to_owned(),
+            description: "Shows Markdown.".to_owned(),
+            dir: r"C:\Users\me\AppData\Local\CabinetOS\tools\md-preview".to_owned(),
+        }
     }
 
     #[expect(clippy::too_many_lines, reason = "one example of every request")]
@@ -1278,6 +1434,19 @@ mod tests {
             Request::ListThemes,
             Request::GetTheme {
                 theme_id: Some("nord".to_owned()),
+            },
+            Request::ListTools,
+            Request::MarketplaceRefresh,
+            Request::MarketplaceSearch {
+                query: "nord".to_owned(),
+                kind: Some(ExtensionKind::Theme),
+            },
+            Request::InstallExtension {
+                extension_id: "hello".to_owned(),
+                version: Some("0.1.0".to_owned()),
+            },
+            Request::UninstallExtension {
+                extension_id: "hello".to_owned(),
             },
         ]
     }
@@ -1481,6 +1650,14 @@ mod tests {
             Response::Theme {
                 theme: Box::new(theme()),
             },
+            Response::Tools {
+                tools: vec![tool()],
+            },
+            Response::MarketplaceIndex {
+                items: vec![market_item()],
+                source: r"C:\market\index.json".to_owned(),
+                fetched_at_ms: 1_790_000_000_000,
+            },
         ]
     }
 
@@ -1551,6 +1728,19 @@ mod tests {
             },
             Event::ThemeChanged {
                 theme: Box::new(theme()),
+            },
+            Event::InstallProgress {
+                extension_id: "hello".to_owned(),
+                bytes: 4096,
+                total: 73_347,
+            },
+            Event::InstallFinished {
+                extension_id: "hello".to_owned(),
+                ok: true,
+                message: "installed hello 0.1.0".to_owned(),
+            },
+            Event::ToolsChanged {
+                tools: vec![tool()],
             },
         ]
     }
@@ -1733,6 +1923,10 @@ mod tests {
             (ErrorCode::NoSuchPlugin, "no_such_plugin"),
             (ErrorCode::PluginError, "plugin_error"),
             (ErrorCode::NoSuchTheme, "no_such_theme"),
+            (ErrorCode::NoSuchExtension, "no_such_extension"),
+            (ErrorCode::MarketplaceError, "marketplace_error"),
+            (ErrorCode::HashMismatch, "hash_mismatch"),
+            (ErrorCode::Incompatible, "incompatible"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));
@@ -1949,6 +2143,41 @@ mod tests {
         let value = serde_json::to_value(&plain).unwrap();
         assert!(value["accent"].is_null() && value["mica"].is_null());
         assert_eq!(plain.kind, ThemeKind::Dark);
+    }
+
+    #[test]
+    fn marketplace_messages_have_the_documented_wire_form() {
+        let install = json!({"id": ID, "type": "install_extension", "extension_id": "hello"});
+        let envelope: Envelope<Request> = serde_json::from_value(install).unwrap();
+        assert_eq!(
+            envelope.body,
+            Request::InstallExtension {
+                extension_id: "hello".to_owned(),
+                version: None,
+            }
+        );
+        let search = json!({"id": ID, "type": "marketplace_search", "query": ""});
+        let envelope: Envelope<Request> = serde_json::from_value(search).unwrap();
+        assert_eq!(
+            envelope.body,
+            Request::MarketplaceSearch {
+                query: String::new(),
+                kind: None,
+            }
+        );
+        let index = every_response()
+            .into_iter()
+            .find(|response| matches!(response, Response::MarketplaceIndex { .. }))
+            .unwrap();
+        let value = serde_json::to_value(Envelope::new(id(), index)).unwrap();
+        assert_eq!(value["type"], "marketplace_index");
+        assert_eq!(value["fetched_at_ms"], 1_790_000_000_000_u64);
+        let item = &value["items"][0];
+        assert_eq!(item["kind"], "plugin");
+        assert_eq!(item["minCoreVersion"], "0.1.0");
+        assert_eq!(item["download"]["url"], "files/hello-0.1.0.zip");
+        assert_eq!(item["capabilities"][0]["level"], "low");
+        assert!(item.get("rating").is_none());
     }
 
     #[test]

@@ -32,5 +32,11 @@ What lives here, or will:
   `catppuccin-mocha`, `rose-pine-moon`), which the core embeds and writes
   into the themes folder when they are missing
   ([../docs/themes.md](../docs/themes.md)).
+- `marketplace/` — the marketplace index format (Phase 9):
+  `index.schema.json`, exported from the Rust types in
+  `core/crates/cabinetos-protocol`, and `build-index.ps1`, which builds a
+  local index from `fixtures/plugins` and `themes/` with their SHA-256
+  hashes, for development and tests
+  ([../docs/marketplace.md](../docs/marketplace.md)).
 
 Extension architecture: Constitution Article 11 and brief §6.

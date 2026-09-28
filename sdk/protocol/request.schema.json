@@ -821,6 +821,104 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Asks for every installed Tool Extension. The core answers `tools`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "list_tools"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Reads the marketplace index named by `marketplace.index` in the\nconfiguration: from disk, or from the web. The core answers\n`marketplace_index`. The core reaches the network only for this\nrequest, `marketplace_search` and `install_extension`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "marketplace_refresh"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Searches the index read last (read first when there is none, or when\n`marketplace.index` changed). The core answers `marketplace_index`\nwith the matching items, best first.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Only items of this kind.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExtensionKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query": {
+          "description": "Text to look for in the name, the ID or the publisher, ranked as\nthe palette ranks commands; empty for every item.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "marketplace_search"
+        }
+      },
+      "required": [
+        "type",
+        "query"
+      ]
+    },
+    {
+      "description": "Downloads an extension from the index, checks its SHA-256, and\ninstalls it. The core answers `ok` once it is in place; a plugin then\nwaits in `needs_review`. `install_progress` and `install_finished`\nfollow its way.",
+      "type": "object",
+      "properties": {
+        "extension_id": {
+          "description": "The extension's ID in the index. (Named `extension_id`, not `id`:\n`id` is the request's own ID in the same object.)",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "install_extension"
+        },
+        "version": {
+          "description": "The version; without it, the newest version this core can run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "extension_id"
+      ]
+    },
+    {
+      "description": "Removes exactly the files an install put in place (a plugin's own\ndata folder stays). The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "extension_id": {
+          "description": "The extension's ID.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "uninstall_extension"
+        }
+      },
+      "required": [
+        "type",
+        "extension_id"
+      ]
     }
   ],
   "required": [
@@ -854,6 +952,26 @@
           "description": "Give the new file a free name: `name (2).ext`.",
           "type": "string",
           "const": "rename"
+        }
+      ]
+    },
+    "ExtensionKind": {
+      "description": "What an extension is.",
+      "oneOf": [
+        {
+          "description": "A Core Plugin: a WebAssembly component with its `plugin.json`.",
+          "type": "string",
+          "const": "plugin"
+        },
+        {
+          "description": "A colour theme: one JSON file.",
+          "type": "string",
+          "const": "theme"
+        },
+        {
+          "description": "A Tool Extension: a folder the Tool Dock hosts.",
+          "type": "string",
+          "const": "tool"
         }
       ]
     },

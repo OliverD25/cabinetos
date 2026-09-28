@@ -12,13 +12,14 @@ protocol between UI and core, with the shared-memory layout:
 [../docs/plugins.md](../docs/plugins.md). The indexer and search:
 [../docs/indexer.md](../docs/indexer.md). The terminal sessions:
 [../docs/terminal.md](../docs/terminal.md). Colour themes:
-[../docs/themes.md](../docs/themes.md).
+[../docs/themes.md](../docs/themes.md). The marketplace:
+[../docs/marketplace.md](../docs/marketplace.md).
 
 ## Crates
 
 | Crate | Kind | Responsibility | Constitution articles |
 |---|---|---|---|
-| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host, the event hub, search (through the indexer, or a bounded walk without it), the terminal sessions, and the theme in effect | 1, 5, 6, 7, 8, 9, 10, 12 |
+| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host, the event hub, search (through the indexer, or a bounded walk without it), the terminal sessions, the theme in effect, and the marketplace's installs with their effects | 1, 2, 5, 6, 7, 8, 9, 10, 12 |
 | `cabinetos-protocol` | library | The IPC contract: message envelopes, request IDs, `#[repr(C)]` shared-memory layouts, JSON Schema export | 1, 12 |
 | `cabinetos-diag` | library | JSON Lines logs, ring buffer of recent events, crash traces ([../docs/diagnostics.md](../docs/diagnostics.md)) | 12, 1 |
 | `cabinetos-ipc` | library | Named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch, and the byte pipes of terminal sessions | 1, 12 |
@@ -32,6 +33,7 @@ protocol between UI and core, with the shared-memory layout:
 | `cabinetos-plugins` | library | `PluginHost`: Core Plugins as WebAssembly components in `wasmtime`, strict manifests, capabilities, the WASI sandbox, fuel, deadline and memory limits per call, trap containment and restarts ([../docs/plugins.md](../docs/plugins.md)) | 8, 10, 11 |
 | `cabinetos-terminal` | library | `Terminals`: shells in pseudo-consoles (ConPTY), a byte pipe per session for one client at a time, output bounded to 1 MiB with backpressure, the change-directory line of each shell, and the console side of `cabinetos-cli term` ([../docs/terminal.md](../docs/terminal.md)) | 9, 4, 1 |
 | `cabinetos-themes` | library | `ThemeFolder`: the strict checks of the JSON theme format, the themes folder (the shipped themes written when missing, the schema for editors), listing and loading themes by ID ([../docs/themes.md](../docs/themes.md)) | 6, 8 |
+| `cabinetos-market` | library | `Market`: the marketplace index (from disk, or over HTTPS with `ureq`, rustls and the Windows certificate store, cached with its `ETag`), search, and installs checked by SHA-256, unpacked in a staging folder and recorded file by file, so an uninstall removes exactly them ([../docs/marketplace.md](../docs/marketplace.md)) | 2, 8 |
 
 A stub holds only its crate documentation and the names of its future public
 types, so the shape of the engine can be reviewed before the code exists.
@@ -76,7 +78,9 @@ The plugin tests load the committed components in
 toolchain. Every test that starts a core points `CABINETOS_PLUGINS_DIR`,
 `CABINETOS_PLUGINS_DATA_DIR` and `CABINETOS_THEMES_DIR` at its temporary
 folder, so no test sees the plugins installed on the machine or writes the
-shipped themes into the real themes folder. The `reader` fixture reads
+shipped themes into the real themes folder. The marketplace tests build
+their indexes on the fly under `%TEMP%\cabinetos-core-test\` and never
+reach the network: the web path is tested against a server on 127.0.0.1. The `reader` fixture reads
 `%TEMP%\cabinetos-plugins-test\reader`, which its tests create and remove.
 
 The indexer's tests need Administrator rights to read the MFT and the
@@ -119,7 +123,8 @@ under `%TEMP%\cabinetos-fs-test\`, which it removes. CI only compiles the
 benchmarks.
 
 **Schemas.** `sdk/protocol/*.schema.json` (the messages),
-`sdk/themes/theme.schema.json` (the theme files) and
+`sdk/themes/theme.schema.json` (the theme files),
+`sdk/marketplace/index.schema.json` (the marketplace index) and
 `sdk/config/cabinetos.schema.json` (the configuration file) are generated
 from the Rust types, and a test fails when a file is out of date. After
 changing a message, the theme format or a setting, regenerate and commit
@@ -142,7 +147,11 @@ another file. It loads the Core Plugins from
 (or `CABINETOS_PLUGINS_DATA_DIR`) the folder of the plugins' own folders.
 It reads the colour themes from `%LOCALAPPDATA%\CabinetOS\themes`, and
 writes the shipped themes there when they are missing; `--themes-dir
-<path>` (or `CABINETOS_THEMES_DIR`) picks another folder.
+<path>` (or `CABINETOS_THEMES_DIR`) picks another folder. Tool Extensions
+live in `%LOCALAPPDATA%\CabinetOS\tools` (`--tools-dir`,
+`CABINETOS_TOOLS_DIR`), and the marketplace keeps its own files in
+`%LOCALAPPDATA%\CabinetOS\marketplace` (`--marketplace-dir`,
+`CABINETOS_MARKETPLACE_DIR`).
 
 ```text
 cargo run -p cabinetos-core -- --pipe demo
@@ -153,6 +162,16 @@ own (in cmd; in PowerShell write `$env:TEMP` for `%TEMP%`):
 
 ```text
 cargo run -p cabinetos-core -- --pipe demo --plugins-dir ..\sdk\fixtures\plugins --plugins-data-dir %TEMP%\cabinetos-demo\plugins-data --themes-dir %TEMP%\cabinetos-demo\themes --config %TEMP%\cabinetos-demo\cabinetos.json
+
+To try the marketplace with a local index (`build-index.ps1` writes it;
+nothing leaves the machine), start the core with folders that are not your
+own and point `marketplace.index` at the index:
+
+```text
+powershell -ExecutionPolicy Bypass -File ..\sdk\marketplace\build-index.ps1 -OutDir %TEMP%\cabinetos-demo\market
+cargo run -p cabinetos-core -- --pipe demo --plugins-dir %TEMP%\cabinetos-demo\plugins --plugins-data-dir %TEMP%\cabinetos-demo\plugins-data --themes-dir %TEMP%\cabinetos-demo\themes --tools-dir %TEMP%\cabinetos-demo\tools --marketplace-dir %TEMP%\cabinetos-demo\marketplace --config %TEMP%\cabinetos-demo\cabinetos.json
+cargo run -p cabinetos-cli -- --pipe demo config set marketplace.index %TEMP%\cabinetos-demo\market
+```
 ```
 
 Terminal 2, from `core/`:
@@ -190,6 +209,10 @@ cargo run -p cabinetos-cli -- --pipe demo term close 1
 cargo run -p cabinetos-cli -- --pipe demo themes list
 cargo run -p cabinetos-cli -- --pipe demo themes show nord
 cargo run -p cabinetos-cli -- --pipe demo config set ui.theme nord
+cargo run -p cabinetos-cli -- --pipe demo market refresh
+cargo run -p cabinetos-cli -- --pipe demo market search nord --kind theme
+cargo run -p cabinetos-cli -- --pipe demo market install hello
+cargo run -p cabinetos-cli -- --pipe demo market uninstall hello
 cargo run -p cabinetos-cli -- --pipe demo shutdown
 ```
 
@@ -258,6 +281,13 @@ cargo run --release -p cabinetos-indexer -- --console --volumes C
   `themes show [<id>]` prints a whole theme as JSON (without an ID, the
   one in effect). `config set ui.theme <id>` changes the theme, and
   `events watch` shows the `theme_changed` that follows.
+- `market refresh` reads the index and prints its items (ID, version,
+  kind, name, publisher, size, and what a plugin asks for); `market search
+  <query> [--kind plugin|theme|tool]` ranks them; `market install <id>
+  [--version V]` shows the download's progress and then what the core did
+  (a plugin then waits for review: `plugins list`); `market uninstall <id>`
+  removes exactly what the install put in place; `market tools` lists the
+  installed Tool Extensions.
 - `shutdown` makes the core exit with code 0. The core also exits on Ctrl+C,
   and, when started with `--parent-pid <pid>`, as soon as that process exits.
 
