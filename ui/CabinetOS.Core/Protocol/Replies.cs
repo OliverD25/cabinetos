@@ -287,6 +287,10 @@ public static class ErrorCodes
     public const string ConfigError = "config_error";
     public const string Io = "io";
     public const string NoSuchTheme = "no_such_theme";
+    public const string NoSuchExtension = "no_such_extension";
+    public const string MarketplaceError = "marketplace_error";
+    public const string HashMismatch = "hash_mismatch";
+    public const string Incompatible = "incompatible";
 }
 
 /// <summary>A tint laid over the Mica backdrop: a <c>#RRGGBB</c> colour and how much of it covers the backdrop.</summary>
@@ -352,3 +356,57 @@ public sealed record ThemesReply(IReadOnlyList<ThemeInfo> Themes) : CoreReply;
 
 /// <summary>Reply to <c>get_theme</c>.</summary>
 public sealed record ThemeReply(ColorTheme Theme) : CoreReply;
+
+/// <summary>An installed Tool Extension, as the core lists it: <c>tools\&lt;id&gt;\tool.json</c> and its folder.</summary>
+public sealed record ToolInfo(string Id, string Name, string Version, string Author, string Description, string Dir);
+
+/// <summary>Reply to <c>list_tools</c>: every installed tool, by ID.</summary>
+public sealed record ToolsReply(IReadOnlyList<ToolInfo> Tools) : CoreReply;
+
+/// <summary>What an extension of the marketplace is.</summary>
+public static class ExtensionKinds
+{
+    public const string Plugin = "plugin";
+    public const string Theme = "theme";
+    public const string Tool = "tool";
+}
+
+/// <summary>Who publishes an extension. <see cref="Verified"/> is shown, not checked (docs/marketplace.md, trust rule 8).</summary>
+public sealed record MarketAuthor(string Name, bool Verified = false, string? Url = null);
+
+/// <summary>What users think of an extension: 0 to 5 stars, and how many ratings that is.</summary>
+public sealed record MarketRating(double Average, ulong Count);
+
+/// <summary>Where an extension's download is, and the SHA-256 it must have.</summary>
+public sealed record MarketDownload(string Url, string Sha256);
+
+/// <summary>A capability a plugin asks for, as the index lists it; the core adds the level.</summary>
+public sealed record MarketCapability(string Name, string Reason, string? Level = null, IReadOnlyList<string>? Roots = null);
+
+/// <summary>
+/// One extension in one version, as the index offers it (docs/marketplace.md,
+/// "The index"). These are the index's own keys, camelCase like a theme's.
+/// </summary>
+public sealed record MarketItem(
+    string Id,
+    string Kind,
+    string Name,
+    MarketAuthor Author,
+    string Version,
+    string Description,
+    ulong Size,
+    MarketDownload Download,
+    JsonElement Manifest,
+    [property: JsonPropertyName("minCoreVersion")] string MinCoreVersion,
+    string License,
+    string Long = "",
+    MarketRating? Rating = null,
+    ulong? Installs = null,
+    IReadOnlyList<MarketCapability>? Capabilities = null);
+
+/// <summary>
+/// Reply to <c>marketplace_refresh</c> (the index's order) and
+/// <c>marketplace_search</c> (best first): the items, the index's file or URL,
+/// and when it was read or found unchanged (ms since 1970, UTC).
+/// </summary>
+public sealed record MarketplaceIndexReply(IReadOnlyList<MarketItem> Items, string Source, ulong FetchedAtMs) : CoreReply;

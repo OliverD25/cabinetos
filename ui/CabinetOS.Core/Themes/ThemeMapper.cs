@@ -102,6 +102,8 @@ public static class ThemeMapper
             ["CbFolderBrush"] = folder,
             ["CbFolderFrontBrush"] = folderFront,
             ["CbRunningBrush"] = levels.Low,
+            // The design's rating star is its medium level's yellow.
+            ["CbRatingStarBrush"] = levels.Medium,
         };
 
         // The palette's Acrylic alpha is how much luminosity it lays over the blur (0xB8, the design's .72);

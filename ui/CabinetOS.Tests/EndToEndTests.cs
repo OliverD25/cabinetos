@@ -1,8 +1,12 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Text;
+using System.Text.Json.Nodes;
 using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Jobs;
 using CabinetOS.Core.Keys;
+using CabinetOS.Core.Market;
+using CabinetOS.Core.Plugins;
 using CabinetOS.Core.Terminal;
 using CabinetOS.Core.Themes;
 using CabinetOS.Core.Listing;
@@ -334,6 +338,69 @@ public class EndToEndTests
         }
     }
 
+    [Fact]
+    public async Task The_marketplace_reads_the_local_index_installs_a_reviewed_plugin_that_starts_and_removes_it()
+    {
+        var coreExe = FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-market");
+        try
+        {
+            var index = Path.Combine(root, "index");
+            BuildLocalIndex(index);
+            Directory.CreateDirectory(Path.Combine(root, "config"));
+            File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"),
+                new JsonObject { ["marketplace"] = new JsonObject { ["index"] = index } }.ToJsonString());
+
+            await using var core = await StartCoreAsync(coreExe, root);
+            await core.Client.HelloAsync();
+            if (await core.Client.RequestAsync(new ListToolsRequest()) is ErrorReply { Code: ErrorCodes.UnknownRequest })
+            {
+                Assert.Skip("This core has no marketplace yet: build the core again.");
+            }
+
+            using var ui = new UiThread();
+            var events = new List<CoreEvent>();
+            await ui.RunAsync(async () =>
+            {
+                var market = new MarketplaceModel(core.Client, _ => Task.CompletedTask);
+                _ = PumpAsync(core.Client, market, events);
+
+                Assert.True(await market.RefreshAsync(), market.Notice?.Detail);
+                Assert.StartsWith(index, market.Source, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(4, market.CountOf(MarketTabs.Themes));
+                // The shipped themes are in the themes folder already: installed, never replaced (trust rule 7).
+                Assert.All(market.All.Where(i => i.Kind == ExtensionKinds.Theme), theme => Assert.True(market.IsInstalled(theme), theme.Id));
+                var hello = market.Find("hello")!;
+                Assert.Equal(MarketAction.Install, market.ActionFor(hello));
+                // The core adds each capability's level for the review.
+                Assert.All(hello.Capabilities!, capability => Assert.NotNull(capability.Level));
+
+                await market.QueryChangedAsync("hel");
+                Assert.Equal("hello", market.Items[0].Id);
+
+                var review = PermissionReview.ForInstall(hello);
+                var installed = await market.InstallAndGrantAsync("hello", review.ToGrant);
+                Assert.True(installed.Ok, installed.Error);
+                Assert.Equal(MarketAction.Installed, market.ActionFor(hello));
+                Assert.True(File.Exists(Path.Combine(root, "plugins", "hello", "plugin.wasm")));
+                await WaitUntilAsync(() => events.OfType<PluginStateChangedEvent>().Any(e => e.PluginId == "hello" && e.State.Type == PluginState.Active),
+                    "hello to become active");
+                Assert.Contains(events, e => e is InstallProgressEvent { ExtensionId: "hello" } progress && progress.Bytes == progress.Total);
+                Assert.Contains(events, e => e is InstallFinishedEvent { ExtensionId: "hello", Ok: true });
+
+                Assert.True((await market.UninstallAsync("hello")).Ok);
+                Assert.False(market.IsInstalled(hello));
+                Assert.False(File.Exists(Path.Combine(root, "plugins", "hello", "plugin.wasm")));
+                return true;
+            });
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
     private static string FindCoreOrSkip()
     {
         var coreExe = CoreLauncher.Find(Path.Combine(Repo.Root, "ui"), Environment.GetEnvironmentVariable, File.Exists);
@@ -354,8 +421,41 @@ public class EndToEndTests
             ["CABINETOS_PLUGINS_DIR"] = Path.Combine(root, "plugins"),
             ["CABINETOS_PLUGINS_DATA_DIR"] = Path.Combine(root, "plugins-data"),
             ["CABINETOS_THEMES_DIR"] = Path.Combine(root, "themes"),
+            ["CABINETOS_MARKETPLACE_DIR"] = Path.Combine(root, "marketplace"),
         };
         return CoreLauncher.StartAsync(coreExe, TimeSpan.FromSeconds(10), environment);
+    }
+
+    // sdk/marketplace/build-index.ps1: the fixture plugins and the shipped themes, hashed, into one folder.
+    private static void BuildLocalIndex(string folder)
+    {
+        var script = Path.Combine(Repo.Root, "sdk", "marketplace", "build-index.ps1");
+        var start = new ProcessStartInfo("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-OutDir", folder])
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        // Started from PowerShell 7, the test would hand Windows PowerShell 7's module path, where
+        // Get-FileHash is not found; without it, Windows PowerShell uses its own.
+        start.Environment.Remove("PSModulePath");
+        using var process = Process.Start(start)!;
+        var errors = process.StandardError.ReadToEndAsync();
+        var output = process.StandardOutput.ReadToEnd();
+        Assert.True(process.WaitForExit(120_000), "build-index.ps1 did not finish within 2 minutes");
+        Assert.True(process.ExitCode == 0 && File.Exists(Path.Combine(folder, "index.json")), output + errors.Result);
+    }
+
+    // The window's event pump, for the marketplace: every core event goes to the model on the UI thread.
+    private static async Task PumpAsync(CoreClient client, MarketplaceModel market, List<CoreEvent> seen)
+    {
+        await foreach (var coreEvent in client.Events.ReadAllAsync())
+        {
+            seen.Add(coreEvent);
+            market.OnEvent(coreEvent);
+            (coreEvent as ICarriesSection)?.TakeSection()?.Dispose();
+        }
     }
 
     // The window's event pump, in short: every core event goes to the job center on the UI thread.

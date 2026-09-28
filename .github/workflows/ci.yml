@@ -79,7 +79,8 @@ jobs:
           }
           # The same paths as the trigger above, split by the job that needs them.
           echo "core=$(touches '^(core/|sdk/(protocol|config|wit|fixtures|themes|marketplace)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
-          echo "ui=$(touches '^(ui/|sdk/(protocol|config|tools)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          # The shell's theme tests map the shipped themes of sdk/themes.
+          echo "ui=$(touches '^(ui/|sdk/(protocol|config|tools|themes)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
   core:

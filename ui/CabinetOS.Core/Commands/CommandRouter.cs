@@ -64,6 +64,9 @@ public sealed class CommandRouter(ICoreChannel core)
     /// <summary>Raised on the calling thread when a run ended.</summary>
     public event Action<CommandOutcome>? Completed;
 
+    /// <summary>Raised on the calling thread just before a command runs, so the window can make room for what it does.</summary>
+    public event Action<CommandInvocation>? Executing;
+
     /// <summary>Every command of the core's registry, in registry order.</summary>
     public IReadOnlyList<CommandInfo> Commands { get; private set; } = [];
 
@@ -161,6 +164,7 @@ public sealed class CommandRouter(ICoreChannel core)
     {
         var requestId = Ulid.NewId();
         var invocation = new CommandInvocation(commandId, args, requestId, trigger);
+        Executing?.Invoke(invocation);
         var info = Find(commandId);
         CommandOutcome outcome;
         if (info is null && _local.TryGetValue(commandId, out var local))

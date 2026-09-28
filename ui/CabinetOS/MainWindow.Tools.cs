@@ -296,9 +296,15 @@ public sealed partial class MainWindow
         Active.Search is null ? Active.Targets().Select(t => t.Path).ToList() : [],
         Active.Path.Length > 0 ? Active.Path : null);
 
-    // The keyboard back to the active pane, or to the tool page that covers it (one pane shown).
+    // The keyboard back to the active pane, or to the tool page that covers it (one pane shown);
+    // while the marketplace covers the panes, back to the marketplace.
     private void FocusActivePane()
     {
+        if (MarketView.IsOpen)
+        {
+            MarketView.FocusSearch();
+            return;
+        }
         if (_editorViews is { } editors && editors[_active].IsOpen && editors[_active].FocusPage())
         {
             return;

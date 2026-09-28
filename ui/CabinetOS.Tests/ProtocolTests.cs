@@ -65,8 +65,19 @@ public class ProtocolTests
             new ListThemesRequest(),
             new GetThemeRequest(),
             new GetThemeRequest { ThemeId = "nord" },
+            new ListToolsRequest(),
+            new MarketplaceRefreshRequest(),
+            new MarketplaceSearchRequest("nord") { Kind = ExtensionKinds.Theme },
+            new MarketplaceSearchRequest(""),
+            new InstallExtensionRequest("hello"),
+            new InstallExtensionRequest("hello") { Version = "0.1.0" },
+            new UninstallExtensionRequest("hello"),
         ];
     }
+
+    private const string HelloItem = """{"id":"hello","kind":"plugin","name":"Hello","author":{"name":"CabinetOS","verified":false},"version":"0.1.0","description":"The sample Core Plugin.","long":"The sample Core Plugin: a Say Hello command that answers.","size":27003,"download":{"url":"files/hello-0.1.0.zip","sha256":"2aaaf9704b4472089bf1e296437107bf9a08e5cc902acdde8c445e95df89da66"},"manifest":{"id":"hello","name":"Hello","version":"0.1.0","capabilities":[{"name":"cmd:register","reason":"Adds the Say Hello command."}]},"capabilities":[{"name":"cmd:register","reason":"Adds the Say Hello command.","level":"low"},{"name":"fs:read","reason":"Reads its folder.","roots":["%TEMP%\\hello"],"level":"medium"}],"minCoreVersion":"0.1.0","license":"MIT"}""";
+
+    private const string NordItem = """{"id":"nord","kind":"theme","name":"Nord","author":{"name":"Arctic Ice Studio","verified":true,"url":"https://www.nordtheme.com"},"version":"1.0.0","description":"An arctic, north-bluish palette.","size":1527,"download":{"url":"https://example.org/nord-1.0.0.json","sha256":"c1c0d89ae34d347c5e333dccee13f28e1967521f9cba349ebcf74c7afc4dd0fb"},"manifest":{"id":"nord","name":"Nord","author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#88C0D0"},"rating":{"average":4.8,"count":120},"installs":5400,"minCoreVersion":"0.1.0","license":"MIT"}""";
 
     private const string NordTheme = """{"id":"nord","name":"Nord","author":"CabinetOS","attribution":"Colours from the Nord palette.","version":"1.0.0","kind":"dark","accent":"#88C0D0","mica":{"tint":"#2E3440","opacity":0.88},"palette":{"textPrimary":"#ECEFF4","textSecondary":"#D8DEE9","textTertiary":"#D8DEE98B","textDisabled":"#D8DEE95D","layerFill":"#3B425280","layerStroke":"#434C5E99","layerStrokeActive":"#4C566A","controlFill":"#3B4252B3","controlFillHover":"#434C5EB3","acrylicTint":"#2E3440B8","terminalBackground":"#2E344099","folderIcon":"#EBCB8B","folderIconFront":"#F2DDB4","fileTypeColors":{"md":"#88C0D0","rs":"#D08770","toml":"#B48EAD","exe":"#A3BE8C","dll":"#A3BE8C","bin":"#BF616A","pdf":"#BF616A","zip":"#EBCB8B"},"permissionLow":"#A3BE8C","permissionMedium":"#EBCB8B","permissionHigh":"#BF616A"},"terminal":{"foreground":"#D8DEE9","background":"#2E3440","cursor":"#D8DEE9","ansi":["#3B4252","#BF616A","#A3BE8C","#EBCB8B","#81A1C1","#B48EAD","#88C0D0","#E5E9F0","#4C566A","#BF616A","#A3BE8C","#EBCB8B","#81A1C1","#B48EAD","#8FBCBB","#ECEFF4"]}}""";
 
@@ -100,7 +111,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(35, checkedTypes.Count);
+        Assert.Equal(40, checkedTypes.Count);
     }
 
     [Fact]
@@ -286,6 +297,25 @@ public class ProtocolTests
                     Assert.Equal(16, theme.Terminal.Ansi.Count);
                     Assert.False(theme.IsLight);
                 }),
+            ($$$"""{"id":"{{{Id}}}","type":"marketplace_index","source":"C:\\market\\index.json","fetched_at_ms":1790000000000,"items":[{{{HelloItem}}},{{{NordItem}}}]}""",
+                b =>
+                {
+                    var index = Assert.IsType<MarketplaceIndexReply>(b);
+                    Assert.Equal((@"C:\market\index.json", 1790000000000UL), (index.Source, index.FetchedAtMs));
+                    var (hello, nord) = (index.Items[0], index.Items[1]);
+                    Assert.Equal((ExtensionKinds.Plugin, "0.1.0", 27003UL, "MIT"), (hello.Kind, hello.MinCoreVersion, hello.Size, hello.License));
+                    Assert.Equal(new MarketCapability("cmd:register", "Adds the Say Hello command.", "low"), hello.Capabilities![0]);
+                    Assert.Equal(["%TEMP%\\hello"], hello.Capabilities[1].Roots);
+                    Assert.Null(hello.Rating);
+                    Assert.Null(hello.Author.Url);
+                    Assert.Equal("files/hello-0.1.0.zip", hello.Download.Url);
+                    Assert.Equal(("", 4.8, 120UL, 5400UL), (nord.Long, nord.Rating!.Average, nord.Rating.Count, nord.Installs!.Value));
+                    Assert.Equal(new MarketAuthor("Arctic Ice Studio", true, "https://www.nordtheme.com"), nord.Author);
+                    Assert.Equal("#88C0D0", nord.Manifest.GetProperty("accent").GetString());
+                    Assert.Null(nord.Capabilities);
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"tools","tools":[{"id":"markdown-preview","name":"Markdown Preview","version":"1.0.0","author":"CabinetOS","description":"Shows Markdown.","dir":"C:\\Users\\me\\AppData\\Local\\CabinetOS\\tools\\markdown-preview"}]}""",
+                b => Assert.Equal(("markdown-preview", "1.0.0"), (Assert.IsType<ToolsReply>(b).Tools.Single().Id, ((ToolsReply)b).Tools.Single().Version))),
         };
         foreach (var (json, check) in samples)
         {
@@ -353,6 +383,12 @@ public class ProtocolTests
                 b => Assert.Equal((23U, "Data error (cyclic redundancy check)."), (((JobConflictEvent)b).Kind.Code!.Value, ((JobConflictEvent)b).Kind.Message))),
             ($$$"""{"id":"{{{Id}}}","type":"theme_changed","theme":{{{NordTheme}}}}""",
                 b => Assert.Equal("#2E3440", Assert.IsType<ThemeChangedEvent>(b).Theme.Mica!.Tint)),
+            ($$$"""{"id":"{{{Id}}}","type":"install_progress","extension_id":"hello","bytes":13500,"total":27003}""",
+                b => Assert.Equal(new InstallProgressEvent("hello", 13500, 27003), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"install_finished","extension_id":"hello","ok":true,"message":"installed hello 0.1.0 (plugin)"}""",
+                b => Assert.Equal(new InstallFinishedEvent("hello", true, "installed hello 0.1.0 (plugin)"), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"tools_changed","tools":[]}""",
+                b => Assert.Empty(Assert.IsType<ToolsChangedEvent>(b).Tools)),
         };
         foreach (var (json, check) in samples)
         {

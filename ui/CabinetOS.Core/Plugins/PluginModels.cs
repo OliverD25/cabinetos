@@ -50,9 +50,12 @@ public sealed record PluginTile(string Text, string Color)
     private static readonly string[] Colors = ["#F0906C", "#F2C063", "#C9B6FF", "#60CDFF", "#8AD2B8", "#F5A8C9"];
 
     /// <summary>The tile for <paramref name="plugin"/>.</summary>
-    public static PluginTile For(PluginInfo plugin)
+    public static PluginTile For(PluginInfo plugin) => For(plugin.Id, plugin.Name);
+
+    /// <summary>The tile of the extension <paramref name="id"/> named <paramref name="name"/>.</summary>
+    public static PluginTile For(string id, string name)
     {
-        var words = plugin.Name.Split([' ', '-', '_'], StringSplitOptions.RemoveEmptyEntries);
+        var words = name.Split([' ', '-', '_'], StringSplitOptions.RemoveEmptyEntries);
         var text = words.Length switch
         {
             0 => "?",
@@ -61,7 +64,7 @@ public sealed record PluginTile(string Text, string Color)
         };
         // A stable pick: the same plugin keeps its color from one start to the next.
         var hash = 0u;
-        foreach (var c in plugin.Id)
+        foreach (var c in id)
         {
             hash = (hash * 31) + c;
         }
@@ -128,6 +131,25 @@ public sealed class PermissionReview(PluginInfo plugin)
 
     /// <summary>The plugin under review.</summary>
     public PluginInfo Plugin { get; } = plugin;
+
+    /// <summary>The marketplace item this review installs ("Allow and install"), or null for an installed plugin.</summary>
+    public MarketItem? Install { get; private init; }
+
+    /// <summary>
+    /// The review of a plugin before it is installed from the marketplace:
+    /// what the index says it asks for, which the core checks against the
+    /// plugin's own manifest before installing (trust rule 3). Allowing
+    /// installs it and grants all of them.
+    /// </summary>
+    public static PermissionReview ForInstall(MarketItem item)
+    {
+        var capabilities = (item.Capabilities ?? [])
+            .Select(c => new CapabilityInfo(c.Name, c.Level ?? "unknown", false, c.Reason, c.Roots))
+            .ToList();
+        var plugin = new PluginInfo(item.Id, item.Name, item.Version, item.Author.Name, item.Description,
+            new PluginState(PluginState.NeedsReview, capabilities.Select(c => c.Name).ToList()), capabilities, []);
+        return new PermissionReview(plugin) { Install = item };
+    }
 
     /// <summary>"Hello by CabinetOS".</summary>
     public string Subtitle => $"{Plugin.Name} by {Plugin.Author}";

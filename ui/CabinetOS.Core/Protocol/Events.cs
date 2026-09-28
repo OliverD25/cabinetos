@@ -110,3 +110,12 @@ public sealed record TerminalExitedEvent(ulong SessionId, uint ExitCode) : CoreE
 
 /// <summary>The theme in effect changed (<c>ui.theme</c>, or its file was saved); it comes whole.</summary>
 public sealed record ThemeChangedEvent(ColorTheme Theme) : CoreEvent;
+
+/// <summary>How far the download of an <c>install_extension</c> has come: at most 30 a second, and one at the end.</summary>
+public sealed record InstallProgressEvent(string ExtensionId, ulong Bytes, ulong Total) : CoreEvent;
+
+/// <summary>An <c>install_extension</c> ended, whichever client asked: whether it is installed now, and what happened.</summary>
+public sealed record InstallFinishedEvent(string ExtensionId, bool Ok, string Message) : CoreEvent;
+
+/// <summary>A Tool Extension was installed or removed; the list is what <c>list_tools</c> would answer now.</summary>
+public sealed record ToolsChangedEvent(IReadOnlyList<ToolInfo> Tools) : CoreEvent;

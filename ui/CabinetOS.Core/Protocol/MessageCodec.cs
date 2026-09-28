@@ -63,6 +63,8 @@ public static class MessageCodec
         ["icon"] = ProtocolJson.Default.IconReply,
         ["themes"] = ProtocolJson.Default.ThemesReply,
         ["theme"] = ProtocolJson.Default.ThemeReply,
+        ["tools"] = ProtocolJson.Default.ToolsReply,
+        ["marketplace_index"] = ProtocolJson.Default.MarketplaceIndexReply,
         ["listing_refreshed"] = ProtocolJson.Default.ListingRefreshedEvent,
         ["listing_lost"] = ProtocolJson.Default.ListingLostEvent,
         ["config_changed"] = ProtocolJson.Default.ConfigChangedEvent,
@@ -76,6 +78,9 @@ public static class MessageCodec
         ["terminal_exited"] = ProtocolJson.Default.TerminalExitedEvent,
         ["volumes_changed"] = ProtocolJson.Default.VolumesChangedEvent,
         ["theme_changed"] = ProtocolJson.Default.ThemeChangedEvent,
+        ["install_progress"] = ProtocolJson.Default.InstallProgressEvent,
+        ["install_finished"] = ProtocolJson.Default.InstallFinishedEvent,
+        ["tools_changed"] = ProtocolJson.Default.ToolsChangedEvent,
     }.ToFrozenDictionary();
 
     /// <summary>The request as UTF-8 JSON, <c>id</c> and <c>type</c> first.</summary>

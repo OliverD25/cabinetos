@@ -65,6 +65,12 @@ public sealed partial class MainWindow
         {
             return;
         }
+        if (review.Install is { } item)
+        {
+            // A review from the marketplace: allowing installs it first.
+            await InstallReviewedAsync(review, item, invocation.RequestId);
+            return;
+        }
         ReviewView.ShowBusy(true);
         ReviewView.ShowError(null);
         var granted = await review.AllowAsync(_session, invocation.RequestId);

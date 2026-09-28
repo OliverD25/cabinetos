@@ -67,10 +67,11 @@
             <SolidColorBrush x:Key="CbDialogTextBrush" Color="#CCFFFFFF" />
             <!-- The accent: the Windows accent until the theme says otherwise. -->
             <SolidColorBrush x:Key="CbAccentBrush" Color="{ThemeResource SystemAccentColorLight2}" />
-            <!-- The folder icon (the design's two-tone folder) and a running shell's dot. -->
+            <!-- The folder icon (the design's two-tone folder), a running shell's dot, and the marketplace's rating star. -->
             <SolidColorBrush x:Key="CbFolderBrush" Color="#FFF2C063" />
             <SolidColorBrush x:Key="CbFolderFrontBrush" Color="#FFF8D98A" />
             <SolidColorBrush x:Key="CbRunningBrush" Color="#FF6CCB5F" />
+            <SolidColorBrush x:Key="CbRatingStarBrush" Color="#FFF2C063" />
 
             <!-- A 1 px lighter bottom edge, as on a Fluent text field. -->
             <LinearGradientBrush x:Key="CbFieldStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">

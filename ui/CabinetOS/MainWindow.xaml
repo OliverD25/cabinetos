@@ -189,10 +189,13 @@
                 <Button
                     x:Name="MarketplaceButton"
                     Grid.Column="8"
-                    AutomationProperties.Name="Marketplace (arrives in a later version)"
-                    IsEnabled="False"
-                    Style="{StaticResource CbSubtleButtonStyle}">
-                    <FontIcon FontSize="14" Glyph="&#xE719;" />
+                    AutomationProperties.Name="Marketplace"
+                    Style="{StaticResource CbSubtleButtonStyle}"
+                    ToolTipService.ToolTip="Marketplace (Ctrl+Shift+X)">
+                    <FontIcon
+                        x:Name="MarketplaceIcon"
+                        FontSize="14"
+                        Glyph="&#xE719;" />
                 </Button>
                 <Button
                     x:Name="PaletteButton"
@@ -269,6 +272,9 @@
                         Grid.Row="2"
                         Visibility="Collapsed" />
                 </Grid>
+
+                <!-- The marketplace (design view C) takes the main column's place; the sidebar and the status bar stay. -->
+                <views:MarketplaceView x:Name="MarketView" Grid.Column="1" />
             </Grid>
 
             <!-- Status bar (26 px). -->

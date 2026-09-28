@@ -389,3 +389,43 @@ public sealed class GetThemeRequest() : CoreRequest("get_theme")
     /// <summary>The theme's ID; absent: the theme in effect now.</summary>
     public string? ThemeId { get; init; }
 }
+
+/// <summary>Asks for every installed Tool Extension (version 10); the reply is <c>tools</c>.</summary>
+public sealed class ListToolsRequest() : CoreRequest("list_tools");
+
+/// <summary>
+/// Reads the marketplace index that <c>marketplace.index</c> names (version
+/// 10); the reply is <c>marketplace_index</c>, in the index's order.
+/// </summary>
+public sealed class MarketplaceRefreshRequest() : CoreRequest("marketplace_refresh");
+
+/// <summary>Searches the index read last; the reply is <c>marketplace_index</c>, best first.</summary>
+public sealed class MarketplaceSearchRequest(string query) : CoreRequest("marketplace_search")
+{
+    /// <summary>Text to look for in the name, the ID or the publisher; empty for every item.</summary>
+    public string Query { get; } = query;
+
+    /// <summary>Only items of this kind (<see cref="ExtensionKinds"/>); absent: every kind.</summary>
+    public string? Kind { get; init; }
+}
+
+/// <summary>
+/// Downloads an extension from the index, checks its SHA-256 and installs it;
+/// the reply is <c>ok</c> once it is in place. <c>install_progress</c> and
+/// <c>install_finished</c> go to every client meanwhile.
+/// </summary>
+public sealed class InstallExtensionRequest(string extensionId) : CoreRequest("install_extension")
+{
+    /// <summary>The extension's ID in the index (not <c>id</c>, which is the request's own).</summary>
+    public string ExtensionId { get; } = extensionId;
+
+    /// <summary>The version; absent: the newest this core can run.</summary>
+    public string? Version { get; init; }
+}
+
+/// <summary>Removes exactly the files an install put in place; the reply is <c>ok</c>.</summary>
+public sealed class UninstallExtensionRequest(string extensionId) : CoreRequest("uninstall_extension")
+{
+    /// <summary>The extension's ID.</summary>
+    public string ExtensionId { get; } = extensionId;
+}

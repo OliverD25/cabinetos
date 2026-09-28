@@ -142,6 +142,7 @@ public sealed partial class MainWindow : Window
         SetUpSearch();
         SetUpPlugins();
         SetUpTools();
+        SetUpMarket();
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
@@ -670,6 +671,10 @@ public sealed partial class MainWindow : Window
                 {
                     ShowNotice("cabinetos.json is valid again.");
                 }
+                if (changed.Changed.Any(key => key.StartsWith("marketplace", StringComparison.Ordinal)))
+                {
+                    OnMarketIndexChanged();
+                }
                 _ = ReadConfigSafelyAsync();
                 break;
             case ConfigErrorEvent error:
@@ -690,8 +695,16 @@ public sealed partial class MainWindow : Window
                 _ = _terminal.OnExitedAsync(exited);
                 return;
             case PluginStateChangedEvent or PluginCrashedEvent:
+                _market.OnEvent(coreEvent);
                 _ = RefreshPluginsAsync();
                 break;
+            case InstallProgressEvent or InstallFinishedEvent:
+                _market.OnEvent(coreEvent);
+                return;
+            case ToolsChangedEvent:
+                _market.OnEvent(coreEvent);
+                _toolsLoading = ReloadToolsAsync();
+                return;
             case JobProgressEvent or JobStateChangedEvent or JobConflictEvent:
                 _transfers.OnEvent(coreEvent);
                 OnJobEvent(coreEvent);
@@ -758,6 +771,9 @@ public sealed partial class MainWindow : Window
         _pluginsUnavailable = false;
         ReviewView.Close();
         PluginsView.Close();
+        // Its downloads ended with it; a shown marketplace reads the index again once it runs.
+        _market.Reset();
+        _marketRead = false;
         if (_restarts.Count >= 3)
         {
             await ShowStartFailureAsync($"The core stopped three times within a minute. Last reason: {reason}");
@@ -777,6 +793,11 @@ public sealed partial class MainWindow : Window
         _settingsWriter.Reset();
         _unavailable.Clear();
         await LoadAsync(firstStart: false);
+        if (MarketView.IsOpen)
+        {
+            _marketRead = true;
+            _ = _market.RefreshAsync();
+        }
         ShowNotice("The core is running again.");
     }
 
@@ -895,6 +916,7 @@ public sealed partial class MainWindow : Window
         RegisterPluginCommands();
         RegisterToolCommands();
         RegisterThemeCommands();
+        RegisterMarketCommands();
 
         _router.Completed += OnCommandCompleted;
     }
@@ -1007,6 +1029,10 @@ public sealed partial class MainWindow : Window
         else if (PluginsView.IsOpen)
         {
             ClosePlugins();
+        }
+        else if (MarketView.IsOpen)
+        {
+            CloseMarketLevel();
         }
         else if (FileMenu.IsOpen)
         {
