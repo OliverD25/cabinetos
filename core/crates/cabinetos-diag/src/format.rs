@@ -75,7 +75,9 @@ struct Line<'a> {
 /// Renders one event as a JSON line, without the trailing newline.
 ///
 /// `scope` is the event's span scope, innermost span first. The innermost span
-/// that carries `request_id` (or `plugin_id`) provides that key.
+/// that carries `request_id` (or `plugin_id`) provides that key. An event
+/// with a `plugin_id` happened inside a plugin's sandbox: its boundary is
+/// `plugin`, whatever the process's own boundary is.
 pub(crate) fn render_line<S>(
     event: &Event<'_>,
     scope: Option<Scope<'_, S>>,
@@ -109,7 +111,11 @@ where
     let line = Line {
         ts: clock::rfc3339_millis(clock::now()),
         level: metadata.level().as_str(),
-        boundary,
+        boundary: if plugin_id.is_some() {
+            Boundary::Plugin
+        } else {
+            boundary
+        },
         target: metadata.target(),
         message: visitor.message,
         request_id,
@@ -371,6 +377,19 @@ mod tests {
         ];
         let positions: Vec<usize> = order.iter().map(|key| line.find(key).unwrap()).collect();
         assert!(positions.is_sorted(), "keys out of order: {line}");
+    }
+
+    #[test]
+    fn events_inside_a_plugin_span_have_the_plugin_boundary() {
+        let lines = capture(|| {
+            tracing::info!("before");
+            let span = tracing::info_span!("plugin", plugin_id = "hello");
+            let _entered = span.enter();
+            tracing::info!("inside");
+        });
+        assert_eq!(lines[0]["boundary"], "engine");
+        assert_eq!(lines[1]["boundary"], "plugin");
+        assert_eq!(lines[1]["plugin_id"], "hello");
     }
 
     #[test]

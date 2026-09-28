@@ -48,11 +48,11 @@ One JSON object per line, with the keys always in this order:
 |---|---|---|---|
 | `ts` | string | always | UTC time, RFC 3339 with milliseconds: `2026-09-28T01:02:03.004Z` |
 | `level` | string | always | `TRACE`, `DEBUG`, `INFO`, `WARN` or `ERROR` |
-| `boundary` | string | always | The part of the system that wrote the line: `frontend`, `engine`, `plugin`, `indexer` or `ipc`. It is fixed per process: the core writes `engine`, the CLI (standing in for the UI) writes `frontend`. |
+| `boundary` | string | always | The part of the system that wrote the line: `frontend`, `engine`, `plugin`, `indexer` or `ipc`. The process decides it: the core writes `engine`, the CLI (standing in for the UI) writes `frontend`. A line with a `plugin_id` is `plugin`: it was written by a plugin (its `log` calls, its stdout and stderr) or by the core on its behalf (docs/plugins.md). |
 | `target` | string | always | The Rust module that logged the event, for example `cabinetos_core` |
 | `message` | string | always | The event text |
 | `request_id` | string | inside a request | The ULID of the request being handled, taken from the innermost enclosing span that has a `request_id` field |
-| `plugin_id` | string | inside a plugin call | The plugin that caused the event (Phase 7), same rule as `request_id` |
+| `plugin_id` | string | inside a plugin call | The plugin that caused the event, same rule as `request_id`. Every line a plugin's own thread writes has it. |
 | `span` | string | inside a span | The name of the innermost span, for example `request` |
 | `fields` | object | when there are any | The event's other fields |
 | `thread` | string | always | The thread's name (`main`, `core-rt-3`), or its ID when it has no name. In the core, `core-rt-N` are the async runtime's threads, workers and blocking threads alike, and `watch-<listing id>` threads watch directories. |
