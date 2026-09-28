@@ -15,6 +15,14 @@ public sealed record NavigationTiming(string RequestId, string Path, int Entries
 public sealed record PaneEntry(int Index, string Name, string Path, bool IsFolder, ulong Size);
 
 /// <summary>
+/// What a pane in search mode shows (docs/ui.md, "Search"): the title
+/// ("Search: budget · 12 hits · index · 1.2 ms"), what was searched, the note
+/// under the title, the "whole volume" box, and the hits (null while the
+/// first answer is on its way).
+/// </summary>
+public sealed record PaneSearch(string Header, string Scope, string Note, bool WholeVolume, SearchRows? Rows);
+
+/// <summary>
 /// One file pane: its folder, its listing in shared memory, the selection and
 /// the history. The core lists, sorts and watches; the pane only asks and shows.
 /// </summary>
@@ -39,6 +47,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     private string? _message;
     private string? _expectedName;
     private TaskCompletionSource<int>? _expectedListed;
+    private PaneSearch? _search;
 
     /// <summary>
     /// Creates pane <paramref name="index"/>, asking <paramref name="core"/> for
@@ -51,12 +60,49 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         _core = core;
         _known = known;
         _icons = icons;
+        KnownDetails = new GuessedDetails(known, icons);
         Selection.Changed += () =>
         {
             OnPropertyChanged(nameof(Selection));
             OnPropertyChanged(nameof(FocusName));
         };
+        SearchSelection.Changed += () => OnPropertyChanged(nameof(Selection));
     }
+
+    /// <summary>
+    /// The search results the pane shows instead of its folder, or null. The
+    /// listing stays underneath and comes back when the search is left.
+    /// </summary>
+    public PaneSearch? Search
+    {
+        get => _search;
+        set
+        {
+            var newRows = !ReferenceEquals(value?.Rows, _search?.Rows);
+            _search = value;
+            if (newRows)
+            {
+                SearchSelection.Reset(value?.Rows?.Count ?? 0, 0);
+            }
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>The focus and selection among the hits (the listing keeps its own).</summary>
+    public SelectionModel SearchSelection { get; } = new();
+
+    /// <summary>The selection of what the pane shows: the hits in search mode, else the listing.</summary>
+    public SelectionModel CurrentSelection => _search is null ? Selection : SearchSelection;
+
+    /// <summary>How many rows the pane shows: hits in search mode, else entries.</summary>
+    public int ShownCount => _search is null ? Count : _search.Rows?.Count ?? 0;
+
+    /// <summary>The focused hit in search mode, or null.</summary>
+    public SearchRowItem? FocusedHit =>
+        _search?.Rows is { } rows && (uint)SearchSelection.Focus < (uint)rows.Count ? rows[SearchSelection.Focus] : null;
+
+    /// <summary>Type names and icons by extension only: for rows that are not entries of this listing (search hits).</summary>
+    public IRowDetails KnownDetails { get; }
 
     /// <summary>Raised when something the user should read goes to the status bar.</summary>
     public event Action<string>? Notice;
@@ -609,6 +655,16 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         OnPropertyChanged(nameof(CanGoBack));
         OnPropertyChanged(nameof(CanGoForward));
     }
+}
+
+/// <summary>What the core said about an extension, and its icons, for rows without a listing index.</summary>
+internal sealed class GuessedDetails(ExtensionDetails known, Services.IconCache icons) : IRowDetails
+{
+    /// <inheritdoc/>
+    public EntryDetail? Detail(int index, ReadOnlySpan<char> name, bool isFolder) => known.Guess(name, isFolder);
+
+    /// <inheritdoc/>
+    public Microsoft.UI.Xaml.Media.ImageSource? Icon(string key) => icons.Get(key);
 }
 
 /// <summary>How a navigation relates to the history.</summary>

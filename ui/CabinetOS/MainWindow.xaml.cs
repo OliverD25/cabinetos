@@ -14,6 +14,7 @@ using CabinetOS.Core.Listing;
 using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
+using CabinetOS.Core.Search;
 using CabinetOS.Core.Settings;
 using CabinetOS.Core.Terminal;
 using CabinetOS.Services;
@@ -130,6 +131,7 @@ public sealed partial class MainWindow : Window
         SetPinnedFolders();
 
         SetUpTerminal();
+        SetUpSearch();
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
@@ -378,6 +380,9 @@ public sealed partial class MainWindow : Window
                     // Typed into the shown shell as keys; {enter} is Enter.
                     await _terminal.TypeAsync(step.Argument.Replace("{enter}", "\r", StringComparison.Ordinal));
                     break;
+                case "search":
+                    SearchBox.Text = step.Argument;
+                    break;
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
                     break;
@@ -428,6 +433,7 @@ public sealed partial class MainWindow : Window
                 "conflict" => _transfers.Conflicts.Current is not null,
                 "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
                 "terminal" => _terminal.Shown is { Pipe: not null },
+                "search" => _search.Phase is SearchPhase.Done or SearchPhase.Failed,
                 _ => true,
             };
             if (met)
@@ -807,24 +813,24 @@ public sealed partial class MainWindow : Window
         _router.RegisterUiHandler("go.back", invocation => Active.GoBackAsync(invocation.RequestId));
         _router.RegisterUiHandler("go.forward", invocation => Active.GoForwardAsync(invocation.RequestId));
         _router.RegisterUiHandler("go.up", invocation => Active.GoUpAsync(invocation.RequestId));
-        _router.RegisterUiHandler("pane.openSelected", OpenAsync);
-        _router.RegisterUiHandler("file.copyToOtherPane", invocation => TransferToOtherPaneAsync(JobKind.Copy, invocation));
-        _router.RegisterUiHandler("file.moveToOtherPane", invocation => TransferToOtherPaneAsync(JobKind.Move, invocation));
-        _router.RegisterUiHandler("file.newFolder", NewFolderAsync);
-        _router.RegisterUiHandler("file.openInOtherPane", OpenInOtherPaneAsync);
-        _router.RegisterUiHandler("file.delete", invocation => DeleteAsync(invocation, permanent: false));
-        _router.RegisterUiHandler("file.deletePermanently", invocation => DeleteAsync(invocation, permanent: true));
-        _router.RegisterUiHandler("file.rename", invocation => Active.FocusIndex >= 0 ? RenameAtAsync(Active, Active.FocusIndex, invocation.RequestId) : Task.CompletedTask);
-        _router.RegisterUiHandler("file.properties", ShowPropertiesAsync);
-        _router.RegisterUiHandler("edit.cut", _ => PutOnClipboard(ClipboardMode.Cut));
-        _router.RegisterUiHandler("edit.copy", _ => PutOnClipboard(ClipboardMode.Copy));
-        _router.RegisterUiHandler("edit.paste", PasteAsync);
-        _router.RegisterUiHandler("edit.selectAll", _ => Active.Selection.SelectAll());
-        _router.RegisterUiHandler("edit.toggleSelection", _ =>
+        _router.RegisterUiHandler("pane.openSelected", invocation => Active.Search is null ? OpenAsync(invocation) : OpenHitAsync(invocation));
+        _router.RegisterUiHandler("file.copyToOtherPane", ListingOnly(invocation => TransferToOtherPaneAsync(JobKind.Copy, invocation)));
+        _router.RegisterUiHandler("file.moveToOtherPane", ListingOnly(invocation => TransferToOtherPaneAsync(JobKind.Move, invocation)));
+        _router.RegisterUiHandler("file.newFolder", ListingOnly(NewFolderAsync));
+        _router.RegisterUiHandler("file.openInOtherPane", ListingOnly(OpenInOtherPaneAsync));
+        _router.RegisterUiHandler("file.delete", ListingOnly(invocation => DeleteAsync(invocation, permanent: false)));
+        _router.RegisterUiHandler("file.deletePermanently", ListingOnly(invocation => DeleteAsync(invocation, permanent: true)));
+        _router.RegisterUiHandler("file.rename", ListingOnly(invocation => Active.FocusIndex >= 0 ? RenameAtAsync(Active, Active.FocusIndex, invocation.RequestId) : Task.CompletedTask));
+        _router.RegisterUiHandler("file.properties", ListingOnly(ShowPropertiesAsync));
+        _router.RegisterUiHandler("edit.cut", ListingOnly(_ => PutOnClipboard(ClipboardMode.Cut)));
+        _router.RegisterUiHandler("edit.copy", ListingOnly(_ => PutOnClipboard(ClipboardMode.Copy)));
+        _router.RegisterUiHandler("edit.paste", ListingOnly(PasteAsync));
+        _router.RegisterUiHandler("edit.selectAll", ListingOnly(_ => Active.Selection.SelectAll()));
+        _router.RegisterUiHandler("edit.toggleSelection", ListingOnly(_ =>
         {
             Active.Selection.ToggleFocusAndAdvance();
             _paneViews[_active].ScrollToFocus();
-        });
+        }));
         // F2 in the open palette: the highlighted command (the pencil passes its own).
         _router.RegisterUiHandler("keys.rebind", invocation =>
         {
@@ -846,6 +852,7 @@ public sealed partial class MainWindow : Window
         _router.RegisterLocal("sidebar.pin", PinAsync);
         _router.RegisterLocal("sidebar.unpin", UnpinAsync);
         RegisterTerminalCommands();
+        RegisterSearchCommands();
 
         _router.Completed += OnCommandCompleted;
     }
@@ -933,7 +940,8 @@ public sealed partial class MainWindow : Window
         _paneViews[_active].Focus(FocusState.Programmatic);
     }
 
-    // Esc: the palette, then the context menu, then an edit in place, then the address box (the design's order).
+    // Esc: the palette, then the context menu, then an edit in place, then the address box
+    // (the design's order), then the search results (back to the folder).
     private void CloseOverlay()
     {
         if (_palette.IsOpen)
@@ -952,6 +960,10 @@ public sealed partial class MainWindow : Window
         {
             EndAddressEdit();
             _paneViews[_active].Focus(FocusState.Programmatic);
+        }
+        else
+        {
+            EndSearch(focusPane: true);
         }
     }
 
@@ -1561,6 +1573,11 @@ public sealed partial class MainWindow : Window
 
     private void OnPaneChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(PaneModel.Path) && _searchPane >= 0 && sender == _panes[_searchPane])
+        {
+            // The pane went elsewhere (Backspace, a crumb, a lost folder): its results are stale.
+            EndSearch(focusPane: false);
+        }
         if (sender != Active)
         {
             return;
@@ -1777,6 +1794,12 @@ public sealed partial class MainWindow : Window
     private void UpdateStatus()
     {
         var pane = Active;
+        if (pane.Search is { } search)
+        {
+            ItemsText.Text = search.Rows is { } rows ? SearchModel.Hits(rows.Count) : "Searching…";
+            SelectionText.Text = pane.FocusedHit?.Hit.Path ?? "";
+            return;
+        }
         ItemsText.Text = pane.Count == 1 ? "1 item" : $"{pane.Count:N0} items";
         var (count, bytes, anyFile) = pane.SelectionSize();
         SelectionText.Text = count switch

@@ -32,7 +32,7 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
 | `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
@@ -81,7 +81,7 @@ skip themselves otherwise (as in the CI job `ui`, which builds no core).
 | `CABINETOS_CONFIG` | Not read by the UI; the core it starts inherits it and uses that `cabinetos.json` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` ends the terminal page's browser process; `until:running`, `until:conflict` or `until:terminal` waits for a job or a shell; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict` |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` ends the terminal page's browser process; `until:running`, `until:conflict`, `until:terminal` or `until:search` waits for a job, a shell or an answer; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -266,12 +266,14 @@ own controls: `transfer.pause`, `transfer.resume`, `transfer.cancel`,
 `transfer.next`, `conflict.resolve`, `sidebar.pin`, `sidebar.unpin`, and
 the terminal's `terminal.new` (`{"profile": …, "cwd": …}`),
 `terminal.show` and `terminal.close` (`{"session": …}`) and
-`terminal.reload` (`RegisterLocal`). They run through the router like the
-others, but they are not in the palette and cannot be rebound.
+`terminal.reload`, and the search's `search.scope`
+(`{"wholeVolume": true}`) (`RegisterLocal`). They run through the router
+like the others, but they are not in the palette and cannot be rebound.
 
 | Command | In this version |
 |---|---|
-| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, the context menu, a rename, the address box |
+| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, the context menu, a rename, the address box, the search results |
+| `search.focus` | Puts the keyboard in the search field ("Search") |
 | `keys.open` | Opens the palette: it lists every command with its keys and edits them |
 | `view.toggleDualPane`, `view.toggleSidebar`, `view.focusOtherPane` | As named; the first two are saved in `cabinetos.json` |
 | `go.toPath` | With `{"path": …}` goes there; without, turns the crumbs into a text box |
@@ -457,6 +459,52 @@ keymap. A refusal (`immutable_binding`, `keybinding_conflict`, …) is shown
 in the row. Commands of the Immutable System Tier show a lock instead of a
 pencil.
 
+## Search
+
+The field in the command bar (Ctrl+F, `search.focus`; placeholder
+"Search {folder}") finds files and folders by name through the core
+([ipc.md](ipc.md), "Search"; [indexer.md](indexer.md)). The core searches
+and ranks; the window shows the hits in the core's order and filters
+nothing.
+
+- Typing sends `search` with the text, `limit: 100` and `root`: the
+  active pane's folder. It goes out once 150 ms pass without another key.
+  Enter sends it at once and moves the keyboard to the hits; Down moves the
+  keyboard there without waiting.
+- The hits replace the folder in the active pane, in the same rows: the
+  name with its type's icon, the folder the hit is in (where a listing
+  shows "Modified"), and the type name. The reply has paths only, so the
+  type and icon are what the core said about that extension in a listing
+  before, and there is no size or time. The pane's title reads
+  "Search: {query} · {n} hits · {index or walk} · {time}", and its right
+  side names what was searched.
+- Under the title, a note says whether the answer is complete: complete,
+  or incomplete because a walk stopped at its limit (2 s or 20,000
+  entries) or a volume is still being indexed. With 100 hits it adds that
+  only the first 100 are shown. When the source is `walk`, it adds that the
+  index is not running, and that docs/indexer.md, "Running it", says how to
+  start it.
+- "Whole volume", beside the note, drops the root: the indexer searches
+  every indexed volume (a walk starts at the folder listed last, or the
+  profile folder), and the search runs again at once.
+- Enter or a double-click on a hit opens its folder in the pane with the
+  hit selected. Esc, from the field or the pane, leaves the search and
+  shows the folder again. Going elsewhere in that pane (Backspace, a crumb)
+  leaves it too. Typing while the other pane is active moves the search
+  there.
+- In search results, the file commands (F5, F6, F7, Delete, F2, Ctrl+X,
+  Ctrl+C, Ctrl+V, Alt+Enter, Insert, Ctrl+A) only say "These are search
+  results: Enter goes to a hit, Esc back to the folder." The listing's
+  selection is out of sight, so they must not act on it. Hits have no
+  context menu.
+- An answer to an older request, or one that arrives after the search was
+  left, is dropped (`SearchModel`, tested). The status bar counts the hits
+  and shows the focused hit's path.
+
+Measured on 2026-09-28 without the indexer: the core walked `docs/` in
+1.4 ms (its `took_us`), and the reply reached the window 4.6 ms after the
+request went out.
+
 ## The terminal
 
 Ctrl+` (`view.toggleTerminal`), the terminal button in the command bar,
@@ -576,7 +624,6 @@ How it is built:
 
 | What | Why |
 |---|---|
-| The search field | In place and disabled, with the design's placeholder; file search comes with its phase |
 | The marketplace button | Disabled; Phase 9 |
 | Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
 | Saving the dock's dragged size | No setting for it yet |

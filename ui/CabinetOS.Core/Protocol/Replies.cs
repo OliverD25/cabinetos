@@ -285,4 +285,5 @@ public static class ErrorCodes
     public const string KeybindingConflict = "keybinding_conflict";
     public const string ImmutableBinding = "immutable_binding";
     public const string ConfigError = "config_error";
+    public const string Io = "io";
 }

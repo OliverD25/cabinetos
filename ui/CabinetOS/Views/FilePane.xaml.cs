@@ -45,6 +45,7 @@ public sealed partial class FilePane : UserControl
     private int _renameIndex = -1;
     private string _renameOriginal = "";
     private int _noteIndex = -1;
+    private bool _searchShown;
 
     /// <summary>Creates the pane; <see cref="Model"/> gives it its content.</summary>
     public FilePane()
@@ -63,6 +64,8 @@ public sealed partial class FilePane : UserControl
         EditLayer.SizeChanged += (_, e) => EditLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
         RenameBox.KeyDown += OnRenameKeyDown;
         RenameBox.LostFocus += (_, _) => EndRename(commit: true);
+        WholeVolumeBox.Click += (_, _) =>
+            _ = Run("search.scope", CommandArgs.Object(("wholeVolume", WholeVolumeBox.IsChecked == true)), "button");
         _noteTimer = DispatcherQueue.CreateTimer();
         _noteTimer.IsRepeating = false;
         _noteTimer.Interval = TimeSpan.FromSeconds(3);
@@ -184,13 +187,64 @@ public sealed partial class FilePane : UserControl
             case nameof(PaneModel.Message):
                 UpdateMessage();
                 break;
+            case nameof(PaneModel.Search):
+                ApplySearch();
+                break;
         }
     }
 
     private void UpdateHeader()
     {
+        if (_model?.Search is { } search)
+        {
+            TitleText.Text = search.Header;
+            PathText.Text = search.Scope;
+            return;
+        }
         TitleText.Text = _model?.FolderName ?? "";
         PathText.Text = _model?.Path ?? "";
+    }
+
+    // Search mode (docs/ui.md, "Search"): the hits in the same rows, the search's title and
+    // note in the header, "Folder" where a listing has "Modified". The listing waits underneath.
+    private void ApplySearch()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+        if (_model.Search is not { } search)
+        {
+            if (_searchShown)
+            {
+                _searchShown = false;
+                SearchBar.Visibility = Visibility.Collapsed;
+                SecondHeading.Text = "Modified";
+                UpdateHeader();
+                ApplyRows();
+                ScrollToFocus();
+            }
+            return;
+        }
+        var entering = !_searchShown;
+        _searchShown = true;
+        EndRename(commit: false);
+        HideRowNote();
+        SearchBar.Visibility = Visibility.Visible;
+        SecondHeading.Text = "Folder";
+        UpdateHeader();
+        SearchNoteText.Text = search.Note;
+        SearchNoteText.Visibility = search.Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        WholeVolumeBox.IsChecked = search.WholeVolume;
+        if (entering || !ReferenceEquals(Repeater.ItemsSource, search.Rows))
+        {
+            Repeater.ItemsSource = search.Rows;
+            Scroller.ChangeView(null, 0, null, disableAnimation: true);
+        }
+        var nothing = search.Rows is { Count: 0 };
+        MessageText.Text = nothing ? "Nothing matches." : "";
+        MessageText.Visibility = nothing ? Visibility.Visible : Visibility.Collapsed;
+        MarkSelection();
     }
 
     private void UpdateActivity()
@@ -212,6 +266,11 @@ public sealed partial class FilePane : UserControl
 
     private void ApplyRows()
     {
+        if (_model?.Search is not null)
+        {
+            // The listing changed under the search results; it shows when the search is left.
+            return;
+        }
         _timing = _model?.PendingTiming;
         if (_model is not null)
         {
@@ -301,9 +360,10 @@ public sealed partial class FilePane : UserControl
         var (first, last) = (_preparedFirst, _preparedLast);
         _preparedFirst = int.MaxValue;
         _preparedLast = -1;
-        if (last >= first)
+        // Search hits are not entries of the listing: their types come from what is known per extension.
+        if (last >= first && _model is { Search: null } model)
         {
-            _model?.EnsureDetails(first, last);
+            model.EnsureDetails(first, last);
         }
     }
 
@@ -373,7 +433,7 @@ public sealed partial class FilePane : UserControl
         {
             return;
         }
-        var selection = model.Selection;
+        var selection = model.CurrentSelection;
         var selected = selection.IsSelected(index);
         row.IsSelected = selected;
         // The outline marks the keyboard's row when the fill alone would not say which it is.
@@ -392,7 +452,7 @@ public sealed partial class FilePane : UserControl
         var ctrl = IsDown(VirtualKey.Control);
         var shift = IsDown(VirtualKey.Shift);
         var mode = shift ? SelectMode.Extend : ctrl ? SelectMode.FocusOnly : SelectMode.Single;
-        var focus = _model.Selection.Focus;
+        var focus = _model.CurrentSelection.Focus;
         var handled = true;
         switch (e.Key)
         {
@@ -406,7 +466,7 @@ public sealed partial class FilePane : UserControl
                 MoveFocus(0, mode);
                 break;
             case VirtualKey.End:
-                MoveFocus(_model.Count - 1, mode);
+                MoveFocus(_model.ShownCount - 1, mode);
                 break;
             case VirtualKey.PageUp:
                 MoveFocus(focus - RowsPerPage(), mode);
@@ -420,7 +480,11 @@ public sealed partial class FilePane : UserControl
                 break;
             case VirtualKey.F10 when shift:
             case VirtualKey.Application:
-                ContextMenuRequested?.Invoke(this, focus, null);
+                // Hits have no menu: Enter goes to one, Esc back to the folder.
+                if (_model.Search is null)
+                {
+                    ContextMenuRequested?.Invoke(this, focus, null);
+                }
                 break;
             default:
                 handled = false;
@@ -434,7 +498,7 @@ public sealed partial class FilePane : UserControl
     {
         if (_model is not null)
         {
-            ScrollIntoView(_model.Selection.Focus);
+            ScrollIntoView(_model.CurrentSelection.Focus);
         }
     }
 
@@ -443,12 +507,12 @@ public sealed partial class FilePane : UserControl
 
     private void MoveFocus(int index, SelectMode mode)
     {
-        if (_model is null || _model.Count == 0)
+        if (_model is null || _model.ShownCount == 0)
         {
             return;
         }
-        _model.Selection.MoveTo(index, mode);
-        ScrollIntoView(_model.Selection.Focus);
+        _model.CurrentSelection.MoveTo(index, mode);
+        ScrollIntoView(_model.CurrentSelection.Focus);
     }
 
     private int RowsPerPage() => Math.Max(1, (int)((Scroller.ViewportHeight - (2 * ListPadding)) / RowHeight) - 1);
@@ -481,11 +545,11 @@ public sealed partial class FilePane : UserControl
         }
         if (IsDown(VirtualKey.Control))
         {
-            _model.Selection.Toggle(row.Index);
+            _model.CurrentSelection.Toggle(row.Index);
         }
         else
         {
-            _model.Selection.MoveTo(row.Index, IsDown(VirtualKey.Shift) ? SelectMode.Extend : SelectMode.Single);
+            _model.CurrentSelection.MoveTo(row.Index, IsDown(VirtualKey.Shift) ? SelectMode.Extend : SelectMode.Single);
         }
     }
 
@@ -493,7 +557,7 @@ public sealed partial class FilePane : UserControl
     {
         if (RowFrom(e.OriginalSource) is { Index: >= 0 } row && _model is not null)
         {
-            _model.Selection.MoveTo(row.Index, SelectMode.Single);
+            _model.CurrentSelection.MoveTo(row.Index, SelectMode.Single);
             _ = Run("pane.openSelected", trigger: "mouse");
         }
     }
@@ -507,12 +571,16 @@ public sealed partial class FilePane : UserControl
         e.Handled = true;
         Focus(FocusState.Pointer);
         var index = RowFrom(e.OriginalSource)?.Index ?? -1;
+        var selection = _model.CurrentSelection;
         if (index >= 0)
         {
             // A right-click inside the selection keeps it (Explorer); outside, it selects that row.
-            _model.Selection.MoveTo(index, _model.Selection.IsSelected(index) ? SelectMode.FocusOnly : SelectMode.Single);
+            selection.MoveTo(index, selection.IsSelected(index) ? SelectMode.FocusOnly : SelectMode.Single);
         }
-        ContextMenuRequested?.Invoke(this, index, e.GetPosition(null));
+        if (_model.Search is null)
+        {
+            ContextMenuRequested?.Invoke(this, index, e.GetPosition(null));
+        }
     }
 
     private FileRow? RowFrom(object source)

@@ -38,6 +38,7 @@ public sealed partial class FileRow : UserControl
 
     private readonly Brush _plainIconBrush;
     private RowItem? _item;
+    private SearchRowItem? _hit;
     private bool _selected;
     private bool _pointerOver;
 
@@ -46,7 +47,17 @@ public sealed partial class FileRow : UserControl
     {
         InitializeComponent();
         _plainIconBrush = Icon.Foreground;
-        DataContextChanged += (_, _) => Bind(DataContext as RowItem);
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is SearchRowItem hit)
+            {
+                BindHit(hit);
+            }
+            else
+            {
+                Bind(DataContext as RowItem);
+            }
+        };
         PointerEntered += OnPointerEntered;
         PointerExited += OnPointerExited;
     }
@@ -88,11 +99,30 @@ public sealed partial class FileRow : UserControl
         {
             BindDetails(item);
         }
+        else if (_hit is { } hit)
+        {
+            ShowTypeAndIcon(hit.Name, hit.Hit.IsFolder ? EntryKind.Directory : EntryKind.File, hit.Hit.IsFolder, hit.Details, -1);
+        }
+    }
+
+    // A search hit (docs/ui.md, "Search"): its folder where a listing shows the time, and no size.
+    private void BindHit(SearchRowItem hit)
+    {
+        _item = null;
+        _hit = hit;
+        Index = hit.Index;
+        NameText.Text = hit.Name;
+        ModifiedText.Text = hit.Folder;
+        SizeText.Text = "";
+        ShowTypeAndIcon(hit.Name, hit.Hit.IsFolder ? EntryKind.Directory : EntryKind.File, hit.Hit.IsFolder, hit.Details, -1);
+        _pointerOver = false;
+        UpdateState();
     }
 
     private void Bind(RowItem? item)
     {
         _item = item;
+        _hit = null;
         if (item is null)
         {
             Index = -1;
@@ -113,18 +143,20 @@ public sealed partial class FileRow : UserControl
         UpdateState();
     }
 
-    // The shell's type name and icon once the core sent them (protocol 9); the built-in text and glyph until then.
     private void BindDetails(RowItem item)
     {
         var view = item.View;
         var index = item.Index;
-        var name = view.NameSpan(index);
-        var kind = view.Kind(index);
-        var isFolder = view.IsFolder(index);
-        var detail = item.Details?.Detail(index, name, isFolder);
+        ShowTypeAndIcon(view.NameSpan(index), view.Kind(index), view.IsFolder(index), item.Details, index);
+    }
+
+    // The shell's type name and icon once the core sent them (protocol 9); the built-in text and glyph until then.
+    private void ShowTypeAndIcon(ReadOnlySpan<char> name, EntryKind kind, bool isFolder, IRowDetails? details, int index)
+    {
+        var detail = details?.Detail(index, name, isFolder);
         TypeText.Text = detail?.TypeName ?? DisplayFormat.TypeText(name, kind, isFolder);
         IconKey = detail?.IconKey;
-        if (IconKey is not null && item.Details?.Icon(IconKey) is { } image)
+        if (IconKey is not null && details?.Icon(IconKey) is { } image)
         {
             IconImage.Source = image;
             IconImage.Visibility = Visibility.Visible;

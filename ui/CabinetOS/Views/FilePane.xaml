@@ -40,6 +40,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="36" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -71,8 +72,40 @@
                 </Grid>
             </Border>
 
+            <!-- Search mode only: whether the answer is complete, and the "whole volume" box. -->
             <Border
+                x:Name="SearchBar"
                 Grid.Row="1"
+                BorderBrush="{ThemeResource CbDividerBrush}"
+                BorderThickness="0,0,0,1"
+                Visibility="Collapsed">
+                <Grid Padding="14,4,14,6" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="SearchNoteText"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{ThemeResource CbTextSecondaryBrush}"
+                        IsTextSelectionEnabled="True"
+                        TextWrapping="Wrap" />
+                    <CheckBox
+                        x:Name="WholeVolumeBox"
+                        Grid.Column="1"
+                        MinWidth="0"
+                        MinHeight="0"
+                        VerticalAlignment="Center"
+                        AllowFocusOnInteraction="False"
+                        Content="Whole volume"
+                        FontSize="11"
+                        ToolTipService.ToolTip="Search every indexed volume, not only this folder" />
+                </Grid>
+            </Border>
+
+            <Border
+                Grid.Row="2"
                 BorderBrush="{ThemeResource CbDividerBrush}"
                 BorderThickness="0,0,0,1">
                 <Grid Padding="14,4">
@@ -87,6 +120,7 @@
                         Foreground="{ThemeResource CbTextTertiaryBrush}"
                         Text="Name" />
                     <TextBlock
+                        x:Name="SecondHeading"
                         Grid.Column="1"
                         FontSize="11"
                         Foreground="{ThemeResource CbTextTertiaryBrush}"
@@ -107,7 +141,7 @@
 
             <ScrollViewer
                 x:Name="Scroller"
-                Grid.Row="2"
+                Grid.Row="3"
                 Padding="4"
                 HorizontalScrollBarVisibility="Disabled"
                 HorizontalScrollMode="Disabled"
@@ -122,7 +156,7 @@
 
             <TextBlock
                 x:Name="MessageText"
-                Grid.Row="2"
+                Grid.Row="3"
                 Padding="40"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
@@ -132,7 +166,7 @@
                 Visibility="Collapsed" />
 
             <!-- Inline rename: one text box over the row's name, and a note under the row for an error. -->
-            <Canvas x:Name="EditLayer" Grid.Row="2">
+            <Canvas x:Name="EditLayer" Grid.Row="3">
                 <TextBox
                     x:Name="RenameBox"
                     Height="26"

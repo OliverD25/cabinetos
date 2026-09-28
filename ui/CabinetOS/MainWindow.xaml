@@ -147,18 +147,13 @@
                         Visibility="Collapsed" />
                 </Grid>
 
+                <!-- Search (Ctrl+F): the core searches the active pane's folder; the hits show in that pane. -->
                 <TextBox
                     x:Name="SearchBox"
                     Grid.Column="4"
                     Height="32"
-                    AutomationProperties.Name="Search (arrives in a later version)"
-                    IsEnabled="False">
-                    <TextBox.Resources>
-                        <StaticResource x:Key="TextControlBackgroundDisabled" ResourceKey="CbControlFillBrush" />
-                        <StaticResource x:Key="TextControlBorderBrushDisabled" ResourceKey="CbControlStrokeBrush" />
-                        <StaticResource x:Key="TextControlPlaceholderForegroundDisabled" ResourceKey="CbTextTertiaryBrush" />
-                    </TextBox.Resources>
-                </TextBox>
+                    AutomationProperties.Name="Search files"
+                    ToolTipService.ToolTip="Search files by name (Ctrl+F)" />
 
                 <Rectangle
                     Grid.Column="5"
