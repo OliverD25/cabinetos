@@ -10,7 +10,7 @@
 
 use schemars::{Schema, schema_for};
 
-use crate::{Envelope, Request, Response};
+use crate::{Envelope, Event, Request, Response};
 
 /// The JSON Schema of a request: an [`Envelope`] around a [`Request`].
 #[must_use]
@@ -24,7 +24,15 @@ pub fn response_schema() -> Schema {
     titled(schema_for!(Envelope<Response>), "ResponseEnvelope")
 }
 
-/// Both envelopes would otherwise be titled "Envelope". Code generators on
+/// The JSON Schema of an event: an [`Envelope`] around an [`Event`]. A
+/// client parses replies and events from one stream; their `type` tags never
+/// overlap.
+#[must_use]
+pub fn event_schema() -> Schema {
+    titled(schema_for!(Envelope<Event>), "EventEnvelope")
+}
+
+/// The envelopes would otherwise be titled "Envelope". Code generators on
 /// the C# side turn the title into a class name, so each gets its own.
 fn titled(mut schema: Schema, title: &str) -> Schema {
     schema.insert("title".to_owned(), title.into());
@@ -76,5 +84,10 @@ mod tests {
     #[test]
     fn response_schema_matches_sdk() {
         check_snapshot("response.schema.json", &response_schema());
+    }
+
+    #[test]
+    fn event_schema_matches_sdk() {
+        check_snapshot("event.schema.json", &event_schema());
     }
 }

@@ -282,6 +282,13 @@ async fn handle_frame(
                         core_version: CORE_VERSION.to_owned(),
                     },
                     Request::Shutdown => Response::Ok,
+                    Request::Hello { .. }
+                    | Request::ListDirectory { .. }
+                    | Request::CloseListing { .. }
+                    | Request::VolumeInfo { .. } => Response::Error {
+                        code: ErrorCode::Internal,
+                        message: format!("{} is not implemented yet", request.type_tag()),
+                    },
                 };
                 connection.send(&Envelope::new(id, reply)).await?;
                 tracing::info!(

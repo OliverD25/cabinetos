@@ -1,18 +1,25 @@
 //! Shared-memory layouts of the data channel (brief §4, PLAN §3).
 //!
-//! For a directory listing the core fills a memory-mapped section with a
-//! [`ListingHeader`], an array of [`ListingEntry`] records and a name arena,
-//! then hands the UI a duplicated handle. The UI reads the section through a
-//! pointer (unsafe C#), with no copy and no serialization.
+//! For a directory listing the core fills a memory-mapped section and hands
+//! the UI a duplicated handle. The UI reads the section through a pointer
+//! (unsafe C#), with no copy and no serialization. A section holds, in order:
+//!
+//! 1. a [`ListingHeader`] (40 bytes) at offset 0;
+//! 2. `entry_count` [`ListingEntry`] records (16 bytes each) at
+//!    `entries_offset`;
+//! 3. `entry_count` [`ListingMeta`] records (40 bytes each) at `meta_offset`,
+//!    in the same order: entry `i` and metadata `i` describe the same item;
+//! 4. the name arena at `name_arena_offset`: file names as UTF-16 code units.
+//!
+//! All numbers are little-endian. The entries are already sorted as the client
+//! asked. Byte diagram: `docs/ipc.md`.
 //!
 //! These layouts are a binary contract with C#. The tests below pin every size
 //! and field offset, so any change is a deliberate, visible act that must also
 //! raise [`ListingHeader::VERSION`].
 //!
-//! Names in the arena are UTF-16 code units: Windows APIs return UTF-16 and C#
-//! strings are UTF-16, so nobody converts anything.
-//!
-//! Phase 1 only defines the layouts; Phase 2 writes the first listing.
+//! Names are UTF-16 because Windows APIs return UTF-16 and C# strings are
+//! UTF-16: nobody converts anything.
 
 /// The start of a listing section.
 #[repr(C)]
@@ -22,30 +29,38 @@ pub struct ListingHeader {
     pub magic: u32,
     /// Layout version, [`ListingHeader::VERSION`] when written by this build.
     pub version: u32,
-    /// Number of [`ListingEntry`] records in the section.
+    /// Number of [`ListingEntry`] records, and of [`ListingMeta`] records.
     pub entry_count: u32,
     /// Byte offset of the name arena from the start of the section.
     pub name_arena_offset: u32,
     /// Length of the name arena in bytes.
     pub name_arena_len: u32,
-    /// Raised each time the core rewrites the section, so a reader can tell a
-    /// stale view from a fresh one.
+    /// 1 for a listing's first section, one more for each refresh.
     pub generation: u32,
+    /// Byte offset of the [`ListingMeta`] array from the start of the section.
+    pub meta_offset: u32,
+    /// Byte offset of the [`ListingEntry`] array from the start of the section.
+    pub entries_offset: u32,
+    /// No flags are defined yet; writers put 0 and readers ignore unknown bits.
+    pub flags: u32,
+    /// Padding to a multiple of 8 bytes, so the entry array that follows is
+    /// 8-byte aligned. Always 0.
+    pub reserved: u32,
 }
 
 impl ListingHeader {
     /// The bytes `b"CBLS"` read as a little-endian `u32`.
     pub const MAGIC: u32 = u32::from_le_bytes(*b"CBLS");
     /// Version of the layout defined in this module.
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
 }
 
 /// One entry of a listing: 16 bytes, 8-byte aligned.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ListingEntry {
-    /// Identifies the entry within its listing; later metadata updates refer
-    /// to it.
+    /// Identifies the entry within its listing. On NTFS it is the file
+    /// reference number; otherwise see [`ListingEntry::FLAG_ID_IS_NAME_HASH`].
     pub id: u64,
     /// Byte offset of the name from the start of the name arena.
     pub name_offset: u32,
@@ -54,12 +69,38 @@ pub struct ListingEntry {
     /// An [`EntryKind`] value, stored as a raw byte. A byte from shared memory
     /// may hold any value, so it is read through [`EntryKind::from_raw`].
     pub kind: u8,
-    /// Reserved for flags. Zero for now.
+    /// Bit flags, see the `FLAG_` constants.
     pub flags: u8,
 }
 
-const _: () = assert!(size_of::<ListingHeader>() == 24);
+impl ListingEntry {
+    /// `id` is not a file reference number (the file system has none) but a
+    /// hash of the upper-cased name with the top bit set.
+    pub const FLAG_ID_IS_NAME_HASH: u8 = 1;
+}
+
+/// The metadata of one entry: 40 bytes, 8-byte aligned. Times are Windows
+/// `FILETIME` ticks: 100-nanosecond intervals since 1601-01-01 UTC.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ListingMeta {
+    /// File size in bytes (end of file); 0 for directories.
+    pub size: u64,
+    /// Last write time.
+    pub modified: i64,
+    /// Creation time.
+    pub created: i64,
+    /// Last access time.
+    pub accessed: i64,
+    /// Windows file attributes (`FILE_ATTRIBUTE_*`).
+    pub attributes: u32,
+    /// Always 0.
+    pub reserved: u32,
+}
+
+const _: () = assert!(size_of::<ListingHeader>() == 40);
 const _: () = assert!(size_of::<ListingEntry>() == 16);
+const _: () = assert!(size_of::<ListingMeta>() == 40);
 
 /// What a [`ListingEntry`] is. The discriminants are the raw byte values
 /// stored in [`ListingEntry::kind`].
@@ -72,7 +113,7 @@ pub enum EntryKind {
     File = 1,
     /// A directory.
     Directory = 2,
-    /// A reparse point: a symbolic link or a junction.
+    /// A link: a symbolic link or a junction (a name-surrogate reparse point).
     ReparsePoint = 3,
 }
 
@@ -104,7 +145,7 @@ mod tests {
 
     #[test]
     fn listing_header_layout_is_pinned() {
-        assert_eq!(size_of::<ListingHeader>(), 24);
+        assert_eq!(size_of::<ListingHeader>(), 40);
         assert_eq!(align_of::<ListingHeader>(), 4);
         assert_eq!(offset_of!(ListingHeader, magic), 0);
         assert_eq!(offset_of!(ListingHeader, version), 4);
@@ -112,6 +153,10 @@ mod tests {
         assert_eq!(offset_of!(ListingHeader, name_arena_offset), 12);
         assert_eq!(offset_of!(ListingHeader, name_arena_len), 16);
         assert_eq!(offset_of!(ListingHeader, generation), 20);
+        assert_eq!(offset_of!(ListingHeader, meta_offset), 24);
+        assert_eq!(offset_of!(ListingHeader, entries_offset), 28);
+        assert_eq!(offset_of!(ListingHeader, flags), 32);
+        assert_eq!(offset_of!(ListingHeader, reserved), 36);
     }
 
     #[test]
@@ -126,10 +171,27 @@ mod tests {
     }
 
     #[test]
+    fn listing_meta_layout_is_pinned() {
+        assert_eq!(size_of::<ListingMeta>(), 40);
+        assert_eq!(align_of::<ListingMeta>(), 8);
+        assert_eq!(offset_of!(ListingMeta, size), 0);
+        assert_eq!(offset_of!(ListingMeta, modified), 8);
+        assert_eq!(offset_of!(ListingMeta, created), 16);
+        assert_eq!(offset_of!(ListingMeta, accessed), 24);
+        assert_eq!(offset_of!(ListingMeta, attributes), 32);
+        assert_eq!(offset_of!(ListingMeta, reserved), 36);
+    }
+
+    #[test]
     fn magic_is_cbls_in_little_endian() {
         assert_eq!(ListingHeader::MAGIC, 0x534C_4243);
         assert_eq!(ListingHeader::MAGIC.to_le_bytes(), *b"CBLS");
-        assert_eq!(ListingHeader::VERSION, 1);
+        assert_eq!(ListingHeader::VERSION, 2);
+    }
+
+    #[test]
+    fn flags_are_pinned() {
+        assert_eq!(ListingEntry::FLAG_ID_IS_NAME_HASH, 1);
     }
 
     #[test]

@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EventEnvelope",
+  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":2,\"core_version\":\"0.1.0\"}\n```",
+  "type": "object",
+  "properties": {
+    "id": {
+      "description": "Created by the sender of a request. The reply carries the same ID. An\nevent carries a fresh ID of its own.",
+      "$ref": "#/$defs/RequestId"
+    }
+  },
+  "oneOf": [
+    {
+      "description": "A watched directory changed, and a new listing is complete in a new\nshared-memory section. The previous section stays valid until the\nclient closes its handle to it.",
+      "type": "object",
+      "properties": {
+        "entry_count": {
+          "description": "Entries in the new listing.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "generation": {
+          "description": "One more than the previous listing of this `listing_id`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "listing_id": {
+          "description": "The listing, from `listing_opened`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reason": {
+          "description": "Why the listing was read again.",
+          "$ref": "#/$defs/RefreshReason"
+        },
+        "section_handle": {
+          "description": "A handle to the new section, already valid in the client's\nprocess. The client owns it and must close it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "section_size": {
+          "description": "How many bytes of the new section hold the listing.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "listing_refreshed"
+        }
+      },
+      "required": [
+        "type",
+        "listing_id",
+        "section_handle",
+        "section_size",
+        "entry_count",
+        "generation",
+        "reason"
+      ]
+    },
+    {
+      "description": "A watched listing can no longer be kept current, for example because\nits directory was deleted. No more events follow for it.",
+      "type": "object",
+      "properties": {
+        "listing_id": {
+          "description": "The listing, from `listing_opened`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "message": {
+          "description": "What happened, for logs and the user.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "listing_lost"
+        }
+      },
+      "required": [
+        "type",
+        "listing_id",
+        "message"
+      ]
+    }
+  ],
+  "required": [
+    "id"
+  ],
+  "$defs": {
+    "RefreshReason": {
+      "description": "Why a watched listing was read again.",
+      "oneOf": [
+        {
+          "description": "Entries were added, removed, renamed or modified.",
+          "type": "string",
+          "const": "changed"
+        },
+        {
+          "description": "So many changes happened at once that Windows could not report them\none by one; the directory was read again from scratch.",
+          "type": "string",
+          "const": "overflow"
+        }
+      ]
+    },
+    "RequestId": {
+      "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",
+      "type": "string",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$"
+    }
+  }
+}

@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ResponseEnvelope",
-  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":1,\"core_version\":\"0.1.0\"}\n```",
+  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":2,\"core_version\":\"0.1.0\"}\n```",
   "type": "object",
   "properties": {
     "id": {
-      "description": "Created by the sender of a request. The reply carries the same ID.",
+      "description": "Created by the sender of a request. The reply carries the same ID. An\nevent carries a fresh ID of its own.",
       "$ref": "#/$defs/RequestId"
     }
   },
@@ -19,7 +19,7 @@
           "type": "string"
         },
         "protocol_version": {
-          "description": "The protocol version the core speaks (`PROTOCOL_VERSION`, now 1).",
+          "description": "The protocol version the core speaks (`PROTOCOL_VERSION`, now 2).",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
@@ -70,12 +70,140 @@
         "code",
         "message"
       ]
+    },
+    {
+      "description": "Reply to `hello`.",
+      "type": "object",
+      "properties": {
+        "core_version": {
+          "description": "The core's version, for example `0.1.0`.",
+          "type": "string"
+        },
+        "protocol_version": {
+          "description": "The protocol version the core speaks (`PROTOCOL_VERSION`, now 2).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "welcome"
+        }
+      },
+      "required": [
+        "type",
+        "protocol_version",
+        "core_version"
+      ]
+    },
+    {
+      "description": "Reply to `list_directory`: the listing is complete in shared memory.",
+      "type": "object",
+      "properties": {
+        "elapsed_us": {
+          "description": "Microseconds the core spent reading, sorting and writing it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "entry_count": {
+          "description": "Entries in the listing.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "generation": {
+          "description": "1 for the first listing, one more for every refresh.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "listing_id": {
+          "description": "Names this listing in `close_listing` and in events.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "section_handle": {
+          "description": "A handle to the shared-memory section, already valid in the\nclient's process. The client owns it and must close it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "section_size": {
+          "description": "How many bytes of the section hold the listing (the layout is in\n`docs/ipc.md`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "listing_opened"
+        }
+      },
+      "required": [
+        "type",
+        "listing_id",
+        "section_handle",
+        "section_size",
+        "entry_count",
+        "generation",
+        "elapsed_us"
+      ]
+    },
+    {
+      "description": "Reply to `volume_info`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "volume_info"
+        }
+      },
+      "$ref": "#/$defs/VolumeDetails",
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [
     "id"
   ],
   "$defs": {
+    "DiskIdentity": {
+      "description": "A physical disk. Two paths on the same `device_number` share one disk, so\ncopies between them compete for it.",
+      "type": "object",
+      "properties": {
+        "bus_type": {
+          "description": "How the disk is attached: `NVMe`, `SATA`, `USB`, `SAS`, `SCSI`, `SD`,\n`RAID`, `Spaces`, `Virtual`, … or `Unknown`.",
+          "type": "string"
+        },
+        "device_number": {
+          "description": "The disk's number, as in `\\\\.\\PhysicalDriveN`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "media_type": {
+          "description": "`HDD` or `SSD`, derived from the seek penalty; `None` when unknown.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seek_penalty": {
+          "description": "Whether random access is slow (a spinning disk). `None` when the disk\ndoes not say.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "device_number",
+        "bus_type"
+      ]
+    },
     "ErrorCode": {
       "description": "Why a request failed.",
       "oneOf": [
@@ -85,7 +213,7 @@
           "const": "unknown_request"
         },
         {
-          "description": "The frame was not a valid envelope: bad JSON, a missing or malformed\n`id`, or fields that do not fit the request type.",
+          "description": "The frame was not a valid envelope (bad JSON, a missing or malformed\n`id`, fields that do not fit the request type), or the request came\nout of order, such as `list_directory` before `hello`.",
           "type": "string",
           "const": "protocol_error"
         },
@@ -98,6 +226,31 @@
           "description": "The core failed while handling a valid request.",
           "type": "string",
           "const": "internal"
+        },
+        {
+          "description": "The path does not exist.",
+          "type": "string",
+          "const": "not_found"
+        },
+        {
+          "description": "Windows denied access to the path.",
+          "type": "string",
+          "const": "access_denied"
+        },
+        {
+          "description": "The path is malformed, or it names a file where a directory is needed.",
+          "type": "string",
+          "const": "invalid_path"
+        },
+        {
+          "description": "No open listing on this connection has that `listing_id`.",
+          "type": "string",
+          "const": "no_such_listing"
+        },
+        {
+          "description": "Reading from the disk or the network failed.",
+          "type": "string",
+          "const": "io"
         }
       ]
     },
@@ -105,6 +258,63 @@
       "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",
       "type": "string",
       "pattern": "^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$"
+    },
+    "VolumeDetails": {
+      "description": "The volume a path lives on, and the physical disk under it.",
+      "type": "object",
+      "properties": {
+        "disk": {
+          "description": "The physical disk, when Windows can tell (not for network shares).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiskIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "drive_letter": {
+          "description": "The volume's drive letter, if it has one.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1,
+          "minLength": 1
+        },
+        "filesystem": {
+          "description": "The file system: `NTFS`, `FAT32`, `exFAT`, `ReFS`, …",
+          "type": "string"
+        },
+        "free_bytes": {
+          "description": "Bytes free for the current user (disk quotas taken into account).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "label": {
+          "description": "The volume label; may be empty.",
+          "type": "string"
+        },
+        "total_bytes": {
+          "description": "The volume's capacity in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "volume_guid_path": {
+          "description": "The volume's GUID path, for example `\\\\?\\Volume{…}\\`. Empty when the\nvolume has none, such as a network share.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "volume_guid_path",
+        "filesystem",
+        "label",
+        "total_bytes",
+        "free_bytes"
+      ]
     }
   }
 }

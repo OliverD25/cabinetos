@@ -25,8 +25,13 @@ pub mod shm;
 pub mod schema;
 
 pub use id::{InvalidRequestId, RequestId};
-pub use message::{Envelope, ErrorCode, Request, Response};
+pub use message::{
+    DiskIdentity, Envelope, ErrorCode, Event, Incoming, RefreshReason, Request, Response, SortKey,
+    SortSpec, VolumeDetails,
+};
 
 /// Version of the control-channel protocol. The core reports it in
-/// [`Response::Pong`]. Raise it whenever a message changes shape.
-pub const PROTOCOL_VERSION: u32 = 1;
+/// [`Response::Pong`] and [`Response::Welcome`]. Raise it whenever a message
+/// is added or changes shape. Version 2 added `hello`, directory listings,
+/// volume information and events.
+pub const PROTOCOL_VERSION: u32 = 2;

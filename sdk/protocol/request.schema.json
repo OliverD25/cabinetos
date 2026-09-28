@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RequestEnvelope",
-  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":1,\"core_version\":\"0.1.0\"}\n```",
+  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":2,\"core_version\":\"0.1.0\"}\n```",
   "type": "object",
   "properties": {
     "id": {
-      "description": "Created by the sender of a request. The reply carries the same ID.",
+      "description": "Created by the sender of a request. The reply carries the same ID. An\nevent carries a fresh ID of its own.",
       "$ref": "#/$defs/RequestId"
     }
   },
@@ -35,6 +35,105 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Introduces the client. Must come before `list_directory` on each\nconnection. The core answers `welcome`.",
+      "type": "object",
+      "properties": {
+        "client_name": {
+          "description": "A name for logs, for example `CabinetOS` or `cabinetos-cli`.",
+          "type": "string"
+        },
+        "client_pid": {
+          "description": "The client's process ID. The core duplicates shared-memory handles\ninto this process, so it must be the process on the other end of\nthe pipe; the core checks that.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "hello"
+        }
+      },
+      "required": [
+        "type",
+        "client_pid",
+        "client_name"
+      ]
+    },
+    {
+      "description": "Lists a directory into shared memory. The core answers\n`listing_opened`.",
+      "type": "object",
+      "properties": {
+        "include_hidden": {
+          "description": "Also list entries with the hidden or the system attribute.",
+          "type": "boolean",
+          "default": false
+        },
+        "path": {
+          "description": "The directory, as an absolute or relative Windows path.",
+          "type": "string"
+        },
+        "sort": {
+          "description": "The order of the entries. Directories always come first.",
+          "$ref": "#/$defs/SortSpec",
+          "default": {
+            "descending": false,
+            "key": "name"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "list_directory"
+        },
+        "watch": {
+          "description": "Keep watching the directory and send `listing_refreshed` events\nwhen it changes.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
+      "description": "Ends a listing: stops its watcher and releases the core's side of its\nshared memory. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "listing_id": {
+          "description": "The listing, from `listing_opened`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "close_listing"
+        }
+      },
+      "required": [
+        "type",
+        "listing_id"
+      ]
+    },
+    {
+      "description": "Asks which volume and physical disk a path lives on. The core answers\n`volume_info`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Any path on the volume; it does not have to exist.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "volume_info"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
     }
   ],
   "required": [
@@ -45,6 +144,47 @@
       "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",
       "type": "string",
       "pattern": "^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$"
+    },
+    "SortKey": {
+      "description": "What a listing is sorted by.",
+      "oneOf": [
+        {
+          "description": "Natural order, as in Explorer: case-insensitive, with numbers compared\nby value, so `file2` comes before `file10`.",
+          "type": "string",
+          "const": "name"
+        },
+        {
+          "description": "File size, then name.",
+          "type": "string",
+          "const": "size"
+        },
+        {
+          "description": "Last-write time, then name.",
+          "type": "string",
+          "const": "modified"
+        },
+        {
+          "description": "Entry kind (directory, file, link), then name.",
+          "type": "string",
+          "const": "kind"
+        }
+      ]
+    },
+    "SortSpec": {
+      "description": "The order of a listing. Directories always come before everything else;\n`descending` reverses the order within each of the two groups.",
+      "type": "object",
+      "properties": {
+        "descending": {
+          "description": "Largest, newest or last first.",
+          "type": "boolean",
+          "default": false
+        },
+        "key": {
+          "description": "What to sort by.",
+          "$ref": "#/$defs/SortKey",
+          "default": "name"
+        }
+      }
     }
   }
 }
