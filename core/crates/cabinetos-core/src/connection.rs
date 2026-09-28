@@ -8,9 +8,10 @@
 //!   queued, so a `listing_opened` always goes out before the events of that
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
-//!   (`list_directory`, `volume_info`, the keybinding writes) as tasks, so
-//!   one slow directory never holds up the next request. After `hello` it
-//!   also forwards the configuration events every connection receives.
+//!   (`list_directory`, `volume_info`, the keybinding writes, `start_job`)
+//!   as tasks, so one slow directory never holds up the next request. After
+//!   `hello` it also forwards the configuration and job events every
+//!   connection receives.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -21,7 +22,8 @@ use cabinetos_diag::span_for_request;
 use cabinetos_fs::{DirectoryWatcher, ListOptions};
 use cabinetos_ipc::{IpcError, PipeConnection, SharedSection};
 use cabinetos_protocol::{
-    Envelope, ErrorCode, Event, PROTOCOL_VERSION, Request, RequestId, Response, SortSpec,
+    Envelope, ErrorCode, Event, JobRequest, PROTOCOL_VERSION, Request, RequestId, Response,
+    SortSpec,
 };
 use serde::Serialize;
 use tokio::sync::broadcast::{self, error::RecvError};
@@ -30,6 +32,7 @@ use tokio::task::{AbortHandle, JoinError, JoinSet};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
+use crate::events::Services;
 use crate::listing::{self, Failure, Published, WatchedListing};
 use crate::settings::{Settings, every_section};
 use crate::{CORE_VERSION, decode_request};
@@ -108,7 +111,7 @@ struct Opened {
 pub(crate) async fn handle_connection(
     connection: PipeConnection,
     shutdown: CancellationToken,
-    settings: Arc<Settings>,
+    services: Arc<Services>,
 ) {
     tracing::debug!("client connected");
     let client_pid_from_windows = connection.client_process_id().ok();
@@ -142,7 +145,7 @@ pub(crate) async fn handle_connection(
         listings: HashMap::new(),
         tasks: JoinSet::new(),
         shutdown,
-        settings,
+        services,
         events: None,
     };
     loop {
@@ -208,8 +211,8 @@ struct Session {
     listings: HashMap<u64, ListingSlot>,
     tasks: JoinSet<TaskDone>,
     shutdown: CancellationToken,
-    settings: Arc<Settings>,
-    /// Configuration events, from `hello` on.
+    services: Arc<Services>,
+    /// Configuration and job events, from `hello` on.
     events: Option<broadcast::Receiver<Envelope<Event>>>,
 }
 
@@ -262,15 +265,15 @@ impl Session {
                     self.volume_info(&id, &span, path);
                     None
                 }
-                Request::GetConfig => Some(self.settings.get_config()),
-                Request::GetKeymap => Some(self.settings.get_keymap()),
-                Request::ListCommands => Some(self.settings.list_commands()),
+                Request::GetConfig => Some(self.services.settings.get_config()),
+                Request::GetKeymap => Some(self.services.settings.get_keymap()),
+                Request::ListCommands => Some(self.services.settings.list_commands()),
                 Request::SearchCommands { query, limit } => {
-                    Some(self.settings.search_commands(&query, limit))
+                    Some(self.services.settings.search_commands(&query, limit))
                 }
                 Request::ExecuteCommand { command, args: _ } => {
                     tracing::info!(command = %command, "command requested");
-                    Some(self.settings.execute(&command))
+                    Some(self.services.settings.execute(&command))
                 }
                 Request::SetKeybinding { command, keys } => {
                     self.write_keybinding(&id, &span, kind, move |settings| {
@@ -284,13 +287,10 @@ impl Session {
                     });
                     None
                 }
-                Request::StartJob(_)
+                request @ (Request::StartJob(_)
                 | Request::ListJobs
                 | Request::JobControl { .. }
-                | Request::ResolveConflict { .. } => Some(Response::Error {
-                    code: ErrorCode::NotImplemented,
-                    message: format!("{kind} is not implemented yet"),
-                }),
+                | Request::ResolveConflict { .. }) => self.job_request(&id, &span, request),
             }
         };
         // Requests handled right here are done; the others log when they end.
@@ -314,7 +314,16 @@ impl Session {
         }
         tracing::info!(client_pid, client_name, "client said hello");
         self.client = Some(Client { pid: client_pid });
-        self.events = Some(self.settings.subscribe());
+        self.events = Some(self.services.events.subscribe());
+        // Conflicts raised before this client connected (a restarted UI)
+        // still wait for a decision. One raised while this runs may arrive
+        // twice; a client keys conflicts by ID.
+        for conflict in self.services.jobs.open_conflicts() {
+            self.out.send(&Envelope::new(
+                RequestId::new(),
+                Event::JobConflict(conflict),
+            ));
+        }
         Response::Welcome {
             protocol_version: PROTOCOL_VERSION,
             core_version: CORE_VERSION.to_owned(),
@@ -354,7 +363,7 @@ impl Session {
         let client_pid = client.pid;
         let listing_id = NEXT_LISTING_ID.fetch_add(1, Ordering::Relaxed);
         // What the request leaves out, the `panes` settings decide.
-        let panes = &self.settings.snapshot().config.panes;
+        let panes = &self.services.settings.snapshot().config.panes;
         let options = ListOptions {
             include_hidden: include_hidden.unwrap_or(panes.show_hidden),
             sort: sort.unwrap_or_else(|| panes.sort.into()),
@@ -413,7 +422,7 @@ impl Session {
         write: impl FnOnce(&Settings) -> Response + Send + 'static,
     ) {
         let out = self.out.clone();
-        let settings = Arc::clone(&self.settings);
+        let settings = Arc::clone(&self.services.settings);
         let request_id = id.clone();
         let started = Instant::now();
         self.tasks.spawn(
@@ -433,7 +442,69 @@ impl Session {
         );
     }
 
-    /// Passes a configuration event on to the client.
+    /// The job requests. `start_job` runs as a task (it looks at the file
+    /// system); the others answer at once.
+    fn job_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        request: Request,
+    ) -> Option<Response> {
+        let jobs = &self.services.jobs;
+        let answer = |result: Result<(), cabinetos_jobs::JobError>| match result {
+            Ok(()) => Response::Ok,
+            Err(error) => job_error(error),
+        };
+        match request {
+            Request::StartJob(request) => {
+                self.start_job(id, span, request);
+                None
+            }
+            Request::ListJobs => Some(Response::Jobs { jobs: jobs.list() }),
+            Request::JobControl { job_id, action } => Some(answer(jobs.control(job_id, action))),
+            Request::ResolveConflict {
+                job_id,
+                conflict_id,
+                resolution,
+                apply_to_same_kind,
+            } => Some(answer(jobs.resolve(
+                job_id,
+                conflict_id,
+                &resolution,
+                apply_to_same_kind,
+            ))),
+            _ => None,
+        }
+    }
+
+    /// Checks the paths and queues a job on the blocking pool: the checks
+    /// look at the file system.
+    fn start_job(&mut self, id: &RequestId, span: &tracing::Span, request: JobRequest) {
+        let out = self.out.clone();
+        let services = Arc::clone(&self.services);
+        let request_id = id.clone();
+        let started = Instant::now();
+        self.tasks.spawn(
+            async move {
+                let reply = match tokio::task::spawn_blocking(move || services.jobs.start(request))
+                    .await
+                {
+                    Ok(Ok(job_id)) => Response::JobStarted { job_id },
+                    Ok(Err(error)) => job_error(error),
+                    Err(error) => {
+                        rethrow_panic(Err(error));
+                        failure_reply((ErrorCode::Internal, "the request was cancelled".to_owned()))
+                    }
+                };
+                log_handled("start_job", started, &reply);
+                out.reply(request_id, reply);
+                TaskDone::Replied
+            }
+            .instrument(span.clone()),
+        );
+    }
+
+    /// Passes a configuration or job event on to the client.
     fn forward_event(&mut self, event: Result<Envelope<Event>, RecvError>) {
         match event {
             Ok(event) => self.out.send(&event),
@@ -450,9 +521,21 @@ impl Session {
                 self.out.send(&Envelope::new(
                     RequestId::new(),
                     Event::KeymapChanged {
-                        keymap: self.settings.snapshot().keymap.to_wire(),
+                        keymap: self.services.settings.snapshot().keymap.to_wire(),
                     },
                 ));
+                for job in self.services.jobs.list() {
+                    self.out.send(&Envelope::new(
+                        RequestId::new(),
+                        Event::JobProgress(job.progress),
+                    ));
+                }
+                for conflict in self.services.jobs.open_conflicts() {
+                    self.out.send(&Envelope::new(
+                        RequestId::new(),
+                        Event::JobConflict(conflict),
+                    ));
+                }
             }
             Err(RecvError::Closed) => self.events = None,
         }
@@ -627,6 +710,13 @@ fn protocol_error(message: &str) -> Response {
 
 fn failure_reply((code, message): Failure) -> Response {
     Response::Error { code, message }
+}
+
+fn job_error(error: cabinetos_jobs::JobError) -> Response {
+    Response::Error {
+        code: error.code,
+        message: error.message,
+    }
 }
 
 /// One line per request, inside its span, so its `request_id` is in the log.

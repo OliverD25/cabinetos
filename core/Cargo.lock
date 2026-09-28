@@ -156,6 +156,7 @@ dependencies = [
  "cabinetos-diag",
  "cabinetos-fs",
  "cabinetos-ipc",
+ "cabinetos-jobs",
  "cabinetos-protocol",
  "clap",
  "serde",

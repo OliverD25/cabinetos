@@ -19,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 mod connection;
+mod events;
 mod listing;
 mod settings;
 
@@ -28,12 +29,14 @@ use std::time::Duration;
 
 use cabinetos_diag::{Boundary, DiagConfig, DiagError};
 use cabinetos_ipc::{IpcError, PipeName, PipeServer};
+use cabinetos_jobs::{EngineConfig, JobQueueManager};
 use cabinetos_protocol::{Envelope, ErrorCode, PROTOCOL_VERSION, Request, RequestId};
 use serde_json::Value;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
+use crate::events::{EventHub, Services};
 use crate::settings::Settings;
 
 /// The core's version, reported in `pong`.
@@ -67,6 +70,10 @@ pub fn worker_threads(value: Option<&str>) -> (usize, Option<String>) {
 
 /// How long open connections may take to finish once shutdown starts.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+
+/// How long running jobs may take to stop once shutdown starts. A copy that
+/// is cancelled removes its partial file first.
+const JOBS_GRACE: Duration = Duration::from_secs(2);
 
 /// Pause after a failed accept, so a persistent failure cannot spin a CPU.
 const ACCEPT_RETRY: Duration = Duration::from_millis(100);
@@ -144,13 +151,30 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
     }
     let config_path = cabinetos_config::default_path(config_path);
     let config_path = std::path::absolute(&config_path).unwrap_or(config_path);
-    let settings = match tokio::task::spawn_blocking(move || Settings::open(config_path)).await {
-        Ok(settings) => settings,
-        Err(error) => std::panic::resume_unwind(error.into_panic()),
-    };
+    let events = EventHub::new();
+    let settings_events = Arc::clone(&events);
+    let settings =
+        match tokio::task::spawn_blocking(move || Settings::open(config_path, settings_events))
+            .await
+        {
+            Ok(settings) => settings,
+            Err(error) => std::panic::resume_unwind(error.into_panic()),
+        };
     // Dropping the watcher at the end stops it without waiting.
     let _watcher = settings.watch();
-    let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &settings).await;
+    let job_events = Arc::clone(&events);
+    let jobs = JobQueueManager::new(
+        EngineConfig::default(),
+        Arc::new(move |event| job_events.publish(event)),
+    );
+    let services = Arc::new(Services {
+        settings,
+        jobs,
+        events,
+    });
+    let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
+    let stopping = Arc::clone(&services);
+    let _ = tokio::task::spawn_blocking(move || stopping.jobs.shutdown(JOBS_GRACE)).await;
     match &result {
         Ok(()) => tracing::info!("core stopped"),
         Err(error) => tracing::error!(%error, "core stopped with an error"),
@@ -164,7 +188,7 @@ async fn serve(
     parent_pid: Option<u32>,
     shutdown: &CancellationToken,
     log_dir: &Path,
-    settings: &Arc<Settings>,
+    services: &Arc<Services>,
 ) -> Result<(), CoreError> {
     let mut server = PipeServer::bind(pipe)?;
 
@@ -196,7 +220,7 @@ async fn serve(
         parent_pid,
         workers = tokio::runtime::Handle::current().metrics().num_workers(),
         log_dir = %log_dir.display(),
-        config = %settings.path().display(),
+        config = %services.settings.path().display(),
         "core started"
     );
 
@@ -213,7 +237,7 @@ async fn serve(
                         connection::handle_connection(
                             connection,
                             shutdown.clone(),
-                            Arc::clone(settings),
+                            Arc::clone(services),
                         )
                         .instrument(span),
                     );

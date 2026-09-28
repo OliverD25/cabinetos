@@ -18,17 +18,12 @@ use cabinetos_config::{
     Config, ConfigError, ConfigStore, ConfigWatcher, LogLevel, Opened, Reload, UpdateError,
     WatchEvent,
 };
-use cabinetos_protocol::{
-    CommandTarget, Envelope, ErrorCode, Event, PROTOCOL_VERSION, RequestId, Response,
-};
+use cabinetos_protocol::{CommandTarget, ErrorCode, Event, PROTOCOL_VERSION, Response};
 use serde_json::{Value, json};
-use tokio::sync::{broadcast, watch};
+use tokio::sync::watch;
 
 use crate::CORE_VERSION;
-
-/// Configuration events a connection may fall behind by before it misses
-/// some. Each is one saved edit, so this is never reached in practice.
-const EVENT_BUFFER: usize = 256;
+use crate::events::EventHub;
 
 /// The settings in effect.
 #[derive(Debug)]
@@ -44,14 +39,14 @@ pub(crate) struct Settings {
     /// Held while the file is read or written, so changes apply in order.
     store: Mutex<ConfigStore>,
     current: watch::Sender<Arc<Snapshot>>,
-    events: broadcast::Sender<Envelope<Event>>,
+    events: Arc<EventHub>,
 }
 
 impl Settings {
     /// Opens the configuration file at `path` (creating it on first run) and
     /// compiles the keymap. A file with an error leaves the defaults in
     /// effect until it is fixed. Blocking: it reads and may write the file.
-    pub(crate) fn open(path: PathBuf) -> Arc<Self> {
+    pub(crate) fn open(path: PathBuf, events: Arc<EventHub>) -> Arc<Self> {
         let registry = CommandRegistry::core();
         let mut compiled = None;
         let (store, opened) = ConfigStore::open(path.clone(), |config| {
@@ -87,7 +82,6 @@ impl Settings {
             keymap: compiled.keymap,
         };
         let (current, _) = watch::channel(Arc::new(snapshot));
-        let (events, _) = broadcast::channel(EVENT_BUFFER);
         Arc::new(Self {
             registry,
             path,
@@ -121,11 +115,6 @@ impl Settings {
     /// The settings in effect now.
     pub(crate) fn snapshot(&self) -> Arc<Snapshot> {
         self.current.borrow().clone()
-    }
-
-    /// Configuration events from now on, for a connection that said `hello`.
-    pub(crate) fn subscribe(&self) -> broadcast::Receiver<Envelope<Event>> {
-        self.events.subscribe()
     }
 
     /// The reply to `get_config`.
@@ -343,8 +332,7 @@ impl Settings {
     }
 
     fn publish(&self, event: Event) {
-        // An error means no connection is listening, which is fine.
-        let _ = self.events.send(Envelope::new(RequestId::new(), event));
+        self.events.publish(event);
     }
 
     fn lock_store(&self) -> MutexGuard<'_, ConfigStore> {
