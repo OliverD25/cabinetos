@@ -57,6 +57,11 @@ public sealed partial class MainWindow
         {
             _panes[_searchPane].Search = null;
         }
+        if (_editorViews[_active].IsOpen && SearchBox.Text.Trim().Length > 0)
+        {
+            // One pane shown with a tool in it: the hits need the pane.
+            CloseEditor(_active, focusPane: false);
+        }
         _searchPane = _active;
         _search.SetText(SearchBox.Text, Active.Path.Length > 0 ? Active.Path : null);
         ScheduleSearch();

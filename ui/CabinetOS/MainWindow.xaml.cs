@@ -154,7 +154,7 @@ public sealed partial class MainWindow : Window
         PillFill.CenterPoint = new Vector3(0, 2, 0);
 
         FileMenu.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
-        FileMenu.Closed += () => _paneViews[_active].Focus(FocusState.Programmatic);
+        FileMenu.Closed += FocusActivePane;
 
         BackButton.Click += (_, _) => _ = _router.ExecuteAsync("go.back", trigger: "button");
         ForwardButton.Click += (_, _) => _ = _router.ExecuteAsync("go.forward", trigger: "button");
@@ -517,7 +517,7 @@ public sealed partial class MainWindow : Window
             var right = documents >= 0 && left!.IsFolder(documents) ? DisplayFormat.Join(profile, "Documents") : @"C:\";
             await _panes[1].NavigateAsync(right);
         }
-        _paneViews[_active].Focus(FocusState.Programmatic);
+        FocusActivePane();
     }
 
     private async Task ReadConfigAsync(bool firstStart)
@@ -937,7 +937,7 @@ public sealed partial class MainWindow : Window
         {
             EndAddressEdit();
             await Active.NavigateAsync(path, invocation.RequestId);
-            _paneViews[_active].Focus(FocusState.Programmatic);
+            FocusActivePane();
         }
         else
         {
@@ -973,7 +973,7 @@ public sealed partial class MainWindow : Window
             return;
         }
         _paletteFromTerminal = false;
-        _paneViews[_active].Focus(FocusState.Programmatic);
+        FocusActivePane();
     }
 
     // Esc: the palette, then the context menu, then an edit in place, then the address box
@@ -1004,7 +1004,7 @@ public sealed partial class MainWindow : Window
         else if (AddressEdit.Visibility == Visibility.Visible)
         {
             EndAddressEdit();
-            _paneViews[_active].Focus(FocusState.Programmatic);
+            FocusActivePane();
         }
         else
         {
@@ -1060,10 +1060,10 @@ public sealed partial class MainWindow : Window
             if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary)
             {
                 Diag.Request(LogLevel.Info, invocation.RequestId, Target, "permanent delete cancelled", new LogField("items", targets.Count));
-                _paneViews[_active].Focus(FocusState.Programmatic);
+                FocusActivePane();
                 return;
             }
-            _paneViews[_active].Focus(FocusState.Programmatic);
+            FocusActivePane();
         }
         var start = await _transfers.StartAsync(JobKind.Delete(permanent), targets.Select(t => t.Path).ToList(), null, invocation.RequestId);
         if (!start.Started)
@@ -1354,7 +1354,7 @@ public sealed partial class MainWindow : Window
             DefaultButton = ContentDialogButton.Close,
         };
         await ShowDialogAsync(dialog);
-        _paneViews[_active].Focus(FocusState.Programmatic);
+        FocusActivePane();
 
         static string FullTime(DateTime utc) => utc == DateTime.MinValue ? "" : utc.ToLocalTime().ToString("G", CultureInfo.CurrentCulture);
     }

@@ -125,6 +125,10 @@ public sealed partial class MainWindow
         {
             path = entry.Path;
         }
+        else if (path is null && Active.FocusedHit is { Hit.IsFolder: false } hit)
+        {
+            path = hit.Hit.Path;
+        }
         if (path is null)
         {
             ShowNotice("Select a Markdown file first.");
@@ -291,6 +295,16 @@ public sealed partial class MainWindow
     private string ToolContext() => ToolMessages.Context(
         Active.Search is null ? Active.Targets().Select(t => t.Path).ToList() : [],
         Active.Path.Length > 0 ? Active.Path : null);
+
+    // The keyboard back to the active pane, or to the tool page that covers it (one pane shown).
+    private void FocusActivePane()
+    {
+        if (_editorViews is { } editors && editors[_active].IsOpen && editors[_active].FocusPage())
+        {
+            return;
+        }
+        _paneViews[_active].Focus(FocusState.Programmatic);
+    }
 
     private CoreWebView2PreferredColorScheme ToolColorScheme() =>
         RootGrid.ActualTheme == ElementTheme.Light ? CoreWebView2PreferredColorScheme.Light : CoreWebView2PreferredColorScheme.Dark;

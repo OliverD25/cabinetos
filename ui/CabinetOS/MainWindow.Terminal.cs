@@ -40,7 +40,7 @@ public sealed partial class MainWindow
             Dock.ShowStopped("The terminal stopped", $"Its page failed: {reason}. The shells still run.");
             if (hadFocus)
             {
-                _paneViews[_active].Focus(FocusState.Programmatic);
+                FocusActivePane();
             }
         };
         BottomSplitter.DragStarted += () => _dockDragStart = CurrentDockSize();
@@ -85,7 +85,7 @@ public sealed partial class MainWindow
         }
         if (wanted is null && _dockVisible)
         {
-            _paneViews[_active].Focus(FocusState.Programmatic);
+            FocusActivePane();
             return;
         }
         await ShowDockAsync(invocation.RequestId);
@@ -162,7 +162,7 @@ public sealed partial class MainWindow
     {
         SetDockVisible(false);
         // The collapsed page cannot keep the keyboard; the pane takes it.
-        _paneViews[_active].Focus(FocusState.Programmatic);
+        FocusActivePane();
     }
 
     private void SetDockVisible(bool visible)

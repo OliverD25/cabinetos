@@ -108,14 +108,14 @@ public sealed partial class MainWindow
         }
         else
         {
-            _paneViews[_active].Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            FocusActivePane();
         }
     }
 
     private void ClosePlugins()
     {
         PluginsView.Close();
-        _paneViews[_active].Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+        FocusActivePane();
     }
 
     /// <summary>
