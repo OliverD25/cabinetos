@@ -328,6 +328,27 @@ mod tests {
     }
 
     #[test]
+    fn paths_deeper_than_260_characters_are_assembled_whole() {
+        let mut index = VolumeIndex::new('D');
+        index.upsert(ROOT, ROOT, &utf16("."), 0x10);
+        let mut parent = ROOT;
+        let mut expected = String::from(r"D:");
+        for (number, depth) in (0x0001_0000_0000_2000..).zip(0..10) {
+            let name = format!("segment-{depth}-of-a-long-path-0123456789");
+            index.upsert(number, parent, &utf16(&name), 0x10);
+            expected.push('\\');
+            expected.push_str(&name);
+            parent = number;
+        }
+        index.upsert(0x0001_0000_0000_3000, parent, &utf16("far away.txt"), 0x20);
+        expected.push_str(r"\far away.txt");
+        let hits = index.search(&Matcher::new("far away").unwrap(), None, 10);
+        assert!(expected.len() > 300, "{}", expected.len());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, expected);
+    }
+
+    #[test]
     fn the_root_filter_keeps_descendants_only() {
         let mut index = sample();
         index.upsert(0x0001_0000_0000_0700, ROOT, &utf16("cat.txt"), 0x20);

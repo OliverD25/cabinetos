@@ -49,8 +49,36 @@ pub fn open_path(path: &str) -> Result<(), FsError> {
     // SAFETY: `info` is a valid structure with its size in `cbSize`; its
     // strings are NUL-terminated and outlive the call, which returns once
     // the shell is done with them (SEE_MASK_NOASYNC).
-    unsafe { ShellExecuteExW(&raw mut info) }.map_err(|error| FsError::from_windows(path, &error))
+    unsafe { ShellExecuteExW(&raw mut info) }.map_err(|error| {
+        // The terminating NUL is not part of the length.
+        let length = plain.len() - 1;
+        if length >= MAX_PATH {
+            // The shell gives no reason here, and the short (8.3) form
+            // does not help: the shell turns it back into the long one.
+            return FsError::InvalidPath {
+                path: path.to_owned(),
+                reason: format!(
+                    "the path is {length} characters long, and Windows opens files with \
+                     their programs only by paths shorter than {MAX_PATH} characters; \
+                     move the file or shorten a folder name on the way"
+                ),
+            };
+        }
+        match FsError::from_windows(path, &error) {
+            FsError::Io { path, source } if source.to_string().is_empty() => FsError::Io {
+                path,
+                source: std::io::Error::other(format!(
+                    "the shell cannot open it (error {:#010x})",
+                    error.code().0
+                )),
+            },
+            other => other,
+        }
+    })
 }
+
+/// The shell's path limit: a path must be shorter, in UTF-16 units.
+const MAX_PATH: usize = 260;
 
 #[cfg(test)]
 mod tests {
@@ -68,6 +96,40 @@ mod tests {
         // No extension probing: `notepad` next to no such file runs nothing.
         let bare = dir.join("notepad");
         let error = open_path(bare.to_str().unwrap()).unwrap_err();
+        assert!(matches!(error, FsError::NotFound { .. }), "{error:?}");
+    }
+
+    #[test]
+    fn a_path_too_long_for_the_shell_is_refused_with_the_reason() {
+        let root = std::env::temp_dir().join("cabinetos-fs-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("open-long")
+            .tempdir_in(&root)
+            .unwrap();
+        let mut deep = dir.path().to_path_buf();
+        while deep.as_os_str().len() < 300 {
+            deep.push("segment-of-a-long-path-0123456789");
+        }
+        std::fs::create_dir_all(format!(r"\\?\{}", deep.display())).unwrap();
+        // If the shell ever ran it, it would only leave this marker.
+        let marker = dir.path().join("opened.txt");
+        let script = deep.join("opened.cmd");
+        std::fs::write(
+            format!(r"\\?\{}", script.display()),
+            format!("@echo opened> \"{}\"\r\n@exit\r\n", marker.display()),
+        )
+        .unwrap();
+        let error = open_path(script.to_str().unwrap()).unwrap_err();
+        let FsError::InvalidPath { reason, .. } = &error else {
+            panic!("{error:?}")
+        };
+        assert!(reason.contains("260"), "{reason}");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        assert!(!marker.exists(), "the shell ran the script");
+
+        let missing = deep.join("missing.txt");
+        let error = open_path(missing.to_str().unwrap()).unwrap_err();
         assert!(matches!(error, FsError::NotFound { .. }), "{error:?}");
     }
 

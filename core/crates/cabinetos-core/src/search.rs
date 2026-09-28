@@ -414,6 +414,36 @@ mod tests {
     }
 
     #[test]
+    fn a_walk_reaches_files_deeper_than_260_characters() {
+        let root = std::env::temp_dir().join("cabinetos-index-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("walk-long")
+            .tempdir_in(root)
+            .unwrap();
+        let mut deep = dir.path().to_path_buf();
+        while deep.as_os_str().len() < 300 {
+            deep.push("segment-of-a-long-path-0123456789");
+        }
+        std::fs::create_dir_all(format!(r"\\?\{}", deep.display())).unwrap();
+        std::fs::write(format!(r"\\?\{}\far away.txt", deep.display()), "x").unwrap();
+        let root = dir.path().display().to_string();
+        let outcome = walk(&root, &Matcher::new("far away").unwrap(), 10, WALK_LIMITS).unwrap();
+        assert!(outcome.complete);
+        // The path as the user knows it: no `\\?\` in an answer.
+        let wanted = deep.join("far away.txt").display().to_string();
+        assert!(wanted.len() > 300);
+        assert_eq!(
+            outcome
+                .hits
+                .iter()
+                .map(|hit| hit.path.as_str())
+                .collect::<Vec<_>>(),
+            [wanted.as_str()]
+        );
+    }
+
+    #[test]
     fn the_entry_limit_stops_the_walk() {
         let dir = tree();
         let root = dir.path().display().to_string();

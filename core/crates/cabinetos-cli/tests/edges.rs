@@ -1,8 +1,9 @@
-//! `cabinetos-cli` with names beyond ASCII (docs/ui.md, "Edge cases"),
-//! against a real core. What it prints into a pipe is UTF-8; on a console
-//! the standard library writes through `WriteConsoleW`, so the console's
-//! code page plays no part. Everything written lives under
-//! `%TEMP%\cabinetos-core-test\`.
+//! `cabinetos-cli` against a real core with the edge cases of the core's
+//! hardening, one section per class: names beyond ASCII (docs/ui.md, "Edge
+//! cases") and paths longer than 260 characters. What the CLI prints into a
+//! pipe is UTF-8; on a console the standard library writes through
+//! `WriteConsoleW`, so the console's code page plays no part. Everything
+//! written lives under `%TEMP%\cabinetos-core-test\`.
 //!
 //! Needs `cabinetos-core.exe` next to `cabinetos-cli.exe`; `cargo test
 //! --workspace` builds both.
@@ -220,4 +221,65 @@ fn search_takes_a_query_beyond_ascii_and_prints_the_hits() {
             "{file}: {text}"
         );
     }
+}
+
+// Paths longer than 260 characters.
+
+/// A folder under `parent` whose path is at least `length` characters,
+/// made with the verbatim (`\\?\`) form.
+fn deep_folder(parent: &Path, length: usize) -> PathBuf {
+    let mut deep = parent.to_path_buf();
+    while deep.as_os_str().len() < length {
+        deep.push("segment-of-a-long-path-0123456789");
+    }
+    std::fs::create_dir_all(format!(r"\\?\{}", deep.display())).unwrap();
+    deep
+}
+
+#[test]
+fn a_folder_deeper_than_260_characters_works_like_any_other() {
+    let core = start_core();
+    let dir = scratch("cli-long");
+    let deep = deep_folder(dir.path(), 300);
+    for name in ["far away.txt", "Звіт 2026.txt"] {
+        std::fs::write(format!(r"\\?\{}\{name}", deep.display()), name).unwrap();
+    }
+    let folder = deep.display().to_string();
+
+    let text = stdout(&cli(&core, &["ls", &folder]));
+    assert!(text.lines().any(|line| line == "- far away.txt"), "{text}");
+    let text = stdout(&cli(&core, &["describe", &folder]));
+    assert!(
+        text.lines()
+            .any(|line| line.contains("ext:.txt") && line.ends_with("Звіт 2026.txt")),
+        "{text}"
+    );
+    let root = dir.path().display().to_string();
+    let text = stdout(&cli(&core, &["search", "far away", "--root", &root]));
+    // The path as the user knows it, without `\\?\`.
+    assert_eq!(
+        text.lines().next(),
+        Some(format!(r"f {folder}\far away.txt").as_str()),
+        "{text}"
+    );
+
+    let new_folder = format!(r"{folder}\нова тека");
+    stdout(&cli(&core, &["mkdir", &new_folder]));
+    stdout(&cli(&core, &["rename", &new_folder, "Ґанок"]));
+    assert!(deep.join("Ґанок").is_dir());
+
+    // The shell cannot open a path this long; the answer says why and
+    // nothing runs.
+    let marker = dir.path().join("opened.txt");
+    std::fs::write(
+        format!(r"\\?\{}\opened.cmd", deep.display()),
+        format!("@echo opened> \"{}\"\r\n@exit\r\n", marker.display()),
+    )
+    .unwrap();
+    let output = cli(&core, &["open", &format!(r"{folder}\opened.cmd")]);
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("260"), "{error}");
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!marker.exists(), "the shell ran the script");
 }

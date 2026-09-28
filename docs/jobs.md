@@ -168,7 +168,7 @@ copy a.txt, replacing: done
 | `file_exists` | The destination has that name. Carries both sizes and write times. | With `on_conflict` other than `ask`, the policy decides at once and no event is sent. |
 | `access_denied` | Windows refused, for example a read-only file. | `overwrite` clears the read-only attribute, then tries again. |
 | `sharing_violation` | Another program has the file open. | `retry` once it is closed. |
-| `path_too_long` | The destination file system refuses the length. | |
+| `path_too_long` | The destination file system refuses the length. In a delete to the Recycle Bin: a path in the item has 260 characters or more (below). | In a delete to the Recycle Bin, `delete_permanently`, `skip` and `retry` answer it; `destination` is absent. |
 | `disk_full` | The destination is full. | The whole job pauses: every other file would fail the same way. Any decision on this conflict resumes the job, unless a client paused the job itself after that: then only `resume` does. |
 | `source_vanished` | The source disappeared after the scan. | No event: the file counts as failed. |
 | `recycle_bin_too_small` | A Recycle Bin delete of an item the bin cannot take. Carries the item's `size`. | Nothing is deleted. Only `delete_permanently` or `skip` answer it (`retry` checks again, for example after the bin was made bigger); any other answer gets `invalid_resolution`. No policy answers it on its own; a rule made with `apply_to_same_kind` does. |
@@ -182,8 +182,26 @@ Decisions (`resolve_conflict`):
 | `skip` | Leave the file out; it counts in `files_skipped`. A skipped folder skips everything in it. |
 | `rename` | Copy or move under another name in the same folder: `new_name`, or without it a free name `name (2).ext`. |
 | `retry` | Try once more, the same way. |
-| `delete_permanently` | Delete for good what the Recycle Bin cannot take. Answers only `recycle_bin_too_small`. |
+| `delete_permanently` | Delete for good what the Recycle Bin cannot take. Answers only `recycle_bin_too_small`, and `path_too_long` in a delete to the Recycle Bin. |
 | `cancel_job` | Stop the whole job. |
+
+### The Recycle Bin and long paths
+
+The shell's Recycle Bin takes paths shorter than 260 characters (UTF-16
+units, as Windows counts them). For a longer one Explorer asks whether to
+delete it permanently; with the silent flags the core passes, the shell
+would answer that question itself, and a delete the user meant to undo
+would be final. So before an item goes to the bin, the walk that sums its
+size also measures its longest path. If that path has 260 characters or
+more, the item waits on a `path_too_long` conflict and nothing is deleted:
+`delete_permanently` deletes it for good (with `DeleteFileW`, which takes
+any length), `skip` keeps it, `retry` measures again (after a folder on the
+way was renamed, for example). A folder counts every path inside it, so a
+deep `node_modules` asks too. This is checked before the bin's size.
+
+Not tried: what the shell itself does with such a path. Trying it would
+put a file into, or delete it past, the Recycle Bin of the machine running
+the test.
 
 - `apply_to_same_kind: true` also answers the job's other waiting
   conflicts of the same kind, and makes the decision a rule for later ones
@@ -257,7 +275,7 @@ after the same gap, and then `job_state_changed`.
 | Cancel | The progress routine returns `PROGRESS_CANCEL`; Windows deletes the partial destination. |
 | Times | `CopyFileExW` keeps the last-write time by itself (a test checks this); the copy's creation time is the moment of the copy. With `preserve_timestamps`, `SetFileTime` gives the copy the source's creation and last-access times too; folders get theirs at the end. |
 | Verify | Sizes, then the whole content up to 1 MiB, or 16 samples of 64 KiB (first and last included) above. |
-| Long paths | Every file call uses the verbatim form (`\\?\C:\...`), so any length works. The shell (Recycle Bin) takes plain paths. |
+| Long paths | Every file call uses the verbatim form (`\\?\C:\...`), so any length works. The shell (Recycle Bin) takes plain paths shorter than 260 characters; a longer one waits on `path_too_long` ([above](#the-recycle-bin-and-long-paths)). |
 | Recycle Bin | `IFileOperation` with `FOF_ALLOWUNDO`, `FOF_NOCONFIRMATION`, `FOF_NOERRORUI`, `FOF_SILENT` and `FOFX_RECYCLEONDELETE`. |
 
 **Measured** (`cargo bench -p cabinetos-jobs --bench copy_file`, 2 GiB

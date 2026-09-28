@@ -48,7 +48,7 @@ use cabinetos_protocol::{
     Conflict, ErrorCode, Event, JobAction, JobInfo, JobKind, JobRequest, JobState, Resolution,
 };
 
-use crate::job::{Counters, Job, as_policy, kind_tag, lock};
+use crate::job::{Counters, Job, Target, as_policy, kind_tag, lock};
 use crate::scheduler::{Disk, DiskKey, Priority, Scheduler};
 
 /// Receives every event of every job: `job_progress`, `job_conflict`,
@@ -486,19 +486,26 @@ impl JobQueueManager {
         }
         let resolved_disk_full = {
             let mut queue = lock(&job.queue);
-            let kind = queue
+            let (kind, recycling) = queue
                 .parked
                 .get(&conflict_id)
-                .map(|parked| kind_tag(&parked.conflict))
+                .map(|parked| {
+                    (
+                        kind_tag(&parked.conflict),
+                        matches!(parked.work.target, Target::Recycle(_)),
+                    )
+                })
                 .ok_or_else(no_conflict)?;
-            // Only an explicit answer to the Recycle Bin conflict may turn a
-            // recoverable delete into a permanent one, and that conflict
-            // takes no other answer.
+            // Only an explicit answer to a conflict of the Recycle Bin may
+            // turn a recoverable delete into a permanent one: the bin is too
+            // small, which takes no other answer, or a path is too long for
+            // the bin.
             let fits = match (resolution, kind) {
                 (
                     Resolution::DeletePermanently | Resolution::Skip | Resolution::Retry,
                     "recycle_bin_too_small",
                 ) => true,
+                (Resolution::DeletePermanently, "path_too_long") => recycling,
                 (Resolution::DeletePermanently, _) | (_, "recycle_bin_too_small") => false,
                 _ => true,
             };

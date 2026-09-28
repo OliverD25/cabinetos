@@ -982,6 +982,171 @@ fn the_recycle_bin_takes_names_beyond_ascii() {
     }
 }
 
+/// A folder under `parent` whose path is at least `length` characters,
+/// made with the verbatim (`\\?\`) form.
+fn deep_folder(parent: &Path, length: usize) -> PathBuf {
+    let mut deep = parent.to_path_buf();
+    while deep.as_os_str().len() < length {
+        deep.push("segment-of-a-long-path-0123456789");
+    }
+    fs::create_dir_all(format!(r"\\?\{}", deep.display())).unwrap();
+    deep
+}
+
+#[test]
+fn a_tree_deeper_than_260_characters_is_copied_moved_and_deleted() {
+    let dir = scratch("long");
+    let source = dir.path().join("src");
+    let deep = deep_folder(&source, 300);
+    write_file(&deep.join("far away.txt"), 1000, 1);
+    write_file(&deep.join("Звіт 2026.txt"), 2000, 2);
+    assert!(deep.join("far away.txt").as_os_str().len() > 300);
+    let before = describe(&source);
+    let engine = engine();
+
+    // Into a destination that is itself deeper than 260 characters, where
+    // one file is in the way: the conflict names it, keep both works there.
+    let destination = deep_folder(&dir.path().join("dst"), 280);
+    let copied_deep = destination.join(deep.strip_prefix(dir.path()).unwrap());
+    fs::create_dir_all(format!(r"\\?\{}", copied_deep.display())).unwrap();
+    fs::write(
+        format!(r"\\?\{}", copied_deep.join("far away.txt").display()),
+        "old",
+    )
+    .unwrap();
+    let job = engine.start(
+        JobKind::Copy,
+        &[&source],
+        Some(&destination),
+        JobOptions::default(),
+    );
+    let conflicts = engine.conflicts_and_progress(job, 1, 1);
+    assert_eq!(
+        conflicts[0].destination.as_deref(),
+        Some(
+            copied_deep
+                .join("far away.txt")
+                .display()
+                .to_string()
+                .as_str()
+        )
+    );
+    assert!(
+        !conflicts[0]
+            .destination
+            .as_deref()
+            .unwrap()
+            .starts_with(r"\\?\")
+    );
+    engine
+        .manager
+        .resolve(
+            job,
+            conflicts[0].conflict_id,
+            &Resolution::Rename { new_name: None },
+            false,
+        )
+        .unwrap();
+    let (last, _) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert_eq!(
+        content_hash(&copied_deep.join("far away (2).txt")),
+        content_hash(&deep.join("far away.txt"))
+    );
+    assert_eq!(
+        fs::read_to_string(copied_deep.join("far away.txt")).unwrap(),
+        "old"
+    );
+
+    // A move on one volume is a rename, whatever the depth.
+    let moved_into = dir.path().join("moved");
+    fs::create_dir(&moved_into).unwrap();
+    let job = engine.start(
+        JobKind::Move,
+        &[&source],
+        Some(&moved_into),
+        JobOptions::default(),
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(conflicts.is_empty(), "{conflicts:?}");
+    assert!(!source.exists());
+    assert_eq!(describe(&moved_into.join("src")), before);
+
+    let job = engine.start(
+        JobKind::Delete { permanent: true },
+        &[&moved_into.join("src"), &dir.path().join("dst")],
+        None,
+        JobOptions::default(),
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(conflicts.is_empty(), "{conflicts:?}");
+    assert!(!moved_into.join("src").exists());
+    assert!(!dir.path().join("dst").exists());
+}
+
+#[test]
+fn a_path_too_long_for_the_recycle_bin_waits_for_an_explicit_decision() {
+    // The shell's Recycle Bin takes paths of up to 259 characters and,
+    // with the silent flags, may delete a longer one for good instead.
+    // Nothing here reaches it: the check comes before the shell (and the
+    // bin is made 0 bytes, so before the check existed the capacity
+    // conflict came first), skip keeps the files, and a permanent delete
+    // uses DeleteFileW.
+    let dir = scratch("recycle-long");
+    let folder = dir.path().join("deep tree");
+    let deep = deep_folder(&folder, 300);
+    write_file(&deep.join("far away.txt"), 10, 1);
+    let long_file = deep.join("far away.txt");
+    let engine = engine_with(EngineConfig {
+        recycle_bin_capacity: Some(0),
+        ..EngineConfig::default()
+    });
+    let recycle = |engine: &Engine, path: &Path| {
+        engine.start(
+            JobKind::Delete { permanent: false },
+            &[path],
+            None,
+            JobOptions::default(),
+        )
+    };
+
+    for path in [&long_file, &folder] {
+        let job = recycle(&engine, path);
+        let conflicts = engine.conflicts_and_progress(job, 1, 0);
+        assert_eq!(
+            conflicts[0].kind,
+            ConflictKind::PathTooLong,
+            "{conflicts:?}"
+        );
+        assert_eq!(conflicts[0].destination, None);
+        assert!(long_file.exists(), "nothing is deleted before the decision");
+        engine
+            .manager
+            .resolve(job, conflicts[0].conflict_id, &Resolution::Skip, false)
+            .unwrap();
+        let (last, _) = engine.finish(job);
+        assert_eq!((last.state, last.files_skipped), (JobState::Completed, 1));
+        assert!(long_file.exists(), "skip keeps it");
+    }
+
+    let job = recycle(&engine, &folder);
+    let conflicts = engine.conflicts_and_progress(job, 1, 0);
+    engine
+        .manager
+        .resolve(
+            job,
+            conflicts[0].conflict_id,
+            &Resolution::DeletePermanently,
+            false,
+        )
+        .unwrap();
+    let (last, _) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(!folder.exists(), "deleted for good, as decided");
+}
+
 #[test]
 fn a_file_too_big_for_the_recycle_bin_waits_for_an_explicit_decision() {
     // The bin is made 1 MiB; nothing here reaches the real Recycle Bin: the

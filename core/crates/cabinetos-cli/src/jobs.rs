@@ -34,6 +34,7 @@ pub(crate) async fn run(client: &mut PipeClient, job: JobRun) -> anyhow::Result<
         .events()
         .context("the event stream was already taken")?;
     expect_welcome(client).await?;
+    let recycling = matches!(job.request.kind, JobKind::Delete { permanent: false });
     let reply = send(client, Request::StartJob(job.request)).await?;
     let Response::JobStarted { job_id } = reply.body else {
         return Err(failure("start_job", &reply.body));
@@ -53,7 +54,7 @@ pub(crate) async fn run(client: &mut PipeClient, job: JobRun) -> anyhow::Result<
                         screen.progress(&progress);
                     }
                     Event::JobConflict(conflict) if conflict.job_id == job_id => {
-                        screen.line(&describe_conflict(&conflict));
+                        screen.line(&describe_conflict(&conflict, recycling));
                         match &job.resolve {
                             Some(resolution) => {
                                 let reply = send(client, Request::ResolveConflict {
@@ -70,7 +71,7 @@ pub(crate) async fn run(client: &mut PipeClient, job: JobRun) -> anyhow::Result<
                             None => screen.line(&format!(
                                 "  decide with: cabinetos-cli job resolve {job_id} {} {}",
                                 conflict.conflict_id,
-                                answers(&conflict.kind)
+                                answers(&conflict.kind, recycling)
                             )),
                         }
                     }
@@ -207,7 +208,9 @@ fn state_name(state: &JobState) -> String {
     }
 }
 
-fn describe_conflict(conflict: &Conflict) -> String {
+/// A conflict in one line; `recycling` when the job deletes to the Recycle
+/// Bin.
+fn describe_conflict(conflict: &Conflict, recycling: bool) -> String {
     let what = match &conflict.kind {
         ConflictKind::FileExists {
             source_size,
@@ -220,6 +223,9 @@ fn describe_conflict(conflict: &Conflict) -> String {
         ),
         ConflictKind::AccessDenied => "access denied".to_owned(),
         ConflictKind::SharingViolation => "in use by another program".to_owned(),
+        ConflictKind::PathTooLong if recycling => {
+            "a path in it is too long for the Recycle Bin; nothing was deleted".to_owned()
+        }
         ConflictKind::PathTooLong => "path too long".to_owned(),
         ConflictKind::DiskFull => "disk full; the job is paused".to_owned(),
         ConflictKind::SourceVanished => "the source is gone".to_owned(),
@@ -241,9 +247,10 @@ fn describe_conflict(conflict: &Conflict) -> String {
 }
 
 /// The answers that fit a conflict.
-fn answers(kind: &ConflictKind) -> &'static str {
+fn answers(kind: &ConflictKind, recycling: bool) -> &'static str {
     match kind {
         ConflictKind::RecycleBinTooSmall { .. } => "delete-permanently|skip",
+        ConflictKind::PathTooLong if recycling => "delete-permanently|skip|retry",
         _ => "overwrite|skip|rename|retry",
     }
 }

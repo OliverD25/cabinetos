@@ -476,6 +476,33 @@ the drives differ from the ones it sent last (free space does not count).
 
 ## Files and folders
 
+### Paths of any length
+
+A path in a request is absolute, in the form the user knows (`C:\work\…`,
+`\\server\share\…`) or in the verbatim form (`\\?\C:\work\…`,
+`\\?\UNC\server\share\…`). The core adds the verbatim prefix itself right
+before each Windows file call that takes a path, so no length limit
+applies and the machine's long-path policy (off by default) plays no part:
+listing, watching, type names and icons, copy, move, delete, a new folder,
+a rename and the search walk all work on paths of 300 characters and more.
+Answers carry paths in the form the client used: the core never adds the
+prefix to a path it answers, and the index builds its hits' paths from
+their folders, without it.
+
+Three things go through the shell, which keeps Windows' old limit of 259
+characters:
+
+- `open_path` hands the file to its program by `ShellExecuteExW`, which
+  refuses a longer path, and its short 8.3 form too (the shell turns it
+  back into the long one). The answer is then `invalid_path`, with the
+  path's length and the limit in the message; nothing runs.
+- The Recycle Bin: a delete to the bin of an item with a path of 260
+  characters or more anywhere in it stops at a `path_too_long` conflict
+  before the shell sees it
+  ([jobs.md](jobs.md#the-recycle-bin-and-long-paths)).
+- A program's own icon (a `path:` key) is read by the shell from the plain
+  path; that works at 300 characters and more (tested).
+
 A new folder and a rename touch one name and finish at once, so they need
 no job; copy, move and delete are jobs ("Jobs" below).
 
@@ -518,7 +545,9 @@ The path must be absolute (`invalid_path` otherwise) and must exist as
 given (`not_found` otherwise): the core never lets the shell look further,
 so `notepad` in a folder without such a file runs nothing. Other errors
 are `access_denied`, or `io` with the shell's error code in the message
-(`os error 1155`: no application is associated with the file).
+(`os error 1155`: no application is associated with the file). A path of
+260 characters or more is `invalid_path` with the reason
+([Paths of any length](#paths-of-any-length)).
 
 Opening a file is core infrastructure: it is the last step of
 navigation, and it hands the file to the application Windows has for it.

@@ -41,6 +41,10 @@ const VERIFY_WHOLE_UP_TO: u64 = 1024 * 1024;
 const VERIFY_SAMPLES: u64 = 16;
 const VERIFY_SAMPLE_SIZE: u64 = 64 * 1024;
 
+/// Windows' old path limit, which the shell's Recycle Bin still keeps: a
+/// path must be shorter, in UTF-16 units.
+const MAX_PATH: usize = 260;
+
 /// What happened to one piece of work.
 #[derive(Debug)]
 enum Outcome {
@@ -871,21 +875,29 @@ impl Run<'_> {
             return self.expand_permanent(&path);
         }
         // The shell would delete for good, silently, what its bin cannot
-        // take; ask first.
+        // take; ask first. It cannot take a path of MAX_PATH units or more
+        // (Explorer asks to delete such an item permanently; the silent
+        // flags would answer yes), nor more than the bin holds.
         let stop = || self.job.control.is_cancelled();
-        let size = match plan::tree_size(&path, &stop) {
-            Ok(size) => size,
+        let tree = match plan::measure_tree(&path, &stop) {
+            Ok(tree) => tree,
             Err(PlanError::Cancelled) => return Outcome::Cancelled,
             Err(PlanError::Source(_)) => return Outcome::Done,
         };
+        if tree.longest_path >= MAX_PATH {
+            return Outcome::Conflict {
+                kind: ConflictKind::PathTooLong,
+                destination: None,
+            };
+        }
         let capacity = self
             .engine
             .config
             .recycle_bin_capacity
             .map_or_else(|| bin::capacity(&path), bin::Capacity::Bytes);
-        if !capacity.fits(size) {
+        if !capacity.fits(tree.bytes) {
             return Outcome::Conflict {
-                kind: ConflictKind::RecycleBinTooSmall { size },
+                kind: ConflictKind::RecycleBinTooSmall { size: tree.bytes },
                 destination: None,
             };
         }

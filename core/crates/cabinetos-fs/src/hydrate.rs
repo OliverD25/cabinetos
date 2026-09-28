@@ -794,6 +794,43 @@ mod tests {
     }
 
     #[test]
+    fn a_folder_deeper_than_260_characters_gets_type_names_and_icons() {
+        let dir = scratch();
+        let mut deep = dir.path().to_path_buf();
+        while deep.as_os_str().len() < 300 {
+            deep.push("segment-of-a-long-path-0123456789");
+        }
+        let verbatim = format!(r"\\?\{}", deep.display());
+        fs::create_dir_all(&verbatim).unwrap();
+        fs::write(format!(r"{verbatim}\notes.txt"), "text").unwrap();
+        fs::copy(
+            std::env::current_exe().unwrap(),
+            format!(r"{verbatim}\tool.exe"),
+        )
+        .unwrap();
+        fs::create_dir(format!(r"{verbatim}\sub")).unwrap();
+        let folder = deep.to_str().unwrap();
+        let listing = list_directory(folder, &ListOptions::default()).unwrap();
+        let writer = ListingWriter::new(&listing).unwrap();
+        let mut section = vec![0u8; writer.section_size()];
+        writer.write(&mut section, 1).unwrap();
+        let hydrator = Hydrator::new();
+        let (_, details) = hydrator.describe(&section, folder, 0, 10).unwrap();
+        let keys: Vec<&str> = details.iter().map(|d| d.icon_key.as_str()).collect();
+        assert_eq!(keys[..2], ["folder", "ext:.txt"], "{keys:?}");
+        assert_eq!(details.len(), 3);
+        for detail in &details {
+            assert!(!detail.type_name.is_empty(), "{detail:?}");
+            for size in [16, 32] {
+                let png = hydrator
+                    .icon_png(&detail.icon_key, size)
+                    .unwrap_or_else(|error| panic!("{detail:?} at {size}: {error}"));
+                assert!(!png.is_empty());
+            }
+        }
+    }
+
+    #[test]
     fn a_progid_is_not_shown_as_a_type_name() {
         let readable = |name: &str, extension: &str| readable_type_name(name.to_owned(), extension);
         for (name, extension, shown) in [

@@ -462,3 +462,33 @@ fn a_name_with_a_lone_surrogate_keeps_its_units_in_the_listing() {
     // As text (the protocol's JSON), the lone surrogate becomes U+FFFD.
     assert_eq!(listing.name_string(&listing.entries()[0]), "a\u{FFFD}.txt");
 }
+
+/// A folder under `parent` whose path is at least `length` characters,
+/// made with the verbatim (`\\?\`) form so nothing depends on the machine's
+/// long-path policy.
+fn deep_folder(parent: &Path, length: usize) -> PathBuf {
+    let mut deep = parent.to_path_buf();
+    while deep.as_os_str().len() < length {
+        deep.push("segment-of-a-long-path-0123456789");
+    }
+    fs::create_dir_all(format!(r"\\?\{}", deep.display())).unwrap();
+    deep
+}
+
+#[test]
+fn a_long_path_lists_the_same_in_the_plain_and_the_verbatim_form() {
+    let dir = scratch("long");
+    let deep = deep_folder(dir.path(), 300);
+    for name in ["deep file.txt", "Звіт 2026.txt"] {
+        touch(
+            Path::new(&format!(r"\\?\{}\{name}", deep.display())),
+            b"deep",
+        );
+    }
+    let plain = list(&deep);
+    let verbatim =
+        list_directory(&format!(r"\\?\{}", deep.display()), &ListOptions::default()).unwrap();
+    assert_eq!(names(&plain), ["deep file.txt", "Звіт 2026.txt"]);
+    assert_eq!(names(&verbatim), names(&plain));
+    assert!(deep.join("deep file.txt").as_os_str().len() > 300);
+}

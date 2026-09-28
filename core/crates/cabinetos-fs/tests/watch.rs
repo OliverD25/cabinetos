@@ -91,3 +91,22 @@ fn a_missing_directory_cannot_be_watched() {
         "{result:?}"
     );
 }
+
+#[test]
+fn watches_a_folder_deeper_than_260_characters() {
+    let root = std::env::temp_dir().join("cabinetos-fs-test");
+    fs::create_dir_all(&root).unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("watch-long")
+        .tempdir_in(root)
+        .unwrap();
+    let mut deep = dir.path().to_path_buf();
+    while deep.as_os_str().len() < 300 {
+        deep.push("segment-of-a-long-path-0123456789");
+    }
+    fs::create_dir_all(format!(r"\\?\{}", deep.display())).unwrap();
+    let (watcher, changes) = start(&deep);
+    fs::write(format!(r"\\?\{}\new.txt", deep.display()), b"deep").unwrap();
+    assert_eq!(changes.recv_timeout(WAIT), Ok(DirectoryChanged::Changed));
+    watcher.stop();
+}
