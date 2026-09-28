@@ -55,6 +55,12 @@ public class EndToEndTests
             Assert.Equal(1000, keymap.ChordWindowMs);
             Assert.Equal("ctrl+shift+p", keymap.FirstFor("palette.show")!.Keys.ToString());
             Assert.Contains("keys.open", keymap.Immutable);
+            // The shell's own commands are bindings of the core's keymap (protocol 9):
+            // F2 renames in a pane and records keys in the palette.
+            Assert.Equal(("f2", "filesView"), (keymap.FirstFor("file.rename")!.Keys.ToString(), keymap.FirstFor("file.rename")!.When));
+            Assert.Equal(("f2", "paletteOpen"), (keymap.FirstFor("keys.rebind")!.Keys.ToString(), keymap.FirstFor("keys.rebind")!.When));
+            Assert.Equal("enter", keymap.FirstFor("pane.openSelected")!.Keys.ToString());
+            Assert.Equal("shift+delete", keymap.FirstFor("file.deletePermanently")!.Keys.ToString());
 
             var list = new ListDirectoryRequest(folder);
             var opened = await client.RequestAsync<ListingOpenedReply>(list);

@@ -330,23 +330,16 @@ public sealed partial class FilePane : UserControl
         {
             return;
         }
+        // The file keys (Enter, F2, Delete, Ctrl+C, Insert, …) are bindings in the
+        // core's keymap and run before this handler; what arrives here moves
+        // through the list, as in any Windows list.
         var ctrl = IsDown(VirtualKey.Control);
         var shift = IsDown(VirtualKey.Shift);
-        var alt = IsDown(VirtualKey.Menu);
         var mode = shift ? SelectMode.Extend : ctrl ? SelectMode.FocusOnly : SelectMode.Single;
         var focus = _model.Selection.Focus;
         var handled = true;
         switch (e.Key)
         {
-            case VirtualKey.Left when alt:
-                _ = Run("go.back");
-                break;
-            case VirtualKey.Right when alt:
-                _ = Run("go.forward");
-                break;
-            case VirtualKey.Up when alt:
-                _ = Run("go.up");
-                break;
             case VirtualKey.Up:
                 MoveFocus(focus - 1, mode);
                 break;
@@ -365,39 +358,9 @@ public sealed partial class FilePane : UserControl
             case VirtualKey.PageDown:
                 MoveFocus(focus + RowsPerPage(), mode);
                 break;
-            case VirtualKey.Insert:
-                _model.Selection.ToggleFocusAndAdvance();
-                ScrollIntoView(_model.Selection.Focus);
-                break;
-            case VirtualKey.A when ctrl:
-                _model.Selection.SelectAll();
-                break;
-            case VirtualKey.Enter when alt:
-                _ = Run("file.properties");
-                break;
-            case VirtualKey.Enter when ctrl:
-                _ = Run("file.openInOtherPane");
-                break;
-            case VirtualKey.Enter:
-                _ = Run("file.open");
-                break;
             case VirtualKey.Back:
+                // A file manager convention the keymap does not hold (go.up is Alt+Up there).
                 _ = Run("go.up");
-                break;
-            case VirtualKey.Delete:
-                _ = Run("file.delete", shift ? CommandArgs.Object(("permanent", true)) : null);
-                break;
-            case VirtualKey.F2:
-                _ = Run("file.rename");
-                break;
-            case VirtualKey.X when ctrl:
-                _ = Run("edit.cut");
-                break;
-            case VirtualKey.C when ctrl:
-                _ = Run("edit.copy");
-                break;
-            case VirtualKey.V when ctrl:
-                _ = Run("edit.paste");
                 break;
             case VirtualKey.F10 when shift:
             case VirtualKey.Application:
@@ -408,6 +371,15 @@ public sealed partial class FilePane : UserControl
                 break;
         }
         e.Handled = handled;
+    }
+
+    /// <summary>Scrolls the focused row into view (after Insert moved it).</summary>
+    public void ScrollToFocus()
+    {
+        if (_model is not null)
+        {
+            ScrollIntoView(_model.Selection.Focus);
+        }
     }
 
     private Task Run(string commandId, JsonElement? args = null, string trigger = "key") =>
@@ -466,7 +438,7 @@ public sealed partial class FilePane : UserControl
         if (RowFrom(e.OriginalSource) is { Index: >= 0 } row && _model is not null)
         {
             _model.Selection.MoveTo(row.Index, SelectMode.Single);
-            _ = Run("file.open", trigger: "mouse");
+            _ = Run("pane.openSelected", trigger: "mouse");
         }
     }
 

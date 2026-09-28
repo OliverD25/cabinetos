@@ -45,12 +45,9 @@ public sealed record CommandOutcome(
 /// the core as <c>execute_command</c>. Every run is logged with its own ULID.
 /// </summary>
 /// <remarks>
-/// The UI also has commands the core's registry does not list yet
-/// (<see cref="RegisterLocal"/>, for example <c>go.up</c>). They run only
-/// here and never reach the palette until the core registers them. And a few
-/// registry commands the core marks <c>target: core</c> but cannot run
-/// (<c>file.copyToOtherPane</c> answers <c>not_implemented</c>) run here
-/// instead (<see cref="RegisterUiOverride"/>): the UI starts their jobs itself.
+/// The UI also has commands the core's registry does not list
+/// (<see cref="RegisterLocal"/>): the buttons of its own controls, such as
+/// the transfer flyout's. They run only here.
 /// </remarks>
 public sealed class CommandRouter(ICoreChannel core)
 {
@@ -58,7 +55,6 @@ public sealed class CommandRouter(ICoreChannel core)
 
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _handlers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _local = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Func<CommandInvocation, Task>> _overrides = new(StringComparer.Ordinal);
     private Dictionary<string, CommandInfo> _byId = new(StringComparer.Ordinal);
 
     /// <summary>Raised on the calling thread when the command list changed.</summary>
@@ -94,13 +90,6 @@ public sealed class CommandRouter(ICoreChannel core)
 
     /// <summary>Registers a UI-only command that the core's registry does not list.</summary>
     public void RegisterLocal(string commandId, Func<CommandInvocation, Task> handler) => _local[commandId] = handler;
-
-    /// <summary>
-    /// Runs a registry command in the UI whatever its <c>target</c> says: for
-    /// the file commands the core lists but answers <c>not_implemented</c>, the
-    /// UI starts the job itself (<c>start_job</c>).
-    /// </summary>
-    public void RegisterUiOverride(string commandId, Func<CommandInvocation, Task> handler) => _overrides[commandId] = handler;
 
     /// <summary>Reads the command list again (<c>list_commands</c>).</summary>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -159,11 +148,6 @@ public sealed class CommandRouter(ICoreChannel core)
         {
             Log(requestId, commandId, "ui", trigger);
             outcome = await RunHandler(local, invocation);
-        }
-        else if (_overrides.TryGetValue(commandId, out var overriding))
-        {
-            Log(requestId, commandId, "ui", trigger);
-            outcome = await RunHandler(overriding, invocation);
         }
         else if (info is { Target: "ui" })
         {

@@ -137,6 +137,9 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
     /// <summary>The highlighted row's index, or -1.</summary>
     public int HighlightIndex => _highlight;
 
+    /// <summary>The highlighted command's ID: what <c>keys.rebind</c> (F2) records keys for.</summary>
+    public string? HighlightedCommandId => _highlight >= 0 && _highlight < Rows.Count ? Rows[_highlight].Info.Id : null;
+
     /// <summary>Whether a row is recording keys: then every key goes to the recorder.</summary>
     public bool IsRecording => _recording is not null;
 

@@ -719,24 +719,39 @@ public sealed partial class MainWindow : Window
         });
         _router.RegisterUiHandler("go.toPath", GoToPathAsync);
 
-        // The core lists these as its own but answers not_implemented: the UI
-        // starts their jobs itself (start_job) or asks for the one folder.
-        _router.RegisterUiOverride("file.copyToOtherPane", invocation => TransferToOtherPaneAsync(JobKind.Copy, invocation));
-        _router.RegisterUiOverride("file.moveToOtherPane", invocation => TransferToOtherPaneAsync(JobKind.Move, invocation));
-        _router.RegisterUiOverride("file.newFolder", NewFolderAsync);
+        // The shell's own commands, in the core's registry since protocol 9
+        // (target ui, keys in the keymap, so each one can be rebound).
+        _router.RegisterUiHandler("go.back", invocation => Active.GoBackAsync(invocation.RequestId));
+        _router.RegisterUiHandler("go.forward", invocation => Active.GoForwardAsync(invocation.RequestId));
+        _router.RegisterUiHandler("go.up", invocation => Active.GoUpAsync(invocation.RequestId));
+        _router.RegisterUiHandler("pane.openSelected", OpenAsync);
+        _router.RegisterUiHandler("file.copyToOtherPane", invocation => TransferToOtherPaneAsync(JobKind.Copy, invocation));
+        _router.RegisterUiHandler("file.moveToOtherPane", invocation => TransferToOtherPaneAsync(JobKind.Move, invocation));
+        _router.RegisterUiHandler("file.newFolder", NewFolderAsync);
+        _router.RegisterUiHandler("file.openInOtherPane", OpenInOtherPaneAsync);
+        _router.RegisterUiHandler("file.delete", invocation => DeleteAsync(invocation, permanent: false));
+        _router.RegisterUiHandler("file.deletePermanently", invocation => DeleteAsync(invocation, permanent: true));
+        _router.RegisterUiHandler("file.rename", invocation => Active.FocusIndex >= 0 ? RenameAtAsync(Active, Active.FocusIndex, invocation.RequestId) : Task.CompletedTask);
+        _router.RegisterUiHandler("file.properties", ShowPropertiesAsync);
+        _router.RegisterUiHandler("edit.cut", _ => PutOnClipboard(ClipboardMode.Cut));
+        _router.RegisterUiHandler("edit.copy", _ => PutOnClipboard(ClipboardMode.Copy));
+        _router.RegisterUiHandler("edit.paste", PasteAsync);
+        _router.RegisterUiHandler("edit.selectAll", _ => Active.Selection.SelectAll());
+        _router.RegisterUiHandler("edit.toggleSelection", _ =>
+        {
+            Active.Selection.ToggleFocusAndAdvance();
+            _paneViews[_active].ScrollToFocus();
+        });
+        // F2 in the open palette: the highlighted command (the pencil passes its own).
+        _router.RegisterUiHandler("keys.rebind", invocation =>
+        {
+            if ((CommandArgs.Text(invocation.Args, "command") ?? _palette.HighlightedCommandId) is { } command)
+            {
+                _palette.StartRecording(command);
+            }
+        });
 
-        // UI-only commands the core's registry does not list yet.
-        _router.RegisterLocal("go.back", invocation => Active.GoBackAsync(invocation.RequestId));
-        _router.RegisterLocal("go.forward", invocation => Active.GoForwardAsync(invocation.RequestId));
-        _router.RegisterLocal("go.up", invocation => Active.GoUpAsync(invocation.RequestId));
-        _router.RegisterLocal("file.open", OpenAsync);
-        _router.RegisterLocal("file.openInOtherPane", OpenInOtherPaneAsync);
-        _router.RegisterLocal("file.delete", DeleteAsync);
-        _router.RegisterLocal("file.rename", invocation => Active.FocusIndex >= 0 ? RenameAtAsync(Active, Active.FocusIndex, invocation.RequestId) : Task.CompletedTask);
-        _router.RegisterLocal("file.properties", ShowPropertiesAsync);
-        _router.RegisterLocal("edit.cut", _ => PutOnClipboard(ClipboardMode.Cut));
-        _router.RegisterLocal("edit.copy", _ => PutOnClipboard(ClipboardMode.Copy));
-        _router.RegisterLocal("edit.paste", PasteAsync);
+        // Commands of the window's own controls, not in the core's registry.
         _router.RegisterLocal("transfer.pause", invocation => ControlShownAsync(JobActions.Pause, invocation));
         _router.RegisterLocal("transfer.resume", invocation => ControlShownAsync(JobActions.Resume, invocation));
         _router.RegisterLocal("transfer.cancel", invocation => ControlShownAsync(JobActions.Cancel, invocation));
@@ -747,13 +762,6 @@ public sealed partial class MainWindow : Window
         _router.RegisterLocal("conflict.resolve", ResolveConflictAsync);
         _router.RegisterLocal("sidebar.pin", PinAsync);
         _router.RegisterLocal("sidebar.unpin", UnpinAsync);
-        _router.RegisterLocal("keys.rebind", invocation =>
-        {
-            if (CommandArgs.Text(invocation.Args, "command") is { } command)
-            {
-                _palette.StartRecording(command);
-            }
-        });
 
         _router.Completed += OnCommandCompleted;
     }
@@ -871,9 +879,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task DeleteAsync(CommandInvocation invocation)
+    private async Task DeleteAsync(CommandInvocation invocation, bool permanent)
     {
-        var permanent = CommandArgs.Bool(invocation.Args, "permanent");
         var targets = Active.Targets();
         if (targets.Count == 0)
         {
@@ -1315,21 +1322,21 @@ public sealed partial class MainWindow : Window
 
     private IReadOnlyList<MenuEntry> RowStrip(PaneModel pane) =>
     [
-        new(MenuEntryKind.Item, "Cut", "\uE8C6", "edit.cut", Tooltip: "Cut (Ctrl+X)"),
-        new(MenuEntryKind.Item, "Copy", "\uE8C8", "edit.copy", Tooltip: "Copy (Ctrl+C)"),
-        new(MenuEntryKind.Item, "Paste", "\uE77F", "edit.paste", IsEnabled: !_clipboard.IsEmpty, Tooltip: "Paste (Ctrl+V)"),
-        new(MenuEntryKind.Item, "Rename", "\uE8AC", "file.rename", IsEnabled: !_unavailable.Contains("rename") && pane.Selection.SelectedCount <= 1, Tooltip: "Rename (F2)"),
-        new(MenuEntryKind.Item, "Delete", "\uE74D", "file.delete", Tooltip: "Delete to the Recycle Bin (Delete)"),
+        new(MenuEntryKind.Item, "Cut", "\uE8C6", "edit.cut", Tooltip: WithKeys("Cut", "edit.cut")),
+        new(MenuEntryKind.Item, "Copy", "\uE8C8", "edit.copy", Tooltip: WithKeys("Copy", "edit.copy")),
+        new(MenuEntryKind.Item, "Paste", "\uE77F", "edit.paste", IsEnabled: !_clipboard.IsEmpty, Tooltip: WithKeys("Paste", "edit.paste")),
+        new(MenuEntryKind.Item, "Rename", "\uE8AC", "file.rename", IsEnabled: !_unavailable.Contains("rename") && pane.Selection.SelectedCount <= 1, Tooltip: WithKeys("Rename", "file.rename")),
+        new(MenuEntryKind.Item, "Delete", "\uE74D", "file.delete", Tooltip: WithKeys("Delete to the Recycle Bin", "file.delete")),
     ];
 
     private IReadOnlyList<MenuEntry> RowMenu(PaneModel pane, PaneEntry entry)
     {
         var items = new List<MenuEntry>
         {
-            new(MenuEntryKind.Item, "Open", "\uE8E5", "file.open", Keys: "Enter", IsEnabled: entry.IsFolder || !_unavailable.Contains("open_path")),
-            new(MenuEntryKind.Item, "Open in other pane", "\uE8A7", "file.openInOtherPane", Keys: "Ctrl+Enter", IsEnabled: entry.IsFolder),
+            new(MenuEntryKind.Item, "Open", "\uE8E5", "pane.openSelected", Keys: KeysOf("pane.openSelected"), IsEnabled: entry.IsFolder || !_unavailable.Contains("open_path")),
+            new(MenuEntryKind.Item, "Open in other pane", "\uE8A7", "file.openInOtherPane", Keys: KeysOf("file.openInOtherPane"), IsEnabled: entry.IsFolder),
             new(MenuEntryKind.Item, "Copy to other pane", "\uE8C8", "file.copyToOtherPane", Keys: KeysOf("file.copyToOtherPane"), IsEnabled: _dual),
-            new(MenuEntryKind.Item, "Open in Terminal", "\uE756", Keys: "Ctrl+`", IsEnabled: false, Tooltip: "The terminal pane arrives in a later version"),
+            new(MenuEntryKind.Item, "Open in Terminal", "\uE756", Keys: KeysOf("view.toggleTerminal"), IsEnabled: false, Tooltip: "The terminal pane arrives in a later version"),
         };
         var plugins = _router.Commands.Where(c => c.Source.Kind == "plugin" && c.When == KeyContexts.FilesView).ToList();
         if (plugins.Count > 0)
@@ -1342,7 +1349,7 @@ public sealed partial class MainWindow : Window
                 Keys: KeysOf(p.Id), Badge: p.Source.Name ?? p.Source.Id ?? "plugin")));
         }
         items.Add(MenuEntry.Separator);
-        items.Add(new(MenuEntryKind.Item, "Properties", "\uE946", "file.properties", Keys: "Alt+Enter"));
+        items.Add(new(MenuEntryKind.Item, "Properties", "\uE946", "file.properties", Keys: KeysOf("file.properties")));
         return items;
     }
 
@@ -1350,7 +1357,7 @@ public sealed partial class MainWindow : Window
     {
         var items = new List<MenuEntry>
         {
-            new(MenuEntryKind.Item, "Paste", "\uE77F", "edit.paste", Keys: "Ctrl+V", IsEnabled: !_clipboard.IsEmpty),
+            new(MenuEntryKind.Item, "Paste", "\uE77F", "edit.paste", Keys: KeysOf("edit.paste"), IsEnabled: !_clipboard.IsEmpty),
             new(MenuEntryKind.Item, "New folder", "\uE8F4", "file.newFolder", Keys: KeysOf("file.newFolder"), IsEnabled: !_unavailable.Contains("create_directory")),
         };
         if (pane.Path.Length > 0 && !_sidebar.IsPinned(pane.Path))
@@ -1367,6 +1374,8 @@ public sealed partial class MainWindow : Window
         _router.Find(commandId)?.Keys is [var first, ..] && KeySequence.TryParse(first, out var keys)
             ? string.Join(' ', keys.DisplayParts())
             : null;
+
+    private string WithKeys(string title, string commandId) => KeysOf(commandId) is { } keys ? $"{title} ({keys})" : title;
 
     // ----- Transfers (design view E) -----
 

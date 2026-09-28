@@ -155,9 +155,6 @@ public sealed partial class CommandPalette : UserControl
                 _searchTimer.Stop();
                 _ = RunHighlightedAsync();
                 break;
-            case VirtualKey.F2 when _model.HighlightIndex >= 0 && _model.HighlightIndex < _model.Rows.Count:
-                _ = Rebind(_model.Rows[_model.HighlightIndex], "key");
-                break;
             case VirtualKey.Tab:
                 // The palette keeps the focus while it is open.
                 break;
