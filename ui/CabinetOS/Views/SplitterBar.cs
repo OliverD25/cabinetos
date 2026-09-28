@@ -40,6 +40,9 @@ public sealed partial class SplitterBar : Grid
     /// <summary>The pointer moved this far (DIPs, down or right is positive) since the drag started.</summary>
     public event Action<double>? Dragged;
 
+    /// <summary>A drag ended: the button was released, or the pointer was lost.</summary>
+    public event Action? DragCompleted;
+
     /// <summary><c>Horizontal</c>: a bar under the panes that moves up and down; <c>Vertical</c>: one beside them.</summary>
     public Orientation Orientation
     {
@@ -92,6 +95,7 @@ public sealed partial class SplitterBar : Grid
         _dragging = false;
         ReleasePointerCapture(pointer);
         _line.Opacity = 0;
+        DragCompleted?.Invoke();
     }
 
     // Measured against the window, not the bar: the bar itself moves while it is dragged.

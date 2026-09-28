@@ -4,6 +4,7 @@ using System.Text.Json;
 using CabinetOS.Core.Keys;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
+using CabinetOS.Core.Settings;
 using CabinetOS.Core.Terminal;
 
 namespace CabinetOS.Tests;
@@ -228,5 +229,32 @@ public class TerminalTests
         // A window too small for both keeps the minimum.
         Assert.Equal(120, DockLayout.Clamp(DockPlacement.Bottom, 300, 250));
         Assert.Equal(872, DockLayout.Clamp(DockPlacement.Right, 2000, 1200));
+    }
+
+    [Fact]
+    public void A_dragged_size_is_kept_in_whole_pixels_under_its_placement_s_key()
+    {
+        Assert.Equal("ui.dockSize.bottom", DockLayout.ConfigKey(DockPlacement.Bottom));
+        Assert.Equal("ui.dockSize.right", DockLayout.ConfigKey(DockPlacement.Right));
+        Assert.Equal(213u, DockLayout.ToSetting(212.6));
+        Assert.Equal(0u, DockLayout.ToSetting(-3));
+    }
+
+    [Fact]
+    public void The_stored_dock_size_is_read_per_placement_and_an_odd_value_means_the_design_s_size()
+    {
+        using var stored = JsonDocument.Parse("""{"ui":{"layout":"right","dockSize":{"bottom":212,"right":null}}}""");
+        var settings = UiSettings.FromConfig(stored.RootElement);
+        Assert.Equal(212, settings.DockSize(DockPlacement.Bottom));
+        Assert.Null(settings.DockSize(DockPlacement.Right));
+        Assert.Null(settings.DockSize(DockLayout.PlacementFor(settings.Layout)));
+
+        using var odd = JsonDocument.Parse("""{"ui":{"dockSize":{"bottom":"tall","right":-40}}}""");
+        var fallback = UiSettings.FromConfig(odd.RootElement);
+        Assert.Null(fallback.DockBottom);
+        Assert.Null(fallback.DockRight);
+
+        // A size the window cannot fit is kept within the design's limits when it is used.
+        Assert.Equal(632, DockLayout.Clamp(DockPlacement.Bottom, 5000, 800));
     }
 }

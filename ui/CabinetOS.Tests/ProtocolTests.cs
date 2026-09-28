@@ -455,11 +455,12 @@ public class ProtocolTests
     {
         const string firstRun = """
         {"$schema":"./cabinetos.schema.json","version":1,
-         "ui":{"layout":"classic","dualPane":true,"sidebar":true,"theme":"default"},
+         "ui":{"layout":"classic","dualPane":true,"sidebar":true,"theme":"default","dockSize":{"bottom":null,"right":null}},
          "panes":{"showHidden":false,"sort":{"key":"name","descending":false}},
          "keybindings":[],"logging":{"level":"info"},"plugins":{}}
         """;
         AssertValid(Schemas.Config, firstRun);
+        AssertValid(Schemas.Config, """{"ui":{"dockSize":{"bottom":212,"right":340}}}""");
         AssertInvalid(Schemas.Config, """{"ui":{"dualPan":true}}""");
         using var document = JsonDocument.Parse(firstRun);
         Assert.Equal(UiSettings.Defaults, UiSettings.FromConfig(document.RootElement));

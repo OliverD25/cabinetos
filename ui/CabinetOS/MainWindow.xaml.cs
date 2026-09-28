@@ -398,6 +398,12 @@ public sealed partial class MainWindow : Window
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
                     break;
+                case "dock" when double.TryParse(step.Argument, System.Globalization.CultureInfo.InvariantCulture, out var dockSize):
+                    // A drag of the dock's splitter to this size: the same resize and save as the pointer's.
+                    StartDockDrag();
+                    ResizeDock(dockSize);
+                    EndDockDrag();
+                    break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
                     var shown = Active.View?.IndexOfName(step.Argument) ?? -1;
@@ -600,6 +606,7 @@ public sealed partial class MainWindow : Window
         {
             ApplyDockPlacement(DockLayout.PlacementFor(settings.Layout));
         }
+        ApplyStoredDockSize(settings);
         if (firstStart && settings.Layout == "rail")
         {
             Diag.Info(Target, "the rail layout arrives in a later phase; showing the sidebar");

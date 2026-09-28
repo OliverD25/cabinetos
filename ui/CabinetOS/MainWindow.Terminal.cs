@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CabinetOS.Core.Commands;
 using CabinetOS.Core.Presentation;
+using CabinetOS.Core.Settings;
 using CabinetOS.Core.Terminal;
 using CabinetOS.Services;
 using CabinetOS.Views;
@@ -18,6 +19,10 @@ public sealed partial class MainWindow
     private bool _dockVisible;
     private double? _dockUserSize;
     private double _dockDragStart;
+    private bool _dockDragging;
+    // What cabinetos.json holds for each placement, as far as the window knows: its own last
+    // write, or what the file said. A config_changed that brings the same value changes nothing.
+    private readonly Dictionary<DockPlacement, uint?> _dockKnown = [];
     private bool _paletteFromTerminal;
 
     private void SetUpTerminal()
@@ -43,10 +48,12 @@ public sealed partial class MainWindow
                 FocusActivePane();
             }
         };
-        BottomSplitter.DragStarted += () => _dockDragStart = CurrentDockSize();
+        BottomSplitter.DragStarted += StartDockDrag;
         BottomSplitter.Dragged += delta => ResizeDock(_dockDragStart - delta);
-        RightSplitter.DragStarted += () => _dockDragStart = CurrentDockSize();
+        BottomSplitter.DragCompleted += EndDockDrag;
+        RightSplitter.DragStarted += StartDockDrag;
         RightSplitter.Dragged += delta => ResizeDock(_dockDragStart - delta);
+        RightSplitter.DragCompleted += EndDockDrag;
         MainColumn.SizeChanged += (_, _) => ApplyDockSize();
         TerminalButton.Click += (_, _) => _ = _router.ExecuteAsync("view.toggleTerminal", trigger: "button");
         RootGrid.ActualThemeChanged += (_, _) => SendTerminalTheme();
@@ -183,8 +190,8 @@ public sealed partial class MainWindow
     {
         if (placement != _dockPlacement)
         {
-            // A height the user dragged to means nothing as a width.
-            _dockUserSize = null;
+            // A height the user dragged to means nothing as a width: each placement keeps its own.
+            _dockUserSize = _settings.DockSize(placement);
         }
         _dockPlacement = placement;
         var bottom = placement == DockPlacement.Bottom;
@@ -213,6 +220,48 @@ public sealed partial class MainWindow
     private void ResizeDock(double size)
     {
         _dockUserSize = DockLayout.Clamp(_dockPlacement, size, DockSpace());
+        ApplyDockSize();
+    }
+
+    private void StartDockDrag()
+    {
+        _dockDragging = true;
+        _dockDragStart = CurrentDockSize();
+    }
+
+    // One write per drag, when it ends, so the size survives a restart (ui.dockSize, docs/config.md).
+    private void EndDockDrag()
+    {
+        _dockDragging = false;
+        if (_dockUserSize is not { } size)
+        {
+            return;
+        }
+        var value = DockLayout.ToSetting(size);
+        if (_dockKnown.TryGetValue(_dockPlacement, out var known) && known == value)
+        {
+            return;
+        }
+        _dockKnown[_dockPlacement] = value;
+        _ = _settingsWriter.SetAsync(DockLayout.ConfigKey(_dockPlacement), value);
+    }
+
+    // ui.dockSize at start, and after a hand edit of cabinetos.json. null is the design's size;
+    // CurrentDockSize keeps any value within the design's limits.
+    private void ApplyStoredDockSize(UiSettings settings)
+    {
+        var stored = settings.DockSize(_dockPlacement);
+        uint? value = stored is { } pixels ? DockLayout.ToSetting(pixels) : null;
+        if (_dockKnown.TryGetValue(_dockPlacement, out var known) && known == value)
+        {
+            return;
+        }
+        _dockKnown[_dockPlacement] = value;
+        if (_dockDragging)
+        {
+            return;
+        }
+        _dockUserSize = stored;
         ApplyDockSize();
     }
 

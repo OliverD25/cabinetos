@@ -25,6 +25,13 @@ public static class DockLayout
     public static DockPlacement PlacementFor(string? layout) =>
         layout == "right" ? DockPlacement.Right : DockPlacement.Bottom;
 
+    /// <summary>The setting that keeps a dragged size for <paramref name="placement"/> (docs/config.md).</summary>
+    public static string ConfigKey(DockPlacement placement) =>
+        placement == DockPlacement.Bottom ? "ui.dockSize.bottom" : "ui.dockSize.right";
+
+    /// <summary>A dragged size as the setting stores it: whole pixels.</summary>
+    public static uint ToSetting(double size) => (uint)Math.Round(Math.Max(0, size));
+
     /// <summary>The design's size in a main column <paramref name="available"/> pixels high (bottom) or wide (right).</summary>
     public static double DefaultSize(DockPlacement placement, double available) => placement == DockPlacement.Bottom
         ? Math.Clamp(available * 0.30, 120, 240)

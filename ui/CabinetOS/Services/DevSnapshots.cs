@@ -28,6 +28,7 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>open:&lt;name&gt;</c> presses Enter on a row (a file may open in a Tool Extension),
 /// <c>terminal:&lt;text&gt;</c> types into the shown shell (<c>{enter}</c> is Enter),
 /// <c>crash:terminal</c> or <c>crash:tool:&lt;id&gt;</c> ends that page's browser process,
+/// <c>dock:&lt;pixels&gt;</c> drags the dock's splitter to that size (and saves it, as a drag does),
 /// <c>until:running|conflict|terminal|search|tool</c> waits for a job, a shell, an answer or a tool page, <c>wait:&lt;ms&gt;</c> waits, and
 /// <c>shot:&lt;name&gt;</c> renders the window's content to <c>&lt;name&gt;.png</c>.
 /// The window draws its own content, so this works when the screen is locked
