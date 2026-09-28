@@ -298,7 +298,10 @@ mod tests {
                 lines: Arc::clone(&lines),
             });
         tracing::subscriber::with_default(subscriber, body);
-        Arc::try_unwrap(lines).unwrap().into_inner().unwrap()
+        // A copy, not `Arc::try_unwrap`: while another test thread registers
+        // a callsite, `tracing` briefly holds a strong reference to every
+        // live subscriber, this one included.
+        lines.lock().unwrap().clone()
     }
 
     /// The events emitted by `body`, parsed.
