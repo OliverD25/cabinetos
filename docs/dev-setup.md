@@ -12,6 +12,34 @@ where the tool exists on Windows alone.
   `.gitattributes`, so no `core.autocrlf` setting is needed; a fresh clone
   gets LF for Rust and docs and CRLF for the C# files.
 
+## CI, on demand
+
+`.github/workflows/ci.yml` runs the core's five checks, the WinUI build and
+tests, `cargo deny`, and a parse check of the `build/*.ps1` scripts, on
+`windows-latest`. Since 2026-09-29 it no longer runs on every push: the
+account's 2,000 free minutes a month ran out in September (Windows minutes
+count double), and no money goes to CI. So:
+
+- Every change is verified on the development PC first: the five checks
+  and the UI tests below, and `build/check-scripts.ps1` for the scripts.
+- CI runs once per accepted phase, started by hand, and on pull requests
+  into `main`. A run started by hand runs every job; a pull request runs
+  the jobs its files touch.
+
+  ```bash
+  gh workflow run ci.yml --repo OliverD25/cabinetos && gh run list --workflow ci.yml --repo OliverD25/cabinetos --limit 1
+  ```
+
+- To run CI on every push again, restore the `push` trigger in `ci.yml`
+  (its git history has it).
+
+The scripts' check, in both PowerShells (install.ps1 and uninstall.ps1
+must also parse in Windows PowerShell 5.1):
+
+```bash
+cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && pwsh.exe -NoProfile -File build/check-scripts.ps1 && powershell.exe -NoProfile -ExecutionPolicy Bypass -File build/check-scripts.ps1
+```
+
 ## Phases 1–4, 6–8: the Rust core
 
 - **Rust stable**, pinned by `core/rust-toolchain.toml` (rustup installs the
