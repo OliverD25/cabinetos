@@ -144,6 +144,25 @@ public class MarketplaceTests
     }
 
     [Fact]
+    public async Task An_install_from_elsewhere_takes_the_version_the_core_names()
+    {
+        var market = Model(CoreWith(Index));
+        await market.RefreshAsync();
+
+        // The command line installed an older version with --version: the offer (1.0.0) is an update.
+        market.OnEvent(new InstallFinishedEvent("hello", true, "installed hello 0.9.0 (plugin)", "0.9.0"));
+        Assert.Equal(("0.9.0", MarketAction.Update), (market.InstalledVersionOf(Hello), market.ActionFor(Hello)));
+
+        // A failed update keeps the version from before.
+        market.OnEvent(new InstallFinishedEvent("hello", false, "the download does not have the SHA-256 the index gives", "0.9.0"));
+        Assert.Equal("0.9.0", market.InstalledVersionOf(Hello));
+
+        // A core that names no version: the offered one, which an install without a version gets.
+        market.OnEvent(new InstallFinishedEvent("paper", true, "installed paper 1.0.0 (theme)"));
+        Assert.Equal("1.0.0", market.InstalledVersionOf(Paper));
+    }
+
+    [Fact]
     public async Task A_search_reply_does_not_undo_what_an_install_just_did()
     {
         // The core's items say nothing is installed: its search reply was made before the install ended.

@@ -115,8 +115,14 @@ public sealed record ThemeChangedEvent(ColorTheme Theme) : CoreEvent;
 /// <summary>How far the download of an <c>install_extension</c> has come: at most 30 a second, and one at the end.</summary>
 public sealed record InstallProgressEvent(string ExtensionId, ulong Bytes, ulong Total) : CoreEvent;
 
-/// <summary>An <c>install_extension</c> ended, whichever client asked: whether it is installed now, and what happened.</summary>
-public sealed record InstallFinishedEvent(string ExtensionId, bool Ok, string Message) : CoreEvent;
+/// <summary>
+/// An <c>install_extension</c> ended, whichever client asked: whether it is
+/// installed now, and what happened. <see cref="InstalledVersion"/> (still
+/// protocol 11, a later addition) is the version the marketplace's record
+/// holds after it: the new one, the one from before a failed update, or null
+/// when none is installed (or the core is older).
+/// </summary>
+public sealed record InstallFinishedEvent(string ExtensionId, bool Ok, string Message, string? InstalledVersion = null) : CoreEvent;
 
 /// <summary>A Tool Extension was installed or removed; the list is what <c>list_tools</c> would answer now.</summary>
 public sealed record ToolsChangedEvent(IReadOnlyList<ToolInfo> Tools) : CoreEvent;

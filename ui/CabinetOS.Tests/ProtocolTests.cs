@@ -398,6 +398,9 @@ public class ProtocolTests
                 b => Assert.Equal(new InstallProgressEvent("hello", 13500, 27003), b)),
             ($$$"""{"id":"{{{Id}}}","type":"install_finished","extension_id":"hello","ok":true,"message":"installed hello 0.1.0 (plugin)"}""",
                 b => Assert.Equal(new InstallFinishedEvent("hello", true, "installed hello 0.1.0 (plugin)"), b)),
+            // Still protocol 11: the record's version after the install.
+            ($$$"""{"id":"{{{Id}}}","type":"install_finished","extension_id":"hello","ok":false,"message":"hash mismatch","installed_version":"0.1.0"}""",
+                b => Assert.Equal(new InstallFinishedEvent("hello", false, "hash mismatch", "0.1.0"), b)),
             ($$$"""{"id":"{{{Id}}}","type":"tools_changed","tools":[]}""",
                 b => Assert.Empty(Assert.IsType<ToolsChangedEvent>(b).Tools)),
         };

@@ -1147,9 +1147,13 @@ the core's events.
   then says "Paper is updated to version 1.1.0.". An installed version
   newer than the offer is kept: the button says "Installed", and the line
   names both versions. The view learns the installed versions at each
-  refresh and from its own installs and uninstalls; the versions in a
-  search reply are not taken, because a reply made before an install ended
-  would undo it.
+  refresh, from its own installs and uninstalls, and from
+  `install_finished`, whichever client installed: its `installed_version`
+  is the record's version after the install (an older one asked for with
+  `cabinetos-cli market install --version`, or the one kept after a failed
+  update); a core without that field leaves the offered version. The
+  versions in a search reply are not taken, because a reply made before an
+  install ended would undo it.
 - **Installing a plugin.** The review dialog of "Plugins" opens first,
   with what the index says the plugin asks for. Nothing is downloaded
   before "Allow and install" (trust rule 1). Allow closes the dialog and
@@ -1260,11 +1264,6 @@ the protocol 11 work that night:
   splitter, keys inside the Markdown Preview, menus and tooltips in light
   mode, and the window following a real change of Windows' light or dark
   mode.
-- **An install made elsewhere with an older version.** The view takes an
-  install it hears of from `install_finished` as the version the index
-  offers, because the event names no version. After
-  `cabinetos-cli market install hello --version 0.1.0`, the card says
-  "Installed" instead of "Update available" until the next Refresh.
 - **The icon cache has no limit.** Every icon the core sent stays until
   the window closes. They are 16 to 32 px bitmaps, so a session that shows
   thousands of program icons holds a few MB.

@@ -468,11 +468,17 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
                 _installs.Remove(finished.ExtensionId);
                 if (finished.Ok)
                 {
-                    MarkInstalled(Find(finished.ExtensionId), finished.ExtensionId, installed: true);
+                    // The record's version: an install from elsewhere may have asked for an older one.
+                    MarkInstalled(Find(finished.ExtensionId), finished.ExtensionId, installed: true, finished.InstalledVersion);
                 }
                 else
                 {
                     _errors[finished.ExtensionId] = finished.Message;
+                    if (finished.InstalledVersion is { } kept)
+                    {
+                        // A failed update keeps the version from before.
+                        _installedVersions[finished.ExtensionId] = kept;
+                    }
                 }
                 Changed?.Invoke();
                 break;
@@ -645,14 +651,15 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         }
     }
 
-    // Without a version the core installs the newest one it can run, which is the item it offers.
-    private void MarkInstalled(MarketItem? item, string id, bool installed)
+    // The version the core names, else the item it offers: without a version the core installs
+    // the newest one it can run, which is that item.
+    private void MarkInstalled(MarketItem? item, string id, bool installed, string? version = null)
     {
         if (installed)
         {
-            if (item is not null)
+            if ((version ?? item?.Version) is { } known)
             {
-                _installedVersions[id] = item.Version;
+                _installedVersions[id] = known;
             }
         }
         else
