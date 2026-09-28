@@ -18,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 mod id;
+mod index;
 mod job;
 mod message;
 mod plugin;
@@ -27,6 +28,10 @@ pub mod shm;
 pub mod schema;
 
 pub use id::{InvalidRequestId, RequestId};
+pub use index::{
+    FileHit, HitKind, IndexState, IndexerErrorCode, IndexerRequest, IndexerResponse, SearchSource,
+    VolumeStatus,
+};
 pub use job::{
     Conflict, ConflictKind, ConflictPolicy, JobAction, JobInfo, JobKind, JobOptions, JobProgress,
     JobRequest, JobState, LinkPolicy, Resolution,

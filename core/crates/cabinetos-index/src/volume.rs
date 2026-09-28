@@ -343,6 +343,15 @@ fn build(
     letter: char,
     stop: &AtomicBool,
 ) -> Result<Option<(Volume, Journal, VolumeIndex)>, String> {
+    match win::file_system(letter) {
+        Some(system) if system == "NTFS" => {}
+        Some(system) => {
+            return Err(format!(
+                "{letter}: is {system}; only NTFS volumes are indexed"
+            ));
+        }
+        None => return Err(format!("there is no volume {letter}:")),
+    }
     let volume = Volume::open(letter).map_err(|error| {
         if win::is_access_denied(&error) {
             format!("{letter}: cannot be read without Administrator rights")

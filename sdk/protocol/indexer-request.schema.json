@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IndexerRequestEnvelope",
+  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":3,\"core_version\":\"0.1.0\"}\n```",
+  "type": "object",
+  "properties": {
+    "id": {
+      "description": "Created by the sender of a request. The reply carries the same ID. An\nevent carries a fresh ID of its own.",
+      "$ref": "#/$defs/RequestId"
+    }
+  },
+  "oneOf": [
+    {
+      "description": "Asks whether the indexer is alive. It answers `pong`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ping"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Asks for every volume's state. It answers `index_status`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "index_status"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Searches the index by name. It answers `file_search_results`.",
+      "type": "object",
+      "properties": {
+        "limit": {
+          "description": "The most hits to return.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 100,
+          "minimum": 0
+        },
+        "query": {
+          "description": "Text the names must contain, compared without case.",
+          "type": "string"
+        },
+        "root": {
+          "description": "Only hits under this folder (at any depth); every indexed volume\nwhen absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "search"
+        }
+      },
+      "required": [
+        "type",
+        "query"
+      ]
+    }
+  ],
+  "required": [
+    "id"
+  ],
+  "$defs": {
+    "RequestId": {
+      "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",
+      "type": "string",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$"
+    }
+  }
+}

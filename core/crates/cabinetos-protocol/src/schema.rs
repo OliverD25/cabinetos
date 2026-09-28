@@ -10,7 +10,7 @@
 
 use schemars::{Schema, schema_for};
 
-use crate::{Envelope, Event, Request, Response};
+use crate::{Envelope, Event, IndexerRequest, IndexerResponse, Request, Response};
 
 /// The JSON Schema of a request: an [`Envelope`] around a [`Request`].
 #[must_use]
@@ -30,6 +30,24 @@ pub fn response_schema() -> Schema {
 #[must_use]
 pub fn event_schema() -> Schema {
     titled(schema_for!(Envelope<Event>), "EventEnvelope")
+}
+
+/// The JSON Schema of a request on the indexer's pipe.
+#[must_use]
+pub fn indexer_request_schema() -> Schema {
+    titled(
+        schema_for!(Envelope<IndexerRequest>),
+        "IndexerRequestEnvelope",
+    )
+}
+
+/// The JSON Schema of a reply on the indexer's pipe.
+#[must_use]
+pub fn indexer_response_schema() -> Schema {
+    titled(
+        schema_for!(Envelope<IndexerResponse>),
+        "IndexerResponseEnvelope",
+    )
 }
 
 /// The envelopes would otherwise be titled "Envelope". Code generators on
@@ -89,5 +107,11 @@ mod tests {
     #[test]
     fn event_schema_matches_sdk() {
         check_snapshot("event.schema.json", &event_schema());
+    }
+
+    #[test]
+    fn indexer_schemas_match_sdk() {
+        check_snapshot("indexer-request.schema.json", &indexer_request_schema());
+        check_snapshot("indexer-response.schema.json", &indexer_response_schema());
     }
 }

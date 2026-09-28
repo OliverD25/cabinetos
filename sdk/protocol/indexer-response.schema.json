@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IndexerResponseEnvelope",
+  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":3,\"core_version\":\"0.1.0\"}\n```",
+  "type": "object",
+  "properties": {
+    "id": {
+      "description": "Created by the sender of a request. The reply carries the same ID. An\nevent carries a fresh ID of its own.",
+      "$ref": "#/$defs/RequestId"
+    }
+  },
+  "oneOf": [
+    {
+      "description": "Reply to `ping`.",
+      "type": "object",
+      "properties": {
+        "indexer_version": {
+          "description": "The indexer's version.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "pong"
+        }
+      },
+      "required": [
+        "type",
+        "indexer_version"
+      ]
+    },
+    {
+      "description": "Reply to `index_status`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "index_status"
+        },
+        "volumes": {
+          "description": "Every volume the indexer was asked to index.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VolumeStatus"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "volumes"
+      ]
+    },
+    {
+      "description": "Reply to `search`: the hits, best first.",
+      "type": "object",
+      "properties": {
+        "complete": {
+          "description": "False when a volume the search should cover is still being\nbuilt or could not be indexed.",
+          "type": "boolean"
+        },
+        "hits": {
+          "description": "The hits.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileHit"
+          }
+        },
+        "took_us": {
+          "description": "The indexer's time for the search, in microseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "file_search_results"
+        }
+      },
+      "required": [
+        "type",
+        "hits",
+        "took_us",
+        "complete"
+      ]
+    },
+    {
+      "description": "The request failed.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "Why, for programs.",
+          "$ref": "#/$defs/IndexerErrorCode"
+        },
+        "message": {
+          "description": "Why, for people.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "error"
+        }
+      },
+      "required": [
+        "type",
+        "code",
+        "message"
+      ]
+    }
+  ],
+  "required": [
+    "id"
+  ],
+  "$defs": {
+    "FileHit": {
+      "description": "One file or directory a search found.",
+      "type": "object",
+      "properties": {
+        "frn": {
+          "description": "Its NTFS file reference number, when known (a 64-bit unsigned\ninteger; it can exceed 2^53).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "File or directory.",
+          "$ref": "#/$defs/HitKind"
+        },
+        "path": {
+          "description": "Its full path, such as `C:\\Users\\me\\notes.txt`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind"
+      ]
+    },
+    "HitKind": {
+      "description": "Whether a hit is a file or a directory.",
+      "oneOf": [
+        {
+          "description": "A file (a link to a file included).",
+          "type": "string",
+          "const": "file"
+        },
+        {
+          "description": "A directory (a junction or a link to a directory included).",
+          "type": "string",
+          "const": "directory"
+        }
+      ]
+    },
+    "IndexState": {
+      "description": "Where a volume's index is.",
+      "oneOf": [
+        {
+          "description": "The first index is being built; searches skip the volume.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "building"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The index is current and follows the change journal.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ready"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A new index is being built; the previous one answers meanwhile.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "rebuilding"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The volume cannot be indexed.",
+          "type": "object",
+          "properties": {
+            "message": {
+              "description": "Why.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ]
+        }
+      ]
+    },
+    "IndexerErrorCode": {
+      "description": "Why an indexer request failed.",
+      "oneOf": [
+        {
+          "description": "The request's `type` is not one the indexer knows.",
+          "type": "string",
+          "const": "unknown_request"
+        },
+        {
+          "description": "The frame is not a valid request.",
+          "type": "string",
+          "const": "protocol_error"
+        },
+        {
+          "description": "The root's volume is not indexed.",
+          "type": "string",
+          "const": "not_indexed"
+        },
+        {
+          "description": "The root is not an absolute folder path, or cannot be opened.",
+          "type": "string",
+          "const": "invalid_root"
+        },
+        {
+          "description": "The indexer failed while handling a valid request.",
+          "type": "string",
+          "const": "internal"
+        }
+      ]
+    },
+    "RequestId": {
+      "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",
+      "type": "string",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$"
+    },
+    "VolumeStatus": {
+      "description": "One volume, as the indexer reports it.",
+      "type": "object",
+      "properties": {
+        "built_in_ms": {
+          "description": "How long the last build took, in milliseconds.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "default": null,
+          "minimum": 0
+        },
+        "entries": {
+          "description": "The entries the index holds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "journal_lag": {
+          "description": "Change-journal bytes written but not yet applied to the index; 0 when\nit is current.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "default": null,
+          "minimum": 0
+        },
+        "letter": {
+          "description": "The drive letter.",
+          "type": "string",
+          "maxLength": 1,
+          "minLength": 1
+        },
+        "state": {
+          "description": "Where its index is.",
+          "$ref": "#/$defs/IndexState"
+        }
+      },
+      "required": [
+        "letter",
+        "state",
+        "entries"
+      ]
+    }
+  }
+}

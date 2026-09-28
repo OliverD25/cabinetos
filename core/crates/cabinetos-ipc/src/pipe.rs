@@ -8,7 +8,7 @@ use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
 use crate::IpcError;
-use crate::security::UserOnlySecurity;
+use crate::security::{self, PipeSecurity};
 use crate::{codec, frame, process};
 
 /// Name prefix of every core pipe.
@@ -40,16 +40,24 @@ impl PipeName {
         Self::new("dev")
     }
 
+    /// Any pipe by its full name, such as the indexer's
+    /// `\\.\pipe\cabinetos-indexer`.
+    #[must_use]
+    pub fn from_full(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
     /// The full name, for Windows APIs.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// The token part of the name.
+    /// The token part of a core pipe's name; the whole name for any other
+    /// pipe.
     #[must_use]
     pub fn token(&self) -> &str {
-        &self.0[PREFIX.len()..]
+        self.0.strip_prefix(PREFIX).unwrap_or(&self.0)
     }
 }
 
@@ -70,12 +78,14 @@ fn server_options(first_instance: bool) -> ServerOptions {
     options
 }
 
-/// The core's end of the control channel. It accepts any number of clients,
-/// one pipe instance each; only the current user can connect.
+/// The server end of a pipe. It accepts any number of clients, one pipe
+/// instance each. The core's pipe admits only the current user
+/// ([`bind`](Self::bind)); the indexer's has its own descriptor
+/// ([`bind_with_sddl`](Self::bind_with_sddl)).
 #[derive(Debug)]
 pub struct PipeServer {
     name: PipeName,
-    security: UserOnlySecurity,
+    security: PipeSecurity,
     /// The instance the next client will connect to.
     next: NamedPipeServer,
 }
@@ -84,13 +94,29 @@ impl PipeServer {
     /// Creates the pipe. Fails if the name is already in use. Must run inside
     /// a Tokio runtime.
     pub fn bind(name: &PipeName) -> Result<Self, IpcError> {
-        let security = UserOnlySecurity::for_current_user()?;
+        Self::bind_secured(name, PipeSecurity::for_current_user()?)
+    }
+
+    /// Creates the pipe with the security descriptor `sddl`, for example one
+    /// that also carries a mandatory integrity label. Fails if the name is
+    /// already in use. Must run inside a Tokio runtime.
+    pub fn bind_with_sddl(name: &PipeName, sddl: &str) -> Result<Self, IpcError> {
+        Self::bind_secured(name, PipeSecurity::from_sddl(sddl)?)
+    }
+
+    fn bind_secured(name: &PipeName, security: PipeSecurity) -> Result<Self, IpcError> {
         let next = security.create_pipe(&server_options(true), name.as_str())?;
         Ok(Self {
             name: name.clone(),
             security,
             next,
         })
+    }
+
+    /// The DACL and the mandatory label Windows stored on the pipe, in SDDL:
+    /// what a client's access is checked against.
+    pub fn stored_security(&self) -> Result<String, IpcError> {
+        security::stored_sddl(&self.next)
     }
 
     /// The pipe's name.
@@ -202,6 +228,9 @@ mod tests {
             r"\\.\pipe\cabinetos-core-abc"
         );
         assert_eq!(PipeName::dev().token(), "dev");
+        let indexer = PipeName::from_full(r"\\.\pipe\cabinetos-indexer");
+        assert_eq!(indexer.as_str(), r"\\.\pipe\cabinetos-indexer");
+        assert_eq!(indexer.token(), indexer.as_str());
         let random = PipeName::random();
         assert_eq!(random.token().len(), 16);
         assert!(random.token().chars().all(|c| c.is_ascii_hexdigit()));

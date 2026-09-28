@@ -277,6 +277,32 @@ fn copy_of(error: &IpcError) -> IpcError {
     }
 }
 
+/// Connects to `name`, sends `message`, reads one reply and closes: one
+/// request, one reply, no background reader. The whole exchange must finish
+/// within `timeout`, busy retries included. A pipe that does not exist fails
+/// at once with an I/O error of kind `NotFound`. Must run inside a Tokio
+/// runtime.
+pub async fn exchange<Q, R>(name: &PipeName, message: &Q, timeout: Duration) -> Result<R, IpcError>
+where
+    Q: serde::Serialize + ?Sized,
+    R: serde::de::DeserializeOwned,
+{
+    let exchange = async {
+        let mut pipe = loop {
+            match ClientOptions::new().open(name.as_str()) {
+                Ok(pipe) => break pipe,
+                Err(error) if is_pipe_busy(&error) => tokio::time::sleep(BUSY_RETRY).await,
+                Err(error) => return Err(error.into()),
+            }
+        };
+        codec::send(&mut pipe, message).await?;
+        codec::recv(&mut pipe).await
+    };
+    tokio::time::timeout(timeout, exchange)
+        .await
+        .map_err(|_| IpcError::Timeout(timeout))?
+}
+
 fn is_pipe_busy(error: &io::Error) -> bool {
     error
         .raw_os_error()

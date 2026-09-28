@@ -16,6 +16,7 @@ cabinetos-commands = { path = "crates/cabinetos-commands" }
 cabinetos-config = { path = "crates/cabinetos-config" }
 cabinetos-diag = { path = "crates/cabinetos-diag" }
 cabinetos-fs = { path = "crates/cabinetos-fs" }
+cabinetos-index = { path = "crates/cabinetos-index" }
 cabinetos-ipc = { path = "crates/cabinetos-ipc" }
 cabinetos-jobs = { path = "crates/cabinetos-jobs" }
 cabinetos-plugins = { path = "crates/cabinetos-plugins" }
@@ -45,6 +46,7 @@ ulid = "3.0"
 wasmtime = { version = "49.0.1", default-features = false }
 wasmtime-wasi = { version = "49.0.1", default-features = false }
 windows = "0.62"
+windows-service = "0.8.1"
 
 [profile.release]
 # Line tables only: crash traces from release builds name file and line, and

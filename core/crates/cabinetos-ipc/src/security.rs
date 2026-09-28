@@ -1,10 +1,12 @@
-//! The pipe's security descriptor: full access for the current user and for
-//! nobody else (PLAN §3, "Security").
+//! A pipe's security descriptor. The core's pipe allows the current user
+//! and nobody else (PLAN §3, "Security"); the indexer's pipe has its own
+//! descriptor, given as SDDL.
 //!
-//! Without it, a named pipe gets the default DACL, which also lets
-//! Administrators, SYSTEM and (for reading) Everyone in. The descriptor below
-//! is `D:P(A;;GA;;;<current user SID>)`: a protected DACL (nothing inherited)
-//! with a single ACE that allows generic-all to the user running the process.
+//! Without one, a named pipe gets the default DACL, which also lets
+//! Administrators, SYSTEM and (for reading) Everyone in. The core's
+//! descriptor is `D:P(A;;GA;;;<current user SID>)`: a protected DACL
+//! (nothing inherited) with a single ACE that allows generic-all to the user
+//! running the process.
 
 use std::ffi::c_void;
 use std::io;
@@ -13,11 +15,13 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use windows::Win32::Foundation::{HANDLE, HLOCAL, LocalFree};
 use windows::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    ConvertSecurityDescriptorToStringSecurityDescriptorW, ConvertSidToStringSidW,
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1,
+    SE_KERNEL_OBJECT,
 };
 use windows::Win32::Security::{
-    GetTokenInformation, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
-    TokenUser,
+    DACL_SECURITY_INFORMATION, GetTokenInformation, LABEL_SECURITY_INFORMATION,
+    PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows::core::{HSTRING, PWSTR};
@@ -29,9 +33,9 @@ fn user_only_sddl(sid: &str) -> String {
     format!("D:P(A;;GA;;;{sid})")
 }
 
-/// A security descriptor that grants full access to the current user only.
+/// A security descriptor for new pipe instances.
 #[derive(Debug)]
-pub(crate) struct UserOnlySecurity {
+pub(crate) struct PipeSecurity {
     /// Allocated by `ConvertStringSecurityDescriptorToSecurityDescriptorW` with
     /// `LocalAlloc`; freed in `Drop`.
     descriptor: PSECURITY_DESCRIPTOR,
@@ -40,16 +44,21 @@ pub(crate) struct UserOnlySecurity {
 // SAFETY: `descriptor` points to heap memory owned by this value alone. It is
 // never written after creation and is freed exactly once, in Drop, so moving
 // the owner to another thread is sound.
-unsafe impl Send for UserOnlySecurity {}
+unsafe impl Send for PipeSecurity {}
 
 // SAFETY: shared references only ever read the descriptor (Windows copies it
 // when creating a pipe instance), so concurrent use from threads is sound.
-unsafe impl Sync for UserOnlySecurity {}
+unsafe impl Sync for PipeSecurity {}
 
-impl UserOnlySecurity {
-    /// Builds the descriptor for the user this process runs as.
+impl PipeSecurity {
+    /// Builds the descriptor that allows only the user this process runs as.
     pub(crate) fn for_current_user() -> Result<Self, IpcError> {
-        let sddl = HSTRING::from(user_only_sddl(&current_user_sid()?));
+        Self::from_sddl(&user_only_sddl(&current_user_sid()?))
+    }
+
+    /// Builds the descriptor that `sddl` describes.
+    pub(crate) fn from_sddl(sddl: &str) -> Result<Self, IpcError> {
+        let sddl = HSTRING::from(sddl);
         let mut descriptor = PSECURITY_DESCRIPTOR::default();
         // SAFETY: `sddl` is a valid NUL-terminated wide string that outlives
         // the call, and `descriptor` is a valid place for the output pointer.
@@ -90,13 +99,59 @@ impl UserOnlySecurity {
     }
 }
 
-impl Drop for UserOnlySecurity {
+impl Drop for PipeSecurity {
     fn drop(&mut self) {
         // SAFETY: the descriptor was allocated with LocalAlloc by
         // ConvertStringSecurityDescriptorToSecurityDescriptorW and is freed
         // only here.
         unsafe { LocalFree(Some(HLOCAL(self.descriptor.0))) };
     }
+}
+
+/// The DACL and the mandatory label of a kernel object, as Windows stored
+/// them, in SDDL.
+pub(crate) fn stored_sddl(handle: &impl AsRawHandle) -> Result<String, IpcError> {
+    let what = DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION;
+    let mut descriptor = PSECURITY_DESCRIPTOR::default();
+    // SAFETY: the handle is valid while `handle` is borrowed; `descriptor` is
+    // a valid output location. The descriptor is LocalAlloc'd and freed
+    // below.
+    unsafe {
+        GetSecurityInfo(
+            HANDLE(handle.as_raw_handle()),
+            SE_KERNEL_OBJECT,
+            what,
+            None,
+            None,
+            None,
+            None,
+            Some(&raw mut descriptor),
+        )
+    }
+    .ok()?;
+    let mut text = PWSTR::null();
+    // SAFETY: `descriptor` is valid (see above); `text` is a valid output
+    // location, LocalAlloc'd on success and freed below.
+    let converted = unsafe {
+        ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            descriptor,
+            SDDL_REVISION_1,
+            what,
+            &raw mut text,
+            None,
+        )
+    };
+    let sddl = converted.map_err(IpcError::from).and_then(|()| {
+        // SAFETY: `text` is a valid NUL-terminated wide string.
+        unsafe { text.to_string() }.map_err(|error| IpcError::Io(io::Error::other(error)))
+    });
+    // SAFETY: both were allocated with LocalAlloc (or are null, which
+    // LocalFree accepts) and are not used again.
+    unsafe {
+        LocalFree(Some(HLOCAL(text.0.cast())));
+        LocalFree(Some(HLOCAL(descriptor.0)));
+    }
+    sddl
 }
 
 /// The current user's SID as text, for example `S-1-5-21-…-1001`.
@@ -173,7 +228,7 @@ mod tests {
     /// Reads the DACL back from a real pipe instance, as Windows stored it.
     #[tokio::test]
     async fn the_pipe_admits_only_the_current_user() {
-        let security = UserOnlySecurity::for_current_user().unwrap();
+        let security = PipeSecurity::for_current_user().unwrap();
         let name = format!(
             r"\\.\pipe\cabinetos-test-dacl-{:016x}",
             rand::random::<u64>()

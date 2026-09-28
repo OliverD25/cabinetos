@@ -1,12 +1,29 @@
 [package]
 name = "cabinetos-indexer"
-description = "The elevated indexer process (stub until Phase 6)."
+description = "The elevated indexer process: indexes NTFS volumes and answers read-only searches over its own pipe."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+
+[dependencies]
+cabinetos-diag.workspace = true
+cabinetos-index.workspace = true
+cabinetos-ipc.workspace = true
+cabinetos-protocol.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+windows-service.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

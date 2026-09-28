@@ -2,7 +2,10 @@
 //!
 //! - **Control channel:** a named pipe that only the current user can open
 //!   ([`PipeServer`], [`PipeClient`]), carrying length-prefixed frames
-//!   ([`frame`]) of JSON ([`codec`]), as ADR 0006 specifies.
+//!   ([`frame`]) of JSON ([`codec`]), as ADR 0006 specifies. The indexer's
+//!   pipe uses the same framing with its own security descriptor
+//!   ([`PipeServer::bind_with_sddl`]); the core asks it one request at a
+//!   time ([`exchange`]).
 //! - **Data channel:** page-file-backed shared-memory sections
 //!   ([`SharedSection`]) whose handles are duplicated into the reading process.
 //! - **Lifetime:** [`process::watch_process_exit`] tells the core when its
@@ -30,7 +33,7 @@ mod shm;
 
 use std::time::Duration;
 
-pub use client::PipeClient;
+pub use client::{PipeClient, exchange};
 pub use frame::MAX_FRAME;
 pub use pipe::{PipeConnection, PipeName, PipeReader, PipeServer, PipeWriter};
 pub use shm::{MappedView, RawHandleValue, ReadOnlyView, SharedSection};
