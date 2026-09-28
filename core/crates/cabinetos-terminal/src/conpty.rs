@@ -93,8 +93,12 @@ impl Drop for PseudoConsole {
 
 /// A process attribute list that attaches a new process to a pseudo-console.
 struct AttributeList {
-    /// 8-byte aligned storage for the list.
-    storage: Vec<u64>,
+    /// 8-byte aligned storage for the list, reached only through `list`.
+    _storage: Vec<u64>,
+    /// Points into the storage's heap buffer, which stays in place when the
+    /// vector moves. Windows writes through it, so it comes from
+    /// `as_mut_ptr`.
+    list: LPPROC_THREAD_ATTRIBUTE_LIST,
 }
 
 impl AttributeList {
@@ -105,18 +109,21 @@ impl AttributeList {
         let _ = unsafe { InitializeProcThreadAttributeList(None, 1, None, &raw mut bytes) };
         let mut storage = vec![0u64; bytes.div_ceil(8)];
         let list = LPPROC_THREAD_ATTRIBUTE_LIST(storage.as_mut_ptr().cast());
-        // SAFETY: `storage` is writable for at least `bytes` bytes and 8-byte
+        // SAFETY: `list` is writable for at least `bytes` bytes and 8-byte
         // aligned; `bytes` is a valid in-out location.
         unsafe { InitializeProcThreadAttributeList(Some(list), 1, None, &raw mut bytes) }?;
         // From here on Drop deletes the initialized list.
-        let this = Self { storage };
+        let this = Self {
+            _storage: storage,
+            list,
+        };
         // SAFETY: the list was initialized for one attribute. For this
         // attribute the value itself is the pseudo-console handle (not a
         // pointer to it), with the size of a handle; the pseudo-console
         // outlives every use of the list.
         unsafe {
             UpdateProcThreadAttribute(
-                this.list(),
+                this.list,
                 0,
                 PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE as usize,
                 Some(std::ptr::without_provenance::<c_void>(
@@ -129,17 +136,13 @@ impl AttributeList {
         }?;
         Ok(this)
     }
-
-    fn list(&self) -> LPPROC_THREAD_ATTRIBUTE_LIST {
-        LPPROC_THREAD_ATTRIBUTE_LIST(self.storage.as_ptr().cast_mut().cast())
-    }
 }
 
 impl Drop for AttributeList {
     fn drop(&mut self) {
         // SAFETY: the list was initialized (a value exists only after that)
-        // and is deleted exactly once.
-        unsafe { DeleteProcThreadAttributeList(self.list()) };
+        // and is deleted exactly once, before its storage is freed.
+        unsafe { DeleteProcThreadAttributeList(self.list) };
     }
 }
 
@@ -171,7 +174,7 @@ pub(crate) fn spawn(
     startup.StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
     startup.StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
     startup.StartupInfo.hStdError = INVALID_HANDLE_VALUE;
-    startup.lpAttributeList = attributes.list();
+    startup.lpAttributeList = attributes.list;
     let program = wide(program.as_os_str());
     let mut line: Vec<u16> = command_line.encode_utf16().chain([0]).collect();
     let cwd = wide(cwd.as_os_str());
