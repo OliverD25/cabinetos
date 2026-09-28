@@ -5,7 +5,7 @@
 //! `%TEMP%\cabinetos-term-test\`, which the tests remove.
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
@@ -38,6 +38,15 @@ fn scratch(prefix: &str) -> TempDir {
 /// A path as the shells print it.
 fn shown(path: &Path) -> String {
     path.display().to_string()
+}
+
+/// `path` spelled with long names. `%TEMP%` may contain a short name, such
+/// as `RUNNER~1` on CI; cmd prints a folder as it was given, PowerShell
+/// with its long names.
+fn long_name(path: &Path) -> PathBuf {
+    let full = std::fs::canonicalize(path).unwrap();
+    let full = full.to_string_lossy();
+    PathBuf::from(full.strip_prefix(r"\\?\").unwrap_or(&full))
 }
 
 fn profile(name: &str, command: &str, args: &[&str]) -> Profile {
@@ -599,7 +608,7 @@ fn powershell_follows_the_pane_when_installed() {
         let harness = Harness::new();
         // A quote, a typographic quote and brackets: literal for
         // Set-Location -LiteralPath, a wildcard for plain Set-Location.
-        let target = dir.path().join("it's [1] ’q’");
+        let target = long_name(dir.path()).join("it's [1] ’q’");
         std::fs::create_dir(&target).unwrap();
         let shell = profile("ps", program, &["-NoLogo", "-NoProfile"]);
         let opened = harness.open(&shell, dir.path(), 300, 25);
