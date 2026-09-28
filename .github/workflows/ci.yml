@@ -10,6 +10,8 @@ on:
       # The plugin host compiles against the WIT, and its tests load the fixtures.
       - "sdk/wit/**"
       - "sdk/fixtures/**"
+      # The WinUI shell; its tests also read sdk/protocol and sdk/config.
+      - "ui/**"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
@@ -19,6 +21,8 @@ on:
       # The plugin host compiles against the WIT, and its tests load the fixtures.
       - "sdk/wit/**"
       - "sdk/fixtures/**"
+      # The WinUI shell; its tests also read sdk/protocol and sdk/config.
+      - "ui/**"
       - ".github/workflows/ci.yml"
 
 concurrency:
@@ -81,6 +85,42 @@ jobs:
       # checks that they still compile. Run them locally (core/README.md).
       - name: Benchmarks compile
         run: cargo bench --workspace --no-run
+
+  ui:
+    name: WinUI shell (build, test)
+    runs-on: windows-latest
+    # Restore, a Release build and the tests take a few minutes; a hang
+    # must not burn paid Windows minutes.
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v7
+
+      # ui/global.json pins the SDK and turns on the Microsoft.Testing.Platform
+      # mode of dotnet test that xunit v3 needs.
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: ui/global.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('ui/Directory.Packages.props', 'ui/**/*.csproj') }}
+
+      - name: Restore
+        run: dotnet restore CabinetOS.sln
+
+      - name: Build (warnings are errors)
+        run: dotnet build CabinetOS.sln -c Release --no-restore -warnaserror
+
+      # This job builds no cabinetos-core.exe, so the end-to-end test skips
+      # itself here; locally it runs against core/target/debug. The core job
+      # tests the core.
+      - name: Test
+        run: dotnet test --solution CabinetOS.sln -c Release --no-build
 
   deny:
     name: cargo-deny (licenses, advisories, bans, sources)
