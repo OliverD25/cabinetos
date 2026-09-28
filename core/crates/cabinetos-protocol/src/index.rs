@@ -8,6 +8,10 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The indexer's pipe. The name is fixed: there is one indexer per machine,
+/// and the core finds it without being told.
+pub const INDEXER_PIPE_NAME: &str = r"\\.\pipe\cabinetos-indexer";
+
 /// Whether a hit is a file or a directory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

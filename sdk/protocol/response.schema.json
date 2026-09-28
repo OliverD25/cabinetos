@@ -339,6 +339,70 @@
         "type",
         "plugins"
       ]
+    },
+    {
+      "description": "Reply to `search`: the hits, best first (names that start with the\nquery, then shorter names, then paths in order).",
+      "type": "object",
+      "properties": {
+        "complete": {
+          "description": "False when the search could not cover everything: a walk stopped\nat its time or entry limit, or a volume was still being indexed.",
+          "type": "boolean"
+        },
+        "hits": {
+          "description": "The hits.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileHit"
+          }
+        },
+        "source": {
+          "description": "The indexer's index, or the core's own walk.",
+          "$ref": "#/$defs/SearchSource"
+        },
+        "took_us": {
+          "description": "How long the search took, in microseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "file_search_results"
+        }
+      },
+      "required": [
+        "type",
+        "hits",
+        "source",
+        "took_us",
+        "complete"
+      ]
+    },
+    {
+      "description": "Reply to `index_status`.",
+      "type": "object",
+      "properties": {
+        "available": {
+          "description": "Whether an indexer answered.",
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "const": "index_status"
+        },
+        "volumes": {
+          "description": "Its volumes; empty without an indexer.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VolumeStatus"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "available",
+        "volumes"
+      ]
     }
   ],
   "required": [
@@ -653,6 +717,110 @@
           "description": "A plugin's command failed: the plugin reported an error, crashed, or\nis not running.",
           "type": "string",
           "const": "plugin_error"
+        }
+      ]
+    },
+    "FileHit": {
+      "description": "One file or directory a search found.",
+      "type": "object",
+      "properties": {
+        "frn": {
+          "description": "Its NTFS file reference number, when known (a 64-bit unsigned\ninteger; it can exceed 2^53).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "File or directory.",
+          "$ref": "#/$defs/HitKind"
+        },
+        "path": {
+          "description": "Its full path, such as `C:\\Users\\me\\notes.txt`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind"
+      ]
+    },
+    "HitKind": {
+      "description": "Whether a hit is a file or a directory.",
+      "oneOf": [
+        {
+          "description": "A file (a link to a file included).",
+          "type": "string",
+          "const": "file"
+        },
+        {
+          "description": "A directory (a junction or a link to a directory included).",
+          "type": "string",
+          "const": "directory"
+        }
+      ]
+    },
+    "IndexState": {
+      "description": "Where a volume's index is.",
+      "oneOf": [
+        {
+          "description": "The first index is being built; searches skip the volume.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "building"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The index is current and follows the change journal.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ready"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A new index is being built; the previous one answers meanwhile.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "rebuilding"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The volume cannot be indexed.",
+          "type": "object",
+          "properties": {
+            "message": {
+              "description": "Why.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ]
         }
       ]
     },
@@ -1180,6 +1348,21 @@
         "score"
       ]
     },
+    "SearchSource": {
+      "description": "Where a search's hits came from.",
+      "oneOf": [
+        {
+          "description": "The indexer's index of whole volumes.",
+          "type": "string",
+          "const": "index"
+        },
+        {
+          "description": "The core's own bounded walk of one folder tree (no indexer).",
+          "type": "string",
+          "const": "walk"
+        }
+      ]
+    },
     "VolumeDetails": {
       "description": "The volume a path lives on, and the physical disk under it.",
       "type": "object",
@@ -1235,6 +1418,53 @@
         "label",
         "total_bytes",
         "free_bytes"
+      ]
+    },
+    "VolumeStatus": {
+      "description": "One volume, as the indexer reports it.",
+      "type": "object",
+      "properties": {
+        "built_in_ms": {
+          "description": "How long the last build took, in milliseconds.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "default": null,
+          "minimum": 0
+        },
+        "entries": {
+          "description": "The entries the index holds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "journal_lag": {
+          "description": "Change-journal bytes written but not yet applied to the index; 0 when\nit is current.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "default": null,
+          "minimum": 0
+        },
+        "letter": {
+          "description": "The drive letter.",
+          "type": "string",
+          "maxLength": 1,
+          "minLength": 1
+        },
+        "state": {
+          "description": "Where its index is.",
+          "$ref": "#/$defs/IndexState"
+        }
+      },
+      "required": [
+        "letter",
+        "state",
+        "entries"
       ]
     }
   }

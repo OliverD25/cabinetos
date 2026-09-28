@@ -435,6 +435,51 @@
         "plugin_id",
         "capabilities"
       ]
+    },
+    {
+      "description": "Searches files and folders by name. The core asks the indexer and,\nwhen none answers in time, walks one folder tree itself; it answers\n`file_search_results` either way.",
+      "type": "object",
+      "properties": {
+        "limit": {
+          "description": "The most hits to return.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 100,
+          "minimum": 0
+        },
+        "query": {
+          "description": "Text the names must contain, compared without case.",
+          "type": "string"
+        },
+        "root": {
+          "description": "Only hits under this folder. Without it, the indexer searches\nevery indexed volume, and a walk starts at the folder this\nconnection listed last (or the user's profile folder).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "search"
+        }
+      },
+      "required": [
+        "type",
+        "query"
+      ]
+    },
+    {
+      "description": "Asks for the indexer's state. The core answers `index_status`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "index_status"
+        }
+      },
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [

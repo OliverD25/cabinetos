@@ -8,6 +8,7 @@ use cabinetos_plugins::PluginHost;
 use cabinetos_protocol::{Envelope, Event, RequestId};
 use tokio::sync::broadcast;
 
+use crate::search::IndexerLink;
 use crate::settings::Settings;
 
 /// Events a connection may fall behind by before it misses some: about ten
@@ -44,4 +45,6 @@ pub(crate) struct Services {
     pub(crate) events: Arc<EventHub>,
     /// `None` when the plugin host could not start: no plugins then.
     pub(crate) plugins: Option<Arc<PluginHost>>,
+    /// The way to the indexer, for search.
+    pub(crate) indexer: IndexerLink,
 }

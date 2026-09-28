@@ -29,8 +29,8 @@ pub mod schema;
 
 pub use id::{InvalidRequestId, RequestId};
 pub use index::{
-    FileHit, HitKind, IndexState, IndexerErrorCode, IndexerRequest, IndexerResponse, SearchSource,
-    VolumeStatus,
+    FileHit, HitKind, INDEXER_PIPE_NAME, IndexState, IndexerErrorCode, IndexerRequest,
+    IndexerResponse, SearchSource, VolumeStatus,
 };
 pub use job::{
     Conflict, ConflictKind, ConflictPolicy, JobAction, JobInfo, JobKind, JobOptions, JobProgress,
@@ -50,5 +50,7 @@ pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 /// and commands, and made `list_directory`'s `include_hidden` and `sort`
 /// optional (the configuration fills them in); version 4 the jobs (copy,
 /// move, delete); version 5 the Recycle Bin conflict
-/// (`recycle_bin_too_small`, `delete_permanently`) and the plugins.
-pub const PROTOCOL_VERSION: u32 = 5;
+/// (`recycle_bin_too_small`, `delete_permanently`) and the plugins; version
+/// 6 file search (`search`, `file_search_results`) and the indexer's state
+/// (`index_status`).
+pub const PROTOCOL_VERSION: u32 = 6;

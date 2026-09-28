@@ -2,8 +2,8 @@
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
 //! UI will), `volume`, `shutdown`, the configuration (`config`), the command
 //! registry (`commands`), the keymap (`keys`), jobs (`copy`, `move`,
-//! `delete`, `jobs`, `job`), the Core Plugins (`plugins`) and the events the
-//! core sends (`events watch`).
+//! `delete`, `jobs`, `job`), the Core Plugins (`plugins`), the events the
+//! core sends (`events watch`), and file search (`search`, `index status`).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -18,6 +18,7 @@
 mod jobs;
 mod ls;
 mod plugins;
+mod search;
 mod settings;
 
 use std::io::Write;
@@ -147,6 +148,30 @@ enum Command {
         #[command(subcommand)]
         action: EventsAction,
     },
+    /// Search files and folders by name: the indexer's index when it runs,
+    /// else a walk of one folder tree (at most 2 s and 20,000 entries).
+    Search {
+        /// Text the names must contain, compared without case.
+        query: String,
+        /// The most hits to print.
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+        /// Only hits under this folder. Without it: every indexed volume, or
+        /// (without an indexer) your profile folder.
+        #[arg(long, value_name = "PATH")]
+        root: Option<String>,
+    },
+    /// Ask about the indexer.
+    Index {
+        #[command(subcommand)]
+        action: IndexAction,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum IndexAction {
+    /// Print whether an indexer answers, and each volume's state.
+    Status,
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -545,6 +570,13 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Events {
             action: EventsAction::Watch,
         } => plugins::watch(&mut client).await?,
+        Command::Search { query, limit, root } => {
+            let root = root.as_deref().map(absolute).transpose()?;
+            search::search(&mut client, query, *limit, root.as_deref()).await?;
+        }
+        Command::Index {
+            action: IndexAction::Status,
+        } => search::status(&mut client).await?,
     }
     Ok(())
 }
@@ -1096,6 +1128,38 @@ mod tests {
             parse(&["events", "watch"]).unwrap(),
             Command::Events {
                 action: EventsAction::Watch
+            }
+        );
+    }
+
+    #[test]
+    fn parses_search_and_index_status() {
+        let parse = |args: &[&str]| {
+            let mut full = vec!["cabinetos-cli"];
+            full.extend_from_slice(args);
+            Cli::try_parse_from(full).map(|cli| cli.command)
+        };
+        assert_eq!(
+            parse(&["search", "budget"]).unwrap(),
+            Command::Search {
+                query: "budget".to_owned(),
+                limit: 50,
+                root: None,
+            }
+        );
+        assert_eq!(
+            parse(&["search", "foo", "--limit", "5", "--root", r"D:\work"]).unwrap(),
+            Command::Search {
+                query: "foo".to_owned(),
+                limit: 5,
+                root: Some(r"D:\work".to_owned()),
+            }
+        );
+        assert!(parse(&["search"]).is_err(), "a query is required");
+        assert_eq!(
+            parse(&["index", "status"]).unwrap(),
+            Command::Index {
+                action: IndexAction::Status
             }
         );
     }

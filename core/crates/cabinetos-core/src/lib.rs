@@ -23,6 +23,7 @@ mod connection;
 mod events;
 mod listing;
 mod plugins;
+mod search;
 mod settings;
 
 use std::path::{Path, PathBuf};
@@ -195,6 +196,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         jobs,
         events,
         plugins,
+        indexer: search::IndexerLink::from_env(),
     });
     let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     if let Some(host) = &services.plugins {

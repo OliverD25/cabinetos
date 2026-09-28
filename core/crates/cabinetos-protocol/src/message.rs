@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::RequestId;
+use crate::index::{FileHit, SearchSource, VolumeStatus, default_file_search_limit};
 use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution};
 use crate::plugin::{PluginInfo, PluginState};
 
@@ -177,6 +178,23 @@ pub enum Request {
         /// Capability names, for example `fs:read`.
         capabilities: Vec<String>,
     },
+    /// Searches files and folders by name. The core asks the indexer and,
+    /// when none answers in time, walks one folder tree itself; it answers
+    /// `file_search_results` either way.
+    Search {
+        /// Text the names must contain, compared without case.
+        query: String,
+        /// The most hits to return.
+        #[serde(default = "default_file_search_limit")]
+        limit: u32,
+        /// Only hits under this folder. Without it, the indexer searches
+        /// every indexed volume, and a walk starts at the folder this
+        /// connection listed last (or the user's profile folder).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        root: Option<String>,
+    },
+    /// Asks for the indexer's state. The core answers `index_status`.
+    IndexStatus,
 }
 
 fn default_search_limit() -> u32 {
@@ -208,6 +226,8 @@ impl Request {
         "reload_plugin",
         "set_plugin_enabled",
         "grant_capabilities",
+        "search",
+        "index_status",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -235,6 +255,8 @@ impl Request {
             Self::ReloadPlugin { .. } => "reload_plugin",
             Self::SetPluginEnabled { .. } => "set_plugin_enabled",
             Self::GrantCapabilities { .. } => "grant_capabilities",
+            Self::Search { .. } => "search",
+            Self::IndexStatus => "index_status",
         }
     }
 }
@@ -363,6 +385,26 @@ pub enum Response {
         /// The plugins.
         plugins: Vec<PluginInfo>,
     },
+    /// Reply to `search`: the hits, best first (names that start with the
+    /// query, then shorter names, then paths in order).
+    FileSearchResults {
+        /// The hits.
+        hits: Vec<FileHit>,
+        /// The indexer's index, or the core's own walk.
+        source: SearchSource,
+        /// How long the search took, in microseconds.
+        took_us: u64,
+        /// False when the search could not cover everything: a walk stopped
+        /// at its time or entry limit, or a volume was still being indexed.
+        complete: bool,
+    },
+    /// Reply to `index_status`.
+    IndexStatus {
+        /// Whether an indexer answered.
+        available: bool,
+        /// Its volumes; empty without an indexer.
+        volumes: Vec<VolumeStatus>,
+    },
 }
 
 impl Response {
@@ -383,6 +425,8 @@ impl Response {
         "job_started",
         "jobs",
         "plugins",
+        "file_search_results",
+        "index_status",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -404,6 +448,8 @@ impl Response {
             Self::JobStarted { .. } => "job_started",
             Self::Jobs { .. } => "jobs",
             Self::Plugins { .. } => "plugins",
+            Self::FileSearchResults { .. } => "file_search_results",
+            Self::IndexStatus { .. } => "index_status",
         }
     }
 }
@@ -859,6 +905,12 @@ mod tests {
                 plugin_id: "reader".to_owned(),
                 capabilities: vec!["fs:read".to_owned()],
             },
+            Request::Search {
+                query: "cat".to_owned(),
+                limit: 50,
+                root: Some(r"C:\Users".to_owned()),
+            },
+            Request::IndexStatus,
         ]
     }
 
@@ -880,6 +932,7 @@ mod tests {
         }
     }
 
+    #[expect(clippy::too_many_lines, reason = "one example of every response")]
     fn every_response() -> Vec<Response> {
         vec![
             Response::Pong {
@@ -974,6 +1027,26 @@ mod tests {
                     sources: vec![r"C:\a".to_owned()],
                     destination: Some(r"D:\target".to_owned()),
                     progress: progress(),
+                }],
+            },
+            Response::FileSearchResults {
+                hits: vec![crate::FileHit {
+                    path: r"C:\Users\me\cat.jpg".to_owned(),
+                    kind: crate::HitKind::File,
+                    frn: None,
+                }],
+                source: SearchSource::Walk,
+                took_us: 1500,
+                complete: false,
+            },
+            Response::IndexStatus {
+                available: true,
+                volumes: vec![VolumeStatus {
+                    letter: 'C',
+                    state: crate::IndexState::Ready,
+                    entries: 1_234_567,
+                    built_in_ms: Some(2900),
+                    journal_lag: Some(0),
                 }],
             },
         ]

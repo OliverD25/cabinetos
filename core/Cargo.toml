@@ -17,6 +17,7 @@ cabinetos-config = { path = "crates/cabinetos-config" }
 cabinetos-diag = { path = "crates/cabinetos-diag" }
 cabinetos-fs = { path = "crates/cabinetos-fs" }
 cabinetos-index = { path = "crates/cabinetos-index" }
+cabinetos-indexer = { path = "crates/cabinetos-indexer" }
 cabinetos-ipc = { path = "crates/cabinetos-ipc" }
 cabinetos-jobs = { path = "crates/cabinetos-jobs" }
 cabinetos-plugins = { path = "crates/cabinetos-plugins" }

@@ -9,8 +9,9 @@
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
 //!   (`list_directory`, `volume_info`, the keybinding and plugin settings
-//!   writes, `start_job`, a plugin's command, `reload_plugin`) as tasks, so
-//!   one slow directory or plugin never holds up the next request. After
+//!   writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
+//!   `index_status`) as tasks, so one slow directory, plugin or search never
+//!   holds up the next request. After
 //!   `hello` it also forwards the configuration, job and plugin events every
 //!   connection receives.
 
@@ -37,6 +38,7 @@ use tracing::Instrument;
 use crate::events::Services;
 use crate::listing::{self, Failure, Published, WatchedListing};
 use crate::plugins::check_grants;
+use crate::search;
 use crate::settings::{Settings, every_section};
 use crate::{CORE_VERSION, decode_request};
 
@@ -150,6 +152,7 @@ pub(crate) async fn handle_connection(
         shutdown,
         services,
         events: None,
+        last_listed: None,
     };
     loop {
         tokio::select! {
@@ -217,6 +220,9 @@ struct Session {
     services: Arc<Services>,
     /// Configuration and job events, from `hello` on.
     events: Option<broadcast::Receiver<Envelope<Event>>>,
+    /// The folder this connection listed last: where a search without a
+    /// root walks, when no indexer answers.
+    last_listed: Option<String>,
 }
 
 impl Session {
@@ -298,6 +304,10 @@ impl Session {
                 | Request::SetPluginEnabled { .. }
                 | Request::GrantCapabilities { .. }) => {
                     self.plugin_request(&id, &span, kind, request)
+                }
+                request @ (Request::Search { .. } | Request::IndexStatus) => {
+                    self.search_request(&id, &span, kind, request);
+                    None
                 }
             }
         };
@@ -431,6 +441,71 @@ impl Session {
     ) {
         let settings = Arc::clone(&self.services.settings);
         self.spawn_reply(id, span, kind, move || write(&settings));
+    }
+
+    /// `search` and `index_status`, as tasks: each may wait for the indexer
+    /// (at most 200 ms) or walk folders (at most 2 s).
+    fn search_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) {
+        let services = Arc::clone(&self.services);
+        let request_id = id.clone();
+        match request {
+            Request::Search { query, limit, root } => {
+                let default_root = self.default_search_root();
+                self.spawn_task_reply(id, span, kind, async move {
+                    search::search(
+                        &services.indexer,
+                        &request_id,
+                        query,
+                        limit,
+                        root,
+                        default_root,
+                    )
+                    .await
+                });
+            }
+            Request::IndexStatus => {
+                self.spawn_task_reply(id, span, kind, async move {
+                    search::index_status(&services.indexer, &request_id).await
+                });
+            }
+            _ => {}
+        }
+    }
+
+    /// Where a search without a root walks: the folder listed last on this
+    /// connection, else the user's profile folder.
+    fn default_search_root(&self) -> String {
+        self.last_listed
+            .clone()
+            .unwrap_or_else(|| std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".to_owned()))
+    }
+
+    /// Runs the async `work` as a task and replies with its answer.
+    fn spawn_task_reply(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        work: impl Future<Output = Response> + Send + 'static,
+    ) {
+        let out = self.out.clone();
+        let request_id = id.clone();
+        let started = Instant::now();
+        self.tasks.spawn(
+            async move {
+                let reply = work.await;
+                log_handled(kind, started, &reply);
+                out.reply(request_id, reply);
+                TaskDone::Replied
+            }
+            .instrument(span.clone()),
+        );
     }
 
     /// Runs `work` on the blocking pool and replies with its answer.
@@ -762,6 +837,7 @@ impl Session {
             watched = watch.is_some(),
             "listing opened"
         );
+        self.last_listed = Some(path.clone());
         log_handled("list_directory", started, &reply);
         // Queued before the refresh task starts, so the client learns the
         // listing ID before any event about it.

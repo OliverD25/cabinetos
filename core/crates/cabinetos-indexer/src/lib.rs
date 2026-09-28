@@ -30,7 +30,7 @@ use tokio_util::sync::CancellationToken;
 
 /// The indexer's pipe. The name is fixed: there is one indexer per machine,
 /// and the core finds it without being told.
-pub const PIPE_NAME: &str = r"\\.\pipe\cabinetos-indexer";
+pub const PIPE_NAME: &str = cabinetos_protocol::INDEXER_PIPE_NAME;
 
 /// The pipe's security descriptor, in SDDL:
 ///

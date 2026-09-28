@@ -13,6 +13,7 @@ cabinetos-commands.workspace = true
 cabinetos-config.workspace = true
 cabinetos-diag.workspace = true
 cabinetos-fs.workspace = true
+cabinetos-index.workspace = true
 cabinetos-ipc.workspace = true
 cabinetos-jobs.workspace = true
 cabinetos-plugins.workspace = true
@@ -26,6 +27,8 @@ tokio-util.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+cabinetos-indexer.workspace = true
+rand.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
 
