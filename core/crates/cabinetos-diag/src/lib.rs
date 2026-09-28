@@ -13,6 +13,8 @@
 //! - On a panic, the hook writes `crash-<timestamp>.json` with the backtrace and
 //!   the last events from the ring buffer, then flushes the log writer before
 //!   the process dies.
+//! - [`set_level`] changes the level while the process runs (the core applies
+//!   `logging.level` from `cabinetos.json`); `CABINETOS_LOG` wins over it.
 //!
 //! Serves Constitution Article 12 (Unified, Zero-Latency Diagnostics & Logging)
 //! and Article 1 (logging never blocks the caller). Brief §8.
@@ -37,6 +39,7 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::Registry;
+use tracing_subscriber::reload;
 
 pub use ring::{RING_CAPACITY, recent_events};
 
@@ -171,6 +174,10 @@ static WORKER: OnceLock<Mutex<Option<WorkerGuard>>> = OnceLock::new();
 
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
+/// Changes the filter after [`init`]. Unset when `CABINETOS_LOG` chose the
+/// filter: the environment wins over the configuration file.
+static LEVEL: OnceLock<reload::Handle<Targets, Registry>> = OnceLock::new();
+
 /// Sets up diagnostics for this process. Call it once, first thing in `main`,
 /// and keep the returned guard until the process exits.
 pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
@@ -191,6 +198,11 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
     );
     let filter_text = std::env::var(LOG_FILTER_ENV).ok();
     let (filter, bad_filter) = parse_filter(filter_text.as_deref());
+    let filter_from_env = filter_text
+        .as_deref()
+        .is_some_and(|text| !text.trim().is_empty())
+        && bad_filter.is_none();
+    let (filter, level_handle) = reload::Layer::new(filter);
 
     let (file_layer, worker_guard) = if log_file {
         let appender = RollingFileAppender::builder()
@@ -242,6 +254,9 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
         .map_err(|_| DiagError::SubscriberAlreadySet)?;
 
     let _ = WORKER.set(Mutex::new(worker_guard));
+    if !filter_from_env {
+        let _ = LEVEL.set(level_handle);
+    }
     let _ = PROCESS.set(ProcessInfo {
         process,
         boundary,
@@ -256,6 +271,21 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
         );
     }
     Ok(DiagGuard { log_dir })
+}
+
+/// Sets the least important level this process logs, for example from
+/// `logging.level` in `cabinetos.json`. Returns `false`, and changes nothing,
+/// before [`init`] or when `CABINETOS_LOG` set the filter: a filter given
+/// for one run wins over the configuration file.
+pub fn set_level(level: tracing::Level) -> bool {
+    let Some(handle) = LEVEL.get() else {
+        return false;
+    };
+    // `modify` also recomputes which log statements are enabled, so a
+    // disabled statement stays a single cached check (Article 1).
+    handle
+        .modify(|filter| *filter = Targets::new().with_default(level))
+        .is_ok()
 }
 
 /// A span for one request. Everything logged inside it carries the request's
