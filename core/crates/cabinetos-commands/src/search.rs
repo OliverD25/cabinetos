@@ -1,0 +1,181 @@
+//! Ranking commands for the palette. The UI does no data processing
+//! (brief §1), so the core scores what the user typed.
+//!
+//! A command matches when the query's letters appear in order (not
+//! necessarily together, case-insensitive) in `Category: Title` or in the
+//! command's ID; spaces in the query are ignored. Among all ways to match,
+//! the best one counts:
+//!
+//! - each matched letter: +16;
+//! - a letter at the start of a word (after a space, `:`, `.`, `-`, `_`, `/`,
+//!   or a lower-to-upper case change as in `toggleDualPane`): +24;
+//! - a letter right after the previous matched one: +20;
+//! - each letter skipped between two matched ones: −3 (at most −30);
+//! - each letter skipped before the first match: −1 (at most −15).
+//!
+//! Ties go to the shorter text, then to registry order.
+
+use cabinetos_protocol::SearchHit;
+
+use crate::registry::CommandRegistry;
+
+const MATCH: i32 = 16;
+const WORD_START: i32 = 24;
+const CONSECUTIVE: i32 = 20;
+const GAP: i32 = 3;
+const MAX_GAP_PENALTY: i32 = 30;
+const LEADING: i32 = 1;
+const MAX_LEADING_PENALTY: i32 = 15;
+
+/// The commands matching `query`, best first, at most `limit`. An empty
+/// query returns every command in registry order, with score 0.
+#[must_use]
+pub fn search(registry: &CommandRegistry, query: &str, limit: usize) -> Vec<SearchHit> {
+    let query: Vec<char> = query
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect();
+    if query.is_empty() {
+        return registry
+            .commands()
+            .iter()
+            .take(limit)
+            .map(|command| SearchHit {
+                id: command.id.clone(),
+                score: 0,
+            })
+            .collect();
+    }
+    let mut hits: Vec<(i32, usize, usize, &str)> = registry
+        .commands()
+        .iter()
+        .enumerate()
+        .filter_map(|(order, command)| {
+            let label = format!("{}: {}", command.category, command.title);
+            let score = score(&query, &label).max(score(&query, &command.id))?;
+            Some((score, label.chars().count(), order, command.id.as_str()))
+        })
+        .collect();
+    hits.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+    hits.into_iter()
+        .take(limit)
+        .map(|(score, _, _, id)| SearchHit {
+            id: id.to_owned(),
+            score,
+        })
+        .collect()
+}
+
+/// The best score of `query` (lower case) as a subsequence of `text`, or
+/// `None` if it is not one.
+fn score(query: &[char], text: &str) -> Option<i32> {
+    let chars: Vec<char> = text.chars().collect();
+    let lower: Vec<char> = chars
+        .iter()
+        .map(|c| c.to_lowercase().next().unwrap_or(*c))
+        .collect();
+    let word_start: Vec<bool> = (0..chars.len())
+        .map(|j| {
+            j == 0 || {
+                let (before, here) = (chars[j - 1], chars[j]);
+                matches!(before, ' ' | ':' | '.' | '-' | '_' | '/')
+                    || (before.is_lowercase() && here.is_uppercase())
+            }
+        })
+        .collect();
+    let gain = |j: usize| MATCH + if word_start[j] { WORD_START } else { 0 };
+
+    // best[j]: the best score with the current query letter matched at j.
+    let mut best: Vec<Option<i32>> = (0..chars.len())
+        .map(|j| {
+            let leading = i32::try_from(j).unwrap_or(i32::MAX).saturating_mul(LEADING);
+            (lower[j] == query[0]).then(|| gain(j) - leading.min(MAX_LEADING_PENALTY))
+        })
+        .collect();
+    for &letter in &query[1..] {
+        let mut next = vec![None; chars.len()];
+        for j in 0..chars.len() {
+            if lower[j] != letter {
+                continue;
+            }
+            let previous = (0..j)
+                .filter_map(|k| {
+                    let before = best[k]?;
+                    let link = if k + 1 == j {
+                        CONSECUTIVE
+                    } else {
+                        let skipped = i32::try_from(j - k - 1).unwrap_or(i32::MAX);
+                        -(skipped.saturating_mul(GAP)).min(MAX_GAP_PENALTY)
+                    };
+                    Some(before + link)
+                })
+                .max();
+            next[j] = previous.map(|previous| previous + gain(j));
+        }
+        best = next;
+    }
+    best.into_iter().flatten().max()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids(query: &str) -> Vec<String> {
+        search(&CommandRegistry::core(), query, 20)
+            .into_iter()
+            .map(|hit| hit.id)
+            .collect()
+    }
+
+    #[test]
+    fn a_word_finds_its_command_first() {
+        assert_eq!(ids("dual")[0], "view.toggleDualPane");
+        assert_eq!(ids("sidebar")[0], "view.toggleSidebar");
+        // Both terminal commands lead; "Terminal: Run Task…" has the word
+        // as its category, at the very start.
+        let terminal = ids("terminal");
+        assert_eq!(terminal[..2], ["terminal.runTask", "view.toggleTerminal"]);
+        assert_eq!(ids("toggle term")[0], "view.toggleTerminal");
+        assert_eq!(ids("about")[0], "help.about");
+    }
+
+    #[test]
+    fn initials_and_camel_case_match() {
+        assert_eq!(ids("tdp")[0], "view.toggleDualPane");
+        assert_eq!(ids("new fold")[0], "file.newFolder");
+        assert_eq!(ids("keys")[0], "keys.open");
+    }
+
+    #[test]
+    fn letters_out_of_order_do_not_match() {
+        assert!(ids("zzq").is_empty());
+        assert!(!ids("laud").contains(&"view.toggleDualPane".to_owned()));
+    }
+
+    #[test]
+    fn scores_are_ranked_and_limited() {
+        let hits = search(&CommandRegistry::core(), "o", 3);
+        assert_eq!(hits.len(), 3);
+        assert!(hits.windows(2).all(|pair| pair[0].score >= pair[1].score));
+    }
+
+    #[test]
+    fn an_empty_query_lists_everything_in_order() {
+        let hits = search(&CommandRegistry::core(), "  ", 100);
+        assert_eq!(hits.len(), CommandRegistry::core().commands().len());
+        assert_eq!(hits[0].id, "palette.show");
+        assert!(hits.iter().all(|hit| hit.score == 0));
+    }
+
+    #[test]
+    fn word_starts_beat_letters_inside_words() {
+        let start = score(&['p'], "Toggle Dual Pane").unwrap();
+        let inside = score(&['p'], "Copy").unwrap();
+        assert!(start > inside);
+        let together = score(&['d', 'u'], "Dual").unwrap();
+        let apart = score(&['d', 'u'], "Drop Up").unwrap();
+        assert!(together > apart);
+    }
+}

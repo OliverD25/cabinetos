@@ -124,6 +124,10 @@ dependencies = [
 [[package]]
 name = "cabinetos-commands"
 version = "0.1.0"
+dependencies = [
+ "cabinetos-protocol",
+ "thiserror",
+]
 
 [[package]]
 name = "cabinetos-config"
