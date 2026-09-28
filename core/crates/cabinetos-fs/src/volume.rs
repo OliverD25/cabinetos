@@ -18,7 +18,7 @@ use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, GetDiskFreeSpaceExW,
     GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
-    GetVolumePathNameW, GetVolumePathNamesForVolumeNameW, OPEN_EXISTING,
+    GetVolumePathNameW, GetVolumePathNamesForVolumeNameW, OPEN_EXISTING, QueryDosDeviceW,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 use windows::Win32::System::Ioctl::{
@@ -94,8 +94,50 @@ pub fn drives() -> Vec<Drive> {
 }
 
 /// The volume that holds `path` and the physical disk under it. `path` does
-/// not have to exist; its volume does.
+/// not have to exist; its volume does. A path on a `subst` letter is on the
+/// volume of the folder the letter stands for.
 pub fn info_for_path(path: &str) -> Result<VolumeDetails, FsError> {
+    match volume_of(path) {
+        // Windows finds no volume path for a `subst` letter (the error is
+        // ERROR_INVALID_PARAMETER): ask about the folder instead.
+        Err(FsError::Io { source, .. }) if source.raw_os_error() == Some(INVALID_PARAMETER) => {
+            match without_subst(path) {
+                Some(folder) => volume_of(&folder),
+                None => Err(FsError::Io {
+                    path: path.to_owned(),
+                    source,
+                }),
+            }
+        }
+        other => other,
+    }
+}
+
+/// `ERROR_INVALID_PARAMETER`.
+const INVALID_PARAMETER: i32 = 87;
+
+/// `path` with its `subst` drive letter replaced by the folder the letter
+/// stands for, or `None` when it does not start with such a letter.
+fn without_subst(path: &str) -> Option<String> {
+    let mut chars = path.chars();
+    let (letter, colon) = (chars.next()?, chars.next()?);
+    if !letter.is_ascii_alphabetic() || colon != ':' {
+        return None;
+    }
+    let device: Vec<u16> = format!("{letter}:").encode_utf16().chain([0]).collect();
+    let mut target = vec![0u16; 32_768];
+    // SAFETY: `device` is NUL-terminated and outlives the call; the binding
+    // passes the buffer's length.
+    if unsafe { QueryDosDeviceW(PCWSTR(device.as_ptr()), Some(&mut target)) } == 0 {
+        return None;
+    }
+    // A `subst` letter stands for `\??\C:\folder`; a volume's letter for a
+    // device such as `\Device\HarddiskVolume3`.
+    let folder = from_wide(&target).strip_prefix(r"\??\")?.to_owned();
+    Some(format!("{folder}{}", chars.as_str()))
+}
+
+fn volume_of(path: &str) -> Result<VolumeDetails, FsError> {
     let wide = path::absolute_wide(path)?;
     let mount_point = volume_mount_point(path, &wide)?;
     let mount_wide: Vec<u16> = mount_point.encode_utf16().chain([0]).collect();
@@ -452,6 +494,72 @@ mod tests {
                 .windows(2)
                 .all(|pair| pair[0].letter < pair[1].letter)
         );
+    }
+
+    /// A `subst` letter for a folder, removed again when dropped.
+    struct Subst(char);
+
+    impl Subst {
+        /// A free letter, from M up, standing for `folder`. (The test of a
+        /// missing drive, which may run at the same time, looks from Z down.)
+        fn new(folder: &std::path::Path) -> Option<Self> {
+            use windows::Win32::Storage::FileSystem::{DEFINE_DOS_DEVICE_FLAGS, DefineDosDeviceW};
+            let letter = ('M'..='Z')
+                .find(|letter| !std::path::Path::new(&format!(r"{letter}:\")).exists())?;
+            let device: Vec<u16> = format!("{letter}:").encode_utf16().chain([0]).collect();
+            let target: Vec<u16> = folder.to_str()?.encode_utf16().chain([0]).collect();
+            // SAFETY: both strings are NUL-terminated and outlive the call.
+            unsafe {
+                DefineDosDeviceW(
+                    DEFINE_DOS_DEVICE_FLAGS(0),
+                    PCWSTR(device.as_ptr()),
+                    PCWSTR(target.as_ptr()),
+                )
+            }
+            .ok()?;
+            Some(Self(letter))
+        }
+    }
+
+    impl Drop for Subst {
+        fn drop(&mut self) {
+            use windows::Win32::Storage::FileSystem::{DDD_REMOVE_DEFINITION, DefineDosDeviceW};
+            let device: Vec<u16> = format!("{}:", self.0).encode_utf16().chain([0]).collect();
+            // SAFETY: `device` is NUL-terminated and outlives the call; no
+            // target is needed to remove the letter's latest definition.
+            let _ = unsafe {
+                DefineDosDeviceW(
+                    DDD_REMOVE_DEFINITION,
+                    PCWSTR(device.as_ptr()),
+                    PCWSTR::null(),
+                )
+            };
+        }
+    }
+
+    #[test]
+    fn a_subst_letter_is_on_its_folders_volume() {
+        let folder = std::env::temp_dir().join("cabinetos-fs-test");
+        std::fs::create_dir_all(&folder).unwrap();
+        let Some(subst) = Subst::new(&folder) else {
+            return;
+        };
+        let letter = subst.0;
+        assert!(
+            drives().contains(&Drive {
+                letter,
+                kind: DriveKind::Fixed
+            }),
+            "{:?}",
+            drives()
+        );
+        let on_letter = info_for_path(&format!("{letter}:\\")).unwrap();
+        let on_folder = info_for_path(folder.to_str().unwrap()).unwrap();
+        assert_eq!(on_letter.volume_guid_path, on_folder.volume_guid_path);
+        assert_eq!(on_letter.filesystem, on_folder.filesystem);
+        let deeper = info_for_path(&format!(r"{letter}:\no\such\folder")).unwrap();
+        assert_eq!(deeper.volume_guid_path, on_folder.volume_guid_path);
+        assert_eq!(without_subst(r"C:\Windows"), None, "not a subst letter");
     }
 
     #[test]
