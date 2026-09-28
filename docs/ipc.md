@@ -329,7 +329,7 @@ hits.
 ```json
 {"id":"01M…","type":"execute_command","command":"help.about"}
 {"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
- "core_version":"0.1.0","protocol_version":3,"config_path":"C:\\…\\cabinetos.json"}}
+ "core_version":"0.1.0","protocol_version":5,"config_path":"C:\\…\\cabinetos.json"}}
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
