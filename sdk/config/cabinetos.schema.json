@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CabinetOS configuration",
+  "description": "The whole configuration.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "Where editors find the schema of this file. The core writes\n`./cabinetos.schema.json` next to it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "keybindings": {
+      "description": "The user's changes to key bindings. The defaults live in the command\nregistry; list only what differs.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/KeybindingEntry"
+      }
+    },
+    "logging": {
+      "description": "Diagnostics.",
+      "$ref": "#/$defs/LoggingConfig",
+      "default": {
+        "level": "info"
+      }
+    },
+    "panes": {
+      "description": "The file panes.",
+      "$ref": "#/$defs/PanesConfig",
+      "default": {
+        "showHidden": false,
+        "sort": {
+          "descending": false,
+          "key": "name"
+        }
+      }
+    },
+    "terminal": {
+      "description": "The integrated terminal.",
+      "$ref": "#/$defs/TerminalConfig",
+      "default": {
+        "defaultProfile": "pwsh",
+        "profiles": [
+          {
+            "args": [
+              "-NoLogo"
+            ],
+            "command": "pwsh.exe",
+            "name": "pwsh"
+          },
+          {
+            "args": [],
+            "command": "cmd.exe",
+            "name": "cmd"
+          },
+          {
+            "args": [],
+            "command": "wsl.exe",
+            "name": "wsl"
+          }
+        ]
+      }
+    },
+    "ui": {
+      "description": "The window.",
+      "$ref": "#/$defs/UiConfig",
+      "default": {
+        "dualPane": true,
+        "layout": "classic",
+        "sidebar": true,
+        "theme": "default"
+      }
+    },
+    "version": {
+      "description": "The file format version; always 1 for now.",
+      "type": "integer",
+      "format": "uint32",
+      "default": 1,
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "KeybindingEntry": {
+      "description": "One change to a key binding.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "The command's ID, for example `view.toggleSidebar`.",
+          "type": "string"
+        },
+        "keys": {
+          "description": "The new keys, for example `ctrl+alt+b` or `ctrl+k ctrl+b`; an empty\nstring removes the command's binding. Grammar: docs/keybindings.md.",
+          "$ref": "#/$defs/Keys"
+        },
+        "when": {
+          "description": "The context in which the binding applies, for example `filesView`;\nwithout it the command's own context applies.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "keys"
+      ]
+    },
+    "Keys": {
+      "description": "One combination (`ctrl+shift+p`) or a chord of two separated by a space (`ctrl+k ctrl+c`); an empty string for none. Modifiers: ctrl, shift, alt, win.",
+      "type": "string"
+    },
+    "Layout": {
+      "description": "Window layouts from the design.",
+      "oneOf": [
+        {
+          "description": "Sidebar on the left, terminal at the bottom.",
+          "type": "string",
+          "const": "classic"
+        },
+        {
+          "description": "Terminal on the right.",
+          "type": "string",
+          "const": "right"
+        },
+        {
+          "description": "An activity rail instead of the full sidebar.",
+          "type": "string",
+          "const": "rail"
+        }
+      ]
+    },
+    "LogLevel": {
+      "description": "Log levels, most detailed first.",
+      "oneOf": [
+        {
+          "description": "Everything.",
+          "type": "string",
+          "const": "trace"
+        },
+        {
+          "description": "Details for developers.",
+          "type": "string",
+          "const": "debug"
+        },
+        {
+          "description": "Normal operation.",
+          "type": "string",
+          "const": "info"
+        },
+        {
+          "description": "Problems the core recovered from.",
+          "type": "string",
+          "const": "warn"
+        },
+        {
+          "description": "Failures.",
+          "type": "string",
+          "const": "error"
+        }
+      ]
+    },
+    "LoggingConfig": {
+      "description": "Diagnostics.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "description": "The least important level written to the log. The environment\nvariable `CABINETOS_LOG` overrides it.",
+          "$ref": "#/$defs/LogLevel",
+          "default": "info"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PanesConfig": {
+      "description": "The file panes. These are the defaults for `list_directory` requests that\ndo not say otherwise.",
+      "type": "object",
+      "properties": {
+        "showHidden": {
+          "description": "Also list hidden and system entries.",
+          "type": "boolean",
+          "default": false
+        },
+        "sort": {
+          "description": "The order of entries; directories always come first.",
+          "$ref": "#/$defs/SortConfig",
+          "default": {
+            "descending": false,
+            "key": "name"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SortConfig": {
+      "description": "The order of a listing.",
+      "type": "object",
+      "properties": {
+        "descending": {
+          "description": "Largest, newest or last first.",
+          "type": "boolean",
+          "default": false
+        },
+        "key": {
+          "description": "`name` (natural order), `size`, `modified` or `kind`.",
+          "$ref": "#/$defs/SortKey",
+          "default": "name"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SortKey": {
+      "description": "What a listing is sorted by.",
+      "oneOf": [
+        {
+          "description": "Natural order, as in Explorer: case-insensitive, with numbers compared\nby value, so `file2` comes before `file10`.",
+          "type": "string",
+          "const": "name"
+        },
+        {
+          "description": "File size, then name.",
+          "type": "string",
+          "const": "size"
+        },
+        {
+          "description": "Last-write time, then name.",
+          "type": "string",
+          "const": "modified"
+        },
+        {
+          "description": "Entry kind (directory, file, link), then name.",
+          "type": "string",
+          "const": "kind"
+        }
+      ]
+    },
+    "TerminalConfig": {
+      "description": "The integrated terminal (Phase 8).",
+      "type": "object",
+      "properties": {
+        "defaultProfile": {
+          "description": "The `name` of the profile a new terminal starts with.",
+          "type": "string",
+          "default": "pwsh"
+        },
+        "profiles": {
+          "description": "The shells a terminal can run.",
+          "type": "array",
+          "default": [
+            {
+              "args": [
+                "-NoLogo"
+              ],
+              "command": "pwsh.exe",
+              "name": "pwsh"
+            },
+            {
+              "args": [],
+              "command": "cmd.exe",
+              "name": "cmd"
+            },
+            {
+              "args": [],
+              "command": "wsl.exe",
+              "name": "wsl"
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/TerminalProfile"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "TerminalProfile": {
+      "description": "One shell a terminal can run.",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Its arguments.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "description": "The program, for example `pwsh.exe`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "A unique name, for example `pwsh`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "command"
+      ]
+    },
+    "UiConfig": {
+      "description": "The window.",
+      "type": "object",
+      "properties": {
+        "dualPane": {
+          "description": "Two file panes side by side, or one.",
+          "type": "boolean",
+          "default": true
+        },
+        "layout": {
+          "description": "Where the sidebar, panes and terminal go.",
+          "$ref": "#/$defs/Layout",
+          "default": "classic"
+        },
+        "sidebar": {
+          "description": "Show the sidebar.",
+          "type": "boolean",
+          "default": true
+        },
+        "theme": {
+          "description": "The color theme's ID.",
+          "type": "string",
+          "default": "default"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

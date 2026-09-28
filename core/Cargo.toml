@@ -12,6 +12,8 @@ publish = false
 
 [workspace.dependencies]
 # Workspace crates
+cabinetos-commands = { path = "crates/cabinetos-commands" }
+cabinetos-config = { path = "crates/cabinetos-config" }
 cabinetos-diag = { path = "crates/cabinetos-diag" }
 cabinetos-fs = { path = "crates/cabinetos-fs" }
 cabinetos-ipc = { path = "crates/cabinetos-ipc" }

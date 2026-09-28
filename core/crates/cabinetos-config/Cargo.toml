@@ -1,12 +1,31 @@
 [package]
 name = "cabinetos-config"
-description = "Loads, validates and watches cabinetos.json (stub until Phase 3)."
+description = "Loads, validates, watches and writes cabinetos.json."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+
+[features]
+# JSON Schema export of cabinetos.json (checked into sdk/config/).
+schema = ["dep:schemars", "cabinetos-protocol/schema"]
+
+[dependencies]
+cabinetos-commands.workspace = true
+cabinetos-fs.workspace = true
+cabinetos-protocol.workspace = true
+schemars = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# Turns on the `schema` feature for this crate's own tests, so the schema
+# snapshot test runs under a plain `cargo test --workspace`.
+cabinetos-config = { path = ".", features = ["schema"] }
+tempfile.workspace = true
 
 [lints]
 workspace = true
