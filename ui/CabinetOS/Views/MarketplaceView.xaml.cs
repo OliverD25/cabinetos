@@ -26,6 +26,7 @@ public sealed partial class MarketplaceView : UserControl
 {
     private readonly Storyboard _detailEntrance;
     private readonly Style _cardStyle;
+    private readonly List<NavRowView> _navRows = [];
     private Dictionary<string, Card> _cards = new(StringComparer.Ordinal);
     private List<string> _order = [];
     private MarketplaceModel? _model;
@@ -110,52 +111,63 @@ public sealed partial class MarketplaceView : UserControl
         RenderDetail(model);
     }
 
-    // The nav: one 32 px row per tab, the count on the right, the accent pill and a fill on the one shown.
+    // The nav: one 32 px row per tab, the count on the right, the accent pill and a fill on the one
+    // shown. Made once and updated in place, so a row with the keyboard keeps it while events come.
     private void RenderNav(MarketplaceModel model)
     {
-        NavRows.Children.Clear();
-        foreach (var (id, title) in MarketTabs.All)
+        if (_navRows.Count == 0)
         {
-            var selected = model.Tab == id;
-            var row = new Grid { Height = 32, Padding = new Thickness(10, 0, 10, 0), ColumnSpacing = 10 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center, Foreground = ThemeResources.Brush("CbTextPrimaryBrush") });
-            var count = new TextBlock
+            foreach (var (id, title) in MarketTabs.All)
             {
-                Text = model.Status == MarketStatus.Ready ? model.CountOf(id).ToString(System.Globalization.CultureInfo.InvariantCulture) : "",
-                FontSize = 11,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = ThemeResources.Brush("CbHintTextBrush"),
-            };
-            Grid.SetColumn(count, 1);
-            row.Children.Add(count);
-            if (selected)
-            {
-                row.Children.Add(new Rectangle
-                {
-                    Width = 3,
-                    Height = 16,
-                    RadiusX = 1.5,
-                    RadiusY = 1.5,
-                    Margin = new Thickness(-10, 0, 0, 0),
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Fill = ThemeResources.Brush("CbAccentBrush"),
-                });
+                _navRows.Add(NavRow(id, title));
             }
-            var button = new Button
-            {
-                Style = (Style)Application.Current.Resources["CbSidebarRowButtonStyle"],
-                Margin = new Thickness(0),
-                Content = row,
-                Background = selected ? ThemeResources.Brush("CbHoverFillBrush") : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            };
-            AutomationProperties.SetName(button, title);
-            var tab = id;
-            button.Click += (_, _) => _model?.SetTab(tab);
-            NavRows.Children.Add(button);
         }
+        foreach (var row in _navRows)
+        {
+            var selected = model.Tab == row.Tab;
+            row.Button.Background = selected ? ThemeResources.Brush("CbHoverFillBrush") : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            row.Pill.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+            row.Count.Text = model.Status == MarketStatus.Ready ? model.CountOf(row.Tab).ToString(System.Globalization.CultureInfo.InvariantCulture) : "";
+        }
+    }
+
+    private NavRowView NavRow(string id, string title)
+    {
+        var row = new Grid { Height = 32, Padding = new Thickness(10, 0, 10, 0), ColumnSpacing = 10 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.Children.Add(new TextBlock { Text = title, VerticalAlignment = VerticalAlignment.Center, Foreground = ThemeResources.Brush("CbTextPrimaryBrush") });
+        var count = new TextBlock
+        {
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = ThemeResources.Brush("CbHintTextBrush"),
+        };
+        Grid.SetColumn(count, 1);
+        row.Children.Add(count);
+        var pill = new Rectangle
+        {
+            Width = 3,
+            Height = 16,
+            RadiusX = 1.5,
+            RadiusY = 1.5,
+            Margin = new Thickness(-10, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Fill = ThemeResources.Brush("CbAccentBrush"),
+            Visibility = Visibility.Collapsed,
+        };
+        row.Children.Add(pill);
+        var button = new Button
+        {
+            Style = (Style)Application.Current.Resources["CbSidebarRowButtonStyle"],
+            Margin = new Thickness(0),
+            Content = row,
+        };
+        AutomationProperties.SetName(button, title);
+        button.Click += (_, _) => _model?.SetTab(id);
+        NavRows.Children.Add(button);
+        return new NavRowView(id, button, count, pill);
     }
 
     // Cards are made once per item and updated in place, so 30 progress events a second only change words.
@@ -315,6 +327,9 @@ public sealed partial class MarketplaceView : UserControl
     }
 
     private void Run(string command, JsonElement? args) => _ = RunCommand?.Invoke(command, args, "button");
+
+    // One row of the nav: its tab, and what changes on it.
+    private sealed record NavRowView(string Tab, Button Button, TextBlock Count, Rectangle Pill);
 
     /// <summary>
     /// One card: the 40 px tile, the name with the verified check, the author,
