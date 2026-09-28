@@ -86,6 +86,11 @@ pub struct UiConfig {
     pub sidebar: bool,
     /// The color theme's ID.
     pub theme: String,
+    /// The folders the panes showed last, left pane first, so the next
+    /// start opens them again. Empty: the UI picks.
+    pub last_paths: Vec<String>,
+    /// Folders the user pinned to the sidebar, in the sidebar's order.
+    pub pinned: Vec<String>,
 }
 
 impl Default for UiConfig {
@@ -95,6 +100,8 @@ impl Default for UiConfig {
             dual_pane: true,
             sidebar: true,
             theme: "default".to_owned(),
+            last_paths: Vec::new(),
+            pinned: Vec::new(),
         }
     }
 }
@@ -319,6 +326,7 @@ mod tests {
         assert_eq!(config.ui.layout, Layout::Classic);
         assert!(config.ui.dual_pane && config.ui.sidebar);
         assert_eq!(config.ui.theme, "default");
+        assert!(config.ui.last_paths.is_empty() && config.ui.pinned.is_empty());
         assert!(!config.panes.show_hidden);
         assert_eq!(SortSpec::from(config.panes.sort), SortSpec::default());
         assert_eq!(config.terminal.default_profile, "pwsh");
@@ -362,6 +370,7 @@ mod tests {
         let positions: Vec<usize> = order.iter().map(|key| text.find(key).unwrap()).collect();
         assert!(positions.is_sorted(), "{text}");
         assert!(text.contains("\"dualPane\":true"));
+        assert!(text.contains("\"lastPaths\":[],\"pinned\":[]"));
         assert!(text.contains("\"showHidden\":false"));
         assert!(text.contains("\"defaultProfile\":\"pwsh\""));
     }

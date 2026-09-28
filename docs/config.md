@@ -33,7 +33,9 @@ file itself shows everything that can be set:
     "layout": "classic",
     "dualPane": true,
     "sidebar": true,
-    "theme": "default"
+    "theme": "default",
+    "lastPaths": [],
+    "pinned": []
   },
   "panes": {
     "showHidden": false,
@@ -84,6 +86,8 @@ while you type.
 | `ui.dualPane` | `true`, `false` | `true` | Two file panes side by side, or one |
 | `ui.sidebar` | `true`, `false` | `true` | Show the sidebar |
 | `ui.theme` | text | `default` | The color theme's ID |
+| `ui.lastPaths` | list of folder paths | empty | The folders the panes showed last, left pane first; the UI opens them again at the next start. Empty: the UI picks. |
+| `ui.pinned` | list of folder paths | empty | Folders the user pinned to the sidebar, in the sidebar's order |
 | `panes.showHidden` | `true`, `false` | `false` | Also list hidden and system entries |
 | `panes.sort.key` | `name`, `size`, `modified`, `kind` | `name` | The order of a listing ([ipc.md](ipc.md), "Listing a directory"); directories always come first |
 | `panes.sort.descending` | `true`, `false` | `false` | Reverse the order |
@@ -135,7 +139,7 @@ keybindings against the command registry. Then:
 Examples of errors, as `cabinetos-cli config validate` prints them:
 
 ```text
-line 3, column 13: unknown field `dualPan`, expected one of `layout`, `dualPane`, `sidebar`, `theme`
+line 3, column 13: unknown field `dualPan`, expected one of `layout`, `dualPane`, `sidebar`, `theme`, `lastPaths`, `pinned`
 line 3, column 24: unknown variant `diagonal`, expected one of `classic`, `right`, `rail`
 line 3, column 60: `ctrl+nope` is not a valid key binding: `nope` is not a key name
 line 3, column 5: ctrl+b is bound to both view.toggleSidebar and go.toPath

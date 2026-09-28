@@ -375,7 +375,7 @@ within a second of the file being saved.
 {"id":"01M…","type":"config_changed","changed":["keybindings"]}
 {"id":"01M…","type":"keymap_changed","keymap":{"chord_window_ms":1000,"bindings":[…],"immutable":[…]}}
 {"id":"01M…","type":"config_error","line":3,"column":13,
- "message":"unknown field `dualPan`, expected one of `layout`, `dualPane`, `sidebar`, `theme`"}
+ "message":"unknown field `dualPan`, expected one of `layout`, `dualPane`, `sidebar`, `theme`, `lastPaths`, `pinned`"}
 ```
 
 - `config_changed` comes for every change that took effect. `changed` lists

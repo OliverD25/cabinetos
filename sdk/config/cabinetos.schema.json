@@ -76,7 +76,9 @@
       "$ref": "#/$defs/UiConfig",
       "default": {
         "dualPane": true,
+        "lastPaths": [],
         "layout": "classic",
+        "pinned": [],
         "sidebar": true,
         "theme": "default"
       }
@@ -339,10 +341,26 @@
           "type": "boolean",
           "default": true
         },
+        "lastPaths": {
+          "description": "The folders the panes showed last, left pane first, so the next\nstart opens them again. Empty: the UI picks.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "layout": {
           "description": "Where the sidebar, panes and terminal go.",
           "$ref": "#/$defs/Layout",
           "default": "classic"
+        },
+        "pinned": {
+          "description": "Folders the user pinned to the sidebar, in the sidebar's order.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
         },
         "sidebar": {
           "description": "Show the sidebar.",
