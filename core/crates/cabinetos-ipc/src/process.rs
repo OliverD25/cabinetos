@@ -7,6 +7,7 @@
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
 use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
+use windows::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows::Win32::System::Threading::{
     INFINITE, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
 };
@@ -47,6 +48,16 @@ where
             on_exit();
         })?;
     Ok(())
+}
+
+/// The ID of the process connected to the server end of a pipe, as Windows
+/// knows it. The core compares it with the ID a client claims in `hello`.
+pub(crate) fn pipe_client_process_id(pipe: &impl AsRawHandle) -> Result<u32, IpcError> {
+    let mut pid = 0u32;
+    // SAFETY: the handle is the server end of a pipe instance and stays open
+    // for the call; `pid` is a valid output location.
+    unsafe { GetNamedPipeClientProcessId(HANDLE(pipe.as_raw_handle()), &raw mut pid) }?;
+    Ok(pid)
 }
 
 #[cfg(test)]

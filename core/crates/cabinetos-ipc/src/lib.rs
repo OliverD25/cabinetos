@@ -13,9 +13,11 @@
 //! with no copy) and Article 12 (request IDs travel with every frame). Brief §4.
 //!
 //! Unsafe code is limited to the three modules that call Windows APIs
-//! directly (`security`, `shm`, `process`). Every unsafe block states its
+//! directly (`security`, `shm`, `process`) and to one function in `client`
+//! that adopts section handles the core sent. Every unsafe block states its
 //! invariant in a `SAFETY:` comment.
 
+mod client;
 pub mod codec;
 pub mod frame;
 mod pipe;
@@ -28,9 +30,10 @@ mod shm;
 
 use std::time::Duration;
 
+pub use client::PipeClient;
 pub use frame::MAX_FRAME;
-pub use pipe::{PipeClient, PipeConnection, PipeName, PipeServer};
-pub use shm::{MappedView, RawHandleValue, SharedSection};
+pub use pipe::{PipeConnection, PipeName, PipeReader, PipeServer, PipeWriter};
+pub use shm::{MappedView, RawHandleValue, ReadOnlyView, SharedSection};
 
 /// Everything that can go wrong on the transport.
 #[derive(Debug, thiserror::Error)]

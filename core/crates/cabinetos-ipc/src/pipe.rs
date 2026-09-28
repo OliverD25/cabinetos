@@ -1,26 +1,18 @@
-//! The control-channel pipe: server, connections and client.
+//! The control-channel pipe: its name, the server and its connections.
 
 use std::fmt;
-use std::time::Duration;
 
-use cabinetos_protocol::{Envelope, Request, RequestId, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use tokio::net::windows::named_pipe::{
-    ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions,
-};
-use tokio::time::Instant;
-use windows::Win32::Foundation::ERROR_PIPE_BUSY;
+use tokio::io::{ReadHalf, WriteHalf};
+use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
 use crate::IpcError;
 use crate::security::UserOnlySecurity;
-use crate::{codec, frame};
+use crate::{codec, frame, process};
 
 /// Name prefix of every core pipe.
 const PREFIX: &str = r"\\.\pipe\cabinetos-core-";
-
-/// How long a client waits before retrying a busy pipe.
-const BUSY_RETRY: Duration = Duration::from_millis(20);
 
 /// The full name of a core pipe: `\\.\pipe\cabinetos-core-<token>`.
 ///
@@ -151,62 +143,52 @@ impl PipeConnection {
     pub async fn recv<T: DeserializeOwned>(&mut self) -> Result<T, IpcError> {
         codec::recv(&mut self.pipe).await
     }
+
+    /// The ID of the client's process, as Windows knows it (not as the
+    /// client claims it).
+    pub fn client_process_id(&self) -> Result<u32, IpcError> {
+        process::pipe_client_process_id(&self.pipe)
+    }
+
+    /// Splits the connection so one task can read requests while another
+    /// writes replies and events.
+    #[must_use]
+    pub fn into_split(self) -> (PipeReader, PipeWriter) {
+        let (reader, writer) = tokio::io::split(self.pipe);
+        (PipeReader { inner: reader }, PipeWriter { inner: writer })
+    }
 }
 
-/// A client of the core's pipe: the CLI now, the UI's model later.
+/// The reading half of a [`PipeConnection`].
 #[derive(Debug)]
-pub struct PipeClient {
-    pipe: NamedPipeClient,
+pub struct PipeReader {
+    inner: ReadHalf<NamedPipeServer>,
 }
 
-impl PipeClient {
-    /// Connects to the pipe, retrying while every instance is busy
-    /// (`ERROR_PIPE_BUSY`) until `timeout` has passed. A pipe that does not
-    /// exist fails at once with an I/O error of kind `NotFound`.
-    pub async fn connect(name: &PipeName, timeout: Duration) -> Result<Self, IpcError> {
-        let deadline = Instant::now() + timeout;
-        loop {
-            match ClientOptions::new().open(name.as_str()) {
-                Ok(pipe) => return Ok(Self { pipe }),
-                Err(error) if is_pipe_busy(&error) => {
-                    if Instant::now() >= deadline {
-                        return Err(IpcError::Timeout(timeout));
-                    }
-                    tokio::time::sleep(BUSY_RETRY).await;
-                }
-                Err(error) => return Err(error.into()),
-            }
-        }
-    }
-
-    /// Sends `request` with a fresh [`RequestId`] and waits for the reply.
-    pub async fn request(&mut self, request: Request) -> Result<Envelope<Response>, IpcError> {
-        self.request_with_id(RequestId::new(), request).await
-    }
-
-    /// Sends `request` with the given ID and waits for the reply. A reply
-    /// that carries a different ID is an [`IpcError::Protocol`].
-    pub async fn request_with_id(
-        &mut self,
-        id: RequestId,
-        request: Request,
-    ) -> Result<Envelope<Response>, IpcError> {
-        codec::send(&mut self.pipe, &Envelope::new(id.clone(), request)).await?;
-        let reply: Envelope<Response> = codec::recv(&mut self.pipe).await?;
-        if reply.id != id {
-            return Err(IpcError::Protocol(format!(
-                "reply carries ID {} but the request had ID {id}",
-                reply.id
-            )));
-        }
-        Ok(reply)
+impl PipeReader {
+    /// Reads the next frame; [`IpcError::Closed`] when the client has gone.
+    /// Not cancel-safe: a frame read halfway is lost if the future is dropped.
+    pub async fn read_frame(&mut self) -> Result<Vec<u8>, IpcError> {
+        frame::read_frame(&mut self.inner).await
     }
 }
 
-fn is_pipe_busy(error: &std::io::Error) -> bool {
-    error
-        .raw_os_error()
-        .is_some_and(|code| code.cast_unsigned() == ERROR_PIPE_BUSY.0)
+/// The writing half of a [`PipeConnection`].
+#[derive(Debug)]
+pub struct PipeWriter {
+    inner: WriteHalf<NamedPipeServer>,
+}
+
+impl PipeWriter {
+    /// Writes one frame.
+    pub async fn write_frame(&mut self, payload: &[u8]) -> Result<(), IpcError> {
+        frame::write_frame(&mut self.inner, payload).await
+    }
+
+    /// Sends one JSON message.
+    pub async fn send<T: Serialize + ?Sized>(&mut self, message: &T) -> Result<(), IpcError> {
+        codec::send(&mut self.inner, message).await
+    }
 }
 
 #[cfg(test)]

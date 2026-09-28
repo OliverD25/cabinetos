@@ -3,9 +3,9 @@
 //! The core creates a page-file-backed section, maps it, writes a listing
 //! (layouts in `cabinetos_protocol::shm`), and duplicates the section handle
 //! into the UI process. The handle's numeric value travels over the pipe; the
-//! UI maps the section and reads it by pointer, with no copy.
-//!
-//! Phase 1 provides only this helper. Nothing writes listings yet.
+//! UI maps the section and reads it by pointer, with no copy. A Rust client
+//! (the CLI) receives the handle through `PipeClient::take_section` and maps
+//! it read-only.
 
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
@@ -13,8 +13,8 @@ use windows::Win32::Foundation::{
     DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows::Win32::System::Memory::{
-    CreateFileMappingW, FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
-    PAGE_READWRITE, UnmapViewOfFile,
+    CreateFileMappingW, FILE_MAP_ALL_ACCESS, FILE_MAP_READ, MEMORY_MAPPED_VIEW_ADDRESS,
+    MapViewOfFile, PAGE_READWRITE, UnmapViewOfFile,
 };
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_DUP_HANDLE};
 use windows::core::PCWSTR;
@@ -67,6 +67,25 @@ impl SharedSection {
         self.size
     }
 
+    /// Takes ownership of a section handle that another process duplicated
+    /// into this one; `size` is the section's size as that process reported
+    /// it. The handle is closed when the returned value drops.
+    ///
+    /// # Safety
+    ///
+    /// `handle` must be a handle to a section, valid in this process, that
+    /// nothing else owns or will close. A Rust client gets such handles
+    /// safely through `PipeClient::take_section`.
+    #[must_use]
+    pub unsafe fn from_raw_handle(handle: u64, size: usize) -> Self {
+        let raw = usize::try_from(handle).unwrap_or(usize::MAX);
+        // SAFETY: the caller guarantees `handle` is a valid, unowned section
+        // handle in this process; `without_provenance_mut` turns the number
+        // back into the pointer-sized value Windows handles are.
+        let handle = unsafe { OwnedHandle::from_raw_handle(std::ptr::without_provenance_mut(raw)) };
+        Self { handle, size }
+    }
+
     /// Maps the whole section into this process, readable and writable.
     pub fn map(&self) -> Result<MappedView, IpcError> {
         // SAFETY: the handle is a valid section handle while `self` lives,
@@ -77,6 +96,23 @@ impl SharedSection {
             return Err(windows::core::Error::from_thread().into());
         }
         Ok(MappedView {
+            address,
+            len: self.size,
+        })
+    }
+
+    /// Maps the whole section into this process, read-only: what a client
+    /// needs to read a listing.
+    pub fn map_readonly(&self) -> Result<ReadOnlyView, IpcError> {
+        // SAFETY: the handle is a valid section handle while `self` lives, and
+        // mapping `size` bytes from offset 0 stays inside the section as long
+        // as `size` is the section's real size (a larger value makes the call
+        // fail, which is reported). The call does not touch Rust memory.
+        let address = unsafe { MapViewOfFile(self.raw(), FILE_MAP_READ, 0, 0, self.size) };
+        if address.Value.is_null() {
+            return Err(windows::core::Error::from_thread().into());
+        }
+        Ok(ReadOnlyView {
             address,
             len: self.size,
         })
@@ -181,6 +217,54 @@ impl Drop for MappedView {
     }
 }
 
+/// A section mapped read-only into this process. Unmapped when the value
+/// drops. The same caveat as for [`MappedView`] applies: another view may
+/// change the bytes, and the listing protocol keeps one writer at a time.
+#[derive(Debug)]
+pub struct ReadOnlyView {
+    address: MEMORY_MAPPED_VIEW_ADDRESS,
+    len: usize,
+}
+
+// SAFETY: the view is plain memory owned by this value until Drop unmaps it;
+// no thread affinity is involved, so the owner may move to another thread.
+unsafe impl Send for ReadOnlyView {}
+
+// SAFETY: the view only allows reading, so sharing references between threads
+// cannot race within this process.
+unsafe impl Sync for ReadOnlyView {}
+
+impl ReadOnlyView {
+    /// The mapped length in bytes.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether the view is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The mapped bytes.
+    #[must_use]
+    pub fn as_slice(&self) -> &[u8] {
+        // SAFETY: MapViewOfFile mapped `len` readable bytes at `address`
+        // (sections are zero-filled at creation, so always initialized). The
+        // mapping lasts until Drop, which cannot run while this borrow lives.
+        unsafe { std::slice::from_raw_parts(self.address.Value.cast::<u8>(), self.len) }
+    }
+}
+
+impl Drop for ReadOnlyView {
+    fn drop(&mut self) {
+        // SAFETY: `address` came from MapViewOfFile and is unmapped only here;
+        // no slice of it can outlive `self`.
+        let _ = unsafe { UnmapViewOfFile(self.address) };
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,13 +299,13 @@ mod tests {
 
         let value = section.duplicate_for(std::process::id()).unwrap();
         assert_ne!(value.0, 0);
-        let raw = usize::try_from(value.0).unwrap();
         // SAFETY: `value` was duplicated into this very process, so it is a
-        // valid section handle that nothing else owns; the new OwnedHandle
-        // closes it when `copy` drops.
-        let handle = unsafe { OwnedHandle::from_raw_handle(std::ptr::without_provenance_mut(raw)) };
-        let copy = SharedSection { handle, size: SIZE };
-        assert_eq!(copy.map().unwrap().as_slice(), pattern().as_slice());
+        // valid section handle that nothing else owns; `copy` closes it.
+        let copy = unsafe { SharedSection::from_raw_handle(value.0, SIZE) };
+        assert_eq!(
+            copy.map_readonly().unwrap().as_slice(),
+            pattern().as_slice()
+        );
 
         // The original handle still works after the duplicate is closed.
         drop(copy);
