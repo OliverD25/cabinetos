@@ -75,8 +75,9 @@ public sealed partial class MainWindow
         {
             pane.CancelRename();
         }
-        MainColumn.Visibility = Visibility.Collapsed;
+        // The search field takes the keyboard before the panes collapse (see the palette).
         MarketView.Open();
+        MainColumn.Visibility = Visibility.Collapsed;
         UpdateMarketButton();
         Diag.Info(MarketTarget, "marketplace shown");
     }
@@ -87,13 +88,16 @@ public sealed partial class MainWindow
         {
             return;
         }
-        MarketView.Close();
         MainColumn.Visibility = Visibility.Visible;
-        UpdateMarketButton();
-        if (focusPane)
+        // The pane takes the keyboard before the marketplace collapses (see the palette);
+        // it must be laid out to take it.
+        if (focusPane || IsFocusWithin(MarketView))
         {
-            FocusActivePane();
+            MainColumn.UpdateLayout();
+            FocusPaneOrEditor();
         }
+        MarketView.Close();
+        UpdateMarketButton();
     }
 
     private void UpdateMarketButton() =>

@@ -105,9 +105,10 @@ public sealed partial class MainWindow
         await RefreshPluginsAsync();
     }
 
+    // Each overlay gives the keyboard away before it collapses: a collapsing element
+    // with the keyboard hands it to whatever comes next (see the palette).
     private void CloseReview()
     {
-        ReviewView.Close();
         if (PluginsView.IsOpen)
         {
             PluginsView.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
@@ -116,12 +117,13 @@ public sealed partial class MainWindow
         {
             FocusActivePane();
         }
+        ReviewView.Close();
     }
 
     private void ClosePlugins()
     {
-        PluginsView.Close();
         FocusActivePane();
+        PluginsView.Close();
     }
 
     /// <summary>

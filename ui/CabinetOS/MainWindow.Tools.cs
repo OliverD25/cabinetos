@@ -305,6 +305,11 @@ public sealed partial class MainWindow
             MarketView.FocusSearch();
             return;
         }
+        FocusPaneOrEditor();
+    }
+
+    private void FocusPaneOrEditor()
+    {
         if (_editorViews is { } editors && editors[_active].IsOpen && editors[_active].FocusPage())
         {
             return;

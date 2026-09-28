@@ -63,8 +63,9 @@ public sealed partial class MainWindow
 
     private void CloseThemePicker()
     {
-        ThemesView.Close();
+        // The pane takes the keyboard before the picker collapses (see the palette).
         FocusActivePane();
+        ThemesView.Close();
     }
 
     // The snapshot aid's stand-in for Mica, which is not part of the window's content:

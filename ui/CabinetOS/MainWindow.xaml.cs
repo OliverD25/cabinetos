@@ -993,13 +993,14 @@ public sealed partial class MainWindow : Window
         {
             EndAddressEdit();
             FileMenu.Close();
-            // A review left open is a Cancel; the list and the picker come back from the palette.
-            ReviewView.Close();
-            PluginsView.Close();
-            ThemesView.Close();
             // Ctrl+Shift+P from a shell: the keyboard goes back there when the palette closes.
             _paletteFromTerminal = Dock.HasTerminalFocus;
             _palette.Open();
+            // Once the palette has the keyboard: a review left open is a Cancel; the list and
+            // the picker come back from the palette.
+            ReviewView.Close();
+            PluginsView.Close();
+            ThemesView.Close();
         }
     }
 
