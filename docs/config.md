@@ -87,8 +87,8 @@ while you type.
 | `panes.showHidden` | `true`, `false` | `false` | Also list hidden and system entries |
 | `panes.sort.key` | `name`, `size`, `modified`, `kind` | `name` | The order of a listing ([ipc.md](ipc.md), "Listing a directory"); directories always come first |
 | `panes.sort.descending` | `true`, `false` | `false` | Reverse the order |
-| `terminal.defaultProfile` | a profile `name` | `pwsh` | The shell a new terminal starts with; must name one of the profiles |
-| `terminal.profiles` | list of `{ "name", "command", "args" }` | pwsh, cmd, wsl | The shells a terminal can run. Names must be unique; `args` may be left out. |
+| `terminal.defaultProfile` | a profile `name` | `pwsh` | The shell a new terminal starts with when the client names none; must name one of the profiles |
+| `terminal.profiles` | list of `{ "name", "command", "args" }` | pwsh, cmd, wsl | The shells a terminal can run. Names must be unique; `args` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
 | `plugins.<id>.enabled` | `true`, `false` | `true` | Run the Core Plugin with this ID ([plugins.md](plugins.md)) |
@@ -108,8 +108,10 @@ Who uses what:
   nothing granted. A changed entry starts, stops or restarts that plugin;
   an ID with no installed plugin is kept and noted in the log. Example:
   `"plugins": { "reader": { "granted": ["cmd:register", "fs:read"] } }`.
-- `ui` and `terminal`: the UI (Phase 5) and the terminal (Phase 8). The core
-  only checks, stores and announces them.
+- `terminal`: the core, at each `terminal_open`. An edited profile applies
+  to the next shell; running shells keep what they started with
+  ([terminal.md](terminal.md)).
+- `ui`: the UI (Phase 5). The core only checks, stores and announces it.
 
 ## Editing by hand
 

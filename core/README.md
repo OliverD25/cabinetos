@@ -10,16 +10,17 @@ protocol between UI and core, with the shared-memory layout:
 [../docs/keybindings.md](../docs/keybindings.md). Copy, move and delete:
 [../docs/jobs.md](../docs/jobs.md). Core Plugins:
 [../docs/plugins.md](../docs/plugins.md). The indexer and search:
-[../docs/indexer.md](../docs/indexer.md).
+[../docs/indexer.md](../docs/indexer.md). The terminal sessions:
+[../docs/terminal.md](../docs/terminal.md).
 
 ## Crates
 
 | Crate | Kind | Responsibility | Constitution articles |
 |---|---|---|---|
-| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host, the event hub, and search (through the indexer, or a bounded walk without it) | 1, 5, 6, 7, 8, 10, 12 |
+| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host, the event hub, search (through the indexer, or a bounded walk without it), and the terminal sessions | 1, 5, 6, 7, 8, 9, 10, 12 |
 | `cabinetos-protocol` | library | The IPC contract: message envelopes, request IDs, `#[repr(C)]` shared-memory layouts, JSON Schema export | 1, 12 |
 | `cabinetos-diag` | library | JSON Lines logs, ring buffer of recent events, crash traces ([../docs/diagnostics.md](../docs/diagnostics.md)) | 12, 1 |
-| `cabinetos-ipc` | library | Named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch | 1, 12 |
+| `cabinetos-ipc` | library | Named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch, and the byte pipes of terminal sessions | 1, 12 |
 | `cabinetos-fs` | library | Directory enumeration (NT API), sorting, the listing section writer and reader, volume and disk detection, change watching | 1, 5 |
 | `cabinetos-cli` | binary | `cabinetos-cli.exe`: command-line client for the pipe, to test the core with no UI | 4, 12 |
 | `cabinetos-jobs` | library | `JobQueueManager`: per-disk queues, copy (`CopyFileExW`), move, delete (Recycle Bin or permanent), per-file conflicts, progress throttled to 30 events per second ([../docs/jobs.md](../docs/jobs.md)) | 1, 5 |
@@ -28,13 +29,14 @@ protocol between UI and core, with the shared-memory layout:
 | `cabinetos-config` | library | `cabinetos.json`: strict parsing with line and column errors, defaults, JSON Schema export, directory watch, diff, atomic rewrite ([../docs/config.md](../docs/config.md)) | 6 |
 | `cabinetos-commands` | library | Command registry, key grammar and chords, keymap compilation with the Immutable System Tier, palette search ([../docs/keybindings.md](../docs/keybindings.md)) | 7, 4 |
 | `cabinetos-plugins` | library | `PluginHost`: Core Plugins as WebAssembly components in `wasmtime`, strict manifests, capabilities, the WASI sandbox, fuel, deadline and memory limits per call, trap containment and restarts ([../docs/plugins.md](../docs/plugins.md)) | 8, 10, 11 |
+| `cabinetos-terminal` | library | `Terminals`: shells in pseudo-consoles (ConPTY), a byte pipe per session for one client at a time, output bounded to 1 MiB with backpressure, the change-directory line of each shell, and the console side of `cabinetos-cli term` ([../docs/terminal.md](../docs/terminal.md)) | 9, 4, 1 |
 
 A stub holds only its crate documentation and the names of its future public
 types, so the shape of the engine can be reviewed before the code exists.
 
 **Unsafe code** is denied in every crate. Crates that will never need it
 forbid it outright. Only the crates that call Windows APIs directly (`ipc`,
-`fs`, `jobs` and `index`) allow it, and only in the modules that need it; every `unsafe` block carries a `// SAFETY:` comment, which clippy
+`fs`, `jobs`, `index` and `terminal`) allow it, and only in the modules that need it; every `unsafe` block carries a `// SAFETY:` comment, which clippy
 enforces.
 
 ## Build and test
@@ -85,6 +87,13 @@ Windows service. They write only under `%TEMP%\cabinetos-index-test\`, as do
 the search tests, and every test that starts a core points
 `CABINETOS_INDEXER_PIPE` at a pipe of its own, so no test talks to an
 indexer that runs on the machine.
+
+The terminal tests (`cabinetos-terminal`, the core's `tests/terminal.rs`
+and the CLI's `tests/term.rs`) run real shells in pseudo-consoles: cmd
+always, pwsh, Windows PowerShell and WSL when they are installed, each
+skipped with a message otherwise. The shells run only `echo`, `cd`, `mode
+con`, `Get-Location`, `pwd` and `exit`, in folders under
+`%TEMP%\cabinetos-term-test\`, which the tests remove.
 
 The job tests (copy, move, delete) write only under
 `%TEMP%\cabinetos-jobs-test\` and remove what they wrote. Two of them run
@@ -154,6 +163,10 @@ cargo run -p cabinetos-cli -- --pipe demo events watch
 cargo run -p cabinetos-cli -- --pipe demo search budget
 cargo run -p cabinetos-cli -- --pipe demo search budget --root D:\work --limit 10
 cargo run -p cabinetos-cli -- --pipe demo index status
+cargo run -p cabinetos-cli -- --pipe demo term --profile cmd
+cargo run -p cabinetos-cli -- --pipe demo term list
+cargo run -p cabinetos-cli -- --pipe demo term cd 1 D:\work
+cargo run -p cabinetos-cli -- --pipe demo term close 1
 cargo run -p cabinetos-cli -- --pipe demo shutdown
 ```
 
@@ -164,7 +177,7 @@ terminal first (Run as administrator), in `core/`:
 cargo run --release -p cabinetos-indexer -- --console --volumes C
 ```
 
-- `ping` prints `pong id=<ulid> protocol=6 core=<version> rtt=<ms>ms`.
+- `ping` prints `pong id=<ulid> protocol=7 core=<version> rtt=<ms>ms`.
 - `ls <path>` lists a directory the way the UI will: the core reads it into
   shared memory, the CLI maps the section and prints it. Options: `--long`
   (attributes, local modification time, size), `--hidden` (hidden and system
@@ -198,6 +211,14 @@ cargo run --release -p cabinetos-indexer -- --console --volumes C
   folder), then how many, `source: index` or `source: walk`, the time, and
   whether the search was complete; `index status` prints whether an indexer
   answers and each volume's state.
+- `term [--profile NAME] [--cwd PATH]` runs a shell in the core, attached
+  to this console: keys go to the shell as typed, the size follows the
+  window, `Ctrl+]` detaches (the shell keeps running), and when the shell
+  exits the CLI prints its exit code. With input from a pipe
+  (`printf 'dir\r\nexit\r\n' | … term`) it forwards the bytes and waits
+  for the shell to exit. `term list` prints every session, `term cd <id>
+  <path>` types the shell's own change-directory command, and `term close
+  <id>` ends a session.
 - `shutdown` makes the core exit with code 0. The core also exits on Ctrl+C,
   and, when started with `--parent-pid <pid>`, as soon as that process exits.
 
@@ -222,9 +243,11 @@ threads `config-watch` and `config-debounce`, each running job `job-<id>`
 publisher of all jobs `job-progress`, each running plugin `plugin-<id>`,
 the plugins' deadline ticker `plugin-epoch` (it sleeps while no plugin call
 runs), and `plugin-<id>-restart` for the 5 s wait before a crashed plugin
-starts again. A search that walks folders runs on the blocking pool. In the
-indexer, each volume has a thread `index-<letter>` that builds its index and
-then follows its change journal.
+starts again. A search that walks folders runs on the blocking pool. Each
+terminal session has three threads: `term-<id>-out` reads the shell's
+output, `term-<id>-in` writes its keys, and `term-<id>-exit` waits for the
+shell to exit. In the indexer, each volume has a thread `index-<letter>`
+that builds its index and then follows its change journal.
 
 Release builds keep line tables in a separate `.pdb` file next to each `.exe`,
 so crash traces name file and line. Ship the `.pdb` with the `.exe`.

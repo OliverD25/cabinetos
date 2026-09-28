@@ -7,12 +7,14 @@ How a client (the WinUI 3 UI, or `cabinetos-cli` today) talks to
 in [sdk/protocol/](../sdk/protocol/) (`request`, `response` and `event`
 schemas).
 
-There are two channels:
+There are three channels:
 
 - **The control channel**: a named pipe carrying small JSON messages
   (requests, replies, events).
 - **The data channel**: shared-memory sections carrying directory listings,
   which the client reads by pointer, with no copy and no parsing.
+- **The terminal pipes**: one pipe per terminal session, carrying the
+  shell's raw bytes both ways ("Terminal sessions" below).
 
 ## The pipe
 
@@ -42,7 +44,7 @@ connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":6,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":7,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
@@ -51,11 +53,11 @@ because it duplicates shared-memory handles into that process. A
 `list_directory` before `hello` fails with `protocol_error`, message
 `hello required`. From `hello` on, the connection also receives the
 configuration events (`config_changed`, `config_error`, `keymap_changed`),
-the job events (`job_progress`, `job_conflict`, `job_state_changed`) and
+the job events (`job_progress`, `job_conflict`, `job_state_changed`),
 the plugin events (`plugin_state_changed`, `plugin_crashed`,
-`plugin_event`), and right after `welcome` a `job_conflict` for every
-conflict that already waits for a decision. Every other request works
-without `hello`.
+`plugin_event`) and `terminal_exited`, and right after `welcome` a
+`job_conflict` for every conflict that already waits for a decision. Every
+other request works without `hello`.
 
 Protocol version 3 (Phase 3) added the configuration, command and keymap
 messages, and made the `list_directory` options `include_hidden` and `sort`
@@ -64,7 +66,10 @@ the Recycle Bin conflict (`recycle_bin_too_small`, `delete_permanently`,
 `invalid_resolution`) and the Core Plugins: four requests, the `plugins`
 reply, three events, the error codes `no_such_plugin` and `plugin_error`,
 and the plugin's `name` in a command's `source`. Version 6 (Phase 6) added
-file search (`search`, `file_search_results`) and `index_status`.
+file search (`search`, `file_search_results`) and `index_status`. Version 7
+(Phase 8) added the terminal sessions: five requests, the replies
+`terminal_opened` and `terminal_sessions`, the event `terminal_exited`, and
+the error codes `no_such_session`, `unknown_profile` and `spawn_failed`.
 
 ## Requests and replies
 
@@ -93,6 +98,11 @@ file search (`search`, `file_search_results`) and `index_status`.
 | `grant_capabilities` | `plugin_id`, `capabilities` | `ok` |
 | `search` | `query`; `limit` (default 100, at most 1,000); `root` | `file_search_results` |
 | `index_status` | — | `index_status` (`available`, `volumes`) |
+| `terminal_open` | `cols`, `rows`; `profile` (default `terminal.defaultProfile`); `cwd` (default the user's profile folder) | `terminal_opened` (`session_id`, `pipe`, `pid`) |
+| `terminal_resize` | `session_id`, `cols`, `rows` | `ok` |
+| `terminal_close` | `session_id` | `ok`, once the shell has ended |
+| `terminal_sync_cwd` | `session_id`, `path` | `ok` |
+| `terminal_list` | — | `terminal_sessions` (`sessions`) |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -118,13 +128,17 @@ Any request can instead get `error` with a `code` and a `message`:
 | `invalid_resolution` | The resolution does not fit the conflict, such as `delete_permanently` for a file that exists. |
 | `no_such_plugin` | No plugin with that ID is installed, or the plugin host is not running. |
 | `plugin_error` | A plugin's command failed: the plugin answered with an error or with text that is not JSON, crashed, or is not running. Also a grant the core refuses: an unknown capability, or one it never grants. |
+| `no_such_session` | No terminal session has that `session_id`; or, for `terminal_resize` and `terminal_sync_cwd`, its shell has exited. |
+| `unknown_profile` | No profile in `terminal.profiles` has that name. The message lists the names. |
+| `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
 
 Requests on one connection are independent: `list_directory`,
 `volume_info`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
-`execute_command` for a plugin's command, `search` and `index_status` run in
-the background, so a slow directory, plugin or search does not hold up the
-next request, and their replies may come in any order. Match replies to
+`execute_command` for a plugin's command, `search`, `index_status`,
+`terminal_open`, `terminal_close` and `terminal_sync_cwd` run in the
+background, so a slow directory, plugin, search or shell does not hold up
+the next request, and their replies may come in any order. Match replies to
 requests by `id`.
 
 ## Listing a directory
@@ -333,7 +347,7 @@ hits.
 ```json
 {"id":"01M…","type":"execute_command","command":"help.about"}
 {"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
- "core_version":"0.1.0","protocol_version":6,"config_path":"C:\\…\\cabinetos.json"}}
+ "core_version":"0.1.0","protocol_version":7,"config_path":"C:\\…\\cabinetos.json"}}
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
@@ -561,6 +575,68 @@ index has not applied yet.
 The core and the indexer speak the same framing on the indexer's own pipe,
 with read-only requests only; that protocol is in [indexer.md](indexer.md).
 
+## Terminal sessions
+
+Shells that the core runs in pseudo-consoles, for the terminal pane
+([terminal.md](terminal.md) has the profiles, the byte pipe in detail and
+the folder sync). A session belongs to the core, not to the connection
+that opened it: a client that leaves, or restarts, finds its sessions in
+`terminal_list` and attaches again.
+
+```json
+{"id":"01M…","type":"terminal_open","profile":"pwsh","cwd":"E:\\work","cols":120,"rows":30}
+{"id":"01M…","type":"terminal_opened","session_id":3,
+ "pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","pid":4242}
+```
+
+- `profile` names one of `terminal.profiles`; without it,
+  `terminal.defaultProfile`. `cwd` must be an absolute path to a folder;
+  without it, the user's profile folder. `cols` and `rows` are the size in
+  character cells, from 1 to 32,767.
+- The shell's bytes travel on `pipe`, not on this channel: raw bytes, no
+  framing, both ways. The client reads the shell's output (UTF-8 text with
+  VT sequences) and writes keys (text, `\r` for Enter, VT sequences for the
+  other keys). One client at a time: while one is attached, opening the
+  pipe fails with `ERROR_PIPE_BUSY`. The pipe has the control pipe's access
+  list and refuses network clients.
+- Output made while no client is attached waits, up to 1 MiB; then the
+  shell waits too, until a client reads.
+- When the shell exits, the client reads the last output and then the end
+  of the pipe, and every connection that said `hello` gets:
+
+  ```json
+  {"id":"01M…","type":"terminal_exited","session_id":3,"exit_code":0}
+  ```
+
+  The session stays listed, as exited, until `terminal_close`. A client
+  that fell behind on events gets one for every exited session.
+
+```json
+{"id":"01M…","type":"terminal_list"}
+{"id":"01M…","type":"terminal_sessions","sessions":[{"session_id":3,"profile":"pwsh",
+ "cwd":"E:\\work","cols":120,"rows":30,"pid":4242,"state":{"type":"running"},
+ "pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","attached":true}]}
+```
+
+`sessions` come oldest first. `state` is `{"type":"running"}` or
+`{"type":"exited","code":3}`. `cwd` is the folder the session started in
+or was last synced to; the shell may have moved since. `attached` says
+whether a client holds the pipe.
+
+```json
+{"id":"01M…","type":"terminal_resize","session_id":3,"cols":100,"rows":30}
+{"id":"01M…","type":"terminal_sync_cwd","session_id":3,"path":"D:\\docs"}
+{"id":"01M…","type":"terminal_close","session_id":3}
+```
+
+Each answers `ok`. `terminal_sync_cwd` types the shell's own
+change-directory command, followed by Enter, so the terminal follows the
+active pane; the path must be an absolute path to a folder (`invalid_path`
+or `not_found` otherwise). `terminal_close` closes the pseudo-console,
+which the shell sees as a hang-up, and forgets the session; the reply
+comes once the shell has ended (a shell still running 2 s later is ended
+by force). When the core stops, it closes every session.
+
 ## Trying it by hand
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
@@ -568,5 +644,5 @@ with read-only requests only; that protocol is in [indexer.md](indexer.md).
 `config`, `commands` and `keys` cover the configuration messages (`keys
 watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`
 cover the jobs, `plugins`, `commands exec` and `events watch` cover the
-plugins, and `search` and `index status` cover file search. See
-[core/README.md](../core/README.md).
+plugins, `search` and `index status` cover file search, and `term` covers
+the terminal sessions. See [core/README.md](../core/README.md).
