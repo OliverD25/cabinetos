@@ -53,6 +53,7 @@ public enum MarketAction
 {
     Install,
     InstallAndApply,
+    Update,
     Installing,
     Installed,
     Applied,
@@ -80,12 +81,18 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
     private const string Target = "cabinetos_ui::market";
 
     private readonly Func<CancellationToken, Task> _debounce = debounce ?? (token => Task.Delay(SearchDelay, token));
-    private readonly Dictionary<string, HashSet<string>> _installed = new(StringComparer.Ordinal)
+
+    // In the folder, whoever put it there (list_plugins, list_themes, list_tools): a shipped
+    // theme or a plugin copied by hand is here too, and the core refuses to replace it.
+    private readonly Dictionary<string, HashSet<string>> _present = new(StringComparer.Ordinal)
     {
         [ExtensionKinds.Plugin] = new(StringComparer.Ordinal),
         [ExtensionKinds.Theme] = new(StringComparer.Ordinal),
         [ExtensionKinds.Tool] = new(StringComparer.Ordinal),
     };
+
+    // What the marketplace installed, by ID: the items' installedVersion (protocol 11).
+    private readonly Dictionary<string, string> _installedVersions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, InstallProgress> _installs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _errors = new(StringComparer.Ordinal);
     private IReadOnlyList<MarketItem>? _hits;
@@ -103,7 +110,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
     /// <summary>The index's file or URL, once read.</summary>
     public string? Source { get; private set; }
 
-    /// <summary>Every extension of the index, one per ID (its newest version), in the index's order.</summary>
+    /// <summary>Every extension the core offers, one per ID (the newest version it can run), in the index's order.</summary>
     public IReadOnlyList<MarketItem> All { get; private set; } = [];
 
     /// <summary>The tab shown (<see cref="MarketTabs"/>).</summary>
@@ -136,7 +143,8 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         _ when Items.Count > 0 => null,
         _ when All.Count == 0 => new MarketNotice("The index lists no extensions.", Source ?? ""),
         _ when Query.Trim().Length > 0 => new MarketNotice($"No results for “{Query.Trim()}”.", "The search looks at names, IDs and publishers."),
-        _ when Tab == MarketTabs.Installed => new MarketNotice("Nothing from this index is installed.", "Install from Discover, Plugins or Themes."),
+        _ when Tab == MarketTabs.Installed => new MarketNotice("Nothing was installed from the marketplace yet.",
+            "Install from Discover, Plugins or Themes. The themes CabinetOS ships with, and extensions copied in by hand, are not listed here."),
         _ => new MarketNotice($"The index has no {TitleOf(Tab).ToLowerInvariant()}.", Source ?? ""),
     };
 
@@ -147,8 +155,26 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
     /// <summary>How many cards <paramref name="tab"/> has, without the search.</summary>
     public int CountOf(string tab) => All.Count(item => InTab(item, tab));
 
-    /// <summary>Whether an extension with the item's kind and ID is installed (whoever installed it).</summary>
-    public bool IsInstalled(MarketItem item) => _installed.TryGetValue(item.Kind, out var ids) && ids.Contains(item.Id);
+    /// <summary>Whether the marketplace installed this extension (any version): the Installed tab.</summary>
+    public bool IsInstalled(MarketItem item) => _installedVersions.ContainsKey(item.Id);
+
+    /// <summary>The version the marketplace installed, or null.</summary>
+    public string? InstalledVersionOf(MarketItem item) => _installedVersions.GetValueOrDefault(item.Id);
+
+    /// <summary>Whether an extension with the item's kind and ID is in its folder, whoever put it there.</summary>
+    public bool IsPresent(MarketItem item) =>
+        IsInstalled(item) || (_present.TryGetValue(item.Kind, out var ids) && ids.Contains(item.Id));
+
+    /// <summary>Whether the core offers a newer version than the one the marketplace installed.</summary>
+    public bool HasUpdate(MarketItem item) =>
+        InstalledVersionOf(item) is { } installed && IsNewer(item.Version, installed);
+
+    /// <summary>
+    /// Whether Uninstall is offered: only for what the marketplace installed
+    /// (the core refuses the rest), and not for the theme in effect.
+    /// </summary>
+    public bool CanUninstall(MarketItem item) =>
+        IsInstalled(item) && !(item.Kind == ExtensionKinds.Theme && item.Id == CurrentThemeId);
 
     /// <summary>The download of an install on its way, or null.</summary>
     public InstallProgress? InstallOf(string id) => _installs.GetValueOrDefault(id);
@@ -160,8 +186,9 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
     public MarketAction ActionFor(MarketItem item) => item switch
     {
         _ when _installs.ContainsKey(item.Id) => MarketAction.Installing,
+        _ when HasUpdate(item) => MarketAction.Update,
         { Kind: ExtensionKinds.Theme } when item.Id == CurrentThemeId => MarketAction.Applied,
-        _ when IsInstalled(item) => MarketAction.Installed,
+        _ when IsPresent(item) => MarketAction.Installed,
         { Kind: ExtensionKinds.Theme } => MarketAction.InstallAndApply,
         _ => MarketAction.Install,
     };
@@ -194,7 +221,9 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         switch (reply)
         {
             case MarketplaceIndexReply index:
-                All = Newest(index.Items);
+                All = index.Items;
+                _installedVersions.Clear();
+                TakeInstalledVersions(index.Items);
                 Source = index.Source;
                 Status = MarketStatus.Ready;
                 Diag.Info(Target, "marketplace index read", new LogField("source", index.Source), new LogField("items", All.Count));
@@ -216,9 +245,9 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
     }
 
     /// <summary>
-    /// Reads which plugins, themes and tools are installed (<c>list_plugins</c>,
-    /// <c>list_themes</c>, <c>list_tools</c>); a kind the core cannot list
-    /// counts as none installed.
+    /// Reads which plugins, themes and tools are in their folders
+    /// (<c>list_plugins</c>, <c>list_themes</c>, <c>list_tools</c>), whoever put
+    /// them there; a kind the core cannot list counts as none.
     /// </summary>
     public async Task ReadInstalledAsync()
     {
@@ -262,7 +291,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
             CurrentThemeId = themeId;
             if (themeId is not null)
             {
-                _installed[ExtensionKinds.Theme].Add(themeId);
+                _present[ExtensionKinds.Theme].Add(themeId);
             }
             Changed?.Invoke();
         }
@@ -327,7 +356,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         {
             case OkReply:
                 _installs.Remove(id);
-                MarkInstalled(item?.Kind, id, installed: true);
+                MarkInstalled(item, id, installed: true);
                 Changed?.Invoke();
                 return MarketOutcome.Done;
             case ErrorReply { Code: ErrorCodes.UnknownRequest }:
@@ -411,7 +440,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         switch (reply)
         {
             case OkReply:
-                MarkInstalled(item?.Kind, id, installed: false);
+                MarkInstalled(item, id, installed: false);
                 Changed?.Invoke();
                 return MarketOutcome.Done;
             case ErrorReply { Code: ErrorCodes.NoSuchExtension }:
@@ -439,7 +468,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
                 _installs.Remove(finished.ExtensionId);
                 if (finished.Ok)
                 {
-                    MarkInstalled(Find(finished.ExtensionId)?.Kind, finished.ExtensionId, installed: true);
+                    MarkInstalled(Find(finished.ExtensionId), finished.ExtensionId, installed: true);
                 }
                 else
                 {
@@ -449,10 +478,15 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
                 break;
             case ToolsChangedEvent tools:
                 Replace(ExtensionKinds.Tool, tools.Tools.Select(t => t.Id));
+                // A tool removed elsewhere (the command line) leaves the Installed tab too.
+                foreach (var gone in All.Where(i => i.Kind == ExtensionKinds.Tool && !_present[ExtensionKinds.Tool].Contains(i.Id)))
+                {
+                    _installedVersions.Remove(gone.Id);
+                }
                 Changed?.Invoke();
                 break;
             case PluginStateChangedEvent plugin:
-                if (_installed[ExtensionKinds.Plugin].Add(plugin.PluginId))
+                if (_present[ExtensionKinds.Plugin].Add(plugin.PluginId))
                 {
                     Changed?.Invoke();
                 }
@@ -516,7 +550,9 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         switch (reply)
         {
             case MarketplaceIndexReply hits:
-                _hits = Newest(hits.Items);
+                // Their installedVersion is not taken: a reply computed before this window's own
+                // install or uninstall ended would undo it. The refresh and those actions keep it.
+                _hits = hits.Items;
                 Changed?.Invoke();
                 break;
             case ErrorReply error:
@@ -589,7 +625,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
 
     private void Replace(string kind, IEnumerable<string>? ids)
     {
-        var set = _installed[kind];
+        var set = _present[kind];
         set.Clear();
         set.UnionWith(ids ?? []);
         if (kind == ExtensionKinds.Theme && CurrentThemeId is { } current)
@@ -598,9 +634,32 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         }
     }
 
-    private void MarkInstalled(string? kind, string id, bool installed)
+    private void TakeInstalledVersions(IEnumerable<MarketItem> items)
     {
-        if (kind is null || !_installed.TryGetValue(kind, out var ids))
+        foreach (var item in items)
+        {
+            if (item.InstalledVersion is { } version)
+            {
+                _installedVersions[item.Id] = version;
+            }
+        }
+    }
+
+    // Without a version the core installs the newest one it can run, which is the item it offers.
+    private void MarkInstalled(MarketItem? item, string id, bool installed)
+    {
+        if (installed)
+        {
+            if (item is not null)
+            {
+                _installedVersions[id] = item.Version;
+            }
+        }
+        else
+        {
+            _installedVersions.Remove(id);
+        }
+        if (item is null || !_present.TryGetValue(item.Kind, out var ids))
         {
             return;
         }
@@ -616,30 +675,10 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
 
     private static string TitleOf(string tab) => MarketTabs.All.FirstOrDefault(t => t.Id == tab).Title ?? tab;
 
-    // An index may list several versions of one ID; a card shows the newest, where the ID first appears.
-    private static IReadOnlyList<MarketItem> Newest(IReadOnlyList<MarketItem> items)
-    {
-        var newest = new Dictionary<string, MarketItem>(StringComparer.Ordinal);
-        var order = new List<string>();
-        foreach (var item in items)
-        {
-            if (!newest.TryGetValue(item.Id, out var seen))
-            {
-                order.Add(item.Id);
-                newest[item.Id] = item;
-            }
-            else if (CompareVersions(item.Version, seen.Version) > 0)
-            {
-                newest[item.Id] = item;
-            }
-        }
-        return order.Select(id => newest[id]).ToList();
-    }
-
-    private static int CompareVersions(string a, string b) =>
-        Version.TryParse(a, out var left) && Version.TryParse(b, out var right)
-            ? left.CompareTo(right)
-            : string.CompareOrdinal(a, b);
+    // Index versions are major.minor.patch (the core leaves out any other); what cannot be
+    // compared is not offered as an update, since that could go back to an older version.
+    private static bool IsNewer(string offered, string installed) =>
+        Version.TryParse(offered, out var left) && Version.TryParse(installed, out var right) && left > right;
 
     private static JsonElement Text(string value)
     {

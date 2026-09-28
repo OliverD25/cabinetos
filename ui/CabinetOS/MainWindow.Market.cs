@@ -132,14 +132,20 @@ public sealed partial class MainWindow
         {
             return;
         }
+        var update = _market.HasUpdate(item);
         MarketOutcome outcome;
         switch (item.Kind)
         {
             case ExtensionKinds.Plugin when item.Capabilities is { Count: > 0 }:
-                // Trust rule 1: the user sees what it asks for before anything is downloaded;
-                // "Allow and install" comes back through plugins.grant (InstallReviewedAsync).
+                // Trust rule 1: the user sees what it asks for before anything is downloaded; an update
+                // too, since the core clears the old grants. "Allow and install" comes back through
+                // plugins.grant (InstallReviewedAsync).
                 ReviewView.Open(PermissionReview.ForInstall(item));
                 return;
+            case ExtensionKinds.Theme when update:
+                // An update is not a choice of theme: it is not applied (the core applies it again if it is in effect).
+                outcome = await _market.InstallAsync(id, invocation.RequestId);
+                break;
             case ExtensionKinds.Theme:
                 outcome = await _market.InstallAndApplyAsync(id, invocation.RequestId);
                 ShowNotice(outcome.Ok ? $"{item.Name} is installed and applied." : $"Cannot install {item.Name}: {outcome.Error}", !outcome.Ok);
@@ -148,28 +154,32 @@ public sealed partial class MainWindow
                 // A tool, or a plugin that asks for nothing: there is nothing to review, and the core starts such a plugin at once.
                 _plugins.MarkReviewed(id);
                 outcome = await _market.InstallAsync(id, invocation.RequestId);
-                ShowNotice(outcome.Ok ? $"{item.Name} is installed." : $"Cannot install {item.Name}: {outcome.Error}", !outcome.Ok);
-                return;
+                break;
         }
+        ShowNotice(outcome.Ok ? InstalledText(item, update) + "." : $"Cannot {(update ? "update" : "install")} {item.Name}: {outcome.Error}", !outcome.Ok);
     }
+
+    private static string InstalledText(MarketItem item, bool update) =>
+        update ? $"{item.Name} is updated to version {item.Version}" : $"{item.Name} is installed";
 
     // "Allow and install": the review closes, the detail column's button shows the download, and
     // the grant follows the install, so the plugin starts.
     private async Task InstallReviewedAsync(PermissionReview review, MarketItem item, string requestId)
     {
         CloseReview();
+        var update = _market.HasUpdate(item);
         // The core installs it waiting for review; this user just reviewed it, so no second review opens.
         _plugins.MarkReviewed(item.Id);
         var outcome = await _market.InstallAndGrantAsync(item.Id, review.ToGrant, requestId);
         if (outcome.Ok)
         {
             Diag.Request(LogLevel.Info, requestId, MarketTarget, "plugin installed and granted",
-                new LogField("plugin", item.Id), new LogField("capabilities", string.Join(",", review.ToGrant)));
-            ShowNotice($"{item.Name} is installed and starting…");
+                new LogField("plugin", item.Id), new LogField("version", item.Version), new LogField("capabilities", string.Join(",", review.ToGrant)));
+            ShowNotice(InstalledText(item, update) + " and starting…");
         }
         else
         {
-            ShowNotice($"Cannot install {item.Name}: {outcome.Error}", isError: true);
+            ShowNotice($"Cannot {(update ? "update" : "install")} {item.Name}: {outcome.Error}", isError: true);
         }
     }
 

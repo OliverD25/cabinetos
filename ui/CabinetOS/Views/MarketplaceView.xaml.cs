@@ -206,10 +206,11 @@ public sealed partial class MarketplaceView : UserControl
         }
     }
 
-    // What a card says about itself in its footer: installing, installed, applied.
+    // What a card says about itself in its footer: installing, an update, installed, applied.
     private static string StateLine(MarketplaceModel model, MarketItem item) => model.ActionFor(item) switch
     {
         MarketAction.Installing => model.InstallOf(item.Id) is { Total: > 0 } progress ? $"Installing {(int)(progress.Fraction * 100)}%" : "Installing…",
+        MarketAction.Update => "Update available",
         MarketAction.Installed => "Installed",
         MarketAction.Applied => "Applied",
         _ => "",
@@ -236,16 +237,20 @@ public sealed partial class MarketplaceView : UserControl
 
         var action = model.ActionFor(item);
         PrimaryText.Text = MarketText.ActionText(action);
-        PrimaryButton.IsEnabled = action is MarketAction.Install or MarketAction.InstallAndApply;
+        PrimaryButton.IsEnabled = action is MarketAction.Install or MarketAction.InstallAndApply or MarketAction.Update;
         var progress = model.InstallOf(item.Id);
         ProgressBar.Visibility = progress is null ? Visibility.Collapsed : Visibility.Visible;
         ProgressScale.ScaleX = progress?.Fraction ?? 0;
 
-        UninstallButton.Visibility = action is MarketAction.Installed or MarketAction.Applied ? Visibility.Visible : Visibility.Collapsed;
-        UninstallButton.IsEnabled = action == MarketAction.Installed;
-        ToolTipService.SetToolTip(UninstallButton, action == MarketAction.Applied
-            ? "The theme in effect cannot be removed: choose another theme first (Ctrl+K Ctrl+T)."
-            : "Remove the files the marketplace installed");
+        // Only what the marketplace installed: the core refuses the rest (trust rule 7).
+        UninstallButton.Visibility = model.IsInstalled(item) && action != MarketAction.Installing ? Visibility.Visible : Visibility.Collapsed;
+        UninstallButton.IsEnabled = model.CanUninstall(item);
+        ToolTipService.SetToolTip(UninstallButton, model.CanUninstall(item)
+            ? "Remove the files the marketplace installed"
+            : "The theme in effect cannot be removed: choose another theme first (Ctrl+K Ctrl+T).");
+        var note = MarketText.Note(model, item);
+        DetailNote.Text = note;
+        DetailNote.Visibility = note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         var error = model.ErrorOf(item.Id);
         DetailError.Text = error ?? "";

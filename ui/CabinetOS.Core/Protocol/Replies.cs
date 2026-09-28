@@ -385,8 +385,11 @@ public sealed record MarketDownload(string Url, string Sha256);
 public sealed record MarketCapability(string Name, string Reason, string? Level = null, IReadOnlyList<string>? Roots = null);
 
 /// <summary>
-/// One extension in one version, as the index offers it (docs/marketplace.md,
-/// "The index"). These are the index's own keys, camelCase like a theme's.
+/// One extension as the core offers it (docs/marketplace.md, "The index"):
+/// the newest version this core can run, one item per extension since
+/// protocol 11. These are the index's own keys, camelCase like a theme's;
+/// <see cref="InstalledVersion"/> is the core's addition, the version the
+/// marketplace installed, absent when it installed none.
 /// </summary>
 public sealed record MarketItem(
     string Id,
@@ -403,7 +406,8 @@ public sealed record MarketItem(
     string Long = "",
     MarketRating? Rating = null,
     ulong? Installs = null,
-    IReadOnlyList<MarketCapability>? Capabilities = null);
+    IReadOnlyList<MarketCapability>? Capabilities = null,
+    [property: JsonPropertyName("installedVersion")] string? InstalledVersion = null);
 
 /// <summary>
 /// Reply to <c>marketplace_refresh</c> (the index's order) and

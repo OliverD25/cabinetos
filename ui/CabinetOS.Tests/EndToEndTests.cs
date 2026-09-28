@@ -368,8 +368,14 @@ public class EndToEndTests
                 Assert.True(await market.RefreshAsync(), market.Notice?.Detail);
                 Assert.StartsWith(index, market.Source, StringComparison.OrdinalIgnoreCase);
                 Assert.Equal(4, market.CountOf(MarketTabs.Themes));
-                // The shipped themes are in the themes folder already: installed, never replaced (trust rule 7).
-                Assert.All(market.All.Where(i => i.Kind == ExtensionKinds.Theme), theme => Assert.True(market.IsInstalled(theme), theme.Id));
+                // The shipped themes are in the themes folder already, but not from the marketplace:
+                // shown as there, never replaced (trust rule 7), and not on the Installed tab.
+                Assert.All(market.All.Where(i => i.Kind == ExtensionKinds.Theme), theme =>
+                {
+                    Assert.True(market.IsPresent(theme), theme.Id);
+                    Assert.Null(theme.InstalledVersion);
+                });
+                Assert.Equal(0, market.CountOf(MarketTabs.Installed));
                 var hello = market.Find("hello")!;
                 Assert.Equal(MarketAction.Install, market.ActionFor(hello));
                 // The core adds each capability's level for the review.
@@ -387,10 +393,17 @@ public class EndToEndTests
                     "hello to become active");
                 Assert.Contains(events, e => e is InstallProgressEvent { ExtensionId: "hello" } progress && progress.Bytes == progress.Total);
                 Assert.Contains(events, e => e is InstallFinishedEvent { ExtensionId: "hello", Ok: true });
+                // The core's own record agrees with what the model concluded (protocol 11).
+                Assert.True(await market.RefreshAsync());
+                Assert.Equal(hello.Version, market.Find("hello")!.InstalledVersion);
+                Assert.Equal((hello.Version, 1), (market.InstalledVersionOf(hello), market.CountOf(MarketTabs.Installed)));
 
                 Assert.True((await market.UninstallAsync("hello")).Ok);
                 Assert.False(market.IsInstalled(hello));
                 Assert.False(File.Exists(Path.Combine(root, "plugins", "hello", "plugin.wasm")));
+                Assert.True(await market.RefreshAsync());
+                Assert.Null(market.Find("hello")!.InstalledVersion);
+                Assert.Equal(0, market.CountOf(MarketTabs.Installed));
                 return true;
             });
             await core.ShutdownAsync(TimeSpan.FromSeconds(5));

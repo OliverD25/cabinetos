@@ -24,6 +24,10 @@ public class MarketplaceTests
 
     private static readonly MarketItem[] Index = [Hello, Nord, Paper, Preview];
 
+    // The index as the core offers it once the marketplace installed some of it (installedVersion).
+    private static MarketItem[] Offered(params (string Id, string Version)[] installed) =>
+        Index.Select(item => installed.Any(i => i.Id == item.Id) ? item with { InstalledVersion = installed.First(i => i.Id == item.Id).Version } : item).ToArray();
+
     private static MarketItem Item(
         string id,
         string kind,
@@ -67,7 +71,7 @@ public class MarketplaceTests
     [Fact]
     public async Task Refreshing_reads_the_index_and_what_is_installed()
     {
-        var core = CoreWith(Index, themes: ["default", "nord"]);
+        var core = CoreWith(Offered(("nord", "1.0.0")), themes: ["default", "nord"]);
         var market = Model(core);
 
         Assert.True(await market.RefreshAsync("01J0000000000000000000000A"));
@@ -88,7 +92,8 @@ public class MarketplaceTests
     [Fact]
     public async Task A_tab_shows_its_kind_and_closes_the_detail_column()
     {
-        var market = Model(CoreWith(Index, themes: ["nord"]));
+        // Nord is in the themes folder but did not come from the marketplace: not on the Installed tab.
+        var market = Model(CoreWith(Offered(("paper", "1.0.0")), themes: ["nord", "paper"]));
         await market.RefreshAsync();
 
         market.Select("nord");
@@ -99,7 +104,7 @@ public class MarketplaceTests
         market.SetTab(MarketTabs.Plugins);
         Assert.Equal(["hello", "md-preview"], market.Items.Select(i => i.Id));
         market.SetTab(MarketTabs.Installed);
-        Assert.Equal(["nord"], market.Items.Select(i => i.Id));
+        Assert.Equal(["paper"], market.Items.Select(i => i.Id));
         market.SetTab("nothing");
         Assert.Equal(MarketTabs.Installed, market.Tab);
         market.Select("not-in-the-index");
@@ -107,13 +112,50 @@ public class MarketplaceTests
     }
 
     [Fact]
-    public async Task An_id_listed_in_several_versions_shows_once_in_its_newest()
+    public async Task An_older_installed_version_offers_an_update_and_a_newer_one_does_not()
     {
-        var market = Model(CoreWith([Item("hello", ExtensionKinds.Plugin, "Hello", "0.2.0"), Nord, Item("hello", ExtensionKinds.Plugin, "Hello", "0.10.0")]));
+        var hello = Hello with { Version = "0.10.0", InstalledVersion = "0.2.0" };
+        var nord = Nord with { Version = "1.1.0", InstalledVersion = "1.0.0" };
+        var paper = Paper with { InstalledVersion = "1.1.0" };
+        var preview = Preview with { InstalledVersion = "1.0.0" };
+        var market = Model(CoreWith([hello, nord, paper, preview], themes: ["nord", "paper"], tools: ["md-preview"]));
         await market.RefreshAsync();
+        market.SetCurrentTheme("nord");
 
-        Assert.Equal(["hello", "nord"], market.All.Select(i => i.Id));
-        Assert.Equal("0.10.0", market.Find("hello")!.Version);
+        // Versions compare as numbers: 0.10.0 is newer than 0.2.0.
+        Assert.Equal((MarketAction.Update, "0.2.0"), (market.ActionFor(hello), market.InstalledVersionOf(hello)));
+        // The theme in effect can be updated (the core applies it again), but not removed.
+        Assert.Equal(MarketAction.Update, market.ActionFor(nord));
+        Assert.False(market.CanUninstall(nord));
+        // An installed version newer than the offer is kept: no update goes back.
+        Assert.Equal((MarketAction.Installed, false), (market.ActionFor(paper), market.HasUpdate(paper)));
+        Assert.Equal(MarketAction.Installed, market.ActionFor(preview));
+        Assert.True(market.CanUninstall(preview));
+        market.SetTab(MarketTabs.Installed);
+        Assert.Equal(["hello", "nord", "paper", "md-preview"], market.Items.Select(i => i.Id));
+
+        Assert.Equal("Version 0.2.0 is installed. You review the permissions again before the update is installed.", MarketText.Note(market, hello));
+        Assert.Equal("Version 1.0.0 is installed. The update replaces its files.", MarketText.Note(market, nord));
+        Assert.Equal("Version 1.1.0 is installed; the index offers 1.0.0.", MarketText.Note(market, paper));
+        Assert.Equal("", MarketText.Note(market, preview));
+
+        Assert.True((await market.InstallAsync("hello")).Ok);
+        Assert.Equal((MarketAction.Installed, "0.10.0"), (market.ActionFor(hello), market.InstalledVersionOf(hello)));
+    }
+
+    [Fact]
+    public async Task A_search_reply_does_not_undo_what_an_install_just_did()
+    {
+        // The core's items say nothing is installed: its search reply was made before the install ended.
+        var market = Model(CoreWith(Index));
+        await market.RefreshAsync();
+        Assert.True((await market.InstallAsync("hello")).Ok);
+
+        await market.QueryChangedAsync("hel");
+
+        Assert.Equal(["hello"], market.Items.Select(i => i.Id));
+        Assert.Null(market.Items[0].InstalledVersion);
+        Assert.Equal("1.0.0", market.InstalledVersionOf(Hello));
     }
 
     [Fact]
@@ -195,12 +237,14 @@ public class MarketplaceTests
         var market = Model(CoreWith(Index));
         await market.RefreshAsync();
         market.SetTab(MarketTabs.Installed);
-        Assert.Equal("Nothing from this index is installed.", market.Notice!.Title);
+        Assert.Equal("Nothing was installed from the marketplace yet.", market.Notice!.Title);
+        Assert.Contains("ships with", market.Notice.Detail);
     }
 
     [Fact]
-    public async Task The_primary_button_follows_what_is_installed_and_applied()
+    public async Task The_primary_button_follows_what_is_there_and_applied()
     {
+        // A shipped theme and a tool copied by hand: there, but not the marketplace's (trust rule 7).
         var market = Model(CoreWith(Index, themes: ["nord"], tools: ["md-preview"]));
         await market.RefreshAsync();
         market.SetCurrentTheme("nord");
@@ -209,6 +253,9 @@ public class MarketplaceTests
         Assert.Equal(MarketAction.Applied, market.ActionFor(Nord));
         Assert.Equal(MarketAction.InstallAndApply, market.ActionFor(Paper));
         Assert.Equal(MarketAction.Installed, market.ActionFor(Preview));
+        Assert.Equal((true, false, false), (market.IsPresent(Preview), market.IsInstalled(Preview), market.CanUninstall(Preview)));
+        Assert.StartsWith("This one is here already, but not from the marketplace", MarketText.Note(market, Preview));
+        Assert.Equal("", MarketText.Note(market, Hello));
         market.SetCurrentTheme("paper");
         Assert.Equal((MarketAction.Installed, MarketAction.Applied), (market.ActionFor(Nord), market.ActionFor(Paper)));
     }
@@ -236,6 +283,7 @@ public class MarketplaceTests
         core.Reply.SetResult(new OkReply());
         Assert.True((await install).Ok);
         Assert.Equal(MarketAction.Installed, market.ActionFor(Hello));
+        Assert.Equal("1.0.0", market.InstalledVersionOf(Hello));
         Assert.True(redraws >= 3);
         market.SetTab(MarketTabs.Installed);
         Assert.Equal(["hello"], market.Items.Select(i => i.Id));
@@ -307,34 +355,40 @@ public class MarketplaceTests
     [Fact]
     public async Task Uninstall_removes_it_from_the_installed_tab_and_leaves_what_the_marketplace_did_not_install()
     {
-        var market = Model(CoreWith(Index, request => request is UninstallExtensionRequest { ExtensionId: "nord" }
+        var market = Model(CoreWith(Offered(("hello", "1.0.0")), request => request is UninstallExtensionRequest { ExtensionId: "nord" }
             ? new ErrorReply(ErrorCodes.NoSuchExtension, "the marketplace did not install nord")
             : null, plugins: ["hello"], themes: ["nord"]));
         await market.RefreshAsync();
-        Assert.Equal(2, market.CountOf(MarketTabs.Installed));
+        Assert.Equal(1, market.CountOf(MarketTabs.Installed));
 
         Assert.True((await market.UninstallAsync("hello")).Ok);
         Assert.False(market.IsInstalled(Hello));
-        Assert.Equal(1, market.CountOf(MarketTabs.Installed));
+        Assert.Equal(MarketAction.Install, market.ActionFor(Hello));
+        Assert.Equal(0, market.CountOf(MarketTabs.Installed));
 
         var refused = await market.UninstallAsync("nord");
         Assert.Equal("Nord was not installed from the marketplace, so the marketplace leaves it alone.", refused.Error);
-        Assert.True(market.IsInstalled(Nord));
+        Assert.True(market.IsPresent(Nord));
     }
 
     [Fact]
-    public async Task Events_of_tools_and_plugins_keep_what_is_installed_up_to_date()
+    public async Task Events_of_tools_and_plugins_keep_what_is_there_up_to_date()
     {
-        var market = Model(CoreWith(Index));
+        var market = Model(CoreWith(Offered(("md-preview", "1.0.0"))));
         await market.RefreshAsync();
+        Assert.True(market.IsInstalled(Preview));
 
         market.OnEvent(new ToolsChangedEvent([new ToolInfo("md-preview", "Markdown Preview", "1.0.0", "CabinetOS", "", @"C:\tools\md-preview")]));
         market.OnEvent(new PluginStateChangedEvent("hello", new PluginState(PluginState.NeedsReview, ["cmd:register"])));
 
         Assert.True(market.IsInstalled(Preview));
-        Assert.True(market.IsInstalled(Hello));
+        // A plugin that appears is there; only the marketplace's record makes it the marketplace's.
+        Assert.Equal((true, false, MarketAction.Installed), (market.IsPresent(Hello), market.IsInstalled(Hello), market.ActionFor(Hello)));
+
+        // A tool removed elsewhere (the command line) leaves the Installed tab too.
         market.OnEvent(new ToolsChangedEvent([]));
-        Assert.False(market.IsInstalled(Preview));
+        Assert.False(market.IsPresent(Preview));
+        Assert.Equal(0, market.CountOf(MarketTabs.Installed));
     }
 
     [Fact]
@@ -381,9 +435,9 @@ public class MarketplaceTests
         Assert.Equal("1 rating", MarketText.RatingsLabel(Hello with { Rating = new MarketRating(5, 1) }));
         Assert.Equal(("950", "12k", "1.2M"), (MarketText.Count(950), MarketText.Count(12_000), MarketText.Count(1_240_000)));
         Assert.Equal("1000 B", MarketText.Size(Hello));
-        Assert.Equal(("Install", "Install and apply", "Installing…", "Installed", "Applied"),
-            (MarketText.ActionText(MarketAction.Install), MarketText.ActionText(MarketAction.InstallAndApply), MarketText.ActionText(MarketAction.Installing),
-             MarketText.ActionText(MarketAction.Installed), MarketText.ActionText(MarketAction.Applied)));
+        Assert.Equal(("Install", "Install and apply", "Update", "Installing…", "Installed", "Applied"),
+            (MarketText.ActionText(MarketAction.Install), MarketText.ActionText(MarketAction.InstallAndApply), MarketText.ActionText(MarketAction.Update),
+             MarketText.ActionText(MarketAction.Installing), MarketText.ActionText(MarketAction.Installed), MarketText.ActionText(MarketAction.Applied)));
     }
 
     [Fact]

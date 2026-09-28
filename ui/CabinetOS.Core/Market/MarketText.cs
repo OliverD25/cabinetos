@@ -57,10 +57,28 @@ public static class MarketText
     public static string ActionText(MarketAction action) => action switch
     {
         MarketAction.InstallAndApply => "Install and apply",
+        MarketAction.Update => "Update",
         MarketAction.Installing => "Installing…",
         MarketAction.Installed => "Installed",
         MarketAction.Applied => "Applied",
         _ => "Install",
+    };
+
+    /// <summary>
+    /// The line under the detail column's buttons, or "": the version an
+    /// update replaces, another version already installed, or why the
+    /// marketplace leaves alone what it did not install (trust rule 7).
+    /// </summary>
+    public static string Note(MarketplaceModel model, MarketItem item) => model.InstalledVersionOf(item) switch
+    {
+        { } installed when model.HasUpdate(item) => item is { Kind: ExtensionKinds.Plugin, Capabilities.Count: > 0 }
+            ? $"Version {installed} is installed. You review the permissions again before the update is installed."
+            : $"Version {installed} is installed. The update replaces its files.",
+        { } installed when installed != item.Version => $"Version {installed} is installed; the index offers {item.Version}.",
+        { } => "",
+        null when model.IsPresent(item) =>
+            "This one is here already, but not from the marketplace: it ships with CabinetOS, or was copied in by hand. So the marketplace does not replace or remove it.",
+        null => "",
     };
 
     /// <summary>

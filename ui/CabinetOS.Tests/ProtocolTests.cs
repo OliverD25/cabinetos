@@ -75,7 +75,7 @@ public class ProtocolTests
         ];
     }
 
-    private const string HelloItem = """{"id":"hello","kind":"plugin","name":"Hello","author":{"name":"CabinetOS","verified":false},"version":"0.1.0","description":"The sample Core Plugin.","long":"The sample Core Plugin: a Say Hello command that answers.","size":27003,"download":{"url":"files/hello-0.1.0.zip","sha256":"2aaaf9704b4472089bf1e296437107bf9a08e5cc902acdde8c445e95df89da66"},"manifest":{"id":"hello","name":"Hello","version":"0.1.0","capabilities":[{"name":"cmd:register","reason":"Adds the Say Hello command."}]},"capabilities":[{"name":"cmd:register","reason":"Adds the Say Hello command.","level":"low"},{"name":"fs:read","reason":"Reads its folder.","roots":["%TEMP%\\hello"],"level":"medium"}],"minCoreVersion":"0.1.0","license":"MIT"}""";
+    private const string HelloItem = """{"id":"hello","kind":"plugin","name":"Hello","author":{"name":"CabinetOS","verified":false},"version":"0.1.0","description":"The sample Core Plugin.","long":"The sample Core Plugin: a Say Hello command that answers.","size":27003,"download":{"url":"files/hello-0.1.0.zip","sha256":"2aaaf9704b4472089bf1e296437107bf9a08e5cc902acdde8c445e95df89da66"},"manifest":{"id":"hello","name":"Hello","version":"0.1.0","capabilities":[{"name":"cmd:register","reason":"Adds the Say Hello command."}]},"capabilities":[{"name":"cmd:register","reason":"Adds the Say Hello command.","level":"low"},{"name":"fs:read","reason":"Reads its folder.","roots":["%TEMP%\\hello"],"level":"medium"}],"minCoreVersion":"0.1.0","license":"MIT","installedVersion":"0.1.0"}""";
 
     private const string NordItem = """{"id":"nord","kind":"theme","name":"Nord","author":{"name":"Arctic Ice Studio","verified":true,"url":"https://www.nordtheme.com"},"version":"1.0.0","description":"An arctic, north-bluish palette.","size":1527,"download":{"url":"https://example.org/nord-1.0.0.json","sha256":"c1c0d89ae34d347c5e333dccee13f28e1967521f9cba349ebcf74c7afc4dd0fb"},"manifest":{"id":"nord","name":"Nord","author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#88C0D0"},"rating":{"average":4.8,"count":120},"installs":5400,"minCoreVersion":"0.1.0","license":"MIT"}""";
 
@@ -313,6 +313,9 @@ public class ProtocolTests
                     Assert.Equal(new MarketAuthor("Arctic Ice Studio", true, "https://www.nordtheme.com"), nord.Author);
                     Assert.Equal("#88C0D0", nord.Manifest.GetProperty("accent").GetString());
                     Assert.Null(nord.Capabilities);
+                    // Protocol 11: camelCase like the index's keys, absent when the marketplace installed none.
+                    Assert.Equal("0.1.0", hello.InstalledVersion);
+                    Assert.Null(nord.InstalledVersion);
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"tools","tools":[{"id":"markdown-preview","name":"Markdown Preview","version":"1.0.0","author":"CabinetOS","description":"Shows Markdown.","dir":"C:\\Users\\me\\AppData\\Local\\CabinetOS\\tools\\markdown-preview"}]}""",
                 b => Assert.Equal(("markdown-preview", "1.0.0"), (Assert.IsType<ToolsReply>(b).Tools.Single().Id, ((ToolsReply)b).Tools.Single().Version))),

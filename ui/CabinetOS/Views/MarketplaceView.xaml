@@ -295,6 +295,14 @@
                                     Visibility="Collapsed" />
                             </StackPanel>
 
+                            <!-- The version an update replaces, or why the marketplace leaves an extension alone. -->
+                            <TextBlock
+                                x:Name="DetailNote"
+                                FontSize="12"
+                                Foreground="{ThemeResource CbStatusTextBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+
                             <TextBlock
                                 x:Name="DetailError"
                                 FontSize="12"
