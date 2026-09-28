@@ -463,7 +463,7 @@ async fn commands_are_listed_searched_and_run() {
     let Response::Commands { commands } = ask(&mut client, Request::ListCommands).await else {
         panic!("expected commands")
     };
-    assert_eq!(commands.len(), 16);
+    assert_eq!(commands.len(), 32);
     let sidebar = commands
         .iter()
         .find(|command| command.id == "view.toggleSidebar")
@@ -501,8 +501,22 @@ async fn commands_are_listed_searched_and_run() {
             target: CommandTarget::Ui
         }
     );
-    let reply = ask(&mut client, execute("file.newFolder")).await;
-    assert_eq!(error_code(&reply), Some(ErrorCode::NotImplemented));
+    // The shell starts the file jobs itself, so these are its commands too.
+    for command in [
+        "file.newFolder",
+        "file.copyToOtherPane",
+        "file.moveToOtherPane",
+        "file.rename",
+        "go.back",
+    ] {
+        assert_eq!(
+            ask(&mut client, execute(command)).await,
+            Response::CommandRouted {
+                target: CommandTarget::Ui
+            },
+            "{command}"
+        );
+    }
     let reply = ask(&mut client, execute("no.suchCommand")).await;
     assert_eq!(error_code(&reply), Some(ErrorCode::UnknownCommand));
 

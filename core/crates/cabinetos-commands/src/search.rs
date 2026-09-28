@@ -146,6 +146,9 @@ mod tests {
         assert_eq!(ids("tdp")[0], "view.toggleDualPane");
         assert_eq!(ids("new fold")[0], "file.newFolder");
         assert_eq!(ids("keys")[0], "keys.open");
+        assert_eq!(ids("rename")[0], "file.rename");
+        assert_eq!(ids("back")[0], "go.back");
+        assert_eq!(ids("delete perm")[0], "file.deletePermanently");
     }
 
     #[test]

@@ -34,14 +34,30 @@ The core's commands, in palette order:
 | `palette.show` | View: Show Command Palette | `ctrl+shift+p` | | UI |
 | `overlay.close` | View: Close Overlay | `escape` | | UI |
 | `keys.open` | Preferences: Open Keyboard Shortcuts | `ctrl+k ctrl+s` | | UI |
+| `keys.rebind` | Preferences: Change Keys of Selected Command | `f2` | `paletteOpen` | UI |
 | `view.toggleDualPane` | View: Toggle Dual Pane | `ctrl+shift+d` | | UI |
 | `view.toggleTerminal` | View: Toggle Integrated Terminal | `ctrl+backquote` | | UI |
 | `view.focusOtherPane` | View: Focus Other Pane | `tab` | `filesView` | UI |
 | `view.toggleSidebar` | View: Toggle Sidebar | `ctrl+b` | | UI |
-| `file.copyToOtherPane` | File: Copy to Other Pane | `f5` | `filesView` | core |
-| `file.moveToOtherPane` | File: Move to Other Pane | `f6` | `filesView` | core |
-| `file.newFolder` | File: New Folder | `f7` | `filesView` | core |
+| `pane.openSelected` | Pane: Open Selected Item | `enter` | `filesView` | UI |
+| `file.copyToOtherPane` | File: Copy to Other Pane | `f5` | `filesView` | UI |
+| `file.moveToOtherPane` | File: Move to Other Pane | `f6` | `filesView` | UI |
+| `file.newFolder` | File: New Folder | `f7` | `filesView` | UI |
+| `file.rename` | File: Rename | `f2` | `filesView` | UI |
+| `file.delete` | File: Delete to Recycle Bin | `delete` | `filesView` | UI |
+| `file.deletePermanently` | File: Delete Permanently | `shift+delete` | `filesView` | UI |
+| `file.openInOtherPane` | File: Open in Other Pane | `ctrl+enter` | `filesView` | UI |
+| `file.properties` | File: Properties | `alt+enter` | `filesView` | UI |
+| `edit.cut` | Edit: Cut | `ctrl+x` | `filesView` | UI |
+| `edit.copy` | Edit: Copy | `ctrl+c` | `filesView` | UI |
+| `edit.paste` | Edit: Paste | `ctrl+v` | `filesView` | UI |
+| `edit.selectAll` | Edit: Select All | `ctrl+a` | `filesView` | UI |
+| `edit.toggleSelection` | Edit: Toggle Selection | `insert` | `filesView` | UI |
+| `go.back` | Go: Back | `alt+left` | | UI |
+| `go.forward` | Go: Forward | `alt+right` | | UI |
+| `go.up` | Go: Up One Level | `alt+up` | | UI |
 | `go.toPath` | Go: Go to Path… | `ctrl+l` | | UI |
+| `search.focus` | Search: Find Files… | `ctrl+f` | | UI |
 | `marketplace.browse` | Marketplace: Browse Plugins and Themes | `ctrl+shift+x` | | UI |
 | `workspace.switch` | Workspace: Switch Workspace… | `ctrl+k ctrl+w` | | UI |
 | `preferences.selectColorTheme` | Preferences: Color Theme | `ctrl+k ctrl+t` | | UI |
@@ -49,17 +65,25 @@ The core's commands, in palette order:
 | `help.about` | Help: About CabinetOS | | | core |
 
 - The list is the design's `COMMANDS` array without its plugin commands
-  (Markdown preview, hex view, Git, compression). Those arrive as plugins in
-  Phase 7 and register their own commands (Article 10). The palette, the
-  overlay exit, the shortcut editor and About are added.
+  (Markdown preview, hex view, Git, compression), and the shell's own
+  commands: moving between folders, the pane's file and edit keys, and the
+  search field. Plugin commands arrive with their plugins and register
+  themselves (Article 10). The palette, the overlay exit, the shortcut
+  editor and About are added. The shell's commands are in the registry so
+  that each of them can be rebound like any other (Article 7).
 - The design wrote the workspace switcher as "Ctrl+K W" in one place and
   "Ctrl+K then Ctrl+W" in another (PLAN.md, conflict E). The registry uses
   `ctrl+k ctrl+w`: Ctrl stays held for the second key, like every other chord
   here. The UI shows it as "Ctrl+K Ctrl+W".
-- Asking the core to run a UI command (`execute_command`) returns
-  `command_routed`: the core does nothing and hands it back. Of the core's
-  own commands only `help.about` exists yet; the file commands answer
-  `not_implemented` until Phase 4.
+- `f2` has two commands in two contexts: in a file pane it renames
+  (`file.rename`), in the open palette it records new keys for the chosen
+  command (`keys.rebind`). Two commands may share keys only this way
+  ("Contexts" below).
+- Every command but `help.about` runs in the UI. The core runs `help.about`
+  and the plugins' commands; asking it to run a UI command
+  (`execute_command`) returns `command_routed`, and the core does nothing.
+  The file commands are the shell's too: it starts their jobs itself
+  (`start_job`) and makes a folder with `create_directory`.
 
 ## Writing keys
 

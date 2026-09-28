@@ -65,11 +65,15 @@ const fn seed(
 const UI: CommandTarget = CommandTarget::Ui;
 const CORE: CommandTarget = CommandTarget::Core;
 const FILES: Option<&str> = Some("filesView");
+const PALETTE: Option<&str> = Some("paletteOpen");
 
 /// The core's commands, in palette order: the design's command list
 /// (`docs/design/FileForge.dc.html`, `COMMANDS`) without its plugin commands,
-/// then the palette, overlays and About.
-const SEED: [Seed; 16] = [
+/// the shell's own navigation, file, edit and search commands, then the
+/// palette, overlays and About. Every one of them runs in the UI except
+/// `help.about`: the shell starts the file jobs itself (`start_job`) and
+/// makes a folder with `create_directory`.
+const SEED: [Seed; 32] = [
     seed(
         "palette.show",
         "View",
@@ -86,6 +90,15 @@ const SEED: [Seed; 16] = [
         "ctrl+k ctrl+s",
         UI,
         None,
+    ),
+    // F2 twice: here in the palette, and as `file.rename` in a file pane.
+    seed(
+        "keys.rebind",
+        "Preferences",
+        "Change Keys of Selected Command",
+        "f2",
+        UI,
+        PALETTE,
     ),
     seed(
         "view.toggleDualPane",
@@ -120,11 +133,19 @@ const SEED: [Seed; 16] = [
         None,
     ),
     seed(
+        "pane.openSelected",
+        "Pane",
+        "Open Selected Item",
+        "enter",
+        UI,
+        FILES,
+    ),
+    seed(
         "file.copyToOtherPane",
         "File",
         "Copy to Other Pane",
         "f5",
-        CORE,
+        UI,
         FILES,
     ),
     seed(
@@ -132,11 +153,60 @@ const SEED: [Seed; 16] = [
         "File",
         "Move to Other Pane",
         "f6",
-        CORE,
+        UI,
         FILES,
     ),
-    seed("file.newFolder", "File", "New Folder", "f7", CORE, FILES),
+    seed("file.newFolder", "File", "New Folder", "f7", UI, FILES),
+    seed("file.rename", "File", "Rename", "f2", UI, FILES),
+    seed(
+        "file.delete",
+        "File",
+        "Delete to Recycle Bin",
+        "delete",
+        UI,
+        FILES,
+    ),
+    seed(
+        "file.deletePermanently",
+        "File",
+        "Delete Permanently",
+        "shift+delete",
+        UI,
+        FILES,
+    ),
+    seed(
+        "file.openInOtherPane",
+        "File",
+        "Open in Other Pane",
+        "ctrl+enter",
+        UI,
+        FILES,
+    ),
+    seed(
+        "file.properties",
+        "File",
+        "Properties",
+        "alt+enter",
+        UI,
+        FILES,
+    ),
+    seed("edit.cut", "Edit", "Cut", "ctrl+x", UI, FILES),
+    seed("edit.copy", "Edit", "Copy", "ctrl+c", UI, FILES),
+    seed("edit.paste", "Edit", "Paste", "ctrl+v", UI, FILES),
+    seed("edit.selectAll", "Edit", "Select All", "ctrl+a", UI, FILES),
+    seed(
+        "edit.toggleSelection",
+        "Edit",
+        "Toggle Selection",
+        "insert",
+        UI,
+        FILES,
+    ),
+    seed("go.back", "Go", "Back", "alt+left", UI, None),
+    seed("go.forward", "Go", "Forward", "alt+right", UI, None),
+    seed("go.up", "Go", "Up One Level", "alt+up", UI, None),
     seed("go.toPath", "Go", "Go to Path…", "ctrl+l", UI, None),
+    seed("search.focus", "Search", "Find Files…", "ctrl+f", UI, None),
     seed(
         "marketplace.browse",
         "Marketplace",
@@ -184,9 +254,11 @@ pub struct CommandRegistry {
 pub struct DuplicateCommand(pub String);
 
 impl CommandRegistry {
-    /// The core's own commands, seeded from the design's command list.
-    /// Commands the design attributes to plugins (Markdown preview, hex view,
-    /// Git, compression) are not here: plugins register them (Article 10).
+    /// The core's own commands, seeded from the design's command list and
+    /// the shell's own commands, so every one of them can be rebound
+    /// (Article 7). Commands the design attributes to plugins (Markdown
+    /// preview, hex view, Git, compression) are not here: plugins register
+    /// them (Article 10).
     #[must_use]
     pub fn core() -> Self {
         let commands = SEED
@@ -255,7 +327,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 16);
+        assert_eq!(registry.commands().len(), 32);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -281,6 +353,50 @@ mod tests {
                 "{plugin_command}"
             );
         }
+    }
+
+    #[test]
+    fn the_shell_s_commands_run_in_the_ui_with_its_keys() {
+        let registry = CommandRegistry::core();
+        for (id, keys, when) in [
+            ("go.back", "alt+left", None),
+            ("go.forward", "alt+right", None),
+            ("go.up", "alt+up", None),
+            ("pane.openSelected", "enter", Some("filesView")),
+            ("keys.rebind", "f2", Some("paletteOpen")),
+            ("file.rename", "f2", Some("filesView")),
+            ("file.delete", "delete", Some("filesView")),
+            ("file.deletePermanently", "shift+delete", Some("filesView")),
+            ("file.openInOtherPane", "ctrl+enter", Some("filesView")),
+            ("file.properties", "alt+enter", Some("filesView")),
+            ("edit.cut", "ctrl+x", Some("filesView")),
+            ("edit.copy", "ctrl+c", Some("filesView")),
+            ("edit.paste", "ctrl+v", Some("filesView")),
+            ("edit.selectAll", "ctrl+a", Some("filesView")),
+            ("edit.toggleSelection", "insert", Some("filesView")),
+            ("search.focus", "ctrl+f", None),
+            ("file.copyToOtherPane", "f5", Some("filesView")),
+            ("file.moveToOtherPane", "f6", Some("filesView")),
+            ("file.newFolder", "f7", Some("filesView")),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            let seeded: Vec<String> = command
+                .default_keys
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            assert_eq!(seeded, [keys], "{id}");
+            assert_eq!(command.when.as_deref(), when, "{id}");
+        }
+        // The core runs only About; the file jobs are started by the shell.
+        let core: Vec<&str> = registry
+            .commands()
+            .iter()
+            .filter(|command| command.target == CommandTarget::Core)
+            .map(|command| command.id.as_str())
+            .collect();
+        assert_eq!(core, ["help.about"]);
     }
 
     #[test]

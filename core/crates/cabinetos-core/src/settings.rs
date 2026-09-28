@@ -221,8 +221,9 @@ impl Settings {
 
     /// The reply to `execute_command` for a command that is not a plugin's
     /// (the connection sends those to the plugin host): the core runs its
-    /// own commands and hands the UI's back. Of the core's commands only
-    /// `help.about` exists yet; the file operations arrive with their phase.
+    /// own commands and hands the UI's back. Of the registry's commands only
+    /// `help.about` runs here; the shell runs the others, the file jobs too
+    /// (it starts them with `start_job`).
     pub(crate) fn execute(&self, command: &str) -> Response {
         let Some(target) = self.registry().get(command).map(|found| found.target) else {
             return unknown_command(command);

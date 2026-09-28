@@ -516,6 +516,38 @@ mod tests {
     }
 
     #[test]
+    fn f2_renames_in_a_pane_and_rebinds_in_the_palette() {
+        let keymap = compile_with(&[]).unwrap().keymap;
+        let f2: Vec<(&str, Option<&str>)> = keymap
+            .bindings()
+            .iter()
+            .filter(|binding| binding.keys.to_string() == "f2")
+            .map(|binding| (binding.command.as_str(), binding.when.as_deref()))
+            .collect();
+        assert_eq!(
+            f2,
+            [
+                ("keys.rebind", Some("paletteOpen")),
+                ("file.rename", Some("filesView"))
+            ]
+        );
+        // In the same context the two would conflict.
+        let mut same_context = over("file.rename", "f2");
+        same_context.when = Some("paletteOpen".to_owned());
+        let error = compile_with(&[same_context]).unwrap_err();
+        assert_eq!(
+            error,
+            KeymapError::Conflict {
+                keys: "f2".to_owned(),
+                first: "keys.rebind".to_owned(),
+                second: "file.rename".to_owned(),
+                when: Some("paletteOpen".to_owned()),
+                entry: Some(0),
+            }
+        );
+    }
+
+    #[test]
     fn a_chord_prefix_cannot_be_a_binding_too() {
         let error = compile_with(&[
             over("view.toggleSidebar", "ctrl+q"),
