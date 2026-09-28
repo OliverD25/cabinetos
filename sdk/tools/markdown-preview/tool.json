@@ -1,0 +1,10 @@
+{
+  "id": "markdown-preview",
+  "name": "Markdown Preview",
+  "version": "0.1.0",
+  "author": "CabinetOS",
+  "description": "Shows a Markdown file as formatted text, with its images, in a pane.",
+  "entry": "index.html",
+  "accepts": ["*.md", "*.markdown"],
+  "placement": "pane"
+}

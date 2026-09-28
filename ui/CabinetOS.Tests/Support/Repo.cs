@@ -25,6 +25,9 @@ internal static class Repo
     /// <summary><c>sdk/config/cabinetos.schema.json</c>.</summary>
     public static string ConfigSchema => Path.Combine(Root, "sdk", "config", "cabinetos.schema.json");
 
+    /// <summary><c>sdk/tools</c>: the Tool Extension schema and the tools written in this repository.</summary>
+    public static string Tools => Path.Combine(Root, "sdk", "tools");
+
     /// <summary>A fresh folder under <c>%TEMP%\cabinetos-ui-test</c>, removed by the caller.</summary>
     public static string NewTempFolder(string purpose)
     {

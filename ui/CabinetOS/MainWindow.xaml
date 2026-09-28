@@ -253,6 +253,12 @@
                             x:Name="RightPane"
                             Grid.Column="1"
                             Margin="4,0,0,0" />
+                        <!-- A pane's editor tab (design view D) covers its listing while a Tool Extension shows a file. -->
+                        <views:EditorPane x:Name="LeftEditor" Margin="0,0,4,0" />
+                        <views:EditorPane
+                            x:Name="RightEditor"
+                            Grid.Column="1"
+                            Margin="4,0,0,0" />
                     </Grid>
                     <views:SplitterBar
                         x:Name="BottomSplitter"

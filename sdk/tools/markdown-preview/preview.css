@@ -1,0 +1,169 @@
+/* The design's Markdown preview (docs/design/README.md, view D): 28/40 px
+   padding, at most 680 px wide, body 13 px / 1.6, h1 26 px, h2 17 px over a
+   rule, code blocks on rgba(0,0,0,.35). The window draws the pane behind. */
+:root {
+  color-scheme: dark light;
+  --text: rgba(255, 255, 255, 0.86);
+  --muted: rgba(255, 255, 255, 0.6);
+  --rule: rgba(255, 255, 255, 0.1);
+  --code-fill: rgba(0, 0, 0, 0.35);
+  --code-text: #d7e3f4;
+  --link: #60cdff;
+  --error: #f27a6c;
+  --scroll: rgba(255, 255, 255, 0.25);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --text: rgba(0, 0, 0, 0.87);
+    --muted: rgba(0, 0, 0, 0.6);
+    --rule: rgba(0, 0, 0, 0.12);
+    --code-fill: rgba(0, 0, 0, 0.06);
+    --code-text: #1b2a3a;
+    --link: #005fb8;
+    --error: #c42b1c;
+    --scroll: rgba(0, 0, 0, 0.3);
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+}
+
+/* A thin bar in the text's tone, not the browser's white one. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll) transparent;
+}
+
+body {
+  padding: 28px 40px;
+  font: 13px/1.6 "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: var(--text);
+  user-select: text;
+}
+
+main {
+  max-width: 680px;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+h2 {
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+p,
+ul,
+ol,
+pre,
+table,
+blockquote,
+dl {
+  margin: 0 0 18px;
+}
+
+ul,
+ol {
+  padding-left: 20px;
+}
+
+li > ul,
+li > ol {
+  margin-bottom: 0;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+a.web {
+  cursor: default;
+}
+
+code,
+pre {
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--code-fill);
+}
+
+pre {
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: var(--code-fill);
+  color: var(--code-text);
+  overflow: auto;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+}
+
+blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--rule);
+  color: var(--muted);
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 4px 10px;
+  border: 1px solid var(--rule);
+}
+
+th {
+  font-weight: 600;
+  text-align: left;
+}
+
+hr {
+  margin: 22px 0;
+  border: none;
+  border-top: 1px solid var(--rule);
+}
+
+img {
+  max-width: 100%;
+}
+
+.error {
+  color: var(--error);
+}

@@ -27,7 +27,7 @@ internal sealed class WebViewHost
 
     private readonly Border _frame;
     private readonly string _name;
-    private readonly Dictionary<string, (string Folder, CoreWebView2HostResourceAccessKind Access)> _mappings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (string Folder, CoreWebView2HostResourceAccessKind Access, bool Navigable)> _mappings = new(StringComparer.OrdinalIgnoreCase);
     private WebView2? _view;
     private CoreWebView2? _core;
     private CoreWebView2Environment? _environment;
@@ -60,10 +60,36 @@ internal sealed class WebViewHost
     public string DataFolder => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CabinetOS", "WebView2", _name);
 
-    /// <summary>Serves <paramref name="folder"/> at <c>https://&lt;host&gt;/</c>; kept across restarts.</summary>
-    public void MapFolder(string host, string folder, CoreWebView2HostResourceAccessKind access)
+    /// <summary>
+    /// Whether the page is drawn dark or light (<c>prefers-color-scheme</c>);
+    /// set before <see cref="StartAsync"/>, or any time for a running page.
+    /// </summary>
+    public CoreWebView2PreferredColorScheme ColorScheme
     {
-        _mappings[host] = (folder, access);
+        get => _colorScheme;
+        set
+        {
+            _colorScheme = value;
+            if (_core is { } core)
+            {
+                core.Profile.PreferredColorScheme = value;
+            }
+        }
+    }
+
+    private CoreWebView2PreferredColorScheme _colorScheme = CoreWebView2PreferredColorScheme.Auto;
+
+    /// <summary>A script of the window's that runs in every document the page loads, before its own scripts.</summary>
+    public string? HostScript { get; set; }
+
+    /// <summary>
+    /// Serves <paramref name="folder"/> at <c>https://&lt;host&gt;/</c>; kept
+    /// across restarts. A host that is not <paramref name="navigable"/> only
+    /// answers requests (a tool's file folder): the page cannot go there.
+    /// </summary>
+    public void MapFolder(string host, string folder, CoreWebView2HostResourceAccessKind access, bool navigable = true)
+    {
+        _mappings[host] = (folder, access, navigable);
         _core?.SetVirtualHostNameToFolderMapping(host, folder, access);
     }
 
@@ -113,9 +139,14 @@ internal sealed class WebViewHost
         _core = core;
         _browserGone = false;
         Configure(core);
-        foreach (var (host, (folder, access)) in _mappings)
+        foreach (var (host, (folder, access, _)) in _mappings)
         {
             core.SetVirtualHostNameToFolderMapping(host, folder, access);
+        }
+        core.Profile.PreferredColorScheme = _colorScheme;
+        if (HostScript is { } script)
+        {
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
         }
         IsRunning = true;
         core.Navigate(start.AbsoluteUri);
@@ -196,11 +227,13 @@ internal sealed class WebViewHost
     {
         var settings = core.Settings;
 #if DEBUG
+        // F12 goes to the page with the other browser keys; the right-click menu's Inspect opens the tools.
         settings.AreDevToolsEnabled = true;
+        settings.AreDefaultContextMenusEnabled = true;
 #else
         settings.AreDevToolsEnabled = false;
-#endif
         settings.AreDefaultContextMenusEnabled = false;
+#endif
         settings.AreDefaultScriptDialogsEnabled = false;
         settings.AreHostObjectsAllowed = false;
         // Ctrl+F, Ctrl+P, F5 and the like go to the page (the shell), not to the browser.
@@ -215,7 +248,7 @@ internal sealed class WebViewHost
 
         core.NavigationStarting += (_, e) =>
         {
-            if (!IsAllowed(e.Uri))
+            if (!IsAllowed(e.Uri, navigation: true))
             {
                 e.Cancel = true;
                 Diag.Info(Target, "a navigation was blocked", new LogField("host", _name), new LogField("url", e.Uri));
@@ -223,7 +256,7 @@ internal sealed class WebViewHost
         };
         core.FrameNavigationStarting += (_, e) =>
         {
-            if (!IsAllowed(e.Uri))
+            if (!IsAllowed(e.Uri, navigation: true))
             {
                 e.Cancel = true;
                 Diag.Info(Target, "a frame navigation was blocked", new LogField("host", _name), new LogField("url", e.Uri));
@@ -240,7 +273,7 @@ internal sealed class WebViewHost
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += (_, e) =>
         {
-            if (!IsAllowed(e.Request.Uri) && _environment is { } environment)
+            if (!IsAllowed(e.Request.Uri, navigation: false) && _environment is { } environment)
             {
                 e.Response = environment.CreateWebResourceResponse(null, 403, "Blocked", "");
                 Diag.Info(Target, "a request was blocked", new LogField("host", _name), new LogField("url", e.Request.Uri));
@@ -263,7 +296,7 @@ internal sealed class WebViewHost
         core.ProcessFailed += (_, e) => OnProcessFailed(e);
     }
 
-    private bool IsAllowed(string uri)
+    private bool IsAllowed(string uri, bool navigation)
     {
         if (uri == "about:blank")
         {
@@ -271,7 +304,8 @@ internal sealed class WebViewHost
         }
         return Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
             && parsed.Scheme == Uri.UriSchemeHttps
-            && _mappings.ContainsKey(parsed.Host);
+            && _mappings.TryGetValue(parsed.Host, out var mapping)
+            && (!navigation || mapping.Navigable);
     }
 
     private void OnProcessFailed(CoreWebView2ProcessFailedEventArgs e)

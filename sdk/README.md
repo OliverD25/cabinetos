@@ -18,8 +18,11 @@ What lives here, or will:
   sandbox and the limits are in [../docs/plugins.md](../docs/plugins.md).
 - `templates/` — starter projects (Phase 7): Rust Core Plugins built with
   `wit-bindgen`, `hello` as the template and five test fixtures, and
-  `build-fixtures.ps1` ([templates/README.md](templates/README.md)). The
-  Tool Extension template comes with the Tool Dock (Phase 5).
+  `build-fixtures.ps1` ([templates/README.md](templates/README.md)).
+- `tools/` — Tool Extensions (Phase 5c): the JSON Schema of `tool.json`,
+  and `markdown-preview`, the first tool and the example to start a new
+  one from ([tools/README.md](tools/README.md),
+  [../docs/tool-extensions.md](../docs/tool-extensions.md)).
 - `fixtures/plugins/` — those plugins built as components, with their
   `plugin.json`. They are committed, so the core's tests and CI need no
   WebAssembly toolchain.

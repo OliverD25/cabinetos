@@ -13,8 +13,13 @@ namespace CabinetOS.Core.Terminal;
 /// </summary>
 public static class TerminalKeys
 {
-    /// <summary>The commands the window runs for keys pressed in the terminal, by combination (<c>ctrl+shift+p</c>).</summary>
-    public static IReadOnlyDictionary<string, string> PassKeys(Keymap keymap)
+    /// <summary>
+    /// The commands the window runs for keys pressed in a web page, by
+    /// combination (<c>ctrl+shift+p</c>): in the terminal (<paramref name="context"/>
+    /// <c>terminalFocus</c>, whose own bindings count too), or in a Tool
+    /// Extension (null: the ways out only).
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> PassKeys(Keymap keymap, string? context = KeyContexts.TerminalFocus)
     {
         var keys = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var binding in keymap.Bindings)
@@ -24,7 +29,7 @@ public static class TerminalKeys
                 continue;
             }
             var combo = binding.Keys.First.ToString();
-            if (binding.When == KeyContexts.TerminalFocus)
+            if (context is not null && binding.When == context)
             {
                 // The more specific binding wins, as everywhere (keybindings.md, "Contexts").
                 keys[combo] = binding.Command;

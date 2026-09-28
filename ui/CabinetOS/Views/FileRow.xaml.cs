@@ -65,6 +65,10 @@ public sealed partial class FileRow : UserControl
     /// <summary>The row's index in its listing, or -1.</summary>
     public int Index { get; private set; } = -1;
 
+    /// <summary>The design's stroke for a file named <paramref name="name"/> (the editor tab's glyph too).</summary>
+    public static Brush IconBrushFor(string name) =>
+        TypeBrushes.TryGetValue(DisplayFormat.Extension(name), out var brush) ? brush : ThemeResources.Brush("CbRowMetaBrush");
+
     /// <summary>The key of the shell icon the row shows or waits for, or null.</summary>
     public string? IconKey { get; private set; }
 

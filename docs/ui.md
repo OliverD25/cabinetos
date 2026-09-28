@@ -32,8 +32,8 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
-| `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, and `Assets/xterm` (the terminal page and xterm.js). |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
+| `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, the editor tabs of Tool Extensions, the plugin list and review, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
 Shared settings: `ui/Directory.Build.props` (target
@@ -81,7 +81,7 @@ skip themselves otherwise (as in the CI job `ui`, which builds no core).
 | `CABINETOS_CONFIG` | Not read by the UI; the core it starts inherits it and uses that `cabinetos.json` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` ends the terminal page's browser process; `until:running`, `until:conflict`, `until:terminal` or `until:search` waits for a job, a shell or an answer; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -267,11 +267,13 @@ own controls: `transfer.pause`, `transfer.resume`, `transfer.cancel`,
 the terminal's `terminal.new` (`{"profile": …, "cwd": …}`),
 `terminal.show` and `terminal.close` (`{"session": …}`) and
 `terminal.reload`, the search's `search.scope`
-(`{"wholeVolume": true}`), and the plugins' `plugins.review` and
-`plugins.reload` (`{"id": …}`) and `plugins.grant` (`RegisterLocal`).
+(`{"wholeVolume": true}`), the plugins' `plugins.review` and
+`plugins.reload` (`{"id": …}`) and `plugins.grant`, and the editors'
+`editor.close` and `editor.reload` (`{"pane": 0 or 1}`) (`RegisterLocal`).
 They run through the router like the others, but they are not in the
-palette and cannot be rebound. `plugins.list` is in the palette
-("Plugins").
+palette and cannot be rebound. `plugins.list` and
+`editor.openMarkdownPreview` are in the palette although the core does not
+list them yet ("Plugins", "Tool Extensions").
 
 | Command | In this version |
 |---|---|
@@ -659,7 +661,8 @@ How it is built:
   navigation, frame, new window, download, permission and request, http
   and https included, is refused and logged. Browser keys (F5, Ctrl+F,
   Ctrl+P) go to the shell, not to the browser. Developer tools exist only
-  in Debug builds. `WebViewHost` does all of this, for Tool Extensions too.
+  in Debug builds (the right-click menu's Inspect). `WebViewHost` does all
+  of this, for Tool Extensions too.
 - **Crash isolation.** The terminal has a browser process of its own
   (user-data folder `%LOCALAPPDATA%\CabinetOS\WebView2\terminal`). When
   its page or browser process ends, the dock shows "The terminal stopped"
@@ -678,11 +681,57 @@ How it is built:
   started" with its browser process ID, every blocked request, and "a
   WebView2 process failed" with the kind and reason.
 
+## Tool Extensions
+
+Tool Extensions are web pages that show a file in a pane
+([tool-extensions.md](tool-extensions.md) has the format and the
+messages; Constitution Articles 10 and 11). None ships with CabinetOS: the
+first, Markdown Preview, is in `sdk/tools/markdown-preview` and is
+installed by copying it to `%LOCALAPPDATA%\CabinetOS\tools\`, or used from
+the repository with `CabinetOS.exe --tools-dir <repo>\sdk\tools` (or the
+variable `CABINETOS_TOOLS_DIR`).
+
+- **Opening.** Enter (`pane.openSelected`) on a file that an installed
+  tool accepts opens it in that tool, in the other pane when two are
+  shown, else in the same pane; without such a tool, the file opens in its
+  default application as before. "Editor: Open Markdown Preview"
+  (`editor.openMarkdownPreview`, in the palette, Ctrl+K V in a pane) opens
+  the focused Markdown file, or says that no Markdown tool is installed.
+- **The editor tab** (design view D) covers the pane's list: a 36 px strip
+  with a 2 px accent edge, the file's glyph and name, close (back to the
+  folder, the tool's process ends), the tool's name beside a green dot,
+  and "Open in Terminal" (a shell in the file's folder). One tool per
+  pane; a tool that is open shows the next file where it is. Showing one
+  pane closes the other pane's editor.
+- **Reading tools.** The window reads `<folder>\<id>\tool.json` of each
+  tools folder once, at start, on a background thread. This is the one
+  file the UI process reads itself (brief §1 forbids file I/O in the UI;
+  the core has no request that lists tools yet), and a tool that cannot
+  be used is left out with a warning in the log. The file a tool shows is
+  read by the tool's own page, through a read-only virtual host.
+- **Keys.** A tool's page gets every key; a script of the window in every
+  tool page hands back the keys of `palette.show` and
+  `view.toggleTerminal`, as the terminal does.
+- **Commands from a tool** run through the router with the trigger
+  `tool:<id>`, and only the navigation, view, terminal and preview
+  commands of [tool-extensions.md](tool-extensions.md), "Messages"; any
+  other is refused with a line in the status bar and the log.
+- **Crash isolation.** Each tool has a browser process of its own
+  (`%LOCALAPPDATA%\CabinetOS\WebView2\tool-<id>`). When it ends, the pane
+  says "The tool stopped" with Reload, and the window goes on; Reload
+  starts a new one with the same file. Checked on 2026-09-28 by ending the
+  Markdown Preview's browser process (`BrowserProcessId`, the snapshot
+  step `crash:tool:markdown-preview`): the pane said so, the other pane
+  went on navigating, and Reload showed the README again.
+- **The Tool Dock** holds the terminal, under or beside the panes. A tool
+  with `placement: dock` opens in a pane in this version.
+
 ## Not in this version
 
 | What | Why |
 |---|---|
 | The marketplace button | Disabled; Phase 9 |
+| Tools in the Tool Dock, and tools opened without a file | The dock holds the terminal; tools open as editor tabs ([tool-extensions.md](tool-extensions.md), "Not yet") |
 | Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
 | Saving the dock's dragged size | No setting for it yet |
 | Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |

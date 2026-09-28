@@ -12,6 +12,10 @@ internal static class Schemas
     private static readonly Lazy<JsonSchema> ResponseSchema = new(() => JsonSchema.FromFile(Repo.ProtocolSchema("response.schema.json")));
     private static readonly Lazy<JsonSchema> EventSchema = new(() => JsonSchema.FromFile(Repo.ProtocolSchema("event.schema.json")));
     private static readonly Lazy<JsonSchema> ConfigSchema = new(() => JsonSchema.FromFile(Repo.ConfigSchema));
+    private static readonly Lazy<JsonSchema> ToolSchema = new(() => JsonSchema.FromFile(Path.Combine(Repo.Tools, "tool.schema.json")));
+
+    /// <summary><c>sdk/tools/tool.schema.json</c>.</summary>
+    public static JsonSchema Tool => ToolSchema.Value;
 
     /// <summary><c>sdk/protocol/request.schema.json</c>.</summary>
     public static JsonSchema Request => RequestSchema.Value;

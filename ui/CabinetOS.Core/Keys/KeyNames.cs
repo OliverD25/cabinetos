@@ -101,6 +101,9 @@ public static class KeyNames
     public static string? FromVirtualKey(int virtualKey) =>
         VirtualKeys.TryGetValue(virtualKey, out var name) ? name : null;
 
+    /// <summary>Every virtual-key code the grammar names, and its name (for the pages' key scripts).</summary>
+    public static IReadOnlyDictionary<int, string> VirtualKeyNames => VirtualKeys;
+
     /// <summary>Whether the virtual key is Ctrl, Shift, Alt or Win (either side).</summary>
     public static bool IsModifier(int virtualKey) =>
         virtualKey is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C or (>= 0xA0 and <= 0xA5);

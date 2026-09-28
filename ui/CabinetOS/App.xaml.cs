@@ -32,7 +32,8 @@ public partial class App : Application
     {
         try
         {
-            _window = new MainWindow(selfTestCrash: _args.Contains("--self-test-crash"));
+            var toolsDir = Array.IndexOf(_args, "--tools-dir") is var at and >= 0 && at + 1 < _args.Length ? _args[at + 1] : null;
+            _window = new MainWindow(selfTestCrash: _args.Contains("--self-test-crash"), toolsDir);
             _window.Activate();
         }
         catch (Exception error)

@@ -64,6 +64,7 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _noticeTimer;
     private readonly DispatcherQueueTimer _speedTimer;
     private readonly bool _selfTestCrash;
+    private readonly string? _toolsDir;
     private UiSettings _settings = UiSettings.Defaults;
     private ShellState _shell = ShellState.Empty;
     private bool _dual = true;
@@ -77,11 +78,16 @@ public sealed partial class MainWindow : Window
     private bool _systemClipboardHolds;
     private readonly Queue<DateTime> _restarts = new();
 
-    /// <summary>Creates the window; the core starts once the content is loaded.</summary>
-    public MainWindow(bool selfTestCrash)
+    /// <summary>
+    /// Creates the window; the core starts once the content is loaded.
+    /// <paramref name="toolsDir"/> (<c>--tools-dir</c>) is a folder of Tool
+    /// Extensions read before the installed ones, for writing a tool.
+    /// </summary>
+    public MainWindow(bool selfTestCrash, string? toolsDir = null)
     {
         InitializeComponent();
         _selfTestCrash = selfTestCrash;
+        _toolsDir = toolsDir;
         _router = new CommandRouter(_session);
         // Both panes share what the core said per extension, and the icons.
         var known = new ExtensionDetails();
@@ -133,6 +139,7 @@ public sealed partial class MainWindow : Window
         SetUpTerminal();
         SetUpSearch();
         SetUpPlugins();
+        SetUpTools();
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
@@ -387,6 +394,15 @@ public sealed partial class MainWindow : Window
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
                     break;
+                case "open":
+                    // Enter on a row by name in the active pane, as the user would.
+                    var shown = Active.View?.IndexOfName(step.Argument) ?? -1;
+                    if (shown >= 0)
+                    {
+                        Active.Selection.MoveTo(shown, SelectMode.Single);
+                        await _router.ExecuteAsync("pane.openSelected", trigger: "snapshot");
+                    }
+                    break;
                 case "until":
                     await WaitUntilAsync(step.Argument);
                     break;
@@ -402,12 +418,15 @@ public sealed partial class MainWindow : Window
     }
 
     // Every WebView2 the window hosts, for the snapshot aid.
-    private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage];
+    private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage, .. _toolHosts.OfType<ToolHost>().Select(h => h.Page)];
 
     // The crash-isolation check: ends a page's browser process, as a crash would.
+    // "terminal", or "tool:<id>".
     private void CrashPageForSnapshot(string which)
     {
-        var page = which == "terminal" ? Dock.TerminalPage : null;
+        var page = which == "terminal"
+            ? Dock.TerminalPage
+            : _toolHosts.FirstOrDefault(h => h is not null && which == $"tool:{h.Tool.Manifest.Id}")?.Page;
         if (page is not { BrowserProcessId: > 0 and var pid })
         {
             Diag.Info(Target, "nothing to crash", new LogField("page", which));
@@ -435,6 +454,7 @@ public sealed partial class MainWindow : Window
                 "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
                 "terminal" => _terminal.Shown is { Pipe: not null },
                 "search" => _search.Phase is SearchPhase.Done or SearchPhase.Failed,
+                "tool" => _toolHosts.Any(h => h is { IsReady: true }),
                 _ => true,
             };
             if (met)
@@ -522,11 +542,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // The window's keys, and the few a terminal passes back to it.
+    // The window's keys (with its own bindings), and the few a terminal or a tool passes back to it.
     private void ApplyKeymap(Keymap keymap)
     {
-        _keys.SetKeymap(keymap);
+        _keys.SetKeymap(WithWindowBindings(keymap));
         _terminal.SetKeymap(keymap);
+        ApplyToolKeys(keymap);
     }
 
     private async Task ReadVolumesAsync()
@@ -864,6 +885,7 @@ public sealed partial class MainWindow : Window
         RegisterTerminalCommands();
         RegisterSearchCommands();
         RegisterPluginCommands();
+        RegisterToolCommands();
 
         _router.Completed += OnCommandCompleted;
     }
@@ -1060,6 +1082,13 @@ public sealed partial class MainWindow : Window
         if (entry.IsFolder)
         {
             await pane.NavigateAsync(entry.Path, invocation.RequestId);
+            return;
+        }
+        // An installed Tool Extension that opens this name gets it (a .md in Markdown Preview);
+        // without one, the file opens in its default application as before.
+        if (await ToolForAsync(entry.Name) is { } tool)
+        {
+            await OpenInToolAsync(tool, entry.Path);
             return;
         }
         if (_unavailable.Contains("open_path"))
@@ -1542,9 +1571,15 @@ public sealed partial class MainWindow : Window
     private void ApplyDual(bool dual)
     {
         _dual = dual;
+        if (!dual)
+        {
+            // The right pane goes away, and its editor with it (the tool's process ends).
+            CloseEditor(1, focusPane: false);
+        }
         RightColumn.Width = dual ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         RightPane.Visibility = dual ? Visibility.Visible : Visibility.Collapsed;
         LeftPane.Margin = dual ? new Thickness(0, 0, 4, 0) : new Thickness(0);
+        LeftEditor.Margin = LeftPane.Margin;
         DualLabel.Text = dual ? "Dual" : "Single";
         var brush = dual ? ThemeResources.Brush("CbAccentBrush") : ThemeResources.Brush("CbTextSecondaryBrush");
         DualIcon.Foreground = brush;
@@ -1592,6 +1627,7 @@ public sealed partial class MainWindow : Window
         UpdateCrumbs();
         _sidebar.SetActivePath(Active.Path);
         _terminal.SetActiveFolder(Active.Path);
+        ScheduleToolContext();
     }
 
     private void OnPaneChanged(object? sender, PropertyChangedEventArgs e)
@@ -1612,12 +1648,14 @@ public sealed partial class MainWindow : Window
                 _sidebar.SetActivePath(Active.Path);
                 UpdateNavigationButtons();
                 _terminal.SetActiveFolder(Active.Path);
+                ScheduleToolContext();
                 break;
             case nameof(PaneModel.CanGoBack) or nameof(PaneModel.CanGoForward) or nameof(PaneModel.CanGoUp):
                 UpdateNavigationButtons();
                 break;
             case nameof(PaneModel.Count) or nameof(PaneModel.Selection) or nameof(PaneModel.Rows):
                 UpdateStatus();
+                ScheduleToolContext();
                 break;
         }
     }

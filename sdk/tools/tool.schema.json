@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cabinetos.example/schemas/tool.schema.json",
+  "title": "CabinetOS Tool Extension manifest",
+  "description": "tool.json: a Tool Extension's manifest (docs/tool-extensions.md). The window reads it strictly: an unknown key, a missing key or a bad value stops the tool.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "version", "author", "description", "entry", "accepts", "placement"],
+  "properties": {
+    "id": {
+      "description": "1 to 63 lower case letters, digits and -, starting with a letter. It must be the folder's name, and it becomes the tool's virtual host name (<id>.tool.cabinetos.example).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,62}$"
+    },
+    "name": {
+      "description": "The name the editor tab shows beside a green dot.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "version": {
+      "description": "major.minor.patch, numbers only.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "entry": {
+      "description": "The page the tool starts from: an .html file inside the tool's folder, such as index.html.",
+      "type": "string",
+      "pattern": "^(?![\\\\/])(?!.*(^|[\\\\/])\\.{1,2}([\\\\/]|$))(?!.*:)[^\\\\/].*\\.html?$"
+    },
+    "accepts": {
+      "description": "The file names the tool opens: *.ext patterns or exact names, compared without case. Enter on such a file opens it in the tool.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(\\*\\.[^*\\\\/:]+|[^*\\\\/:]+)$"
+      }
+    },
+    "placement": {
+      "description": "pane: a pane's editor tab (design view D). dock: the Tool Dock; this version opens it in a pane too.",
+      "enum": ["pane", "dock"]
+    }
+  }
+}

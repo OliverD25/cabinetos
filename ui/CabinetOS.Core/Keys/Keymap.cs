@@ -16,7 +16,7 @@ public static class KeyContexts
     /// <summary>A text box has focus.</summary>
     public const string TextInput = "textInput";
 
-    /// <summary>The terminal has focus (no terminal pane yet).</summary>
+    /// <summary>The terminal has focus.</summary>
     public const string TerminalFocus = "terminalFocus";
 }
 
@@ -70,4 +70,26 @@ public sealed class Keymap
 
     /// <summary>The first binding of <paramref name="command"/>, if it has any.</summary>
     public Binding? FirstFor(string command) => Bindings.FirstOrDefault(b => b.Command == command);
+
+    /// <summary>
+    /// This keymap plus a binding of the window's own (a command the core's
+    /// registry does not list yet), unless it would take keys the keymap
+    /// already uses: the same keys, a single combination that is its
+    /// chord's first half, or a chord that starts with it. The core's keymap
+    /// always wins; null says the binding was left out.
+    /// </summary>
+    public Keymap? With(Binding extra)
+    {
+        foreach (var binding in Bindings)
+        {
+            var same = binding.Keys == extra.Keys;
+            var blocksChord = extra.Keys.IsChord && !binding.Keys.IsChord && binding.Keys.First == extra.Keys.First;
+            var startsChord = !extra.Keys.IsChord && binding.Keys.IsChord && binding.Keys.First == extra.Keys.First;
+            if (same || blocksChord || startsChord)
+            {
+                return null;
+            }
+        }
+        return new Keymap(ChordWindowMs, [.. Bindings, extra], Immutable);
+    }
 }
