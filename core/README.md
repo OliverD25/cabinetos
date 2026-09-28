@@ -104,11 +104,16 @@ because it puts a real file into the Recycle Bin (CI sets it; its runner is
 thrown away). `cargo test -p cabinetos-jobs --release --test engine --
 --ignored --nocapture measure` repeats the files-in-flight measurement.
 
-**Benchmarks.** `cargo bench -p cabinetos-fs` measures listing 1,000 and
-100,000 files (and the whole path into shared memory) against
+**Benchmarks.** `cargo bench -p cabinetos-fs` measures listing 1,000,
+10,000 and 100,000 files (and the whole path into shared memory) both
+ways, `_serial` (the Phase 2 path) and `_pipelined` (the default), against
 `std::fs::read_dir`. The first run creates the fixture folders under
-`%TEMP%\cabinetos-bench\` (100,000 empty files, created once); later runs
-reuse them, and the bench never deletes them. CI only compiles the benchmarks.
+`%TEMP%\cabinetos-bench\` (empty files, created once); later runs reuse
+them, and the bench never deletes them. The test `tests/pipeline.rs`, which
+checks that both ways write the same section bytes, lists the same
+100,000-file folder (creating it when missing) and seeded random folders
+under `%TEMP%\cabinetos-fs-test\`, which it removes. CI only compiles the
+benchmarks.
 
 **Schemas.** `sdk/protocol/*.schema.json` (the messages) and
 `sdk/config/cabinetos.schema.json` (the configuration file) are generated
