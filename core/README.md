@@ -9,21 +9,22 @@ protocol between UI and core, with the shared-memory layout:
 [../docs/config.md](../docs/config.md). Commands, keys and chords:
 [../docs/keybindings.md](../docs/keybindings.md). Copy, move and delete:
 [../docs/jobs.md](../docs/jobs.md). Core Plugins:
-[../docs/plugins.md](../docs/plugins.md).
+[../docs/plugins.md](../docs/plugins.md). The indexer and search:
+[../docs/indexer.md](../docs/indexer.md).
 
 ## Crates
 
 | Crate | Kind | Responsibility | Constitution articles |
 |---|---|---|---|
-| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host and the event hub | 1, 5, 6, 7, 8, 10, 12 |
+| `cabinetos-core` | binary + library | `cabinetos-core.exe`: startup, the pipe server, session lifetime, wiring of all libraries, the settings service (configuration, commands, keymap events), the job manager, the plugin host, the event hub, and search (through the indexer, or a bounded walk without it) | 1, 5, 6, 7, 8, 10, 12 |
 | `cabinetos-protocol` | library | The IPC contract: message envelopes, request IDs, `#[repr(C)]` shared-memory layouts, JSON Schema export | 1, 12 |
 | `cabinetos-diag` | library | JSON Lines logs, ring buffer of recent events, crash traces ([../docs/diagnostics.md](../docs/diagnostics.md)) | 12, 1 |
 | `cabinetos-ipc` | library | Named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch | 1, 12 |
 | `cabinetos-fs` | library | Directory enumeration (NT API), sorting, the listing section writer and reader, volume and disk detection, change watching | 1, 5 |
 | `cabinetos-cli` | binary | `cabinetos-cli.exe`: command-line client for the pipe, to test the core with no UI | 4, 12 |
 | `cabinetos-jobs` | library | `JobQueueManager`: per-disk queues, copy (`CopyFileExW`), move, delete (Recycle Bin or permanent), per-file conflicts, progress throttled to 30 events per second ([../docs/jobs.md](../docs/jobs.md)) | 1, 5 |
-| `cabinetos-index` | library (stub) | In-memory volume index, MFT reader, USN Journal tailer (Phase 6) | 1 |
-| `cabinetos-indexer` | binary (stub) | `cabinetos-indexer.exe`: the elevated indexer process (Phase 6, ADR 0002) | 1 |
+| `cabinetos-index` | library | The in-memory index of NTFS volumes: built with `FSCTL_ENUM_USN_DATA`, kept current from the USN Journal, interned names, ranked substring search on several threads ([../docs/indexer.md](../docs/indexer.md)) | 1 |
+| `cabinetos-indexer` | binary + library | `cabinetos-indexer.exe`: the elevated indexer (ADR 0002): console and service modes, the read-only pipe with a medium integrity label | 1, 12 |
 | `cabinetos-config` | library | `cabinetos.json`: strict parsing with line and column errors, defaults, JSON Schema export, directory watch, diff, atomic rewrite ([../docs/config.md](../docs/config.md)) | 6 |
 | `cabinetos-commands` | library | Command registry, key grammar and chords, keymap compilation with the Immutable System Tier, palette search ([../docs/keybindings.md](../docs/keybindings.md)) | 7, 4 |
 | `cabinetos-plugins` | library | `PluginHost`: Core Plugins as WebAssembly components in `wasmtime`, strict manifests, capabilities, the WASI sandbox, fuel, deadline and memory limits per call, trap containment and restarts ([../docs/plugins.md](../docs/plugins.md)) | 8, 10, 11 |
@@ -33,8 +34,7 @@ types, so the shape of the engine can be reviewed before the code exists.
 
 **Unsafe code** is denied in every crate. Crates that will never need it
 forbid it outright. Only the crates that call Windows APIs directly (`ipc`,
-`fs` and `jobs` now; `index` later) allow it, and only in the modules that
-need it; every `unsafe` block carries a `// SAFETY:` comment, which clippy
+`fs`, `jobs` and `index`) allow it, and only in the modules that need it; every `unsafe` block carries a `// SAFETY:` comment, which clippy
 enforces.
 
 ## Build and test
@@ -73,6 +73,18 @@ toolchain. Every test that starts a core points `CABINETOS_PLUGINS_DIR` and
 `CABINETOS_PLUGINS_DATA_DIR` at its temporary folder, so no test sees the
 plugins installed on the machine. The `reader` fixture reads
 `%TEMP%\cabinetos-plugins-test\reader`, which its tests create and remove.
+
+The indexer's tests need Administrator rights to read the MFT and the
+change journal, so they are ignored and, when run without the rights, skip
+with a message. CI runs them: its runners are Administrators. From an
+elevated terminal, `cargo test --release -p cabinetos-index -p
+cabinetos-indexer -- --ignored --nocapture` runs them and prints the build
+time, memory per entry, search time and change latency; the service test
+also needs `CABINETOS_TEST_SERVICE=1`, because it installs and removes a
+Windows service. They write only under `%TEMP%\cabinetos-index-test\`, as do
+the search tests, and every test that starts a core points
+`CABINETOS_INDEXER_PIPE` at a pipe of its own, so no test talks to an
+indexer that runs on the machine.
 
 The job tests (copy, move, delete) write only under
 `%TEMP%\cabinetos-jobs-test\` and remove what they wrote. Two of them run
@@ -139,10 +151,20 @@ cargo run -p cabinetos-cli -- --pipe demo plugins list
 cargo run -p cabinetos-cli -- --pipe demo plugins grant hello cmd:register events:emit
 cargo run -p cabinetos-cli -- --pipe demo commands exec hello.say
 cargo run -p cabinetos-cli -- --pipe demo events watch
+cargo run -p cabinetos-cli -- --pipe demo search budget
+cargo run -p cabinetos-cli -- --pipe demo search budget --root D:\work --limit 10
+cargo run -p cabinetos-cli -- --pipe demo index status
 cargo run -p cabinetos-cli -- --pipe demo shutdown
 ```
 
-- `ping` prints `pong id=<ulid> protocol=5 core=<version> rtt=<ms>ms`.
+For searches over whole volumes, start the indexer from an elevated
+terminal first (Run as administrator), in `core/`:
+
+```text
+cargo run --release -p cabinetos-indexer -- --console --volumes C
+```
+
+- `ping` prints `pong id=<ulid> protocol=6 core=<version> rtt=<ms>ms`.
 - `ls <path>` lists a directory the way the UI will: the core reads it into
   shared memory, the CLI maps the section and prints it. Options: `--long`
   (attributes, local modification time, size), `--hidden` (hidden and system
@@ -172,6 +194,10 @@ cargo run -p cabinetos-cli -- --pipe demo shutdown
   print its state once it has settled. `commands exec <command>
   [json-args]` runs a command and prints its JSON result, and `events watch`
   prints every event as one JSON line until Ctrl+C.
+- `search <query> [--limit N] [--root path]` prints the hits (`f` file, `d`
+  folder), then how many, `source: index` or `source: walk`, the time, and
+  whether the search was complete; `index status` prints whether an indexer
+  answers and each volume's state.
 - `shutdown` makes the core exit with code 0. The core also exits on Ctrl+C,
   and, when started with `--parent-pid <pid>`, as soon as that process exits.
 
@@ -196,7 +222,9 @@ threads `config-watch` and `config-debounce`, each running job `job-<id>`
 publisher of all jobs `job-progress`, each running plugin `plugin-<id>`,
 the plugins' deadline ticker `plugin-epoch` (it sleeps while no plugin call
 runs), and `plugin-<id>-restart` for the 5 s wait before a crashed plugin
-starts again.
+starts again. A search that walks folders runs on the blocking pool. In the
+indexer, each volume has a thread `index-<letter>` that builds its index and
+then follows its change journal.
 
 Release builds keep line tables in a separate `.pdb` file next to each `.exe`,
 so crash traces name file and line. Ship the `.pdb` with the `.exe`.
@@ -207,5 +235,7 @@ so crash traces name file and line. Ship the `.pdb` with the `.exe`.
 line. Every line written while handling a request carries its `request_id`,
 the same ID the CLI printed. Crash traces (`crash-<timestamp>.json`) go to the
 same directory. The CLI writes a log (`cli.<date>.jsonl`) only when given
-`--log-dir`. The format, the environment variables and the crash file:
+`--log-dir`. The indexer writes `indexer.<date>.jsonl` (boundary `indexer`)
+there too when run with `--console`, and in `%ProgramData%\CabinetOS\logs`
+as a service. The format, the environment variables and the crash file:
 [../docs/diagnostics.md](../docs/diagnostics.md).

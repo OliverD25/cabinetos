@@ -6,8 +6,9 @@ This folder fills up in Phases 1, 3 and 7 of
 What lives here, or will:
 
 - `protocol/` — the JSON Schema of the control-channel messages, exported from
-  the Rust types in `core/crates/cabinetos-protocol` (Phase 1 onward). The C#
-  side is validated against it.
+  the Rust types in `core/crates/cabinetos-protocol` (Phase 1 onward), and of
+  the indexer's read-only pipe (`indexer-request`, `indexer-response`,
+  Phase 6). The C# side is validated against it.
 - `config/` — the JSON Schema of `cabinetos.json`, exported from the Rust
   types in `core/crates/cabinetos-config` (Phase 3). The core writes a copy
   next to the configuration file for editors ([../docs/config.md](../docs/config.md)).

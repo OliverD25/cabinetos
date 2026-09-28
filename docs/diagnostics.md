@@ -12,7 +12,7 @@ The Rust processes (core, indexer, CLI) get all of this from the
 | What | Where |
 |---|---|
 | Directory | `%LOCALAPPDATA%\CabinetOS\logs\` |
-| Log files | One per process and UTC day: `core.2026-09-28.jsonl`, `indexer.<date>.jsonl`, `ui.<date>.jsonl` (Phase 5). The CLI writes `cli.<date>.jsonl` only when it is given `--log-dir`. |
+| Log files | One per process and UTC day: `core.2026-09-28.jsonl`, `indexer.<date>.jsonl`, `ui.<date>.jsonl` (Phase 5). The CLI writes `cli.<date>.jsonl` only when it is given `--log-dir`. The indexer running as a service writes to `%ProgramData%\CabinetOS\logs` instead ([indexer.md](indexer.md)). |
 | Crash traces | `crash-<YYYYMMDDTHHMMSSmmmZ>.json` in the same directory, for example `crash-20260928T010203004Z.json` |
 
 - **Other directory.** `--log-dir <path>` on `cabinetos-core` and
@@ -48,7 +48,7 @@ One JSON object per line, with the keys always in this order:
 |---|---|---|---|
 | `ts` | string | always | UTC time, RFC 3339 with milliseconds: `2026-09-28T01:02:03.004Z` |
 | `level` | string | always | `TRACE`, `DEBUG`, `INFO`, `WARN` or `ERROR` |
-| `boundary` | string | always | The part of the system that wrote the line: `frontend`, `engine`, `plugin`, `indexer` or `ipc`. The process decides it: the core writes `engine`, the CLI (standing in for the UI) writes `frontend`. A line with a `plugin_id` is `plugin`: it was written by a plugin (its `log` calls, its stdout and stderr) or by the core on its behalf (docs/plugins.md). |
+| `boundary` | string | always | The part of the system that wrote the line: `frontend`, `engine`, `plugin`, `indexer` or `ipc`. The process decides it: the core writes `engine`, the indexer `indexer`, the CLI (standing in for the UI) `frontend`. A line with a `plugin_id` is `plugin`: it was written by a plugin (its `log` calls, its stdout and stderr) or by the core on its behalf (docs/plugins.md). |
 | `target` | string | always | The Rust module that logged the event, for example `cabinetos_core` |
 | `message` | string | always | The event text |
 | `request_id` | string | inside a request | The ULID of the request being handled, taken from the innermost enclosing span that has a `request_id` field |

@@ -42,7 +42,7 @@ connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":5,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":6,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
@@ -63,7 +63,8 @@ optional. Version 4 (Phase 4) added the jobs. Version 5 (Phase 7) added
 the Recycle Bin conflict (`recycle_bin_too_small`, `delete_permanently`,
 `invalid_resolution`) and the Core Plugins: four requests, the `plugins`
 reply, three events, the error codes `no_such_plugin` and `plugin_error`,
-and the plugin's `name` in a command's `source`.
+and the plugin's `name` in a command's `source`. Version 6 (Phase 6) added
+file search (`search`, `file_search_results`) and `index_status`.
 
 ## Requests and replies
 
@@ -90,6 +91,8 @@ and the plugin's `name` in a command's `source`.
 | `reload_plugin` | `plugin_id` | `ok` |
 | `set_plugin_enabled` | `plugin_id`, `enabled` | `ok` |
 | `grant_capabilities` | `plugin_id`, `capabilities` | `ok` |
+| `search` | `query`; `limit` (default 100, at most 1,000); `root` | `file_search_results` |
+| `index_status` | — | `index_status` (`available`, `volumes`) |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -118,10 +121,11 @@ Any request can instead get `error` with a `code` and a `message`:
 
 Requests on one connection are independent: `list_directory`,
 `volume_info`, `set_keybinding`, `reset_keybinding`, `start_job`,
-`reload_plugin`, `set_plugin_enabled`, `grant_capabilities`, and
-`execute_command` for a plugin's command run in the background, so a slow
-directory or plugin does not hold up the next request, and their replies
-may come in any order. Match replies to requests by `id`.
+`reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
+`execute_command` for a plugin's command, `search` and `index_status` run in
+the background, so a slow directory, plugin or search does not hold up the
+next request, and their replies may come in any order. Match replies to
+requests by `id`.
 
 ## Listing a directory
 
@@ -329,7 +333,7 @@ hits.
 ```json
 {"id":"01M…","type":"execute_command","command":"help.about"}
 {"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
- "core_version":"0.1.0","protocol_version":5,"config_path":"C:\\…\\cabinetos.json"}}
+ "core_version":"0.1.0","protocol_version":6,"config_path":"C:\\…\\cabinetos.json"}}
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
@@ -514,11 +518,55 @@ answers `unknown_command` and says which plugin crashed.
   `events:emit`): a `name` the plugin chose, and the `payload` text as the
   plugin wrote it, usually JSON.
 
+## Search
+
+Files and folders by name, across whole volumes when the elevated indexer
+runs, and in one folder tree when it does not ([indexer.md](indexer.md)).
+
+```json
+{"id":"01M…","type":"search","query":"budget","limit":20,"root":"C:\\Users\\me"}
+{"id":"01M…","type":"file_search_results","hits":[
+ {"path":"C:\\Users\\me\\Budget-2026.xlsx","kind":"file","frn":1407374883553540},
+ {"path":"C:\\Users\\me\\old\\budget","kind":"directory","frn":1407374883553541}],
+ "source":"index","took_us":1210,"complete":true}
+```
+
+- The match is a substring of the name, without case. Hits come best first:
+  names that start with the query, then shorter names, then paths in
+  order.
+- `root` limits the hits to one folder (at any depth). Without it the
+  indexer searches every indexed volume, and a walk starts at the folder
+  this connection listed last, else at the user's profile folder.
+- `source` is `index` (the indexer answered) or `walk` (the core walked
+  folders: no indexer answered within 200 ms, or it cannot search under
+  that root). A walk stops after 2 s or 20,000 entries.
+- `complete` is `false` when the search could not cover everything: a
+  walk stopped at a limit, or a volume is still being indexed.
+- `kind` is `file` or `directory`; `frn` is the NTFS file reference number, a
+  64-bit unsigned integer (it can exceed 2^53), absent when unknown.
+- An empty query gets `protocol_error`; a root that does not exist gets
+  `not_found`.
+
+```json
+{"id":"01M…","type":"index_status"}
+{"id":"01M…","type":"index_status","available":true,"volumes":[{"letter":"C",
+ "state":{"type":"ready"},"entries":1357918,"built_in_ms":3480,"journal_lag":0}]}
+```
+
+`available` is `false` (and `volumes` empty) when no indexer answers.
+`state` is an object tagged by `type`: `building`, `ready`, `rebuilding`, or
+`failed` with a `message`. `journal_lag` is the change-journal bytes the
+index has not applied yet.
+
+The core and the indexer speak the same framing on the indexer's own pipe,
+with read-only requests only; that protocol is in [indexer.md](indexer.md).
+
 ## Trying it by hand
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
 `ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
 `config`, `commands` and `keys` cover the configuration messages (`keys
 watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`
-cover the jobs, and `plugins`, `commands exec` and `events watch` cover the
-plugins. See [core/README.md](../core/README.md).
+cover the jobs, `plugins`, `commands exec` and `events watch` cover the
+plugins, and `search` and `index status` cover file search. See
+[core/README.md](../core/README.md).
