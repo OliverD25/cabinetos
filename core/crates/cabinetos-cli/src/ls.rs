@@ -119,13 +119,18 @@ fn print_entries(entries: &[EntryView], long: bool) -> bool {
         let written = if long {
             writeln!(
                 out,
-                "{} {} {} {:>15} {}{}",
+                "{} {} {} {:>15} {}{}{}",
                 glyph(entry.kind),
                 attribute_letters(entry.meta.attributes),
                 modified(entry.meta.modified),
                 size(entry),
                 entry.name,
-                link_kind(entry.flags)
+                link_kind(entry.flags),
+                if entry.flags & ListingEntry::FLAG_NOT_ON_DISK == 0 {
+                    ""
+                } else {
+                    " [not on this disk]"
+                }
             )
         } else {
             writeln!(out, "{} {}", glyph(entry.kind), entry.name)

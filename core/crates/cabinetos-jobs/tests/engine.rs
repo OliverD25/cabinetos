@@ -1350,6 +1350,47 @@ fn a_symbolic_link_to_a_file_is_copied_as_a_link_wherever_this_user_may_make_one
 }
 
 #[test]
+fn a_copy_of_a_file_whose_data_is_elsewhere_reads_it_and_is_here() {
+    // A copy reads the whole file, so a cloud file is downloaded by it (the
+    // sync provider fetches the data when CopyFileExW reads it). That is
+    // what the user asked for, and the copy is an ordinary file on this
+    // disk. The offline attribute stands in for the cloud ones, which only
+    // a sync provider can set.
+    const OFFLINE: u32 = 0x1000;
+    let dir = scratch("copy-offline");
+    let source = dir.path().join("elsewhere.bin");
+    write_file(&source, 64 * 1024, 7);
+    let status = Command::new("attrib")
+        .arg("+O")
+        .arg(&source)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert_ne!(
+        fs::metadata(&source).unwrap().file_attributes() & OFFLINE,
+        0
+    );
+    let destination = dir.path().join("dst");
+    let engine = engine();
+    let job = engine.start(
+        JobKind::Copy,
+        &[&source],
+        Some(&destination),
+        JobOptions::default(),
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(conflicts.is_empty(), "{conflicts:?}");
+    let copy = destination.join("elsewhere.bin");
+    assert_eq!(content_hash(&copy), content_hash(&source));
+    assert_eq!(
+        fs::metadata(&copy).unwrap().file_attributes() & OFFLINE,
+        0,
+        "the copy's data is on this disk"
+    );
+}
+
+#[test]
 fn following_links_stops_at_a_link_back_into_the_copy() {
     let dir = scratch("follow-loop");
     let source = dir.path().join("src");

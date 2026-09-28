@@ -1,6 +1,7 @@
-//! What a link is: the flags a listing gives it, and the one fact that
-//! needs its reparse data, whether a junction's target is a volume (then it
-//! is a mount point).
+//! The flags a listing gives an entry beyond its kind: what kind of link it
+//! is, and whether its data is on this disk. Only one of them needs more
+//! than the enumeration's record: whether a junction's target is a volume
+//! (then it is a mount point), which its reparse data says.
 
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
@@ -32,6 +33,15 @@ pub(crate) fn flag_of(attrs: u32, reparse_tag: u32) -> u8 {
         TAG_MOUNT_POINT => ListingEntry::FLAG_JUNCTION,
         TAG_SYMLINK => ListingEntry::FLAG_SYMBOLIC_LINK,
         _ => 0,
+    }
+}
+
+/// The "not on this disk" flag for an entry with these attributes.
+pub(crate) fn not_on_disk_flag(attrs: u32) -> u8 {
+    if attrs & attributes::NOT_ON_DISK == 0 {
+        0
+    } else {
+        ListingEntry::FLAG_NOT_ON_DISK
     }
 }
 
@@ -139,6 +149,29 @@ fn reparse_data(path: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn data_elsewhere_is_marked_not_on_this_disk() {
+        const OFFLINE: u32 = 0x1000;
+        const RECALL_ON_OPEN: u32 = 0x4_0000;
+        const RECALL_ON_DATA_ACCESS: u32 = 0x40_0000;
+        const PINNED: u32 = 0x8_0000;
+        const UNPINNED: u32 = 0x10_0000;
+        let not_on_disk = ListingEntry::FLAG_NOT_ON_DISK;
+        // OneDrive's "online only" file, and its folder whose list of
+        // files is still in the cloud.
+        assert_eq!(
+            not_on_disk_flag(RECALL_ON_DATA_ACCESS | UNPINNED | 0x20),
+            not_on_disk
+        );
+        assert_eq!(not_on_disk_flag(RECALL_ON_OPEN | 0x10), not_on_disk);
+        // Moved to other storage by an archiving system.
+        assert_eq!(not_on_disk_flag(OFFLINE | 0x20), not_on_disk);
+        // Downloaded ("always keep on this device", or just opened): here.
+        assert_eq!(not_on_disk_flag(PINNED | 0x20), 0);
+        assert_eq!(not_on_disk_flag(UNPINNED | 0x20), 0);
+        assert_eq!(not_on_disk_flag(0x20), 0);
+    }
 
     #[test]
     fn only_junctions_and_symbolic_links_get_a_flag() {

@@ -1,6 +1,7 @@
 //! `cabinetos-cli` against a real core with the edge cases of the core's
 //! hardening, one section per class: names beyond ASCII (docs/ui.md, "Edge
-//! cases"), paths longer than 260 characters, and links. What the CLI prints into a
+//! cases"), paths longer than 260 characters, links, and files whose data
+//! is not on this disk. What the CLI prints into a
 //! pipe is UTF-8; on a console the standard library writes through
 //! `WriteConsoleW`, so the console's code page plays no part. Everything
 //! written lives under `%TEMP%\cabinetos-core-test\`.
@@ -325,4 +326,34 @@ fn ls_long_names_the_kind_of_each_link() {
         );
     }
     assert!(line("target").ends_with(" target"), "{text}");
+}
+
+// Files whose data is not on this disk.
+
+#[test]
+fn ls_long_marks_a_file_whose_data_is_not_on_this_disk() {
+    let core = start_core();
+    let dir = scratch("cli-offline");
+    std::fs::write(dir.path().join("here.txt"), "here").unwrap();
+    std::fs::write(dir.path().join("elsewhere.txt"), "elsewhere").unwrap();
+    // The offline attribute stands in for OneDrive's "online only".
+    let status = Command::new("attrib")
+        .arg("+O")
+        .arg(dir.path().join("elsewhere.txt"))
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let text = stdout(&cli(
+        &core,
+        &["ls", "--long", &dir.path().display().to_string()],
+    ));
+    assert!(
+        text.lines()
+            .any(|line| line.ends_with(" elsewhere.txt [not on this disk]")),
+        "{text}"
+    );
+    assert!(
+        text.lines().any(|line| line.ends_with(" here.txt")),
+        "{text}"
+    );
 }

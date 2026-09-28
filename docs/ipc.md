@@ -305,6 +305,8 @@ offset 0                                        the section
                       bit 2 (4): a symbolic link (to a folder when the
                              attributes have FILE_ATTRIBUTE_DIRECTORY)
                       bit 3 (8): a mount point (a junction to a volume)
+                      bit 4 (16): not on this disk: reading the data
+                             fetches it (a cloud file, an offline file)
 ```
 
 `ListingMeta` (40 bytes, 8-byte aligned), same index as the entry:
@@ -333,6 +335,17 @@ junction in the folder). A link of another name-surrogate kind (a WSL link,
 compressed system files (`IO_REPARSE_TAG_WOF`) and the like keep kind file
 or directory, with the reparse-point bit in `attributes` and their tag in
 `reparse_tag`, so a client can name them without opening them.
+
+**Not on this disk.** Flag bit 4 marks an entry whose data is elsewhere:
+the attributes hold `FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS` (a cloud file
+not downloaded, OneDrive's "online only"), `FILE_ATTRIBUTE_RECALL_ON_OPEN`
+(a cloud folder whose list of files is not fetched yet) or
+`FILE_ATTRIBUTE_OFFLINE` (a file moved to other storage). The attributes
+say the same; the flag saves every client the test. Listing such an entry
+reads nothing of it, `describe_entries` and `get_icon` never read it
+(below), and opening, copying or moving it fetches it, which is what the
+user asked for. A downloaded cloud file loses the mark with its
+attributes; the folder's watcher reports that as a change.
 
 The flags and the tag are additive: `reparse_tag` was a reserved field,
 always 0, and clients ignore flag bits they do not know, so the layout
@@ -370,7 +383,10 @@ UI asks for those for the rows it shows, a screenful at a time.
   file has `ext:` and its extension in lower case with its dot
   (`ext:.txt`, and `ext:.gitignore` for `.gitignore`); a file without one
   has `generic`. `.exe`, `.ico` and `.lnk` files carry their own icon, so
-  each has `path:` and 16 hex digits: FNV-1a (64 bits) of the lower-case
+  each has `path:` and 16 hex digits, unless its data is not on this disk:
+  reading its icon would download a cloud file, so it gets the `ext:` key
+  of its extension, and its row is drawn without reading it. The
+  `path:` digits are FNV-1a (64 bits) of the lower-case
   full path, the last-write time and the size. A changed file gets a new
   key, so a client may keep icons by key for as long as it likes. The
   core remembers which file a `path:` key stands for (the last 16,384 of

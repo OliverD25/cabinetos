@@ -134,3 +134,35 @@ fn watching_a_junction_reports_changes_in_what_it_points_to() {
     assert_eq!(changes.recv_timeout(WAIT), Ok(DirectoryChanged::Changed));
     watcher.stop();
 }
+
+#[test]
+fn a_file_coming_back_to_this_disk_is_a_change_and_the_watcher_goes_on() {
+    // A download of a cloud file changes its attributes (the "not on this
+    // disk" ones go) and its allocation; the offline attribute stands in
+    // for them here.
+    let root = std::env::temp_dir().join("cabinetos-fs-test");
+    fs::create_dir_all(&root).unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("watch-offline")
+        .tempdir_in(root)
+        .unwrap();
+    let file = dir.path().join("elsewhere.txt");
+    fs::write(&file, b"x").unwrap();
+    let attrib = |switch: &str| {
+        let status = std::process::Command::new("attrib")
+            .arg(switch)
+            .arg(&file)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    };
+    attrib("+O");
+    let (watcher, changes) = start(dir.path());
+    attrib("-O");
+    fs::write(&file, b"the whole file, downloaded").unwrap();
+    assert_eq!(changes.recv_timeout(WAIT), Ok(DirectoryChanged::Changed));
+    while changes.recv_timeout(Duration::from_millis(200)).is_ok() {}
+    fs::write(dir.path().join("after.txt"), b"still watching").unwrap();
+    assert_eq!(changes.recv_timeout(WAIT), Ok(DirectoryChanged::Changed));
+    watcher.stop();
+}

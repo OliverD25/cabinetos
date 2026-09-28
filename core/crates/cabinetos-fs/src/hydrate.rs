@@ -159,7 +159,11 @@ impl Hydrator {
                 icon_key: "generic".to_owned(),
             };
         };
-        let icon_key = if OWN_ICON.contains(&extension.as_str()) {
+        // A file whose data is not on this disk is never read to be shown:
+        // reading a cloud file downloads it. It gets its extension's icon.
+        let own_icon = OWN_ICON.contains(&extension.as_str())
+            && entry.meta.attributes & attributes::NOT_ON_DISK == 0;
+        let icon_key = if own_icon {
             self.path_key(folder, entry)
         } else {
             format!("ext:{extension}")
@@ -827,6 +831,66 @@ mod tests {
                     .unwrap_or_else(|error| panic!("{detail:?} at {size}: {error}"));
                 assert!(!png.is_empty());
             }
+        }
+    }
+
+    /// A section of entries with these names and attributes, made by hand:
+    /// a cloud file cannot be made without a sync provider.
+    fn section_with(entries: &[(&str, u32)]) -> Vec<u8> {
+        use crate::{Entry, Listing};
+        use cabinetos_protocol::shm::{EntryKind, ListingMeta};
+
+        let mut listing = Listing::default();
+        for (index, (name, attributes)) in entries.iter().enumerate() {
+            let start = listing.names.len();
+            listing.names.extend(name.encode_utf16());
+            listing.entries.push(Entry {
+                id: 5000 + index as u64,
+                kind: EntryKind::File,
+                flags: 0,
+                meta: ListingMeta {
+                    size: 1_000_000,
+                    modified: 133_000_000_000_000_000,
+                    created: 133_000_000_000_000_000,
+                    accessed: 133_000_000_000_000_000,
+                    attributes: *attributes,
+                    reparse_tag: 0,
+                },
+                name_start: u32::try_from(start).unwrap(),
+                name_len: u16::try_from(listing.names.len() - start).unwrap(),
+            });
+        }
+        let writer = ListingWriter::new(&listing).unwrap();
+        let mut section = vec![0u8; writer.section_size()];
+        writer.write(&mut section, 1).unwrap();
+        section
+    }
+
+    #[test]
+    fn a_file_not_on_this_disk_gets_its_icon_by_extension_and_is_never_read() {
+        const RECALL_ON_DATA_ACCESS: u32 = 0x40_0000;
+        const OFFLINE: u32 = 0x1000;
+        // None of these files exists: only the attributes and the name may
+        // be used, so a cloud file is not downloaded by being shown.
+        let section = section_with(&[
+            ("online only.exe", RECALL_ON_DATA_ACCESS | 0x20),
+            ("archived.lnk", OFFLINE | 0x20),
+            ("icon.ico", RECALL_ON_DATA_ACCESS | 0x20),
+            ("here.exe", 0x20),
+        ]);
+        let hydrator = Hydrator::new();
+        let (_, details) = hydrator
+            .describe(&section, r"C:\no such folder", 0, 10)
+            .unwrap();
+        let keys: Vec<&str> = details.iter().map(|d| d.icon_key.as_str()).collect();
+        assert_eq!(keys[..3], ["ext:.exe", "ext:.lnk", "ext:.ico"], "{keys:?}");
+        assert!(
+            keys[3].starts_with("path:"),
+            "a file on this disk has its own icon"
+        );
+        for key in &keys[..3] {
+            let png = hydrator.icon_png(key, 16).unwrap();
+            assert!(!png.is_empty());
         }
     }
 

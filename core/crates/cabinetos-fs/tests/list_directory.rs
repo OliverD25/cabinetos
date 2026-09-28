@@ -734,3 +734,61 @@ fn a_link_lists_what_it_points_to_and_a_broken_one_is_still_a_link() {
     .unwrap_err();
     assert!(matches!(error, FsError::NotFound { .. }), "{error:?}");
 }
+
+/// `FILE_ATTRIBUTE_OFFLINE`: the file's data was moved to other storage. Of
+/// the three attributes that mean "not on this disk" it is the one anyone
+/// may set (`attrib +O`); the two cloud ones need a sync provider.
+const FILE_ATTRIBUTE_OFFLINE: u32 = 0x1000;
+
+fn set_offline(path: &Path, offline: bool) {
+    let status = Command::new("attrib")
+        .arg(if offline { "+O" } else { "-O" })
+        .arg(path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+#[test]
+fn a_file_whose_data_is_elsewhere_is_marked_not_on_this_disk() {
+    let dir = scratch("offline");
+    touch(&dir.path().join("here.txt"), b"here");
+    touch(&dir.path().join("elsewhere.txt"), b"elsewhere");
+    set_offline(&dir.path().join("elsewhere.txt"), true);
+    let listing = list(dir.path());
+    let flags = |name: &str| {
+        let entry = listing
+            .entries()
+            .iter()
+            .find(|entry| listing.name_string(entry) == name)
+            .copied()
+            .unwrap();
+        (
+            entry.flags & ListingEntry::FLAG_NOT_ON_DISK,
+            entry.meta.attributes,
+        )
+    };
+    let (mark, attributes) = flags("elsewhere.txt");
+    assert_eq!(mark, ListingEntry::FLAG_NOT_ON_DISK);
+    assert_ne!(attributes & FILE_ATTRIBUTE_OFFLINE, 0);
+    assert_eq!(flags("here.txt").0, 0);
+
+    let writer = ListingWriter::new(&listing).unwrap();
+    let mut section = vec![0u8; writer.section_size()];
+    writer.write(&mut section, 1).unwrap();
+    let reader = ListingReader::new(&section).unwrap();
+    let seen: Vec<(String, u8)> = reader
+        .entries()
+        .map(|entry| {
+            let entry = entry.unwrap();
+            (entry.name, entry.flags & ListingEntry::FLAG_NOT_ON_DISK)
+        })
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("elsewhere.txt".to_owned(), ListingEntry::FLAG_NOT_ON_DISK),
+            ("here.txt".to_owned(), 0)
+        ]
+    );
+}

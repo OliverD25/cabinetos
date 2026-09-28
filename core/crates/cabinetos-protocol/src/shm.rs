@@ -87,6 +87,12 @@ impl ListingEntry {
     /// [`EntryKind::ReparsePoint`]). Its reparse tag is a junction's; the
     /// target, a volume, tells them apart.
     pub const FLAG_MOUNT_POINT: u8 = 8;
+    /// The entry's data is not on this disk: a cloud file not downloaded
+    /// (`FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS`), a cloud folder whose list
+    /// of files is not fetched yet (`FILE_ATTRIBUTE_RECALL_ON_OPEN`), or a
+    /// file moved to other storage (`FILE_ATTRIBUTE_OFFLINE`). Reading it
+    /// fetches it; showing it must not.
+    pub const FLAG_NOT_ON_DISK: u8 = 16;
 }
 
 /// The metadata of one entry: 40 bytes, 8-byte aligned. Times are Windows
@@ -209,6 +215,7 @@ mod tests {
         assert_eq!(ListingEntry::FLAG_JUNCTION, 2);
         assert_eq!(ListingEntry::FLAG_SYMBOLIC_LINK, 4);
         assert_eq!(ListingEntry::FLAG_MOUNT_POINT, 8);
+        assert_eq!(ListingEntry::FLAG_NOT_ON_DISK, 16);
     }
 
     #[test]

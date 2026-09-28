@@ -207,6 +207,19 @@ link, never what it points to, unless `copy_links` says otherwise.
 - **To the Recycle Bin** the shell takes the link. The test for that runs
   only where `CABINETOS_TEST_RECYCLE_BIN=1` (CI), like the other bin tests.
 
+### Files not on this disk
+
+A cloud file that is not downloaded (OneDrive's "online only") or a file
+moved to other storage has its data elsewhere; the listing marks it (ipc.md,
+"Not on this disk"). A copy reads the whole file with `CopyFileExW`, so the
+sync provider downloads it while the job runs: that is what the user asked
+for, and the job counts the file's full size, as the listing gives it. The
+copy is an ordinary file whose data is here; it does not keep the offline
+attribute. A move across volumes copies (downloading), then deletes the
+source, which the provider may pass on to the cloud, as a move out of the
+synced folder in Explorer does. Tested with the offline attribute standing
+in for the cloud ones, which only a sync provider can set.
+
 ### The Recycle Bin and long paths
 
 The shell's Recycle Bin takes paths shorter than 260 characters (UTF-16

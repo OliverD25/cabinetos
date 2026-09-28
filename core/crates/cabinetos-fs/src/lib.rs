@@ -208,4 +208,8 @@ pub(crate) mod attributes {
     pub(crate) const HIDDEN_OR_SYSTEM: u32 = HIDDEN | SYSTEM;
     pub(crate) const DIRECTORY: u32 = 0x10;
     pub(crate) const REPARSE_POINT: u32 = 0x400;
+    /// The data is not on this disk: `OFFLINE` (moved to other storage),
+    /// `RECALL_ON_OPEN` (a cloud folder whose list of files is not fetched
+    /// yet), `RECALL_ON_DATA_ACCESS` (a cloud file not downloaded).
+    pub(crate) const NOT_ON_DISK: u32 = 0x1000 | 0x4_0000 | 0x40_0000;
 }

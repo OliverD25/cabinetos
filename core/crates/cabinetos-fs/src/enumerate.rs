@@ -239,7 +239,7 @@ pub(crate) fn parse_records(
                         reparse_tag,
                         ..meta
                     },
-                    link::flag_of(attrs, reparse_tag),
+                    link::flag_of(attrs, reparse_tag) | link::not_on_disk_flag(attrs),
                 )
                 .map_err(|()| malformed())?;
         }

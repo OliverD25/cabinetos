@@ -121,6 +121,16 @@ core's own walk ([Without the indexer](#without-the-indexer)) does the
 same: it enters folders only, never a link (kind 3), so a junction that
 points back at its own folder costs one entry and ends there.
 
+### Cloud files
+
+The index reads names from the MFT, so a cloud file or folder is indexed
+like any other, whether its data is here or not, and a search never
+fetches anything. The core's walk lists folders, and a cloud folder whose
+list of files is not fetched yet (`FILE_ATTRIBUTE_RECALL_ON_OPEN`) makes
+the sync provider fetch that list when the walk enters it: names only, no
+file data. (That is the Cloud Files behaviour Windows documents; it is not
+tested here, since it needs a sync provider.)
+
 ### What the index reveals
 
 The index holds names, parents and attributes, never file contents. It
