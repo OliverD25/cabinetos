@@ -50,6 +50,10 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+        env:
+          # The runner is thrown away after the run, so the test that sends
+          # a file to the Recycle Bin may run here (it is skipped elsewhere).
+          CABINETOS_TEST_RECYCLE_BIN: "1"
 
       - name: Release build
         run: cargo build --workspace --release

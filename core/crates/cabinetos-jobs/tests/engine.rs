@@ -859,3 +859,54 @@ fn measure_files_in_flight() {
         }
     }
 }
+
+/// What `CopyFileExW` keeps by itself, and what `preserve_timestamps` adds.
+#[test]
+fn copyfile_keeps_the_write_time_and_the_option_adds_the_creation_time() {
+    use std::fs::FileTimes;
+    use std::os::windows::fs::FileTimesExt;
+    use std::time::SystemTime;
+
+    let dir = scratch("times");
+    let source = dir.path().join("old.txt");
+    fs::write(&source, "old").unwrap();
+    let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+    fs::File::options()
+        .write(true)
+        .open(&source)
+        .unwrap()
+        .set_times(
+            FileTimes::new()
+                .set_modified(old)
+                .set_accessed(old)
+                .set_created(old),
+        )
+        .unwrap();
+    let original = fs::metadata(&source).unwrap();
+
+    let engine = engine();
+    for preserve in [false, true] {
+        let destination = dir.path().join(format!("dst-{preserve}"));
+        let options = JobOptions {
+            preserve_timestamps: preserve,
+            ..JobOptions::default()
+        };
+        let job = engine.start(JobKind::Copy, &[&source], Some(&destination), options);
+        assert_eq!(engine.finish(job).0.state, JobState::Completed);
+        let copied = fs::metadata(destination.join("old.txt")).unwrap();
+        assert_eq!(
+            copied.last_write_time(),
+            original.last_write_time(),
+            "CopyFileExW keeps the write time"
+        );
+        if preserve {
+            assert_eq!(copied.creation_time(), original.creation_time());
+        } else {
+            assert_ne!(
+                copied.creation_time(),
+                original.creation_time(),
+                "without the option the copy is created now"
+            );
+        }
+    }
+}
