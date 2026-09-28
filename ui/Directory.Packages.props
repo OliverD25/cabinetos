@@ -1,0 +1,15 @@
+<Project>
+  <!-- One place for every package version (docs/dev-setup.md, "Phase 5"). -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="Microsoft.Windows.CsWin32" Version="0.3.335" />
+    <!-- Runs on Microsoft.Testing.Platform; ui/global.json turns that mode on for dotnet test. -->
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <!-- 8.0.5 is the last MIT release; 9.0 moved to a maintenance-fee EULA. -->
+    <PackageVersion Include="JsonSchema.Net" Version="8.0.5" />
+  </ItemGroup>
+</Project>
