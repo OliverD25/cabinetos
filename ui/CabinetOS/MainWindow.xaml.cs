@@ -75,7 +75,7 @@ public sealed partial class MainWindow : Window
     private bool _closed;
     private bool _started;
     private bool _volumesLogged;
-    private bool _dialogOpen;
+    private ContentDialog? _openDialog;
     private bool _systemClipboardHolds;
     private readonly Queue<DateTime> _restarts = new();
 
@@ -411,6 +411,9 @@ public sealed partial class MainWindow : Window
                 case "click":
                     ClickForSnapshot(step.Argument);
                     break;
+                case "focus":
+                    LogFocusForSnapshot(step.Argument);
+                    break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
                     var shown = Active.View?.IndexOfName(step.Argument) ?? -1;
@@ -438,7 +441,7 @@ public sealed partial class MainWindow : Window
     private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage, .. _toolHosts.OfType<ToolHost>().Select(h => h.Page)];
 
     // The snapshot aid's click: step: the first shown button with that accessible name, pressed
-    // through its automation peer, as assistive technology presses it.
+    // as assistive technology may press it: the keyboard moves to it, then its automation peer invokes it.
     private void ClickForSnapshot(string name)
     {
         var pending = new Stack<DependencyObject>();
@@ -450,11 +453,13 @@ public sealed partial class MainWindow : Window
             {
                 continue;
             }
+            // The peer's name is what UI Automation reports: the accessible name, else the button's text.
             if (element is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase button
-                && Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(button) == name
-                && Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(button)
-                    ?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invoke)
+                && Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(button) is { } peer
+                && peer.GetName() == name
+                && peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invoke)
             {
+                button.Focus(FocusState.Keyboard);
                 invoke.Invoke();
                 return;
             }
@@ -464,6 +469,31 @@ public sealed partial class MainWindow : Window
             }
         }
         Diag.Info(Target, "snapshot click: no shown button has that name", new LogField("name", name));
+    }
+
+    // The snapshot aid's focus: step: where the keyboard is, in the log (the label names the moment).
+    private void LogFocusForSnapshot(string label)
+    {
+        var focused = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
+        var name = focused is UIElement element ? Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(element) : "";
+        var within = focused is null ? "nothing"
+            : _openDialog is { } dialog && IsWithin(focused, dialog) ? "dialog"
+            : IsWithin(focused, RootGrid) ? "window"
+            : "elsewhere";
+        Diag.Info("cabinetos_ui::snapshot", "keyboard focus", new LogField("label", label), new LogField("element", focused?.GetType().Name ?? "none"),
+            new LogField("name", name), new LogField("within", within));
+
+        static bool IsWithin(DependencyObject element, DependencyObject container)
+        {
+            for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+            {
+                if (current == container)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     // The crash-isolation check: ends a page's browser process, as a crash would.
@@ -877,21 +907,100 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // WinUI allows one ContentDialog at a time; a second one would throw.
+    // WinUI allows one ContentDialog at a time; a second one would throw. While one is open the
+    // router runs no command, and Esc closes it wherever the keyboard is (docs/ui.md, "Dialogs").
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {
-        if (_dialogOpen)
+        if (_openDialog is not null)
         {
             return ContentDialogResult.None;
         }
-        _dialogOpen = true;
+        _openDialog = dialog;
+        UpdateModal();
+        // A selectable text in the dialog, which can hold the keyboard, takes Esc for itself.
+        dialog.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == VirtualKey.Escape)
+            {
+                e.Handled = true;
+                dialog.Hide();
+            }
+        };
+        dialog.Opened += (_, _) => FocusDialog(dialog);
+        var title = dialog.Title as string ?? "";
+        Diag.Info(Target, "dialog shown", new LogField("title", title));
+        var result = ContentDialogResult.None;
         try
         {
-            return await dialog.ShowAsync();
+            result = await dialog.ShowAsync();
+            return result;
         }
         finally
         {
-            _dialogOpen = false;
+            _openDialog = null;
+            UpdateModal();
+            Diag.Info(Target, "dialog closed", new LogField("title", title), new LogField("result", result.ToString()));
+        }
+    }
+
+    // The dialog's default button (else Close) takes the keyboard, unless something in the dialog has it already.
+    private void FocusDialog(ContentDialog dialog)
+    {
+        var focused = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
+        for (var current = focused; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current == dialog)
+            {
+                return;
+            }
+        }
+        var name = dialog.DefaultButton switch
+        {
+            ContentDialogButton.Primary => "PrimaryButton",
+            ContentDialogButton.Secondary => "SecondaryButton",
+            _ => "CloseButton",
+        };
+        if (FindNamed(dialog, name) is Control button && button.Focus(FocusState.Programmatic))
+        {
+            return;
+        }
+        if (FocusManager.FindFirstFocusableElement(dialog) is UIElement first)
+        {
+            first.Focus(FocusState.Programmatic);
+        }
+
+        static DependencyObject? FindNamed(DependencyObject parent, string name)
+        {
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is FrameworkElement { Name: var childName, Visibility: Visibility.Visible } && childName == name)
+                {
+                    return child;
+                }
+                if (FindNamed(child, name) is { } found)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+    }
+
+    // docs/ui.md, "Dialogs": while a dialog is open the router runs only that dialog's own commands.
+    private void UpdateModal()
+    {
+        if (_openDialog is { } dialog)
+        {
+            _router.SetModal(dialog.Title as string ?? "dialog");
+        }
+        else if (ReviewView.IsOpen)
+        {
+            _router.SetModal("permissions review", "plugins.grant", "overlay.close");
+        }
+        else
+        {
+            _router.SetModal(null);
         }
     }
 
@@ -954,8 +1063,16 @@ public sealed partial class MainWindow : Window
         _router.RegisterUiHandler("transfer.pause", invocation => ControlShownAsync(JobActions.Pause, invocation));
         _router.RegisterUiHandler("transfer.resume", invocation => ControlShownAsync(JobActions.Resume, invocation));
         _router.RegisterUiHandler("transfer.cancel", invocation => ControlShownAsync(JobActions.Cancel, invocation));
-        _router.RegisterUiHandler("transfer.close", _ => _transfers.Close());
-        _router.RegisterUiHandler("transfer.minimize", _ => _transfers.Minimize());
+        _router.RegisterUiHandler("transfer.close", _ =>
+        {
+            ReturnFocusFromFlyout();
+            _transfers.Close();
+        });
+        _router.RegisterUiHandler("transfer.minimize", _ =>
+        {
+            ReturnFocusFromFlyout();
+            _transfers.Minimize();
+        });
         _router.RegisterUiHandler("transfer.restore", _ => _transfers.Restore());
         _router.RegisterUiHandler("transfer.next", _ => _transfers.ShowNext());
         _router.RegisterUiHandler("conflict.resolve", ResolveConflictAsync);
@@ -1552,10 +1669,24 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
+        // Before the card closes: a button pressed by a screen reader or Voice Access holds the
+        // keyboard, which a closing card would hand to the Back button (live check, 2026-09-28).
+        ReturnFocusFromFlyout();
         var apply = CommandArgs.Bool(invocation.Args, "apply_to_same_kind");
         if (await _transfers.ResolveAsync(conflict, new Resolution(resolution), apply, invocation.RequestId) is { } error)
         {
             ShowNotice($"{ConflictText.Name(conflict)}: {error}", isError: true);
+        }
+    }
+
+    // The flyout never keeps the keyboard (docs/ui.md, "The transfer flyout"): a pointer never gives
+    // it the focus, and whatever else did (Tab, assistive technology) hands it back to the pane
+    // before the part with the focus closes.
+    private void ReturnFocusFromFlyout()
+    {
+        if (IsFocusWithin(TransferView))
+        {
+            FocusActivePane();
         }
     }
 
@@ -1897,6 +2028,22 @@ public sealed partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_openDialog is { } dialog)
+        {
+            // The keyboard is under an open dialog (keys in the dialog do not come here): nothing
+            // under it reacts. Esc closes the dialog, as it would there; any other key takes the
+            // keyboard back into it.
+            e.Handled = true;
+            if (e.Key == VirtualKey.Escape)
+            {
+                dialog.Hide();
+            }
+            else
+            {
+                FocusDialog(dialog);
+            }
+            return;
+        }
         if (RootGrid.XamlRoot is { } focusRoot && FocusManager.GetFocusedElement(focusRoot) is WebView2)
         {
             // A web page (the terminal, a tool) takes its own keys and passes the

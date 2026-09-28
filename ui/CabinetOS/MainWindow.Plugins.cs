@@ -18,6 +18,7 @@ public sealed partial class MainWindow
     {
         PluginsView.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         ReviewView.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
+        ReviewView.OpenChanged += UpdateModal;
     }
 
     private void RegisterPluginCommands()

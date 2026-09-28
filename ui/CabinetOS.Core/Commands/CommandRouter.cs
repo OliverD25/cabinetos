@@ -26,6 +26,9 @@ public enum CommandOutcomeKind
 
     /// <summary>It failed: an <c>error</c> reply, a lost connection, or a handler that threw.</summary>
     Failed,
+
+    /// <summary>It did not run: a dialog of the window was open and does not take it (<see cref="CommandRouter.SetModal"/>).</summary>
+    Refused,
 }
 
 /// <summary>The end of one run, for the status bar and the logs.</summary>
@@ -56,6 +59,7 @@ public sealed class CommandRouter(ICoreChannel core)
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _handlers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _local = new(StringComparer.Ordinal);
     private Dictionary<string, CommandInfo> _byId = new(StringComparer.Ordinal);
+    private HashSet<string> _modalAllows = new(StringComparer.Ordinal);
 
     /// <summary>Raised on the calling thread when the command list changed.</summary>
     public event Action? CommandsChanged;
@@ -101,6 +105,22 @@ public sealed class CommandRouter(ICoreChannel core)
     /// the arguments out.
     /// </summary>
     public Func<CommandInfo, JsonElement?>? PluginArgs { get; set; }
+
+    /// <summary>The dialog of the window that is open, as <see cref="SetModal"/> named it, or null.</summary>
+    public string? Modal { get; private set; }
+
+    /// <summary>
+    /// A modal dialog of the window opened (<paramref name="dialog"/> names it
+    /// in the log) or closed (null). While one is open, only the dialog's own
+    /// commands in <paramref name="allowed"/> run; any other ends as
+    /// <see cref="CommandOutcomeKind.Refused"/> without running, so no key,
+    /// web page or plugin acts on the window under the dialog.
+    /// </summary>
+    public void SetModal(string? dialog, params string[] allowed)
+    {
+        Modal = dialog;
+        _modalAllows = new HashSet<string>(dialog is null ? [] : allowed, StringComparer.Ordinal);
+    }
 
     /// <summary>Reads the command list again (<c>list_commands</c>).</summary>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -152,6 +172,15 @@ public sealed class CommandRouter(ICoreChannel core)
     public async Task<CommandOutcome> ExecuteAsync(string commandId, JsonElement? args = null, string trigger = "api")
     {
         var requestId = Ulid.NewId();
+        if (Modal is { } dialog && !_modalAllows.Contains(commandId))
+        {
+            // Before Executing: nothing may make room for a command that does not run.
+            Diag.Request(LogLevel.Info, requestId, Target, "command refused: a dialog is open",
+                new LogField("command", commandId), new LogField("trigger", trigger), new LogField("dialog", dialog));
+            var refused = new CommandOutcome(commandId, requestId, trigger, CommandOutcomeKind.Refused);
+            Completed?.Invoke(refused);
+            return refused;
+        }
         var info = Find(commandId);
         if (args is null && info is { Source.Kind: "plugin" } && PluginArgs?.Invoke(info) is { } files)
         {

@@ -168,6 +168,42 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public async Task While_a_dialog_is_open_only_its_own_commands_run()
+    {
+        var (router, core) = Create();
+        var ran = new List<string>();
+        router.RegisterUiHandler("view.toggleTerminal", invocation => ran.Add(invocation.CommandId));
+        router.RegisterUiHandler("palette.show", invocation => ran.Add(invocation.CommandId));
+        router.RegisterLocal("plugins.grant", invocation => ran.Add(invocation.CommandId));
+        var executing = new List<string>();
+        router.Executing += invocation => executing.Add(invocation.CommandId);
+        var completed = new List<CommandOutcomeKind>();
+        router.Completed += outcome => completed.Add(outcome.Kind);
+
+        // A dialog with no commands of its own (Properties, a confirmation): nothing runs,
+        // not a key's command, not the palette, not a command of the core.
+        router.SetModal("Properties");
+        Assert.Equal("Properties", router.Modal);
+        Assert.Equal(CommandOutcomeKind.Refused, (await router.ExecuteAsync("view.toggleTerminal", trigger: "key")).Kind);
+        Assert.Equal(CommandOutcomeKind.Refused, (await router.ExecuteAsync("palette.show", trigger: "key")).Kind);
+        Assert.Equal(CommandOutcomeKind.Refused, (await router.ExecuteAsync("help.about", trigger: "tool:markdown-preview")).Kind);
+        Assert.Empty(ran);
+        Assert.Empty(executing);
+        Assert.Empty(core.Requests);
+        Assert.Equal([CommandOutcomeKind.Refused, CommandOutcomeKind.Refused, CommandOutcomeKind.Refused], completed);
+
+        // The permissions review runs its own buttons, and nothing else.
+        router.SetModal("permissions review", "plugins.grant", "overlay.close");
+        Assert.Equal(CommandOutcomeKind.RanInUi, (await router.ExecuteAsync("plugins.grant", trigger: "button")).Kind);
+        Assert.Equal(CommandOutcomeKind.Refused, (await router.ExecuteAsync("view.toggleTerminal", trigger: "key")).Kind);
+
+        router.SetModal(null);
+        Assert.Null(router.Modal);
+        Assert.Equal(CommandOutcomeKind.RanInUi, (await router.ExecuteAsync("view.toggleTerminal", trigger: "key")).Kind);
+        Assert.Equal(["plugins.grant", "view.toggleTerminal"], ran);
+    }
+
+    [Fact]
     public async Task A_command_nobody_knows_is_asked_of_the_core_and_fails_there()
     {
         var (router, core) = Create();
