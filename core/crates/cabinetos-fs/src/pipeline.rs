@@ -1,16 +1,21 @@
 //! The pipelined listing. The calling thread only asks the kernel for
 //! records (`NtQueryDirectoryFile`, about 64 KiB per call). Meanwhile one
-//! worker thread parses each filled buffer, builds its entries' sort keys,
-//! sorts them, and merges the sorted runs as it goes. After the kernel's
-//! last call, only the last buffer and one merge pass are left; the merge
-//! writes the display order, with every name's place in the section, and
-//! the entries themselves never move.
+//! worker thread parses each filled buffer, builds its entries' sort keys
+//! and sorts them into a run. After the kernel's last call, only the last
+//! buffer and one k-way merge of the runs are left. The merge writes the
+//! display order, with every name's place in the section; the entries
+//! themselves never move.
 //!
-//! One worker, not a pool: a buffer takes the worker about half the time
-//! the kernel takes to fill the next one, and with one worker taking the
-//! buffers in order, every entry's index in the worker's arrays is its
-//! place in the enumeration. More workers measured slower: they left a
-//! larger merge at the end.
+//! One worker, not a pool: with one worker taking the buffers in order,
+//! every entry's index in the worker's arrays is its place in the
+//! enumeration, so nothing has to be gathered at the end. A first version
+//! with two and three workers, which gathered their batches, measured
+//! slower than with one.
+//!
+//! The runs are merged only at the end, with a heap. Merging them as they
+//! came kept the worker so busy that it fell behind the kernel (measured
+//! 1 to 4 ms slower in all for 100,000 entries), and sorting the joined
+//! runs again with `sort_unstable` took about 9 ms against the heap's 2.
 //!
 //! The order is exactly the serial path's: both use [`sort::compare`], and
 //! tests compare their sections byte for byte. A directory that fits in the
@@ -256,11 +261,9 @@ fn work_on(
     })
 }
 
-/// Sorts a listing's entries batch by batch, as they are parsed: builds the
-/// batch's keys, sorts it, and merges the sorted runs as a binary counter
-/// does (two runs of about the same size become one), so every entry moves
-/// about log2(batches) times and few runs are left at the end. Then one
-/// merge pass makes the display order.
+/// Sorts a listing's entries batch by batch, as they are parsed: builds
+/// the batch's keys and sorts it into a run. [`finish`](Self::finish)
+/// merges the runs.
 struct Sorter {
     spec: SortSpec,
     keys: NameKeys,
@@ -293,28 +296,33 @@ impl Sorter {
             listing,
             keys: &self.keys,
         };
-        let mut items = items(path, &arena, self.spec, start, end)?;
-        items.sort_unstable_by(|a, b| sort::compare(&arena, descending, a, b));
-        if !items.is_empty() {
-            self.runs.push(items);
-        }
-        while let [.., below, top] = self.runs.as_slice()
-            && top.len() >= below.len()
-        {
-            let top = self.runs.pop().expect("two runs");
-            let below = self.runs.pop().expect("two runs");
-            self.runs.push(merge(&arena, descending, &below, &top));
+        let mut run = items(path, &arena, self.spec, start, end)?;
+        run.sort_unstable_by(|a, b| sort::compare(&arena, descending, a, b));
+        if !run.is_empty() {
+            self.runs.push(run);
         }
         Ok(())
     }
 
     /// The display order of every entry taken.
     fn finish(self, path: &str, listing: &Listing) -> Result<Vec<Placed>, FsError> {
+        let names: u64 = self
+            .runs
+            .iter()
+            .flatten()
+            .map(|item| u64::from(item.name_bytes()))
+            .sum();
+        if u32::try_from(names).is_err() {
+            return Err(FsError::Io {
+                path: path.to_owned(),
+                source: std::io::Error::other("the listing's names are larger than 4 GiB"),
+            });
+        }
         let arena = Arena {
             listing,
             keys: &self.keys,
         };
-        display_order(path, &arena, self.spec.descending, self.runs)
+        Ok(merge(&arena, self.spec.descending, &self.runs))
     }
 }
 
@@ -350,160 +358,58 @@ fn items(
         .collect())
 }
 
-/// Two sorted runs as one.
-fn merge(arena: &Arena<'_>, descending: bool, a: &[Item], b: &[Item]) -> Vec<Item> {
-    let mut out = Vec::with_capacity(a.len() + b.len());
-    merge_into(arena, descending, a, b, |item| out.push(item));
-    out
-}
-
-/// Hands the items of two sorted runs to `take`, in order.
-fn merge_into(
-    arena: &Arena<'_>,
-    descending: bool,
-    a: &[Item],
-    b: &[Item],
-    mut take: impl FnMut(Item),
-) {
-    let (mut i, mut j) = (0, 0);
-    while i < a.len() && j < b.len() {
-        if sort::compare(arena, descending, &b[j], &a[i]).is_lt() {
-            take(b[j]);
-            j += 1;
-        } else {
-            take(a[i]);
-            i += 1;
-        }
-    }
-    a[i..].iter().chain(&b[j..]).for_each(|&item| take(item));
-}
-
-/// The display order from the runs left on the stack: the small runs merged
-/// first, the last merge writing each entry's index and name offset.
-fn display_order(
-    path: &str,
-    arena: &Arena<'_>,
-    descending: bool,
-    mut runs: Vec<Vec<Item>>,
-) -> Result<Vec<Placed>, FsError> {
-    // The stack holds the largest run at the bottom.
-    while runs.len() > 2 {
-        let top = runs.pop().expect("two runs");
-        let below = runs.pop().expect("two runs");
-        runs.push(merge(arena, descending, &below, &top));
-    }
-    let b = if runs.len() == 2 {
-        runs.pop().expect("two runs")
-    } else {
-        Vec::new()
+/// The display order of the items of sorted `runs`: a k-way merge with a
+/// binary heap of the runs, keyed by each run's next item. NTFS returns
+/// names in its own case-insensitive order, close to the display order, so
+/// a run covers a narrow stretch of names and the run just taken is
+/// usually the smallest again. Most steps then stop at the top of the heap
+/// (measured: about 2 comparisons per entry for 100,000 entries in 169
+/// runs, where a loser tree would always make 8, and took longer). Name
+/// offsets count from 0; `finish` checked that they fit.
+fn merge(arena: &Arena<'_>, descending: bool, runs: &[Vec<Item>]) -> Vec<Placed> {
+    let mut next = vec![0usize; runs.len()];
+    let before = |a: usize, b: usize, next: &[usize]| {
+        sort::compare(arena, descending, &runs[a][next[a]], &runs[b][next[b]]).is_lt()
     };
-    let a = runs.pop().unwrap_or_default();
-    let names: u64 = a
-        .iter()
-        .chain(&b)
-        .map(|item| u64::from(item.name_bytes()))
-        .sum();
-    if u32::try_from(names).is_err() {
-        return Err(FsError::Io {
-            path: path.to_owned(),
-            source: std::io::Error::other("the listing's names are larger than 4 GiB"),
+    // Moves the run at `at` down until neither child's next item comes
+    // before its own.
+    let sift_down = |heap: &mut [usize], mut at: usize, next: &[usize]| {
+        loop {
+            let left = 2 * at + 1;
+            let mut first = at;
+            if left < heap.len() && before(heap[left], heap[first], next) {
+                first = left;
+            }
+            if left + 1 < heap.len() && before(heap[left + 1], heap[first], next) {
+                first = left + 1;
+            }
+            if first == at {
+                return;
+            }
+            heap.swap(at, first);
+            at = first;
+        }
+    };
+    let mut heap: Vec<usize> = (0..runs.len()).collect();
+    for at in (0..heap.len() / 2).rev() {
+        sift_down(&mut heap, at, &next);
+    }
+    let mut order = Vec::with_capacity(runs.iter().map(Vec::len).sum());
+    let mut name_offset = 0u32;
+    while let Some(&run) = heap.first() {
+        let item = runs[run][next[run]];
+        order.push(Placed {
+            index: item.index_u32(),
+            name_offset,
         });
-    }
-    // The last merge is the one step after the kernel's last call that
-    // touches every entry, so it runs in parts on idle cores: each part
-    // starts where the merge would be after the entries before it.
-    let total = a.len() + b.len();
-    let parts = if total >= PARALLEL_MERGE_FROM {
-        MERGE_PARTS
-    } else {
-        1
-    };
-    let bounds: Vec<(usize, usize)> = (0..=parts)
-        .map(|part| {
-            let rank = total * part / parts;
-            let from_a = split(arena, descending, &a, &b, rank);
-            (from_a, rank - from_a)
-        })
-        .collect();
-    let (a, b) = (&a[..], &b[..]);
-    let pieces: Vec<Vec<Placed>> = std::thread::scope(|scope| {
-        let later: Vec<_> = bounds[1..]
-            .windows(2)
-            .map(|pair| {
-                let (from, to) = (pair[0], pair[1]);
-                scope.spawn(move || place(arena, descending, a, b, from, to))
-            })
-            .collect();
-        let first = place(arena, descending, a, b, bounds[0], bounds[1]);
-        std::iter::once(first)
-            .chain(later.into_iter().map(|piece| {
-                piece
-                    .join()
-                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-            }))
-            .collect()
-    });
-    let mut order = Vec::with_capacity(total);
-    for piece in pieces {
-        order.extend_from_slice(&piece);
-    }
-    Ok(order)
-}
-
-/// Parts of the last merge, each on its own thread.
-const MERGE_PARTS: usize = 4;
-
-/// The last merge is split from this many entries on.
-const PARALLEL_MERGE_FROM: usize = 16_384;
-
-/// How many of the first `rank` items of the merge of `a` and `b` come
-/// from `a` (the merge path's crossing, found by binary search).
-fn split(arena: &Arena<'_>, descending: bool, a: &[Item], b: &[Item], rank: usize) -> usize {
-    let (mut low, mut high) = (rank.saturating_sub(b.len()), rank.min(a.len()));
-    while low < high {
-        let from_a = low + (high - low) / 2;
-        // `a[from_a]` is among the first `rank` when it comes before the
-        // last item that `b` would give.
-        if sort::compare(arena, descending, &a[from_a], &b[rank - from_a - 1]).is_lt() {
-            low = from_a + 1;
-        } else {
-            high = from_a;
+        name_offset += item.name_bytes();
+        next[run] += 1;
+        if next[run] == runs[run].len() {
+            heap.swap_remove(0);
         }
+        sift_down(&mut heap, 0, &next);
     }
-    low
-}
-
-/// The places of the merge of `a[from.0..to.0]` and `b[from.1..to.1]`,
-/// whose names follow those of everything before `from`.
-fn place(
-    arena: &Arena<'_>,
-    descending: bool,
-    a: &[Item],
-    b: &[Item],
-    from: (usize, usize),
-    to: (usize, usize),
-) -> Vec<Placed> {
-    // `display_order` checked that all the names fit in 4 GiB.
-    let mut name_offset: u32 = a[..from.0]
-        .iter()
-        .chain(&b[..from.1])
-        .map(|item| item.name_bytes())
-        .sum();
-    let mut out = Vec::with_capacity(to.0 - from.0 + to.1 - from.1);
-    merge_into(
-        arena,
-        descending,
-        &a[from.0..to.0],
-        &b[from.1..to.1],
-        |item| {
-            out.push(Placed {
-                index: item.index_u32(),
-                name_offset,
-            });
-            name_offset += item.name_bytes();
-        },
-    );
-    out
+    order
 }
 
 #[cfg(test)]
@@ -624,12 +530,13 @@ mod tests {
             .collect()
     }
 
-    /// Sorts `listing` the pipelined way, in batches of random sizes.
-    fn batched(random: &mut Random, listing: &Listing, spec: SortSpec) -> Listing {
+    /// Sorts `listing` the pipelined way, in batches of 1 to `largest`
+    /// entries.
+    fn batched(random: &mut Random, listing: &Listing, spec: SortSpec, largest: usize) -> Listing {
         let mut sorter = Sorter::new(spec);
         let mut start = 0;
         while start < listing.entries.len() {
-            let end = (start + 1 + random.below(700)).min(listing.entries.len());
+            let end = (start + 1 + random.below(largest)).min(listing.entries.len());
             sorter.add("synthetic", listing, start, end).unwrap();
             start = end;
         }
@@ -643,18 +550,26 @@ mod tests {
     }
 
     #[test]
-    fn batches_and_merges_give_the_serial_order() {
+    fn batches_and_the_merge_give_the_serial_order() {
         let mut random = Random(0x5EED_CAB1_0E70_0001);
-        // Sizes below and above the split of the last merge.
-        for count in [0, 1, 2, 700, 5_000, PARALLEL_MERGE_FROM + 3_333] {
+        // No runs, one, a few, many; and runs of one entry each.
+        for (count, largest) in [
+            (0, 700),
+            (1, 700),
+            (2, 700),
+            (700, 700),
+            (5_000, 700),
+            (20_000, 700),
+            (1_500, 1),
+        ] {
             let listing = synthetic(&mut random, count);
             for spec in specs() {
                 let mut serial = listing.clone();
                 sort::sort(&mut serial, spec);
-                let pipelined = batched(&mut random, &listing, spec);
+                let pipelined = batched(&mut random, &listing, spec, largest);
                 assert!(
                     shown(&serial) == shown(&pipelined),
-                    "{count} entries sorted by {spec:?} in a different order"
+                    "{count} entries in batches of up to {largest}, sorted by {spec:?}, in a different order"
                 );
             }
         }
@@ -663,8 +578,8 @@ mod tests {
     #[test]
     fn name_offsets_follow_the_display_order() {
         let mut random = Random(0x5EED_CAB1_0E70_0002);
-        let listing = synthetic(&mut random, PARALLEL_MERGE_FROM * 2);
-        let pipelined = batched(&mut random, &listing, SortSpec::default());
+        let listing = synthetic(&mut random, 30_000);
+        let pipelined = batched(&mut random, &listing, SortSpec::default(), 700);
         let order = pipelined.order.as_ref().unwrap();
         let mut offset = 0u32;
         for placed in order {
@@ -678,33 +593,5 @@ mod tests {
                 .copied()
                 .eq(0..u32::try_from(listing.len()).unwrap())
         );
-    }
-
-    #[test]
-    fn the_merge_path_split_takes_the_first_items() {
-        let mut random = Random(0x5EED_CAB1_0E70_0003);
-        let listing = synthetic(&mut random, 3_000);
-        let spec = SortSpec::default();
-        let mut sorter = Sorter::new(spec);
-        // A smaller run on a larger one stays separate.
-        sorter.add("synthetic", &listing, 0, 2_000).unwrap();
-        sorter.add("synthetic", &listing, 2_000, 3_000).unwrap();
-        let [a, b] = <[Vec<Item>; 2]>::try_from(sorter.runs.clone()).unwrap();
-        let arena = Arena {
-            listing: &listing,
-            keys: &sorter.keys,
-        };
-        let merged = merge(&arena, false, &a, &b);
-        for rank in [0, 1, 999, 1_500, 2_000, 2_999, 3_000] {
-            let from_a = split(&arena, false, &a, &b, rank);
-            let first: std::collections::HashSet<u64> =
-                merged[..rank].iter().map(|item| item.pos).collect();
-            let expected: std::collections::HashSet<u64> = a[..from_a]
-                .iter()
-                .chain(&b[..rank - from_a])
-                .map(|item| item.pos)
-                .collect();
-            assert_eq!(first, expected, "rank {rank}");
-        }
     }
 }
