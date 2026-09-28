@@ -2347,6 +2347,8 @@ public sealed partial class MainWindow : Window
         _noticeTimer.Stop();
         if (text.Length > 0)
         {
+            // What the status bar told the user, for the log and the live checks that read it.
+            Diag.Info(Target, "notice shown", new LogField("text", text), new LogField("error", isError));
             _noticeTimer.Start();
         }
     }

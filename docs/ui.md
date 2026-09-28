@@ -1242,9 +1242,16 @@ snapshot step `click:Installed` showed the tab.
 
 What the shell does with the names, paths, links and windows that break
 file managers, one class at a time, each with its tests
-(`ui/CabinetOS.Tests`) and snapshots of a fixture. The fixture is made by
-`ui/livecheck/edge-fixture.ps1 -Root <folder>` (Windows PowerShell or
-PowerShell 7) until the core's fixture script covers the same.
+(`ui/CabinetOS.Tests`) and snapshots of a fixture. The fixture is the
+one the core's checks use too: `sdk/fixtures/edge-fixture.ps1 -Root
+<folder>` (Windows PowerShell or PowerShell 7; it removes and remakes only
+a folder it made). `ui/livecheck/edge-snapshots.ps1` makes it, adds
+`deep notes.md` at the end of the long path, and runs the window over it
+with the snapshot aid (no keys, so the screen may be locked): both panes
+on the fixture, a Cyrillic rename, a Cyrillic search, Enter into the long
+path and on its Markdown file, and Shift+Delete of the junction; then it
+checks the disk and the log. `ui/livecheck/livecheck.ps1` does the same
+with real keys ("The live check").
 
 ### Names beyond ASCII
 
@@ -1290,8 +1297,11 @@ Tests: `NamesBeyondAsciiTests` (14).
 ### Long paths
 
 The fixture's `long\` folder nests `segment-of-a-long-path-0123456789`
-until the path has 333 characters, with `deep file.txt` and
-`deep notes.md` at the bottom.
+until the path passes 300 characters, with `deep file.txt` (and
+`deep notes.md`, which the shell's checks add) at the bottom. Under
+`%TEMP%\cabinetos-edge` on this PC the folder has 325 characters and its
+files 339; the first snapshots used a fixture with a 333-character
+folder.
 
 - **The crumbs keep the drive, a "…", and the last folders that fit**
   (`CrumbFit`, in pixels), so the bar never grows and the folder shown is
@@ -1310,37 +1320,52 @@ until the path has 333 characters, with `deep file.txt` and
   Properties wraps the Location. The status bar names the selected row,
   not its path. The search's note wraps the searched folder, and the
   hits' Folder column starts at the searched folder's name. All unchanged.
-- **In and out:** Enter on the last folder goes into the 333-character
-  path; Up, Back and a folder of the "…" menu go out and come back.
+- **In and out:** Enter on the last folder goes into the long path; Up,
+  Back and a folder of the "…" menu go out and come back.
 - **A tool is not offered a file whose path has more than 259
   characters.** WebView2 showed a 255-character path from a 250-character
   folder, failed to fetch a 272-character path from the same folder, and
   refused to serve the 333-character folder at all, with Windows' long
   paths turned on (2026-09-29). So the status bar says "Markdown Preview
-  cannot show deep notes.md: its path has 347 characters, and WebView2
+  cannot show deep notes.md: its path has 339 characters, and WebView2
   reads none longer than 259." (`ToolFileSession.LongestPath`). Before,
   Enter on `deep notes.md` left the preview empty and logged "UI command
   handler failed". A folder WebView2 refuses for another reason (one
   deleted since the listing) ends the open the same way, with WebView2's
   reason.
 - Enter on `deep file.txt` asks the core's `open_path` to start its
-  default application. It was not run in the check, because it would open
-  Notepad on the desktop.
+  program. On this PC (Windows 11, long paths turned on) the shell took
+  the 339-character path and Notepad opened the file (2026-09-29). Where
+  the shell refuses a path of 260 characters or more, the core answers
+  `invalid_path` with the length and the limit, and the status bar says
+  "Cannot open deep file.txt: …". The scripted checks do not press Enter
+  on it, so they start no program.
+- **Delete (to the Recycle Bin) of a long path** stops at a
+  `path_too_long` conflict: the core measures the item's longest path
+  first, since Windows' shell would delete it for good without asking
+  (docs/jobs.md, "The Recycle Bin and long paths"). The card says "has a
+  path too long for the Recycle Bin" and offers Delete permanently, Skip
+  and Retry, as for a bin too small; in a copy or a move the kind keeps
+  "the path is too long for the destination" and its own answers
+  (`ConflictText.Options`).
 - Tooltips that hold a whole path (the flyout's line and the conflict's
   name, the "…" menu's folders, the editor tab's file) wrap at WinUI's
   tooltip width; they are not in the snapshots, since the snapshot aid
   opens only the window's own tooltip objects.
 
-Tests: `LongPathTests` (11), and three in `ToolTests` for a path or a
-folder WebView2 cannot serve.
+Tests: `LongPathTests` (11), three in `ToolTests` for a path or a folder
+WebView2 cannot serve, and one in `ConflictTests` for the Recycle Bin's
+long-path conflict.
 
 ### Links and cloud files
 
 The fixture's `links\` folder holds `junction to target`, a junction to
-`link-target\` and its files `kept 1.txt` to `kept 3.txt`. Symbolic links
-and mount points need an administrator, so the fixture has none; their
-words are tested on fake listings. So are cloud placeholders, which need
-a sync provider such as OneDrive.
+`link-target\` and its files `kept 1.txt` to `kept 3.txt`, and symbolic
+links when Windows lets the user make them (an administrator or Developer
+Mode; not on this PC). A mount point needs an administrator, so the
+fixture has none. Their words are tested on fake listings; so are cloud
+placeholders, which need a sync provider such as OneDrive. `loop\` holds
+a junction back to its own folder, for the core's walks.
 
 - **A link says so.** Its icon carries a small chain badge on the lower
   left, where Explorer draws its arrow, and it stays when the shell's icon
@@ -1417,6 +1442,31 @@ opens windows on the desktop, so it runs only with `CABINETOS_UI_E2E=1`
 (and skips otherwise). Checked with the snapshot aid: `window.new` in a
 pane at `names\Ґанок` started a window whose left pane opened there, with
 its own core.
+
+### The fixture in the live checks
+
+`ui/livecheck/edge-snapshots.ps1` ran on 2026-09-29 (release builds,
+Windows PowerShell 5.1) and answered yes to each of its checks:
+
+- both panes on the fixture: `names\` in the core's order on the left,
+  the 325-character folder on the right;
+- F2 on `Звіт 2026.txt` and `Звіт 2027.txt` typed in: the file on disk
+  has the new name;
+- the search "звіт" found `Звіт 2027.txt` in `names` and `Звіт 2026.txt`
+  in `names\Ґанок`;
+- Enter on the last folder went into the long path, and Enter on
+  `deep notes.md` there put the preview's reason in the status bar;
+- Delete of `deep file.txt` there stopped at "has a path too long for the
+  Recycle Bin" with Delete permanently, Skip and Retry; Skip left the file;
+- Shift+Delete on `junction to target` asked "Delete the link
+  permanently?"; after Delete permanently the junction was gone and
+  `kept 1.txt` to `kept 3.txt` were still in `link-target\`;
+- every line of the window's log was whole.
+
+The window now logs what the status bar says ("notice shown"), which the
+checks read. `ui/livecheck/livecheck.ps1` has the same steps with real
+keys (a section "Edge cases" before it closes the window); its run is the
+planning session's, on a screen someone watches.
 
 ## Not in this version
 

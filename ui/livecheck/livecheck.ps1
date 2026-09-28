@@ -2,7 +2,8 @@
 # with a configuration, logs and themes of its own, sends real key presses and mouse clicks
 # with SendInput, and takes screenshots. Run it only on an unlocked screen you are watching:
 # it stops the moment another window comes to the front, so no key reaches another program.
-# Leaves one file in the Recycle Bin (cabinetos-live-check-delete-me.txt, the Delete check).
+# Leaves one file in the Recycle Bin (cabinetos-live-check-delete-me.txt, the Delete check),
+# and the edge-case fixture in %TEMP%\cabinetos-edge-live (sdk\fixtures\edge-fixture.ps1).
 # Needs the release builds of the window and the core, and the 100,000-entry folder that
 # `cargo bench -p cabinetos-fs --bench list_directory` makes in %TEMP%\cabinetos-bench.
 param(
@@ -282,6 +283,67 @@ Step "Ctrl+K V on readme.md: the same file, in the open preview"
 Shot $h "$ShotDir\phase-5c-markdown-chord.png"
 $ready = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool ready"' }).Count
 "the preview said ready for each open (2 expected): $ready"
+
+# ----- Edge cases (docs/ui.md, "Edge cases"): the shared fixture, with real keys -----
+# The fixture has links, so it lives outside $root: only its own script removes it (rmdir, which
+# never follows a link). Its Cyrillic names are built from code points, so this file stays ASCII.
+$edge = "$env:TEMP\cabinetos-edge-live"
+& "$PSScriptRoot\..\..\sdk\fixtures\edge-fixture.ps1" -Root $edge | ForEach-Object { "fixture: $_" }
+$deep = Join-Path $edge 'long'
+while ($deep.Length -lt 300) { $deep = Join-Path $deep 'segment-of-a-long-path-0123456789' }
+[System.IO.File]::WriteAllText("\\?\$deep\deep notes.md", "# Deep notes", (New-Object System.Text.UTF8Encoding $false))
+$zvit = -join ([char[]](0x0417, 0x0432, 0x0456, 0x0442))
+$zvitLower = -join ([char[]](0x0437, 0x0432, 0x0456, 0x0442))
+
+Step "edge: the fixture's names on the left, its long path on the right"
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type("$edge\names"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type($deep); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+Shot $h "$ShotDir\edge-both-panes-live.png"
+
+# The core's order in names\: case, the Ukrainian folder, the emoji folder, the Chinese folder,
+# the 255-unit name, the two cafe.txt, then the Ukrainian report: seven rows down from the first.
+Step "edge: F2 on the Ukrainian report, typed Cyrillic, Enter (only the stem is selected)"
+[Live]::Press($VK.Home); foreach ($i in 1..7) { [Live]::Press($VK.Down) }; Start-Sleep -Milliseconds 300
+[Live]::Press($VK.F2); Start-Sleep -Milliseconds 700
+[Live]::Type("$zvit 2027"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+Shot $h "$ShotDir\edge-renamed-live.png"
+"F2 renamed the Cyrillic file: $((Test-Path -LiteralPath "$edge\names\$zvit 2027.txt") -and -not (Test-Path -LiteralPath "$edge\names\$zvit 2026.txt"))"
+
+Step "edge: Ctrl+F, a Cyrillic query"
+[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 400
+[Live]::Type($zvitLower); Start-Sleep -Milliseconds 1500
+Shot $h "$ShotDir\edge-search-live.png"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
+
+Step "edge: Enter into the long path"
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type((Split-Path $deep -Parent)); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Home); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
+Shot $h "$ShotDir\edge-long-live.png"
+# Not Enter on deep file.txt: Windows may open it with its program (Notepad did, 2026-09-29).
+Step "edge: Enter on deep notes.md: the status bar says why the preview cannot show it"
+[Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+Shot $h "$ShotDir\edge-preview-refused-live.png"
+$notice = Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"notice shown"' -and $_ -match 'deep notes.md' }
+"the status bar said why: $([bool]$notice)"
+
+Step "edge: Shift+Delete on the junction, Delete permanently through UI Automation"
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type("$edge\links"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Shift, $VK.Delete); Start-Sleep -Milliseconds 1200
+Shot $h "$ShotDir\edge-delete-link-question-live.png"
+$byName = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Delete permanently")
+$confirm = [System.Windows.Automation.AutomationElement]::FromHandle($h).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $byName)
+if ($confirm) { ([System.Windows.Automation.InvokePattern]$confirm.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke(); Step "Delete permanently pressed through UI Automation" } else { Step "no Delete permanently button found"; [Live]::Press($VK.Esc) }
+Start-Sleep -Milliseconds 3000
+Shot $h "$ShotDir\edge-deleted-live.png"
+"the junction is gone: $(-not (Test-Path -LiteralPath "$edge\links\junction to target"))"
+"the files behind it stayed: $((@(Get-ChildItem -LiteralPath "$edge\link-target" | ForEach-Object { $_.Name }) -join ',') -eq 'kept 1.txt,kept 2.txt,kept 3.txt')"
 
 Step "close"
 $script:h = $null
