@@ -70,6 +70,8 @@ pub(crate) struct Output {
     /// Wakes the pipe task: bytes arrived, or the output ended.
     ready: Notify,
     limit: usize,
+    /// For the log: span fields do not reach the log lines.
+    session_id: u64,
 }
 
 /// What happens to output that does not fit.
@@ -98,7 +100,7 @@ struct OutputState {
 }
 
 impl Output {
-    pub(crate) fn new(limit: usize) -> Self {
+    pub(crate) fn new(session_id: u64, limit: usize) -> Self {
         Self {
             state: Mutex::new(OutputState {
                 bytes: VecDeque::new(),
@@ -111,6 +113,7 @@ impl Output {
             changed: Condvar::new(),
             ready: Notify::new(),
             limit,
+            session_id,
         }
     }
 
@@ -135,6 +138,7 @@ impl Output {
                 if !state.waited {
                     state.waited = true;
                     tracing::warn!(
+                        session_id = self.session_id,
                         limit = self.limit,
                         "terminal output backpressure: the buffer is full, so the shell's \
                          output waits until a client reads"
@@ -159,6 +163,7 @@ impl Output {
         state.ended = true;
         if state.dropped > 0 {
             tracing::debug!(
+                session_id = self.session_id,
                 dropped = state.dropped,
                 "output that arrived after the shell exited did not fit the buffer"
             );
@@ -367,7 +372,7 @@ pub(crate) fn start(
         process,
         console: Mutex::new(Some(console)),
         input: Mutex::new(Some(input_tx)),
-        output: Output::new(OUTPUT_LIMIT),
+        output: Output::new(id, OUTPUT_LIMIT),
         info: Mutex::new(Info {
             cwd: cwd.display().to_string(),
             cols,
@@ -452,7 +457,11 @@ impl Session {
     fn watch_exit(&self, sink: &EventSink) {
         let code = conpty::wait_for_exit(&self.process);
         self.info().state = TerminalState::Exited { code };
-        tracing::info!(exit_code = code, "terminal shell exited");
+        tracing::info!(
+            session_id = self.id,
+            exit_code = code,
+            "terminal shell exited"
+        );
         if !self.output.is_discarding() {
             self.output.wait_quiet(QUIET, QUIET_LIMIT);
         }
@@ -460,7 +469,10 @@ impl Session {
         self.close_console();
         drop(lock(&self.input).take());
         if !self.output.wait_ended(END_LIMIT) {
-            tracing::warn!("the pseudo-console did not end its output after the shell exited");
+            tracing::warn!(
+                session_id = self.id,
+                "the pseudo-console did not end its output after the shell exited"
+            );
         }
         sink(Event::TerminalExited {
             session_id: self.id,
@@ -491,6 +503,7 @@ impl Session {
             // milliseconds: it never ends on its own.
             let _entered = self.span.enter();
             tracing::warn!(
+                session_id = self.id,
                 pid = self.pid,
                 "the shell kept running after its pseudo-console closed; ending it"
             );
@@ -498,7 +511,11 @@ impl Session {
             // Ending is asynchronous; until it is done, the shell still
             // holds its current folder, for one.
             if !conpty::ends_within(&self.process, TERMINATE_WAIT) {
-                tracing::warn!(pid = self.pid, "the shell did not end when told to");
+                tracing::warn!(
+                    session_id = self.id,
+                    pid = self.pid,
+                    "the shell did not end when told to"
+                );
             }
         }
     }
@@ -574,11 +591,15 @@ impl Session {
             match connected {
                 Ok(()) => {
                     self.info().attached = true;
-                    tracing::debug!("terminal client attached");
+                    tracing::debug!(session_id = self.id, "terminal client attached");
                     self.pump(&mut server).await;
-                    tracing::debug!("terminal client detached");
+                    tracing::debug!(session_id = self.id, "terminal client detached");
                 }
-                Err(error) => tracing::debug!(%error, "a terminal client failed to connect"),
+                Err(error) => tracing::debug!(
+                    session_id = self.id,
+                    %error,
+                    "a terminal client failed to connect"
+                ),
             }
             if self.stop.is_cancelled() {
                 return;
@@ -655,7 +676,11 @@ impl Session {
                 Err(error) => {
                     if !waiting {
                         waiting = true;
-                        tracing::debug!(%error, "waiting for the last client to let go of the pipe");
+                        tracing::debug!(
+                            session_id = self.id,
+                            %error,
+                            "waiting for the last client to let go of the pipe"
+                        );
                     }
                     tokio::select! {
                         () = self.stop.cancelled() => return None,
@@ -675,7 +700,7 @@ mod tests {
 
     #[test]
     fn a_full_buffer_holds_the_reader_until_a_client_reads() {
-        let output = Arc::new(Output::new(8));
+        let output = Arc::new(Output::new(1, 8));
         output.push(b"12345678");
         assert_eq!(output.buffered(), 8);
 
@@ -714,7 +739,7 @@ mod tests {
 
     #[test]
     fn after_the_shell_exits_what_does_not_fit_is_dropped() {
-        let output = Output::new(4);
+        let output = Output::new(1, 4);
         output.push(b"1234");
         output.shell_exited();
         output.push(b"56");
@@ -725,7 +750,7 @@ mod tests {
 
     #[test]
     fn closing_frees_a_waiting_reader_and_drops_the_output() {
-        let output = Arc::new(Output::new(2));
+        let output = Arc::new(Output::new(1, 2));
         output.push(b"12");
         let reader = {
             let output = Arc::clone(&output);
@@ -743,7 +768,7 @@ mod tests {
 
     #[test]
     fn quiet_is_measured_from_the_last_output() {
-        let output = Output::new(64);
+        let output = Output::new(1, 64);
         let started = Instant::now();
         output.wait_quiet(Duration::from_millis(60), Duration::from_secs(1));
         let waited = started.elapsed();
