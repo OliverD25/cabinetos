@@ -99,6 +99,12 @@ enum Command {
     },
     /// List every volume that has a drive letter, with its disk.
     Volumes,
+    /// Open a file or folder with its default application, as a
+    /// double-click in Explorer does.
+    Open {
+        /// The file or folder.
+        path: String,
+    },
     /// Show or check the configuration file (cabinetos.json).
     Config {
         #[command(subcommand)]
@@ -609,6 +615,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Volume { .. } | Command::Volumes => {
             volume_command(&mut client, &cli.command).await?;
         }
+        Command::Open { .. } => file_command(&mut client, &cli.command).await?,
         Command::Config { .. } | Command::Commands { .. } | Command::Keys { .. } => {
             settings_command(&mut client, &cli.command).await?;
         }
@@ -651,6 +658,22 @@ async fn volume_command(client: &mut PipeClient, command: &Command) -> anyhow::R
             }
         }
         _ => unreachable!("only volume commands come here"),
+    }
+    Ok(())
+}
+
+/// The file commands: `open`.
+async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
+    match command {
+        Command::Open { path } => {
+            let path = absolute(path)?;
+            let reply = send(client, Request::OpenPath { path: path.clone() }).await?;
+            if reply.body != Response::Ok {
+                return Err(failure(&path, &reply.body));
+            }
+            say(format_args!("opened {path}"));
+        }
+        _ => unreachable!("only file commands come here"),
     }
     Ok(())
 }
@@ -1051,6 +1074,14 @@ mod tests {
         );
         let cli = Cli::try_parse_from(["cabinetos-cli", "volumes"]).unwrap();
         assert_eq!(cli.command, Command::Volumes);
+        let cli = Cli::try_parse_from(["cabinetos-cli", "open", "notes.txt"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Open {
+                path: "notes.txt".to_owned()
+            }
+        );
+        assert!(Cli::try_parse_from(["cabinetos-cli", "open"]).is_err());
     }
 
     #[test]

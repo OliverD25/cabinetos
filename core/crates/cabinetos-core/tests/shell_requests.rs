@@ -189,6 +189,33 @@ async fn every_drive_letter_is_listed_once_in_order() {
 }
 
 #[tokio::test]
+async fn open_path_refuses_what_it_cannot_open_without_starting_anything() {
+    // A real open starts an application and leaves its window on the
+    // desktop, so only the refusals are tested here.
+    let core = start_core();
+    let mut client = connect(&core.pipe).await;
+    let open = |path: &str| Request::OpenPath {
+        path: path.to_owned(),
+    };
+    let missing = core.dir.path().join("no-such-file.txt");
+    let reply = ask(&mut client, open(missing.to_str().unwrap())).await;
+    assert_eq!(error_code(&reply), Some(ErrorCode::NotFound), "{reply:?}");
+    // A name the shell might look up elsewhere (`notepad` on the PATH) is
+    // never tried: only the path as given.
+    let bare = core.dir.path().join("notepad");
+    let reply = ask(&mut client, open(bare.to_str().unwrap())).await;
+    assert_eq!(error_code(&reply), Some(ErrorCode::NotFound), "{reply:?}");
+    for relative in ["notes.txt", r"sub\notes.txt", ""] {
+        let reply = ask(&mut client, open(relative)).await;
+        assert_eq!(
+            error_code(&reply),
+            Some(ErrorCode::InvalidPath),
+            "{relative:?}: {reply:?}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn set_value_writes_one_setting_and_tells_every_client() {
     let core = start_core();
     let (mut client, mut events) = greeted(&core).await;

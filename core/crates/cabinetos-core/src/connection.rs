@@ -8,8 +8,8 @@
 //!   queued, so a `listing_opened` always goes out before the events of that
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
-//!   (`list_directory`, `volume_info`, `list_volumes`, `set_value`, the
-//!   keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
+//!   (`list_directory`, `volume_info`, `list_volumes`, `open_path`,
+//!   `set_value`, the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`)
 //!   as tasks, so one slow directory, plugin, search or shell never holds up
 //!   the next request. After `hello` it also forwards the configuration,
@@ -270,10 +270,9 @@ impl Session {
                     sort,
                     watch,
                 } => self.list_directory(&id, &span, path, include_hidden, sort, watch),
-                request @ (Request::VolumeInfo { .. } | Request::ListVolumes) => {
-                    self.file_request(&id, &span, kind, request);
-                    None
-                }
+                request @ (Request::VolumeInfo { .. }
+                | Request::ListVolumes
+                | Request::OpenPath { .. }) => self.file_request(&id, &span, kind, request),
                 request @ (Request::GetConfig
                 | Request::GetValue { .. }
                 | Request::SetValue { .. }
@@ -402,21 +401,31 @@ impl Session {
     }
 
     /// The volume and file requests, as tasks: each asks the disk, the
-    /// network or the shell.
+    /// network or the shell. Answers at once only to refuse a path that is
+    /// not absolute: the core's own folder means nothing to a client.
     fn file_request(
         &mut self,
         id: &RequestId,
         span: &tracing::Span,
         kind: &'static str,
         request: Request,
-    ) {
+    ) -> Option<Response> {
         match request {
             Request::VolumeInfo { path } => self.volume_info(id, span, path),
             Request::ListVolumes => {
                 self.spawn_task_reply(id, span, kind, volumes::list_volumes());
             }
+            Request::OpenPath { path } => {
+                if let Some(refusal) = not_absolute(&path) {
+                    return Some(refusal);
+                }
+                self.spawn_reply(id, span, kind, move || {
+                    answer_fs(cabinetos_fs::open_path(&path))
+                });
+            }
             _ => {}
         }
+        None
     }
 
     /// The configuration, command and keymap requests. The reads answer at
@@ -1085,6 +1094,25 @@ fn protocol_error(message: &str) -> Response {
 
 fn failure_reply((code, message): Failure) -> Response {
     Response::Error { code, message }
+}
+
+/// `ok`, or the error reply for a filesystem error.
+fn answer_fs(result: Result<(), cabinetos_fs::FsError>) -> Response {
+    match result {
+        Ok(()) => Response::Ok,
+        Err(error) => failure_reply(listing::fs_failure(&error)),
+    }
+}
+
+/// `invalid_path` for a path that is not absolute (a drive letter and a
+/// backslash, or a UNC share).
+fn not_absolute(path: &str) -> Option<Response> {
+    (!std::path::Path::new(path).is_absolute()).then(|| {
+        failure_reply((
+            ErrorCode::InvalidPath,
+            format!("{path}: not an absolute path"),
+        ))
+    })
 }
 
 fn job_error(error: cabinetos_jobs::JobError) -> Response {

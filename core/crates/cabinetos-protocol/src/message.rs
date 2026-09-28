@@ -86,6 +86,13 @@ pub enum Request {
     /// Asks for every volume that has a drive letter. The core answers
     /// `volumes`.
     ListVolumes,
+    /// Opens a file or folder with its default application, as a
+    /// double-click in Explorer does. The core answers `ok` once the shell
+    /// has handed it over.
+    OpenPath {
+        /// The file or folder, as an absolute path.
+        path: String,
+    },
     /// Asks for the configuration in effect and the path of its file. The
     /// core answers `config`.
     GetConfig,
@@ -274,6 +281,7 @@ impl Request {
         "close_listing",
         "volume_info",
         "list_volumes",
+        "open_path",
         "get_config",
         "get_value",
         "set_value",
@@ -311,6 +319,7 @@ impl Request {
             Self::CloseListing { .. } => "close_listing",
             Self::VolumeInfo { .. } => "volume_info",
             Self::ListVolumes => "list_volumes",
+            Self::OpenPath { .. } => "open_path",
             Self::GetConfig => "get_config",
             Self::GetValue { .. } => "get_value",
             Self::SetValue { .. } => "set_value",
@@ -985,6 +994,9 @@ mod tests {
                 path: r"C:\".to_owned(),
             },
             Request::ListVolumes,
+            Request::OpenPath {
+                path: r"C:\Users\me\notes.txt".to_owned(),
+            },
             Request::GetConfig,
             Request::GetValue {
                 path: "ui.dualPane".to_owned(),

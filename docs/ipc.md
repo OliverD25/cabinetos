@@ -71,8 +71,8 @@ file search (`search`, `file_search_results`) and `index_status`. Version 7
 `terminal_opened` and `terminal_sessions`, the event `terminal_exited`, and
 the error codes `no_such_session`, `unknown_profile` and `spawn_failed`.
 Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
-`volumes`, `get_value` and `set_value` with the reply `value`, and the
-error code `already_exists`.
+`volumes`, `get_value` and `set_value` with the reply `value`,
+`open_path`, and the error code `already_exists`.
 
 ## Requests and replies
 
@@ -85,6 +85,7 @@ error code `already_exists`.
 | `close_listing` | `listing_id` | `ok` |
 | `volume_info` | `path` (need not exist) | `volume_info` |
 | `list_volumes` | — | `volumes` (`volumes`) |
+| `open_path` | `path` (absolute) | `ok` |
 | `get_config` | — | `config` (`path`, `config`) |
 | `get_value` | `path` (a dotted path, such as `ui.dualPane`) | `value` (`value`) |
 | `set_value` | `path`, `value` | `ok` |
@@ -140,7 +141,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
 
 Requests on one connection are independent: `list_directory`,
-`volume_info`, `list_volumes`, `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
+`volume_info`, `list_volumes`, `open_path`, `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
 `terminal_open`, `terminal_close` and `terminal_sync_cwd` run in the
@@ -329,6 +330,36 @@ drive whose server does not answer within 200 ms, or a local drive that
 takes more than 2 s. A drive left out for time is not asked again until
 its first query has ended, so a share whose server is gone holds one
 thread in the core, not one per request.
+
+## Opening files
+
+```json
+{"id":"01M…","type":"open_path","path":"C:\\Users\\me\\notes.txt"}
+{"id":"01M…","type":"ok"}
+```
+
+`open_path` opens a file or folder with its default application, as a
+double-click in Explorer does: the shell's `open` verb
+(`ShellExecuteExW`), without error dialogs. The reply comes once the shell
+has handed the file over, not when the application ends. Which
+application that is, is the user's choice in Windows: an editor or viewer
+for a document, Explorer for a folder, the program itself for an `.exe`.
+The path must be absolute (`invalid_path` otherwise) and must exist as
+given (`not_found` otherwise): the core never lets the shell look further,
+so `notepad` in a folder without such a file runs nothing. Other errors
+are `access_denied`, or `io` with the shell's error code in the message
+(`os error 1155`: no application is associated with the file).
+
+Opening a file is core infrastructure: it is the last step of
+navigation, and it hands the file to the application Windows has for it.
+Article 10 still holds: the core has no viewer or editor of its own, and
+those come as extensions.
+
+The core runs in the background, and Windows may then open the
+application's window behind the current one, flashing in the taskbar. The
+usual cure is for the UI, the foreground process, to call
+`AllowSetForegroundWindow` with the core's process ID before `open_path`;
+the core does not depend on it.
 
 ## Configuration, commands and keybindings
 
@@ -692,8 +723,8 @@ by force). When the core stops, it closes every session.
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
 `ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
-`volumes` prints `volumes`, `config get` and `config set` send
-`get_value` and `set_value`,
+`volumes` prints `volumes`, `open` sends `open_path`, `config get` and
+`config set` send `get_value` and `set_value`,
 `config`, `commands` and `keys` cover the configuration messages (`keys
 watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`
 cover the jobs, `plugins`, `commands exec` and `events watch` cover the

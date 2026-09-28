@@ -154,6 +154,24 @@
       ]
     },
     {
+      "description": "Opens a file or folder with its default application, as a\ndouble-click in Explorer does. The core answers `ok` once the shell\nhas handed it over.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The file or folder, as an absolute path.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "open_path"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
       "description": "Asks for the configuration in effect and the path of its file. The\ncore answers `config`.",
       "type": "object",
       "properties": {
