@@ -294,7 +294,7 @@ the chord state machine with `chord_window_ms` (keybindings.md, "Chords").
  "default_keys":["ctrl+shift+d"],"source":{"kind":"core"},"target":"ui",
  "immutable":false},…]}
 {"id":"01M…","type":"search_commands","query":"dual","limit":5}
-{"id":"01M…","type":"search_results","hits":[{"id":"view.toggleDualPane","score":208}]}
+{"id":"01M…","type":"search_results","hits":[{"id":"view.toggleDualPane","score":137}]}
 ```
 
 `source` is `{"kind":"core"}` or `{"kind":"plugin","id":"…"}`. The palette

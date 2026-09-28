@@ -139,7 +139,8 @@ error points at the start of its entry.
 It does not matter how the editor saves. Writing the file in place and
 writing a temporary file that then replaces it (as many editors do) are both
 seen. A file that is deleted is reported as an error and not recreated; the
-settings in effect stay until it is back.
+settings in effect stay until it is back, or until a `set_keybinding` writes
+it anew with those settings.
 
 When the core starts with a file that has an error, it logs the error and
 uses the defaults until the file is fixed.
