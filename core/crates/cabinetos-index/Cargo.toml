@@ -1,12 +1,30 @@
 [package]
 name = "cabinetos-index"
-description = "In-memory volume index, MFT reader and USN Journal tailer (stub until Phase 6)."
+description = "In-memory index of NTFS volumes, built from the MFT and kept current from the USN Journal."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+
+[dependencies]
+hashbrown.workspace = true
+memchr.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+windows = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Ioctl",
+  "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+rand.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

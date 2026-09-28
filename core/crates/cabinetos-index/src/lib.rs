@@ -1,21 +1,27 @@
-//! Volume index: an in-memory tree of every file on an NTFS volume, built from
-//! the MFT and kept fresh by tailing the USN Journal. Shared by the elevated
-//! indexer (which builds it) and the core (which queries it).
+//! The volume index: every file and directory of an NTFS volume in memory,
+//! keyed by file reference number, searchable by name in milliseconds.
+//!
+//! - [`record`] reads the USN records the NTFS driver returns, both for the
+//!   whole MFT (`FSCTL_ENUM_USN_DATA`) and for each change
+//!   (`FSCTL_READ_USN_JOURNAL`).
+//! - [`VolumeIndex`] holds the entries: parent, interned name and attributes
+//!   per file reference number. Paths are rebuilt from the parents, so a
+//!   renamed directory is one update.
+//! - [`Matcher`] and [`VolumeIndex::search`]: case-insensitive substring
+//!   search, ranked, on several threads.
+//!
+//! Shared by the elevated indexer, which builds and serves the index, and the
+//! core, which ranks the results of its own folder walk the same way when no
+//! indexer runs (ADR 0002).
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: real-time
-//! NT-level file indexing). Brief §2; elevation lives in a separate process
-//! (ADR 0002).
-//!
-//! Status: stub. Phase 6 of `docs/PLAN.md` fills it in. The types below only
-//! name the shape of the public API so it can be reviewed early. Unsafe code
-//! will be allowed here, isolated per module, once the MFT reader arrives.
+//! NT-level file indexing). Brief §2.
 
-/// Compact in-memory tree of one volume, keyed by file reference number.
-pub struct VolumeIndex;
+mod index;
+mod names;
+pub mod record;
+mod search;
 
-/// Reads `$MFT` directly to build a [`VolumeIndex`].
-pub struct MftReader;
-
-/// Follows the USN Journal (`FSCTL_READ_USN_JOURNAL`) to update a
-/// [`VolumeIndex`] without rescanning the disk.
-pub struct UsnTailer;
+pub use index::{EntryInfo, Frn, ROOT_SEGMENT, VolumeIndex, segment};
+pub use names::lowercase;
+pub use search::{IndexHit, Matcher, Rank, sort_hits};

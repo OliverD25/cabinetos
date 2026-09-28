@@ -251,6 +251,15 @@ dependencies = [
 [[package]]
 name = "cabinetos-index"
 version = "0.1.0"
+dependencies = [
+ "hashbrown 0.17.1",
+ "memchr",
+ "rand",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "windows",
+]
 
 [[package]]
 name = "cabinetos-indexer"
