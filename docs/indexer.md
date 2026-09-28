@@ -205,6 +205,10 @@ cabinetos-indexer --uninstall
 `--log-dir` given, so reinstall after moving the program. `--uninstall`
 stops the service first.
 
+A release installs and starts the service with `install.ps1 -AllUsers
+-Indexer`, only into Program Files: a LocalSystem service must run a
+program that only administrators can change ([release.md](release.md)).
+
 Logs: `indexer.<date>.jsonl`, boundary `indexer`, in
 `%LOCALAPPDATA%\CabinetOS\logs` for `--console` and
 `%ProgramData%\CabinetOS\logs` for the service; `--log-dir` changes it

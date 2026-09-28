@@ -132,6 +132,21 @@ Checked on 2026-09-28 on the main PC (Windows 11 25H2, build 26200).
   run with `cargo test -- --ignored` from an elevated shell. GitHub Actions
   runners run as Administrator, so CI runs them.
 
+## Phase 10: release builds
+
+- **PowerShell 7** (`pwsh`) runs `build/release.ps1` and
+  `build/notices.ps1`. Windows only, so PowerShell:
+
+  ```powershell
+  # PowerShell - winget exists only on Windows
+  winget install --id Microsoft.PowerShell --exact
+  ```
+
+- Everything else is what the core and the window already need. The Rust
+  programs link the C runtime statically (`core/.cargo/config.toml`), so a
+  full rebuild follows the first build after that file arrived.
+- How to build, install, sign and publish: [release.md](release.md).
+
 ## Logs and config while developing
 
 - Logs: `%LOCALAPPDATA%\CabinetOS\logs\`, one file per process and UTC day
