@@ -15,6 +15,7 @@
 //! (Sandboxed Extensibility: the JSON-based theme engine).
 #![forbid(unsafe_code)]
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fmt;
 use std::io;
@@ -33,6 +34,10 @@ pub const DEFAULT_THEME: &str = "default";
 
 /// The file name of the schema kept next to the themes.
 pub const SCHEMA_FILE_NAME: &str = "theme.schema.json";
+
+/// The record, in the themes folder, of every shipped theme file the core
+/// wrote there: each ID with the SHA-256 of each version.
+pub const SHIPPED_RECORD: &str = ".shipped.json";
 
 /// The JSON Schema of a theme file, as `sdk/themes/theme.schema.json` has it.
 pub const SCHEMA_JSON: &str = include_str!("../../../../sdk/themes/theme.schema.json");
@@ -54,6 +59,15 @@ pub const SHIPPED: [(&str, &str); 4] = [
         include_str!("../../../../sdk/themes/rose-pine-moon.json"),
     ),
 ];
+
+/// Versions of the shipped themes from before the record existed, by
+/// SHA-256 of the file as the core wrote it: a copy that matches one is
+/// unedited, and follows the shipped version.
+const EARLIER_SHIPPED: [(&str, &str); 1] = [(
+    // default 1.0.0, before it followed Windows' light or dark mode.
+    DEFAULT_THEME,
+    "789d478e245cb5c8004bfcb38221c29c2c0133185c8989ca4ce8a63eac0a7e69",
+)];
 
 /// How often, and how far apart, a read is retried while an editor holds
 /// the file open without sharing it.
@@ -173,34 +187,38 @@ pub struct ThemeFolder {
 }
 
 impl ThemeFolder {
-    /// Opens the folder, creating it when needed. Writes each shipped theme
-    /// whose file is missing (a theme the user edited stays as it is) and
-    /// keeps `theme.schema.json` current for editors. Best effort: what
-    /// cannot be written is logged, and the core still has the default
-    /// theme in memory.
+    /// Opens the folder, creating it when needed, and keeps the shipped
+    /// themes current: a missing one is written; a copy the core wrote and
+    /// the user never changed follows the version this core ships; a copy
+    /// the user edited stays as it is. [`SHIPPED_RECORD`] remembers the
+    /// SHA-256 of every shipped file the core wrote, which is how an
+    /// unedited copy is told from an edited one. Also keeps
+    /// `theme.schema.json` current for editors. Best effort: what cannot be
+    /// written is logged, and the core still has the default theme in
+    /// memory.
     pub fn open(dir: PathBuf) -> Self {
         if let Err(error) = std::fs::create_dir_all(&dir) {
             tracing::warn!(dir = %dir.display(), %error, "cannot create the themes folder");
             return Self { dir };
         }
+        let mut record = read_record(&dir);
+        let before = record.clone();
         for (id, text) in SHIPPED {
-            let path = dir.join(format!("{id}.json"));
-            match path.try_exists() {
-                Ok(true) => {}
-                Ok(false) => match std::fs::write(&path, text) {
-                    Ok(()) => tracing::info!(path = %path.display(), "wrote a shipped theme"),
-                    Err(error) => {
-                        tracing::warn!(path = %path.display(), %error, "cannot write a shipped theme");
-                    }
-                },
-                Err(error) => {
-                    tracing::warn!(path = %path.display(), %error, "cannot look for a shipped theme");
-                }
+            if keep_shipped(&dir, id, text, &record) {
+                record
+                    .entry(id.to_owned())
+                    .or_default()
+                    .insert(sha256_hex(text.as_bytes()));
             }
+        }
+        if record != before
+            && let Err(error) = write_record(&dir, &record)
+        {
+            tracing::warn!(dir = %dir.display(), %error, "cannot write the record of shipped themes");
         }
         let schema = dir.join(SCHEMA_FILE_NAME);
         if std::fs::read(&schema).ok().as_deref() != Some(SCHEMA_JSON.as_bytes())
-            && let Err(error) = std::fs::write(&schema, SCHEMA_JSON)
+            && let Err(error) = replace_file(&schema, SCHEMA_JSON.as_bytes())
         {
             tracing::warn!(path = %schema.display(), %error, "cannot write the theme schema");
         }
@@ -267,7 +285,8 @@ impl ThemeFolder {
             else {
                 continue;
             };
-            if id.ends_with(".schema") || !path.is_file() {
+            // `.shipped.json` and other dotfiles are the core's own.
+            if id.ends_with(".schema") || id.starts_with('.') || !path.is_file() {
                 continue;
             }
             match self.load(id) {
@@ -278,6 +297,105 @@ impl ThemeFolder {
         themes.sort_by(|a, b| a.id.cmp(&b.id));
         themes
     }
+}
+
+/// Brings the shipped theme `id` up to `text` unless the user edited it.
+/// Returns whether the folder now holds `text`, so it is recorded.
+fn keep_shipped(
+    dir: &Path,
+    id: &str,
+    text: &str,
+    record: &BTreeMap<String, BTreeSet<String>>,
+) -> bool {
+    let path = dir.join(format!("{id}.json"));
+    let shipped = sha256_hex(text.as_bytes());
+    let found = match std::fs::read(&path) {
+        Ok(bytes) => sha256_hex(&bytes),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return match replace_file(&path, text.as_bytes()) {
+                Ok(()) => {
+                    tracing::info!(path = %path.display(), "wrote a shipped theme");
+                    true
+                }
+                Err(error) => {
+                    tracing::warn!(path = %path.display(), %error, "cannot write a shipped theme");
+                    false
+                }
+            };
+        }
+        Err(error) => {
+            tracing::warn!(path = %path.display(), %error, "cannot read a shipped theme");
+            return false;
+        }
+    };
+    if found == shipped {
+        return true;
+    }
+    let unedited = record.get(id).is_some_and(|hashes| hashes.contains(&found))
+        || EARLIER_SHIPPED
+            .iter()
+            .any(|(earlier, hash)| *earlier == id && *hash == found);
+    if !unedited {
+        tracing::info!(
+            path = %path.display(),
+            "keeping the edited copy of a shipped theme; this core's version of it is not written"
+        );
+        return false;
+    }
+    match replace_file(&path, text.as_bytes()) {
+        Ok(()) => {
+            tracing::info!(path = %path.display(), "updated an unedited shipped theme to the version this core ships");
+            true
+        }
+        Err(error) => {
+            tracing::warn!(path = %path.display(), %error, "cannot update a shipped theme");
+            false
+        }
+    }
+}
+
+/// The record of shipped theme files the core wrote. A record that cannot
+/// be read counts as empty: every copy that differs from this core's
+/// version is then kept, as an edit.
+fn read_record(dir: &Path) -> BTreeMap<String, BTreeSet<String>> {
+    let path = dir.join(SHIPPED_RECORD);
+    match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+            tracing::warn!(path = %path.display(), %error, "the record of shipped themes cannot be read");
+            BTreeMap::new()
+        }),
+        Err(_) => BTreeMap::new(),
+    }
+}
+
+fn write_record(dir: &Path, record: &BTreeMap<String, BTreeSet<String>>) -> io::Result<()> {
+    let mut text = serde_json::to_string_pretty(record).map_err(io::Error::other)?;
+    text.push('\n');
+    replace_file(&dir.join(SHIPPED_RECORD), text.as_bytes())
+}
+
+/// Replaces `path` through a temporary file and a rename, so the themes
+/// watcher and a second core never read half a file.
+fn replace_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let name = path
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    let temporary = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
+    let result = std::fs::write(&temporary, bytes).and_then(|()| std::fs::rename(&temporary, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .fold(String::with_capacity(64), |mut text, byte| {
+            let _ = std::fmt::Write::write_fmt(&mut text, format_args!("{byte:02x}"));
+            text
+        })
 }
 
 /// Reads a whole text file. Retries for a short while when an editor holds
@@ -488,5 +606,98 @@ mod tests {
         fs::remove_file(dir.join("nord.json")).unwrap();
         ThemeFolder::open(dir.clone());
         assert!(dir.join("nord.json").is_file());
+    }
+
+    /// `default.json` as the shipped version 1.0.0 was: an older core wrote
+    /// this file on every PC it started on.
+    const DEFAULT_1_0_0: &str = include_str!("../testdata/default-1.0.0.json");
+
+    #[test]
+    fn the_earlier_versions_are_the_files_that_shipped() {
+        assert_eq!(
+            EARLIER_SHIPPED,
+            [(DEFAULT_THEME, sha256_hex(DEFAULT_1_0_0.as_bytes()).as_str())]
+        );
+    }
+
+    /// The nord theme's JSON with one change.
+    fn changed_nord(change: impl FnOnce(&mut Value)) -> String {
+        let mut value: Value = serde_json::from_str(SHIPPED[1].1).unwrap();
+        change(&mut value);
+        value.to_string()
+    }
+
+    /// A PC that ran the core before `default` became 1.1.0 has the 1.0.0
+    /// file: untouched, it follows the shipped version; a theme the user
+    /// edited stays theirs.
+    #[test]
+    fn an_unedited_older_shipped_theme_is_updated_and_an_edited_one_kept() {
+        let scratch = scratch();
+        let dir = scratch.path().join("themes");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("default.json"), DEFAULT_1_0_0).unwrap();
+        let edited = changed_nord(|theme| theme["name"] = json!("My Nord"));
+        fs::write(dir.join("nord.json"), &edited).unwrap();
+
+        let folder = ThemeFolder::open(dir.clone());
+        assert_eq!(
+            fs::read_to_string(dir.join("default.json")).unwrap(),
+            SHIPPED[0].1,
+            "the unedited 1.0.0 became the shipped 1.1.0"
+        );
+        assert_eq!(folder.load("default").unwrap().version, "1.1.0");
+        assert_eq!(
+            fs::read_to_string(dir.join("nord.json")).unwrap(),
+            edited,
+            "the edited theme stays as the user left it"
+        );
+    }
+
+    /// The record of what the core wrote (`.shipped.json`) recognizes an
+    /// unedited copy of any shipped version, also one this core never
+    /// shipped itself.
+    #[test]
+    fn a_copy_the_record_knows_follows_the_shipped_version() {
+        let scratch = scratch();
+        let dir = scratch.path().join("themes");
+        fs::create_dir_all(&dir).unwrap();
+        let older = changed_nord(|theme| theme["version"] = json!("0.9.0"));
+        fs::write(dir.join("nord.json"), &older).unwrap();
+        fs::write(
+            dir.join(SHIPPED_RECORD),
+            json!({"nord": [sha256_hex(older.as_bytes())]}).to_string(),
+        )
+        .unwrap();
+
+        let folder = ThemeFolder::open(dir.clone());
+        assert_eq!(
+            fs::read_to_string(dir.join("nord.json")).unwrap(),
+            SHIPPED[1].1
+        );
+        let record: Value =
+            serde_json::from_str(&fs::read_to_string(dir.join(SHIPPED_RECORD)).unwrap()).unwrap();
+        for (id, text) in SHIPPED {
+            let hashes: Vec<&str> = record[id]
+                .as_array()
+                .unwrap_or_else(|| panic!("{id} is recorded"))
+                .iter()
+                .map(|hash| hash.as_str().unwrap())
+                .collect();
+            assert!(
+                hashes.contains(&sha256_hex(text.as_bytes()).as_str()),
+                "{id}: {hashes:?}"
+            );
+        }
+        assert_eq!(
+            record["nord"].as_array().unwrap().len(),
+            2,
+            "the old hash stays known"
+        );
+        let ids: Vec<String> = folder.list().into_iter().map(|theme| theme.id).collect();
+        assert_eq!(
+            ids,
+            ["catppuccin-mocha", "default", "nord", "rose-pine-moon"],
+            "the record is not a theme"
+        );
     }
 }

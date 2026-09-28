@@ -1,0 +1,61 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "default",
+  "name": "Default",
+  "author": "CabinetOS",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": null,
+  "mica": null,
+  "palette": {
+    "textPrimary": "#FFFFFF",
+    "textSecondary": "#FFFFFFC8",
+    "textTertiary": "#FFFFFF8B",
+    "textDisabled": "#FFFFFF5D",
+    "layerFill": "#FFFFFF0D",
+    "layerStroke": "#FFFFFF12",
+    "layerStrokeActive": "#FFFFFF2E",
+    "controlFill": "#FFFFFF0F",
+    "controlFillHover": "#FFFFFF14",
+    "acrylicTint": "#2C2C2CB8",
+    "terminalBackground": "#00000059",
+    "folderIcon": "#F2C063",
+    "folderIconFront": "#F8D98A",
+    "fileTypeColors": {
+      "md": "#60CDFF",
+      "rs": "#F0906C",
+      "toml": "#C9B6FF",
+      "exe": "#6CCB5F",
+      "dll": "#6CCB5F",
+      "bin": "#E0705E",
+      "pdf": "#E0705E",
+      "zip": "#F2C063"
+    },
+    "permissionLow": "#6CCB5F",
+    "permissionMedium": "#F2C063",
+    "permissionHigh": "#F27A6C"
+  },
+  "terminal": {
+    "foreground": "#CCCCCC",
+    "background": "#0C0C0C",
+    "cursor": "#FFFFFF",
+    "ansi": [
+      "#0C0C0C",
+      "#C50F1F",
+      "#13A10E",
+      "#C19C00",
+      "#0037DA",
+      "#881798",
+      "#3A96DD",
+      "#CCCCCC",
+      "#767676",
+      "#E74856",
+      "#16C60C",
+      "#F9F1A5",
+      "#3B78FF",
+      "#B4009E",
+      "#61D6D6",
+      "#F2F2F2"
+    ]
+  }
+}

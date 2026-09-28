@@ -18,8 +18,9 @@ How the window applies a theme, and its theme picker:
 - A theme is `<themes folder>\<id>.json`. `ui.theme` in `cabinetos.json`
   names the theme in effect; the default is `default`.
 - Four themes ship with the core: `default`, `nord`, `catppuccin-mocha` and
-  `rose-pine-moon`. The core writes each one that is missing into the
-  folder at every start.
+  `rose-pine-moon`. At every start the core writes each one that is
+  missing into the folder, and brings each copy the user never changed up
+  to the version it ships.
 - Change the theme with `set_value` on `ui.theme` (the settings UI, or
   `cabinetos-cli config set ui.theme nord`), or edit `cabinetos.json`.
 - Every client that said `hello` gets `theme_changed` with the whole theme
@@ -37,10 +38,26 @@ The flag wins over the variable. At every start the core creates the
 folder, writes each shipped theme whose file is missing, and keeps
 `theme.schema.json` next to the themes, so an editor completes and checks
 the keys (a theme file starts with `"$schema": "./theme.schema.json"`). A
-shipped theme the user edited stays as it is; one the user deleted comes
-back at the next start. A theme installed from the marketplace lands here
-too ([marketplace.md](marketplace.md)); it applies at once when `ui.theme`
+theme installed from the marketplace lands here too
+([marketplace.md](marketplace.md)); it applies at once when `ui.theme`
 names it.
+
+**Shipped themes and edits.** A shipped theme follows the version this
+core ships until the user edits it; an edit is never overwritten:
+
+| The file in the folder | At the next start |
+|---|---|
+| Missing (never written, or deleted) | Written |
+| Byte for byte a version the core wrote (an older one, say `default` 1.0.0) | Replaced by the version this core ships; the log says `updated an unedited shipped theme` |
+| Anything else (the user edited it) | Kept; the log says `keeping the edited copy of a shipped theme` |
+
+The core tells an unedited copy by its SHA-256. `.shipped.json` in the
+folder records the hash of every shipped file the core wrote there, by
+theme ID; versions that shipped before the record existed are known to
+the core itself (`default` 1.0.0). An editor that saves a file unchanged
+but with other line endings makes it an edit. Every file is replaced
+through a temporary file and a rename, so the themes watcher never reads
+half a theme.
 
 ## The format
 
@@ -176,5 +193,3 @@ whole theme as JSON: the one named, or the one in effect.
 ## Not yet
 
 - There are no light themes yet; `light` is there for them.
-- A new version of a shipped theme does not replace a copy already in the
-  folder; delete the file to get the new one at the next start.
