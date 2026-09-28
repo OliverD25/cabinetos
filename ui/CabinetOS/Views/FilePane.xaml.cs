@@ -434,7 +434,9 @@ public sealed partial class FilePane : UserControl
             Unhook();
             return;
         }
-        if (_firstRowTicks == 0 && (_model?.Count ?? 0) > 0)
+        // A pane that is not drawn (under an editor or the marketplace) makes no rows; waiting
+        // longer than 5 s would keep this per-frame callback, and the render loop, running.
+        if (_firstRowTicks == 0 && (_model?.Count ?? 0) > 0 && Stopwatch.GetElapsedTime(timing.StartedTicks) < TimeSpan.FromSeconds(5))
         {
             return;
         }

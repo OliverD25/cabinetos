@@ -18,9 +18,13 @@ public sealed partial class MainWindow
         _themes = new ThemeApplier(RootGrid, _backdrop);
         _themes.Applied += _ =>
         {
-            // What paints outside the brushes: the terminal page, and the caption buttons.
+            // What paints outside the brushes: the terminal page, the caption buttons, and
+            // the level dots that open views drew with the colours of the theme before.
             SendTerminalTheme();
             UpdateCaptionColors();
+            PluginsView.Repaint();
+            ReviewView.Repaint();
+            MarketView.Repaint();
         };
         _picker = new ThemePickerModel(_session);
         ThemesView.Model = _picker;

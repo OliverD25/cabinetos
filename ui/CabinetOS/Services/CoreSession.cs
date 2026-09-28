@@ -40,10 +40,11 @@ public sealed class CoreSession : ICoreChannel
     public async Task StartAsync()
     {
         var directory = AppContext.BaseDirectory;
-        var exe = CoreLauncher.Find(directory, Environment.GetEnvironmentVariable, File.Exists);
+        // Probing the candidate paths is file I/O: off the UI thread (brief §1).
+        var exe = await Task.Run(() => CoreLauncher.Find(directory, Environment.GetEnvironmentVariable, File.Exists));
         if (exe is null)
         {
-            var looked = string.Join(Environment.NewLine, CoreLauncher.Candidates(directory, Environment.GetEnvironmentVariable, File.Exists));
+            var looked = string.Join(Environment.NewLine, await Task.Run(() => CoreLauncher.Candidates(directory, Environment.GetEnvironmentVariable, File.Exists)));
             throw new CoreLaunchException(
                 $"CabinetOS could not find {CoreLauncher.CoreExeName}. It looked in:{Environment.NewLine}{looked}{Environment.NewLine}{Environment.NewLine}" +
                 $"Build the core (cargo build -p cabinetos-core in core\\), or set {CoreLauncher.CoreExeEnv} to its full path.");

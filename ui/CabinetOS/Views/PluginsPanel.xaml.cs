@@ -18,6 +18,8 @@ namespace CabinetOS.Views;
 /// </summary>
 public sealed partial class PluginsPanel : UserControl
 {
+    private (IReadOnlyList<PluginRow> Rows, string Folder)? _shown;
+
     /// <summary>Creates the panel, hidden.</summary>
     public PluginsPanel()
     {
@@ -39,9 +41,22 @@ public sealed partial class PluginsPanel : UserControl
     /// <summary>Whether the panel is shown.</summary>
     public bool IsOpen => Visibility == Visibility.Visible;
 
+    /// <summary>
+    /// Draws the list again with the theme's level colours, which its rows
+    /// take when they are made (a theme changed while it is shown).
+    /// </summary>
+    public void Repaint()
+    {
+        if (IsOpen && _shown is { } shown)
+        {
+            Show(shown.Rows, shown.Folder);
+        }
+    }
+
     /// <summary>Shows the list, or keeps it up to date while shown.</summary>
     public void Show(IReadOnlyList<PluginRow> rows, string pluginsFolder)
     {
+        _shown = (rows, pluginsFolder);
         List.Children.Clear();
         foreach (var row in rows)
         {

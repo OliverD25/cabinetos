@@ -85,6 +85,16 @@ public sealed partial class MarketplaceView : UserControl
     /// <summary>Gives the keyboard to the search field.</summary>
     public void FocusSearch() => SearchField.Focus(FocusState.Programmatic);
 
+    /// <summary>
+    /// Draws the detail column again with the theme's level colours, which its
+    /// capability dots take when they are made (a theme changed while shown).
+    /// </summary>
+    public void Repaint()
+    {
+        _detailItem = null;
+        Render();
+    }
+
     private void Render()
     {
         if (_model is not { } model || !IsOpen)

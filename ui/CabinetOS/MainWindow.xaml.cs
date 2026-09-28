@@ -654,6 +654,12 @@ public sealed partial class MainWindow : Window
 
     private void OnCoreEvent(CoreEvent coreEvent)
     {
+        if (_closing)
+        {
+            // The core is being shut down: saving the last paths still brings a
+            // config_changed, and reading the configuration now would only fail.
+            return;
+        }
         switch (coreEvent)
         {
             case ListingRefreshedEvent refreshed:

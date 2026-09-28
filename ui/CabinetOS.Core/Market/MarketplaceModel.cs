@@ -579,8 +579,10 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         {
             return ids(await core.RequestAsync(request));
         }
-        catch (IOException)
+        catch (IOException error)
         {
+            // Nothing of that kind shows as installed until the next look.
+            Diag.Info(Target, "cannot list what is installed", new LogField("request", request.Type), new LogField("error", error.Message));
             return null;
         }
     }

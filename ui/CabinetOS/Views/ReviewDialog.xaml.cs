@@ -71,6 +71,23 @@ public sealed partial class ReviewDialog : UserControl
         CancelButton.Focus(FocusState.Programmatic);
     }
 
+    /// <summary>
+    /// Draws the rows again with the theme's level colours, which they take
+    /// when they are made (a theme changed while the dialog is open).
+    /// </summary>
+    public void Repaint()
+    {
+        if (!IsOpen || Review is not { } review)
+        {
+            return;
+        }
+        Rows.Children.Clear();
+        foreach (var row in review.Rows)
+        {
+            Rows.Children.Add(RowFor(row));
+        }
+    }
+
     /// <summary>Hides the dialog.</summary>
     public void Close()
     {
