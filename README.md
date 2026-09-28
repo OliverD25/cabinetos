@@ -38,7 +38,10 @@ with a theme picker, and the marketplace view, which installs plugins and
 themes from an index through the core; checked with real keys on
 2026-09-28, with five findings queued for the shell. Phase 10's buildable
 parts are done: one command builds a release zip with an installer and
-every third-party license; signing and publishing wait for the creator.
+every third-party license; signing and publishing wait for the creator. 36
+more colour themes, ported under their MIT licenses from 27 of the 30 most
+popular editor themes, wait in `sdk/themes/collection` for the marketplace
+instead of shipping with the core.
 
 ## Documents
 

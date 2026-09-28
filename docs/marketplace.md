@@ -198,7 +198,7 @@ in `sdk/fixtures/plugins` (each as a zip) and the shipped themes in
 `sdk/themes`, with their hashes, into a folder of your choice:
 
 ```text
-powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder>
+powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection]
 cabinetos-cli config set marketplace.index "<folder>"
 cabinetos-cli market refresh
 cabinetos-cli market install hello
@@ -207,7 +207,9 @@ cabinetos-cli market uninstall hello
 ```
 
 The shipped themes are in the index too, but installing one is refused
-while its file is in the themes folder (trust rule 7).
+while its file is in the themes folder (trust rule 7). With `-Collection`
+the index also offers the 36 themes of `sdk/themes/collection`
+([themes.md](themes.md), "The collection").
 
 ## The messages
 
