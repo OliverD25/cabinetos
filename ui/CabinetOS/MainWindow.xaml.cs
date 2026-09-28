@@ -408,6 +408,9 @@ public sealed partial class MainWindow : Window
                     // Windows' light or dark mode as the window sees it, through the path a change there takes.
                     ForceSystemMode(step.Argument);
                     break;
+                case "click":
+                    ClickForSnapshot(step.Argument);
+                    break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
                     var shown = Active.View?.IndexOfName(step.Argument) ?? -1;
@@ -433,6 +436,35 @@ public sealed partial class MainWindow : Window
 
     // Every WebView2 the window hosts, for the snapshot aid.
     private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage, .. _toolHosts.OfType<ToolHost>().Select(h => h.Page)];
+
+    // The snapshot aid's click: step: the first shown button with that accessible name, pressed
+    // through its automation peer, as assistive technology presses it.
+    private void ClickForSnapshot(string name)
+    {
+        var pending = new Stack<DependencyObject>();
+        pending.Push(RootGrid);
+        while (pending.Count > 0)
+        {
+            var element = pending.Pop();
+            if (element is UIElement { Visibility: Visibility.Collapsed })
+            {
+                continue;
+            }
+            if (element is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase button
+                && Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(button) == name
+                && Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(button)
+                    ?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invoke)
+            {
+                invoke.Invoke();
+                return;
+            }
+            for (var i = VisualTreeHelper.GetChildrenCount(element) - 1; i >= 0; i--)
+            {
+                pending.Push(VisualTreeHelper.GetChild(element, i));
+            }
+        }
+        Diag.Info(Target, "snapshot click: no shown button has that name", new LogField("name", name));
+    }
 
     // The crash-isolation check: ends a page's browser process, as a crash would.
     // "terminal", or "tool:<id>".
