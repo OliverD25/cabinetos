@@ -82,7 +82,11 @@ public sealed partial class ThemePicker : UserControl
     }
 
     /// <summary>Hides the picker.</summary>
-    public void Close() => Visibility = Visibility.Collapsed;
+    public void Close()
+    {
+        Visibility = Visibility.Collapsed;
+        OpenToolTips.Close(XamlRoot);
+    }
 
     /// <summary>
     /// Draws the rows again: their swatches take the Windows accent and, for

@@ -119,6 +119,7 @@ public sealed partial class FileContextMenu : UserControl
         // focus would hand it to whatever comes next, maybe the other pane.
         Closed?.Invoke();
         Visibility = Visibility.Collapsed;
+        OpenToolTips.Close(XamlRoot);
     }
 
     private void Build(IReadOnlyList<MenuEntry> strip, IReadOnlyList<MenuEntry> items)

@@ -109,6 +109,7 @@ public sealed partial class CommandPalette : UserControl
         // hands it to whatever comes next, maybe the other pane, which then becomes active.
         ReturnFocus?.Invoke();
         Visibility = Visibility.Collapsed;
+        OpenToolTips.Close(XamlRoot);
     }
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e)

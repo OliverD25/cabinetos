@@ -80,7 +80,11 @@ public sealed partial class MarketplaceView : UserControl
     }
 
     /// <summary>Hides the marketplace.</summary>
-    public void Close() => Visibility = Visibility.Collapsed;
+    public void Close()
+    {
+        Visibility = Visibility.Collapsed;
+        OpenToolTips.Close(XamlRoot);
+    }
 
     /// <summary>Gives the keyboard to the search field.</summary>
     public void FocusSearch() => SearchField.Focus(FocusState.Programmatic);

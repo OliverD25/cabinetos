@@ -50,6 +50,9 @@ public sealed partial class ReviewDialog : UserControl
     /// <summary>Whether the dialog is shown.</summary>
     public bool IsOpen => Visibility == Visibility.Visible;
 
+    /// <summary>The dialog opened or closed: while it is open, only its own commands run (docs/ui.md, "Dialogs").</summary>
+    public event Action? OpenChanged;
+
     /// <summary>Shows <paramref name="review"/>; the keyboard goes to Cancel, so Enter does not grant by accident.</summary>
     public void Open(PermissionReview review)
     {
@@ -69,6 +72,7 @@ public sealed partial class ReviewDialog : UserControl
         Visibility = Visibility.Visible;
         _entrance.Begin();
         CancelButton.Focus(FocusState.Programmatic);
+        OpenChanged?.Invoke();
     }
 
     /// <summary>
@@ -91,8 +95,14 @@ public sealed partial class ReviewDialog : UserControl
     /// <summary>Hides the dialog.</summary>
     public void Close()
     {
+        var wasOpen = IsOpen;
         Review = null;
         Visibility = Visibility.Collapsed;
+        OpenToolTips.Close(XamlRoot);
+        if (wasOpen)
+        {
+            OpenChanged?.Invoke();
+        }
     }
 
     /// <summary>A grant is on its way: the buttons wait.</summary>

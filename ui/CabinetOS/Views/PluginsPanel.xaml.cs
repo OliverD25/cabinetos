@@ -73,7 +73,11 @@ public sealed partial class PluginsPanel : UserControl
     }
 
     /// <summary>Hides the panel.</summary>
-    public void Close() => Visibility = Visibility.Collapsed;
+    public void Close()
+    {
+        Visibility = Visibility.Collapsed;
+        OpenToolTips.Close(XamlRoot);
+    }
 
     private Border CardFor(PluginRow row)
     {
