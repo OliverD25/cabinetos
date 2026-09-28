@@ -231,9 +231,12 @@ The core asks the indexer with a 200 ms limit. When it does not answer, the
 core:
 
 - walks one folder tree itself, breadth first, with the NT enumeration of
-  [ipc.md](ipc.md) "Listing a directory", without following links, for at
-  most 2 s and 20,000 entries (`complete: false` when a limit stops it), and
-  ranks the hits the same way;
+  [ipc.md](ipc.md) "Listing a directory", without following links, for
+  about 2 s and 20,000 entries (`complete: false` when a limit stops it), and
+  ranks the hits the same way. The limits are checked before each folder,
+  and a folder is always read whole, so one slow folder can hold the walk
+  past 2 s: a huge one, or a network folder whose server stopped answering
+  (Windows waits for its network timeout);
 - starts the walk at the search's `root`, else at the folder the connection
   listed last, else at the user's profile folder;
 - says so once in its log, at INFO, and waits 1 s before asking the indexer

@@ -5,8 +5,10 @@
 //! per connection (a named pipe connects in microseconds). When the indexer
 //! does not answer, the core waits a while before asking again (1 s, then
 //! doubling to 30 s), and says so once in its log. Meanwhile it walks one
-//! folder tree itself with the NT enumeration, for at most 2 s and 20,000
-//! entries, and ranks the hits the way the indexer does.
+//! folder tree itself with the NT enumeration, for about 2 s and 20,000
+//! entries, and ranks the hits the way the indexer does. The limits are
+//! checked before each folder; a folder is read whole, so one slow folder
+//! (a network share that stopped answering) can hold the walk longer.
 
 use std::collections::VecDeque;
 use std::sync::{Mutex, MutexGuard, PoisonError};
