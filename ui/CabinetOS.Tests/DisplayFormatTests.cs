@@ -40,8 +40,8 @@ public class DisplayFormatTests
     [InlineData(".gitignore", EntryKind.File, false, "File")]
     [InlineData("trailing.", EntryKind.File, false, "File")]
     [InlineData("src", EntryKind.Directory, true, "Folder")]
-    [InlineData("repo", EntryKind.Link, true, "Folder link")]
-    [InlineData("tool.exe", EntryKind.Link, false, "Link")]
+    [InlineData("repo", EntryKind.Link, true, "Link to a folder")]
+    [InlineData("tool.exe", EntryKind.Link, false, "Link to a file")]
     public void The_type_column_names_folders_links_and_extensions(string name, EntryKind kind, bool isFolder, string text) =>
         Assert.Equal(text, DisplayFormat.TypeText(name, kind, isFolder));
 

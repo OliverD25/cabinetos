@@ -1334,6 +1334,50 @@ until the path has 333 characters, with `deep file.txt` and
 Tests: `LongPathTests` (11), and three in `ToolTests` for a path or a
 folder WebView2 cannot serve.
 
+### Links and cloud files
+
+The fixture's `links\` folder holds `junction to target`, a junction to
+`link-target\` and its files `kept 1.txt` to `kept 3.txt`. Symbolic links
+and mount points need an administrator, so the fixture has none; their
+words are tested on fake listings. So are cloud placeholders, which need
+a sync provider such as OneDrive.
+
+- **A link says so.** Its icon carries a small chain badge on the lower
+  left, where Explorer draws its arrow, and it stays when the shell's icon
+  arrives. The Type column and Properties name the link, not its target:
+  the core names a type by the folder attribute, so a junction was "File
+  folder" once its details came (after "Folder link" before them). Now it
+  is "Junction", "Mount point", "Symbolic link to a folder", "Symbolic link
+  to a file", or, while the listing does not name the kind, "Link to a
+  folder" or "Link to a file" (`DisplayFormat.RowType`, `EntryFacts.LinkOf`).
+  The listing marks a link (kind 3) but not yet which kind; the core's part
+  of the edge cases adds it, and `EntryFacts.LinkOf` is the one place that
+  will read it.
+- **Shift+Delete on a link names it**: "Delete the link permanently?" and
+  "“junction to target” is a link. Only the link is deleted; the folder it
+  points to keeps its files." Several rows with links among them end with
+  "1 of them is a link: only the link is deleted, not what it points to."
+  The question never counted the items behind a row (`DeleteText`). What
+  the delete does to the files is the core's (its jobs delete a link as a
+  link); the live check deletes the fixture's junction and looks at
+  `link-target\` on disk afterwards.
+- **A row not on this disk** (the attributes `RECALL_ON_DATA_ACCESS`,
+  `RECALL_ON_OPEN` or `OFFLINE`: OneDrive's "online only", a folder whose
+  list is still in the cloud, an offline file) shows a cloud after its
+  name, "Not on this disk: opening it downloads it". Its Size is the
+  listing's, which is the file's logical size, not the space it takes.
+  "Always keep on this device" and a file downloaded once carry none of
+  these, and show no cloud.
+- **Showing such a row reads nothing from it.** The only request of a row
+  that reads its file is `get_icon` with a `path:` key (programs, icons and
+  shortcuts carry their own icon). For a row not on this disk the shell
+  asks for its extension's icon instead (`ext:.exe`, drawn without opening
+  a file), so the core is never asked to read a placeholder to draw it
+  (`DisplayFormat.IconKeyFor`). The type names are the core's by extension
+  and read no file either (docs/ipc.md, "Type names and icons").
+
+Tests: `LinksAndCloudFilesTests` (22).
+
 ## Not in this version
 
 | What | Why |

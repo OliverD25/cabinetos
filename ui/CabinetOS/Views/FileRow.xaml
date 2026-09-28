@@ -58,23 +58,47 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <FontIcon
-                    x:Name="Icon"
-                    VerticalAlignment="Center"
-                    FontSize="16"
-                    Foreground="{ThemeResource CbRowMetaBrush}" />
-                <local:FolderGlyph
-                    x:Name="FolderIcon"
-                    VerticalAlignment="Center"
-                    Visibility="Collapsed" />
-                <!-- The shell's icon (get_icon) replaces the glyph once it arrives. -->
-                <Image
-                    x:Name="IconImage"
+                <Grid
                     Width="16"
                     Height="16"
-                    VerticalAlignment="Center"
-                    Visibility="Collapsed" />
+                    VerticalAlignment="Center">
+                    <FontIcon
+                        x:Name="Icon"
+                        VerticalAlignment="Center"
+                        FontSize="16"
+                        Foreground="{ThemeResource CbRowMetaBrush}" />
+                    <local:FolderGlyph
+                        x:Name="FolderIcon"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed" />
+                    <!-- The shell's icon (get_icon) replaces the glyph once it arrives. -->
+                    <Image
+                        x:Name="IconImage"
+                        Width="16"
+                        Height="16"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed" />
+                    <!-- A link (junction, symbolic link, mount point): a badge on the icon's lower left, as Explorer's arrow. -->
+                    <Border
+                        x:Name="LinkBadge"
+                        Width="10"
+                        Height="10"
+                        Margin="-3,0,0,-3"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Bottom"
+                        Background="{ThemeResource CbDialogFillBrush}"
+                        BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="2"
+                        Visibility="Collapsed">
+                        <FontIcon
+                            FontSize="7"
+                            Foreground="{ThemeResource CbAccentBrush}"
+                            Glyph="&#xE71B;" />
+                    </Border>
+                </Grid>
                 <TextBlock
                     x:Name="NameText"
                     Grid.Column="1"
@@ -82,6 +106,17 @@
                     Foreground="{ThemeResource CbRowTextBrush}"
                     TextTrimming="CharacterEllipsis"
                     TextWrapping="NoWrap" />
+                <!-- Not on this disk (a cloud placeholder): opening it downloads it. -->
+                <FontIcon
+                    x:Name="CloudMark"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Not on this disk"
+                    FontSize="12"
+                    Foreground="{ThemeResource CbTextTertiaryBrush}"
+                    Glyph="&#xE753;"
+                    ToolTipService.ToolTip="Not on this disk: opening it downloads it"
+                    Visibility="Collapsed" />
             </Grid>
             <TextBlock
                 x:Name="ModifiedText"

@@ -16,8 +16,7 @@ namespace CabinetOS.Views;
 /// </summary>
 public sealed partial class FileRow : UserControl
 {
-    // Segoe Fluent Icons: Link, Document (folders draw FolderGlyph).
-    private const string LinkGlyph = "";
+    // Segoe Fluent Icons: Document (folders draw FolderGlyph; a link adds LinkBadge).
     private const string FileGlyph = "";
 
     private readonly Brush _plainIconBrush;
@@ -135,15 +134,20 @@ public sealed partial class FileRow : UserControl
     {
         var view = item.View;
         var index = item.Index;
-        ShowTypeAndIcon(view.NameSpan(index), view.Kind(index), view.IsFolder(index), item.Details, index);
+        ShowTypeAndIcon(view.NameSpan(index), view.Kind(index), view.IsFolder(index), item.Details, index,
+            EntryFacts.LinkOf(view, index), view.Attributes(index));
     }
 
     // The shell's type name and icon once the core sent them (protocol 9); the built-in text and glyph until then.
-    private void ShowTypeAndIcon(ReadOnlySpan<char> name, EntryKind kind, bool isFolder, IRowDetails? details, int index)
+    // A link says so in the Type column and on its icon; a row not on this disk shows a cloud and is never read to draw it.
+    private void ShowTypeAndIcon(ReadOnlySpan<char> name, EntryKind kind, bool isFolder, IRowDetails? details, int index,
+        LinkKind link = LinkKind.None, uint attributes = 0)
     {
         var detail = details?.Detail(index, name, isFolder);
-        TypeText.Text = detail?.TypeName ?? DisplayFormat.TypeText(name, kind, isFolder);
-        IconKey = detail?.IconKey;
+        TypeText.Text = DisplayFormat.RowType(name, kind, isFolder, link, detail);
+        LinkBadge.Visibility = link != LinkKind.None ? Visibility.Visible : Visibility.Collapsed;
+        CloudMark.Visibility = EntryFacts.IsNotOnDisk(attributes) ? Visibility.Visible : Visibility.Collapsed;
+        IconKey = detail is null ? null : DisplayFormat.IconKeyFor(detail, name, isFolder, attributes);
         if (IconKey is not null && details?.Icon(IconKey) is { } image)
         {
             IconImage.Source = image;
@@ -154,16 +158,11 @@ public sealed partial class FileRow : UserControl
         }
         IconImage.Source = null;
         IconImage.Visibility = Visibility.Collapsed;
-        // A folder until its shell icon comes: the design's two-tone folder in the theme's colours.
-        var plainFolder = isFolder && kind != EntryKind.Link;
-        FolderIcon.Visibility = plainFolder ? Visibility.Visible : Visibility.Collapsed;
-        Icon.Visibility = plainFolder ? Visibility.Collapsed : Visibility.Visible;
-        if (kind == EntryKind.Link)
-        {
-            Icon.Glyph = LinkGlyph;
-            Icon.Foreground = isFolder ? ThemeResources.Brush("CbFolderBrush") : _plainIconBrush;
-        }
-        else if (!isFolder)
+        // A folder until its shell icon comes: the design's two-tone folder in the theme's colours
+        // (a link to a folder too: its badge says it is a link).
+        FolderIcon.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
+        Icon.Visibility = isFolder ? Visibility.Collapsed : Visibility.Visible;
+        if (!isFolder)
         {
             Icon.Glyph = FileGlyph;
             Icon.Foreground = ThemeBrushes.FileType(DisplayFormat.Extension(name)) ?? _plainIconBrush;

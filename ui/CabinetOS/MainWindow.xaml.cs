@@ -1338,16 +1338,20 @@ public sealed partial class MainWindow : Window
         }
         if (permanent)
         {
-            var what = targets.Count == 1 ? $"\u201C{targets[0].Name}\u201D" : $"These {targets.Count:N0} items";
+            // A link is named as one (docs/ui.md, "Links and cloud files"): only the link goes.
+            var view = Active.View;
+            var (title, body) = DeleteText.Permanent(targets
+                .Select(t => new DeleteTarget(t.Name, t.IsFolder, view is null ? LinkKind.None : EntryFacts.LinkOf(view, t.Index)))
+                .ToList());
             var dialog = new ContentDialog
             {
                 XamlRoot = RootGrid.XamlRoot,
                 // A dialog sits in the popup layer, outside the root's RequestedTheme (a light theme).
                 RequestedTheme = RootGrid.ActualTheme,
-                Title = targets.Count == 1 ? "Delete 1 item permanently?" : $"Delete {targets.Count:N0} items permanently?",
+                Title = title,
                 Content = new TextBlock
                 {
-                    Text = $"{what} will be deleted for good. {(targets.Count == 1 ? "It does" : "They do")} not go to the Recycle Bin, and this cannot be undone.",
+                    Text = body,
                     TextWrapping = TextWrapping.Wrap,
                 },
                 PrimaryButtonText = "Delete permanently",

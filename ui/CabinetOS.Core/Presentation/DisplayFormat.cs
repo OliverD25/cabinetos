@@ -54,14 +54,15 @@ public static class DisplayFormat
     }
 
     /// <summary>
-    /// The Type column: <c>Folder</c>, <c>Link</c>, or the extension in capitals
-    /// with <c>File</c>. The core does not send shell type names yet.
+    /// The built-in Type column, until the core's type names come (or from a
+    /// core before protocol 9): <c>Folder</c>, a link's words, or the
+    /// extension in capitals with <c>File</c>.
     /// </summary>
     public static string TypeText(ReadOnlySpan<char> name, EntryKind kind, bool isFolder)
     {
         if (kind == EntryKind.Link)
         {
-            return isFolder ? "Folder link" : "Link";
+            return LinkTypeName(LinkKind.Unknown, isFolder);
         }
         if (isFolder)
         {
@@ -73,6 +74,48 @@ public static class DisplayFormat
             return "File";
         }
         return string.Concat(name[(dot + 1)..].ToString().ToUpperInvariant(), " File");
+    }
+
+    /// <summary>
+    /// The Type column of a row (and Properties' Type): a link says what kind
+    /// of link it is, since the shell's name is its target's ("File folder"
+    /// for a junction); any other row has the shell's name, else the
+    /// built-in one.
+    /// </summary>
+    public static string RowType(ReadOnlySpan<char> name, EntryKind kind, bool isFolder, LinkKind link, Protocol.EntryDetail? detail)
+    {
+        if (link != LinkKind.None)
+        {
+            return LinkTypeName(link, isFolder);
+        }
+        return detail?.TypeName is { Length: > 0 } shellName ? shellName : TypeText(name, kind, isFolder);
+    }
+
+    /// <summary>A link's type: <c>Junction</c>, <c>Mount point</c>, <c>Symbolic link to a folder</c>, <c>Link to a file</c>, ….</summary>
+    public static string LinkTypeName(LinkKind link, bool isFolder) => link switch
+    {
+        LinkKind.Junction => "Junction",
+        LinkKind.MountPoint => "Mount point",
+        LinkKind.SymbolicLink => isFolder ? "Symbolic link to a folder" : "Symbolic link to a file",
+        _ => isFolder ? "Link to a folder" : "Link to a file",
+    };
+
+    /// <summary>
+    /// The icon key a row asks <c>get_icon</c> for: the core's, except that a
+    /// row not on this disk never asks for its file's own icon (a <c>path:</c>
+    /// key, which the core reads from the file, and reading a placeholder
+    /// downloads it). It gets its extension's icon instead, which the core
+    /// draws for any <c>ext:</c> key without opening a file.
+    /// </summary>
+    public static string IconKeyFor(Protocol.EntryDetail detail, ReadOnlySpan<char> name, bool isFolder, uint attributes)
+    {
+        if (isFolder || !EntryFacts.IsNotOnDisk(attributes) || !detail.IconKey.StartsWith("path:", StringComparison.Ordinal))
+        {
+            return detail.IconKey;
+        }
+        // The core's own rule for an extension: from the last dot on, lower case (.gitignore has one).
+        var dot = name.LastIndexOf('.');
+        return dot < 0 || dot == name.Length - 1 ? "generic" : "ext:" + name[dot..].ToString().ToLowerInvariant();
     }
 
     /// <summary>

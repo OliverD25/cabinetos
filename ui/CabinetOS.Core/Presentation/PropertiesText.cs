@@ -11,14 +11,14 @@ namespace CabinetOS.Core.Presentation;
 public static class PropertiesText
 {
     /// <summary>
-    /// One entry's rows: the type (the shell's name, as the Type column shows
-    /// it, else the built-in one), the location, the size (files), the times
-    /// and the attributes.
+    /// One entry's rows: the type as the Type column shows it (a link's kind,
+    /// the shell's name, else the built-in one), the location, the size
+    /// (files), the times and the attributes.
     /// </summary>
     public static IReadOnlyList<(string Label, string Value)> ForEntry(ListingView view, int index, string folder, EntryDetail? detail, CultureInfo culture)
     {
         var isFolder = view.IsFolder(index);
-        var type = detail?.TypeName is { Length: > 0 } shellName ? shellName : DisplayFormat.TypeText(view.NameSpan(index), view.Kind(index), isFolder);
+        var type = DisplayFormat.RowType(view.NameSpan(index), view.Kind(index), isFolder, EntryFacts.LinkOf(view, index), detail);
         var rows = new List<(string Label, string Value)>
         {
             ("Type", type),
