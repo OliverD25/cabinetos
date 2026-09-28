@@ -10,7 +10,7 @@ use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write};
 use std::panic::PanicHookInfo;
 use std::path::{Path, PathBuf};
-use std::sync::Once;
+use std::sync::{Once, OnceLock};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -41,6 +41,20 @@ struct CrashLocation<'a> {
 
 static INSTALL: Once = Once::new();
 
+/// What the process does after a panic's crash trace; see [`on_panic`].
+static ON_PANIC: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
+
+/// Runs `callback` after every panic, once its crash trace is written and
+/// the log writer is closed, on the panicking thread. A process that must
+/// not run on after a panic anywhere (without the thread that panicked,
+/// and without a log file) starts its shutdown here. The callback must
+/// return at once and wait for nothing, not even a lock: the panicking
+/// thread may hold it. Only the first call counts; it returns `false` for
+/// the others.
+pub fn on_panic(callback: impl Fn() + Send + Sync + 'static) -> bool {
+    ON_PANIC.set(Box::new(callback)).is_ok()
+}
+
 /// Installs the crash hook once per process. [`init`](crate::init) calls it.
 /// The previous hook still runs afterwards, so the usual panic message is
 /// printed as well.
@@ -52,6 +66,9 @@ pub(crate) fn install_panic_hook() {
                 write_crash_trace(process, info);
             }
             flush_log_writer();
+            if let Some(callback) = ON_PANIC.get() {
+                callback();
+            }
             previous(info);
         }));
     });

@@ -96,9 +96,14 @@ When a Rust process panics, the panic hook runs before the process dies:
 The hook takes no lock it would have to wait for and writes no log events,
 so a panic that happens while a lock is held cannot hang the process.
 
-The core treats a panic in any of its tasks as fatal: after the hook has run
-it stops with exit code 1. Running on would mean running without a log
-writer. The UI is expected to restart it.
+The core treats a panic on any of its threads or tasks as fatal: after the
+hook has run it stops with exit code 1, whichever thread panicked (a
+connection, a directory watcher, the job progress thread, a plugin's
+thread). Running on would mean running without the thread that panicked
+and without a log writer. The UI is expected to restart it. A job's own
+thread ends the process at once instead (`abort`), so the job's disks are
+never left locked. `cabinetos-core --self-test-thread-panic` runs a normal
+core and panics one of its threads a second after the start.
 
 Crash file format:
 

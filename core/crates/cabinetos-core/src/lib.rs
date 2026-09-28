@@ -37,6 +37,7 @@ mod volumes;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use cabinetos_diag::{Boundary, DiagConfig, DiagError};
@@ -145,6 +146,10 @@ pub enum CoreError {
     /// A connection task panicked. The crash trace is in the log directory.
     #[error("a connection task panicked; see the crash trace in the log directory")]
     ConnectionPanicked,
+    /// A thread of the core panicked. The crash trace is in the log
+    /// directory.
+    #[error("a thread of the core panicked; see the crash trace in the log directory")]
+    Panicked,
 }
 
 /// The diagnostics configuration of the core process: process `core`,
@@ -176,6 +181,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         marketplace_dir,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
+    let panicked = stop_on_panic(&shutdown);
     if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
         tracing::warn!(
             value = %rejected,
@@ -241,7 +247,10 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         themes,
         market,
     });
-    let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
+    let mut result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
+    if result.is_ok() && panicked.load(Ordering::SeqCst) {
+        result = Err(CoreError::Panicked);
+    }
     // The shells get their hang-up; together they may take up to 2 s to end.
     let closing = Arc::clone(&services.terminals);
     let _ = tokio::task::spawn_blocking(move || closing.shutdown()).await;
@@ -256,6 +265,28 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
     }
     drop(diag);
     result
+}
+
+/// Makes a panic on any thread stop the core, as a panic in a connection
+/// task already does: the panic hook has written the crash trace and closed
+/// the log writer, so running on would mean running without the thread
+/// that panicked and without a log (fail fast; the window starts a new
+/// core). Returns the flag that says a panic happened.
+fn stop_on_panic(shutdown: &CancellationToken) -> Arc<AtomicBool> {
+    let panicked = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&panicked);
+    let token = shutdown.clone();
+    cabinetos_diag::on_panic(move || {
+        flag.store(true, Ordering::SeqCst);
+        // Cancelled from a thread of its own: the panicking thread may hold
+        // a lock that cancelling needs, and it releases its locks as it
+        // unwinds.
+        let token = token.clone();
+        let _ = std::thread::Builder::new()
+            .name("panic-stop".to_owned())
+            .spawn(move || token.cancel());
+    });
+    panicked
 }
 
 async fn serve(

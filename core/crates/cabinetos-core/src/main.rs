@@ -74,12 +74,20 @@ struct Args {
     /// Log one event, then panic: tests crash traces.
     #[arg(long, hide = true)]
     self_test_panic: bool,
+
+    /// Run normally, and panic one thread of the core a second after the
+    /// start: tests that a panic on any thread stops the core.
+    #[arg(long, hide = true)]
+    self_test_thread_panic: bool,
 }
 
 fn main() -> ExitCode {
     let args = Args::parse();
     if args.self_test_panic {
         self_test_panic(args.log_dir);
+    }
+    if args.self_test_thread_panic {
+        self_test_thread_panic();
     }
 
     // An invalid value falls back to the default; `run` logs a warning once
@@ -133,6 +141,21 @@ fn self_test_panic(log_dir: Option<PathBuf>) -> ! {
     panic!("self-test panic");
 }
 
+/// A thread of the core's own that panics while the core serves: what a
+/// bug in a directory watcher or a plugin's thread would do.
+fn self_test_thread_panic() {
+    let spawned = std::thread::Builder::new()
+        .name("self-test".to_owned())
+        .spawn(|| {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            tracing::info!("about to panic on a thread of the core (self-test)");
+            panic!("self-test panic on a thread");
+        });
+    if let Err(error) = spawned {
+        eprintln!("cabinetos-core: cannot start the self-test thread: {error}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use clap::CommandFactory;
@@ -175,6 +198,7 @@ mod tests {
             "--marketplace-dir",
             r"E:\marketplace",
             "--self-test-panic",
+            "--self-test-thread-panic",
         ])
         .unwrap();
         assert_eq!(args.pipe, "abc");
@@ -190,5 +214,6 @@ mod tests {
         assert_eq!(args.tools_dir, Some(PathBuf::from(r"E:\tools")));
         assert_eq!(args.marketplace_dir, Some(PathBuf::from(r"E:\marketplace")));
         assert!(args.self_test_panic);
+        assert!(args.self_test_thread_panic);
     }
 }

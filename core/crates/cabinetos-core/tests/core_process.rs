@@ -228,6 +228,38 @@ async fn a_panic_writes_a_crash_trace_and_flushes_the_log() {
     );
 }
 
+/// The crash traces in a log directory.
+fn crash_files(dir: &Path) -> Vec<PathBuf> {
+    files_in(dir)
+        .into_iter()
+        .filter(|path| {
+            let name = path.file_name().unwrap().to_string_lossy();
+            name.starts_with("crash-")
+                && path
+                    .extension()
+                    .is_some_and(|extension| extension == "json")
+        })
+        .collect()
+}
+
+/// A panic on one of the core's own threads (a watcher, the job progress
+/// thread, a plugin's thread) is a bug like any other: the core writes the
+/// crash trace and stops, and the window starts a new one. It must not run
+/// on without that thread and without its log file, which the panic hook
+/// closed.
+#[tokio::test]
+async fn a_panic_on_any_thread_stops_the_core() {
+    let mut core = start_core(&["--self-test-thread-panic"]);
+    let status = wait_for_exit(&mut core.child, EXIT_DEADLINE).await;
+    assert_eq!(status.code(), Some(1), "a core that panicked must fail");
+
+    let crashes = crash_files(core.log_dir.path());
+    assert_eq!(crashes.len(), 1, "{crashes:?}");
+    let crash: Value = serde_json::from_str(&fs::read_to_string(&crashes[0]).unwrap()).unwrap();
+    assert_eq!(crash["message"], "self-test panic on a thread");
+    assert_eq!(crash["thread"], "self-test");
+}
+
 #[tokio::test]
 async fn the_core_exits_when_its_parent_exits() {
     // A stand-in parent that waits for a key press that never comes.

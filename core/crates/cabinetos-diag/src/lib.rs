@@ -11,8 +11,9 @@
 //!   the request it belongs to ([`span_for_request`]), so one action can be
 //!   followed from the UI through the pipe into the core.
 //! - On a panic, the hook writes `crash-<timestamp>.json` with the backtrace and
-//!   the last events from the ring buffer, then flushes the log writer before
-//!   the process dies.
+//!   the last events from the ring buffer, then flushes and closes the log
+//!   writer: the process is expected to end. [`on_panic`] lets it start its
+//!   shutdown from there, whichever thread panicked.
 //! - [`set_level`] changes the level while the process runs (the core applies
 //!   `logging.level` from `cabinetos.json`); `CABINETOS_LOG` wins over it.
 //!
@@ -41,6 +42,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::Registry;
 use tracing_subscriber::reload;
 
+pub use panic::on_panic;
 pub use ring::{RING_CAPACITY, recent_events};
 
 /// Environment variable that overrides the log directory.
