@@ -1,6 +1,8 @@
+using System.Text;
 using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Jobs;
 using CabinetOS.Core.Keys;
+using CabinetOS.Core.Terminal;
 using CabinetOS.Core.Listing;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Tests.Support;
@@ -181,6 +183,49 @@ public class EndToEndTests
         {
             Repo.RemoveTempFolder(root);
         }
+    }
+
+    [Fact]
+    public async Task A_cmd_session_echoes_through_the_byte_pump()
+    {
+        var coreExe = FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-term");
+        try
+        {
+            await using var core = await StartCoreAsync(coreExe, root);
+            var client = core.Client;
+            await client.HelloAsync();
+
+            var opened = await client.RequestAsync<TerminalOpenedReply>(new TerminalOpenRequest(100, 30) { Profile = "cmd", Cwd = root });
+            Assert.StartsWith(@"\\.\pipe\cabinetos-term-", opened.Pipe);
+            var output = new OutputCoalescer(() => Environment.TickCount64);
+            var seen = new StringBuilder();
+            await using (var pipe = await TerminalPipe.ConnectAsync(opened.Pipe, output, TimeSpan.FromSeconds(5)))
+            {
+                await pipe.WriteAsync("echo hello-from-pane\r"u8.ToArray());
+                // What the page would get: base64 chunks, decoded here.
+                var deadline = DateTime.UtcNow.AddSeconds(20);
+                while (CountOf(seen.ToString(), "hello-from-pane") < 2 && DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(OutputCoalescer.FrameMilliseconds);
+                    foreach (var chunk in output.Flush())
+                    {
+                        seen.Append(Encoding.UTF8.GetString(Convert.FromBase64String(chunk)));
+                    }
+                }
+            }
+            // The typed line comes back once as echo and once as the command's output.
+            Assert.True(CountOf(seen.ToString(), "hello-from-pane") >= 2, seen.ToString());
+
+            Assert.IsType<OkReply>(await client.RequestAsync(new TerminalCloseRequest(opened.SessionId)));
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+
+        static int CountOf(string text, string part) => text.Split(part).Length - 1;
     }
 
     private static string FindCoreOrSkip()

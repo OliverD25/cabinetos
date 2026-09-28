@@ -249,6 +249,101 @@ public sealed class CreateDirectoryRequest(string path) : CoreRequest("create_di
     public string Path { get; } = path;
 }
 
+/// <summary>Opens a shell in a pseudo-console (docs/terminal.md); the reply is <c>terminal_opened</c>.</summary>
+public sealed class TerminalOpenRequest(ushort cols, ushort rows) : CoreRequest("terminal_open")
+{
+    /// <summary>Width in character cells.</summary>
+    public ushort Cols { get; } = cols;
+
+    /// <summary>Height in character cells.</summary>
+    public ushort Rows { get; } = rows;
+
+    /// <summary>A profile of <c>terminal.profiles</c>; absent: <c>terminal.defaultProfile</c>.</summary>
+    public string? Profile { get; init; }
+
+    /// <summary>The folder it starts in; absent: the user's profile folder.</summary>
+    public string? Cwd { get; init; }
+}
+
+/// <summary>Tells a session its new size in cells; the reply is <c>ok</c>.</summary>
+public sealed class TerminalResizeRequest(ulong sessionId, ushort cols, ushort rows) : CoreRequest("terminal_resize")
+{
+    /// <summary>The session.</summary>
+    public ulong SessionId { get; } = sessionId;
+
+    /// <summary>Width in character cells.</summary>
+    public ushort Cols { get; } = cols;
+
+    /// <summary>Height in character cells.</summary>
+    public ushort Rows { get; } = rows;
+}
+
+/// <summary>Closes a session (a hang-up for the shell); the reply is <c>ok</c> once the shell ended.</summary>
+public sealed class TerminalCloseRequest(ulong sessionId) : CoreRequest("terminal_close")
+{
+    /// <summary>The session.</summary>
+    public ulong SessionId { get; } = sessionId;
+}
+
+/// <summary>Types the shell's own change-directory command, then Enter; the reply is <c>ok</c>.</summary>
+public sealed class TerminalSyncCwdRequest(ulong sessionId, string path) : CoreRequest("terminal_sync_cwd")
+{
+    /// <summary>The session.</summary>
+    public ulong SessionId { get; } = sessionId;
+
+    /// <summary>An absolute path to a folder.</summary>
+    public string Path { get; } = path;
+}
+
+/// <summary>Asks for every session; the reply is <c>terminal_sessions</c>.</summary>
+public sealed class TerminalListRequest() : CoreRequest("terminal_list");
+
+/// <summary>Searches files and folders by name (docs/indexer.md); the reply is <c>file_search_results</c>.</summary>
+public sealed class SearchRequest(string query) : CoreRequest("search")
+{
+    /// <summary>What the user typed; the core ranks.</summary>
+    public string Query { get; } = query;
+
+    /// <summary>At most this many hits (default 100, at most 1,000).</summary>
+    public uint? Limit { get; init; }
+
+    /// <summary>Only hits under this folder; absent: every indexed volume.</summary>
+    public string? Root { get; init; }
+}
+
+/// <summary>Asks whether the indexer answers, and for its volumes; the reply is <c>index_status</c>.</summary>
+public sealed class IndexStatusRequest() : CoreRequest("index_status");
+
+/// <summary>Asks for every installed plugin (docs/plugins.md); the reply is <c>plugins</c>.</summary>
+public sealed class ListPluginsRequest() : CoreRequest("list_plugins");
+
+/// <summary>Reads a plugin's folder again and starts it; the reply is <c>ok</c>.</summary>
+public sealed class ReloadPluginRequest(string pluginId) : CoreRequest("reload_plugin")
+{
+    /// <summary>The plugin.</summary>
+    public string PluginId { get; } = pluginId;
+}
+
+/// <summary>Turns a plugin on or off in the configuration; the reply is <c>ok</c>.</summary>
+public sealed class SetPluginEnabledRequest(string pluginId, bool enabled) : CoreRequest("set_plugin_enabled")
+{
+    /// <summary>The plugin.</summary>
+    public string PluginId { get; } = pluginId;
+
+    /// <summary>On or off.</summary>
+    public bool Enabled { get; } = enabled;
+}
+
+/// <summary>Grants capabilities to a plugin (the review dialog's "Allow"); the reply is <c>ok</c>.</summary>
+public sealed class GrantCapabilitiesRequest(string pluginId, IReadOnlyList<string> capabilities) : CoreRequest("grant_capabilities")
+{
+    /// <summary>The plugin.</summary>
+    public string PluginId { get; } = pluginId;
+
+    /// <summary>The capabilities, such as <c>fs:read</c>.</summary>
+    public IReadOnlyList<string> Capabilities { get; } = capabilities;
+}
+
 /// <summary>Renames one entry in its folder (version 8, "rename"); the reply is <c>ok</c>.</summary>
 public sealed class RenameRequest(string path, string newName) : CoreRequest("rename")
 {

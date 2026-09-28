@@ -97,13 +97,13 @@ public sealed record ConflictKind(
 public sealed record JobConflictEvent(ulong ConflictId, ulong JobId, ConflictKind Kind, string Source, string? Destination) : CoreEvent;
 
 /// <summary>A plugin changed state; its commands may have changed with it.</summary>
-public sealed record PluginStateChangedEvent(string PluginId, JsonElement State) : CoreEvent;
+public sealed record PluginStateChangedEvent(string PluginId, PluginState State) : CoreEvent;
 
-/// <summary>A plugin trapped; its commands are gone. Parsed only.</summary>
+/// <summary>A plugin trapped; its commands are gone.</summary>
 public sealed record PluginCrashedEvent(string PluginId, string Message) : CoreEvent;
 
 /// <summary>A drive letter came or went; the list is what <c>list_volumes</c> would answer now.</summary>
 public sealed record VolumesChangedEvent(IReadOnlyList<VolumeDetails> Volumes) : CoreEvent;
 
-/// <summary>A terminal session's shell exited. Parsed only; the terminal pane comes later.</summary>
+/// <summary>A terminal session's shell exited; the session stays listed until closed.</summary>
 public sealed record TerminalExitedEvent(ulong SessionId, uint ExitCode) : CoreEvent;

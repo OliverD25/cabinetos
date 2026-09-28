@@ -47,6 +47,19 @@ public class ProtocolTests
             new JobControlRequest(7, JobActions.Pause),
             new ResolveConflictRequest(7, 9, new Resolution(Resolution.RenameType, "b.txt")) { ApplyToSameKind = true },
             new ResolveConflictRequest(7, 10, new Resolution(Resolution.SkipType)),
+            new TerminalOpenRequest(120, 30) { Profile = "pwsh", Cwd = @"E:\work" },
+            new TerminalOpenRequest(80, 25),
+            new TerminalResizeRequest(3, 100, 30),
+            new TerminalCloseRequest(3),
+            new TerminalSyncCwdRequest(3, @"D:\docs"),
+            new TerminalListRequest(),
+            new SearchRequest("budget") { Limit = 100, Root = @"C:\Users\me" },
+            new SearchRequest("budget"),
+            new IndexStatusRequest(),
+            new ListPluginsRequest(),
+            new ReloadPluginRequest("crashy"),
+            new SetPluginEnabledRequest("reader", false),
+            new GrantCapabilitiesRequest("reader", ["fs:read"]),
         ];
     }
 
@@ -80,7 +93,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(20, checkedTypes.Count);
+        Assert.Equal(31, checkedTypes.Count);
     }
 
     [Fact]
@@ -211,6 +224,35 @@ public class ProtocolTests
                     Assert.Equal((7UL, 3UL, 9UL), (job.ToProgress().JobId, job.ToProgress().FilesDone, job.ToProgress().FilesTotal));
                     Assert.Null(job.EtaSeconds);
                 }),
+            ($$$"""{"id":"{{{Id}}}","type":"terminal_opened","session_id":3,"pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","pid":4242}""",
+                b => Assert.Equal(new TerminalOpenedReply(3, @"\\.\pipe\cabinetos-term-9f3c01a2b4d5e6f7", 4242), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"terminal_sessions","sessions":[{"session_id":3,"profile":"pwsh","cwd":"E:\\work","cols":120,"rows":30,"pid":4242,"state":{"type":"exited","code":3221225786},"pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","attached":false}]}""",
+                b =>
+                {
+                    var session = Assert.IsType<TerminalSessionsReply>(b).Sessions.Single();
+                    Assert.Equal(new TerminalState(TerminalState.Exited, 3221225786), session.State);
+                    Assert.Equal((120, 30), (session.Cols, session.Rows));
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"file_search_results","hits":[{"path":"C:\\Users\\me\\Budget-2026.xlsx","kind":"file","frn":1407374883553540},{"path":"C:\\Users\\me\\old\\budget","kind":"directory"}],"source":"index","took_us":1210,"complete":true}""",
+                b =>
+                {
+                    var results = Assert.IsType<FileSearchResultsReply>(b);
+                    Assert.Equal((FileSearchResultsReply.FromIndex, 1210UL, true), (results.Source, results.TookUs, results.Complete));
+                    Assert.False(results.Hits[0].IsFolder);
+                    Assert.True(results.Hits[1].IsFolder);
+                    Assert.Null(results.Hits[1].Frn);
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"index_status","available":true,"volumes":[{"letter":"C","state":{"type":"ready"},"entries":1357918,"built_in_ms":3480,"journal_lag":0}]}""",
+                b => Assert.Equal(("C", "ready"), (Assert.IsType<IndexStatusReply>(b).Volumes.Single().Letter, ((IndexStatusReply)b).Volumes.Single().State.Type))),
+            ($$$"""{"id":"{{{Id}}}","type":"plugins","plugins":[{"id":"reader","name":"Reader","version":"0.1.0","author":"CabinetOS tests","description":"Reads the size of files in one folder.","state":{"type":"needs_review","missing":["fs:read"]},"capabilities":[{"name":"cmd:register","level":"low","granted":true,"reason":"Adds the Size command."},{"name":"fs:read","level":"medium","granted":false,"reason":"Reads the size of files in its test folder.","roots":["%TEMP%\\cabinetos-plugins-test\\reader"]}],"commands":[]}]}""",
+                b =>
+                {
+                    var plugin = Assert.IsType<PluginsReply>(b).Plugins.Single();
+                    Assert.Equal(PluginState.NeedsReview, plugin.State.Type);
+                    Assert.Equal(["fs:read"], plugin.State.Missing);
+                    Assert.Equal(("fs:read", "medium", false), (plugin.Capabilities[1].Name, plugin.Capabilities[1].Level, plugin.Capabilities[1].Granted));
+                    Assert.Single(plugin.Capabilities[1].Roots!);
+                }),
         };
         foreach (var (json, check) in samples)
         {
@@ -250,7 +292,7 @@ public class ProtocolTests
             ($$$"""{"id":"{{{Id}}}","type":"job_progress","job_id":7,"state":{"type":"failed","message":"the disk is gone"},"bytes_done":0,"bytes_total":0,"files_done":0,"files_total":0,"files_skipped":0,"files_failed":0,"conflicts_open":0,"speed_bps":0,"elapsed_ms":1}""",
                 b => Assert.Equal(new JobState("failed", "the disk is gone"), ((JobProgressEvent)b).State)),
             ($$$"""{"id":"{{{Id}}}","type":"plugin_state_changed","plugin_id":"crashy","state":{"type":"crashed","message":"wasm trap","at_ms":1790553600000}}""",
-                b => Assert.Equal("crashed", ((PluginStateChangedEvent)b).State.GetProperty("type").GetString())),
+                b => Assert.Equal(new PluginState(PluginState.Crashed, Message: "wasm trap", AtMs: 1790553600000), ((PluginStateChangedEvent)b).State with { Missing = null })),
             ($$$"""{"id":"{{{Id}}}","type":"plugin_crashed","plugin_id":"crashy","message":"wasm trap: unreachable"}""",
                 b => Assert.Equal(new PluginCrashedEvent("crashy", "wasm trap: unreachable"), b)),
             ($$$"""{"id":"{{{Id}}}","type":"terminal_exited","session_id":3,"exit_code":0}""",

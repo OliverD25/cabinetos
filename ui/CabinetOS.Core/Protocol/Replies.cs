@@ -128,6 +128,87 @@ public sealed record JobInfo(
 /// <summary>Reply to <c>list_jobs</c>: every job, oldest first (the core keeps the last 100 finished ones).</summary>
 public sealed record JobsReply(IReadOnlyList<JobInfo> Jobs) : CoreReply;
 
+/// <summary>Reply to <c>terminal_open</c>: the session and its byte pipe.</summary>
+public sealed record TerminalOpenedReply(ulong SessionId, string Pipe, uint Pid) : CoreReply;
+
+/// <summary>Whether a session's shell runs: <c>running</c>, or <c>exited</c> with its code.</summary>
+public sealed record TerminalState(string Type, uint? Code = null)
+{
+    public const string Running = "running";
+    public const string Exited = "exited";
+}
+
+/// <summary>One session, as <c>terminal_list</c> reports it.</summary>
+public sealed record TerminalSessionInfo(
+    ulong SessionId,
+    string Profile,
+    string Cwd,
+    ushort Cols,
+    ushort Rows,
+    uint Pid,
+    TerminalState State,
+    string Pipe,
+    bool Attached);
+
+/// <summary>Reply to <c>terminal_list</c>, oldest first.</summary>
+public sealed record TerminalSessionsReply(IReadOnlyList<TerminalSessionInfo> Sessions) : CoreReply;
+
+/// <summary>One file or folder a search found.</summary>
+public sealed record FileHit(string Path, string Kind, ulong? Frn = null)
+{
+    /// <summary>Whether it is a folder (a junction or a link to one included).</summary>
+    [JsonIgnore]
+    public bool IsFolder => Kind == "directory";
+}
+
+/// <summary>Reply to <c>search</c>: the hits, best first, and where they came from.</summary>
+public sealed record FileSearchResultsReply(IReadOnlyList<FileHit> Hits, string Source, ulong TookUs, bool Complete) : CoreReply
+{
+    public const string FromIndex = "index";
+    public const string FromWalk = "walk";
+}
+
+/// <summary>Where a volume's index is: <c>building</c>, <c>ready</c>, <c>rebuilding</c>, or <c>failed</c>.</summary>
+public sealed record IndexState(string Type, string? Message = null);
+
+/// <summary>One volume, as the indexer reports it.</summary>
+public sealed record IndexVolumeStatus(string Letter, IndexState State, ulong Entries, ulong? BuiltInMs = null, ulong? JournalLag = null);
+
+/// <summary>Reply to <c>index_status</c>.</summary>
+public sealed record IndexStatusReply(bool Available, IReadOnlyList<IndexVolumeStatus> Volumes) : CoreReply;
+
+/// <summary>One capability a plugin asks for, for the review dialog.</summary>
+public sealed record CapabilityInfo(string Name, string Level, bool Granted, string Reason, IReadOnlyList<string>? Roots = null);
+
+/// <summary>
+/// Where a plugin is: <c>loading</c>, <c>active</c>, <c>disabled</c>,
+/// <c>needs_review</c> (with <see cref="Missing"/>), <c>failed</c> or
+/// <c>crashed</c> (with <see cref="Message"/>; <see cref="AtMs"/> for a crash).
+/// </summary>
+public sealed record PluginState(string Type, IReadOnlyList<string>? Missing = null, string? Message = null, long? AtMs = null)
+{
+    public const string Loading = "loading";
+    public const string Active = "active";
+    public const string Disabled = "disabled";
+    public const string NeedsReview = "needs_review";
+    public const string Failed = "failed";
+    public const string Crashed = "crashed";
+}
+
+/// <summary>One installed plugin.</summary>
+public sealed record PluginInfo(
+    string Id,
+    string Name,
+    string Version,
+    string Author,
+    string Description,
+    PluginState State,
+    IReadOnlyList<CapabilityInfo> Capabilities,
+    IReadOnlyList<string> Commands);
+
+/// <summary>Reply to <c>list_plugins</c>.</summary>
+public sealed record PluginsReply(IReadOnlyList<PluginInfo> Plugins) : CoreReply;
+
 /// <summary>One binding of the compiled keymap.</summary>
 public sealed record KeymapBinding(string Keys, string Command, string? When);
 
@@ -184,6 +265,11 @@ public static class ErrorCodes
     public const string NoSuchJob = "no_such_job";
     public const string NoSuchConflict = "no_such_conflict";
     public const string InvalidResolution = "invalid_resolution";
+    public const string NoSuchPlugin = "no_such_plugin";
+    public const string PluginError = "plugin_error";
+    public const string NoSuchSession = "no_such_session";
+    public const string UnknownProfile = "unknown_profile";
+    public const string SpawnFailed = "spawn_failed";
     public const string UnknownCommand = "unknown_command";
     public const string NotImplemented = "not_implemented";
     public const string InvalidKeys = "invalid_keys";
