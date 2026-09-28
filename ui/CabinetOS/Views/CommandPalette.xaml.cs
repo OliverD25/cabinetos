@@ -115,6 +115,10 @@ public sealed partial class CommandPalette : UserControl
             case nameof(PaletteModel.HighlightIndex):
                 BringHighlightIntoView();
                 break;
+            case nameof(PaletteModel.IsRecording):
+                // Keys go to the recorder; letters must not also land in the query.
+                Input.IsReadOnly = _model?.IsRecording == true;
+                break;
         }
     }
 
@@ -153,6 +157,9 @@ public sealed partial class CommandPalette : UserControl
                 break;
             case VirtualKey.F2 when _model.HighlightIndex >= 0 && _model.HighlightIndex < _model.Rows.Count:
                 _ = Rebind(_model.Rows[_model.HighlightIndex], "key");
+                break;
+            case VirtualKey.Tab:
+                // The palette keeps the focus while it is open.
                 break;
             default:
                 return;

@@ -25,6 +25,7 @@ public sealed partial class FilePane : UserControl
     private const double ListPadding = 4;
 
     private PaneModel? _model;
+    private string? _shownPath;
     private int _markedIndex = -1;
     private NavigationTiming? _timing;
     private long _firstRowTicks;
@@ -127,6 +128,16 @@ public sealed partial class FilePane : UserControl
         _firstRowTicks = 0;
         Repeater.ItemsSource = _model?.Rows;
         UpdateMessage();
+        if (!string.Equals(_shownPath, _model?.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            // Another folder starts at its top (a refresh keeps the scroll position).
+            _shownPath = _model?.Path;
+            Scroller.ChangeView(null, 0, null, disableAnimation: true);
+            if (_model is { SelectedIndex: > 0 } model)
+            {
+                ScrollIntoView(model.SelectedIndex);
+            }
+        }
         if (_timing is not null && !_renderingHooked)
         {
             CompositionTarget.Rendering += OnFirstFrame;

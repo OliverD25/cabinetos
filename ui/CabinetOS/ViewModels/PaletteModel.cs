@@ -281,6 +281,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         row.IsRecording = true;
         _recording = row;
         _combos.Clear();
+        OnPropertyChanged(nameof(IsRecording));
         Diag.Info(Target, "recording keys", new LogField("command", row.Info.Id));
     }
 
@@ -295,6 +296,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         _recording = null;
         _combos.Clear();
         _recordingVersion++;
+        OnPropertyChanged(nameof(IsRecording));
     }
 
     /// <summary>
@@ -338,6 +340,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         _recording = null;
         _combos.Clear();
         _recordingVersion++;
+        OnPropertyChanged(nameof(IsRecording));
 
         var request = new SetKeybindingRequest(row.Info.Id, keys);
         CoreReply reply;
