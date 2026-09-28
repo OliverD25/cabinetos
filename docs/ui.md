@@ -1251,7 +1251,12 @@ with the snapshot aid (no keys, so the screen may be locked): both panes
 on the fixture, a Cyrillic rename, a Cyrillic search, Enter into the long
 path and on its Markdown file, and Shift+Delete of the junction; then it
 checks the disk and the log. `ui/livecheck/livecheck.ps1` does the same
-with real keys ("The live check").
+with real keys ("The live check"). Snapshots of 2026-09-29 in
+[log/2026-09-28/](log/2026-09-28/): `edge-a-names.png` (the crumbs, a
+conflict, the search and the terminal line with Cyrillic names),
+`edge-b-crumbs.png` and `edge-b-lines.png` (long paths),
+`edge-c-links.png` (a junction), `edge-e-fixture.png` and
+`edge-e-bin-conflict.png` (the scripted run).
 
 ### Names beyond ASCII
 
