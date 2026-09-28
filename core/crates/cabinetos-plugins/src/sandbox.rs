@@ -76,7 +76,8 @@ pub(crate) enum Stream {
 /// A plugin's stdout or stderr: each line becomes a log event (inside the
 /// plugin's span, so it carries its `plugin_id`). The last stderr line is
 /// kept for the crash message: a Rust panic prints its reason there, as
-/// `thread '..' panicked at <place>:` and then the message.
+/// `thread '..' (<id>) panicked at <place>:` and then the message (older
+/// Rust leaves out the thread's ID).
 #[derive(Clone)]
 pub(crate) struct LineLog {
     stream: Stream,
@@ -140,7 +141,7 @@ impl LineLog {
         let mut panic_at = self.panic_at.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(place) = text
             .strip_prefix("thread '")
-            .and_then(|rest| rest.find("' panicked at ").map(|end| &rest[end + 2..]))
+            .and_then(|rest| rest.find(" panicked at ").map(|start| &rest[start + 1..]))
         {
             *panic_at = Some(place.to_owned());
             return;
@@ -302,21 +303,23 @@ mod tests {
 
     #[test]
     fn a_panic_is_remembered_with_its_place() {
-        let last = Arc::new(Mutex::new(None));
-        let log = LineLog::new(Stream::Stderr, Arc::clone(&last));
-        log.take(
-            b"thread '<unnamed>' panicked at src/lib.rs:30:9:
-crashy was asked to crash
-",
-        );
-        log.take(
-            b"note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-",
-        );
-        assert_eq!(
-            last.lock().unwrap().as_deref(),
-            Some("panicked at src/lib.rs:30:9: crashy was asked to crash")
-        );
+        // Rust 1.98 prints the thread's ID; older versions do not.
+        for header in [
+            "thread '<unnamed>' (1) panicked at crashy\\src\\lib.rs:32:9:",
+            "thread '<unnamed>' panicked at crashy\\src\\lib.rs:32:9:",
+        ] {
+            let last = Arc::new(Mutex::new(None));
+            let log = LineLog::new(Stream::Stderr, Arc::clone(&last));
+            log.take(format!("{header}\ncrashy was asked to crash\n").as_bytes());
+            log.take(
+                b"note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+            );
+            assert_eq!(
+                last.lock().unwrap().as_deref(),
+                Some("panicked at crashy\\src\\lib.rs:32:9: crashy was asked to crash"),
+                "{header}"
+            );
+        }
     }
 
     #[test]

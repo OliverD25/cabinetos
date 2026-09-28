@@ -358,6 +358,8 @@ async fn a_crashing_plugin_is_removed_while_the_core_keeps_serving_listings() {
     assert_eq!(trap["boundary"], "plugin");
     let details = trap["fields"]["details"].as_str().unwrap_or_default();
     assert!(details.contains("wasm backtrace"), "{trap}");
+    // The fixtures keep their function names (sdk/templates/plugins).
+    assert!(details.contains("Guest>::on_command"), "{trap}");
 }
 
 #[tokio::test]

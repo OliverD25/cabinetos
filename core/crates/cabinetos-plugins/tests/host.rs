@@ -359,6 +359,11 @@ fn a_crash_is_contained_and_the_plugin_comes_back() {
         error.message.contains("crashy was asked to crash"),
         "{error}"
     );
+    // The panic's place, from Rust's own panic message on stderr.
+    assert!(
+        error.message.contains("it said: panicked at crashy"),
+        "{error}"
+    );
     let crashes = setup.recorder.crashes("crashy");
     assert_eq!(crashes.len(), 1);
     assert!(crashes[0].contains("wasm trap"), "{}", crashes[0]);

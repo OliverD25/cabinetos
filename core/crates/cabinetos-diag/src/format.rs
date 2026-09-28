@@ -75,9 +75,11 @@ struct Line<'a> {
 /// Renders one event as a JSON line, without the trailing newline.
 ///
 /// `scope` is the event's span scope, innermost span first. The innermost span
-/// that carries `request_id` (or `plugin_id`) provides that key. An event
-/// with a `plugin_id` happened inside a plugin's sandbox: its boundary is
-/// `plugin`, whatever the process's own boundary is.
+/// that carries `request_id` (or `plugin_id`) provides that key. Outside a
+/// plugin's span, an event's own `plugin_id` field provides it: the core
+/// names the plugin a line is about. An event with a `plugin_id` is about a
+/// plugin: its boundary is `plugin`, whatever the process's own boundary
+/// is.
 pub(crate) fn render_line<S>(
     event: &Event<'_>,
     scope: Option<Scope<'_, S>>,
@@ -106,6 +108,14 @@ where
         if request_id.is_some() && plugin_id.is_some() {
             break;
         }
+    }
+    if let Some(Value::String(named)) = visitor.fields.get(PLUGIN_ID)
+        && plugin_id
+            .as_ref()
+            .is_none_or(|from_span| from_span == named)
+    {
+        plugin_id = Some(named.clone());
+        visitor.fields.remove(PLUGIN_ID);
     }
 
     let line = Line {
@@ -390,6 +400,24 @@ mod tests {
         assert_eq!(lines[0]["boundary"], "engine");
         assert_eq!(lines[1]["boundary"], "plugin");
         assert_eq!(lines[1]["plugin_id"], "hello");
+    }
+
+    #[test]
+    fn a_plugin_id_field_names_the_plugin_outside_its_span() {
+        let lines = capture(|| {
+            tracing::info!(plugin_id = "crashy", "starting the plugin again");
+            let span = tracing::info_span!("plugin", plugin_id = "hello");
+            let _entered = span.enter();
+            tracing::info!(plugin_id = "hello", "the same plugin twice");
+            tracing::info!(plugin_id = "other", "another plugin inside");
+        });
+        assert_eq!(lines[0]["plugin_id"], "crashy");
+        assert_eq!(lines[0]["boundary"], "plugin");
+        assert!(lines[0].get("fields").is_none(), "{}", lines[0]);
+        assert_eq!(lines[1]["plugin_id"], "hello");
+        assert!(lines[1].get("fields").is_none(), "{}", lines[1]);
+        assert_eq!(lines[2]["plugin_id"], "hello", "the span wins");
+        assert_eq!(lines[2]["fields"]["plugin_id"], "other");
     }
 
     #[test]

@@ -21,4 +21,6 @@ wit-bindgen = "0.61.1"
 opt-level = "s"
 lto = true
 codegen-units = 1
-strip = true
+# Drop the debug info but keep the function names: the core's crash log
+# then shows a backtrace with names instead of bare function numbers.
+strip = "debuginfo"

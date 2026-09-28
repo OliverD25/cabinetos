@@ -177,7 +177,10 @@ error raised by a host function (such as `register-command` called after
 `activate`), crashes the plugin:
 
 1. The core writes an ERROR line with the `plugin_id`, the message, and in
-   `fields.details` the full error with the WebAssembly backtrace.
+   `fields.details` the full error with the WebAssembly backtrace. The
+   frames have names when the component keeps its name section, as the
+   template's release profile does (`strip = "debuginfo"`), for example
+   `crashy.wasm!<crashy::Crashy as crashy::Guest>::on_command`.
 2. It drops the instance: its store, its memory and its thread go.
 3. The plugin's state becomes `crashed`, with the message and the time.
 4. Every client that said `hello` gets `plugin_crashed`, then
