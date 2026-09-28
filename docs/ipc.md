@@ -201,7 +201,10 @@ requests by `id`.
 2. `section_handle` is that handle's value, already valid in the client. The
    client owns it: it maps the section (read-only is enough), reads it, and
    closes the handle when done (`CloseHandle` in C#; dropping the section in
-   Rust).
+   Rust). The core duplicates a handle only in the step that sends the
+   message naming it, so every handle a client holds was announced to it:
+   a listing closed while its refresh is still reading leaves nothing
+   behind in the client.
 3. `section_size` is the number of bytes that hold the listing.
    `elapsed_us` is the core's time to read, sort and write it.
 4. The listing is complete when the reply arrives. (Publishing in chunks

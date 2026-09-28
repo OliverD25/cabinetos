@@ -22,12 +22,10 @@ pub(crate) const MIN_REFRESH_INTERVAL: Duration = Duration::from_micros(33_334);
 /// A failed request: the code and message of the error reply.
 pub(crate) type Failure = (ErrorCode, String);
 
-/// A listing written into a section and handed to the client.
+/// A listing written into a section, not yet handed to the client.
 pub(crate) struct Published {
-    /// The core's handle to the section; the client has its own.
+    /// The core's handle to the section.
     pub(crate) section: SharedSection,
-    /// The section's handle value in the client's process.
-    pub(crate) client_handle: u64,
     /// Bytes of the section that hold the listing.
     pub(crate) size: u64,
     pub(crate) entry_count: u32,
@@ -35,13 +33,31 @@ pub(crate) struct Published {
     pub(crate) elapsed_us: u64,
 }
 
-/// Reads `path`, writes it into a new section and duplicates the section's
-/// handle into the client. Blocking: run it with `spawn_blocking`.
+impl Published {
+    /// Duplicates the section's handle into the client and returns its value
+    /// there. The client learns of it only from the message that carries
+    /// it, so call this in the same step that queues that message, with no
+    /// `.await` between: a task cancelled in between would leave a handle
+    /// the client never closes.
+    pub(crate) fn hand_to(&self, client_pid: u32) -> Result<u64, Failure> {
+        self.section
+            .duplicate_for(client_pid)
+            .map(|handle| handle.0)
+            .map_err(|error| {
+                (
+                    ErrorCode::Internal,
+                    format!("cannot hand the listing to process {client_pid}: {error}"),
+                )
+            })
+    }
+}
+
+/// Reads `path` and writes it into a new section. Blocking: run it with
+/// `spawn_blocking`.
 pub(crate) fn publish(
     path: &str,
     options: &ListOptions,
     generation: u32,
-    client_pid: u32,
 ) -> Result<Published, Failure> {
     let started = Instant::now();
     let listing =
@@ -55,22 +71,11 @@ pub(crate) fn publish(
             .write(view.as_mut_slice(), generation)
             .map_err(|error| (ErrorCode::Internal, error.to_string()))?;
     }
-    let elapsed_us = micros(started.elapsed());
-    let client_handle = section
-        .duplicate_for(client_pid)
-        .map_err(|error| {
-            (
-                ErrorCode::Internal,
-                format!("cannot hand the listing to process {client_pid}: {error}"),
-            )
-        })?
-        .0;
     Ok(Published {
         section,
-        client_handle,
         size: writer.section_size() as u64,
         entry_count: u32::try_from(listing.len()).unwrap_or(u32::MAX),
-        elapsed_us,
+        elapsed_us: micros(started.elapsed()),
     })
 }
 
@@ -162,24 +167,25 @@ pub(crate) async fn refresh_loop(mut watched: WatchedListing) -> u64 {
         }
 
         let generation = watched.current.get().0 + 1;
-        let (path, options, client_pid) =
-            (watched.path.clone(), watched.options, watched.client_pid);
-        let published = match tokio::task::spawn_blocking(move || {
-            publish(&path, &options, generation, client_pid)
-        })
-        .await
-        {
-            Ok(result) => result,
-            Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
-            Err(_) => return listing_id,
-        };
-        match published {
-            Ok(published) => {
+        let (path, options) = (watched.path.clone(), watched.options);
+        let published =
+            match tokio::task::spawn_blocking(move || publish(&path, &options, generation)).await {
+                Ok(result) => result,
+                Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
+                Err(_) => return listing_id,
+            };
+        // Handed over and announced in one step: if this task is cancelled
+        // (the listing was closed), it is cancelled before either.
+        match published.and_then(|published| {
+            let handle = published.hand_to(watched.client_pid)?;
+            Ok((published, handle))
+        }) {
+            Ok((published, section_handle)) => {
                 watched.out.send(&Envelope::new(
                     RequestId::new(),
                     Event::ListingRefreshed {
                         listing_id,
-                        section_handle: published.client_handle,
+                        section_handle,
                         section_size: published.size,
                         entry_count: published.entry_count,
                         generation,
@@ -255,7 +261,7 @@ mod tests {
         // The sections are handed to this very process; their client-side
         // handles stay open until the test process ends.
         let client_pid = std::process::id();
-        let first = publish(&path, &options, 1, client_pid).unwrap();
+        let first = publish(&path, &options, 1).unwrap();
         let watcher = DirectoryWatcher::start(&path, "watch-test".to_owned(), |_| {}).unwrap();
         let (changes_tx, changes_rx) = mpsc::unbounded_channel();
         let (out_tx, mut out_rx) = mpsc::unbounded_channel();
@@ -299,6 +305,56 @@ mod tests {
             }
         );
         assert_eq!(task.await.unwrap(), 7);
+    }
+
+    /// A stand-in client process that only waits, so its handle count holds
+    /// still; killed when dropped.
+    struct Client(std::process::Child);
+
+    impl Client {
+        fn start() -> Self {
+            let child = std::process::Command::new("cmd.exe")
+                .args(["/c", "pause"])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .unwrap();
+            // Let it finish starting before its handles are counted.
+            std::thread::sleep(Duration::from_millis(300));
+            Self(child)
+        }
+
+        fn handles(&self) -> u32 {
+            cabinetos_ipc::process::handle_count(self.0.id()).unwrap()
+        }
+    }
+
+    impl Drop for Client {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    /// A refresh cancelled on its way (the listing was closed while the
+    /// folder was being read) is never announced, so the client never
+    /// learns of the section and could never close a handle to it.
+    #[test]
+    fn publishing_hands_the_client_nothing_until_the_listing_is_announced() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), b"").unwrap();
+        let client = Client::start();
+        let before = client.handles();
+        let published = publish(dir.path().to_str().unwrap(), &ListOptions::default(), 1).unwrap();
+        assert_eq!(
+            client.handles(),
+            before,
+            "an unannounced section stayed open in the client"
+        );
+        let handle = published.hand_to(client.0.id()).unwrap();
+        assert_ne!(handle, 0);
+        assert_eq!(client.handles(), before + 1, "handing it over adds one");
+        assert!(published.hand_to(0).is_err(), "PID 0 cannot be opened");
     }
 
     #[test]

@@ -9,7 +9,8 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Pipes::GetNamedPipeClientProcessId;
 use windows::Win32::System::Threading::{
-    INFINITE, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    GetProcessHandleCount, INFINITE, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SYNCHRONIZE, WaitForSingleObject,
 };
 
 use crate::IpcError;
@@ -48,6 +49,21 @@ where
             on_exit();
         })?;
     Ok(())
+}
+
+/// How many handles process `pid` has open. Tests use it to prove that a
+/// section handle was, or was not, handed to another process.
+pub fn handle_count(pid: u32) -> Result<u32, IpcError> {
+    // SAFETY: OpenProcess has no memory-safety preconditions; failure is
+    // reported through the Result.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }?;
+    // SAFETY: OpenProcess succeeded, so this is a new handle we own.
+    let process = unsafe { OwnedHandle::from_raw_handle(process.0) };
+    let mut count = 0u32;
+    // SAFETY: the process handle stays open for the call, and `count` is a
+    // valid output location.
+    unsafe { GetProcessHandleCount(HANDLE(process.as_raw_handle()), &raw mut count) }?;
+    Ok(count)
 }
 
 /// The ID of the process connected to the server end of a pipe, as Windows
@@ -94,5 +110,12 @@ mod tests {
     fn a_missing_process_is_an_error() {
         // PID 0 is the System Idle Process, which cannot be opened.
         assert!(watch_process_exit(0, || {}).is_err());
+        assert!(handle_count(0).is_err());
+    }
+
+    #[test]
+    fn counts_the_handles_of_a_process() {
+        let mine = handle_count(std::process::id()).unwrap();
+        assert!(mine > 0);
     }
 }

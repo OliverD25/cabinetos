@@ -461,10 +461,9 @@ impl Session {
         sort: Option<SortSpec>,
         watch: bool,
     ) -> Option<Response> {
-        let Some(client) = &self.client else {
+        if self.client.is_none() {
             return Some(protocol_error("hello required"));
-        };
-        let client_pid = client.pid;
+        }
         let listing_id = NEXT_LISTING_ID.fetch_add(1, Ordering::Relaxed);
         // What the request leaves out, the `panes` settings decide.
         let panes = &self.services.settings.snapshot().config.panes;
@@ -477,7 +476,7 @@ impl Session {
         let started = Instant::now();
         self.tasks.spawn(
             async move {
-                let result = open_listing(listing_id, path, options, watch, client_pid).await;
+                let result = open_listing(listing_id, path, options, watch).await;
                 TaskDone::ListingReady {
                     request_id,
                     listing_id,
@@ -1178,9 +1177,21 @@ impl Session {
             published,
             watch,
         } = opened;
+        let client_pid = self.client.as_ref().map_or(0, |client| client.pid);
+        // Handed over here, where the reply that carries it is queued; a
+        // connection that ended first never runs this.
+        let section_handle = match published.hand_to(client_pid) {
+            Ok(handle) => handle,
+            Err(failure) => {
+                let reply = failure_reply(failure);
+                log_handled("list_directory", started, &reply);
+                self.out.reply(request_id, reply);
+                return;
+            }
+        };
         let reply = Response::ListingOpened {
             listing_id,
-            section_handle: published.client_handle,
+            section_handle,
             section_size: published.size,
             entry_count: published.entry_count,
             generation: 1,
@@ -1209,7 +1220,7 @@ impl Session {
                 listing_id,
                 path: path.clone(),
                 options,
-                client_pid: self.client.as_ref().map_or(0, |client| client.pid),
+                client_pid,
                 current: Arc::clone(&current),
                 changes,
                 _watcher: directory_watcher,
@@ -1260,7 +1271,6 @@ async fn open_listing(
     path: String,
     options: ListOptions,
     watch: bool,
-    client_pid: u32,
 ) -> Result<Opened, Failure> {
     let watch = if watch {
         let (changes_tx, changes_rx) = mpsc::unbounded_channel();
@@ -1277,8 +1287,7 @@ async fn open_listing(
         None
     };
     let read_path = path.clone();
-    let published =
-        run_blocking(move || listing::publish(&read_path, &options, 1, client_pid)).await?;
+    let published = run_blocking(move || listing::publish(&read_path, &options, 1)).await?;
     Ok(Opened {
         path,
         options,
