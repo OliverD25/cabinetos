@@ -179,11 +179,13 @@ Core side done 2026-09-28; the permissions review dialog, the Tool Dock and the 
 
 Articles: 8, 10, 11.
 
-### Phase 8 — Integrated terminal
+### Phase 8 — Integrated terminal — core side done 2026-09-28
 
 Goal: a shell scoped to the active pane.
 
 Produces: ConPTY host in the core with a byte pipe per session; shell profiles (pwsh, cmd, WSL) in config; the terminal pane in the UI, hidden until `Ctrl+`` `; "cwd follows the active pane". The rendering control is an open question (see section 7).
+
+Core side done 2026-09-28; the terminal pane waits for the UI (Phase 5). Built: the crate `cabinetos-terminal`: each shell runs in a ConPTY pseudo-console, from a profile in `cabinetos.json` read at each open, with `TERM=xterm-256color` and `CABINETOS_SESSION`; each session's raw bytes travel on a pipe of their own (`\\.\pipe\cabinetos-term-<random>`), with the control pipe's access rules and one client at a time; sessions belong to the core, so a client may leave and attach again; output waits in a 1 MiB buffer that holds the shell back when full; closing is a hang-up, and a shell still running 2 s later is ended. Protocol version 7: `terminal_open`, `terminal_resize`, `terminal_close`, `terminal_sync_cwd`, `terminal_list` and the event `terminal_exited`. "cwd follows the active pane" is `terminal_sync_cwd`: it types the shell's own change-directory command, quoted so pwsh, cmd and WSL read the path literally. `cabinetos-cli term` runs a shell in a console window (Ctrl+] detaches). Measured 2026-09-28 on the development PC (debug build): a shell starts in 17 to 24 ms and closes at its prompt in 3 to 15 ms; 2.8 MB printed while no client read arrived complete. Guide: [terminal.md](terminal.md).
 
 Articles: 4, 9.
 
@@ -263,7 +265,7 @@ Directory listing, shared-memory data (only the section-creation helper), file o
 | Risk | Effect | Mitigation |
 |------|--------|------------|
 | MFT parsing edge cases (attribute lists, hard links, reparse points, very large volumes) | Wrong or missing entries in search | NTFS only for indexing; fixture volume images in tests; ReFS and others use the fallback path |
-| .NET SDK and WinUI workload are not installed on this PC | Phase 5 cannot start | Install .NET 8 SDK and the Windows App SDK before Phase 5; note it in `docs/dev-setup.md` in Phase 0 |
+| .NET SDK and WinUI workload are not installed on this PC | Phase 5 cannot start | Closed 2026-09-28: the .NET 10 SDK is installed; command-line builds get the Windows App SDK from NuGet ([dev-setup.md](dev-setup.md)) |
 | Garbage-collector pauses in the C# UI | Frame drops | Dumb UI Rule: the UI holds no data; listings are read from native memory |
 | Shared-memory layout drift between Rust and C# | Silent corruption | Size and offset tests on both sides against one constants file; protocol version in the header |
 | WASM plugin runs forever or eats memory | Core stalls | wasmtime fuel and epoch interruption, per-store memory limits, one thread per plugin |

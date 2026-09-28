@@ -39,19 +39,31 @@ code. From a Windows shell (PowerShell, Git Bash) the same commands run from
 
 ## Phase 5 and later: the WinUI 3 frontend
 
-Not installed on the main PC as of 2026-09-28 (checked: `dotnet --list-sdks`
-returned nothing; Visual Studio has only the C++ workload).
+On the main PC the .NET 10 SDK (10.0.401) was installed on 2026-09-28; Visual
+Studio still has only the C++ workload, which command-line builds do not need.
 
-- **.NET 8 SDK** (long-term support). Windows-only installer, so PowerShell:
+- **.NET 10 SDK** (long-term support until November 2028; .NET 8 leaves
+  support in November 2026). Windows-only installer, so PowerShell; winget
+  asks for elevation (a UAC prompt):
 
   ```powershell
   # PowerShell — winget exists only on Windows
-  winget install --id Microsoft.DotNet.SDK.8 --exact
+  winget install --id Microsoft.DotNet.SDK.10 --exact
   ```
 
-- **Windows App SDK** workload for Visual Studio 2022: in the Visual Studio
-  Installer, add "WinUI application development" (this brings the Windows App
-  SDK C# templates and the XAML tooling). Or from PowerShell:
+  A per-user install with no UAC prompt (for unattended sessions) uses
+  Microsoft's install script instead:
+
+  ```powershell
+  # PowerShell — installs under %LOCALAPPDATA%\Microsoft\dotnet, no elevation
+  Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile "$env:TEMP\dotnet-install.ps1"; & "$env:TEMP\dotnet-install.ps1" -Channel 10.0
+  ```
+
+- **Windows App SDK**: command-line builds (`dotnet build`) get it as the
+  `Microsoft.WindowsAppSDK` NuGet package during restore; nothing to install.
+  The Visual Studio workload is only needed for the XAML designer and the
+  project templates inside Visual Studio. To add it, in the Visual Studio
+  Installer choose "WinUI application development", or from PowerShell:
 
   ```powershell
   # PowerShell — the Visual Studio Installer exists only on Windows

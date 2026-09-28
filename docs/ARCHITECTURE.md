@@ -113,7 +113,7 @@ match; the records are the source of truth for each point.
 | §4 "JSON or Protobuf" | Control-channel format | [ADR 0006](decisions/0006-control-channel-json.md): JSON |
 | §3 "IoRing" | Minimum Windows version | [ADR 0004](decisions/0004-minimum-windows-11-22h2.md): Windows 11 22H2 or newer |
 | §6 Layer 2 "UserControls or WebView2" | Crash isolation of Tool Extensions | [PLAN.md](PLAN.md) section 2: WebView2 for third-party tools; native controls only for first-party ones |
-| §7 "terminal panels" | Terminal in core or as extension | [ADR 0005](decisions/0005-terminal-in-core-hidden.md): core, hidden by default |
+| §1 "terminal panels" | Terminal in core or as extension | [ADR 0005](decisions/0005-terminal-in-core-hidden.md): core, hidden by default |
 
 ## Crate map
 
