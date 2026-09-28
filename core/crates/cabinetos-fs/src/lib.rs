@@ -36,6 +36,7 @@ use cabinetos_protocol::SortSpec;
 use cabinetos_protocol::shm::{EntryKind, ListingMeta};
 
 pub use error::FsError;
+pub use path::verbatim_wide;
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter};
 pub use watch::{DirectoryChanged, DirectoryWatcher};
 

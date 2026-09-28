@@ -1,12 +1,30 @@
 [package]
 name = "cabinetos-jobs"
-description = "Drive-aware copy, move and delete queues (stub until Phase 4)."
+description = "Drive-aware copy, move and delete queues with throttled progress and per-file conflicts."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+
+[dependencies]
+cabinetos-fs.workspace = true
+cabinetos-protocol.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+windows = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_IO",
+  "Win32_System_Ioctl",
+  "Win32_UI_Shell",
+] }
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

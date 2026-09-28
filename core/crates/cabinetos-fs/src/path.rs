@@ -14,7 +14,7 @@ const MAX_PATH: usize = 260;
 /// `\\?\UNC\server\share\x`. Relative paths are resolved against the current
 /// directory first, which also normalizes `.`, `..` and `/`; the verbatim
 /// form would take those literally.
-pub(crate) fn verbatim_wide(path: &str) -> Result<Vec<u16>, FsError> {
+pub fn verbatim_wide(path: &str) -> Result<Vec<u16>, FsError> {
     let wide = absolute_units(path)?;
     let mut result = Vec::with_capacity(wide.len() + 9);
     if starts_with(&wide, r"\\?\") || starts_with(&wide, r"\\.\") {

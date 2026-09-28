@@ -221,6 +221,14 @@ dependencies = [
 [[package]]
 name = "cabinetos-jobs"
 version = "0.1.0"
+dependencies = [
+ "cabinetos-fs",
+ "cabinetos-protocol",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "windows",
+]
 
 [[package]]
 name = "cabinetos-plugins"
