@@ -354,3 +354,23 @@ async fn bad_frames_get_error_replies() {
     let status = wait_for_exit(&mut core.child, EXIT_DEADLINE).await;
     assert_eq!(status.code(), Some(0));
 }
+
+#[tokio::test]
+async fn a_missing_log_directory_is_created_without_noise() {
+    let dir = tempfile::tempdir().unwrap();
+    let log_dir = dir.path().join("not").join("there").join("yet");
+    let pipe = PipeName::random();
+    let mut child = core_command(&pipe, &log_dir)
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut client = connect(&pipe).await;
+    client.request(Request::Shutdown).await.unwrap();
+    drop(client);
+    let status = wait_for_exit(&mut child, EXIT_DEADLINE).await;
+    assert_eq!(status.code(), Some(0));
+    let mut stderr = String::new();
+    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    assert_eq!(stderr, "", "the core wrote to stderr");
+    assert!(!read_log_lines(&log_dir, "core").is_empty());
+}

@@ -145,7 +145,16 @@ pub enum DiagError {
     /// [`init`] was already called in this process.
     #[error("diagnostics are already initialized in this process")]
     AlreadyInitialized,
-    /// The log directory or file could not be created.
+    /// The log directory could not be created.
+    #[error("cannot create the log directory {dir}: {source}")]
+    LogDir {
+        /// The directory that was tried.
+        dir: PathBuf,
+        /// What went wrong.
+        #[source]
+        source: std::io::Error,
+    },
+    /// The log file could not be created.
     #[error("cannot open the log file in {dir}: {source}")]
     LogFile {
         /// The directory that was tried.
@@ -205,6 +214,12 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
     let (filter, level_handle) = reload::Layer::new(filter);
 
     let (file_layer, worker_guard) = if log_file {
+        // The appender prunes old files before it creates the directory, and
+        // prints an error to stderr when the directory is not there yet.
+        std::fs::create_dir_all(&log_dir).map_err(|source| DiagError::LogDir {
+            dir: log_dir.clone(),
+            source,
+        })?;
         let appender = RollingFileAppender::builder()
             .rotation(Rotation::DAILY)
             .filename_prefix(process)
