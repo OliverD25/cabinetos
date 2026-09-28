@@ -19,6 +19,7 @@ cabinetos-protocol = { path = "crates/cabinetos-protocol" }
 # External crates. Each crate adds the features it needs on top of these.
 anyhow = "1.0"
 clap = { version = "4.6", features = ["derive"] }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 crossbeam-queue = "0.3"
 rand = "0.10"
 schemars = "1.2"
