@@ -196,6 +196,40 @@ public class ToolTests
         Assert.Equal("https://f3.markdown-preview.cabinetos.example/read%20me.md", open.RootElement.GetProperty("url").GetString());
     }
 
+    [Fact]
+    public async Task A_file_opened_again_in_a_loaded_page_gets_a_new_host_after_the_page_loads_again()
+    {
+        var page = new RecordingPage();
+        var files = new ToolFileSession("markdown-preview", "cabinetos.example", page);
+
+        Assert.True(await files.OpenAsync(@"C:\docs\README.md"));
+        files.OnReady("""{"type":"context"}""");
+        Assert.Equal(
+            [
+                @"map f1.markdown-preview.cabinetos.example C:\docs",
+                "load",
+                """post {"type":"context"}""",
+                """post {"type":"open","path":"C:\\docs\\README.md","url":"https://f1.markdown-preview.cabinetos.example/README.md"}""",
+            ],
+            page.Calls);
+        page.Calls.Clear();
+
+        // Ctrl+K V on the file on screen (live check 2026-09-28): a loaded page cannot fetch from a host
+        // mapped after it loaded, so the file's new host comes with a new load, and open waits for ready.
+        Assert.True(await files.OpenAsync(@"C:\docs\README.md"));
+        Assert.False(files.IsReady);
+        Assert.Equal(["unmap f1.markdown-preview.cabinetos.example", @"map f2.markdown-preview.cabinetos.example C:\docs", "load"], page.Calls);
+        files.OnReady(null);
+        Assert.Equal("""post {"type":"open","path":"C:\\docs\\README.md","url":"https://f2.markdown-preview.cabinetos.example/README.md"}""", page.Calls[^1]);
+
+        // After a crash the page loads again and gets the same file on the same host.
+        page.Calls.Clear();
+        files.OnStopped();
+        Assert.True(await files.ReloadAsync());
+        files.OnReady(null);
+        Assert.Equal(["load", """post {"type":"open","path":"C:\\docs\\README.md","url":"https://f2.markdown-preview.cabinetos.example/README.md"}"""], page.Calls);
+    }
+
     [Theory]
     [InlineData("go.toPath", true)]
     [InlineData("terminal.new", true)]
@@ -239,5 +273,23 @@ public class ToolTests
         Assert.Null(Map(("ctrl+k v", "user.command")).With(Extra("ctrl+k v")));
         Assert.Null(Map(("ctrl+k", "user.command")).With(Extra("ctrl+k v")));
         Assert.Null(Map(("ctrl+k ctrl+s", "keys.open")).With(Extra("ctrl+k")));
+    }
+
+    // A page that writes down what the file session asks of it.
+    private sealed class RecordingPage : IToolPage
+    {
+        public List<string> Calls { get; } = [];
+
+        public void MapFolder(string host, string folder) => Calls.Add($"map {host} {folder}");
+
+        public void UnmapFolder(string host) => Calls.Add($"unmap {host}");
+
+        public Task<bool> LoadAsync()
+        {
+            Calls.Add("load");
+            return Task.FromResult(true);
+        }
+
+        public void Post(string message) => Calls.Add($"post {message}");
     }
 }

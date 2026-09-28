@@ -10,28 +10,28 @@ namespace CabinetOS.Services;
 /// One running Tool Extension (docs/tool-extensions.md): its page in a
 /// WebView2 of its own, served from <c>https://&lt;id&gt;.tool.cabinetos.example/</c>.
 /// The file it shows is read from the file's folder, mapped read-only to a
-/// new host for every open; the page cannot navigate there. Messages go
-/// both ways as JSON strings; what the page asks for is checked here.
+/// new host for every open (<see cref="ToolFileSession"/>, which also loads
+/// the page again for each open); the page cannot navigate there. Messages
+/// go both ways as JSON strings; what the page asks for is checked here.
 /// </summary>
-internal sealed class ToolHost
+internal sealed class ToolHost : IToolPage
 {
     private const string Target = "cabinetos_ui::tools";
 
     private readonly WebViewHost _page;
-    private int _serial;
-    private string? _fileHost;
-    private bool _ready;
+    private readonly ToolFileSession _files;
 
     /// <summary>A host for <paramref name="tool"/> whose WebView2 goes into <paramref name="frame"/>.</summary>
     public ToolHost(InstalledTool tool, Border frame, string hostScript)
     {
         Tool = tool;
+        _files = new ToolFileSession(tool.Manifest.Id, WebViewHost.Domain, this);
         _page = new WebViewHost(frame, $"tool-{tool.Manifest.Id}") { HostScript = hostScript };
         _page.MapFolder(PageHost, tool.Folder, CoreWebView2HostResourceAccessKind.Deny);
         _page.MessageReceived += OnMessage;
         _page.Failed += reason =>
         {
-            _ready = false;
+            _files.OnStopped();
             Failed?.Invoke(reason);
         };
     }
@@ -46,10 +46,10 @@ internal sealed class ToolHost
     public string PageHost => $"{Tool.Manifest.Id}.tool.{WebViewHost.Domain}";
 
     /// <summary>The file on screen.</summary>
-    public string? FilePath { get; private set; }
+    public string? FilePath => _files.FilePath;
 
     /// <summary>Whether the page said <c>ready</c> and has the file.</summary>
-    public bool IsReady => _ready;
+    public bool IsReady => _files.IsReady;
 
     /// <summary>The page's process ended (the text says which).</summary>
     public event Action<string>? Failed;
@@ -64,36 +64,16 @@ internal sealed class ToolHost
     public Func<string>? Context { get; set; }
 
     /// <summary>
-    /// Shows <paramref name="path"/>: its folder is served on a new host,
-    /// and the page gets <c>open</c> (at once, or when it says <c>ready</c>).
+    /// Shows <paramref name="path"/>: its folder is served on a new host, the
+    /// page loads (again), and it gets <c>open</c> when it says <c>ready</c>.
     /// False when WebView2 could not start.
     /// </summary>
-    public async Task<bool> OpenAsync(string path)
-    {
-        FilePath = path;
-        var folder = Path.GetDirectoryName(path) ?? path;
-        if (_fileHost is { } previous)
-        {
-            _page.UnmapFolder(previous);
-        }
-        _fileHost = ToolFileUrls.Host(Tool.Manifest.Id, ++_serial, WebViewHost.Domain);
-        _page.MapFolder(_fileHost, folder, CoreWebView2HostResourceAccessKind.Allow, navigable: false);
-        if (_page.View is null)
-        {
-            _ready = false;
-            return await _page.StartAsync(EntryUri());
-        }
-        if (_ready)
-        {
-            SendOpen();
-        }
-        return true;
-    }
+    public Task<bool> OpenAsync(string path) => _files.OpenAsync(path);
 
     /// <summary>Sends <c>context</c> (the active pane's folder and selection) if the page is ready.</summary>
     public void Send(string message)
     {
-        if (_ready)
+        if (_files.IsReady)
         {
             _page.Post(message);
         }
@@ -103,18 +83,23 @@ internal sealed class ToolHost
     public void SendPassKeys(string message) => _page.Post(message);
 
     /// <summary>Brings the page back after <see cref="Failed"/>; it gets the same file again.</summary>
-    public Task<bool> ReloadAsync()
-    {
-        _ready = false;
-        return _page.RestartAsync();
-    }
+    public Task<bool> ReloadAsync() => _files.ReloadAsync();
 
     /// <summary>Ends the page and its browser process.</summary>
     public void Close()
     {
-        _ready = false;
+        _files.OnStopped();
         _page.Close();
     }
+
+    void IToolPage.MapFolder(string host, string folder) =>
+        _page.MapFolder(host, folder, CoreWebView2HostResourceAccessKind.Allow, navigable: false);
+
+    void IToolPage.UnmapFolder(string host) => _page.UnmapFolder(host);
+
+    Task<bool> IToolPage.LoadAsync() => _page.View is null ? _page.StartAsync(EntryUri()) : _page.RestartAsync();
+
+    void IToolPage.Post(string message) => _page.Post(message);
 
     private Uri EntryUri() =>
         new($"https://{PageHost}/{string.Join('/', Tool.Manifest.Entry.Split('/', '\\').Select(Uri.EscapeDataString))}");
@@ -129,12 +114,7 @@ internal sealed class ToolHost
         switch (message.Type)
         {
             case "ready":
-                _ready = true;
-                if (Context?.Invoke() is { } context)
-                {
-                    _page.Post(context);
-                }
-                SendOpen();
+                _files.OnReady(Context?.Invoke());
                 Diag.Info(Target, "tool ready", new LogField("tool", Tool.Manifest.Id), new LogField("path", FilePath));
                 break;
             case "command":
@@ -146,11 +126,4 @@ internal sealed class ToolHost
         }
     }
 
-    private void SendOpen()
-    {
-        if (FilePath is { } path && _fileHost is { } host)
-        {
-            _page.Post(ToolMessages.Open(path, ToolFileUrls.Url(host, path)));
-        }
-    }
 }
