@@ -141,7 +141,7 @@ async fn ping_round_trip_is_logged_with_its_request_id() {
             core_version,
         } => {
             assert_eq!(protocol_version, PROTOCOL_VERSION);
-            assert_eq!(protocol_version, 3);
+            assert_eq!(protocol_version, 4);
             assert_eq!(core_version, env!("CARGO_PKG_VERSION"));
         }
         other => panic!("expected pong, got {other:?}"),

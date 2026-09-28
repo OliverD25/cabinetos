@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::RequestId;
+use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution};
 
 /// One message on the control channel: a request ID plus the message body.
 ///
@@ -121,6 +122,34 @@ pub enum Request {
         /// The command's ID.
         command: String,
     },
+    /// Starts a copy, move or delete job. The core answers `job_started`
+    /// once the paths are checked; the work itself follows as events. Needs
+    /// no `hello`, but only connections that said `hello` get the events.
+    StartJob(JobRequest),
+    /// Asks for every job the core knows, running or finished. The core
+    /// answers `jobs`.
+    ListJobs,
+    /// Pauses, resumes or cancels a job. The core answers `ok`.
+    JobControl {
+        /// The job, from `job_started`.
+        job_id: u64,
+        /// What to do.
+        action: JobAction,
+    },
+    /// Decides what happens to a file that waits on a conflict. The core
+    /// answers `ok`.
+    ResolveConflict {
+        /// The job, from `job_conflict`.
+        job_id: u64,
+        /// The conflict, from `job_conflict`.
+        conflict_id: u64,
+        /// The decision.
+        resolution: Resolution,
+        /// Also use this decision for the job's other conflicts of the same
+        /// kind, the waiting ones and the ones still to come.
+        #[serde(default)]
+        apply_to_same_kind: bool,
+    },
 }
 
 fn default_search_limit() -> u32 {
@@ -144,6 +173,10 @@ impl Request {
         "execute_command",
         "set_keybinding",
         "reset_keybinding",
+        "start_job",
+        "list_jobs",
+        "job_control",
+        "resolve_conflict",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -163,6 +196,10 @@ impl Request {
             Self::ExecuteCommand { .. } => "execute_command",
             Self::SetKeybinding { .. } => "set_keybinding",
             Self::ResetKeybinding { .. } => "reset_keybinding",
+            Self::StartJob(_) => "start_job",
+            Self::ListJobs => "list_jobs",
+            Self::JobControl { .. } => "job_control",
+            Self::ResolveConflict { .. } => "resolve_conflict",
         }
     }
 }
@@ -275,6 +312,17 @@ pub enum Response {
         /// What the command returned.
         result: Value,
     },
+    /// Reply to `start_job`: the job exists and is queued.
+    JobStarted {
+        /// Names the job in later requests and events; unique for the life
+        /// of the core.
+        job_id: u64,
+    },
+    /// Reply to `list_jobs`: every job, oldest first.
+    Jobs {
+        /// The jobs.
+        jobs: Vec<JobInfo>,
+    },
 }
 
 impl Response {
@@ -292,6 +340,8 @@ impl Response {
         "search_results",
         "command_routed",
         "command_result",
+        "job_started",
+        "jobs",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -310,6 +360,8 @@ impl Response {
             Self::SearchResults { .. } => "search_results",
             Self::CommandRouted { .. } => "command_routed",
             Self::CommandResult { .. } => "command_result",
+            Self::JobStarted { .. } => "job_started",
+            Self::Jobs { .. } => "jobs",
         }
     }
 }
@@ -498,6 +550,21 @@ pub enum Event {
         /// The new keymap.
         keymap: Keymap,
     },
+    /// How far a job has come. At most 30 per second per job, and always
+    /// one when the job ends. Sent to every connection that said `hello`.
+    JobProgress(JobProgress),
+    /// A file of a job needs a decision (`resolve_conflict`). The file waits;
+    /// the rest of the job goes on.
+    JobConflict(Conflict),
+    /// A job changed state. After a final state (`completed`,
+    /// `completed_with_errors`, `cancelled`, `failed`) no more events follow
+    /// for that job.
+    JobStateChanged {
+        /// The job.
+        job_id: u64,
+        /// Its new state.
+        state: JobState,
+    },
 }
 
 impl Event {
@@ -509,6 +576,9 @@ impl Event {
         "config_changed",
         "config_error",
         "keymap_changed",
+        "job_progress",
+        "job_conflict",
+        "job_state_changed",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -520,6 +590,9 @@ impl Event {
             Self::ConfigChanged { .. } => "config_changed",
             Self::ConfigError { .. } => "config_error",
             Self::KeymapChanged { .. } => "keymap_changed",
+            Self::JobProgress(_) => "job_progress",
+            Self::JobConflict(_) => "job_conflict",
+            Self::JobStateChanged { .. } => "job_state_changed",
         }
     }
 }
@@ -591,6 +664,10 @@ pub enum ErrorCode {
     /// The configuration file cannot be changed now: it has an error the
     /// user must fix first, or it cannot be written.
     ConfigError,
+    /// No job has that `job_id`.
+    NoSuchJob,
+    /// The job has no waiting conflict with that `conflict_id`.
+    NoSuchConflict,
 }
 
 #[cfg(test)]
@@ -598,6 +675,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::job::{ConflictKind, ConflictPolicy, JobKind, JobOptions, LinkPolicy};
 
     const ID: &str = "01J9ZQ4X7K3M5N8P2R6S0T1V4W";
 
@@ -663,7 +741,49 @@ mod tests {
             Request::ResetKeybinding {
                 command: "view.toggleSidebar".to_owned(),
             },
+            Request::StartJob(JobRequest {
+                kind: JobKind::Copy,
+                sources: vec![r"C:\a".to_owned(), r"C:\b.txt".to_owned()],
+                destination: Some(r"D:\target".to_owned()),
+                options: JobOptions {
+                    on_conflict: ConflictPolicy::OverwriteIfNewer,
+                    copy_links: LinkPolicy::FollowTarget,
+                    verify: true,
+                    preserve_timestamps: false,
+                },
+            }),
+            Request::ListJobs,
+            Request::JobControl {
+                job_id: 3,
+                action: JobAction::Pause,
+            },
+            Request::ResolveConflict {
+                job_id: 3,
+                conflict_id: 9,
+                resolution: Resolution::Rename {
+                    new_name: Some("b (copy).txt".to_owned()),
+                },
+                apply_to_same_kind: true,
+            },
         ]
+    }
+
+    fn progress() -> JobProgress {
+        JobProgress {
+            job_id: 3,
+            state: JobState::Running,
+            bytes_done: 1_200_000_000,
+            bytes_total: 2_700_000_000,
+            files_done: 8412,
+            files_total: 10_001,
+            files_skipped: 2,
+            files_failed: 0,
+            conflicts_open: 1,
+            current_path: Some(r"C:\a\big.bin".to_owned()),
+            speed_bps: 610_000_000,
+            eta_seconds: Some(3),
+            elapsed_ms: 2400,
+        }
     }
 
     fn every_response() -> Vec<Response> {
@@ -733,6 +853,15 @@ mod tests {
             Response::CommandResult {
                 result: json!({"product": "CabinetOS"}),
             },
+            Response::JobStarted { job_id: 3 },
+            Response::Jobs {
+                jobs: vec![JobInfo {
+                    kind: JobKind::Move,
+                    sources: vec![r"C:\a".to_owned()],
+                    destination: Some(r"D:\target".to_owned()),
+                    progress: progress(),
+                }],
+            },
         ]
     }
 
@@ -759,6 +888,25 @@ mod tests {
                 message: "unknown field `dualPan`".to_owned(),
             },
             Event::KeymapChanged { keymap: keymap() },
+            Event::JobProgress(progress()),
+            Event::JobConflict(Conflict {
+                conflict_id: 9,
+                job_id: 3,
+                kind: ConflictKind::FileExists {
+                    source_size: 10,
+                    source_modified: 133_000_000_000_000_000,
+                    dest_size: 12,
+                    dest_modified: 132_000_000_000_000_000,
+                },
+                source: r"C:\a\b.txt".to_owned(),
+                destination: Some(r"D:\target\a\b.txt".to_owned()),
+            }),
+            Event::JobStateChanged {
+                job_id: 3,
+                state: JobState::Failed {
+                    message: "the destination disk is gone".to_owned(),
+                },
+            },
         ]
     }
 
@@ -917,6 +1065,8 @@ mod tests {
             (ErrorCode::KeybindingConflict, "keybinding_conflict"),
             (ErrorCode::ImmutableBinding, "immutable_binding"),
             (ErrorCode::ConfigError, "config_error"),
+            (ErrorCode::NoSuchJob, "no_such_job"),
+            (ErrorCode::NoSuchConflict, "no_such_conflict"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));
@@ -992,5 +1142,124 @@ mod tests {
         let extra = json!({"id": ID, "type": "ping", "added_later": true});
         let envelope: Envelope<Request> = serde_json::from_value(extra).unwrap();
         assert_eq!(envelope.body, Request::Ping);
+    }
+
+    #[test]
+    fn job_messages_have_the_documented_wire_form() {
+        let start = json!({
+            "id": ID,
+            "type": "start_job",
+            "kind": {"type": "copy"},
+            "sources": [r"C:\a"],
+            "destination": r"D:\b"
+        });
+        let envelope: Envelope<Request> = serde_json::from_value(start).unwrap();
+        assert_eq!(
+            envelope.body,
+            Request::StartJob(JobRequest {
+                kind: JobKind::Copy,
+                sources: vec![r"C:\a".to_owned()],
+                destination: Some(r"D:\b".to_owned()),
+                options: JobOptions::default(),
+            })
+        );
+        let delete =
+            json!({"id": ID, "type": "start_job", "kind": {"type": "delete"}, "sources": ["x"]});
+        let envelope: Envelope<Request> = serde_json::from_value(delete).unwrap();
+        assert!(matches!(
+            envelope.body,
+            Request::StartJob(JobRequest {
+                kind: JobKind::Delete { permanent: false },
+                destination: None,
+                ..
+            })
+        ));
+        let defaults = JobOptions::default();
+        assert_eq!(defaults.on_conflict, ConflictPolicy::Ask);
+        assert_eq!(defaults.copy_links, LinkPolicy::AsLink);
+        assert!(!defaults.verify && defaults.preserve_timestamps);
+        let partial: JobOptions = serde_json::from_value(json!({"verify": true})).unwrap();
+        assert!(partial.verify && partial.preserve_timestamps);
+
+        let value =
+            serde_json::to_value(Envelope::new(id(), Event::JobProgress(progress()))).unwrap();
+        assert_eq!(value["type"], "job_progress");
+        assert_eq!(value["state"], json!({"type": "running"}));
+        assert_eq!(value["files_total"], 10_001);
+        let listed = every_response()
+            .into_iter()
+            .find(|response| matches!(response, Response::Jobs { .. }))
+            .unwrap();
+        let value = serde_json::to_value(Envelope::new(id(), listed)).unwrap();
+        assert_eq!(value["jobs"][0]["kind"], json!({"type": "move"}));
+        assert_eq!(value["jobs"][0]["bytes_done"], 1_200_000_000_u64);
+
+        let resolve = json!({
+            "id": ID, "type": "resolve_conflict", "job_id": 3, "conflict_id": 9,
+            "resolution": {"type": "rename"}
+        });
+        let envelope: Envelope<Request> = serde_json::from_value(resolve).unwrap();
+        assert_eq!(
+            envelope.body,
+            Request::ResolveConflict {
+                job_id: 3,
+                conflict_id: 9,
+                resolution: Resolution::Rename { new_name: None },
+                apply_to_same_kind: false,
+            }
+        );
+        let io = Event::JobConflict(Conflict {
+            conflict_id: 10,
+            job_id: 3,
+            kind: ConflictKind::Io {
+                code: 1117,
+                message: "The request could not be performed because of an I/O device error."
+                    .to_owned(),
+            },
+            source: r"C:\a\c.txt".to_owned(),
+            destination: None,
+        });
+        let json = serde_json::to_string(&Envelope::new(id(), io.clone())).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Envelope<Event>>(&json).unwrap().body,
+            io
+        );
+        let delete = Request::StartJob(JobRequest {
+            kind: JobKind::Delete { permanent: true },
+            sources: vec![r"C:\old".to_owned()],
+            destination: None,
+            options: JobOptions::default(),
+        });
+        let value = serde_json::to_value(&delete).unwrap();
+        assert_eq!(value["kind"], json!({"type": "delete", "permanent": true}));
+        assert!(value.get("destination").is_none());
+
+        let control = serde_json::to_value(Request::JobControl {
+            job_id: 3,
+            action: JobAction::Resume,
+        })
+        .unwrap();
+        assert_eq!(control["action"], "resume");
+    }
+
+    #[test]
+    fn terminal_states_are_the_last_ones() {
+        let terminal = [
+            JobState::Completed,
+            JobState::CompletedWithErrors,
+            JobState::Cancelled,
+            JobState::Failed {
+                message: String::new(),
+            },
+        ];
+        assert!(terminal.iter().all(JobState::is_terminal));
+        let alive = [
+            JobState::Queued,
+            JobState::Scanning,
+            JobState::Running,
+            JobState::Paused,
+        ];
+        assert!(!alive.iter().any(JobState::is_terminal));
+        assert_eq!(ConflictKind::DiskFull.tag(), "disk_full");
     }
 }

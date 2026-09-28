@@ -266,16 +266,360 @@
         "type",
         "command"
       ]
+    },
+    {
+      "description": "Starts a copy, move or delete job. The core answers `job_started`\nonce the paths are checked; the work itself follows as events. Needs\nno `hello`, but only connections that said `hello` get the events.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "start_job"
+        }
+      },
+      "$ref": "#/$defs/JobRequest",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Asks for every job the core knows, running or finished. The core\nanswers `jobs`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "list_jobs"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Pauses, resumes or cancels a job. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "What to do.",
+          "$ref": "#/$defs/JobAction"
+        },
+        "job_id": {
+          "description": "The job, from `job_started`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "job_control"
+        }
+      },
+      "required": [
+        "type",
+        "job_id",
+        "action"
+      ]
+    },
+    {
+      "description": "Decides what happens to a file that waits on a conflict. The core\nanswers `ok`.",
+      "type": "object",
+      "properties": {
+        "apply_to_same_kind": {
+          "description": "Also use this decision for the job's other conflicts of the same\nkind, the waiting ones and the ones still to come.",
+          "type": "boolean",
+          "default": false
+        },
+        "conflict_id": {
+          "description": "The conflict, from `job_conflict`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "job_id": {
+          "description": "The job, from `job_conflict`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "resolution": {
+          "description": "The decision.",
+          "$ref": "#/$defs/Resolution"
+        },
+        "type": {
+          "type": "string",
+          "const": "resolve_conflict"
+        }
+      },
+      "required": [
+        "type",
+        "job_id",
+        "conflict_id",
+        "resolution"
+      ]
     }
   ],
   "required": [
     "id"
   ],
   "$defs": {
+    "ConflictPolicy": {
+      "description": "What to do when a file already exists at the destination.",
+      "oneOf": [
+        {
+          "description": "Set the file aside, report a `job_conflict`, and go on with the rest.",
+          "type": "string",
+          "const": "ask"
+        },
+        {
+          "description": "Replace the existing file.",
+          "type": "string",
+          "const": "overwrite"
+        },
+        {
+          "description": "Replace the existing file only when the source is newer; otherwise\nskip it.",
+          "type": "string",
+          "const": "overwrite_if_newer"
+        },
+        {
+          "description": "Keep the existing file and skip the source.",
+          "type": "string",
+          "const": "skip"
+        },
+        {
+          "description": "Give the new file a free name: `name (2).ext`.",
+          "type": "string",
+          "const": "rename"
+        }
+      ]
+    },
+    "JobAction": {
+      "description": "What `job_control` does.",
+      "oneOf": [
+        {
+          "description": "Stop moving bytes until `resume`; the job keeps its place.",
+          "type": "string",
+          "const": "pause"
+        },
+        {
+          "description": "Go on after `pause`.",
+          "type": "string",
+          "const": "resume"
+        },
+        {
+          "description": "Stop for good; a partly copied file is removed.",
+          "type": "string",
+          "const": "cancel"
+        }
+      ]
+    },
+    "JobKind": {
+      "description": "What a job does.",
+      "oneOf": [
+        {
+          "description": "Copy the sources into the destination folder.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "copy"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Move the sources into the destination folder: a rename on the same\nvolume, a copy and then a delete of each source file across volumes.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "move"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Delete the sources.",
+          "type": "object",
+          "properties": {
+            "permanent": {
+              "description": "Delete for good. Without it the sources go to the Recycle Bin.",
+              "type": "boolean",
+              "default": false
+            },
+            "type": {
+              "type": "string",
+              "const": "delete"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "JobOptions": {
+      "description": "How a job behaves.",
+      "type": "object",
+      "properties": {
+        "copy_links": {
+          "description": "What to do with symbolic links and junctions.",
+          "$ref": "#/$defs/LinkPolicy",
+          "default": "as_link"
+        },
+        "on_conflict": {
+          "description": "What to do when a file already exists at the destination.",
+          "$ref": "#/$defs/ConflictPolicy",
+          "default": "ask"
+        },
+        "preserve_timestamps": {
+          "description": "Give each copy the creation, last-access and last-write times of its\nsource.",
+          "type": "boolean",
+          "default": true
+        },
+        "verify": {
+          "description": "After each copy, compare the sizes and sampled bytes of the source\nand the copy.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "JobRequest": {
+      "description": "A job to start.",
+      "type": "object",
+      "properties": {
+        "destination": {
+          "description": "The absolute path of the folder to copy or move into; created when it\ndoes not exist. A delete has none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Copy, move or delete.",
+          "$ref": "#/$defs/JobKind"
+        },
+        "options": {
+          "description": "How to handle conflicts, links, verification and timestamps.",
+          "$ref": "#/$defs/JobOptions",
+          "default": {
+            "copy_links": "as_link",
+            "on_conflict": "ask",
+            "preserve_timestamps": true,
+            "verify": false
+          }
+        },
+        "sources": {
+          "description": "Absolute paths of the files and folders to work on.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "sources"
+      ]
+    },
+    "LinkPolicy": {
+      "description": "What to do with symbolic links and junctions.",
+      "oneOf": [
+        {
+          "description": "Copy the link itself; the copy points where the original points.",
+          "type": "string",
+          "const": "as_link"
+        },
+        {
+          "description": "Copy what the link points to.",
+          "type": "string",
+          "const": "follow_target"
+        }
+      ]
+    },
     "RequestId": {
       "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",
       "type": "string",
       "pattern": "^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$"
+    },
+    "Resolution": {
+      "description": "The decision for a file that waits.",
+      "oneOf": [
+        {
+          "description": "Replace the existing file (for `access_denied`: clear the read-only\nattribute first).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "overwrite"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Leave this file out.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "skip"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Copy or move under another name in the same folder.",
+          "type": "object",
+          "properties": {
+            "new_name": {
+              "description": "The new name (no folder part). Absent: the core picks a free\nname, `name (2).ext`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "rename"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Try once more, the same way.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "retry"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Stop the whole job.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cancel_job"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
     },
     "SortKey": {
       "description": "What a listing is sorted by.",

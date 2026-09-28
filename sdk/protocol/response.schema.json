@@ -277,6 +277,47 @@
         "type",
         "result"
       ]
+    },
+    {
+      "description": "Reply to `start_job`: the job exists and is queued.",
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "description": "Names the job in later requests and events; unique for the life\nof the core.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "job_started"
+        }
+      },
+      "required": [
+        "type",
+        "job_id"
+      ]
+    },
+    {
+      "description": "Reply to `list_jobs`: every job, oldest first.",
+      "type": "object",
+      "properties": {
+        "jobs": {
+          "description": "The jobs.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JobInfo"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "jobs"
+        }
+      },
+      "required": [
+        "type",
+        "jobs"
+      ]
     }
   ],
   "required": [
@@ -506,6 +547,298 @@
           "description": "The configuration file cannot be changed now: it has an error the\nuser must fix first, or it cannot be written.",
           "type": "string",
           "const": "config_error"
+        },
+        {
+          "description": "No job has that `job_id`.",
+          "type": "string",
+          "const": "no_such_job"
+        },
+        {
+          "description": "The job has no waiting conflict with that `conflict_id`.",
+          "type": "string",
+          "const": "no_such_conflict"
+        }
+      ]
+    },
+    "JobInfo": {
+      "description": "A job as `list_jobs` describes it: its progress and what it works on.",
+      "type": "object",
+      "properties": {
+        "bytes_done": {
+          "description": "Bytes copied so far.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "bytes_total": {
+          "description": "Bytes to copy in all; 0 for a delete or a move on one volume.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "conflicts_open": {
+          "description": "Files waiting for a conflict decision.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "current_path": {
+          "description": "The file being worked on now.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination": {
+          "description": "The folder it copies or moves into.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "elapsed_ms": {
+          "description": "Milliseconds since the job started working (after `queued`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "eta_seconds": {
+          "description": "Seconds left at the current speed; absent in the first two seconds\nand when there are no bytes to count.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files_done": {
+          "description": "Files and folders handled so far, skipped and failed ones included.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files_failed": {
+          "description": "Of `files_done`, the ones that failed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files_skipped": {
+          "description": "Of `files_done`, the ones skipped by a conflict decision.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files_total": {
+          "description": "Files and folders to handle in all.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "job_id": {
+          "description": "The job, from `job_started`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "Copy, move or delete.",
+          "$ref": "#/$defs/JobKind"
+        },
+        "sources": {
+          "description": "The paths the job was started with.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "speed_bps": {
+          "description": "Bytes per second, averaged over about the last second.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "Its state.",
+          "$ref": "#/$defs/JobState"
+        }
+      },
+      "required": [
+        "kind",
+        "sources",
+        "job_id",
+        "state",
+        "bytes_done",
+        "bytes_total",
+        "files_done",
+        "files_total",
+        "files_skipped",
+        "files_failed",
+        "conflicts_open",
+        "speed_bps",
+        "elapsed_ms"
+      ]
+    },
+    "JobKind": {
+      "description": "What a job does.",
+      "oneOf": [
+        {
+          "description": "Copy the sources into the destination folder.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "copy"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Move the sources into the destination folder: a rename on the same\nvolume, a copy and then a delete of each source file across volumes.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "move"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Delete the sources.",
+          "type": "object",
+          "properties": {
+            "permanent": {
+              "description": "Delete for good. Without it the sources go to the Recycle Bin.",
+              "type": "boolean",
+              "default": false
+            },
+            "type": {
+              "type": "string",
+              "const": "delete"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "JobState": {
+      "description": "Where a job is in its life.",
+      "oneOf": [
+        {
+          "description": "Waiting for its disks: another job is using them.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "queued"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Walking the sources to count the files and bytes.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "scanning"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Working. Files waiting for a conflict decision do not change this.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "running"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Stopped by the user, or by a full disk, until resumed.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "paused"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Done; every file was handled (skipped files count as handled).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "completed"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Done, but some files failed.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "completed_with_errors"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Stopped for good by the user.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cancelled"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Stopped by an error that concerns the whole job.",
+          "type": "object",
+          "properties": {
+            "message": {
+              "description": "What went wrong.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ]
         }
       ]
     },

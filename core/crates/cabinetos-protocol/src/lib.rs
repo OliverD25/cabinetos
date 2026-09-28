@@ -18,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 mod id;
+mod job;
 mod message;
 pub mod shm;
 
@@ -25,6 +26,10 @@ pub mod shm;
 pub mod schema;
 
 pub use id::{InvalidRequestId, RequestId};
+pub use job::{
+    Conflict, ConflictKind, ConflictPolicy, JobAction, JobInfo, JobKind, JobOptions, JobProgress,
+    JobRequest, JobState, LinkPolicy, Resolution,
+};
 pub use message::{
     CommandInfo, CommandSource, CommandTarget, DiskIdentity, Envelope, ErrorCode, Event, Incoming,
     Keymap, KeymapBinding, RefreshReason, Request, Response, SearchHit, SortKey, SortSpec,
@@ -36,5 +41,6 @@ pub use message::{
 /// is added or changes shape. Version 2 added `hello`, directory listings,
 /// volume information and events; version 3 the configuration, the keymap
 /// and commands, and made `list_directory`'s `include_hidden` and `sort`
-/// optional (the configuration fills them in).
-pub const PROTOCOL_VERSION: u32 = 3;
+/// optional (the configuration fills them in); version 4 the jobs (copy,
+/// move, delete).
+pub const PROTOCOL_VERSION: u32 = 4;

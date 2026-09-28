@@ -162,12 +162,451 @@
         "type",
         "keymap"
       ]
+    },
+    {
+      "description": "How far a job has come. At most 30 per second per job, and always\none when the job ends. Sent to every connection that said `hello`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "job_progress"
+        }
+      },
+      "$ref": "#/$defs/JobProgress",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "A file of a job needs a decision (`resolve_conflict`). The file waits;\nthe rest of the job goes on.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "job_conflict"
+        }
+      },
+      "$ref": "#/$defs/Conflict",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "A job changed state. After a final state (`completed`,\n`completed_with_errors`, `cancelled`, `failed`) no more events follow\nfor that job.",
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "description": "The job.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "Its new state.",
+          "$ref": "#/$defs/JobState"
+        },
+        "type": {
+          "type": "string",
+          "const": "job_state_changed"
+        }
+      },
+      "required": [
+        "type",
+        "job_id",
+        "state"
+      ]
     }
   ],
   "required": [
     "id"
   ],
   "$defs": {
+    "Conflict": {
+      "description": "A file that needs a decision. The file waits; the rest of the job goes on.",
+      "type": "object",
+      "properties": {
+        "conflict_id": {
+          "description": "Names the conflict in `resolve_conflict`; unique across all jobs.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "destination": {
+          "description": "Where it was going, for a copy or a move.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job_id": {
+          "description": "The job it belongs to.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "What happened.",
+          "$ref": "#/$defs/ConflictKind"
+        },
+        "source": {
+          "description": "The file or folder the job was working on.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "conflict_id",
+        "job_id",
+        "kind",
+        "source"
+      ]
+    },
+    "ConflictKind": {
+      "description": "What stopped a file. Times are FILETIME ticks (100 ns since 1601-01-01\nUTC), as in the listing section.",
+      "oneOf": [
+        {
+          "description": "The destination already has a file of that name.",
+          "type": "object",
+          "properties": {
+            "dest_modified": {
+              "description": "Last-write time of the existing file.",
+              "type": "integer",
+              "format": "int64"
+            },
+            "dest_size": {
+              "description": "Size of the existing file in bytes.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "source_modified": {
+              "description": "Last-write time of the source.",
+              "type": "integer",
+              "format": "int64"
+            },
+            "source_size": {
+              "description": "Size of the source in bytes.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "file_exists"
+            }
+          },
+          "required": [
+            "type",
+            "source_size",
+            "source_modified",
+            "dest_size",
+            "dest_modified"
+          ]
+        },
+        {
+          "description": "Windows denied access, for example to a read-only file.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "access_denied"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Another program has the file open.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "sharing_violation"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The path is too long for the destination's file system.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "path_too_long"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The destination disk is full; the job is paused.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "disk_full"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The source disappeared before it was handled.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "source_vanished"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Any other error.",
+          "type": "object",
+          "properties": {
+            "code": {
+              "description": "The Windows error code.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "message": {
+              "description": "Its text.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "io"
+            }
+          },
+          "required": [
+            "type",
+            "code",
+            "message"
+          ]
+        }
+      ]
+    },
+    "JobProgress": {
+      "description": "How far a job has come.",
+      "type": "object",
+      "properties": {
+        "bytes_done": {
+          "description": "Bytes copied so far.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "bytes_total": {
+          "description": "Bytes to copy in all; 0 for a delete or a move on one volume.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "conflicts_open": {
+          "description": "Files waiting for a conflict decision.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "current_path": {
+          "description": "The file being worked on now.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "elapsed_ms": {
+          "description": "Milliseconds since the job started working (after `queued`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "eta_seconds": {
+          "description": "Seconds left at the current speed; absent in the first two seconds\nand when there are no bytes to count.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files_done": {
+          "description": "Files and folders handled so far, skipped and failed ones included.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files_failed": {
+          "description": "Of `files_done`, the ones that failed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files_skipped": {
+          "description": "Of `files_done`, the ones skipped by a conflict decision.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files_total": {
+          "description": "Files and folders to handle in all.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "job_id": {
+          "description": "The job, from `job_started`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "speed_bps": {
+          "description": "Bytes per second, averaged over about the last second.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "Its state.",
+          "$ref": "#/$defs/JobState"
+        }
+      },
+      "required": [
+        "job_id",
+        "state",
+        "bytes_done",
+        "bytes_total",
+        "files_done",
+        "files_total",
+        "files_skipped",
+        "files_failed",
+        "conflicts_open",
+        "speed_bps",
+        "elapsed_ms"
+      ]
+    },
+    "JobState": {
+      "description": "Where a job is in its life.",
+      "oneOf": [
+        {
+          "description": "Waiting for its disks: another job is using them.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "queued"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Walking the sources to count the files and bytes.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "scanning"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Working. Files waiting for a conflict decision do not change this.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "running"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Stopped by the user, or by a full disk, until resumed.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "paused"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Done; every file was handled (skipped files count as handled).",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "completed"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Done, but some files failed.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "completed_with_errors"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Stopped for good by the user.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cancelled"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Stopped by an error that concerns the whole job.",
+          "type": "object",
+          "properties": {
+            "message": {
+              "description": "What went wrong.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ]
+        }
+      ]
+    },
     "Keymap": {
       "description": "The compiled keymap: every binding in effect. The UI runs the chord state\nmachine with it; the core stays the source of truth.",
       "type": "object",

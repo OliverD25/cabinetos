@@ -284,6 +284,13 @@ impl Session {
                     });
                     None
                 }
+                Request::StartJob(_)
+                | Request::ListJobs
+                | Request::JobControl { .. }
+                | Request::ResolveConflict { .. } => Some(Response::Error {
+                    code: ErrorCode::NotImplemented,
+                    message: format!("{kind} is not implemented yet"),
+                }),
             }
         };
         // Requests handled right here are done; the others log when they end.
