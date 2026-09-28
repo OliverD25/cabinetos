@@ -12,6 +12,8 @@
 //! - A file that hits a conflict is set aside with an event, and the job
 //!   goes on; [`JobQueueManager::resolve`] sends it back.
 //! - Progress goes out at most 30 times per second per job.
+//! - A [`JobGate`], when set, sees every job after its scan and may refuse
+//!   it before anything is written (the core asks its plugins).
 //!
 //! Jobs belong to the manager, not to the client that started them. Events
 //! reach the caller through the [`EventSink`] given to
@@ -38,7 +40,7 @@ mod win;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -53,6 +55,32 @@ use crate::scheduler::{Disk, DiskKey, Priority, Scheduler};
 /// `job_state_changed`. Called on the engine's threads; it must return
 /// quickly.
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
+
+/// Sees every job after its scan, before anything is written, and may
+/// refuse it. The core asks the plugins that hold `jobs:intercept`
+/// (`docs/plugins.md`).
+pub trait JobGate: Send + Sync {
+    /// `Err(message)` stops the job: its state becomes `failed` with
+    /// `message`. Called on the job's own thread; it may block for a moment.
+    fn check(&self, job: &JobPreview<'_>) -> Result<(), String>;
+}
+
+/// What a [`JobGate`] sees of a job.
+#[derive(Clone, Copy, Debug)]
+pub struct JobPreview<'a> {
+    /// The job's ID.
+    pub job_id: u64,
+    /// Copy, move or delete.
+    pub kind: &'a JobKind,
+    /// The sources, as requested.
+    pub sources: &'a [String],
+    /// The destination folder; a delete has none.
+    pub destination: Option<&'a str>,
+    /// The files the scan found.
+    pub files_total: u64,
+    /// The bytes the scan found.
+    pub bytes_total: u64,
+}
 
 /// How the engine runs.
 #[derive(Clone, Debug)]
@@ -137,6 +165,7 @@ pub(crate) struct Engine {
     /// Wakes the progress publisher; `true` asks it to stop.
     publisher: (Mutex<PublisherState>, Condvar),
     stopping: AtomicBool,
+    pub(crate) gate: OnceLock<Arc<dyn JobGate>>,
 }
 
 #[derive(Default)]
@@ -300,6 +329,7 @@ impl JobQueueManager {
             threads: Mutex::new(Vec::new()),
             publisher: (Mutex::new(PublisherState::default()), Condvar::new()),
             stopping: AtomicBool::new(false),
+            gate: OnceLock::new(),
         });
         let weak = Arc::downgrade(&engine);
         if let Err(error) = std::thread::Builder::new()
@@ -309,6 +339,12 @@ impl JobQueueManager {
             tracing::error!(%error, "cannot start the job progress thread; jobs report only their end");
         }
         Self { engine }
+    }
+
+    /// Sets the gate every job passes after its scan. Only the first call
+    /// counts; it returns `false` for the others.
+    pub fn set_gate(&self, gate: Arc<dyn JobGate>) -> bool {
+        self.engine.gate.set(gate).is_ok()
     }
 
     /// Checks the paths of `request`, finds the disks it touches and queues

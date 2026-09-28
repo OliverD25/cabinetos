@@ -11,7 +11,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use cabinetos_jobs::{EngineConfig, EventSink, JobError, JobQueueManager};
+use cabinetos_jobs::{EngineConfig, EventSink, JobError, JobGate, JobPreview, JobQueueManager};
 use cabinetos_protocol::{
     Conflict, ConflictKind, ConflictPolicy, ErrorCode, Event, JobAction, JobKind, JobOptions,
     JobProgress, JobRequest, JobState, Resolution,
@@ -849,6 +849,43 @@ fn a_file_too_big_for_the_recycle_bin_waits_for_an_explicit_decision() {
         .resolve(job, conflicts[0].conflict_id, &Resolution::Skip, false)
         .unwrap();
     engine.finish(job);
+}
+
+#[test]
+fn a_gate_can_refuse_a_job_before_anything_is_written() {
+    struct Vetoer;
+    impl JobGate for Vetoer {
+        fn check(&self, job: &JobPreview<'_>) -> Result<(), String> {
+            match job.destination {
+                Some(destination) if destination.contains("forbidden") => Err(format!(
+                    "denied by the test gate: {} file of {} bytes",
+                    job.files_total, job.bytes_total
+                )),
+                _ => Ok(()),
+            }
+        }
+    }
+    let root = scratch("gate");
+    let source = root.path().join("a.txt");
+    write_file(&source, 10, 1);
+    let engine = engine();
+    assert!(engine.manager.set_gate(Arc::new(Vetoer)));
+    assert!(!engine.manager.set_gate(Arc::new(Vetoer)), "only the first gate counts");
+
+    let refused = root.path().join("forbidden");
+    let job = engine.start(JobKind::Copy, &[&source], Some(&refused), options(ConflictPolicy::Ask));
+    assert_eq!(
+        engine.finish(job).0.state,
+        JobState::Failed {
+            message: "denied by the test gate: 1 file of 10 bytes".to_owned()
+        }
+    );
+    assert!(!refused.exists(), "a refused job creates nothing");
+
+    let allowed = root.path().join("fine");
+    let job = engine.start(JobKind::Copy, &[&source], Some(&allowed), options(ConflictPolicy::Ask));
+    assert_eq!(engine.finish(job).0.state, JobState::Completed);
+    assert!(allowed.join("a.txt").is_file());
 }
 
 #[test]

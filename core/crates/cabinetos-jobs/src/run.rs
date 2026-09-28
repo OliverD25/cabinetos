@@ -1,6 +1,7 @@
 //! Running one job on its own thread.
 //!
-//! 1. **Scanning:** walk the sources into a plan (folders, files, totals).
+//! 1. **Scanning:** walk the sources into a plan (folders, files, totals),
+//!    then ask the engine's gate, if any, whether the job may go on.
 //! 2. **Folders:** create the destination folders in order, on this thread,
 //!    so every folder exists (or is known to wait) before any file goes
 //!    into it.
@@ -21,8 +22,8 @@ use cabinetos_protocol::{
     Conflict, ConflictKind, ConflictPolicy, Event, JobKind, JobState, LinkPolicy, Resolution,
 };
 
-use crate::Engine;
 use crate::bin;
+use crate::{Engine, JobPreview};
 use crate::job::{Counters, DirState, DirStatus, Job, Parked, Phase, Target, Work, lock};
 use crate::plan::{
     self, FileItem, FileKind, Plan, PlanError, RemoveKind, RenameItem, Transfer, file_name, join,
@@ -60,6 +61,25 @@ enum Outcome {
     Cancelled,
 }
 
+/// Asks the engine's gate, if one is set, whether the job may go on.
+fn ask_gate(engine: &Engine, job: &Job, files_total: u64, bytes_total: u64) -> Result<(), String> {
+    let Some(gate) = engine.gate.get() else {
+        return Ok(());
+    };
+    let request = &job.request;
+    gate.check(&JobPreview {
+        job_id: job.id,
+        kind: &request.kind,
+        sources: &request.sources,
+        destination: request.destination.as_deref(),
+        files_total,
+        bytes_total,
+    })
+    .inspect_err(|message| {
+        tracing::info!(job_id = job.id, reason = %message, "the job was refused before it started");
+    })
+}
+
 /// Runs `job` to its end. Called on the job's own thread.
 pub(crate) fn run(engine: &Engine, job: &Job) {
     let _ = job.started.set(Instant::now());
@@ -81,6 +101,11 @@ pub(crate) fn run(engine: &Engine, job: &Job) {
             return;
         }
     };
+    let unreadable = plan.unreadable.len() as u64;
+    if let Err(message) = ask_gate(engine, job, plan.count() + unreadable, plan.bytes) {
+        finish(engine, job, &JobState::Failed { message });
+        return;
+    }
     if let Some(destination) = &job.request.destination
         && let Err(error) = std::fs::create_dir_all(destination)
     {
@@ -94,7 +119,6 @@ pub(crate) fn run(engine: &Engine, job: &Job) {
         return;
     }
     let counters = &job.counters;
-    let unreadable = plan.unreadable.len() as u64;
     counters
         .files_total
         .store(plan.count() + unreadable, Ordering::Relaxed);
