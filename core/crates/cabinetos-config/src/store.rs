@@ -133,6 +133,7 @@ pub struct ConfigStore {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Seen {
     Missing,
+    Folder,
     Content(u64),
 }
 
@@ -208,6 +209,12 @@ impl ConfigStore {
                 )));
             }
             Err(error) => {
+                if self.path.is_dir() {
+                    if self.failed == Some(Seen::Folder) {
+                        return Reload::Unchanged;
+                    }
+                    self.failed = Some(Seen::Folder);
+                }
                 return Reload::Invalid(ConfigError::general(format!(
                     "cannot read {}: {error}",
                     self.path.display()
@@ -410,6 +417,12 @@ fn read(path: &Path) -> io::Result<Option<Vec<u8>>> {
             {
                 attempts += 1;
                 std::thread::sleep(SHARING_RETRY_DELAY);
+            }
+            // Windows says "Access is denied" for a folder.
+            Err(_) if path.is_dir() => {
+                return Err(io::Error::other(
+                    "it is a folder; the settings need a file there",
+                ));
             }
             Err(error) => return Err(error),
         }
@@ -695,6 +708,37 @@ mod tests {
         // Nothing changed, but the error is resolved.
         assert_eq!(store.reload(accept), Reload::Changed(Vec::new()));
         assert_eq!(store.reload(accept), Reload::Unchanged);
+    }
+
+    /// Windows reports reading a folder as "Access is denied", which sends
+    /// the user looking at permissions; the error says what is wrong.
+    #[test]
+    fn a_folder_in_the_file_s_place_is_named_and_reported_once() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let original = std::fs::read(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+
+        let Reload::Invalid(error) = store.reload(accept) else {
+            panic!("a folder is not a configuration file")
+        };
+        assert!(error.message.contains("is a folder"), "{error:?}");
+        assert_eq!(store.reload(accept), Reload::Unchanged, "reported once");
+        let refused = store.set_value("ui.sidebar", Value::from(false), accept);
+        assert!(
+            matches!(&refused, Err(UpdateError::Io(error)) if error.to_string().contains("is a folder")),
+            "{refused:?}"
+        );
+        let (_, opened) = ConfigStore::open(path.clone(), accept);
+        assert!(
+            matches!(&opened, Opened::Invalid(error) if error.message.contains("is a folder")),
+            "{opened:?}"
+        );
+
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::write(&path, &original).unwrap();
+        assert_eq!(store.reload(accept), Reload::Changed(Vec::new()));
     }
 
     #[test]

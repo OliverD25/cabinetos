@@ -165,7 +165,9 @@ It does not matter how the editor saves. Writing the file in place and
 writing a temporary file that then replaces it (as many editors do) are both
 seen. A file that is deleted is reported as an error and not recreated; the
 settings in effect stay until it is back, or until a `set_keybinding` writes
-it anew with those settings.
+it anew with those settings. A folder in the file's place is reported once,
+as a folder ("it is a folder; the settings need a file there"), and every
+change is refused until a file is back.
 
 When the core starts with a file that has an error, it logs the error and
 uses the defaults until the file is fixed.
