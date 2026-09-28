@@ -128,8 +128,9 @@ waits for this; a page that reloads sends it again.
   `f<n>.<id>.cabinetos.example`, new for every file, so the page can
   `fetch` the file and load what sits beside it (images) with relative
   URLs, and cannot keep reading an earlier folder. The page cannot
-  navigate to that host, only request from it. A page that is open gets
-  the next file with another `open`.
+  navigate to that host, only request from it. For every file after the first, the page loads again, because a page
+  that is already loaded cannot fetch from a host mapped after it loaded;
+  it says `ready` again and then gets the `open`.
 
 **Page to window.**
 

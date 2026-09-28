@@ -28,6 +28,7 @@ with the reason and the way to undo it.
 | 9, UI | [phase-9-ui-report.md](phase-9-ui-report.md) | Themes applied live, the theme picker, the marketplace view. 395 UI tests. A light theme ended the window; fixed. |
 | UI self-review | [ui-self-review-report.md](ui-self-review-report.md) | A review pass over the whole shell: 13 fixes (a file probe off the UI thread, focus order in overlays, stale colours, Esc in the flyout). 412 UI tests. |
 | live check | [live-check.md](live-check.md) | Real keys and mouse clicks on the shell, screen unlocked: 100,000 entries shown 88 ms after Enter; PageDown held 5 s at 53–61 frames per second, worst frame 78 ms; the file keys checked on disk; the terminal, the palette from inside it, search and Markdown Preview; five findings for the shell. |
+| install check | [install-check.md](install-check.md) | A real per-user install from the release zip on the development PC: the installed window passed the whole real-key live check with the core found next to it, the uninstall left nothing behind, and the twelve scripted installer cases behaved. |
 | core for the UI, v11 | [protocol-11-report.md](protocol-11-report.md) | The window's own commands in the registry, `ui.dockSize`, readable type names, `items_per_second`, one marketplace item per extension with `installedVersion`, the Mica tint in `list_themes`, the `system` theme kind. 482 tests. |
 
 Phase 5 (the WinUI 3 shell) waited for the .NET SDK, which was installed in
