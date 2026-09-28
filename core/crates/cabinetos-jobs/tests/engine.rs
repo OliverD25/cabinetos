@@ -574,10 +574,12 @@ fn a_move_on_one_volume_is_a_rename() {
     let (last, _) = engine.finish(job);
     assert_eq!(last.state, JobState::Completed);
     assert!(!source.exists());
-    // Same file IDs: the files were renamed, not copied.
+    // Same file IDs: the files were renamed, not copied. The time is only a
+    // sanity bound: under 50 ms when the machine is idle, but a loaded one
+    // (a full workspace test run) took longer, so it allows a second.
     assert_eq!(file_ids(&destination.join("src")), before);
     assert!(
-        last.elapsed_ms < 50,
+        last.elapsed_ms < 1_000,
         "a rename takes moments, not {} ms",
         last.elapsed_ms
     );
