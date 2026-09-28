@@ -15,10 +15,6 @@ public class ProtocolTests
 {
     private const string Id = "01J9ZQ4X7K3M5N8P2R6S0T1V4W";
 
-    private static readonly Lazy<JsonSchema> RequestSchema = new(() => JsonSchema.FromFile(Repo.ProtocolSchema("request.schema.json")));
-    private static readonly Lazy<JsonSchema> ResponseSchema = new(() => JsonSchema.FromFile(Repo.ProtocolSchema("response.schema.json")));
-    private static readonly Lazy<JsonSchema> EventSchema = new(() => JsonSchema.FromFile(Repo.ProtocolSchema("event.schema.json")));
-    private static readonly Lazy<JsonSchema> ConfigSchema = new(() => JsonSchema.FromFile(Repo.ConfigSchema));
 
     /// <summary>One instance of every request the UI sends.</summary>
     private static IReadOnlyList<CoreRequest> AllRequests()
@@ -42,8 +38,28 @@ public class ProtocolTests
             new ExecuteCommandRequest("reader.size") { Args = args.RootElement.Clone() },
             new SetKeybindingRequest("view.toggleSidebar", "ctrl+alt+b"),
             new ResetKeybindingRequest("view.toggleSidebar"),
+            new GetValueRequest("ui.dualPane"),
+            new SetValueRequest("ui.lastPaths", JsonDocument.Parse("""["C:\\Users\\me","D:\\work"]""").RootElement.Clone()),
+            new StartJobRequest(JobKind.Copy, [@"C:\photos\a.jpg", @"C:\photos\b.jpg"]) { Destination = @"D:\backup" },
+            new StartJobRequest(JobKind.Move, [@"C:\inbox"]) { Destination = @"D:\archive", Options = new JobOptions(OnConflict: "ask", Verify: true) },
+            new StartJobRequest(JobKind.Delete(permanent: true), [@"C:\old"]),
+            new ListJobsRequest(),
+            new JobControlRequest(7, JobActions.Pause),
+            new ResolveConflictRequest(7, 9, new Resolution(Resolution.RenameType, "b.txt")) { ApplyToSameKind = true },
+            new ResolveConflictRequest(7, 10, new Resolution(Resolution.SkipType)),
         ];
     }
+
+    /// <summary>
+    /// Requests of protocol version 8 built against the shapes the core agreed
+    /// on before its schema had them: their JSON exactly as the UI sends it.
+    /// </summary>
+    private static IReadOnlyList<(CoreRequest Request, string Json)> AgreedRequests() =>
+    [
+        (new OpenPathRequest(@"C:\data\report.pdf"), $$$"""{"id":"{{{Id}}}","type":"open_path","path":"C:\\data\\report.pdf"}"""),
+        (new CreateDirectoryRequest(@"C:\data\New folder"), $$$"""{"id":"{{{Id}}}","type":"create_directory","path":"C:\\data\\New folder"}"""),
+        (new RenameRequest(@"C:\data\a.txt", "b.txt"), $$$"""{"id":"{{{Id}}}","type":"rename","path":"C:\\data\\a.txt","new_name":"b.txt"}"""),
+    ];
 
     [Fact]
     public void Every_request_matches_the_request_schema_and_uses_only_declared_fields()
@@ -55,7 +71,7 @@ public class ProtocolTests
             request.Id = Id;
             var json = Encoding.UTF8.GetString(MessageCodec.Encode(request));
             Assert.True(variants.TryGetValue(request.Type, out var declared), $"{request.Type} is not in the request schema");
-            AssertValid(RequestSchema.Value, json);
+            AssertValid(Schemas.Request, json);
             using var document = JsonDocument.Parse(json);
             foreach (var property in document.RootElement.EnumerateObject())
             {
@@ -64,7 +80,46 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(14, checkedTypes.Count);
+        Assert.Equal(20, checkedTypes.Count);
+    }
+
+    [Fact]
+    public void The_agreed_version_8_requests_follow_the_schema_once_it_has_them()
+    {
+        var variants = SchemaVariants(Repo.ProtocolSchema("request.schema.json"));
+        foreach (var (request, expected) in AgreedRequests())
+        {
+            request.Id = Id;
+            var json = Encoding.UTF8.GetString(MessageCodec.Encode(request));
+            if (variants.TryGetValue(request.Type, out var declared))
+            {
+                AssertValid(Schemas.Request, json);
+                using var document = JsonDocument.Parse(json);
+                Assert.All(document.RootElement.EnumerateObject(), property =>
+                    Assert.True(property.Name == "id" || declared.Contains(property.Name), $"{request.Type} sends `{property.Name}`: {json}"));
+            }
+            else
+            {
+                Assert.Equal(expected, json);
+            }
+        }
+    }
+
+    [Fact]
+    public void A_job_request_leaves_its_defaults_to_the_core()
+    {
+        var copy = new StartJobRequest(JobKind.Copy, [@"C:\a"]) { Destination = @"D:\b", Id = Id };
+        Assert.Equal(
+            $$$"""{"id":"{{{Id}}}","type":"start_job","kind":{"type":"copy"},"sources":["C:\\a"],"destination":"D:\\b"}""",
+            Encoding.UTF8.GetString(MessageCodec.Encode(copy)));
+        var delete = new StartJobRequest(JobKind.Delete(permanent: false), [@"C:\a"]) { Id = Id };
+        Assert.Equal(
+            $$$"""{"id":"{{{Id}}}","type":"start_job","kind":{"type":"delete","permanent":false},"sources":["C:\\a"]}""",
+            Encoding.UTF8.GetString(MessageCodec.Encode(delete)));
+        var resolve = new ResolveConflictRequest(7, 9, new Resolution(Resolution.OverwriteType)) { Id = Id };
+        Assert.Equal(
+            $$$"""{"id":"{{{Id}}}","type":"resolve_conflict","job_id":7,"conflict_id":9,"resolution":{"type":"overwrite"},"apply_to_same_kind":false}""",
+            Encoding.UTF8.GetString(MessageCodec.Encode(resolve)));
     }
 
     [Fact]
@@ -142,10 +197,24 @@ public class ProtocolTests
                 b => Assert.Equal("ui", Assert.IsType<CommandRoutedReply>(b).Target)),
             ($$$"""{"id":"{{{Id}}}","type":"command_result","result":{"name":"CabinetOS","core_version":"0.1.0","protocol_version":7,"config_path":"C:\\x\\cabinetos.json"}}""",
                 b => Assert.Equal("CabinetOS", Assert.IsType<CommandResultReply>(b).Result.GetProperty("name").GetString())),
+            ($$$"""{"id":"{{{Id}}}","type":"value","value":["C:\\Users\\me"]}""",
+                b => Assert.Equal(@"C:\Users\me", Assert.IsType<ValueReply>(b).Value[0].GetString())),
+            ($$$"""{"id":"{{{Id}}}","type":"job_started","job_id":7}""",
+                b => Assert.Equal(new JobStartedReply(7), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"jobs","jobs":[{"kind":{"type":"delete","permanent":true},"sources":["C:\\old"],"destination":null,"job_id":7,"state":{"type":"running"},"bytes_done":0,"bytes_total":0,"files_done":3,"files_total":9,"files_skipped":0,"files_failed":0,"conflicts_open":0,"current_path":"C:\\old\\c.txt","speed_bps":0,"elapsed_ms":120}]}""",
+                b =>
+                {
+                    var job = Assert.IsType<JobsReply>(b).Jobs.Single();
+                    Assert.True(job.Kind.IsPermanentDelete);
+                    Assert.Equal([@"C:\old"], job.Sources);
+                    Assert.Null(job.Destination);
+                    Assert.Equal((7UL, 3UL, 9UL), (job.ToProgress().JobId, job.ToProgress().FilesDone, job.ToProgress().FilesTotal));
+                    Assert.Null(job.EtaSeconds);
+                }),
         };
         foreach (var (json, check) in samples)
         {
-            AssertValid(ResponseSchema.Value, json);
+            AssertValid(Schemas.Response, json);
             var message = MessageCodec.Decode(Encoding.UTF8.GetBytes(json));
             Assert.False(message.IsEvent, json);
             Assert.Equal(Id, message.Id);
@@ -186,10 +255,29 @@ public class ProtocolTests
                 b => Assert.Equal(new PluginCrashedEvent("crashy", "wasm trap: unreachable"), b)),
             ($$$"""{"id":"{{{Id}}}","type":"terminal_exited","session_id":3,"exit_code":0}""",
                 b => Assert.Equal(new TerminalExitedEvent(3, 0), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"job_state_changed","job_id":7,"state":{"type":"completed_with_errors"}}""",
+                b =>
+                {
+                    var changed = Assert.IsType<JobStateChangedEvent>(b);
+                    Assert.Equal(new JobState(JobState.CompletedWithErrors), changed.State);
+                    Assert.True(changed.State.IsFinal);
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"job_conflict","conflict_id":9,"job_id":7,"kind":{"type":"file_exists","source_size":10,"source_modified":133000000000000000,"dest_size":12,"dest_modified":132000000000000000},"source":"C:\\photos\\a.jpg","destination":"D:\\backup\\photos\\a.jpg"}""",
+                b =>
+                {
+                    var conflict = Assert.IsType<JobConflictEvent>(b);
+                    Assert.Equal((9UL, 7UL), (conflict.ConflictId, conflict.JobId));
+                    Assert.Equal(new ConflictKind(ConflictKind.FileExists, 10, 133000000000000000, 12, 132000000000000000), conflict.Kind);
+                    Assert.Equal(@"D:\backup\photos\a.jpg", conflict.Destination);
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"job_conflict","conflict_id":10,"job_id":8,"kind":{"type":"recycle_bin_too_small","size":22548578304},"source":"E:\\big.iso","destination":null}""",
+                b => Assert.Equal(22548578304UL, Assert.IsType<JobConflictEvent>(b).Kind.Size)),
+            ($$$"""{"id":"{{{Id}}}","type":"job_conflict","conflict_id":11,"job_id":8,"kind":{"type":"io","code":23,"message":"Data error (cyclic redundancy check)."},"source":"E:\\x.bin"}""",
+                b => Assert.Equal((23U, "Data error (cyclic redundancy check)."), (((JobConflictEvent)b).Kind.Code!.Value, ((JobConflictEvent)b).Kind.Message))),
         };
         foreach (var (json, check) in samples)
         {
-            AssertValid(EventSchema.Value, json);
+            AssertValid(Schemas.Event, json);
             var message = MessageCodec.Decode(Encoding.UTF8.GetBytes(json));
             Assert.True(message.IsEvent, json);
             Assert.NotNull(message.Body);
@@ -250,8 +338,8 @@ public class ProtocolTests
          "panes":{"showHidden":false,"sort":{"key":"name","descending":false}},
          "keybindings":[],"logging":{"level":"info"},"plugins":{}}
         """;
-        AssertValid(ConfigSchema.Value, firstRun);
-        AssertInvalid(ConfigSchema.Value, """{"ui":{"dualPan":true}}""");
+        AssertValid(Schemas.Config, firstRun);
+        AssertInvalid(Schemas.Config, """{"ui":{"dualPan":true}}""");
         using var document = JsonDocument.Parse(firstRun);
         Assert.Equal(UiSettings.Defaults, UiSettings.FromConfig(document.RootElement));
     }
@@ -265,10 +353,15 @@ public class ProtocolTests
         Assert.Equal(UiSettings.Defaults, UiSettings.FromConfig(odd.RootElement));
     }
 
-    /// <summary>For each <c>oneOf</c> variant of a message schema: its <c>type</c> and its declared fields.</summary>
+    /// <summary>
+    /// For each <c>oneOf</c> variant of a message schema: its <c>type</c> and its
+    /// declared fields, those of a <c>$ref</c> next to its <c>type</c> included
+    /// (<c>start_job</c> refers to <c>JobRequest</c> for its fields).
+    /// </summary>
     private static Dictionary<string, HashSet<string>> SchemaVariants(string path)
     {
         using var schema = JsonDocument.Parse(File.ReadAllText(path));
+        var definitions = schema.RootElement.TryGetProperty("$defs", out var defs) ? defs : default;
         var variants = new Dictionary<string, HashSet<string>>();
         foreach (var variant in schema.RootElement.GetProperty("oneOf").EnumerateArray())
         {
@@ -276,7 +369,13 @@ public class ProtocolTests
                 && properties.TryGetProperty("type", out var type)
                 && type.TryGetProperty("const", out var name))
             {
-                variants[name.GetString()!] = properties.EnumerateObject().Select(p => p.Name).ToHashSet();
+                var fields = properties.EnumerateObject().Select(p => p.Name).ToHashSet();
+                if (variant.TryGetProperty("$ref", out var reference))
+                {
+                    var definition = definitions.GetProperty(reference.GetString()!.Replace("#/$defs/", ""));
+                    fields.UnionWith(definition.GetProperty("properties").EnumerateObject().Select(p => p.Name));
+                }
+                variants[name.GetString()!] = fields;
             }
             else if (variant.TryGetProperty("$ref", out _) || variant.TryGetProperty("allOf", out _))
             {

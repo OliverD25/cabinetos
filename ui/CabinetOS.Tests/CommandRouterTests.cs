@@ -127,6 +127,25 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public async Task A_core_command_the_ui_overrides_runs_in_the_ui_without_asking_the_core()
+    {
+        var (router, core) = Create();
+        CommandInvocation? seen = null;
+        router.RegisterUiOverride("file.copyToOtherPane", invocation =>
+        {
+            seen = invocation;
+            return Task.CompletedTask;
+        });
+
+        var outcome = await router.ExecuteAsync("file.copyToOtherPane", trigger: "key");
+
+        Assert.Equal(CommandOutcomeKind.RanInUi, outcome.Kind);
+        Assert.Equal(outcome.RequestId, seen!.RequestId);
+        Assert.Empty(core.Requests);
+        Assert.Equal("core", router.Find("file.copyToOtherPane")!.Target);
+    }
+
+    [Fact]
     public async Task A_command_nobody_knows_is_asked_of_the_core_and_fails_there()
     {
         var (router, core) = Create();

@@ -14,7 +14,7 @@ public sealed record IncomingMessage(string? Id, string? Type, object? Body, boo
 /// <summary>Turns requests into JSON and JSON into replies and events.</summary>
 public static class MessageCodec
 {
-    /// <summary>Every event type of protocol version 7; everything else is a reply.</summary>
+    /// <summary>Every event type of protocol version 8; everything else is a reply.</summary>
     public static readonly FrozenSet<string> EventTypes = FrozenSet.ToFrozenSet(
     [
         "listing_refreshed",
@@ -46,12 +46,17 @@ public static class MessageCodec
         ["search_results"] = ProtocolJson.Default.SearchResultsReply,
         ["command_routed"] = ProtocolJson.Default.CommandRoutedReply,
         ["command_result"] = ProtocolJson.Default.CommandResultReply,
+        ["value"] = ProtocolJson.Default.ValueReply,
+        ["job_started"] = ProtocolJson.Default.JobStartedReply,
+        ["jobs"] = ProtocolJson.Default.JobsReply,
         ["listing_refreshed"] = ProtocolJson.Default.ListingRefreshedEvent,
         ["listing_lost"] = ProtocolJson.Default.ListingLostEvent,
         ["config_changed"] = ProtocolJson.Default.ConfigChangedEvent,
         ["config_error"] = ProtocolJson.Default.ConfigErrorEvent,
         ["keymap_changed"] = ProtocolJson.Default.KeymapChangedEvent,
         ["job_progress"] = ProtocolJson.Default.JobProgressEvent,
+        ["job_state_changed"] = ProtocolJson.Default.JobStateChangedEvent,
+        ["job_conflict"] = ProtocolJson.Default.JobConflictEvent,
         ["plugin_state_changed"] = ProtocolJson.Default.PluginStateChangedEvent,
         ["plugin_crashed"] = ProtocolJson.Default.PluginCrashedEvent,
         ["terminal_exited"] = ProtocolJson.Default.TerminalExitedEvent,

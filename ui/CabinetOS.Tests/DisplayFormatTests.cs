@@ -71,4 +71,14 @@ public class DisplayFormatTests
         Assert.Equal("Data (D:)", DisplayFormat.DriveName("D", "Data"));
         Assert.Equal("118 GB", DisplayFormat.Bytes(126_701_535_232UL, Invariant));
     }
+
+    [Fact]
+    public void Properties_name_the_attributes_and_the_exact_size()
+    {
+        Assert.Equal("Read-only, Hidden, Archive", DisplayFormat.AttributeNames(0x1 | 0x2 | 0x20));
+        Assert.Equal("", DisplayFormat.AttributeNames(0x10 | 0x80));
+        Assert.Equal("1.4 MB (1,468,006 bytes)", DisplayFormat.SizeWithBytes(1_468_006, Invariant));
+        Assert.Equal("1 byte", DisplayFormat.SizeWithBytes(1, Invariant));
+        Assert.Equal("512 bytes", DisplayFormat.SizeWithBytes(512, Invariant));
+    }
 }

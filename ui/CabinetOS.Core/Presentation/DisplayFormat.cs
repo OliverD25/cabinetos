@@ -134,6 +134,39 @@ public static class DisplayFormat
     public static string Join(string folder, string name) =>
         folder.EndsWith('\\') ? folder + name : folder + '\\' + name;
 
+    /// <summary>
+    /// The <c>FILE_ATTRIBUTE_*</c> bits a user cares about, in words, for the
+    /// Properties dialog: "Read-only, Hidden, Archive"; empty when none is set.
+    /// </summary>
+    public static string AttributeNames(uint attributes)
+    {
+        (uint Bit, string Name)[] known =
+        [
+            (0x1, "Read-only"),
+            (0x2, "Hidden"),
+            (0x4, "System"),
+            (0x20, "Archive"),
+            (0x100, "Temporary"),
+            (0x200, "Sparse"),
+            (0x400, "Link (reparse point)"),
+            (0x800, "Compressed"),
+            (0x1000, "Offline"),
+            (0x2000, "Not indexed"),
+            (0x4000, "Encrypted"),
+            (0x80000, "Always kept on this device"),
+            (0x400000, "Online only"),
+        ];
+        return string.Join(", ", known.Where(k => (attributes & k.Bit) != 0).Select(k => k.Name));
+    }
+
+    /// <summary>A size for the Properties dialog: "1.4 MB (1,468,006 bytes)".</summary>
+    public static string SizeWithBytes(ulong bytes, CultureInfo? culture = null)
+    {
+        culture ??= CultureInfo.CurrentCulture;
+        var exact = bytes == 1 ? "1 byte" : string.Create(culture, $"{bytes:N0} bytes");
+        return bytes < 1024 ? exact : $"{Bytes(bytes, culture)} ({exact})";
+    }
+
     private static string Scaled(ulong bytes, CultureInfo culture)
     {
         string[] units = ["KB", "MB", "GB", "TB", "PB"];

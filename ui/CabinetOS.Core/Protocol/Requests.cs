@@ -72,13 +72,33 @@ public sealed class VolumeInfoRequest(string path) : CoreRequest("volume_info")
 }
 
 /// <summary>
-/// Asks for every volume. Not in protocol version 7: until the core adds it,
-/// the reply is <c>error</c> with <c>unknown_request</c> (Phase 5, Part D).
+/// Asks for every volume (protocol version 8); the reply is <c>volumes</c>.
+/// An older core answers <c>unknown_request</c>, and the Drives section stays hidden.
 /// </summary>
 public sealed class ListVolumesRequest() : CoreRequest("list_volumes");
 
 /// <summary>Asks for the configuration in effect; the reply is <c>config</c>.</summary>
 public sealed class GetConfigRequest() : CoreRequest("get_config");
+
+/// <summary>Asks for one setting in effect (version 8); the reply is <c>value</c>.</summary>
+public sealed class GetValueRequest(string path) : CoreRequest("get_value")
+{
+    /// <summary>The setting as a dotted path, for example <c>ui.dualPane</c>.</summary>
+    public string Path { get; } = path;
+}
+
+/// <summary>
+/// Changes one setting (version 8); the reply is <c>ok</c>, and every client
+/// that said hello then gets <c>config_changed</c>, this one too.
+/// </summary>
+public sealed class SetValueRequest(string path, JsonElement value) : CoreRequest("set_value")
+{
+    /// <summary>The setting as a dotted path, for example <c>ui.lastPaths</c>.</summary>
+    public string Path { get; } = path;
+
+    /// <summary>Its new value, in the file's own format.</summary>
+    public JsonElement Value { get; } = value;
+}
 
 /// <summary>Asks for the compiled keymap; the reply is <c>keymap</c>.</summary>
 public sealed class GetKeymapRequest() : CoreRequest("get_keymap");
@@ -121,4 +141,120 @@ public sealed class ResetKeybindingRequest(string command) : CoreRequest("reset_
 {
     /// <summary>The command's ID.</summary>
     public string Command { get; } = command;
+}
+
+/// <summary>What a job does: <c>copy</c>, <c>move</c>, or <c>delete</c> (docs/jobs.md).</summary>
+/// <param name="Type">The kind's tag.</param>
+/// <param name="Permanent">For a delete: for good instead of to the Recycle Bin.</param>
+public sealed record JobKind(string Type, bool? Permanent = null)
+{
+    /// <summary>A copy into the destination folder.</summary>
+    public static readonly JobKind Copy = new("copy");
+
+    /// <summary>A move into the destination folder.</summary>
+    public static readonly JobKind Move = new("move");
+
+    /// <summary>A delete, to the Recycle Bin or for good.</summary>
+    public static JobKind Delete(bool permanent) => new("delete", permanent);
+
+    /// <summary>Whether this is a delete for good.</summary>
+    [JsonIgnore]
+    public bool IsPermanentDelete => Type == "delete" && Permanent == true;
+}
+
+/// <summary>The options of <c>start_job</c>; a field left null takes the core's default.</summary>
+public sealed record JobOptions(string? OnConflict = null, string? CopyLinks = null, bool? Verify = null, bool? PreserveTimestamps = null);
+
+/// <summary>Starts a copy, move or delete; the reply is <c>job_started</c>, the work comes as events.</summary>
+public sealed class StartJobRequest(JobKind kind, IReadOnlyList<string> sources) : CoreRequest("start_job")
+{
+    /// <summary>Copy, move or delete.</summary>
+    public JobKind Kind { get; } = kind;
+
+    /// <summary>Absolute paths of the files and folders.</summary>
+    public IReadOnlyList<string> Sources { get; } = sources;
+
+    /// <summary>The folder a copy or move goes into; none for a delete.</summary>
+    public string? Destination { get; init; }
+
+    /// <summary>Conflict policy and the rest; absent: the core's defaults (<c>on_conflict: ask</c>).</summary>
+    public JobOptions? Options { get; init; }
+}
+
+/// <summary>Asks for every job the core knows; the reply is <c>jobs</c>.</summary>
+public sealed class ListJobsRequest() : CoreRequest("list_jobs");
+
+/// <summary>The actions of <c>job_control</c>.</summary>
+public static class JobActions
+{
+    public const string Pause = "pause";
+    public const string Resume = "resume";
+    public const string Cancel = "cancel";
+}
+
+/// <summary>Pauses, resumes or cancels a job; the reply is <c>ok</c>.</summary>
+public sealed class JobControlRequest(ulong jobId, string action) : CoreRequest("job_control")
+{
+    /// <summary>The job, from <c>job_started</c>.</summary>
+    public ulong JobId { get; } = jobId;
+
+    /// <summary>One of <see cref="JobActions"/>.</summary>
+    public string Action { get; } = action;
+}
+
+/// <summary>A decision for a file that waits on a conflict (docs/jobs.md, "Conflicts").</summary>
+/// <param name="Type"><c>overwrite</c>, <c>skip</c>, <c>rename</c>, <c>retry</c>, <c>delete_permanently</c> or <c>cancel_job</c>.</param>
+/// <param name="NewName">For <c>rename</c>: the new name; absent, the core picks <c>name (2).ext</c>.</param>
+public sealed record Resolution(string Type, string? NewName = null)
+{
+    public const string OverwriteType = "overwrite";
+    public const string SkipType = "skip";
+    public const string RenameType = "rename";
+    public const string RetryType = "retry";
+    public const string DeletePermanentlyType = "delete_permanently";
+    public const string CancelJobType = "cancel_job";
+}
+
+/// <summary>Decides a conflict; the reply is <c>ok</c>.</summary>
+public sealed class ResolveConflictRequest(ulong jobId, ulong conflictId, Resolution resolution) : CoreRequest("resolve_conflict")
+{
+    /// <summary>The job, from <c>job_conflict</c>.</summary>
+    public ulong JobId { get; } = jobId;
+
+    /// <summary>The conflict, from <c>job_conflict</c>.</summary>
+    public ulong ConflictId { get; } = conflictId;
+
+    /// <summary>The decision.</summary>
+    public Resolution Resolution { get; } = resolution;
+
+    /// <summary>Also the job's other conflicts of this kind, waiting and still to come.</summary>
+    public bool ApplyToSameKind { get; init; }
+}
+
+/// <summary>
+/// Opens a file with its default program (protocol version 8, "open_path");
+/// the reply is <c>ok</c>. Built against the shape the core agreed on; an
+/// older core answers <c>unknown_request</c> and the UI stops offering it.
+/// </summary>
+public sealed class OpenPathRequest(string path) : CoreRequest("open_path")
+{
+    /// <summary>The file, as an absolute path.</summary>
+    public string Path { get; } = path;
+}
+
+/// <summary>Creates one folder (version 8, "create_directory"); the reply is <c>ok</c>.</summary>
+public sealed class CreateDirectoryRequest(string path) : CoreRequest("create_directory")
+{
+    /// <summary>The new folder, as an absolute path.</summary>
+    public string Path { get; } = path;
+}
+
+/// <summary>Renames one entry in its folder (version 8, "rename"); the reply is <c>ok</c>.</summary>
+public sealed class RenameRequest(string path, string newName) : CoreRequest("rename")
+{
+    /// <summary>The entry, as an absolute path.</summary>
+    public string Path { get; } = path;
+
+    /// <summary>The new name, without a folder part.</summary>
+    public string NewName { get; } = newName;
 }

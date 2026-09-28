@@ -89,11 +89,44 @@ public sealed record VolumeInfoReply(
     public VolumeDetails ToDetails() => new(DriveLetter, VolumeGuidPath, Filesystem, Label, TotalBytes, FreeBytes, Disk);
 }
 
-/// <summary>Reply to <c>list_volumes</c> (not in protocol version 7 yet).</summary>
+/// <summary>Reply to <c>list_volumes</c>: every drive letter's volume, in letter order.</summary>
 public sealed record VolumesReply(IReadOnlyList<VolumeDetails> Volumes) : CoreReply;
 
 /// <summary>Reply to <c>get_config</c>: the whole configuration, defaults included.</summary>
 public sealed record ConfigReply(string Path, JsonElement Config) : CoreReply;
+
+/// <summary>Reply to <c>get_value</c>: one setting in effect, in the file's own format.</summary>
+public sealed record ValueReply(JsonElement Value) : CoreReply;
+
+/// <summary>Reply to <c>start_job</c>: the paths were checked and the job is queued.</summary>
+public sealed record JobStartedReply(ulong JobId) : CoreReply;
+
+/// <summary>A job as <c>list_jobs</c> describes it: its progress and what it works on.</summary>
+public sealed record JobInfo(
+    JobKind Kind,
+    IReadOnlyList<string> Sources,
+    string? Destination,
+    ulong JobId,
+    JobState State,
+    ulong BytesDone,
+    ulong BytesTotal,
+    ulong FilesDone,
+    ulong FilesTotal,
+    ulong FilesSkipped,
+    ulong FilesFailed,
+    ulong ConflictsOpen,
+    string? CurrentPath,
+    ulong SpeedBps,
+    ulong? EtaSeconds,
+    ulong ElapsedMs)
+{
+    /// <summary>The progress part, as a <c>job_progress</c> event carries it.</summary>
+    public JobProgressEvent ToProgress() => new(JobId, State, BytesDone, BytesTotal, FilesDone, FilesTotal,
+        FilesSkipped, FilesFailed, ConflictsOpen, CurrentPath, SpeedBps, EtaSeconds, ElapsedMs);
+}
+
+/// <summary>Reply to <c>list_jobs</c>: every job, oldest first (the core keeps the last 100 finished ones).</summary>
+public sealed record JobsReply(IReadOnlyList<JobInfo> Jobs) : CoreReply;
 
 /// <summary>One binding of the compiled keymap.</summary>
 public sealed record KeymapBinding(string Keys, string Command, string? When);
@@ -146,7 +179,11 @@ public static class ErrorCodes
     public const string NotFound = "not_found";
     public const string AccessDenied = "access_denied";
     public const string InvalidPath = "invalid_path";
+    public const string AlreadyExists = "already_exists";
     public const string NoSuchListing = "no_such_listing";
+    public const string NoSuchJob = "no_such_job";
+    public const string NoSuchConflict = "no_such_conflict";
+    public const string InvalidResolution = "invalid_resolution";
     public const string UnknownCommand = "unknown_command";
     public const string NotImplemented = "not_implemented";
     public const string InvalidKeys = "invalid_keys";
