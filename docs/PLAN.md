@@ -199,11 +199,13 @@ Done 2026-09-28: the core side, and the terminal pane in the UI (Phase 5c). Buil
 
 Articles: 4, 9.
 
-### Phase 9 — Marketplace and theme engine
+### Phase 9 — Marketplace and theme engine — UI half built 2026-09-28
 
 Goal: install and share extensions and themes.
 
 Produces: the JSON theme format (accent, Mica tint, palette) with live apply; a marketplace index served as static files first; install, update and remove flows; publisher trust.
+
+**The UI half of Phase 9, built 2026-09-28.** Themes apply live. Every design token is one app-wide brush whose colour the theme changes in place, so `get_theme` at start and each `theme_changed` repaint the window without a restart: text, layers, controls, the Acrylic of the palette, menus and flyout, the terminal's 16 ANSI colours, the file glyphs, the two-tone folder and the capability levels. The accent becomes WinUI's too (`SystemAccentColor` and six computed shades); `accent: null` follows the Windows accent, `mica` tints a `MicaController`, and `kind: light` turns WinUI's own controls light. "Preferences: Color Theme" (Ctrl+K Ctrl+T) lists the themes with swatches and applies one with `set_value ui.theme`. The marketplace (design view C, Ctrl+Shift+X or the command bar's button) takes the main column's place: Discover, Plugins, Themes and Installed with counts, a search sent after 150 ms of quiet, the card grid and a 340 px detail column. A plugin gets the permissions review with the index's capabilities before anything is downloaded; "Allow and install" installs it and grants them, and the plugin starts. A theme installs and applies; uninstall asks first; Source opens only web pages. The empty states name `marketplace.index` and say when the index is the unpublished placeholder. The live check found that a light theme ended the window (WinUI's backdrop callback), and it was fixed. 395 tests, seven against the real core (Nord through the picker; the local index read, Hello installed, granted, active and removed). Checked live on 2026-09-28 (release builds, locked screen) with the local index of `sdk/marketplace/build-index.ps1` plus one light theme. Snapshots in [log/2026-09-28/](log/2026-09-28/). Open for the core: which extensions the marketplace installed, the Mica tint in `list_themes`, and a light or system default theme. Guide: [ui.md](ui.md), "Themes" and "The marketplace". The core side (the theme format, the shipped themes, the marketplace client against a local index) is recorded when its report lands.
 
 Articles: 2, 8.
 

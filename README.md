@@ -24,16 +24,17 @@ WebAssembly plugins whose crashes it contains, searches whole NTFS volumes
 through an elevated indexer (or walks folders without it), and runs shells
 in pseudo-consoles, all over a user-only named pipe, with the indexer behind
 a read-only pipe of its own and each shell's bytes on a pipe of their own
-(`core/`, 434 tests, CI green). Phase 5, the WinUI 3 shell, is built
-(`ui/`, 327 tests, CI green): two panes over the core's shared-memory
-listings with the shell's type names and icons, breadcrumbs, a status bar,
-the command palette with chord keys and inline rebinding, copy, move,
-delete, rename, new folder and open with the transfer flyout and conflict
-decisions, file search, the plugin list and permissions review, the
-integrated terminal in a Tool Dock, and Tool Extensions each in a WebView2
-process of its own, with Markdown Preview as the first (opt-in, in
-`sdk/tools`); its scrolling check and the real-key run still wait for an
-unlocked screen.
+(`core/`, 434 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 395
+tests): two panes over the core's shared-memory listings with the shell's
+type names and icons, breadcrumbs, a status bar, the command palette with
+chord keys and inline rebinding, copy, move, delete, rename, new folder and
+open with the transfer flyout and conflict decisions, file search, the
+plugin list and permissions review, the integrated terminal in a Tool Dock,
+Tool Extensions each in a WebView2 process of its own, with Markdown
+Preview as the first (opt-in, in `sdk/tools`), colour themes applied live
+with a theme picker, and the marketplace view, which installs plugins and
+themes from an index through the core; its scrolling check and the
+real-key run still wait for an unlocked screen.
 
 ## Documents
 
