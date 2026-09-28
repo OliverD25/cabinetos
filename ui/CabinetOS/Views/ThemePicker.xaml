@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.ThemePicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <UserControl.Resources>
+        <!-- The palette's entrance: 160 ms, opacity, 6 px down, scale .98 to 1. -->
+        <Storyboard x:Key="Entrance">
+            <DoubleAnimation
+                Storyboard.TargetName="Panel"
+                Storyboard.TargetProperty="Opacity"
+                From="0"
+                To="1"
+                Duration="0:0:0.16" />
+            <DoubleAnimation
+                Storyboard.TargetName="PanelTransform"
+                Storyboard.TargetProperty="TranslateY"
+                From="-6"
+                To="0"
+                Duration="0:0:0.16">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </UserControl.Resources>
+
+    <!-- The palette's frame: a transparent scrim (a click closes) and the 640 px Acrylic panel. -->
+    <Grid x:Name="Scrim" Background="Transparent">
+        <Border
+            x:Name="Panel"
+            Width="640"
+            Margin="0,64,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            Background="{ThemeResource CbPaletteAcrylicBrush}"
+            BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            IsTabStop="True"
+            TabFocusNavigation="Once"
+            Translation="0,0,32"
+            UseSystemFocusVisuals="False">
+            <Border.RenderTransform>
+                <CompositeTransform x:Name="PanelTransform" />
+            </Border.RenderTransform>
+            <Border.Shadow>
+                <ThemeShadow />
+            </Border.Shadow>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Padding="16,12,16,10" ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource CbTextPrimaryBrush}"
+                        Text="Color Theme" />
+                    <TextBlock
+                        x:Name="CountText"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource CbHintTextBrush}" />
+                </Grid>
+
+                <StackPanel
+                    x:Name="Rows"
+                    Grid.Row="1"
+                    Padding="6,0,6,6" />
+
+                <Border
+                    Grid.Row="2"
+                    Padding="16,7"
+                    BorderBrush="{ThemeResource CbDividerBrush}"
+                    BorderThickness="0,1,0,0">
+                    <TextBlock
+                        x:Name="FooterText"
+                        FontSize="11"
+                        Foreground="{ThemeResource CbHintTextBrush}"
+                        Text="↑↓ choose · ↵ apply · Esc close · themes live in %LOCALAPPDATA%\CabinetOS\themes"
+                        TextTrimming="CharacterEllipsis" />
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

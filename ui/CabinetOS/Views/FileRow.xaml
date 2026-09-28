@@ -3,6 +3,7 @@
     x:Class="CabinetOS.Views.FileRow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:CabinetOS.Views"
     IsTabStop="False">
     <Grid
         x:Name="Root"
@@ -63,6 +64,10 @@
                     VerticalAlignment="Center"
                     FontSize="16"
                     Foreground="{ThemeResource CbRowMetaBrush}" />
+                <local:FolderGlyph
+                    x:Name="FolderIcon"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed" />
                 <!-- The shell's icon (get_icon) replaces the glyph once it arrives. -->
                 <Image
                     x:Name="IconImage"

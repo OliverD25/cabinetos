@@ -13,6 +13,8 @@ public partial class App : Application
     public App(string[] args)
     {
         _args = args;
+        // The design's mode and the default theme's; a light theme switches the window's content (docs/ui.md, "Themes").
+        RequestedTheme = ApplicationTheme.Dark;
         InitializeComponent();
         UnhandledException += OnUnhandledException;
         DebugSettings.XamlResourceReferenceFailed += (_, e) => LogXamlFailure("a resource reference failed", e.Message);

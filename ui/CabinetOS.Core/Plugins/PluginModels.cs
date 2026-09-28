@@ -1,20 +1,26 @@
 using System.Globalization;
 using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Protocol;
+using CabinetOS.Core.Themes;
 
 namespace CabinetOS.Core.Plugins;
 
-/// <summary>The capability levels of docs/plugins.md and the design's colors for them.</summary>
+/// <summary>The capability levels of docs/plugins.md and their colours.</summary>
 public static class CapabilityLevels
 {
-    /// <summary>The dot's color: low green, medium yellow, high red (docs/design/README.md, "Permission levels").</summary>
-    public static string Color(string level) => level switch
+    /// <summary>
+    /// The colours in use: the design's (low green, medium yellow, high red;
+    /// docs/design/README.md, "Permission levels") until a theme sets its own
+    /// (<c>permissionLow</c>, <c>permissionMedium</c>, <c>permissionHigh</c>).
+    /// </summary>
+    public static LevelColors Current { get; set; } = LevelColors.Design;
+
+    /// <summary>The dot's colour for <paramref name="level"/>, as <c>#RRGGBB</c>.</summary>
+    public static string Color(string level)
     {
-        "low" => "#6CCB5F",
-        "medium" => "#F2C063",
-        "high" => "#F27A6C",
-        _ => "#8B8B8B",
-    };
+        var color = Current.For(level);
+        return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+    }
 }
 
 /// <summary>One capability as the list and the review dialog show it.</summary>

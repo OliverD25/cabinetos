@@ -45,6 +45,8 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(GrantCapabilitiesRequest))]
 [JsonSerializable(typeof(DescribeEntriesRequest))]
 [JsonSerializable(typeof(GetIconRequest))]
+[JsonSerializable(typeof(ListThemesRequest))]
+[JsonSerializable(typeof(GetThemeRequest))]
 [JsonSerializable(typeof(PongReply))]
 [JsonSerializable(typeof(OkReply))]
 [JsonSerializable(typeof(ErrorReply))]
@@ -68,6 +70,8 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(PluginsReply))]
 [JsonSerializable(typeof(EntryDetailsReply))]
 [JsonSerializable(typeof(IconReply))]
+[JsonSerializable(typeof(ThemesReply))]
+[JsonSerializable(typeof(ThemeReply))]
 [JsonSerializable(typeof(ListingRefreshedEvent))]
 [JsonSerializable(typeof(ListingLostEvent))]
 [JsonSerializable(typeof(ConfigChangedEvent))]
@@ -80,4 +84,5 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(PluginCrashedEvent))]
 [JsonSerializable(typeof(TerminalExitedEvent))]
 [JsonSerializable(typeof(VolumesChangedEvent))]
+[JsonSerializable(typeof(ThemeChangedEvent))]
 internal sealed partial class ProtocolJson : JsonSerializerContext;

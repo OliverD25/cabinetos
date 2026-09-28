@@ -29,14 +29,8 @@
                     <Border
                         Width="18"
                         Height="18"
-                        CornerRadius="5">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                <GradientStop Offset="0" Color="{ThemeResource SystemAccentColorLight2}" />
-                                <GradientStop Offset="1" Color="#FF8A5CF6" />
-                            </LinearGradientBrush>
-                        </Border.Background>
-                    </Border>
+                        Background="{StaticResource CbAppTileBrush}"
+                        CornerRadius="5" />
                     <TextBlock
                         VerticalAlignment="Center"
                         FontSize="12"
@@ -396,6 +390,8 @@
         <views:FileContextMenu x:Name="FileMenu" />
 
         <views:CommandPalette x:Name="Palette" Visibility="Collapsed" />
+
+        <views:ThemePicker x:Name="ThemesView" />
 
         <views:PluginsPanel x:Name="PluginsView" />
 

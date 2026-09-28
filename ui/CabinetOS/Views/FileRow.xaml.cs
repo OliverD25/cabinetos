@@ -1,11 +1,11 @@
 using CabinetOS.Core.Listing;
 using CabinetOS.Core.Presentation;
+using CabinetOS.Services;
 using CabinetOS.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Windows.UI;
 
 namespace CabinetOS.Views;
 
@@ -16,25 +16,9 @@ namespace CabinetOS.Views;
 /// </summary>
 public sealed partial class FileRow : UserControl
 {
-    // Segoe Fluent Icons: Link, FolderFill, Document.
+    // Segoe Fluent Icons: Link, Document (folders draw FolderGlyph).
     private const string LinkGlyph = "";
-    private const string FolderGlyph = "";
     private const string FileGlyph = "";
-
-    // The design's file-type strokes (docs/design/README.md, "Color").
-    private static readonly Dictionary<string, SolidColorBrush> TypeBrushes = new(StringComparer.Ordinal)
-    {
-        ["md"] = Brush(0x60, 0xCD, 0xFF),
-        ["rs"] = Brush(0xF0, 0x90, 0x6C),
-        ["toml"] = Brush(0xC9, 0xB6, 0xFF),
-        ["exe"] = Brush(0x6C, 0xCB, 0x5F),
-        ["dll"] = Brush(0x6C, 0xCB, 0x5F),
-        ["bin"] = Brush(0xE0, 0x70, 0x5E),
-        ["pdf"] = Brush(0xE0, 0x70, 0x5E),
-        ["zip"] = Brush(0xF2, 0xC0, 0x63),
-    };
-
-    private static readonly SolidColorBrush FolderBrush = Brush(0xF2, 0xC0, 0x63);
 
     private readonly Brush _plainIconBrush;
     private RowItem? _item;
@@ -65,9 +49,9 @@ public sealed partial class FileRow : UserControl
     /// <summary>The row's index in its listing, or -1.</summary>
     public int Index { get; private set; } = -1;
 
-    /// <summary>The design's stroke for a file named <paramref name="name"/> (the editor tab's glyph too).</summary>
+    /// <summary>The theme's stroke for a file named <paramref name="name"/> (the editor tab's glyph too).</summary>
     public static Brush IconBrushFor(string name) =>
-        TypeBrushes.TryGetValue(DisplayFormat.Extension(name), out var brush) ? brush : ThemeResources.Brush("CbRowMetaBrush");
+        ThemeBrushes.FileType(DisplayFormat.Extension(name)) ?? ThemeResources.Brush("CbRowMetaBrush");
 
     /// <summary>The key of the shell icon the row shows or waits for, or null.</summary>
     public string? IconKey { get; private set; }
@@ -165,25 +149,24 @@ public sealed partial class FileRow : UserControl
             IconImage.Source = image;
             IconImage.Visibility = Visibility.Visible;
             Icon.Visibility = Visibility.Collapsed;
+            FolderIcon.Visibility = Visibility.Collapsed;
             return;
         }
         IconImage.Source = null;
         IconImage.Visibility = Visibility.Collapsed;
-        Icon.Visibility = Visibility.Visible;
+        // A folder until its shell icon comes: the design's two-tone folder in the theme's colours.
+        var plainFolder = isFolder && kind != EntryKind.Link;
+        FolderIcon.Visibility = plainFolder ? Visibility.Visible : Visibility.Collapsed;
+        Icon.Visibility = plainFolder ? Visibility.Collapsed : Visibility.Visible;
         if (kind == EntryKind.Link)
         {
             Icon.Glyph = LinkGlyph;
-            Icon.Foreground = isFolder ? FolderBrush : _plainIconBrush;
+            Icon.Foreground = isFolder ? ThemeResources.Brush("CbFolderBrush") : _plainIconBrush;
         }
-        else if (isFolder)
-        {
-            Icon.Glyph = FolderGlyph;
-            Icon.Foreground = FolderBrush;
-        }
-        else
+        else if (!isFolder)
         {
             Icon.Glyph = FileGlyph;
-            Icon.Foreground = TypeBrushes.TryGetValue(DisplayFormat.Extension(name), out var brush) ? brush : _plainIconBrush;
+            Icon.Foreground = ThemeBrushes.FileType(DisplayFormat.Extension(name)) ?? _plainIconBrush;
         }
     }
 
@@ -201,6 +184,4 @@ public sealed partial class FileRow : UserControl
 
     private void UpdateState() =>
         VisualStateManager.GoToState(this, _selected ? "Selected" : _pointerOver ? "PointerOver" : "Normal", false);
-
-    private static SolidColorBrush Brush(byte r, byte g, byte b) => new(Color.FromArgb(0xFF, r, g, b));
 }

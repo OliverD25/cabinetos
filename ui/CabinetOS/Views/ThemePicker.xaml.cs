@@ -1,0 +1,209 @@
+using System.Text.Json;
+using CabinetOS.Core.Themes;
+using CabinetOS.Services;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.System;
+using Windows.UI;
+
+namespace CabinetOS.Views;
+
+/// <summary>
+/// The theme picker (<c>preferences.selectColorTheme</c>, Ctrl+K Ctrl+T):
+/// the palette's frame with one row per theme, each with a swatch (the
+/// accent over the Mica tint), its name and author, and a check on the
+/// theme in effect. Up and Down move, Enter or a click applies through the
+/// window's router, Esc and the scrim close.
+/// </summary>
+public sealed partial class ThemePicker : UserControl
+{
+    private readonly Storyboard _entrance;
+    private ThemePickerModel? _model;
+
+    /// <summary>Creates the picker, hidden.</summary>
+    public ThemePicker()
+    {
+        InitializeComponent();
+        _entrance = (Storyboard)Resources["Entrance"];
+        Panel.PreviewKeyDown += OnKeyDown;
+        Scrim.PointerPressed += (_, e) =>
+        {
+            if (ReferenceEquals(e.OriginalSource, Scrim))
+            {
+                _ = RunCommand?.Invoke("overlay.close", null, "mouse");
+            }
+        };
+        SizeChanged += (_, e) => Panel.Width = Math.Max(200, Math.Min(640, e.NewSize.Width - 32));
+    }
+
+    /// <summary>Runs a command through the window's router: (command, args, trigger).</summary>
+    public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
+
+    /// <summary>The accent a theme without one shows: the Windows accent.</summary>
+    public Func<Argb>? SystemAccent { get; set; }
+
+    /// <summary>Whether the picker is shown.</summary>
+    public bool IsOpen => Visibility == Visibility.Visible;
+
+    /// <summary>The picker's state.</summary>
+    public ThemePickerModel? Model
+    {
+        get => _model;
+        set
+        {
+            if (_model is not null)
+            {
+                _model.Changed -= Render;
+            }
+            _model = value;
+            if (_model is not null)
+            {
+                _model.Changed += Render;
+            }
+            Render();
+        }
+    }
+
+    /// <summary>Shows the picker and gives it the keyboard.</summary>
+    public void Open()
+    {
+        Visibility = Visibility.Visible;
+        _entrance.Begin();
+        Render();
+        Panel.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>Hides the picker.</summary>
+    public void Close() => Visibility = Visibility.Collapsed;
+
+    private void OnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case VirtualKey.Up:
+                _model?.Move(-1);
+                e.Handled = true;
+                break;
+            case VirtualKey.Down:
+                _model?.Move(1);
+                e.Handled = true;
+                break;
+            case VirtualKey.Home:
+                _model?.SetHighlight(0);
+                e.Handled = true;
+                break;
+            case VirtualKey.End:
+                _model?.SetHighlight((_model?.Rows.Count ?? 1) - 1);
+                e.Handled = true;
+                break;
+            case VirtualKey.Enter:
+                _ = RunCommand?.Invoke("theme.apply", null, "key");
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void Render()
+    {
+        Rows.Children.Clear();
+        if (_model is not { } model)
+        {
+            return;
+        }
+        CountText.Text = model.Rows.Count == 1 ? "1 theme" : $"{model.Rows.Count} themes";
+        for (var i = 0; i < model.Rows.Count; i++)
+        {
+            Rows.Children.Add(RowFor(model.Rows[i], i, i == model.Highlight));
+        }
+        FooterText.Text = model.Error ?? "↑↓ choose · ↵ apply · Esc close · themes live in %LOCALAPPDATA%\\CabinetOS\\themes";
+        FooterText.Foreground = ThemeResources.Brush(model.Error is null ? "CbHintTextBrush" : "CbErrorTextBrush");
+    }
+
+    // A row, 36 px: the highlight's pill and fill, the swatch, name and author, and a check on the theme in effect.
+    private Grid RowFor(ThemeChoice choice, int index, bool highlighted)
+    {
+        var accent = choice.Info.Accent is { } own && Argb.TryParse(own, out var parsed) ? parsed : SystemAccent?.Invoke() ?? new Argb(0xFF, 0x60, 0xCD, 0xFF);
+        var tint = choice.Tint is { } tintText && Argb.TryParse(tintText, out var tintColor) ? tintColor : new Argb(0xFF, 0x20, 0x20, 0x20);
+        var swatch = new Border
+        {
+            Width = 40,
+            Height = 22,
+            CornerRadius = new CornerRadius(4),
+            BorderThickness = new Thickness(1),
+            BorderBrush = ThemeResources.Brush("CbOverlayStrokeBrush"),
+            Background = new SolidColorBrush(Color.FromArgb(0xFF, tint.R, tint.G, tint.B)),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new Ellipse
+            {
+                Width = 10,
+                Height = 10,
+                Fill = new SolidColorBrush(Color.FromArgb(0xFF, accent.R, accent.G, accent.B)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        ToolTipService.SetToolTip(swatch, choice.Info.Accent is null ? "Follows the Windows accent colour" : $"Accent {choice.Info.Accent}");
+
+        var name = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        name.Children.Add(new TextBlock { Text = choice.Info.Name, Foreground = ThemeResources.Brush("CbTextPrimaryBrush") });
+        name.Children.Add(new TextBlock
+        {
+            Text = choice.Info.Author,
+            FontSize = 12,
+            Foreground = ThemeResources.Brush("CbHintTextBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        if (choice.Info.Kind == "light")
+        {
+            name.Children.Add(new TextBlock { Text = "light", FontSize = 11, Foreground = ThemeResources.Brush("CbHintTextBrush"), VerticalAlignment = VerticalAlignment.Center });
+        }
+
+        var check = new FontIcon
+        {
+            Glyph = "",
+            FontSize = 12,
+            Foreground = ThemeResources.Brush("CbAccentBrush"),
+            Visibility = choice.IsCurrent ? Visibility.Visible : Visibility.Collapsed,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ToolTipService.SetToolTip(check, "The theme in effect");
+
+        var row = new Grid
+        {
+            Height = 36,
+            Padding = new Thickness(12, 0, 12, 0),
+            ColumnSpacing = 12,
+            CornerRadius = new CornerRadius(4),
+            Background = highlighted ? ThemeResources.Brush("CbSelectedFillBrush") : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+        };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.Children.Add(swatch);
+        Grid.SetColumn(name, 1);
+        row.Children.Add(name);
+        Grid.SetColumn(check, 2);
+        row.Children.Add(check);
+        if (highlighted)
+        {
+            row.Children.Add(new Rectangle
+            {
+                Width = 3,
+                Height = 16,
+                RadiusX = 1.5,
+                RadiusY = 1.5,
+                Margin = new Thickness(-12, 0, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                Fill = ThemeResources.Brush("CbAccentBrush"),
+            });
+        }
+        row.PointerEntered += (_, _) => _model?.SetHighlight(index);
+        row.Tapped += (_, _) => _ = RunCommand?.Invoke("theme.apply", CommandArgs.Object(("index", index)), "mouse");
+        return row;
+    }
+}

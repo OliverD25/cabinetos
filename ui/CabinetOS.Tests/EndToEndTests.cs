@@ -4,6 +4,7 @@ using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Jobs;
 using CabinetOS.Core.Keys;
 using CabinetOS.Core.Terminal;
+using CabinetOS.Core.Themes;
 using CabinetOS.Core.Listing;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Tests.Support;
@@ -285,6 +286,52 @@ public class EndToEndTests
         }
 
         static int CountOf(string text, string part) => text.Split(part).Length - 1;
+    }
+
+    [Fact]
+    public async Task Choosing_Nord_in_the_picker_brings_theme_changed_and_the_mapper_reports_its_accent()
+    {
+        var coreExe = FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-theme");
+        try
+        {
+            await using var core = await StartCoreAsync(coreExe, root);
+            var client = core.Client;
+            await client.HelloAsync();
+            var first = await client.RequestAsync(new GetThemeRequest());
+            if (first is ErrorReply { Code: ErrorCodes.UnknownRequest })
+            {
+                Assert.Skip("This core has no themes yet: build the core again.");
+            }
+            Assert.Equal("default", Assert.IsType<ThemeReply>(first).Theme.Id);
+
+            // The window's way: the picker lists the themes and applies one with set_value ui.theme.
+            var picker = new ThemePickerModel(client);
+            Assert.True(await picker.LoadAsync("default"));
+            Assert.Equal(["catppuccin-mocha", "default", "nord", "rose-pine-moon"], picker.Rows.Select(r => r.Info.Id).Order());
+            Assert.Equal("#2E3440", picker.Rows.Single(r => r.Info.Id == "nord").Tint);
+            Assert.True(await picker.ApplyAsync(picker.Rows.ToList().FindIndex(r => r.Info.Id == "nord")));
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            ThemeChangedEvent? changed = null;
+            while (changed is null)
+            {
+                changed = await client.Events.ReadAsync(timeout.Token) as ThemeChangedEvent;
+            }
+            var look = ThemeMapper.Map(changed.Theme, ThemeMapper.Shades(new Argb(0xFF, 0x60, 0xCD, 0xFF), light: false));
+            Assert.Equal(("nord", "#FF88C0D0"), (look.Id, look.Accent.ToString()));
+            Assert.Equal(("#FF2E3440", 0.88), (look.Mica!.Tint.ToString(), look.Mica.Opacity));
+            Assert.Equal(16, look.Terminal.Ansi.Count);
+
+            // The choice is the configuration's: a restart starts with Nord.
+            Assert.Equal("nord", Assert.IsType<ThemeReply>(await client.RequestAsync(new GetThemeRequest())).Theme.Id);
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+            Assert.Contains("nord", File.ReadAllText(Path.Combine(root, "config", "cabinetos.json")));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
     }
 
     private static string FindCoreOrSkip()

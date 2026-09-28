@@ -59,9 +59,12 @@ internal static class DevSnapshots
     /// Renders <paramref name="element"/> to <c>&lt;folder&gt;\&lt;name&gt;.png</c>.
     /// A WebView2 draws outside XAML, so <c>RenderTargetBitmap</c> leaves it
     /// empty: each page of <paramref name="pages"/> that is on screen is
-    /// captured by WebView2 itself and drawn over its place.
+    /// captured by WebView2 itself and drawn over its place. The backdrop
+    /// (Mica) is not part of the window's content either; with a
+    /// <paramref name="backdrop"/> colour the image is laid over it, opaque,
+    /// as a stand-in for Mica and its tint.
     /// </summary>
-    public static async Task RenderAsync(FrameworkElement element, string name, IEnumerable<WebViewHost>? pages = null)
+    public static async Task RenderAsync(FrameworkElement element, string name, IEnumerable<WebViewHost>? pages = null, Windows.UI.Color? backdrop = null)
     {
         if (Folder is not { } folder)
         {
@@ -73,6 +76,18 @@ internal static class DevSnapshots
         foreach (var page in pages ?? [])
         {
             await DrawPageAsync(page, element, pixels, bitmap.PixelWidth, bitmap.PixelHeight);
+        }
+        if (backdrop is { } under)
+        {
+            // Premultiplied BGRA "over" an opaque colour.
+            for (var i = 0; i < pixels.Length; i += 4)
+            {
+                var clear = 255 - pixels[i + 3];
+                pixels[i] = (byte)(pixels[i] + (under.B * clear / 255));
+                pixels[i + 1] = (byte)(pixels[i + 1] + (under.G * clear / 255));
+                pixels[i + 2] = (byte)(pixels[i + 2] + (under.R * clear / 255));
+                pixels[i + 3] = 255;
+            }
         }
         Directory.CreateDirectory(folder);
         var path = Path.Combine(folder, name + ".png");

@@ -94,8 +94,13 @@ public static class TerminalPageMessages
         w.WriteEndArray();
     });
 
-    /// <summary>Colors and font from the design tokens.</summary>
-    public static string Theme(string background, string foreground, string cursor, string selection, string fontFamily, int fontSize) => Write(w =>
+    /// <summary>
+    /// Colours and font: the theme's terminal colours (docs/themes.md), and
+    /// its 16 ANSI colours in order (black, red, green, yellow, blue, magenta,
+    /// cyan, white, then the bright ones) when it has them.
+    /// </summary>
+    public static string Theme(string background, string foreground, string cursor, string selection, string fontFamily, int fontSize,
+        IReadOnlyList<string>? ansi = null) => Write(w =>
     {
         w.WriteString("type", "theme");
         w.WriteString("background", background);
@@ -104,6 +109,15 @@ public static class TerminalPageMessages
         w.WriteString("selection", selection);
         w.WriteString("fontFamily", fontFamily);
         w.WriteNumber("fontSize", fontSize);
+        if (ansi is { Count: 16 })
+        {
+            w.WriteStartArray("ansi");
+            foreach (var color in ansi)
+            {
+                w.WriteStringValue(color);
+            }
+            w.WriteEndArray();
+        }
     });
 
     private static byte[] DecodeBase64(string? data)

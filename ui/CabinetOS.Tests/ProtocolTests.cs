@@ -62,8 +62,13 @@ public class ProtocolTests
             new GrantCapabilitiesRequest("reader", ["fs:read"]),
             new DescribeEntriesRequest(7, 0, 128),
             new GetIconRequest("ext:.txt", 24),
+            new ListThemesRequest(),
+            new GetThemeRequest(),
+            new GetThemeRequest { ThemeId = "nord" },
         ];
     }
+
+    private const string NordTheme = """{"id":"nord","name":"Nord","author":"CabinetOS","attribution":"Colours from the Nord palette.","version":"1.0.0","kind":"dark","accent":"#88C0D0","mica":{"tint":"#2E3440","opacity":0.88},"palette":{"textPrimary":"#ECEFF4","textSecondary":"#D8DEE9","textTertiary":"#D8DEE98B","textDisabled":"#D8DEE95D","layerFill":"#3B425280","layerStroke":"#434C5E99","layerStrokeActive":"#4C566A","controlFill":"#3B4252B3","controlFillHover":"#434C5EB3","acrylicTint":"#2E3440B8","terminalBackground":"#2E344099","folderIcon":"#EBCB8B","folderIconFront":"#F2DDB4","fileTypeColors":{"md":"#88C0D0","rs":"#D08770","toml":"#B48EAD","exe":"#A3BE8C","dll":"#A3BE8C","bin":"#BF616A","pdf":"#BF616A","zip":"#EBCB8B"},"permissionLow":"#A3BE8C","permissionMedium":"#EBCB8B","permissionHigh":"#BF616A"},"terminal":{"foreground":"#D8DEE9","background":"#2E3440","cursor":"#D8DEE9","ansi":["#3B4252","#BF616A","#A3BE8C","#EBCB8B","#81A1C1","#B48EAD","#88C0D0","#E5E9F0","#4C566A","#BF616A","#A3BE8C","#EBCB8B","#81A1C1","#B48EAD","#8FBCBB","#ECEFF4"]}}""";
 
     /// <summary>
     /// Requests of protocol version 8 built against the shapes the core agreed
@@ -95,7 +100,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(33, checkedTypes.Count);
+        Assert.Equal(35, checkedTypes.Count);
     }
 
     [Fact]
@@ -264,6 +269,23 @@ public class ProtocolTests
                     Assert.Equal(("fs:read", "medium", false), (plugin.Capabilities[1].Name, plugin.Capabilities[1].Level, plugin.Capabilities[1].Granted));
                     Assert.Single(plugin.Capabilities[1].Roots!);
                 }),
+            ($$$"""{"id":"{{{Id}}}","type":"themes","themes":[{"id":"default","name":"Default","author":"CabinetOS","version":"1.0.0","kind":"dark","accent":null},{"id":"nord","name":"Nord","author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#88C0D0"}]}""",
+                b =>
+                {
+                    var themes = Assert.IsType<ThemesReply>(b).Themes;
+                    Assert.Equal(new ThemeInfo("default", "Default", "CabinetOS", "1.0.0", "dark"), themes[0]);
+                    Assert.Equal("#88C0D0", themes[1].Accent);
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"theme","theme":{{{NordTheme}}}}""",
+                b =>
+                {
+                    var theme = Assert.IsType<ThemeReply>(b).Theme;
+                    Assert.Equal(("nord", "#88C0D0", 0.88), (theme.Id, theme.Accent, theme.Mica!.Opacity));
+                    Assert.Equal(("#D8DEE98B", "#F2DDB4"), (theme.Palette.TextTertiary, theme.Palette.FolderIconFront));
+                    Assert.Equal("#BF616A", theme.Palette.FileTypeColors["pdf"]);
+                    Assert.Equal(16, theme.Terminal.Ansi.Count);
+                    Assert.False(theme.IsLight);
+                }),
         };
         foreach (var (json, check) in samples)
         {
@@ -329,6 +351,8 @@ public class ProtocolTests
                 b => Assert.Equal(22548578304UL, Assert.IsType<JobConflictEvent>(b).Kind.Size)),
             ($$$"""{"id":"{{{Id}}}","type":"job_conflict","conflict_id":11,"job_id":8,"kind":{"type":"io","code":23,"message":"Data error (cyclic redundancy check)."},"source":"E:\\x.bin"}""",
                 b => Assert.Equal((23U, "Data error (cyclic redundancy check)."), (((JobConflictEvent)b).Kind.Code!.Value, ((JobConflictEvent)b).Kind.Message))),
+            ($$$"""{"id":"{{{Id}}}","type":"theme_changed","theme":{{{NordTheme}}}}""",
+                b => Assert.Equal("#2E3440", Assert.IsType<ThemeChangedEvent>(b).Theme.Mica!.Tint)),
         };
         foreach (var (json, check) in samples)
         {

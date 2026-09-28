@@ -11,150 +11,108 @@
 
             <!--
               Design tokens (docs/design/README.md, "Design tokens (dark mode)").
-              Dark uses the design's values. Light has no design yet, so each token
-              falls back to the Windows light-theme brush with the same role.
+              The theme in effect sets every one of them at run time: the core sends
+              it, ThemeMapper turns it into these keys, and the window changes each
+              brush in place (docs/ui.md, "Themes"). The values below are what the
+              shipped default theme (sdk/themes/default.json) maps to, so the window
+              looks the same before and after the core's theme arrives; a test holds
+              them equal. The tokens are not per light/dark: the theme decides both.
             -->
-            <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Default">
-                    <SolidColorBrush x:Key="CbLayerFillBrush" Color="#0DFFFFFF" />
-                    <SolidColorBrush x:Key="CbLayerStrokeBrush" Color="#12FFFFFF" />
-                    <SolidColorBrush x:Key="CbLayerStrokeActiveBrush" Color="#2EFFFFFF" />
-                    <SolidColorBrush x:Key="CbDividerBrush" Color="#0FFFFFFF" />
-                    <SolidColorBrush x:Key="CbControlFillBrush" Color="#0FFFFFFF" />
-                    <SolidColorBrush x:Key="CbControlStrokeBrush" Color="#12FFFFFF" />
-                    <Color x:Key="CbFieldBottomColor">#33FFFFFF</Color>
-                    <Color x:Key="CbFieldStrokeColor">#12FFFFFF</Color>
-                    <SolidColorBrush x:Key="CbHoverFillBrush" Color="#0FFFFFFF" />
-                    <SolidColorBrush x:Key="CbCrumbHoverFillBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbPressedFillBrush" Color="#0AFFFFFF" />
-                    <SolidColorBrush x:Key="CbSelectedFillBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbTextPrimaryBrush" Color="#FFFFFFFF" />
-                    <SolidColorBrush x:Key="CbTextSecondaryBrush" Color="#C8FFFFFF" />
-                    <SolidColorBrush x:Key="CbTextTertiaryBrush" Color="#8BFFFFFF" />
-                    <SolidColorBrush x:Key="CbTextDisabledBrush" Color="#5DFFFFFF" />
-                    <SolidColorBrush x:Key="CbRowTextBrush" Color="#E6FFFFFF" />
-                    <SolidColorBrush x:Key="CbRowMetaBrush" Color="#99FFFFFF" />
-                    <SolidColorBrush x:Key="CbPaneTitleInactiveBrush" Color="#B3FFFFFF" />
-                    <SolidColorBrush x:Key="CbStatusTextBrush" Color="#99FFFFFF" />
-                    <SolidColorBrush x:Key="CbHintTextBrush" Color="#73FFFFFF" />
-                    <SolidColorBrush x:Key="CbKeycapFillBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbKeycapTextBrush" Color="#E6FFFFFF" />
-                    <Color x:Key="CbKeycapStrokeColor">#1AFFFFFF</Color>
-                    <Color x:Key="CbKeycapBottomColor">#38FFFFFF</Color>
-                    <SolidColorBrush x:Key="CbBadgeFillBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbPencilHoverFillBrush" Color="#1FFFFFFF" />
-                    <SolidColorBrush x:Key="CbOverlayStrokeBrush" Color="#1AFFFFFF" />
-                    <SolidColorBrush x:Key="CbPaletteInputFillBrush" Color="#0FFFFFFF" />
-                    <SolidColorBrush x:Key="CbPaletteInputStrokeBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbTabActiveFillBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbUsageTrackBrush" Color="#1AFFFFFF" />
-                    <SolidColorBrush x:Key="CbErrorTextBrush" Color="#FFF27A6C" />
-                    <AcrylicBrush x:Key="CbPaletteAcrylicBrush" TintColor="#FF2C2C2C" TintOpacity="0.15" TintLuminosityOpacity="0.72" FallbackColor="#F22C2C2C" />
-                    <!-- The design's menu (.78) and transfer flyout (rgba(40,40,40,.82)) Acrylic. -->
-                    <AcrylicBrush x:Key="CbMenuAcrylicBrush" TintColor="#FF2C2C2C" TintOpacity="0.15" TintLuminosityOpacity="0.78" FallbackColor="#F52C2C2C" />
-                    <AcrylicBrush x:Key="CbFlyoutAcrylicBrush" TintColor="#FF282828" TintOpacity="0.15" TintLuminosityOpacity="0.82" FallbackColor="#F7282828" />
-                    <SolidColorBrush x:Key="CbCursorStrokeBrush" Color="#4DFFFFFF" />
-                    <SolidColorBrush x:Key="CbNoteFillBrush" Color="#F2202020" />
-                    <SolidColorBrush x:Key="CbGraphFillBrush" Color="#4D000000" />
-                    <SolidColorBrush x:Key="CbProgressTrackBrush" Color="#1FFFFFFF" />
-                    <SolidColorBrush x:Key="CbPillFillBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbPillTrackBrush" Color="#26FFFFFF" />
-                    <SolidColorBrush x:Key="CbCardFillBrush" Color="#0DFFFFFF" />
-                    <SolidColorBrush x:Key="CbMenuHoverFillBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbPluginBadgeFillBrush" Color="#2660CDFF" />
-                    <SolidColorBrush x:Key="CbDangerHoverFillBrush" Color="#99C42B1C" />
-                    <SolidColorBrush x:Key="CbTerminalFillBrush" Color="#59000000" />
-                    <SolidColorBrush x:Key="CbTerminalStrokeBrush" Color="#14FFFFFF" />
-                    <SolidColorBrush x:Key="CbCloseHoverFillBrush" Color="#1AFFFFFF" />
-                    <SolidColorBrush x:Key="CbDialogFillBrush" Color="#FF2B2B2B" />
-                    <SolidColorBrush x:Key="CbDialogFooterFillBrush" Color="#FF202020" />
-                    <SolidColorBrush x:Key="CbDialogTextBrush" Color="#CCFFFFFF" />
-                    <StaticResource x:Key="CbAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
-                </ResourceDictionary>
-                <ResourceDictionary x:Key="Light">
-                    <StaticResource x:Key="CbLayerFillBrush" ResourceKey="LayerFillColorDefaultBrush" />
-                    <StaticResource x:Key="CbLayerStrokeBrush" ResourceKey="CardStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbLayerStrokeActiveBrush" ResourceKey="ControlStrongStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbDividerBrush" ResourceKey="DividerStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbControlFillBrush" ResourceKey="ControlFillColorDefaultBrush" />
-                    <StaticResource x:Key="CbControlStrokeBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbFieldBottomColor" ResourceKey="ControlStrongStrokeColorDefault" />
-                    <StaticResource x:Key="CbFieldStrokeColor" ResourceKey="ControlStrokeColorDefault" />
-                    <StaticResource x:Key="CbHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbCrumbHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbPressedFillBrush" ResourceKey="SubtleFillColorTertiaryBrush" />
-                    <StaticResource x:Key="CbSelectedFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbTextPrimaryBrush" ResourceKey="TextFillColorPrimaryBrush" />
-                    <StaticResource x:Key="CbTextSecondaryBrush" ResourceKey="TextFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbTextTertiaryBrush" ResourceKey="TextFillColorTertiaryBrush" />
-                    <StaticResource x:Key="CbTextDisabledBrush" ResourceKey="TextFillColorDisabledBrush" />
-                    <StaticResource x:Key="CbRowTextBrush" ResourceKey="TextFillColorPrimaryBrush" />
-                    <StaticResource x:Key="CbRowMetaBrush" ResourceKey="TextFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbPaneTitleInactiveBrush" ResourceKey="TextFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbStatusTextBrush" ResourceKey="TextFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbHintTextBrush" ResourceKey="TextFillColorTertiaryBrush" />
-                    <StaticResource x:Key="CbKeycapFillBrush" ResourceKey="ControlFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbKeycapTextBrush" ResourceKey="TextFillColorPrimaryBrush" />
-                    <StaticResource x:Key="CbKeycapStrokeColor" ResourceKey="ControlStrokeColorDefault" />
-                    <StaticResource x:Key="CbKeycapBottomColor" ResourceKey="ControlStrokeColorSecondary" />
-                    <StaticResource x:Key="CbBadgeFillBrush" ResourceKey="ControlFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbPencilHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbOverlayStrokeBrush" ResourceKey="SurfaceStrokeColorFlyoutBrush" />
-                    <StaticResource x:Key="CbPaletteInputFillBrush" ResourceKey="ControlFillColorDefaultBrush" />
-                    <StaticResource x:Key="CbPaletteInputStrokeBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbTabActiveFillBrush" ResourceKey="LayerFillColorDefaultBrush" />
-                    <StaticResource x:Key="CbUsageTrackBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbErrorTextBrush" ResourceKey="SystemFillColorCriticalBrush" />
-                    <StaticResource x:Key="CbPaletteAcrylicBrush" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
-                    <StaticResource x:Key="CbMenuAcrylicBrush" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
-                    <StaticResource x:Key="CbFlyoutAcrylicBrush" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
-                    <StaticResource x:Key="CbCursorStrokeBrush" ResourceKey="ControlStrongStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbNoteFillBrush" ResourceKey="SolidBackgroundFillColorBaseBrush" />
-                    <StaticResource x:Key="CbGraphFillBrush" ResourceKey="ControlFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbProgressTrackBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbPillFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbPillTrackBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbCardFillBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
-                    <StaticResource x:Key="CbMenuHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbPluginBadgeFillBrush" ResourceKey="AccentFillColorTertiaryBrush" />
-                    <StaticResource x:Key="CbDangerHoverFillBrush" ResourceKey="SystemFillColorCriticalBackgroundBrush" />
-                    <StaticResource x:Key="CbTerminalFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
-                    <StaticResource x:Key="CbTerminalStrokeBrush" ResourceKey="CardStrokeColorDefaultBrush" />
-                    <StaticResource x:Key="CbCloseHoverFillBrush" ResourceKey="SubtleFillColorTertiaryBrush" />
-                    <StaticResource x:Key="CbDialogFillBrush" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
-                    <StaticResource x:Key="CbDialogFooterFillBrush" ResourceKey="SolidBackgroundFillColorBaseBrush" />
-                    <StaticResource x:Key="CbDialogTextBrush" ResourceKey="TextFillColorPrimaryBrush" />
-                    <StaticResource x:Key="CbAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
-                </ResourceDictionary>
-            </ResourceDictionary.ThemeDictionaries>
-
-            <!-- Content colors: the same in both themes. -->
+            <SolidColorBrush x:Key="CbLayerFillBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="CbLayerStrokeBrush" Color="#12FFFFFF" />
+            <SolidColorBrush x:Key="CbLayerStrokeActiveBrush" Color="#2EFFFFFF" />
+            <SolidColorBrush x:Key="CbDividerBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="CbControlFillBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="CbControlStrokeBrush" Color="#12FFFFFF" />
+            <SolidColorBrush x:Key="CbHoverFillBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="CbCrumbHoverFillBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbPressedFillBrush" Color="#0AFFFFFF" />
+            <SolidColorBrush x:Key="CbSelectedFillBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbTextPrimaryBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="CbTextSecondaryBrush" Color="#C8FFFFFF" />
+            <SolidColorBrush x:Key="CbTextTertiaryBrush" Color="#8BFFFFFF" />
+            <SolidColorBrush x:Key="CbTextDisabledBrush" Color="#5DFFFFFF" />
+            <SolidColorBrush x:Key="CbRowTextBrush" Color="#E6FFFFFF" />
+            <SolidColorBrush x:Key="CbRowMetaBrush" Color="#99FFFFFF" />
+            <SolidColorBrush x:Key="CbPaneTitleInactiveBrush" Color="#B3FFFFFF" />
+            <SolidColorBrush x:Key="CbStatusTextBrush" Color="#99FFFFFF" />
+            <SolidColorBrush x:Key="CbHintTextBrush" Color="#73FFFFFF" />
+            <SolidColorBrush x:Key="CbKeycapFillBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbKeycapTextBrush" Color="#E6FFFFFF" />
+            <SolidColorBrush x:Key="CbBadgeFillBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbPencilHoverFillBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="CbOverlayStrokeBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="CbPaletteInputFillBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="CbPaletteInputStrokeBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbTabActiveFillBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbUsageTrackBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="CbErrorTextBrush" Color="#FFF27A6C" />
+            <AcrylicBrush x:Key="CbPaletteAcrylicBrush" TintColor="#FF2C2C2C" TintOpacity="0.15" TintLuminosityOpacity="0.72" FallbackColor="#F22C2C2C" />
+            <!-- The design's menu (.78) and transfer flyout (rgba(40,40,40,.82)) Acrylic. -->
+            <AcrylicBrush x:Key="CbMenuAcrylicBrush" TintColor="#FF2C2C2C" TintOpacity="0.15" TintLuminosityOpacity="0.78" FallbackColor="#F52C2C2C" />
+            <AcrylicBrush x:Key="CbFlyoutAcrylicBrush" TintColor="#FF282828" TintOpacity="0.15" TintLuminosityOpacity="0.82" FallbackColor="#F7282828" />
+            <SolidColorBrush x:Key="CbCursorStrokeBrush" Color="#4DFFFFFF" />
+            <SolidColorBrush x:Key="CbNoteFillBrush" Color="#F2202020" />
+            <SolidColorBrush x:Key="CbProgressTrackBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="CbPillFillBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbPillTrackBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="CbCardFillBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="CbMenuHoverFillBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbPluginBadgeFillBrush" Color="#2660CDFF" />
+            <SolidColorBrush x:Key="CbTerminalFillBrush" Color="#59000000" />
+            <SolidColorBrush x:Key="CbTerminalStrokeBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbCloseHoverFillBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="CbDialogFillBrush" Color="#FF2C2C2C" />
+            <SolidColorBrush x:Key="CbDialogFooterFillBrush" Color="#FF202020" />
+            <SolidColorBrush x:Key="CbDialogTextBrush" Color="#CCFFFFFF" />
+            <!-- The accent: the Windows accent until the theme says otherwise. -->
+            <SolidColorBrush x:Key="CbAccentBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+            <!-- The folder icon (the design's two-tone folder) and a running shell's dot. -->
             <SolidColorBrush x:Key="CbFolderBrush" Color="#FFF2C063" />
-            <SolidColorBrush x:Key="CbOnAccentBrush" Color="#FF111111" />
-            <!-- A running shell's dot on its tab. -->
+            <SolidColorBrush x:Key="CbFolderFrontBrush" Color="#FFF8D98A" />
             <SolidColorBrush x:Key="CbRunningBrush" Color="#FF6CCB5F" />
-            <!-- The design's 40 % black scrim behind a dialog. -->
-            <SolidColorBrush x:Key="CbScrimBrush" Color="#66000000" />
-            <FontFamily x:Key="CbMonoFont">Cascadia Code, Cascadia Mono, Consolas</FontFamily>
-
-            <x:Double x:Key="CbRowHeight">30</x:Double>
 
             <!-- A 1 px lighter bottom edge, as on a Fluent text field. -->
             <LinearGradientBrush x:Key="CbFieldStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">
                 <LinearGradientBrush.RelativeTransform>
                     <ScaleTransform CenterY="0.5" ScaleY="-1" />
                 </LinearGradientBrush.RelativeTransform>
-                <GradientStop Offset="0.5" Color="{ThemeResource CbFieldBottomColor}" />
-                <GradientStop Offset="0.5" Color="{ThemeResource CbFieldStrokeColor}" />
+                <GradientStop Offset="0.5" Color="#33FFFFFF" />
+                <GradientStop Offset="0.5" Color="#12FFFFFF" />
             </LinearGradientBrush>
 
             <LinearGradientBrush x:Key="CbKeycapStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">
                 <LinearGradientBrush.RelativeTransform>
                     <ScaleTransform CenterY="0.5" ScaleY="-1" />
                 </LinearGradientBrush.RelativeTransform>
-                <GradientStop Offset="0.5" Color="{ThemeResource CbKeycapBottomColor}" />
-                <GradientStop Offset="0.5" Color="{ThemeResource CbKeycapStrokeColor}" />
+                <GradientStop Offset="0.5" Color="#38FFFFFF" />
+                <GradientStop Offset="0.5" Color="#1AFFFFFF" />
             </LinearGradientBrush>
+
+            <!-- The palette's input: the accent's 2 px bottom edge over a faint stroke. -->
+            <LinearGradientBrush x:Key="CbPaletteInputAccentBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,4">
+                <LinearGradientBrush.RelativeTransform>
+                    <ScaleTransform CenterY="0.5" ScaleY="-1" />
+                </LinearGradientBrush.RelativeTransform>
+                <GradientStop Offset="0.5" Color="{ThemeResource SystemAccentColorLight2}" />
+                <GradientStop Offset="0.5" Color="#14FFFFFF" />
+            </LinearGradientBrush>
+
+            <!-- The title bar's app tile: accent to the design's violet. -->
+            <LinearGradientBrush x:Key="CbAppTileBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Offset="0" Color="{ThemeResource SystemAccentColorLight2}" />
+                <GradientStop Offset="1" Color="#FF8A5CF6" />
+            </LinearGradientBrush>
+
+            <!-- Not themed: text on the accent, the speed graph's inset, the close button's red, the dialog scrim. -->
+            <SolidColorBrush x:Key="CbOnAccentBrush" Color="#FF111111" />
+            <SolidColorBrush x:Key="CbGraphFillBrush" Color="#4D000000" />
+            <SolidColorBrush x:Key="CbDangerHoverFillBrush" Color="#99C42B1C" />
+            <SolidColorBrush x:Key="CbScrimBrush" Color="#66000000" />
+
+            <FontFamily x:Key="CbMonoFont">Cascadia Code, Cascadia Mono, Consolas</FontFamily>
+
+            <x:Double x:Key="CbRowHeight">30</x:Double>
 
             <Style x:Key="CbSectionLabelStyle" TargetType="TextBlock">
                 <Setter Property="FontSize" Value="11" />

@@ -107,3 +107,6 @@ public sealed record VolumesChangedEvent(IReadOnlyList<VolumeDetails> Volumes) :
 
 /// <summary>A terminal session's shell exited; the session stays listed until closed.</summary>
 public sealed record TerminalExitedEvent(ulong SessionId, uint ExitCode) : CoreEvent;
+
+/// <summary>The theme in effect changed (<c>ui.theme</c>, or its file was saved); it comes whole.</summary>
+public sealed record ThemeChangedEvent(ColorTheme Theme) : CoreEvent;

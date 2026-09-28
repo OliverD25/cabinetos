@@ -219,8 +219,17 @@ public sealed partial class MainWindow
         Dock.SetCaption(_terminal.Caption(_dockPlacement));
     }
 
+    // The theme's terminal colours (docs/themes.md, "terminal"); before the core sent a theme,
+    // the design's text colour on a clear background with the accent's cursor.
     private void SendTerminalTheme()
     {
+        const string font = "'Cascadia Code', 'Cascadia Mono', Consolas, monospace";
+        if (_themes.Current is { Terminal: var terminal })
+        {
+            _terminal.SetTheme(TerminalPageMessages.Theme(terminal.Background, terminal.Foreground, terminal.Cursor, terminal.Selection,
+                font, 12, terminal.Ansi));
+            return;
+        }
         var dark = RootGrid.ActualTheme != ElementTheme.Light;
         var accent = AccentColor(dark);
         _terminal.SetTheme(TerminalPageMessages.Theme(
@@ -228,7 +237,7 @@ public sealed partial class MainWindow
             foreground: dark ? "#FFFFFFE6" : "#000000E4",
             cursor: Css(accent, 0xFF),
             selection: Css(accent, 0x4D),
-            fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+            fontFamily: font,
             fontSize: 12));
     }
 

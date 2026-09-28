@@ -53,6 +53,7 @@ public sealed partial class MainWindow : Window
     private readonly PaneModel[] _panes;
     private readonly FilePane[] _paneViews;
     private readonly IconCache _icons;
+    private readonly TintedMicaBackdrop _backdrop = new();
     private readonly SidebarModel _sidebar = new();
     private readonly PaletteModel _palette;
     private readonly TransferCenter _transfers;
@@ -136,6 +137,7 @@ public sealed partial class MainWindow : Window
         SidebarView.UnpinRequested += path => _ = _router.ExecuteAsync("sidebar.unpin", CommandArgs.With("path", path), "sidebar");
         SetPinnedFolders();
 
+        SetUpThemes();
         SetUpTerminal();
         SetUpSearch();
         SetUpPlugins();
@@ -200,7 +202,8 @@ public sealed partial class MainWindow : Window
 
     private void SetUpWindow()
     {
-        SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
+        // Mica that a theme can tint (MicaBackdrop has no tint).
+        SystemBackdrop = _backdrop;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         AppWindow.Title = "CabinetOS";
@@ -411,7 +414,7 @@ public sealed partial class MainWindow : Window
                     break;
                 case "shot":
                     await Task.Delay(400);
-                    await DevSnapshots.RenderAsync(RootGrid, step.Argument, WebPages());
+                    await DevSnapshots.RenderAsync(RootGrid, step.Argument, WebPages(), SnapshotBackdrop());
                     break;
             }
         }
@@ -470,6 +473,7 @@ public sealed partial class MainWindow : Window
         try
         {
             await ReadConfigAsync(firstStart);
+            var theme = ReadThemeAsync();
             var keymap = ReadKeymapAsync();
             var commands = _router.RefreshAsync();
             var volumes = ReadVolumesAsync();
@@ -490,7 +494,7 @@ public sealed partial class MainWindow : Window
                     }
                 }
             }
-            await Task.WhenAll(keymap, commands, volumes, jobs);
+            await Task.WhenAll(theme, keymap, commands, volumes, jobs);
             await RefreshPluginsAsync();
         }
         catch (IOException error)
@@ -675,6 +679,9 @@ public sealed partial class MainWindow : Window
             case KeymapChangedEvent keymap:
                 ApplyKeymap(Keymap.From(keymap.Keymap));
                 break;
+            case ThemeChangedEvent changed:
+                _themes.Apply(changed.Theme);
+                return;
             case VolumesChangedEvent volumes:
                 // A USB stick or a mapped share came or went: the Drives section follows.
                 _sidebar.SetDrives(volumes.Volumes);
@@ -778,6 +785,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = RootGrid.XamlRoot,
+            RequestedTheme = RootGrid.ActualTheme,
             Title = "CabinetOS could not start its core",
             Content = new ScrollViewer
             {
@@ -886,6 +894,7 @@ public sealed partial class MainWindow : Window
         RegisterSearchCommands();
         RegisterPluginCommands();
         RegisterToolCommands();
+        RegisterThemeCommands();
 
         _router.Completed += OnCommandCompleted;
     }
@@ -924,6 +933,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = RootGrid.XamlRoot,
+            RequestedTheme = RootGrid.ActualTheme,
             Title = title,
             Content = new TextBlock { Text = text.ToString().TrimEnd(), TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true },
             CloseButtonText = "Close",
@@ -955,9 +965,10 @@ public sealed partial class MainWindow : Window
         {
             EndAddressEdit();
             FileMenu.Close();
-            // A review left open is a Cancel; the list comes back from the palette.
+            // A review left open is a Cancel; the list and the picker come back from the palette.
             ReviewView.Close();
             PluginsView.Close();
+            ThemesView.Close();
             // Ctrl+Shift+P from a shell: the keyboard goes back there when the palette closes.
             _paletteFromTerminal = Dock.HasTerminalFocus;
             _palette.Open();
@@ -984,6 +995,10 @@ public sealed partial class MainWindow : Window
         if (_palette.IsOpen)
         {
             _palette.Close();
+        }
+        else if (ThemesView.IsOpen)
+        {
+            CloseThemePicker();
         }
         else if (ReviewView.IsOpen)
         {
@@ -1047,6 +1062,8 @@ public sealed partial class MainWindow : Window
             var dialog = new ContentDialog
             {
                 XamlRoot = RootGrid.XamlRoot,
+                // A dialog sits in the popup layer, outside the root's RequestedTheme (a light theme).
+                RequestedTheme = RootGrid.ActualTheme,
                 Title = targets.Count == 1 ? "Delete 1 item permanently?" : $"Delete {targets.Count:N0} items permanently?",
                 Content = new TextBlock
                 {
@@ -1348,6 +1365,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = RootGrid.XamlRoot,
+            RequestedTheme = RootGrid.ActualTheme,
             Title = title,
             Content = grid,
             CloseButtonText = "Close",

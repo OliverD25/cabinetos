@@ -379,3 +379,13 @@ public sealed class RenameRequest(string path, string newName) : CoreRequest("re
     /// <summary>The new name, without a folder part.</summary>
     public string NewName { get; } = newName;
 }
+
+/// <summary>Asks for every valid theme in the themes folder (docs/themes.md); the reply is <c>themes</c>.</summary>
+public sealed class ListThemesRequest() : CoreRequest("list_themes");
+
+/// <summary>Asks for one whole theme; the reply is <c>theme</c>.</summary>
+public sealed class GetThemeRequest() : CoreRequest("get_theme")
+{
+    /// <summary>The theme's ID; absent: the theme in effect now.</summary>
+    public string? ThemeId { get; init; }
+}

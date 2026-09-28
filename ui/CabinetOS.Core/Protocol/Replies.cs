@@ -286,4 +286,69 @@ public static class ErrorCodes
     public const string ImmutableBinding = "immutable_binding";
     public const string ConfigError = "config_error";
     public const string Io = "io";
+    public const string NoSuchTheme = "no_such_theme";
 }
+
+/// <summary>A tint laid over the Mica backdrop: a <c>#RRGGBB</c> colour and how much of it covers the backdrop.</summary>
+public sealed record MicaTint(string Tint, double Opacity);
+
+/// <summary>
+/// The colours of the window a theme sets (docs/themes.md, "The format").
+/// A colour is <c>#RRGGBB</c> or <c>#RRGGBBAA</c>. The theme's own keys are
+/// camelCase, unlike the protocol's.
+/// </summary>
+public sealed record ThemePalette(
+    [property: JsonPropertyName("textPrimary")] string TextPrimary,
+    [property: JsonPropertyName("textSecondary")] string TextSecondary,
+    [property: JsonPropertyName("textTertiary")] string TextTertiary,
+    [property: JsonPropertyName("textDisabled")] string TextDisabled,
+    [property: JsonPropertyName("layerFill")] string LayerFill,
+    [property: JsonPropertyName("layerStroke")] string LayerStroke,
+    [property: JsonPropertyName("layerStrokeActive")] string LayerStrokeActive,
+    [property: JsonPropertyName("controlFill")] string ControlFill,
+    [property: JsonPropertyName("controlFillHover")] string ControlFillHover,
+    [property: JsonPropertyName("acrylicTint")] string AcrylicTint,
+    [property: JsonPropertyName("terminalBackground")] string TerminalBackground,
+    [property: JsonPropertyName("folderIcon")] string FolderIcon,
+    [property: JsonPropertyName("folderIconFront")] string FolderIconFront,
+    [property: JsonPropertyName("fileTypeColors")] IReadOnlyDictionary<string, string> FileTypeColors,
+    [property: JsonPropertyName("permissionLow")] string PermissionLow,
+    [property: JsonPropertyName("permissionMedium")] string PermissionMedium,
+    [property: JsonPropertyName("permissionHigh")] string PermissionHigh);
+
+/// <summary>The terminal's colours: the default text, the scheme's background, the cursor, and the 16 ANSI colours.</summary>
+public sealed record ThemeTerminal(string Foreground, string Background, string Cursor, IReadOnlyList<string> Ansi);
+
+/// <summary>
+/// A colour theme (docs/themes.md): what <c>get_theme</c> answers and
+/// <c>theme_changed</c> carries. A null <see cref="Accent"/> follows the
+/// Windows accent colour; a null <see cref="Mica"/> shows plain Mica.
+/// </summary>
+public sealed record ColorTheme(
+    string Id,
+    string Name,
+    string Author,
+    string Version,
+    string Kind,
+    string? Accent,
+    MicaTint? Mica,
+    ThemePalette Palette,
+    ThemeTerminal Terminal,
+    string? Attribution = null)
+{
+    public const string Dark = "dark";
+    public const string Light = "light";
+
+    /// <summary>Whether it is a theme for light mode.</summary>
+    [JsonIgnore]
+    public bool IsLight => Kind == Light;
+}
+
+/// <summary>What the theme picker shows of a theme (<c>list_themes</c>): no palette, no tint.</summary>
+public sealed record ThemeInfo(string Id, string Name, string Author, string Version, string Kind, string? Accent = null);
+
+/// <summary>Reply to <c>list_themes</c>: every valid theme, by ID.</summary>
+public sealed record ThemesReply(IReadOnlyList<ThemeInfo> Themes) : CoreReply;
+
+/// <summary>Reply to <c>get_theme</c>.</summary>
+public sealed record ThemeReply(ColorTheme Theme) : CoreReply;

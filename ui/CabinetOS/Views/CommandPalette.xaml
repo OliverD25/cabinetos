@@ -41,13 +41,6 @@
                 To="1"
                 Duration="0:0:0.16" />
         </Storyboard>
-        <LinearGradientBrush x:Key="InputStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,4">
-            <LinearGradientBrush.RelativeTransform>
-                <ScaleTransform CenterY="0.5" ScaleY="-1" />
-            </LinearGradientBrush.RelativeTransform>
-            <GradientStop Offset="0.5" Color="{ThemeResource SystemAccentColorLight2}" />
-            <GradientStop Offset="0.5" Color="#14FFFFFF" />
-        </LinearGradientBrush>
     </UserControl.Resources>
 
     <!-- The full-window scrim is transparent; a click on it closes the palette. -->
@@ -86,7 +79,7 @@
                         Height="34"
                         Padding="10,0"
                         Background="{ThemeResource CbPaletteInputFillBrush}"
-                        BorderBrush="{StaticResource InputStrokeBrush}"
+                        BorderBrush="{StaticResource CbPaletteInputAccentBrush}"
                         BorderThickness="1,1,1,2"
                         CornerRadius="4">
                         <Grid ColumnSpacing="8">

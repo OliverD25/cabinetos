@@ -166,12 +166,21 @@
     sessions.delete(id);
   }
 
+  // The theme's 16 ANSI colours, in the order docs/themes.md gives them.
+  const ANSI_KEYS = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+    'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'];
+
   function applyLook(message) {
+    const ansi = {};
+    if (Array.isArray(message.ansi) && message.ansi.length === 16) {
+      ANSI_KEYS.forEach((key, i) => { ansi[key] = message.ansi[i]; });
+    }
     look = {
       fontFamily: message.fontFamily || look.fontFamily,
       fontSize: message.fontSize || look.fontSize,
       theme: {
         ...look.theme,
+        ...ansi,
         background: message.background || look.theme.background,
         foreground: message.foreground || look.theme.foreground,
         cursor: message.cursor || look.theme.cursor,
