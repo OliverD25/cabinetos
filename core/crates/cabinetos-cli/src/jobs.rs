@@ -9,7 +9,7 @@ use anyhow::{Context, anyhow, bail};
 use cabinetos_ipc::PipeClient;
 use cabinetos_protocol::{
     Conflict, ConflictKind, Envelope, Event, JobAction, JobInfo, JobKind, JobProgress, JobRequest,
-    JobState, Request, Resolution, Response,
+    JobState, Rate, Request, Resolution, Response,
 };
 
 use crate::{expect_welcome, failure, say, send};
@@ -294,8 +294,10 @@ fn progress_line(progress: &JobProgress) -> String {
             decimal(progress.bytes_total),
             decimal(progress.speed_bps)
         );
-    } else if let Some(rate) = progress.items_per_second {
-        let rate = rate.get();
+    } else if let Some(rate) = progress.items_per_second.map(Rate::get)
+        // The final record and a paused job carry 0: no pace to show.
+        && rate > 0.0
+    {
         let _ = if rate >= 10.0 {
             write!(line, "  {rate:.0} items/s")
         } else {
@@ -331,22 +333,32 @@ fn progress_line(progress: &JobProgress) -> String {
 )]
 fn summary(last: &JobProgress) -> String {
     let seconds = last.elapsed_ms as f64 / 1000.0;
-    let rate = if seconds > 0.0 {
-        format!(
+    // A job that moved no bytes (a delete, a move on one volume) is
+    // measured in files and folders.
+    let moved_bytes = last.bytes_done > 0 || last.bytes_total > 0;
+    let rate = match (seconds > 0.0, moved_bytes) {
+        (false, _) => String::new(),
+        (true, true) => format!(
             ", {}/s on average",
             decimal((last.bytes_done as f64 / seconds) as u64)
-        )
+        ),
+        (true, false) => format!(
+            ", {:.0} items/s on average",
+            last.files_done as f64 / seconds
+        ),
+    };
+    let amount = if moved_bytes {
+        format!("{} ", decimal(last.bytes_done))
     } else {
         String::new()
     };
     format!(
-        "{}: {} of {} files and folders, {} skipped, {} failed; {} in {seconds:.1} s{rate}",
+        "{}: {} of {} files and folders, {} skipped, {} failed; {amount}in {seconds:.1} s{rate}",
         state_name(&last.state),
         last.files_done,
         last.files_total,
         last.files_skipped,
         last.files_failed,
-        decimal(last.bytes_done),
     )
 }
 
@@ -448,8 +460,6 @@ impl Stats {
 
 #[cfg(test)]
 mod tests {
-    use cabinetos_protocol::Rate;
-
     use super::*;
 
     fn progress() -> JobProgress {
@@ -498,6 +508,31 @@ mod tests {
         let mut copy = progress();
         copy.items_per_second = Rate::new(412.25);
         assert!(!progress_line(&copy).contains("items/s"));
+        // The final record (and a paused job) carries a pace of 0: nothing
+        // to show.
+        delete.items_per_second = Rate::new(0.0);
+        assert_eq!(progress_line(&delete), " 84%  files 8412/10001");
+    }
+
+    #[test]
+    fn the_summary_of_a_job_without_bytes_counts_items() {
+        let mut delete = progress();
+        delete.state = JobState::Completed;
+        delete.bytes_total = 0;
+        delete.bytes_done = 0;
+        delete.files_done = 30_031;
+        delete.files_total = 30_031;
+        delete.elapsed_ms = 4400;
+        assert_eq!(
+            summary(&delete),
+            "completed: 30031 of 30031 files and folders, 0 skipped, 0 failed; in 4.4 s, 6825 items/s on average"
+        );
+        let mut copy = progress();
+        copy.state = JobState::Completed;
+        assert_eq!(
+            summary(&copy),
+            "completed: 8412 of 10001 files and folders, 0 skipped, 0 failed; 1.2 GB in 2.0 s, 600.0 MB/s on average"
+        );
     }
 
     #[test]
