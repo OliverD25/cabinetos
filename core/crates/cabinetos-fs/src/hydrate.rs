@@ -5,6 +5,10 @@
 //! **Type names** come from `SHGetFileInfoW` with `SHGFI_TYPENAME` and
 //! `SHGFI_USEFILEATTRIBUTES`: by the extension and the folder attribute
 //! only, so nothing is read from the disk. They are cached per extension.
+//! When a program registered an extension without a readable name, the
+//! shell answers the program's internal name for it (a program
+//! identifier, such as `txtfile` for `.gitattributes`); such a name
+//! becomes `{EXT} File`, the form Explorer uses for a type nobody named.
 //!
 //! **Icon keys** name an icon for [`Hydrator::icon_png`]: `folder` for
 //! every folder, `ext:<extension>` (lower case, with its dot) for a file by
@@ -173,6 +177,10 @@ impl Hydrator {
         let Some(name) = shell_type_name(&probe, attributes) else {
             return String::new();
         };
+        let name = match &key {
+            TypeKey::Extension(extension) => readable_type_name(name, extension),
+            TypeKey::Folder | TypeKey::NoExtension => name,
+        };
         lock(&self.type_names).insert(key, name.clone());
         name
     }
@@ -262,6 +270,20 @@ impl Hydrator {
 fn extension(name: &str) -> Option<String> {
     let dot = name.rfind('.')?;
     (dot + 1 < name.len()).then(|| name[dot..].to_lowercase())
+}
+
+/// `name`, unless it looks like a program identifier: no space, and either
+/// no capital letter or ending in `file` (`txtfile`, `Textfile`). Then
+/// `{EXT} File`, as Explorer names a type nobody named, such as
+/// `GITATTRIBUTES File`.
+fn readable_type_name(name: String, extension: &str) -> String {
+    let progid = !name.contains(char::is_whitespace)
+        && (!name.chars().any(char::is_uppercase) || name.to_lowercase().ends_with("file"));
+    if progid {
+        format!("{} File", extension.trim_start_matches('.').to_uppercase())
+    } else {
+        name
+    }
 }
 
 /// Whether `extension` (after `ext:`) is one `describe` could have made.
@@ -701,6 +723,48 @@ mod tests {
             .unwrap();
         assert_eq!(tail.len(), 2);
         assert_eq!(tail[0].icon_key, "generic");
+    }
+
+    #[test]
+    fn a_progid_is_not_shown_as_a_type_name() {
+        let readable = |name: &str, extension: &str| readable_type_name(name.to_owned(), extension);
+        for (name, extension, shown) in [
+            ("txtfile", ".gitattributes", "GITATTRIBUTES File"),
+            (
+                "gitattributes_auto_file",
+                ".gitattributes",
+                "GITATTRIBUTES File",
+            ),
+            ("Textfile", ".cfg", "CFG File"),
+            ("vlc.mp4", ".mp4", "MP4 File"),
+            ("Text Document", ".txt", "Text Document"),
+            ("Markdown Source File", ".md", "Markdown Source File"),
+            ("EDITORCONFIG File", ".editorconfig", "EDITORCONFIG File"),
+            ("Application", ".exe", "Application"),
+            ("Textdokument", ".txt", "Textdokument"),
+        ] {
+            assert_eq!(readable(name, extension), shown, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_gitattributes_file_gets_a_readable_type_name() {
+        let dir = scratch();
+        fs::write(dir.path().join(".gitattributes"), "* text=auto").unwrap();
+        let listing =
+            list_directory(dir.path().to_str().unwrap(), &ListOptions::default()).unwrap();
+        let writer = ListingWriter::new(&listing).unwrap();
+        let mut section = vec![0u8; writer.section_size()];
+        writer.write(&mut section, 1).unwrap();
+        let (_, details) = Hydrator::new()
+            .describe(&section, dir.path().to_str().unwrap(), 0, 1)
+            .unwrap();
+        let name = &details[0].type_name;
+        // The shell may know a friendly name, know none (Windows then says
+        // "GITATTRIBUTES File" itself), or answer a ProgID such as
+        // `txtfile` (as where Git registered it); never the ProgID.
+        assert!(name.contains(' '), "{name}");
+        assert_ne!(name, "txtfile");
     }
 
     #[test]

@@ -306,7 +306,11 @@ UI asks for those for the rows it shows, a screenful at a time.
 - `type_name` is the shell's name for the type, in the user's language:
   `SHGetFileInfoW` with `SHGFI_TYPENAME | SHGFI_USEFILEATTRIBUTES`, by the
   extension and the folder attribute only, so no file is read. The core
-  keeps it per extension.
+  keeps it per extension. When the shell answers a program's internal name
+  for the type instead (no space, and either no capital letter or ending in
+  `file`, such as `txtfile` for `.gitattributes`), the core answers
+  `{EXT} File` (`GITATTRIBUTES File`), as Explorer names a type nobody
+  named.
 - `icon_key` names an icon for `get_icon`. Every folder has `folder`. A
   file has `ext:` and its extension in lower case with its dot
   (`ext:.txt`, and `ext:.gitignore` for `.gitignore`); a file without one
