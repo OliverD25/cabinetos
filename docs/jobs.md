@@ -217,6 +217,22 @@ after the same gap, and then `job_state_changed`.
 | Long paths | Every file call uses the verbatim form (`\\?\C:\...`), so any length works. The shell (Recycle Bin) takes plain paths. |
 | Recycle Bin | `IFileOperation` with `FOF_ALLOWUNDO`, `FOF_NOCONFIRMATION`, `FOF_NOERRORUI`, `FOF_SILENT` and `FOFX_RECYCLEONDELETE`. |
 
+**Measured** (`cargo bench -p cabinetos-jobs --bench copy_file`, 2 GiB
+file on C:, NVMe, 2026-09-28; nothing is adopted from it):
+
+| Method | Median | Rate |
+|---|---|---|
+| `CopyFileExW`, buffered | 0.51 s | 4.2 GB/s |
+| `CopyFileExW`, `COPY_FILE_NO_BUFFERING` | 1.37 s (spread 0.64–2.47 s) | 1.6 GB/s |
+| `ReadFile`/`WriteFile`, 4 MiB, `FILE_FLAG_NO_BUFFERING` | 2.42 s | 0.89 GB/s |
+
+The buffered figure mostly measures memory: the source was still in the
+file cache, and Windows writes the copy out later. A plain synchronous
+loop is the slowest, because it does not overlap reads and writes;
+beating `CopyFileExW` would take overlapped I/O or IoRing, which PLAN.md
+leaves to a later measurement. In the Phase 4 live check a 20 GiB file on
+E: copied at about 3 GB/s with `COPY_FILE_NO_BUFFERING`.
+
 ## Jobs and clients
 
 - Jobs belong to the core, not to the connection that started them. A UI

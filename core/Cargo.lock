@@ -225,6 +225,7 @@ version = "0.1.0"
 dependencies = [
  "cabinetos-fs",
  "cabinetos-protocol",
+ "criterion",
  "tempfile",
  "thiserror",
  "tracing",

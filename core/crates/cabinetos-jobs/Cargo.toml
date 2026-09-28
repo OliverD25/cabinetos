@@ -24,7 +24,12 @@ windows = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+criterion.workspace = true
 tempfile.workspace = true
+
+[[bench]]
+name = "copy_file"
+harness = false
 
 [lints]
 workspace = true
