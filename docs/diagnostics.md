@@ -52,7 +52,7 @@ One JSON object per line, with the keys always in this order:
 | `plugin_id` | string | inside a plugin call | The plugin that caused the event (Phase 7), same rule as `request_id` |
 | `span` | string | inside a span | The name of the innermost span, for example `request` |
 | `fields` | object | when there are any | The event's other fields |
-| `thread` | string | always | The thread's name (`main`, `core-rt-3`), or its ID when it has no name. In the core, `core-rt-N` are the async runtime's threads, workers and blocking threads alike. |
+| `thread` | string | always | The thread's name (`main`, `core-rt-3`), or its ID when it has no name. In the core, `core-rt-N` are the async runtime's threads, workers and blocking threads alike, and `watch-<listing id>` threads watch directories. |
 
 Example, one line from `core.<date>.jsonl`:
 

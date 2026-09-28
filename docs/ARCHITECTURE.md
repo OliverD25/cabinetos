@@ -124,12 +124,12 @@ brief. Responsibilities, Constitution articles and build commands per crate:
 
 | Brief section | Crate | State |
 |---|---|---|
-| §2 Rust Core Engine | `cabinetos-fs`: directory enumeration, metadata hydration, volume and disk detection, change watching | stub until Phase 2 |
+| §2 Rust Core Engine | `cabinetos-fs`: directory enumeration (NT API) with metadata in the same pass, sorting, listing sections, volume and disk detection, change watching; icon and type-name hydration comes in Phase 5 | Phase 2 |
 | §2 Rust Core Engine | `cabinetos-index`: in-memory volume index, MFT reader, USN Journal tailer | stub until Phase 6 |
 | §2 Rust Core Engine | `cabinetos-indexer`: the elevated indexer process ([ADR 0002](decisions/0002-separate-elevated-indexer.md)) | stub until Phase 6 |
 | §3 Copy/Move Queues | `cabinetos-jobs`: `JobQueueManager`, copy/move/delete backends, progress throttling, conflict states | stub until Phase 4 |
-| §4 UI-Core Bridge (IPC) | `cabinetos-protocol`: message envelopes, request IDs, shared-memory layouts, JSON Schema export to `sdk/protocol/` | Phase 1 |
-| §4 UI-Core Bridge (IPC) | `cabinetos-ipc`: named pipe with a user-only DACL, length-prefixed framing, shared-memory sections, process watch | Phase 1 |
+| §4 UI-Core Bridge (IPC) | `cabinetos-protocol`: message envelopes, request IDs, events, shared-memory layouts, JSON Schema export to `sdk/protocol/` ([ipc.md](ipc.md)) | Phase 1; listings and events in Phase 2 |
+| §4 UI-Core Bridge (IPC) | `cabinetos-ipc`: named pipe with a user-only DACL, length-prefixed framing, a client with events, shared-memory sections, process watch | Phase 1; events in Phase 2 |
 | §5 WinUI 3 Frontend | no crate: the C# solution in `ui/` | Phase 5 |
 | §6 Extension Architecture | `cabinetos-plugins`: Layer 1, the `wasmtime` host for Core Plugins | stub until Phase 7 |
 | §7 Config, Keyboard & Command Palette | `cabinetos-config`: `cabinetos.json` load, schema, defaults, watch, diff | stub until Phase 3 |
@@ -148,3 +148,4 @@ without a UI.
 | 2026-09-28 | Copied from the creator's brief. | First version in the repo (ADR 0008). |
 | 2026-09-28 | §8, first sentence: "telemetry" → "diagnostics". | Article 12 of the Constitution was renamed by the creator on 2026-09-28 to avoid the word "telemetry", which suggests data sent to the developer. The brief describes only local logs and crash traces. Recorded in PLAN.md, consistency check row A. |
 | 2026-09-28 | Added the "Crate map" section. | Phase 1 created the Rust workspace. The map links each brief section to the crate that implements it (PLAN.md §6, definition of done item 6). |
+| 2026-09-28 | Crate map: `cabinetos-fs` is real (Phase 2); the §4 rows note the Phase 2 listings and events and link [ipc.md](ipc.md). | Phase 2 built the filesystem engine and the listing protocol. Size, dates and attributes arrive with the listing itself, because the NT API returns them in the same pass, so the §2 "asynchronous hydration" stream is kept for icons and shell type names (Phase 5). |
