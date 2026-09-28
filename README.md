@@ -25,8 +25,8 @@ contains, searches whole NTFS volumes through an elevated indexer (or walks
 folders without it), and runs shells in pseudo-consoles for the terminal
 pane, all over a user-only named pipe, with the indexer behind a read-only
 pipe of its own and each shell's bytes on a pipe of their own, and gives the
-shell its drives, one-setting reads and writes, and file actions (`core/`,
-421 tests, CI green). Phase 5, the WinUI 3 shell, is built (`ui/`, 207
+shell its drives, one-setting reads and writes, file actions, and the
+shell's own type names and icons (`core/`, 434 tests, CI green). Phase 5, the WinUI 3 shell, is built (`ui/`, 207
 tests, CI green): two panes over the core's shared-memory listings,
 breadcrumbs, a status bar, the command palette with chord keys and inline
 rebinding, and copy, move, delete, rename, new folder and open, with the
