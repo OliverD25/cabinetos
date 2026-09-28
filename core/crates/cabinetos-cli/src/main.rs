@@ -1,7 +1,8 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
 //! UI will), `volume`, `shutdown`, the configuration (`config`), the command
-//! registry (`commands`) and the keymap (`keys`); `copy` in a later phase.
+//! registry (`commands`), the keymap (`keys`), and jobs (`copy`, `move`,
+//! `delete`, `jobs`, `job`).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -13,6 +14,7 @@
 //! client through the pipe into the core).
 #![forbid(unsafe_code)]
 
+mod jobs;
 mod ls;
 mod settings;
 
@@ -25,9 +27,10 @@ use anyhow::{Context, anyhow, bail};
 use cabinetos_diag::{Boundary, DiagConfig, span_for_request};
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
-    Envelope, Request, RequestId, Response, SortKey, SortSpec, VolumeDetails,
+    ConflictPolicy, Envelope, JobAction, JobKind, JobOptions, JobRequest, Request, RequestId,
+    Resolution, Response, SortKey, SortSpec, VolumeDetails,
 };
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use tracing::Instrument;
 
 /// How long to wait for a busy pipe.
@@ -104,6 +107,184 @@ enum Command {
         #[command(subcommand)]
         action: KeysAction,
     },
+    /// Copy files and folders into a folder, and follow the job.
+    Copy(TransferArgs),
+    /// Move files and folders into a folder, and follow the job.
+    Move(TransferArgs),
+    /// Delete files and folders (to the Recycle Bin unless --permanent), and
+    /// follow the job.
+    Delete {
+        /// The files and folders to delete.
+        #[arg(required = true, value_name = "PATH")]
+        paths: Vec<String>,
+        /// Delete for good instead of to the Recycle Bin.
+        #[arg(long)]
+        permanent: bool,
+        /// Answer every conflict this way (overwrite clears a read-only
+        /// attribute).
+        #[arg(long, value_enum)]
+        resolve: Option<ResolveArg>,
+        /// At the end, print how many progress events arrived per second.
+        #[arg(long)]
+        stats: bool,
+    },
+    /// List the jobs the core knows, running and finished.
+    Jobs,
+    /// Pause, resume or cancel a job, or decide a conflict.
+    Job {
+        #[command(subcommand)]
+        action: JobCommand,
+    },
+}
+
+/// The paths and options of `copy` and `move`.
+#[derive(Debug, PartialEq, Eq, Args)]
+struct TransferArgs {
+    /// The files and folders, then the folder they go into (created if it
+    /// does not exist).
+    #[arg(required = true, num_args = 2.., value_name = "PATH")]
+    paths: Vec<String>,
+    /// What to do when a file already exists at the destination.
+    #[arg(long, value_enum, default_value = "ask")]
+    on_conflict: OnConflictArg,
+    /// Compare each copy with its source (sizes and sampled bytes).
+    #[arg(long)]
+    verify: bool,
+    /// Answer every conflict this way instead of waiting for `job resolve`.
+    #[arg(long, value_enum)]
+    resolve: Option<ResolveArg>,
+    /// At the end, print how many progress events arrived per second.
+    #[arg(long)]
+    stats: bool,
+}
+
+/// `--on-conflict`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum OnConflictArg {
+    /// Set the file aside and report a conflict.
+    Ask,
+    Overwrite,
+    Skip,
+    /// Give the new file a free name: `name (2).ext`.
+    Rename,
+    /// Overwrite only when the source is newer.
+    Newer,
+}
+
+impl From<OnConflictArg> for ConflictPolicy {
+    fn from(argument: OnConflictArg) -> Self {
+        match argument {
+            OnConflictArg::Ask => Self::Ask,
+            OnConflictArg::Overwrite => Self::Overwrite,
+            OnConflictArg::Skip => Self::Skip,
+            OnConflictArg::Rename => Self::Rename,
+            OnConflictArg::Newer => Self::OverwriteIfNewer,
+        }
+    }
+}
+
+/// `--resolve`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum ResolveArg {
+    Overwrite,
+    Skip,
+    Rename,
+}
+
+impl From<ResolveArg> for Resolution {
+    fn from(argument: ResolveArg) -> Self {
+        match argument {
+            ResolveArg::Overwrite => Self::Overwrite,
+            ResolveArg::Skip => Self::Skip,
+            ResolveArg::Rename => Self::Rename { new_name: None },
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum JobCommand {
+    /// Pause a job: no bytes move until it is resumed.
+    Pause {
+        /// The job's ID.
+        id: u64,
+    },
+    /// Resume a paused job.
+    Resume {
+        /// The job's ID.
+        id: u64,
+    },
+    /// Cancel a job; a partly copied file is removed.
+    Cancel {
+        /// The job's ID.
+        id: u64,
+    },
+    /// Decide what happens to a file that waits on a conflict.
+    Resolve {
+        /// The job's ID.
+        job: u64,
+        /// The conflict's ID, as `copy` printed it.
+        conflict: u64,
+        /// The decision.
+        #[arg(value_enum)]
+        resolution: ResolutionArg,
+    },
+}
+
+/// `job resolve`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum ResolutionArg {
+    Overwrite,
+    Skip,
+    /// Under a free name: `name (2).ext`.
+    Rename,
+    /// Try once more, the same way.
+    Retry,
+    /// Stop the whole job.
+    Cancel,
+}
+
+impl From<ResolutionArg> for Resolution {
+    fn from(argument: ResolutionArg) -> Self {
+        match argument {
+            ResolutionArg::Overwrite => Self::Overwrite,
+            ResolutionArg::Skip => Self::Skip,
+            ResolutionArg::Rename => Self::Rename { new_name: None },
+            ResolutionArg::Retry => Self::Retry,
+            ResolutionArg::Cancel => Self::CancelJob,
+        }
+    }
+}
+
+/// `path` made absolute against this process's folder: the core has its own.
+fn absolute(path: &str) -> anyhow::Result<String> {
+    std::path::absolute(path)
+        .map(|path| path.display().to_string())
+        .with_context(|| format!("{path}: not a valid path"))
+}
+
+/// The job of a `copy` or `move` command.
+fn transfer_job(kind: JobKind, arguments: &TransferArgs) -> anyhow::Result<jobs::JobRun> {
+    let (destination, sources) = arguments
+        .paths
+        .split_last()
+        .context("a source and a destination are needed")?;
+    Ok(jobs::JobRun {
+        request: JobRequest {
+            kind,
+            sources: sources
+                .iter()
+                .map(|source| absolute(source))
+                .collect::<anyhow::Result<_>>()?,
+            destination: Some(absolute(destination)?),
+            options: JobOptions {
+                on_conflict: arguments.on_conflict.into(),
+                verify: arguments.verify,
+                ..JobOptions::default()
+            },
+        },
+        resolve: arguments.resolve.map(Resolution::from),
+        stats: arguments.stats,
+    })
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -285,27 +466,91 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
                 other => return Err(failure(path, &other)),
             }
         }
+        Command::Config { .. } | Command::Commands { .. } | Command::Keys { .. } => {
+            settings_command(&mut client, &cli.command).await?;
+        }
+        Command::Copy(_)
+        | Command::Move(_)
+        | Command::Delete { .. }
+        | Command::Jobs
+        | Command::Job { .. } => job_command(&mut client, &cli.command).await?,
+    }
+    Ok(())
+}
+
+/// The settings commands: `config`, `commands`, `keys`.
+async fn settings_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
+    match command {
         Command::Config { action } => match action {
-            ConfigAction::Path => settings::config_path(&mut client).await?,
-            ConfigAction::Show => settings::config_show(&mut client).await?,
+            ConfigAction::Path => settings::config_path(client).await?,
+            ConfigAction::Show => settings::config_show(client).await?,
             ConfigAction::Validate { .. } => unreachable!("handled without a connection"),
         },
         Command::Commands { action } => match action {
-            CommandsAction::List { json } => settings::commands_list(&mut client, *json).await?,
+            CommandsAction::List { json } => settings::commands_list(client, *json).await?,
             CommandsAction::Search { query } => {
-                settings::commands_search(&mut client, query).await?;
+                settings::commands_search(client, query).await?;
             }
         },
         Command::Keys { action } => match action {
-            KeysAction::List => settings::keys_list(&mut client).await?,
+            KeysAction::List => settings::keys_list(client).await?,
             KeysAction::Set { command, keys } => {
-                settings::keys_change(&mut client, command, Some(keys)).await?;
+                settings::keys_change(client, command, Some(keys)).await?;
             }
             KeysAction::Reset { command } => {
-                settings::keys_change(&mut client, command, None).await?;
+                settings::keys_change(client, command, None).await?;
             }
-            KeysAction::Watch => settings::keys_watch(&mut client).await?,
+            KeysAction::Watch => settings::keys_watch(client).await?,
         },
+        _ => unreachable!("only settings commands come here"),
+    }
+    Ok(())
+}
+
+/// The job commands: `copy`, `move`, `delete`, `jobs`, `job`.
+async fn job_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
+    match command {
+        Command::Copy(arguments) => {
+            jobs::run(client, transfer_job(JobKind::Copy, arguments)?).await?;
+        }
+        Command::Move(arguments) => {
+            jobs::run(client, transfer_job(JobKind::Move, arguments)?).await?;
+        }
+        Command::Delete {
+            paths,
+            permanent,
+            resolve,
+            stats,
+        } => {
+            let job = jobs::JobRun {
+                request: JobRequest {
+                    kind: JobKind::Delete {
+                        permanent: *permanent,
+                    },
+                    sources: paths
+                        .iter()
+                        .map(|path| absolute(path))
+                        .collect::<anyhow::Result<_>>()?,
+                    destination: None,
+                    options: JobOptions::default(),
+                },
+                resolve: resolve.map(Resolution::from),
+                stats: *stats,
+            };
+            jobs::run(client, job).await?;
+        }
+        Command::Jobs => jobs::list(client).await?,
+        Command::Job { action } => match action {
+            JobCommand::Pause { id } => jobs::control(client, *id, JobAction::Pause).await?,
+            JobCommand::Resume { id } => jobs::control(client, *id, JobAction::Resume).await?,
+            JobCommand::Cancel { id } => jobs::control(client, *id, JobAction::Cancel).await?,
+            JobCommand::Resolve {
+                job,
+                conflict,
+                resolution,
+            } => jobs::resolve(client, *job, *conflict, (*resolution).into()).await?,
+        },
+        _ => unreachable!("only job commands come here"),
     }
     Ok(())
 }
@@ -608,6 +853,81 @@ mod tests {
         assert!(
             parse(&["commands", "search"]).is_err(),
             "a query is required"
+        );
+    }
+
+    #[test]
+    fn parses_copy_move_delete_and_job() {
+        let parse = |args: &[&str]| {
+            let mut full = vec!["cabinetos-cli"];
+            full.extend_from_slice(args);
+            Cli::try_parse_from(full).map(|cli| cli.command)
+        };
+        let Command::Copy(copy) = parse(&[
+            "copy",
+            "a",
+            "b",
+            r"E:\dst",
+            "--on-conflict",
+            "newer",
+            "--verify",
+            "--resolve",
+            "skip",
+            "--stats",
+        ])
+        .unwrap() else {
+            panic!("expected copy")
+        };
+        assert_eq!(copy.paths, ["a", "b", r"E:\dst"]);
+        assert_eq!(copy.on_conflict, OnConflictArg::Newer);
+        assert!(copy.verify && copy.stats);
+        assert_eq!(copy.resolve, Some(ResolveArg::Skip));
+        let job = transfer_job(JobKind::Copy, &copy).unwrap();
+        assert_eq!(job.request.destination.as_deref(), Some(r"E:\dst"));
+        assert_eq!(job.request.sources.len(), 2);
+        assert!(
+            job.request
+                .sources
+                .iter()
+                .all(|source| std::path::Path::new(source).is_absolute())
+        );
+        assert_eq!(
+            job.request.options.on_conflict,
+            ConflictPolicy::OverwriteIfNewer
+        );
+        assert!(
+            parse(&["copy", "only-one"]).is_err(),
+            "a source and a destination"
+        );
+        assert!(matches!(
+            parse(&["move", "a", "b"]).unwrap(),
+            Command::Move(_)
+        ));
+        assert_eq!(
+            parse(&["delete", "x", "--permanent"]).unwrap(),
+            Command::Delete {
+                paths: vec!["x".to_owned()],
+                permanent: true,
+                resolve: None,
+                stats: false,
+            }
+        );
+        assert_eq!(parse(&["jobs"]).unwrap(), Command::Jobs);
+        assert_eq!(
+            parse(&["job", "resolve", "3", "9", "rename"]).unwrap(),
+            Command::Job {
+                action: JobCommand::Resolve {
+                    job: 3,
+                    conflict: 9,
+                    resolution: ResolutionArg::Rename,
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["job", "cancel", "3"]).unwrap(),
+            Command::Job {
+                action: JobCommand::Cancel { id: 3 }
+            }
         );
     }
 
