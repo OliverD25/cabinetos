@@ -77,7 +77,7 @@ Places where the brief or the design handout disagree with the Constitution, or 
 | # | Where | Conflict | Proposed handling | Decide in |
 |---|-------|----------|-------------------|-----------|
 | A | Brief §8, first sentence | Says "telemetry"; the creator renamed Article 12 to "Diagnostics" because telemetry suggests data sent home | Done in Phase 0: `docs/ARCHITECTURE.md` says "diagnostics" and its change log records the edit. The creator's preference was already known from the Article 12 rename | Phase 0 (done) |
-| B | Design §1 vs §3A | §1: first run is a single pane. §3A: dual pane by default. Article 5 makes dual-pane the primary paradigm; Article 4 wants a casual user at ease | Recommend dual by default with single one toggle away; confirm before the UI phase | Phase 5 |
+| B | Design §1 vs §3A | §1: first run is a single pane. §3A: dual pane by default. Article 5 makes dual-pane the primary paradigm; Article 4 wants a casual user at ease | Decided by the creator 2026-09-28: **dual pane on first start**, single pane one toggle away (`view.toggleDualPane`, Ctrl+Shift+D). `ui.dualPane` already defaults to `true` | Phase 5 (decided) |
 | C | Brief §6 Layer 2 | "WinUI UserControls or WebView2" and "if they crash, the window must remain responsive". An in-process control cannot guarantee that | WebView2 for third-party Tool Extensions; native controls only first-party (section 2 default) | Phase 7 |
 | D | Design sidebar "Tags" | File tagging is a feature, not navigation. Article 10 says features are opt-in | Tags become a first-party plugin (core plugin stores tags; UI hook draws the dot). Not in the core | Phase 7 |
 | E | Design keybinding hint | Sidebar shows "Ctrl+K W"; the command list says "Ctrl+K then Ctrl+W" | Pick one when seeding the command registry | Phase 3 (done: `ctrl+k ctrl+w`, [keybindings.md](keybindings.md)) |
@@ -253,7 +253,7 @@ Directory listing, shared-memory data (only the section-creation helper), file o
 ## 7. Open questions for later phases (nothing here blocks Phase 0 or 1)
 
 1. **Terminal rendering control (Phase 8).** WinUI 3 has no public terminal control. Options: xterm.js inside WebView2 (fast to build, proven), or a custom text renderer (native look, months of work). Recommendation: xterm.js first.
-2. **First-run layout (Phase 5).** Dual or single pane on first start; see conflict B.
+2. **First-run layout (Phase 5).** Settled 2026-09-28 by the creator: dual pane on first start; see conflict B.
 3. **Config comments (Phase 3).** Settled 2026-09-28: strict JSON for version 1 ([config.md](config.md)); every JSON tool can read it and there is one parser. JSONC stays possible later by stripping comments before parsing.
 4. **Indexer install (Phase 6).** Windows service installed once with one UAC prompt, or elevated on demand every session? Service is smoother; on-demand is simpler to ship first.
 5. **IoRing vs CopyFileExW (Phase 4).** Measure before adopting. IoRing's API surface in `windows-rs` must be checked.
