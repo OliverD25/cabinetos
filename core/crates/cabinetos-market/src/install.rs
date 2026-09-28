@@ -410,17 +410,18 @@ impl Market {
         let mut placed: Vec<String> = Vec::new();
         for relative in staged {
             let recorded = format!("{prefix}{relative}");
-            let (Some(from), Some(to)) = (relative_path(relative), relative_path(&recorded)) else {
-                continue;
+            let copied = match (relative_path(relative), relative_path(&recorded)) {
+                (Some(from), Some(to)) => copy_replacing(&staging.join(from), &root.join(to))
+                    .map_err(|error| format!("cannot put {recorded} in place: {error}")),
+                _ => Err(format!("cannot record the file name `{relative}`")),
             };
-            let to = root.join(to);
-            if let Err(error) = copy_replacing(&staging.join(from), &to) {
+            if let Err(problem) = copied {
                 if previous.is_none() {
                     remove_files(root, &placed);
                 }
                 return Err(MarketError::market(format!(
-                    "cannot put {} in place: {error}",
-                    to.display()
+                    "{} {}: {problem}",
+                    item.id, item.version
                 )));
             }
             placed.push(recorded);
