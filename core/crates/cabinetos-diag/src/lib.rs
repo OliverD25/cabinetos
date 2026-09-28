@@ -4,7 +4,9 @@
 //! - [`init`] installs a `tracing` subscriber. Events are formatted as one JSON
 //!   object per line (schema in `docs/diagnostics.md`) and handed to a
 //!   background thread that appends them to `<process>.<UTC date>.jsonl`, a
-//!   file that rolls over daily. The calling thread never waits for the disk.
+//!   file that rolls over daily; the newest [`KEPT_LOG_FILES`] files are kept.
+//!   The calling thread never waits for the disk, and never takes a lock: the
+//!   ring buffer of recent events is a lock-free queue.
 //! - Every event carries the process's [`Boundary`], and the `request_id` of
 //!   the request it belongs to ([`span_for_request`]), so one action can be
 //!   followed from the UI through the pipe into the core.
@@ -45,6 +47,11 @@ pub const LOG_STDERR_ENV: &str = "CABINETOS_LOG_STDERR";
 /// Environment variable with a log filter, for example `debug` or
 /// `info,cabinetos_ipc=trace`. The default is `info`.
 pub const LOG_FILTER_ENV: &str = "CABINETOS_LOG";
+
+/// How many daily log files each process keeps, today's included. Older files
+/// of the same process are deleted when a process starts and at each daily
+/// rollover. Crash traces are never deleted.
+pub const KEPT_LOG_FILES: usize = 14;
 
 /// Where in the system an event happened. Each process has one fixed boundary,
 /// so a crash trace names the side that failed (Article 12).
@@ -190,6 +197,7 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
             .rotation(Rotation::DAILY)
             .filename_prefix(process)
             .filename_suffix("jsonl")
+            .max_log_files(KEPT_LOG_FILES)
             .build(&log_dir)
             .map_err(|source| DiagError::LogFile {
                 dir: log_dir.clone(),

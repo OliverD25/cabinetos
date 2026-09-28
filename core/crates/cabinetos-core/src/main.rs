@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use cabinetos_core::{CoreConfig, diag_config, run};
+use cabinetos_core::{CoreConfig, WORKERS_ENV, diag_config, run, worker_threads};
 use cabinetos_ipc::PipeName;
 use clap::Parser;
 use tokio_util::sync::CancellationToken;
@@ -44,9 +44,13 @@ fn main() -> ExitCode {
         self_test_panic(args.log_dir);
     }
 
+    // An invalid value falls back to the default; `run` logs a warning once
+    // diagnostics are up.
+    let (workers, _) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref());
     let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(workers)
         .enable_all()
-        .thread_name_fn(worker_thread_name)
+        .thread_name_fn(runtime_thread_name)
         .build()
     {
         Ok(runtime) => runtime,
@@ -69,10 +73,11 @@ fn main() -> ExitCode {
     }
 }
 
-/// Numbered names, so each log line says which worker it came from.
-fn worker_thread_name() -> String {
+/// Numbered names, so each log line says which runtime thread wrote it. Tokio
+/// uses this for async workers and for its blocking-thread pool alike.
+fn runtime_thread_name() -> String {
     static NEXT: AtomicUsize = AtomicUsize::new(1);
-    format!("core-worker-{}", NEXT.fetch_add(1, Ordering::Relaxed))
+    format!("core-rt-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
 /// Proves the crash path end to end: a crash trace with the recent events, and

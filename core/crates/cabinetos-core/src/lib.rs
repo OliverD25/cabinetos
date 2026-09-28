@@ -26,6 +26,32 @@ use tracing::Instrument;
 /// The core's version, reported in `pong`.
 pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Environment variable that sets the number of async worker threads.
+pub const WORKERS_ENV: &str = "CABINETOS_WORKERS";
+
+/// Async worker threads when `CABINETOS_WORKERS` is not set. The workers only
+/// route messages and wait for events; disk work runs on blocking threads
+/// (`spawn_blocking`) or on dedicated threads (directory watchers), never on
+/// a worker.
+pub const DEFAULT_WORKERS: usize = 4;
+
+/// Largest accepted `CABINETOS_WORKERS` value.
+const MAX_WORKERS: usize = 64;
+
+/// The async worker count for a `CABINETOS_WORKERS` value: the value itself
+/// when it is a whole number from 1 to 64, otherwise [`DEFAULT_WORKERS`]. The
+/// second element returns a rejected value, so the caller can warn about it.
+#[must_use]
+pub fn worker_threads(value: Option<&str>) -> (usize, Option<String>) {
+    let Some(text) = value.map(str::trim).filter(|text| !text.is_empty()) else {
+        return (DEFAULT_WORKERS, None);
+    };
+    match text.parse::<usize>() {
+        Ok(count) if (1..=MAX_WORKERS).contains(&count) => (count, None),
+        _ => (DEFAULT_WORKERS, Some(text.to_owned())),
+    }
+}
+
 /// How long open connections may take to finish once shutdown starts.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 
@@ -93,6 +119,12 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         log_dir,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
+    if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
+        tracing::warn!(
+            value = %rejected,
+            "ignoring {WORKERS_ENV}: expected a whole number from 1 to {MAX_WORKERS}; using {DEFAULT_WORKERS}"
+        );
+    }
     let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir()).await;
     match &result {
         Ok(()) => tracing::info!("core stopped"),
@@ -136,6 +168,7 @@ async fn serve(
         protocol_version = PROTOCOL_VERSION,
         pid = std::process::id(),
         parent_pid,
+        workers = tokio::runtime::Handle::current().metrics().num_workers(),
         log_dir = %log_dir.display(),
         "core started"
     );
@@ -332,6 +365,21 @@ mod tests {
     use super::*;
 
     const ID: &str = "01J9ZQ4X7K3M5N8P2R6S0T1V4W";
+
+    #[test]
+    fn worker_count_defaults_to_four_and_rejects_nonsense() {
+        assert_eq!(worker_threads(None), (DEFAULT_WORKERS, None));
+        assert_eq!(worker_threads(Some("  ")), (DEFAULT_WORKERS, None));
+        assert_eq!(worker_threads(Some("8")), (8, None));
+        assert_eq!(worker_threads(Some(" 1 ")), (1, None));
+        for bad in ["0", "65", "-2", "four", "2.5"] {
+            assert_eq!(
+                worker_threads(Some(bad)),
+                (DEFAULT_WORKERS, Some(bad.to_owned())),
+                "{bad}"
+            );
+        }
+    }
 
     #[test]
     fn decodes_a_valid_request() {

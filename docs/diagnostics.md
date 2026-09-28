@@ -20,7 +20,9 @@ The Rust processes (core, indexer, CLI) get all of this from the
   wins over the variable.
 - **Daily files.** A new file starts at midnight UTC. The date is part of the
   file name because the rolling writer (`tracing-appender`) always names its
-  files that way. Old files are kept; there is no clean-up yet.
+  files that way. Each process keeps its newest 14 daily files, today's
+  included; older files of that process are deleted when it starts and at each
+  daily rollover. Crash traces are never deleted.
 - **Level.** `info` by default. `CABINETOS_LOG` sets a filter, for example
   `debug` or `info,cabinetos_ipc=trace`.
 - **Terminal.** `CABINETOS_LOG_STDERR=1` also prints every event to stderr in a
@@ -29,6 +31,11 @@ The Rust processes (core, indexer, CLI) get all of this from the
 - **Never blocking.** The calling thread formats the line and hands it to a
   background writer thread; it never waits for the disk. If that thread falls
   far behind, new lines are dropped rather than stalling the caller.
+- **Lock-free.** The calling thread takes no lock. Besides going to the file,
+  every line goes into the ring buffer of recent events: a bounded lock-free
+  queue of the last 256 lines that drops its oldest line when full. Reading
+  the ring (for a crash trace) moves the queued lines into a reader-side copy;
+  only readers ever wait for each other, never a thread that logs.
 
 ## Log line format
 
@@ -45,12 +52,12 @@ One JSON object per line, with the keys always in this order:
 | `plugin_id` | string | inside a plugin call | The plugin that caused the event (Phase 7), same rule as `request_id` |
 | `span` | string | inside a span | The name of the innermost span, for example `request` |
 | `fields` | object | when there are any | The event's other fields |
-| `thread` | string | always | The thread's name (`main`, `core-worker-3`), or its ID when it has no name |
+| `thread` | string | always | The thread's name (`main`, `core-rt-3`), or its ID when it has no name. In the core, `core-rt-N` are the async runtime's threads, workers and blocking threads alike. |
 
 Example, one line from `core.<date>.jsonl`:
 
 ```json
-{"ts":"2026-09-28T00:16:18.959Z","level":"INFO","boundary":"engine","target":"cabinetos_core","message":"request handled","request_id":"01M3JNX80F5HE9R5F65SBDGNWS","span":"request","fields":{"elapsed_us":57,"request":"ping"},"thread":"core-worker-1"}
+{"ts":"2026-09-28T00:16:18.959Z","level":"INFO","boundary":"engine","target":"cabinetos_core","message":"request handled","request_id":"01M3JNX80F5HE9R5F65SBDGNWS","span":"request","fields":{"elapsed_us":57,"request":"ping"},"thread":"core-rt-1"}
 ```
 
 ## How a request ID travels
@@ -100,7 +107,7 @@ Crash file format:
 | `message` | string | The panic message |
 | `location` | object | `file`, `line` and `column` of the panic |
 | `thread` | string | The thread that panicked |
-| `backtrace` | string | The full backtrace, captured whatever `RUST_BACKTRACE` says |
+| `backtrace` | string | The full backtrace, captured whatever `RUST_BACKTRACE` says. Release builds carry line tables, so frames name file and line as long as the `.pdb` file sits next to the `.exe` |
 | `recent_events` | array | The last log lines (at most 256), oldest first, each as a JSON object in the log line format above |
 
 To see one without a real bug:

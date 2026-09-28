@@ -58,8 +58,7 @@ pub(crate) fn install_panic_hook() {
 }
 
 fn write_crash_trace(process: &ProcessInfo, info: &PanicHookInfo<'_>) {
-    let recent_events = ring::try_recent_events()
-        .unwrap_or_default()
+    let recent_events = ring::recent_events_without_waiting()
         .into_iter()
         .map(|line| serde_json::from_str(&line).unwrap_or(Value::String(line)))
         .collect();

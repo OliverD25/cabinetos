@@ -19,6 +19,7 @@ cabinetos-protocol = { path = "crates/cabinetos-protocol" }
 # External crates. Each crate adds the features it needs on top of these.
 anyhow = "1.0"
 clap = { version = "4.6", features = ["derive"] }
+crossbeam-queue = "0.3"
 rand = "0.10"
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }
@@ -33,6 +34,11 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "registry", "std"] }
 ulid = "3.0"
 windows = "0.62"
+
+[profile.release]
+# Line tables only: crash traces from release builds name file and line, and
+# the MSVC linker puts the tables in a separate .pdb, so the .exe stays small.
+debug = "line-tables-only"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

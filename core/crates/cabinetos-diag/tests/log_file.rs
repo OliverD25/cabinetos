@@ -7,7 +7,9 @@
 use std::fs;
 use std::path::Path;
 
-use cabinetos_diag::{Boundary, DiagConfig, DiagError, init, recent_events, span_for_request};
+use cabinetos_diag::{
+    Boundary, DiagConfig, DiagError, KEPT_LOG_FILES, init, recent_events, span_for_request,
+};
 use cabinetos_protocol::RequestId;
 use serde_json::Value;
 
@@ -56,9 +58,31 @@ fn assert_timestamp_format(ts: &str) {
     }
 }
 
+fn count_logs(dir: &Path, process: &str) -> usize {
+    fs::read_dir(dir)
+        .unwrap()
+        .filter(|entry| {
+            let name = entry.as_ref().unwrap().file_name();
+            let name = name.to_string_lossy();
+            name.starts_with(&format!("{process}.")) && name.ends_with(".jsonl")
+        })
+        .count()
+}
+
 #[test]
 fn writes_json_lines_and_flushes_on_drop() {
     let dir = tempfile::tempdir().unwrap();
+    // Twenty old daily files of this process, plus files init must not touch.
+    for day in 1..=20 {
+        fs::write(
+            dir.path().join(format!("diagtest.2025-01-{day:02}.jsonl")),
+            "",
+        )
+        .unwrap();
+    }
+    fs::write(dir.path().join("crash-20250101T000000000Z.json"), "{}").unwrap();
+    fs::write(dir.path().join("other.2025-01-01.jsonl"), "").unwrap();
+
     let guard = init(DiagConfig {
         process: "diagtest",
         boundary: Boundary::Engine,
@@ -67,6 +91,11 @@ fn writes_json_lines_and_flushes_on_drop() {
     })
     .unwrap();
     assert_eq!(guard.log_dir(), dir.path());
+
+    // Old files were pruned to the cap, today's file included.
+    assert_eq!(count_logs(dir.path(), "diagtest"), KEPT_LOG_FILES);
+    assert!(dir.path().join("crash-20250101T000000000Z.json").exists());
+    assert!(dir.path().join("other.2025-01-01.jsonl").exists());
 
     let id = RequestId::new();
     {

@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 cabinetos-protocol.workspace = true
+crossbeam-queue.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

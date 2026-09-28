@@ -82,6 +82,22 @@ Each ping prints `pong id=<ulid> protocol=1 core=<version> rtt=<ms>ms`.
 and, when started with `--parent-pid <pid>`, as soon as that process exits.
 `cabinetos-cli --help` and `cabinetos-core --help` list every option.
 
+## Threads in the core
+
+The core runs a fixed number of async worker threads: 4 by default, or the
+value of the environment variable `CABINETOS_WORKERS` (a whole number from 1
+to 64; anything else falls back to 4 with a warning in the log). The workers
+only route messages and wait for events.
+
+Disk work never runs on a worker (Article 1: nothing may stall the pipe). Work
+that finishes on its own, such as reading a directory, goes through Tokio's
+`spawn_blocking` pool. Work that waits indefinitely, such as watching a
+directory, gets a dedicated thread. In the log, the runtime's threads are
+named `core-rt-N`.
+
+Release builds keep line tables in a separate `.pdb` file next to each `.exe`,
+so crash traces name file and line. Ship the `.pdb` with the `.exe`.
+
 ## Logs
 
 `%LOCALAPPDATA%\CabinetOS\logs\core.<UTC date>.jsonl`, one JSON object per
