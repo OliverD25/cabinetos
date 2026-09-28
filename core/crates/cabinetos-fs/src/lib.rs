@@ -4,8 +4,12 @@
 //!
 //! [`list_directory`] reads a directory with `NtQueryDirectoryFile`, which
 //! returns names, file IDs, sizes, times and attributes in one pass, and
-//! sorts the result. [`ListingWriter`] puts it into a shared-memory section
-//! for the UI; [`ListingReader`] reads a section back.
+//! sorts the result. For a directory larger than a few buffers, a worker
+//! thread parses, keys and sorts each buffer while the kernel fills the next
+//! (the pipelined path, `pipeline.rs`); the result is the same as sorting
+//! afterwards. [`ListingWriter`] puts it into a shared-memory section for
+//! the UI, a large one on several threads; [`ListingReader`] reads a section
+//! back.
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: a directory is
 //! read in one pass and handed over without copying) and Article 5
@@ -24,6 +28,7 @@
 mod enumerate;
 mod error;
 mod path;
+mod pipeline;
 mod section;
 mod sort;
 pub mod time;
@@ -31,6 +36,8 @@ pub mod time;
 pub mod volume;
 #[allow(unsafe_code)]
 mod watch;
+
+use std::sync::OnceLock;
 
 use cabinetos_protocol::SortSpec;
 use cabinetos_protocol::shm::{EntryKind, ListingMeta};
@@ -40,8 +47,9 @@ pub use path::verbatim_wide;
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter};
 pub use watch::{DirectoryChanged, DirectoryWatcher};
 
-/// The default buffer for one `NtQueryDirectoryFile` call: 256 KiB, about
-/// 2,000 entries per system call.
+/// The default buffer for one `NtQueryDirectoryFile` call: 256 KiB. NTFS
+/// fills at most about 64 KiB of it per call (about 580 entries of typical
+/// names); a network share may fill more, saving round trips.
 pub const DEFAULT_BUFFER_SIZE: usize = 256 * 1024;
 
 /// How to list a directory.
@@ -54,6 +62,11 @@ pub struct ListOptions {
     /// Bytes per `NtQueryDirectoryFile` call. A tuning knob for benchmarks;
     /// values below 4 KiB are raised to 4 KiB.
     pub buffer_size: usize,
+    /// Parse, key and sort on a worker thread while the kernel reads on
+    /// (the default). `false` does it all on the calling thread after the
+    /// kernel is done: the Phase 2 path, kept to compare against. Both give
+    /// the same listing.
+    pub pipelined: bool,
 }
 
 impl Default for ListOptions {
@@ -62,6 +75,7 @@ impl Default for ListOptions {
             include_hidden: false,
             sort: SortSpec::default(),
             buffer_size: DEFAULT_BUFFER_SIZE,
+            pipelined: true,
         }
     }
 }
@@ -69,6 +83,9 @@ impl Default for ListOptions {
 /// Reads the directory at `path` (absolute or relative; any length) and
 /// sorts it. `.` and `..` are never included.
 pub fn list_directory(path: &str, options: &ListOptions) -> Result<Listing, FsError> {
+    if options.pipelined {
+        return pipeline::list(path, options);
+    }
     let mut listing = enumerate::read_directory(path, options.include_hidden, options.buffer_size)?;
     sort::sort(&mut listing, options.sort);
     Ok(listing)
@@ -77,9 +94,27 @@ pub fn list_directory(path: &str, options: &ListOptions) -> Result<Listing, FsEr
 /// A directory listing in memory, in display order.
 #[derive(Clone, Debug, Default)]
 pub struct Listing {
+    /// In display order, or in enumeration order when `order` is set.
     entries: Vec<Entry>,
     /// Every name back to back, UTF-16, without terminators.
     names: Vec<u16>,
+    /// The display order, when `entries` are not in it: the pipelined path
+    /// sorts indices, and the section writer follows them without moving
+    /// the entries.
+    order: Option<Vec<Placed>>,
+    /// `entries` in display order, made on the first call of
+    /// [`entries`](Self::entries) when `order` is set.
+    display: OnceLock<Vec<Entry>>,
+}
+
+/// One place in the display order of a [`Listing`] with an order.
+#[derive(Clone, Copy, Debug)]
+struct Placed {
+    /// The entry, as an index into the listing's entries.
+    index: u32,
+    /// Where its name starts in the section's name arena, in bytes: the
+    /// names of the entries before it in display order, back to back.
+    name_offset: u32,
 }
 
 impl Listing {
@@ -98,7 +133,15 @@ impl Listing {
     /// The entries, in display order.
     #[must_use]
     pub fn entries(&self) -> &[Entry] {
-        &self.entries
+        match &self.order {
+            None => &self.entries,
+            Some(order) => self.display.get_or_init(|| {
+                order
+                    .iter()
+                    .map(|placed| self.entries[placed.index as usize])
+                    .collect()
+            }),
+        }
     }
 
     /// The name of `entry` as UTF-16 units.

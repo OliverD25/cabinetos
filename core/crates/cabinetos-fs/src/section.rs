@@ -2,7 +2,9 @@
 //!
 //! The layout is defined and pinned in `cabinetos_protocol::shm` (diagram in
 //! `docs/ipc.md`): header, entry array, metadata array, name arena. The
-//! writer sizes the section exactly and writes it in one pass. The reader is
+//! writer sizes the section exactly and writes it in one pass; a large
+//! listing is split among several threads, each writing its own part of the
+//! three arrays, so no byte has two writers. The reader is
 //! a safe, bounds-checked view for Rust clients (the CLI, tests); the C# UI
 //! reads the same bytes through pointers.
 
@@ -91,7 +93,21 @@ impl<'a> ListingWriter<'a> {
 
     /// Writes the whole listing into `out`, which must hold at least
     /// [`section_size`](Self::section_size) bytes (the rest is left alone).
+    /// A large listing is written by several threads, each into its own
+    /// part of the entries, the metadata and the names.
     pub fn write(&self, out: &mut [u8], generation: u32) -> Result<(), LayoutError> {
+        self.write_with_threads(out, generation, write_threads(self.listing.len()))
+    }
+
+    /// [`write`](Self::write) with the entries split among `threads`
+    /// threads; 1 writes everything in one pass on this thread. The bytes
+    /// are the same either way.
+    pub fn write_with_threads(
+        &self,
+        out: &mut [u8],
+        generation: u32,
+        threads: usize,
+    ) -> Result<(), LayoutError> {
         let layout = self.layout;
         if out.len() < layout.total as usize {
             return Err(LayoutError(format!(
@@ -125,75 +141,182 @@ impl<'a> ListingWriter<'a> {
             put(out, at, &value.to_le_bytes());
         }
 
-        let mut name_cursor = 0usize;
-        for (index, entry) in self.listing.entries.iter().enumerate() {
-            let name = self.listing.name(entry);
-            let name_offset = u32::try_from(name_cursor).expect("checked by Layout");
-
-            let at = layout.entries_offset as usize + index * ENTRY_SIZE;
-            put(
-                out,
-                at + offset_of!(ListingEntry, id),
-                &entry.id.to_le_bytes(),
-            );
-            put(
-                out,
-                at + offset_of!(ListingEntry, name_offset),
-                &name_offset.to_le_bytes(),
-            );
-            put(
-                out,
-                at + offset_of!(ListingEntry, name_len),
-                &entry.name_len.to_le_bytes(),
-            );
-            out[at + offset_of!(ListingEntry, kind)] = entry.kind.to_raw();
-            out[at + offset_of!(ListingEntry, flags)] = entry.flags;
-
-            let at = layout.meta_offset as usize + index * META_SIZE;
-            let meta = &entry.meta;
-            put(
-                out,
-                at + offset_of!(ListingMeta, size),
-                &meta.size.to_le_bytes(),
-            );
-            put(
-                out,
-                at + offset_of!(ListingMeta, modified),
-                &meta.modified.to_le_bytes(),
-            );
-            put(
-                out,
-                at + offset_of!(ListingMeta, created),
-                &meta.created.to_le_bytes(),
-            );
-            put(
-                out,
-                at + offset_of!(ListingMeta, accessed),
-                &meta.accessed.to_le_bytes(),
-            );
-            put(
-                out,
-                at + offset_of!(ListingMeta, attributes),
-                &meta.attributes.to_le_bytes(),
-            );
-            put(
-                out,
-                at + offset_of!(ListingMeta, reserved),
-                &0u32.to_le_bytes(),
-            );
-
-            let at = layout.name_arena_offset as usize + name_cursor;
-            for (bytes, unit) in out[at..at + name.len() * 2]
-                .as_chunks_mut::<2>()
-                .0
-                .iter_mut()
-                .zip(name)
-            {
-                bytes.copy_from_slice(&unit.to_le_bytes());
-            }
-            name_cursor += name.len() * 2;
+        // The three parts follow each other (see `Layout`); each thread gets
+        // its own slice of every part, so no byte has two writers.
+        let count = layout.entry_count as usize;
+        let rest = &mut out[layout.entries_offset as usize..layout.total as usize];
+        let (entries_out, rest) = rest.split_at_mut(count * ENTRY_SIZE);
+        let (meta_out, names_out) = rest.split_at_mut(count * META_SIZE);
+        let threads = threads.clamp(1, count.max(1));
+        if threads == 1 {
+            write_range(self.listing, 0..count, entries_out, meta_out, names_out, 0);
+            return Ok(());
         }
+        // Every start is below `count`, as `threads <= count`; the product
+        // fits, as `count` fits in 32 bits.
+        let starts: Vec<usize> = (0..threads)
+            .map(|thread| thread * count / threads)
+            .collect();
+        let name_starts = self.name_offsets_at(&starts);
+        std::thread::scope(|scope| {
+            let (mut entries_rest, mut meta_rest, mut names_rest) =
+                (entries_out, meta_out, names_out);
+            for thread in 0..threads {
+                let (first, end) = (
+                    starts[thread],
+                    starts.get(thread + 1).map_or(count, |&next| next),
+                );
+                let names_end = name_starts
+                    .get(thread + 1)
+                    .map_or(layout.name_arena_len as usize, |&next| next);
+                let names_len = names_end - name_starts[thread];
+                let (entries, rest) =
+                    std::mem::take(&mut entries_rest).split_at_mut((end - first) * ENTRY_SIZE);
+                entries_rest = rest;
+                let (meta, rest) =
+                    std::mem::take(&mut meta_rest).split_at_mut((end - first) * META_SIZE);
+                meta_rest = rest;
+                let (names, rest) = std::mem::take(&mut names_rest).split_at_mut(names_len);
+                names_rest = rest;
+                let listing = self.listing;
+                let name_start = name_starts[thread];
+                scope.spawn(move || {
+                    write_range(listing, first..end, entries, meta, names, name_start);
+                });
+            }
+        });
         Ok(())
+    }
+
+    /// Where, in bytes, the name of the entry at each display position in
+    /// `positions` (ascending) starts in the name arena.
+    fn name_offsets_at(&self, positions: &[usize]) -> Vec<usize> {
+        let listing = self.listing;
+        if let Some(order) = &listing.order {
+            return positions
+                .iter()
+                .map(|&position| order[position].name_offset as usize)
+                .collect();
+        }
+        let mut offsets = Vec::with_capacity(positions.len());
+        let mut cursor = 0usize;
+        let mut next = 0usize;
+        for &position in positions {
+            for entry in &listing.entries[next..position] {
+                cursor += usize::from(entry.name_len) * 2;
+            }
+            next = position;
+            offsets.push(cursor);
+        }
+        offsets
+    }
+}
+
+/// How many threads [`ListingWriter::write`] uses for `count` entries.
+fn write_threads(count: usize) -> usize {
+    if count < PARALLEL_WRITE_FROM {
+        return 1;
+    }
+    std::thread::available_parallelism()
+        .map_or(1, std::num::NonZero::get)
+        .min(MAX_WRITE_THREADS)
+}
+
+/// Listings at least this long are written by several threads.
+const PARALLEL_WRITE_FROM: usize = 16_384;
+
+/// At most this many threads write a section.
+const MAX_WRITE_THREADS: usize = 4;
+
+/// Writes the entries at display positions `positions` into their slices:
+/// `entries_out` and `meta_out` start at the first position's entry, and
+/// `names_out` at `name_start`, that entry's name offset in the arena.
+fn write_range(
+    listing: &Listing,
+    positions: std::ops::Range<usize>,
+    entries_out: &mut [u8],
+    meta_out: &mut [u8],
+    names_out: &mut [u8],
+    name_start: usize,
+) {
+    let mut name_cursor = name_start;
+    for (slot, position) in positions.enumerate() {
+        let (entry, name_offset) = match &listing.order {
+            Some(order) => {
+                let placed = order[position];
+                (
+                    &listing.entries[placed.index as usize],
+                    placed.name_offset as usize,
+                )
+            }
+            None => (&listing.entries[position], name_cursor),
+        };
+        let name = listing.name(entry);
+
+        let at = slot * ENTRY_SIZE;
+        put(
+            entries_out,
+            at + offset_of!(ListingEntry, id),
+            &entry.id.to_le_bytes(),
+        );
+        put(
+            entries_out,
+            at + offset_of!(ListingEntry, name_offset),
+            &u32::try_from(name_offset)
+                .expect("checked by Layout")
+                .to_le_bytes(),
+        );
+        put(
+            entries_out,
+            at + offset_of!(ListingEntry, name_len),
+            &entry.name_len.to_le_bytes(),
+        );
+        entries_out[at + offset_of!(ListingEntry, kind)] = entry.kind.to_raw();
+        entries_out[at + offset_of!(ListingEntry, flags)] = entry.flags;
+
+        let at = slot * META_SIZE;
+        let meta = &entry.meta;
+        put(
+            meta_out,
+            at + offset_of!(ListingMeta, size),
+            &meta.size.to_le_bytes(),
+        );
+        put(
+            meta_out,
+            at + offset_of!(ListingMeta, modified),
+            &meta.modified.to_le_bytes(),
+        );
+        put(
+            meta_out,
+            at + offset_of!(ListingMeta, created),
+            &meta.created.to_le_bytes(),
+        );
+        put(
+            meta_out,
+            at + offset_of!(ListingMeta, accessed),
+            &meta.accessed.to_le_bytes(),
+        );
+        put(
+            meta_out,
+            at + offset_of!(ListingMeta, attributes),
+            &meta.attributes.to_le_bytes(),
+        );
+        put(
+            meta_out,
+            at + offset_of!(ListingMeta, reserved),
+            &0u32.to_le_bytes(),
+        );
+
+        let at = name_offset - name_start;
+        for (bytes, unit) in names_out[at..at + name.len() * 2]
+            .as_chunks_mut::<2>()
+            .0
+            .iter_mut()
+            .zip(name)
+        {
+            bytes.copy_from_slice(&unit.to_le_bytes());
+        }
+        name_cursor = name_offset + name.len() * 2;
     }
 }
 
@@ -499,6 +622,106 @@ mod tests {
         name_outside[40 + 8..40 + 12].copy_from_slice(&1000u32.to_le_bytes());
         let reader = ListingReader::new(&name_outside).unwrap();
         assert!(reader.entry(0).is_err());
+    }
+
+    /// A listing of `count` entries with names of many lengths.
+    fn many(count: usize) -> Listing {
+        let mut listing = Listing::default();
+        for index in 0..count {
+            let start = listing.names.len();
+            let name = "x".repeat(index % 37) + &index.to_string();
+            listing.names.extend(name.encode_utf16());
+            listing.entries.push(Entry {
+                id: index as u64,
+                kind: EntryKind::File,
+                flags: 0,
+                meta: ListingMeta {
+                    size: index as u64 * 3,
+                    attributes: 0x20,
+                    ..ListingMeta::default()
+                },
+                name_start: u32::try_from(start).unwrap(),
+                name_len: u16::try_from(listing.names.len() - start).unwrap(),
+            });
+        }
+        listing
+    }
+
+    /// Panics at the first byte where `a` and `b` differ, without printing
+    /// whole sections.
+    fn assert_same_bytes(a: &[u8], b: &[u8], what: &str) {
+        assert_eq!(a.len(), b.len(), "{what}: lengths");
+        if let Some(at) = a.iter().zip(b).position(|(x, y)| x != y) {
+            panic!("{what}: first difference at byte {at}");
+        }
+    }
+
+    fn written(listing: &Listing, threads: usize) -> Vec<u8> {
+        let writer = ListingWriter::new(listing).unwrap();
+        let mut section = vec![0xAAu8; writer.section_size()];
+        writer.write_with_threads(&mut section, 3, threads).unwrap();
+        section
+    }
+
+    #[test]
+    fn any_number_of_threads_writes_the_same_bytes() {
+        let plain = many(10_001);
+        // The same entries in another display order, given as an order...
+        let permutation: Vec<usize> = (0..plain.len())
+            .map(|i| (i * 7_919) % plain.len())
+            .collect();
+        let mut name_offset = 0u32;
+        let order = permutation
+            .iter()
+            .map(|&index| {
+                let placed = crate::Placed {
+                    index: u32::try_from(index).unwrap(),
+                    name_offset,
+                };
+                name_offset += u32::from(plain.entries[index].name_len) * 2;
+                placed
+            })
+            .collect();
+        let ordered = Listing {
+            order: Some(order),
+            ..plain.clone()
+        };
+        // ...and moved into that order.
+        let moved = Listing {
+            entries: permutation
+                .iter()
+                .map(|&index| plain.entries[index])
+                .collect(),
+            ..plain.clone()
+        };
+        for listing in [&plain, &ordered] {
+            let one = written(listing, 1);
+            for threads in 2..=7 {
+                assert_same_bytes(
+                    &written(listing, threads),
+                    &one,
+                    &format!("{threads} threads"),
+                );
+            }
+        }
+        assert_same_bytes(
+            &written(&ordered, 4),
+            &written(&moved, 1),
+            "ordered and moved",
+        );
+        assert!(ListingReader::new(&written(&ordered, 3)).is_ok());
+        // As many threads as entries or more, and no entries.
+        for count in [0, 5, 10] {
+            let small = many(count);
+            let one = written(&small, 1);
+            for threads in 2..=12 {
+                assert_same_bytes(
+                    &written(&small, threads),
+                    &one,
+                    &format!("{count} entries, {threads} threads"),
+                );
+            }
+        }
     }
 
     #[test]

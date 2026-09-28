@@ -49,7 +49,11 @@ pub(crate) fn sort(listing: &mut Listing, spec: SortSpec) {
             index: u32::try_from(index).expect("a listing has fewer than 2^32 entries"),
         })
         .collect();
-    items.sort_unstable_by(|a, b| compare(listing, &keys, spec.descending, a, b));
+    let whole = Whole {
+        listing,
+        keys: &keys,
+    };
+    items.sort_unstable_by(|a, b| compare(&whole, spec.descending, a, b));
     listing.entries = items
         .iter()
         .map(|item| listing.entries[item.index as usize])
@@ -67,34 +71,85 @@ struct SortItem {
     index: u32,
 }
 
-fn compare(
-    listing: &Listing,
-    keys: &NameKeys,
-    descending: bool,
-    a: &SortItem,
-    b: &SortItem,
-) -> Ordering {
-    let group = a.group.cmp(&b.group);
+impl Packed for SortItem {
+    fn group(&self) -> u8 {
+        self.group
+    }
+
+    fn primary(&self) -> u64 {
+        self.primary
+    }
+
+    fn prefix(&self) -> u128 {
+        self.prefix
+    }
+
+    fn position(&self) -> u64 {
+        u64::from(self.index)
+    }
+}
+
+/// A whole listing and its keys: the ties of [`SortItem`]s.
+struct Whole<'a> {
+    listing: &'a Listing,
+    keys: &'a NameKeys,
+}
+
+impl Ties<SortItem> for Whole<'_> {
+    fn key(&self, item: &SortItem) -> &[u8] {
+        self.keys.key(item.index as usize)
+    }
+
+    fn name(&self, item: &SortItem) -> &[u16] {
+        self.listing
+            .name(&self.listing.entries[item.index as usize])
+    }
+}
+
+/// The fields of a sort item that most comparisons need.
+pub(crate) trait Packed {
+    /// [`group_rank`]: directories first.
+    fn group(&self) -> u8;
+    /// [`primary_value`].
+    fn primary(&self) -> u64;
+    /// The first 16 bytes of the name's sort key ([`NameKeys::prefix`]).
+    fn prefix(&self) -> u128;
+    /// The entry's place in the enumeration: equal only for the same entry.
+    fn position(&self) -> u64;
+}
+
+/// What a comparison looks up when the packed fields tie: the whole sort
+/// key, then the raw name.
+pub(crate) trait Ties<I> {
+    /// The whole sort key of the item's name.
+    fn key(&self, item: &I) -> &[u8];
+    /// The item's name as UTF-16 units.
+    fn name(&self, item: &I) -> &[u16];
+}
+
+/// The display order of two entries: the group, then the requested key,
+/// the name's sort key and the raw name, and last the place in the
+/// enumeration. Every way of sorting a listing uses this function, so they
+/// all give the same order.
+pub(crate) fn compare<I: Packed, T: Ties<I>>(ties: &T, descending: bool, a: &I, b: &I) -> Ordering {
+    let group = a.group().cmp(&b.group());
     if group != Ordering::Equal {
         return group;
     }
     let within = a
-        .primary
-        .cmp(&b.primary)
-        .then(a.prefix.cmp(&b.prefix))
-        .then_with(|| keys.key(a.index as usize).cmp(keys.key(b.index as usize)))
-        .then_with(|| {
-            let name = |item: &SortItem| listing.name(&listing.entries[item.index as usize]);
-            name(a).cmp(name(b))
-        })
+        .primary()
+        .cmp(&b.primary())
+        .then(a.prefix().cmp(&b.prefix()))
+        .then_with(|| ties.key(a).cmp(ties.key(b)))
+        .then_with(|| ties.name(a).cmp(ties.name(b)))
         // Equal only for the same entry; keeps the order strict and total.
-        .then(a.index.cmp(&b.index));
+        .then(a.position().cmp(&b.position()));
     if descending { within.reverse() } else { within }
 }
 
 /// The value the sort key orders by, as an unsigned number. Times are
 /// shifted from `i64` to `u64` without changing their order.
-fn primary_value(entry: &Entry, key: SortKey) -> u64 {
+pub(crate) fn primary_value(entry: &Entry, key: SortKey) -> u64 {
     match key {
         SortKey::Name => 0,
         SortKey::Size => entry.meta.size,
@@ -104,7 +159,7 @@ fn primary_value(entry: &Entry, key: SortKey) -> u64 {
 }
 
 /// Directories before everything else.
-fn group_rank(attrs: u32) -> u8 {
+pub(crate) fn group_rank(attrs: u32) -> u8 {
     u8::from(attrs & attributes::DIRECTORY == 0)
 }
 
@@ -121,7 +176,7 @@ fn kind_rank(kind: EntryKind) -> u8 {
 }
 
 /// The sort key of every name, in one byte arena.
-struct NameKeys {
+pub(crate) struct NameKeys {
     bytes: Vec<u8>,
     /// `(start, len)` in `bytes`, by entry index.
     ranges: Vec<(u32, u32)>,
@@ -178,36 +233,59 @@ impl NameKeys {
 
     /// The keys of entries `start..end`, with ranges into its own arena.
     fn build_range(listing: &Listing, start: usize, end: usize) -> Self {
-        let entries = &listing.entries[start..end];
+        let count = end - start;
         let mut keys = Self {
-            bytes: Vec::with_capacity(entries.len() * 32),
-            ranges: Vec::with_capacity(entries.len()),
+            bytes: Vec::with_capacity(count * 32),
+            ranges: Vec::with_capacity(count),
         };
-        // Sort keys are byte strings, but the binding takes a UTF-16 buffer
-        // and passes its length in units as the byte capacity: 1024 units
-        // hold keys of up to 1024 bytes, enough for names of about 200
-        // characters. Longer names grow the buffer.
-        let mut scratch = vec![0u16; 1024];
-        for entry in entries {
-            let key_start = keys.bytes.len();
-            append_sort_key(listing.name(entry), &mut scratch, &mut keys.bytes);
-            let len = keys.bytes.len() - key_start;
-            keys.ranges.push((
+        keys.extend(listing, start, end, &mut Self::scratch());
+        keys
+    }
+
+    /// No keys yet.
+    pub(crate) fn new() -> Self {
+        Self {
+            bytes: Vec::new(),
+            ranges: Vec::new(),
+        }
+    }
+
+    /// A buffer for [`extend`](Self::extend). Sort keys are byte strings,
+    /// but the binding takes a UTF-16 buffer and passes its length in units
+    /// as the byte capacity: 1024 units hold keys of up to 1024 bytes,
+    /// enough for names of about 200 characters. Longer names grow it.
+    pub(crate) fn scratch() -> Vec<u16> {
+        vec![0; 1024]
+    }
+
+    /// Appends the keys of entries `start..end` of `listing`; they get the
+    /// next indices.
+    pub(crate) fn extend(
+        &mut self,
+        listing: &Listing,
+        start: usize,
+        end: usize,
+        scratch: &mut Vec<u16>,
+    ) {
+        for entry in &listing.entries[start..end] {
+            let key_start = self.bytes.len();
+            append_sort_key(listing.name(entry), scratch, &mut self.bytes);
+            let len = self.bytes.len() - key_start;
+            self.ranges.push((
                 u32::try_from(key_start).unwrap_or(u32::MAX),
                 u32::try_from(len).unwrap_or(0),
             ));
         }
-        keys
     }
 
-    fn key(&self, index: usize) -> &[u8] {
+    pub(crate) fn key(&self, index: usize) -> &[u8] {
         let (start, len) = self.ranges[index];
         let start = start as usize;
         self.bytes.get(start..start + len as usize).unwrap_or(&[])
     }
 
     /// The first 16 key bytes as a number that orders like the bytes.
-    fn prefix(&self, index: usize) -> u128 {
+    pub(crate) fn prefix(&self, index: usize) -> u128 {
         let mut prefix = [0u8; 16];
         let key = self.key(index);
         let len = key.len().min(16);

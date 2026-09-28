@@ -29,6 +29,7 @@ anyhow = "1.0"
 bytes = { version = "1.11", default-features = false }
 clap = { version = "4.6", features = ["derive"] }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+crossbeam-channel = "0.5"
 crossbeam-queue = "0.3"
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"] }
 memchr = "2.8"

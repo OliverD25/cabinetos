@@ -247,6 +247,7 @@ dependencies = [
  "cabinetos-ipc",
  "cabinetos-protocol",
  "criterion",
+ "crossbeam-channel",
  "tempfile",
  "thiserror",
  "tracing",

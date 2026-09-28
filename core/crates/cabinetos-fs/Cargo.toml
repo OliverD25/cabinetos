@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 cabinetos-protocol.workspace = true
+crossbeam-channel.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 windows = { workspace = true, features = [

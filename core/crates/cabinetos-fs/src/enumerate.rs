@@ -64,57 +64,92 @@ pub(crate) fn read_directory(
     include_hidden: bool,
     buffer_size: usize,
 ) -> Result<Listing, FsError> {
-    let wide = path::verbatim_wide(path)?;
-    let directory = open_directory(path, &wide)?;
-    let handle = HANDLE(directory.as_raw_handle());
-
-    let mut buffer = vec![0u64; buffer_size.max(MIN_BUFFER).div_ceil(8)];
-    let buffer_bytes = buffer.len() * 8;
-    let buffer_len = u32::try_from(buffer_bytes).unwrap_or(u32::MAX);
+    let directory = open(path)?;
+    let mut buffer = Buffer::new(buffer_size);
     let mut listing = Listing::default();
     let mut first = true;
     loop {
+        let written = buffer.fill(path, &directory, first)?;
+        first = false;
+        if written == 0 {
+            break;
+        }
+        parse_records(path, buffer.bytes(written), include_hidden, &mut listing)?;
+    }
+    Ok(listing)
+}
+
+/// Opens the directory at `path` for listing.
+pub(crate) fn open(path: &str) -> Result<OwnedHandle, FsError> {
+    let wide = path::verbatim_wide(path)?;
+    open_directory(path, &wide)
+}
+
+/// Room for the records of one `NtQueryDirectoryFile` call, 8-byte aligned
+/// as the records need.
+pub(crate) struct Buffer(Vec<u64>);
+
+impl Buffer {
+    /// A buffer of `size` bytes (at least 4 KiB).
+    pub(crate) fn new(size: usize) -> Self {
+        Self(vec![0; size.max(MIN_BUFFER).div_ceil(8)])
+    }
+
+    fn capacity(&self) -> usize {
+        self.0.len() * 8
+    }
+
+    /// Fills the buffer with the next records of `directory` (from the
+    /// start when `first`); returns how many bytes it holds, 0 at the end
+    /// of the directory.
+    pub(crate) fn fill(
+        &mut self,
+        path: &str,
+        directory: &OwnedHandle,
+        first: bool,
+    ) -> Result<usize, FsError> {
+        let capacity = self.capacity();
+        let len = u32::try_from(capacity).unwrap_or(u32::MAX);
         let mut status_block = IO_STATUS_BLOCK::default();
-        // SAFETY: `handle` is an open directory handle for synchronous I/O
+        // SAFETY: `directory` is an open directory handle for synchronous I/O
         // (no FILE_FLAG_OVERLAPPED), so the call completes before it returns
-        // and nothing refers to `status_block` or `buffer` afterwards.
-        // `buffer` is 8-byte aligned (u64 elements) and writable for
-        // `buffer_len` bytes, which never exceeds its size.
+        // and nothing refers to `status_block` or the buffer afterwards. The
+        // buffer is 8-byte aligned (u64 elements) and writable for `len`
+        // bytes, which never exceeds its size.
         let status = unsafe {
             NtQueryDirectoryFile(
-                handle,
+                HANDLE(directory.as_raw_handle()),
                 None,
                 None,
                 None,
                 &raw mut status_block,
-                buffer.as_mut_ptr().cast(),
-                buffer_len,
+                self.0.as_mut_ptr().cast(),
+                len,
                 FileIdFullDirectoryInformation,
                 false,
                 None,
                 first,
             )
         };
-        first = false;
         if status == STATUS_NO_MORE_FILES || status == STATUS_NO_SUCH_FILE {
-            break;
+            return Ok(0);
         }
         if status.0 < 0 || status == STATUS_PENDING {
             // SAFETY: RtlNtStatusToDosError only maps a number to a number.
             let code = unsafe { RtlNtStatusToDosError(status) };
             return Err(FsError::from_win32(path, code));
         }
-        let written = status_block.Information.min(buffer_bytes);
-        if written == 0 {
-            break;
-        }
-        // SAFETY: the buffer is `buffer_bytes` bytes of initialized memory
-        // (zeroed at allocation, partly overwritten by the kernel), and a
-        // byte slice has no alignment needs. `written` is clamped to its size.
-        let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), written) };
-        parse_records(path, bytes, include_hidden, &mut listing)?;
+        Ok(status_block.Information.min(capacity))
     }
-    Ok(listing)
+
+    /// The first `len` bytes, as the last [`fill`](Self::fill) left them.
+    pub(crate) fn bytes(&self, len: usize) -> &[u8] {
+        let len = len.min(self.capacity());
+        // SAFETY: the buffer is initialized memory (zeroed at allocation,
+        // partly overwritten by the kernel) of at least `len` bytes, and a
+        // byte slice has no alignment needs.
+        unsafe { std::slice::from_raw_parts(self.0.as_ptr().cast::<u8>(), len) }
+    }
 }
 
 /// Opens `wide` (verbatim, NUL-terminated) for listing and checks that it is a
@@ -151,7 +186,7 @@ fn open_directory(path: &str, wide: &[u16]) -> Result<OwnedHandle, FsError> {
 }
 
 /// Appends the records in `bytes` (one filled buffer) to `listing`.
-fn parse_records(
+pub(crate) fn parse_records(
     path: &str,
     bytes: &[u8],
     include_hidden: bool,
