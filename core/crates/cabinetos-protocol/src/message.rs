@@ -5,6 +5,7 @@ use crate::RequestId;
 use crate::index::{FileHit, SearchSource, VolumeStatus, default_file_search_limit};
 use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution};
 use crate::plugin::{PluginInfo, PluginState};
+use crate::terminal::TerminalSession;
 
 /// One message on the control channel: a request ID plus the message body.
 ///
@@ -195,6 +196,47 @@ pub enum Request {
     },
     /// Asks for the indexer's state. The core answers `index_status`.
     IndexStatus,
+    /// Starts a shell in a pseudo-console. The core answers
+    /// `terminal_opened`; the session's bytes then travel on its own pipe.
+    TerminalOpen {
+        /// A profile from `terminal.profiles`; `terminal.defaultProfile`
+        /// when absent.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<String>,
+        /// The folder the shell starts in; the user's profile folder when
+        /// absent.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cwd: Option<String>,
+        /// Width in character cells.
+        cols: u16,
+        /// Height in character cells.
+        rows: u16,
+    },
+    /// Changes a session's size. The core answers `ok`.
+    TerminalResize {
+        /// The session.
+        session_id: u64,
+        /// Width in character cells.
+        cols: u16,
+        /// Height in character cells.
+        rows: u16,
+    },
+    /// Closes a session's pseudo-console, which ends its shell, and forgets
+    /// the session. The core answers `ok`.
+    TerminalClose {
+        /// The session.
+        session_id: u64,
+    },
+    /// Types the shell's own change-directory command into the session, so
+    /// the terminal follows the active pane. The core answers `ok`.
+    TerminalSyncCwd {
+        /// The session.
+        session_id: u64,
+        /// The folder to change to.
+        path: String,
+    },
+    /// Asks for every session. The core answers `terminal_sessions`.
+    TerminalList,
 }
 
 fn default_search_limit() -> u32 {
@@ -228,6 +270,11 @@ impl Request {
         "grant_capabilities",
         "search",
         "index_status",
+        "terminal_open",
+        "terminal_resize",
+        "terminal_close",
+        "terminal_sync_cwd",
+        "terminal_list",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -257,6 +304,11 @@ impl Request {
             Self::GrantCapabilities { .. } => "grant_capabilities",
             Self::Search { .. } => "search",
             Self::IndexStatus => "index_status",
+            Self::TerminalOpen { .. } => "terminal_open",
+            Self::TerminalResize { .. } => "terminal_resize",
+            Self::TerminalClose { .. } => "terminal_close",
+            Self::TerminalSyncCwd { .. } => "terminal_sync_cwd",
+            Self::TerminalList => "terminal_list",
         }
     }
 }
@@ -405,6 +457,21 @@ pub enum Response {
         /// Its volumes; empty without an indexer.
         volumes: Vec<VolumeStatus>,
     },
+    /// Reply to `terminal_open`: the shell runs.
+    TerminalOpened {
+        /// The new session's ID.
+        session_id: u64,
+        /// Its byte pipe: open it to read the shell's output and send it
+        /// input (one client at a time).
+        pipe: String,
+        /// The shell's process ID.
+        pid: u32,
+    },
+    /// Reply to `terminal_list`: every session, oldest first.
+    TerminalSessions {
+        /// The sessions.
+        sessions: Vec<TerminalSession>,
+    },
 }
 
 impl Response {
@@ -427,6 +494,8 @@ impl Response {
         "plugins",
         "file_search_results",
         "index_status",
+        "terminal_opened",
+        "terminal_sessions",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -450,6 +519,8 @@ impl Response {
             Self::Plugins { .. } => "plugins",
             Self::FileSearchResults { .. } => "file_search_results",
             Self::IndexStatus { .. } => "index_status",
+            Self::TerminalOpened { .. } => "terminal_opened",
+            Self::TerminalSessions { .. } => "terminal_sessions",
         }
     }
 }
@@ -930,6 +1001,23 @@ mod tests {
                 root: Some(r"C:\Users".to_owned()),
             },
             Request::IndexStatus,
+            Request::TerminalOpen {
+                profile: Some("pwsh".to_owned()),
+                cwd: Some(r"E:\work".to_owned()),
+                cols: 120,
+                rows: 30,
+            },
+            Request::TerminalResize {
+                session_id: 3,
+                cols: 80,
+                rows: 24,
+            },
+            Request::TerminalClose { session_id: 3 },
+            Request::TerminalSyncCwd {
+                session_id: 3,
+                path: r"D:\docs".to_owned(),
+            },
+            Request::TerminalList,
         ]
     }
 
@@ -1066,6 +1154,24 @@ mod tests {
                     entries: 1_234_567,
                     built_in_ms: Some(2900),
                     journal_lag: Some(0),
+                }],
+            },
+            Response::TerminalOpened {
+                session_id: 3,
+                pipe: r"\\.\pipe\cabinetos-term-0123456789abcdef".to_owned(),
+                pid: 4242,
+            },
+            Response::TerminalSessions {
+                sessions: vec![TerminalSession {
+                    session_id: 3,
+                    profile: "cmd".to_owned(),
+                    cwd: r"C:\Users\me".to_owned(),
+                    cols: 80,
+                    rows: 24,
+                    pid: 4242,
+                    state: crate::TerminalState::Running,
+                    pipe: r"\\.\pipe\cabinetos-term-0123456789abcdef".to_owned(),
+                    attached: true,
                 }],
             },
         ]

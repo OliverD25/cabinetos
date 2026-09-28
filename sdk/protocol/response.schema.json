@@ -403,6 +403,59 @@
         "available",
         "volumes"
       ]
+    },
+    {
+      "description": "Reply to `terminal_open`: the shell runs.",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "description": "The shell's process ID.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "pipe": {
+          "description": "Its byte pipe: open it to read the shell's output and send it\ninput (one client at a time).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The new session's ID.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_opened"
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "pipe",
+        "pid"
+      ]
+    },
+    {
+      "description": "Reply to `terminal_list`: every session, oldest first.",
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "description": "The sessions.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TerminalSession"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_sessions"
+        }
+      },
+      "required": [
+        "type",
+        "sessions"
+      ]
     }
   ],
   "required": [
@@ -1375,6 +1428,107 @@
           "description": "The core's own bounded walk of one folder tree (no indexer).",
           "type": "string",
           "const": "walk"
+        }
+      ]
+    },
+    "TerminalSession": {
+      "description": "One terminal session, as `terminal_list` reports it.",
+      "type": "object",
+      "properties": {
+        "attached": {
+          "description": "Whether a client is attached to the byte pipe now.",
+          "type": "boolean"
+        },
+        "cols": {
+          "description": "Its width in character cells.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "cwd": {
+          "description": "The folder it started in, or was last synced to. The shell may have\nmoved since.",
+          "type": "string"
+        },
+        "pid": {
+          "description": "The shell's process ID.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "pipe": {
+          "description": "The session's byte pipe, such as `\\\\.\\pipe\\cabinetos-term-<token>`.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile it was opened with, such as `pwsh`.",
+          "type": "string"
+        },
+        "rows": {
+          "description": "Its height in character cells.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "session_id": {
+          "description": "The session's ID, unique while the core runs.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "Whether the shell still runs.",
+          "$ref": "#/$defs/TerminalState"
+        }
+      },
+      "required": [
+        "session_id",
+        "profile",
+        "cwd",
+        "cols",
+        "rows",
+        "pid",
+        "state",
+        "pipe",
+        "attached"
+      ]
+    },
+    "TerminalState": {
+      "description": "Whether a session's shell still runs.",
+      "oneOf": [
+        {
+          "description": "The shell runs.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "running"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The shell has exited.",
+          "type": "object",
+          "properties": {
+            "code": {
+              "description": "Its exit code (a Windows exit code, such as 3221225786 for a\nconsole closed under it).",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "exited"
+            }
+          },
+          "required": [
+            "type",
+            "code"
+          ]
         }
       ]
     },

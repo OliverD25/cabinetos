@@ -54,5 +54,6 @@ pub use terminal::{TerminalSession, TerminalState};
 /// move, delete); version 5 the Recycle Bin conflict
 /// (`recycle_bin_too_small`, `delete_permanently`) and the plugins; version
 /// 6 file search (`search`, `file_search_results`) and the indexer's state
-/// (`index_status`).
-pub const PROTOCOL_VERSION: u32 = 6;
+/// (`index_status`); version 7 terminal sessions (`terminal_open` and the
+/// other `terminal_*` messages).
+pub const PROTOCOL_VERSION: u32 = 7;

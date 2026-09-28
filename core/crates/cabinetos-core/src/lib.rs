@@ -4,9 +4,9 @@
 //! The UI is only a view (brief §1, the Dumb UI Rule): all work happens here,
 //! behind the named pipe. The core lists directories into shared memory,
 //! keeps watched listings current with events, reports volumes and disks,
-//! owns the configuration file, the commands and the keymap, runs the jobs
-//! and the Core Plugins, logs every request with its ID, and exits with its
-//! parent process. The protocol is in `docs/ipc.md`.
+//! owns the configuration file, the commands and the keymap, runs the jobs,
+//! the Core Plugins and the terminal sessions, logs every request with its
+//! ID, and exits with its parent process. The protocol is in `docs/ipc.md`.
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: every
 //! connection is served asynchronously, so no request waits on another),
@@ -14,9 +14,11 @@
 //! effect at once), Article 7 (Absolute Keyboard Control: the keymap and
 //! the Immutable System Tier live here), Article 8 (Sandboxed
 //! Extensibility: a plugin that crashes is removed and the core goes on),
-//! Article 10 (The Zero-Bloat Foundation: the core is the bare navigation
-//! engine; features arrive as extensions) and Article 12 (Unified
-//! Diagnostics: each request is handled inside a span carrying its ID).
+//! Article 9 (Workspace & Terminal Integration: shells in pseudo-consoles,
+//! started only when a client asks), Article 10 (The Zero-Bloat
+//! Foundation: the core is the bare navigation engine; features arrive as
+//! extensions) and Article 12 (Unified Diagnostics: each request is handled
+//! inside a span carrying its ID).
 #![forbid(unsafe_code)]
 
 mod connection;
@@ -25,6 +27,7 @@ mod listing;
 mod plugins;
 mod search;
 mod settings;
+mod terminal;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -191,14 +194,19 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
             settings.subscribe(),
         ));
     }
+    let terminals = terminal::start(&events);
     let services = Arc::new(Services {
         settings,
         jobs,
         events,
         plugins,
         indexer: search::IndexerLink::from_env(),
+        terminals,
     });
     let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
+    // The shells get their hang-up; together they may take up to 2 s to end.
+    let closing = Arc::clone(&services.terminals);
+    let _ = tokio::task::spawn_blocking(move || closing.shutdown()).await;
     if let Some(host) = &services.plugins {
         host.shutdown();
     }

@@ -10,10 +10,10 @@
 //! - the session loop, which answers quick requests itself and runs slow ones
 //!   (`list_directory`, `volume_info`, the keybinding and plugin settings
 //!   writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
-//!   `index_status`) as tasks, so one slow directory, plugin or search never
-//!   holds up the next request. After
-//!   `hello` it also forwards the configuration, job and plugin events every
-//!   connection receives.
+//!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`)
+//!   as tasks, so one slow directory, plugin, search or shell never holds up
+//!   the next request. After `hello` it also forwards the configuration,
+//!   job, plugin and terminal events every connection receives.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -25,7 +25,7 @@ use cabinetos_fs::{DirectoryWatcher, ListOptions};
 use cabinetos_ipc::{IpcError, PipeConnection, SharedSection};
 use cabinetos_protocol::{
     Envelope, ErrorCode, Event, JobRequest, PROTOCOL_VERSION, Request, RequestId, Response,
-    SortSpec,
+    SortSpec, TerminalState,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -40,7 +40,7 @@ use crate::listing::{self, Failure, Published, WatchedListing};
 use crate::plugins::check_grants;
 use crate::search;
 use crate::settings::{Settings, every_section};
-use crate::{CORE_VERSION, decode_request};
+use crate::{CORE_VERSION, decode_request, terminal};
 
 /// How long the writer may take to send what is still queued when the
 /// connection ends.
@@ -309,6 +309,11 @@ impl Session {
                     self.search_request(&id, &span, kind, request);
                     None
                 }
+                request @ (Request::TerminalOpen { .. }
+                | Request::TerminalResize { .. }
+                | Request::TerminalClose { .. }
+                | Request::TerminalSyncCwd { .. }
+                | Request::TerminalList) => self.terminal_request(&id, &span, kind, request),
             }
         };
         // Requests handled right here are done; the others log when they end.
@@ -475,6 +480,70 @@ impl Session {
                 });
             }
             _ => {}
+        }
+    }
+
+    /// The terminal requests. `terminal_resize` and `terminal_list` answer
+    /// at once; the others run on the blocking pool (starting a shell takes
+    /// tens of milliseconds, closing one up to 2 s).
+    fn terminal_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        let terminals = Arc::clone(&self.services.terminals);
+        let answer = |result: Result<(), cabinetos_terminal::TerminalError>| match result {
+            Ok(()) => Response::Ok,
+            Err(error) => failure_reply((error.code, error.message)),
+        };
+        match request {
+            Request::TerminalOpen {
+                profile,
+                cwd,
+                cols,
+                rows,
+            } => {
+                // Read at each open: an edited profile applies to the next
+                // shell at once.
+                let settings = self.services.settings.snapshot();
+                let profile = match terminal::profile(&settings.config.terminal, profile.as_deref())
+                {
+                    Ok(profile) => profile,
+                    Err(refusal) => return Some(failure_reply(refusal)),
+                };
+                self.spawn_reply(id, span, kind, move || {
+                    match terminals.open(&profile, cwd.as_deref(), cols, rows) {
+                        Ok(opened) => Response::TerminalOpened {
+                            session_id: opened.session_id,
+                            pipe: opened.pipe,
+                            pid: opened.pid,
+                        },
+                        Err(error) => failure_reply((error.code, error.message)),
+                    }
+                });
+                None
+            }
+            Request::TerminalResize {
+                session_id,
+                cols,
+                rows,
+            } => Some(answer(terminals.resize(session_id, cols, rows))),
+            Request::TerminalClose { session_id } => {
+                self.spawn_reply(id, span, kind, move || answer(terminals.close(session_id)));
+                None
+            }
+            Request::TerminalSyncCwd { session_id, path } => {
+                self.spawn_reply(id, span, kind, move || {
+                    answer(terminals.sync_cwd(session_id, &path))
+                });
+                None
+            }
+            Request::TerminalList => Some(Response::TerminalSessions {
+                sessions: terminals.list(),
+            }),
+            _ => None,
         }
     }
 
@@ -768,6 +837,17 @@ impl Session {
                             state: plugin.state,
                         },
                     ));
+                }
+                for session in self.services.terminals.list() {
+                    if let TerminalState::Exited { code } = session.state {
+                        self.out.send(&Envelope::new(
+                            RequestId::new(),
+                            Event::TerminalExited {
+                                session_id: session.session_id,
+                                exit_code: code,
+                            },
+                        ));
+                    }
                 }
             }
             Err(RecvError::Closed) => self.events = None,

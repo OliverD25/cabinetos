@@ -1,11 +1,13 @@
 //! The events every connection that said `hello` receives, whoever caused
-//! them: configuration changes, job progress and plugin news.
+//! them: configuration changes, job progress, plugin news and shells that
+//! exited.
 
 use std::sync::Arc;
 
 use cabinetos_jobs::JobQueueManager;
 use cabinetos_plugins::PluginHost;
 use cabinetos_protocol::{Envelope, Event, RequestId};
+use cabinetos_terminal::Terminals;
 use tokio::sync::broadcast;
 
 use crate::search::IndexerLink;
@@ -47,4 +49,7 @@ pub(crate) struct Services {
     pub(crate) plugins: Option<Arc<PluginHost>>,
     /// The way to the indexer, for search.
     pub(crate) indexer: IndexerLink,
+    /// The terminal sessions. They belong to the core, not to a
+    /// connection: a client may leave and a new one attach.
+    pub(crate) terminals: Arc<Terminals>,
 }

@@ -480,6 +480,143 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Starts a shell in a pseudo-console. The core answers\n`terminal_opened`; the session's bytes then travel on its own pipe.",
+      "type": "object",
+      "properties": {
+        "cols": {
+          "description": "Width in character cells.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "cwd": {
+          "description": "The folder the shell starts in; the user's profile folder when\nabsent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "A profile from `terminal.profiles`; `terminal.defaultProfile`\nwhen absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rows": {
+          "description": "Height in character cells.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_open"
+        }
+      },
+      "required": [
+        "type",
+        "cols",
+        "rows"
+      ]
+    },
+    {
+      "description": "Changes a session's size. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "cols": {
+          "description": "Width in character cells.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "rows": {
+          "description": "Height in character cells.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_resize"
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "cols",
+        "rows"
+      ]
+    },
+    {
+      "description": "Closes a session's pseudo-console, which ends its shell, and forgets\nthe session. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_close"
+        }
+      },
+      "required": [
+        "type",
+        "session_id"
+      ]
+    },
+    {
+      "description": "Types the shell's own change-directory command into the session, so\nthe terminal follows the active pane. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The folder to change to.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_sync_cwd"
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "path"
+      ]
+    },
+    {
+      "description": "Asks for every session. The core answers `terminal_sessions`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "terminal_list"
+        }
+      },
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [

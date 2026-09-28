@@ -3,7 +3,8 @@
 //! UI will), `volume`, `shutdown`, the configuration (`config`), the command
 //! registry (`commands`), the keymap (`keys`), jobs (`copy`, `move`,
 //! `delete`, `jobs`, `job`), the Core Plugins (`plugins`), the events the
-//! core sends (`events watch`), and file search (`search`, `index status`).
+//! core sends (`events watch`), file search (`search`, `index status`), and
+//! the terminal sessions (`term`).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -20,6 +21,7 @@ mod ls;
 mod plugins;
 mod search;
 mod settings;
+mod term;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -165,6 +167,43 @@ enum Command {
     Index {
         #[command(subcommand)]
         action: IndexAction,
+    },
+    /// Run a shell in the core, attached to this console until it exits
+    /// (Ctrl+] detaches), or list, close or move the shells the core runs.
+    Term(TermArgs),
+}
+
+/// `term`: a new session, or an action on the sessions.
+#[derive(Debug, PartialEq, Eq, Args)]
+#[command(args_conflicts_with_subcommands = true)]
+struct TermArgs {
+    #[command(subcommand)]
+    action: Option<TermAction>,
+    /// A profile from terminal.profiles; without it, terminal.defaultProfile.
+    #[arg(long, value_name = "NAME")]
+    profile: Option<String>,
+    /// The folder the shell starts in; without it, this folder.
+    #[arg(long, value_name = "PATH")]
+    cwd: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum TermAction {
+    /// Print every session: its ID, profile, process ID, size, state,
+    /// whether a client is attached, and its folder.
+    List,
+    /// Close a session: its shell gets a hang-up.
+    Close {
+        /// The session's ID.
+        id: u64,
+    },
+    /// Type the shell's own change-directory command for PATH into a
+    /// session, as the pane does when it changes folder.
+    Cd {
+        /// The session's ID.
+        id: u64,
+        /// The folder.
+        path: String,
     },
 }
 
@@ -577,8 +616,32 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Index {
             action: IndexAction::Status,
         } => search::status(&mut client).await?,
+        Command::Term(arguments) => term_command(&mut client, arguments).await?,
     }
     Ok(())
+}
+
+/// The terminal commands: `term`, `term list|close|cd`.
+async fn term_command(client: &mut PipeClient, arguments: &TermArgs) -> anyhow::Result<()> {
+    match &arguments.action {
+        None => {
+            let cwd = absolute(arguments.cwd.as_deref().unwrap_or("."))?;
+            term::run(client, arguments.profile.clone(), cwd).await
+        }
+        Some(TermAction::List) => term::list(client).await,
+        Some(TermAction::Close { id }) => {
+            let request = Request::TerminalClose { session_id: *id };
+            term::change(client, request, format_args!("session {id} closed")).await
+        }
+        Some(TermAction::Cd { id, path }) => {
+            let path = absolute(path)?;
+            let request = Request::TerminalSyncCwd {
+                session_id: *id,
+                path: path.clone(),
+            };
+            term::change(client, request, format_args!("session {id}: cd {path}")).await
+        }
+    }
 }
 
 /// The plugin commands: `plugins list|reload|enable|disable|grant`.
@@ -1162,6 +1225,52 @@ mod tests {
                 action: IndexAction::Status
             }
         );
+    }
+
+    #[test]
+    fn parses_term_and_its_actions() {
+        let parse = |args: &[&str]| {
+            let mut full = vec!["cabinetos-cli"];
+            full.extend_from_slice(args);
+            Cli::try_parse_from(full).map(|cli| cli.command)
+        };
+        let term = |action: Option<TermAction>, profile: Option<&str>, cwd: Option<&str>| {
+            Command::Term(TermArgs {
+                action,
+                profile: profile.map(str::to_owned),
+                cwd: cwd.map(str::to_owned),
+            })
+        };
+        assert_eq!(parse(&["term"]).unwrap(), term(None, None, None));
+        assert_eq!(
+            parse(&["term", "--profile", "pwsh", "--cwd", r"E:\"]).unwrap(),
+            term(None, Some("pwsh"), Some(r"E:\"))
+        );
+        assert_eq!(
+            parse(&["term", "list"]).unwrap(),
+            term(Some(TermAction::List), None, None)
+        );
+        assert_eq!(
+            parse(&["term", "close", "3"]).unwrap(),
+            term(Some(TermAction::Close { id: 3 }), None, None)
+        );
+        assert_eq!(
+            parse(&["term", "cd", "3", r"D:\docs"]).unwrap(),
+            term(
+                Some(TermAction::Cd {
+                    id: 3,
+                    path: r"D:\docs".to_owned()
+                }),
+                None,
+                None
+            )
+        );
+        assert!(
+            parse(&["term", "--profile", "cmd", "list"]).is_err(),
+            "an action takes no options"
+        );
+        assert!(parse(&["term", "close"]).is_err(), "an ID is required");
+        assert!(parse(&["term", "cd", "3"]).is_err(), "a path is required");
     }
 
     #[test]
