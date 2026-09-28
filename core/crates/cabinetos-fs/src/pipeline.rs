@@ -18,8 +18,9 @@
 //! runs again with `sort_unstable` took about 9 ms against the heap's 2.
 //!
 //! The order is exactly the serial path's: both use [`sort::compare`], and
-//! tests compare their sections byte for byte. A directory that fits in the
-//! first [`SERIAL_BUFFERS`] buffers takes the serial path whole.
+//! tests compare their sections byte for byte. A directory that the kernel
+//! returns in fewer than [`SERIAL_BUFFERS`] buffers takes the serial path
+//! whole.
 
 use std::num::NonZero;
 use std::os::windows::io::OwnedHandle;
@@ -33,14 +34,16 @@ use crate::enumerate::{self, Buffer};
 use crate::sort::{self, NameKeys, Packed, Ties};
 use crate::{FsError, ListOptions, Listing, Placed};
 
-/// A directory that fits in this many buffers is read and sorted on the
-/// calling thread; a larger one gets the worker after that many. NTFS
-/// fills about 64 KiB per call, so this is about 2,200 entries of typical
-/// names. The worker costs about 0.2 ms, so a directory that ends a few
-/// buffers later is slower pipelined (measured: +0.2 ms at 2,000 and 3,000
-/// entries); from about 4,000 entries on it is faster (−20% at 5,000 and
-/// 10,000). Switching later only moved that band up and took most of the
-/// gain at 5,000 and 10,000 (after 8 buffers: +8% and −10%).
+/// The calling thread reads and parses the first buffers itself, as the
+/// serial path does, and sorts the directory there if the kernel ends it
+/// sooner. Once this many are parsed, a worker takes over. NTFS fills
+/// about 64 KiB per call, about 580 entries of typical names, so the
+/// worker starts at about 1,750 entries. It costs about 0.2 ms, so a
+/// directory that ends a few buffers later is slower pipelined (measured:
+/// +0.2 ms at 2,000 and 3,000 entries); from about 4,000 entries on it is
+/// faster (−20% at 5,000 and 10,000). Switching later only moved that band
+/// up and took most of the gain at 5,000 and 10,000 (after 8 buffers: +8%
+/// and −10%).
 const SERIAL_BUFFERS: usize = 4;
 
 /// Filled buffers that may wait for the worker.
@@ -53,8 +56,8 @@ const NAME_LEN_SHIFT: u32 = 32;
 const INDEX_MASK: u64 = u32::MAX as u64;
 
 /// Reads and sorts the directory at `path`. It starts as the serial path
-/// does (one buffer, parsed on this thread as it comes); when the directory
-/// needs more than [`SERIAL_BUFFERS`] buffers and the machine has a second
+/// does (one buffer, parsed on this thread as it comes); once
+/// [`SERIAL_BUFFERS`] buffers are parsed and the machine has a second
 /// core, a worker takes over the parsed entries and everything after them.
 pub(crate) fn list(path: &str, options: &ListOptions) -> Result<Listing, FsError> {
     let directory = enumerate::open(path)?;
