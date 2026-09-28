@@ -113,11 +113,32 @@ public static class TransferText
         };
     }
 
-    /// <summary>The speed over the graph, "610 MB/s"; nothing for a job without bytes to count.</summary>
-    public static string SpeedText(TransferJob job, CultureInfo? culture = null) =>
-        job.Progress is { BytesTotal: > 0 } progress && !job.IsFinal
-            ? $"{DisplayFormat.Bytes(job.State.Type == JobState.Running ? progress.SpeedBps : 0, culture)}/s"
-            : "";
+    /// <summary>
+    /// The pace over the graph with its unit: "610 MB/s", or "412 items/s" for
+    /// a job without bytes to count. Nothing once the job ended, or before a
+    /// job that counts items has a pace (its first record has none).
+    /// </summary>
+    public static string SpeedText(TransferJob job, CultureInfo? culture = null)
+    {
+        if (job.Progress is not { } progress || job.IsFinal)
+        {
+            return "";
+        }
+        var running = job.State.Type == JobState.Running;
+        if (!job.CountsItems)
+        {
+            return $"{DisplayFormat.Bytes(running ? progress.SpeedBps : 0, culture)}/s";
+        }
+        if (progress.ItemsPerSecond is not { } items)
+        {
+            return "";
+        }
+        var pace = running ? items : 0;
+        return (pace is > 0 and < 10 ? pace.ToString("0.#", culture ?? CultureInfo.CurrentCulture) : Number((ulong)Math.Round(pace), culture)) + " items/s";
+    }
+
+    /// <summary>The graph's lowest top, so a slow job does not fill it: 1 MB/s, or 10 items/s.</summary>
+    public static double GraphFloor(TransferJob job) => job.CountsItems ? 10 : 1024.0 * 1024.0;
 
     /// <summary>The status-bar pill: "Copying · 45%", "Copy paused · 45%", or the title.</summary>
     public static string PillText(TransferJob job, CultureInfo? culture = null)
@@ -147,13 +168,13 @@ public static class TransferText
     /// pixels, oldest sample on the left. The scale follows the fastest sample,
     /// never below 1 MB/s, so a slow copy does not draw noise as mountains.
     /// </summary>
-    public static IReadOnlyList<(double X, double Y)> Graph(IReadOnlyList<ulong> speeds, double width, double height)
+    public static IReadOnlyList<(double X, double Y)> Graph(IReadOnlyList<double> speeds, double width, double height, double floor = 1024.0 * 1024.0)
     {
         if (speeds.Count < 2)
         {
             return [];
         }
-        var top = Math.Max(speeds.Max() * 1.1, 1024.0 * 1024.0);
+        var top = Math.Max(speeds.Max() * 1.1, floor);
         var usable = Math.Max(0, height - 6);
         var points = new (double, double)[speeds.Count];
         for (var i = 0; i < speeds.Count; i++)

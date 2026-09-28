@@ -127,11 +127,12 @@ public sealed record JobInfo(
     string? CurrentPath,
     ulong SpeedBps,
     ulong? EtaSeconds,
-    ulong ElapsedMs)
+    ulong ElapsedMs,
+    double? ItemsPerSecond = null)
 {
     /// <summary>The progress part, as a <c>job_progress</c> event carries it.</summary>
     public JobProgressEvent ToProgress() => new(JobId, State, BytesDone, BytesTotal, FilesDone, FilesTotal,
-        FilesSkipped, FilesFailed, ConflictsOpen, CurrentPath, SpeedBps, EtaSeconds, ElapsedMs);
+        FilesSkipped, FilesFailed, ConflictsOpen, CurrentPath, SpeedBps, EtaSeconds, ElapsedMs, ItemsPerSecond);
 }
 
 /// <summary>Reply to <c>list_jobs</c>: every job, oldest first (the core keeps the last 100 finished ones).</summary>

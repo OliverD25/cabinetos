@@ -64,7 +64,8 @@ public sealed record JobProgressEvent(
     string? CurrentPath,
     ulong SpeedBps,
     ulong? EtaSeconds,
-    ulong ElapsedMs) : CoreEvent;
+    ulong ElapsedMs,
+    double? ItemsPerSecond = null) : CoreEvent;
 
 /// <summary>A job changed state; after a final state no more events follow for it.</summary>
 public sealed record JobStateChangedEvent(ulong JobId, JobState State) : CoreEvent;

@@ -379,7 +379,7 @@ public class TransferCenterTests
         center.SampleSpeeds();
 
         Assert.Equal(TransferJob.SampleCount, job.Speeds.Count);
-        Assert.Equal([4UL * 1024 * 1024, 0UL], job.Speeds.TakeLast(2));
+        Assert.Equal([4.0 * 1024 * 1024, 0.0], job.Speeds.TakeLast(2));
         var graph = TransferText.Graph(job.Speeds, 348, 56);
         Assert.Equal(TransferJob.SampleCount, graph.Count);
         Assert.Equal((0.0, 56.0), graph[0]);
@@ -427,7 +427,39 @@ public class TransferCenterTests
         Assert.Equal(@"C:\x → deleted for good", TransferText.Subtitle(job));
         Assert.Equal("3 of 12 items", TransferText.DoneText(job, Invariant));
         Assert.Equal("25%", TransferText.PercentText(job, Invariant));
+        // The first record has no pace yet (protocol 11: items_per_second is absent there).
         Assert.Equal("", TransferText.SpeedText(job, Invariant));
+    }
+
+    [Fact]
+    public async Task A_job_without_bytes_graphs_and_shows_its_pace_in_items_per_second()
+    {
+        var (center, _) = Create();
+        var job = (await center.StartAsync(JobKind.Delete(permanent: false), [@"C:\old"], null)).Job!;
+        center.OnEvent(Progress(7, JobState.Running, 0, 0, filesDone: 800, filesTotal: 5000, elapsed: 2000) with { ItemsPerSecond = 412.4 });
+        center.SampleSpeeds();
+        center.OnEvent(Progress(7, JobState.Running, 0, 0, filesDone: 801, filesTotal: 5000, elapsed: 2500) with { ItemsPerSecond = 2.5 });
+        center.SampleSpeeds();
+
+        Assert.True(job.CountsItems);
+        Assert.Equal([412.4, 2.5], job.Speeds.TakeLast(2));
+        Assert.Equal("2.5 items/s", TransferText.SpeedText(job, Invariant));
+        // The line is not flat: the graph's top follows the items, not a 1 MB/s floor.
+        Assert.Equal(10, TransferText.GraphFloor(job));
+        var graph = TransferText.Graph(job.Speeds, 348, 56, TransferText.GraphFloor(job));
+        Assert.InRange(graph[^2].Y, 6, 12);
+        Assert.True(graph[^1].Y > graph[^2].Y + 30);
+
+        center.OnEvent(Progress(7, JobState.Running, 0, 0, filesDone: 900, filesTotal: 5000, elapsed: 3000) with { ItemsPerSecond = 412.4 });
+        Assert.Equal("412 items/s", TransferText.SpeedText(job, Invariant));
+        center.OnEvent(Progress(7, JobState.Paused, 0, 0, filesDone: 900, filesTotal: 5000, elapsed: 3500) with { ItemsPerSecond = 0 });
+        Assert.Equal("0 items/s", TransferText.SpeedText(job, Invariant));
+
+        // A copy counts bytes: its graph keeps the 1 MB/s floor.
+        var copy = (await center.StartAsync(JobKind.Copy, [@"C:\a"], @"D:\b")).Job!;
+        center.OnEvent(Progress(8, JobState.Running, 10, 100, speed: 1000));
+        Assert.False(copy.CountsItems);
+        Assert.Equal(1024.0 * 1024.0, TransferText.GraphFloor(copy));
     }
 
     [Theory]

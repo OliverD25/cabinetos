@@ -353,7 +353,13 @@ public class ProtocolTests
                     Assert.Equal(3UL, progress.EtaSeconds);
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"job_progress","job_id":7,"state":{"type":"failed","message":"the disk is gone"},"bytes_done":0,"bytes_total":0,"files_done":0,"files_total":0,"files_skipped":0,"files_failed":0,"conflicts_open":0,"speed_bps":0,"elapsed_ms":1}""",
-                b => Assert.Equal(new JobState("failed", "the disk is gone"), ((JobProgressEvent)b).State)),
+                b =>
+                {
+                    Assert.Equal(new JobState("failed", "the disk is gone"), ((JobProgressEvent)b).State);
+                    Assert.Null(((JobProgressEvent)b).ItemsPerSecond);
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"job_progress","job_id":8,"state":{"type":"running"},"bytes_done":0,"bytes_total":0,"files_done":800,"files_total":5000,"files_skipped":0,"files_failed":0,"conflicts_open":0,"current_path":"C:\\old\\a.txt","speed_bps":0,"items_per_second":412.5,"elapsed_ms":2000}""",
+                b => Assert.Equal(412.5, Assert.IsType<JobProgressEvent>(b).ItemsPerSecond)),
             ($$$"""{"id":"{{{Id}}}","type":"plugin_state_changed","plugin_id":"crashy","state":{"type":"crashed","message":"wasm trap","at_ms":1790553600000}}""",
                 b => Assert.Equal(new PluginState(PluginState.Crashed, Message: "wasm trap", AtMs: 1790553600000), ((PluginStateChangedEvent)b).State with { Missing = null })),
             ($$$"""{"id":"{{{Id}}}","type":"plugin_crashed","plugin_id":"crashy","message":"wasm trap: unreachable"}""",

@@ -13,7 +13,7 @@ public sealed class TransferJob
     /// <summary>Points of the speed graph: the design's 40 samples, one every 500 ms.</summary>
     public const int SampleCount = 40;
 
-    private readonly ulong[] _speeds = new ulong[SampleCount];
+    private readonly double[] _speeds = new double[SampleCount];
 
     internal TransferJob(ulong id, long order)
     {
@@ -51,8 +51,17 @@ public sealed class TransferJob
     /// <summary>Whether the user closed it, or it ended quietly out of sight.</summary>
     public bool IsDismissed { get; internal set; }
 
-    /// <summary>The speed samples in bytes per second, oldest first.</summary>
-    public IReadOnlyList<ulong> Speeds => _speeds;
+    /// <summary>
+    /// The speed samples, oldest first: bytes per second, or items per second
+    /// for a job that counts items (<see cref="CountsItems"/>).
+    /// </summary>
+    public IReadOnlyList<double> Speeds => _speeds;
+
+    /// <summary>
+    /// Whether the job has no bytes to count (a delete, a move on one volume):
+    /// its pace is items per second (<c>items_per_second</c>, protocol 11).
+    /// </summary>
+    public bool CountsItems => Progress is { BytesTotal: 0 };
 
     internal bool EndHandled { get; set; }
 
@@ -85,6 +94,8 @@ public sealed class TransferJob
     internal void Sample()
     {
         Array.Copy(_speeds, 1, _speeds, 0, SampleCount - 1);
-        _speeds[SampleCount - 1] = State.Type == JobState.Running ? Progress?.SpeedBps ?? 0 : 0;
+        _speeds[SampleCount - 1] = State.Type != JobState.Running || Progress is not { } progress
+            ? 0
+            : CountsItems ? progress.ItemsPerSecond ?? 0 : progress.SpeedBps;
     }
 }

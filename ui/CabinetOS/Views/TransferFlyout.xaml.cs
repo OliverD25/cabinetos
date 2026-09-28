@@ -177,7 +177,7 @@ public sealed partial class TransferFlyout : UserControl
         {
             return;
         }
-        var points = TransferText.Graph(job.Speeds, Graph.ActualWidth, Graph.ActualHeight);
+        var points = TransferText.Graph(job.Speeds, Graph.ActualWidth, Graph.ActualHeight, TransferText.GraphFloor(job));
         var line = new PointCollection();
         var area = new PointCollection { new Point(0, Graph.ActualHeight) };
         foreach (var (x, y) in points)
