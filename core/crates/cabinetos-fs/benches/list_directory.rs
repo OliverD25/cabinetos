@@ -1,5 +1,10 @@
 //! How fast a directory reaches shared memory, against `std::fs::read_dir`.
 //!
+//! Two ways of listing are compared: `serial`, the Phase 2 path (read, then
+//! sort and write the section on the calling thread), and `pipelined`, the
+//! default (a worker parses, keys and sorts while the kernel reads, and
+//! several threads write the section). Both give the same bytes.
+//!
 //! Fixtures are generated once into `%TEMP%\cabinetos-bench\<n>\` with
 //! `File::create` and reused on later runs (a `<n>.complete` marker next to
 //! the folder says the folder is whole). The bench never deletes them; delete
@@ -47,14 +52,18 @@ fn fixture(count: u32) -> PathBuf {
 }
 
 /// The whole path the core takes: read, sort, create a section, write it.
-fn publish(path: &str, options: &ListOptions) -> usize {
+/// `write_threads` 1 writes on this thread, as Phase 2 did; `None` lets the
+/// writer choose.
+fn publish(path: &str, options: &ListOptions, write_threads: Option<usize>) -> usize {
     let listing = list_directory(path, options).expect("list the fixture");
     let writer = ListingWriter::new(&listing).expect("plan the section");
     let section = SharedSection::create(writer.section_size()).expect("create a section");
     let mut view = section.map().expect("map the section");
-    writer
-        .write(view.as_mut_slice(), 1)
-        .expect("write the section");
+    match write_threads {
+        Some(threads) => writer.write_with_threads(view.as_mut_slice(), 1, threads),
+        None => writer.write(view.as_mut_slice(), 1),
+    }
+    .expect("write the section");
     listing.len()
 }
 
@@ -70,10 +79,14 @@ fn std_read_dir(path: &PathBuf) -> usize {
 }
 
 fn benches(c: &mut Criterion) {
-    for count in [1_000_u32, 100_000] {
+    let serial = ListOptions {
+        pipelined: false,
+        ..ListOptions::default()
+    };
+    let pipelined = ListOptions::default();
+    for count in [1_000_u32, 10_000, 100_000] {
         let dir = fixture(count);
         let path = dir.to_str().expect("a UTF-8 temp path").to_owned();
-        let options = ListOptions::default();
 
         let mut group = c.benchmark_group(format!("{count}_files"));
         if count >= 100_000 {
@@ -81,11 +94,17 @@ fn benches(c: &mut Criterion) {
                 .sample_size(20)
                 .measurement_time(Duration::from_secs(10));
         }
-        group.bench_function("list_directory", |b| {
-            b.iter(|| black_box(list_directory(&path, &options).expect("list")).len());
+        group.bench_function("list_directory_serial", |b| {
+            b.iter(|| black_box(list_directory(&path, &serial).expect("list")).len());
         });
-        group.bench_function("list_and_publish", |b| {
-            b.iter(|| black_box(publish(&path, &options)));
+        group.bench_function("list_directory_pipelined", |b| {
+            b.iter(|| black_box(list_directory(&path, &pipelined).expect("list")).len());
+        });
+        group.bench_function("list_and_publish_serial", |b| {
+            b.iter(|| black_box(publish(&path, &serial, Some(1))));
+        });
+        group.bench_function("list_and_publish_pipelined", |b| {
+            b.iter(|| black_box(publish(&path, &pipelined, None)));
         });
         group.bench_function("std_read_dir_metadata", |b| {
             b.iter(|| black_box(std_read_dir(&dir)));
