@@ -1,0 +1,67 @@
+name: Release build
+
+# Builds the release zip on a clean Windows runner with build/release.ps1
+# and keeps it as a workflow artifact for 30 days. Started by hand only
+# (Actions > Release build > Run workflow), never by a push, so it spends
+# no minutes on its own. It publishes nothing: an artifact is not a GitHub
+# Release, and nothing here signs, tags or submits to winget. The steps
+# after it are in docs/release.md.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release zip (build/release.ps1)
+    runs-on: windows-latest
+    # Without a cache this builds wasmtime in release mode; the core job's
+    # cold runs needed 33 to 41 minutes for more work than this.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the toolchain pinned in core/rust-toolchain.toml
+        shell: bash
+        working-directory: core
+        run: |
+          channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+          rustup toolchain install "$channel" --profile minimal
+          rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+
+      # ui/global.json pins the .NET SDK.
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: ui/global.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('ui/Directory.Packages.props', 'ui/**/*.csproj') }}
+
+      - name: Build the release folder, the zip and the winget manifests
+        id: build
+        shell: pwsh
+        run: ./build/release.ps1
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CabinetOS-${{ steps.build.outputs.version }}-win-x64
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
+            dist/winget/
+          if-no-files-found: error
+          # The zip is compressed already.
+          compression-level: 0
+          retention-days: 30
