@@ -17,17 +17,20 @@
 //!
 //! [`volume::info_for_path`] tells which volume and physical disk a path is
 //! on, so the job engine can keep copies on one disk from competing, and
-//! [`volume::drives`] lists the drive letters in use. [`DirectoryWatcher`]
-//! reports when a directory changes, so its listing can be read again.
+//! [`volume::drives`] lists the drive letters in use; [`DriveWatcher`] says
+//! when they change. [`DirectoryWatcher`] reports when a directory changes,
+//! so its listing can be read again.
 //!
 //! [`create_directory`] and [`rename`] are the changes a user makes to a
 //! folder without a job; [`open_path`] opens a file or folder with its
 //! default application.
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
-//! (`enumerate`, `volume`, `watch`, `time`, `ops`, `open`, and one function
-//! in `sort`), each block with a `SAFETY:` comment.
+//! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, and one
+//! function in `sort`), each block with a `SAFETY:` comment.
 
+#[allow(unsafe_code)]
+mod drives;
 #[allow(unsafe_code)]
 mod enumerate;
 mod error;
@@ -50,6 +53,7 @@ use std::sync::OnceLock;
 use cabinetos_protocol::SortSpec;
 use cabinetos_protocol::shm::{EntryKind, ListingMeta};
 
+pub use drives::DriveWatcher;
 pub use error::FsError;
 pub use open::open_path;
 pub use ops::{create_directory, rename};

@@ -14,7 +14,7 @@
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`)
 //!   as tasks, so one slow directory, plugin, search or shell never holds up
 //!   the next request. After `hello` it also forwards the configuration,
-//!   job, plugin and terminal events every connection receives.
+//!   job, plugin, terminal and volume events every connection receives.
 
 use std::collections::HashMap;
 use std::sync::Arc;

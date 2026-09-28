@@ -824,6 +824,13 @@ pub enum Event {
         /// The shell's exit code.
         exit_code: u32,
     },
+    /// A drive letter appeared or went away: a USB stick, a card in a
+    /// reader, a mapped network share. Sent to every connection that said
+    /// `hello`, with the list `list_volumes` would answer now.
+    VolumesChanged {
+        /// Each volume as `volume_info` describes it, by drive letter.
+        volumes: Vec<VolumeDetails>,
+    },
 }
 
 impl Event {
@@ -842,6 +849,7 @@ impl Event {
         "plugin_crashed",
         "plugin_event",
         "terminal_exited",
+        "volumes_changed",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -860,6 +868,7 @@ impl Event {
             Self::PluginCrashed { .. } => "plugin_crashed",
             Self::PluginEvent { .. } => "plugin_event",
             Self::TerminalExited { .. } => "terminal_exited",
+            Self::VolumesChanged { .. } => "volumes_changed",
         }
     }
 }
@@ -1345,6 +1354,9 @@ mod tests {
             Event::TerminalExited {
                 session_id: 3,
                 exit_code: 0,
+            },
+            Event::VolumesChanged {
+                volumes: vec![volume()],
             },
         ]
     }

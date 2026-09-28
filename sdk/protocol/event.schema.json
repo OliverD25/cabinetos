@@ -316,6 +316,27 @@
         "session_id",
         "exit_code"
       ]
+    },
+    {
+      "description": "A drive letter appeared or went away: a USB stick, a card in a\nreader, a mapped network share. Sent to every connection that said\n`hello`, with the list `list_volumes` would answer now.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "volumes_changed"
+        },
+        "volumes": {
+          "description": "Each volume as `volume_info` describes it, by drive letter.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VolumeDetails"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "volumes"
+      ]
     }
   ],
   "required": [
@@ -513,6 +534,40 @@
             "message"
           ]
         }
+      ]
+    },
+    "DiskIdentity": {
+      "description": "A physical disk. Two paths on the same `device_number` share one disk, so\ncopies between them compete for it.",
+      "type": "object",
+      "properties": {
+        "bus_type": {
+          "description": "How the disk is attached: `NVMe`, `SATA`, `USB`, `SAS`, `SCSI`, `SD`,\n`RAID`, `Spaces`, `Virtual`, … or `Unknown`.",
+          "type": "string"
+        },
+        "device_number": {
+          "description": "The disk's number, as in `\\\\.\\PhysicalDriveN`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "media_type": {
+          "description": "`HDD` or `SSD`, derived from the seek penalty; `None` when unknown.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seek_penalty": {
+          "description": "Whether random access is slow (a spinning disk). `None` when the disk\ndoes not say.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "device_number",
+        "bus_type"
       ]
     },
     "JobProgress": {
@@ -911,6 +966,63 @@
       "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",
       "type": "string",
       "pattern": "^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$"
+    },
+    "VolumeDetails": {
+      "description": "The volume a path lives on, and the physical disk under it.",
+      "type": "object",
+      "properties": {
+        "disk": {
+          "description": "The physical disk, when Windows can tell (not for network shares).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiskIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "drive_letter": {
+          "description": "The volume's drive letter, if it has one.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1,
+          "minLength": 1
+        },
+        "filesystem": {
+          "description": "The file system: `NTFS`, `FAT32`, `exFAT`, `ReFS`, …",
+          "type": "string"
+        },
+        "free_bytes": {
+          "description": "Bytes free for the current user (disk quotas taken into account).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "label": {
+          "description": "The volume label; may be empty.",
+          "type": "string"
+        },
+        "total_bytes": {
+          "description": "The volume's capacity in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "volume_guid_path": {
+          "description": "The volume's GUID path, for example `\\\\?\\Volume{…}\\`. Empty when the\nvolume has none, such as a network share.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "volume_guid_path",
+        "filesystem",
+        "label",
+        "total_bytes",
+        "free_bytes"
+      ]
     }
   }
 }

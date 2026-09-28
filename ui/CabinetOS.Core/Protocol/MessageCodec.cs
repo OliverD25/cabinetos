@@ -29,6 +29,7 @@ public static class MessageCodec
         "plugin_crashed",
         "plugin_event",
         "terminal_exited",
+        "volumes_changed",
     ]);
 
     private static readonly FrozenDictionary<string, JsonTypeInfo> Known = new Dictionary<string, JsonTypeInfo>

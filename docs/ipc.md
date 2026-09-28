@@ -55,7 +55,8 @@ because it duplicates shared-memory handles into that process. A
 configuration events (`config_changed`, `config_error`, `keymap_changed`),
 the job events (`job_progress`, `job_conflict`, `job_state_changed`),
 the plugin events (`plugin_state_changed`, `plugin_crashed`,
-`plugin_event`) and `terminal_exited`, and right after `welcome` a
+`plugin_event`), `terminal_exited` and `volumes_changed`, and right after
+`welcome` a
 `job_conflict` for every conflict that already waits for a decision. Every
 other request works without `hello`.
 
@@ -71,9 +72,9 @@ file search (`search`, `file_search_results`) and `index_status`. Version 7
 `terminal_opened` and `terminal_sessions`, the event `terminal_exited`, and
 the error codes `no_such_session`, `unknown_profile` and `spawn_failed`.
 Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
-`volumes`, `get_value` and `set_value` with the reply `value`,
-`open_path`, `create_directory` and `rename`, and the error code
-`already_exists`.
+`volumes` and the event `volumes_changed`, `get_value` and `set_value`
+with the reply `value`, `open_path`, `create_directory` and `rename`, and
+the error code `already_exists`.
 
 ## Requests and replies
 
@@ -334,6 +335,20 @@ drive whose server does not answer within 200 ms, or a local drive that
 takes more than 2 s. A drive left out for time is not asked again until
 its first query has ended, so a share whose server is gone holds one
 thread in the core, not one per request.
+
+```json
+{"id":"01M…","type":"volumes_changed","volumes":[{"drive_letter":"C",…},…]}
+```
+
+When a drive letter appears or goes away (a USB stick, a card put into a
+reader or taken out, a network share mapped or unmapped, a `subst`
+letter), every connection that said `hello` gets `volumes_changed` with
+the list `list_volumes` would answer now. Windows announces such changes with
+`WM_DEVICECHANGE` broadcasts, which reach only top-level windows, so the
+core keeps a top-level window that is never shown, on a thread of its
+own. It waits 500 ms for the rest of a burst (one stick may bring two
+volumes, and Windows may repeat a message) and sends the event only when
+the drives differ from the ones it sent last (free space does not count).
 
 ## Files and folders
 

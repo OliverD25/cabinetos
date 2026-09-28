@@ -196,6 +196,8 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         ));
     }
     let terminals = terminal::start(&events);
+    // Dropping the watcher at the end stops it.
+    let _drives = volumes::watch(Arc::clone(&events));
     let services = Arc::new(Services {
         settings,
         jobs,

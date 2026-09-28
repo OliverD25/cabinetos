@@ -1,6 +1,6 @@
 //! The events every connection that said `hello` receives, whoever caused
-//! them: configuration changes, job progress, plugin news and shells that
-//! exited.
+//! them: configuration changes, job progress, plugin news, shells that
+//! exited and drive letters that changed.
 
 use std::sync::Arc;
 

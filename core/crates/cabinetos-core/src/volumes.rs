@@ -7,21 +7,30 @@
 //! that ran out of time goes on on its blocking thread, which cannot be
 //! stopped; until it ends, that letter is left out without a new query, so
 //! a server that is gone holds one thread, not one per request.
+//!
+//! [`watch`] sends `volumes_changed` when drive letters come or go.
 
 use std::collections::BTreeSet;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
+use cabinetos_fs::DriveWatcher;
 use cabinetos_fs::volume::{self, Drive, DriveKind};
-use cabinetos_protocol::{ErrorCode, Response, VolumeDetails};
-use tokio::sync::oneshot;
+use cabinetos_protocol::{ErrorCode, Event, Response, VolumeDetails};
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
+
+use crate::events::EventHub;
 
 /// How long a network drive may take to answer.
 pub(crate) const NETWORK_LIMIT: Duration = Duration::from_millis(200);
 
 /// How long a local drive may take: an optical drive may need to spin up.
 pub(crate) const LOCAL_LIMIT: Duration = Duration::from_secs(2);
+
+/// How long to wait for the rest of a burst of device announcements: one
+/// USB stick with two volumes is two, and Windows may repeat one.
+const SETTLE: Duration = Duration::from_millis(500);
 
 /// Letters whose last query ran out of time and still runs.
 static STILL_ASKING: Mutex<BTreeSet<char>> = Mutex::new(BTreeSet::new());
@@ -57,6 +66,59 @@ pub(crate) async fn list_volumes() -> Response {
     }
     volumes.sort_by_key(|details| details.drive_letter);
     Response::Volumes { volumes }
+}
+
+/// Sends `volumes_changed` to every connection that said `hello` whenever
+/// the drive letters change, once the announcements have settled and only
+/// when the volumes differ from the last ones sent. The watching stops when
+/// the returned watcher drops; `None` when it cannot start (the core then
+/// runs without the event).
+pub(crate) fn watch(events: Arc<EventHub>) -> Option<DriveWatcher> {
+    let (changed_tx, mut changed_rx) = mpsc::unbounded_channel();
+    let watcher = match DriveWatcher::start(move || {
+        let _ = changed_tx.send(());
+    }) {
+        Ok(watcher) => watcher,
+        Err(error) => {
+            tracing::warn!(%error, "cannot watch drive letters; volumes_changed will not be sent");
+            return None;
+        }
+    };
+    tokio::spawn(async move {
+        let mut last = None;
+        // Ends when the watcher drops: its thread takes the sender along.
+        while changed_rx.recv().await.is_some() {
+            tokio::time::sleep(SETTLE).await;
+            while changed_rx.try_recv().is_ok() {}
+            let Response::Volumes { volumes } = list_volumes().await else {
+                continue;
+            };
+            let now = drive_set(&volumes);
+            if last.as_ref() == Some(&now) {
+                continue;
+            }
+            tracing::info!(volumes = volumes.len(), "the drive letters changed");
+            last = Some(now);
+            events.publish(Event::VolumesChanged { volumes });
+        }
+    });
+    Some(watcher)
+}
+
+/// What says that the drives changed, leaving out the free space, which
+/// changes all the time.
+fn drive_set(volumes: &[VolumeDetails]) -> Vec<(Option<char>, String, String, u64)> {
+    volumes
+        .iter()
+        .map(|volume| {
+            (
+                volume.drive_letter,
+                volume.volume_guid_path.clone(),
+                volume.label.clone(),
+                volume.total_bytes,
+            )
+        })
+        .collect()
 }
 
 /// The volume behind `drive`, or `None` when it is left out.
