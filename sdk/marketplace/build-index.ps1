@@ -82,7 +82,9 @@ Get-ChildItem -Path (Join-Path $sdk 'themes') -Filter '*.json' |
         $name = "$($theme.id)-$($theme.version).json"
         $file = Join-Path $files $name
         Copy-Item -Path $_.FullName -Destination $file -Force
-        $long = "A $($theme.kind) colour theme."
+        $description = "A $($theme.kind) colour theme."
+        if ($theme.kind -eq 'system') { $description = "A colour theme that follows Windows' light or dark mode." }
+        $long = $description
         if ($theme.attribution) { $long = "$long $($theme.attribution)" }
         [void]$items.Add([ordered]@{
             id             = $theme.id
@@ -90,7 +92,7 @@ Get-ChildItem -Path (Join-Path $sdk 'themes') -Filter '*.json' |
             name           = $theme.name
             author         = [ordered]@{ name = $theme.author; verified = $false }
             version        = $theme.version
-            description    = "A $($theme.kind) colour theme."
+            description    = $description
             long           = $long
             size           = (Get-Item $file).Length
             download       = [ordered]@{ url = "files/$name"; sha256 = (Get-Sha256 $file) }

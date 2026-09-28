@@ -26,7 +26,7 @@ pub struct Theme {
     pub attribution: Option<String>,
     /// `major.minor.patch`.
     pub version: String,
-    /// Whether the theme is for dark or light mode.
+    /// Whether the theme is for dark mode, light mode, or follows Windows.
     pub kind: ThemeKind,
     /// The accent colour; `null` follows the Windows accent colour.
     #[serde(default)]
@@ -40,7 +40,7 @@ pub struct Theme {
     pub terminal: TerminalColors,
 }
 
-/// Dark or light.
+/// Dark, light, or as Windows is set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
@@ -49,6 +49,9 @@ pub enum ThemeKind {
     Dark,
     /// Dark text on a light backdrop.
     Light,
+    /// Light or dark as Windows is set; the window decides which, and
+    /// follows when the user changes it.
+    System,
 }
 
 /// A tint laid over the Mica backdrop.
@@ -156,7 +159,7 @@ pub struct ThemeInfo {
     pub author: String,
     /// Its version.
     pub version: String,
-    /// Dark or light.
+    /// Dark, light, or as Windows is set.
     pub kind: ThemeKind,
     /// Its accent colour; `null` follows the Windows accent colour.
     pub accent: Option<Rgb>,

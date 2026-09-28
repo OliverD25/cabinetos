@@ -30,6 +30,7 @@ fn line(theme: &ThemeInfo, in_effect: bool) -> String {
     let kind = match theme.kind {
         ThemeKind::Dark => "dark",
         ThemeKind::Light => "light",
+        ThemeKind::System => "system",
     };
     let accent = theme
         .accent

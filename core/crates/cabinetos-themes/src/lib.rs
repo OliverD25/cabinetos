@@ -344,7 +344,14 @@ mod tests {
             let theme = shipped(id);
             assert_eq!(theme.id, id);
             assert_eq!(theme.schema, None, "{id}: $schema is for editors only");
-            assert_eq!(theme.kind, ThemeKind::Dark);
+            // The default follows Windows' light or dark mode; the named
+            // palettes are dark ones.
+            let kind = if id == DEFAULT_THEME {
+                ThemeKind::System
+            } else {
+                ThemeKind::Dark
+            };
+            assert_eq!(theme.kind, kind, "{id}");
         }
         let default = default_theme();
         assert_eq!((default.accent, default.mica), (None, None));

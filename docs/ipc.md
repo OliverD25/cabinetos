@@ -87,7 +87,9 @@ marketplace: `marketplace_refresh` and `marketplace_search` with the reply
 `no_such_extension`, `marketplace_error`, `hash_mismatch` and
 `incompatible`. Version 11 added what the shell asked for after Phases 5
 and 9: `items_per_second` in `job_progress`; one `marketplace_index` item
-per extension, with `installedVersion`; each theme's `mica` in `themes`.
+per extension, with `installedVersion`; each theme's `mica` in `themes`;
+and the theme kind `system` (follow Windows' light or dark mode), which
+the shipped `default` theme now has.
 
 ## Requests and replies
 

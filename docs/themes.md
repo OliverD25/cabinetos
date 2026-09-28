@@ -93,7 +93,7 @@ names it.
 | `author` | Who made the theme. Not empty. |
 | `attribution` | Optional. Where the colours come from and under which license, when they are someone else's. |
 | `version` | `major.minor.patch`. |
-| `kind` | `dark` or `light`. |
+| `kind` | `dark`, `light`, or `system`: follow Windows' light or dark mode. With `system` the window decides which, and changes when the user changes Windows; `theme_changed` carries the theme as it is. |
 | `accent` | `#RRGGBB`, or `null` (or left out) to follow the Windows accent colour. |
 | `mica` | `{ "tint": "#RRGGBB", "opacity": 0 to 1 }`, a tint laid over the Mica backdrop; `null` (or left out) for plain Mica. |
 | `palette` | Every key below is required. |
@@ -126,7 +126,7 @@ with the default background show `palette.terminalBackground`.
 
 | ID | Name | Accent | Mica tint | Source of the colours |
 |---|---|---|---|---|
-| `default` | Default | the Windows accent | plain Mica | The design tokens of [design/README.md](design/README.md); the terminal uses the Windows console's Campbell scheme |
+| `default` | Default | the Windows accent | plain Mica | The design tokens of [design/README.md](design/README.md); the terminal uses the Windows console's Campbell scheme. Its kind is `system` |
 | `nord` | Nord | `#88C0D0` | `#2E3440` at 0.88 | The Nord palette (MIT) |
 | `catppuccin-mocha` | Catppuccin Mocha | `#CBA6F7` | `#1E1E2E` at 0.9 | The Catppuccin Mocha palette (MIT) |
 | `rose-pine-moon` | Rosé Pine Moon | `#EBBCBA` | `#232136` at 0.9 | The Rosé Pine Moon palette (MIT) |
@@ -134,8 +134,11 @@ with the default background show `palette.terminalBackground`.
 The accents and tints are the design's. `default` leaves `accent` and
 `mica` `null`: the design's `#60CDFF` is the Windows default accent in dark
 mode and its `rgba(32,32,32,.86)` only imitates Mica in the prototype, so
-the default theme follows the system instead. Each named theme keeps an
-attribution line for the palette it uses.
+the default theme follows the system instead. It follows Windows' light or
+dark mode too (`kind: "system"`). Its palette holds the design's tokens,
+which are dark-mode ones; what it shows in light mode is the window's
+choice ([ui.md](ui.md), "Themes"). Each named theme keeps an attribution
+line for the palette it uses; their palettes are dark.
 
 ## Live editing
 
@@ -172,6 +175,6 @@ whole theme as JSON: the one named, or the one in effect.
 
 ## Not yet
 
-- There are no light themes yet; `kind` is there for them.
+- There are no light themes yet; `light` is there for them.
 - A new version of a shipped theme does not replace a copy already in the
   folder; delete the file to get the new one at the next start.

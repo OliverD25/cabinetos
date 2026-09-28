@@ -39,7 +39,7 @@
       "type": "string"
     },
     "kind": {
-      "description": "Whether the theme is for dark or light mode.",
+      "description": "Whether the theme is for dark mode, light mode, or follows Windows.",
       "$ref": "#/$defs/ThemeKind"
     },
     "mica": {
@@ -295,7 +295,7 @@
       ]
     },
     "ThemeKind": {
-      "description": "Dark or light.",
+      "description": "Dark, light, or as Windows is set.",
       "oneOf": [
         {
           "description": "Light text on a dark backdrop.",
@@ -306,6 +306,11 @@
           "description": "Dark text on a light backdrop.",
           "type": "string",
           "const": "light"
+        },
+        {
+          "description": "Light or dark as Windows is set; the window decides which, and\nfollows when the user changes it.",
+          "type": "string",
+          "const": "system"
         }
       ]
     }
