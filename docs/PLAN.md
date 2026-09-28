@@ -165,13 +165,15 @@ Done when: the index of the system drive builds in seconds, a rename on disk app
 
 Articles: 1.
 
-### Phase 7 — Plugin host and Tool Dock
+### Phase 7 — Plugin host and Tool Dock — core side done 2026-09-28
 
 Goal: the two extension layers, with strict boundaries.
 
 Produces: `wasmtime` with the Component Model; the WIT package for the plugin world; plugin manifest with capability requests (`fs:read`, `fs:write`, `cmd:register`, `process:run`, `net`, `credentials`); the permissions review flow (design view C dialog); one store and one thread per plugin with fuel and memory limits; trap handling that logs the plugin ID, kills the instance and keeps the core alive; the Tool Dock in the UI with WebView2 hosting; one sample core plugin and one sample Tool Extension (Markdown preview, as in the design).
 
 Done when: a deliberately crashing plugin is logged and removed while the core keeps serving listings, and the sample extension renders in a dock pane.
+
+Core side done 2026-09-28; the permissions review dialog, the Tool Dock and the sample Tool Extension wait for the UI (Phase 5). Built: the WIT package `cabinetos:plugin@0.1.0` in `sdk/wit/`; strict `plugin.json` manifests; capabilities with levels (the list above plus `config:read`, `events:emit` and `jobs:intercept`; `process:run`, `net` and `credentials` are declared but never granted yet), granted in the `plugins` section of `cabinetos.json` and applied without a restart; one store and one thread per plugin, with fuel (5×10⁹ per call), a 5 s deadline (500 ms for `before-job`) and 256 MiB of memory; trap handling that logs the plugin ID with a named WebAssembly backtrace, drops the instance, removes its commands and keeps the core serving, with a restart after 5 s unless the plugin crashed three times in ten minutes; the Rust sample `hello` and five test fixtures, committed as built components. Measured 2026-09-28 on this PC (debug build): `crashy.crash` answered `plugin_error` at once, and the same core listed `C:\Windows` (108 entries, 1.4 ms) right after; `spinner.spin` was stopped at 5.1 s. Guide: [plugins.md](plugins.md).
 
 Articles: 8, 10, 11.
 

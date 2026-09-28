@@ -16,12 +16,13 @@ workspace architecture of VS Code.
 - **The mouse is optional.** Every action is a named command with a shortcut,
   reachable from a command palette, with chord keybindings.
 
-Status: pre-alpha. Phases 0 to 4 of [the plan](docs/PLAN.md) are done: the
-governing documents, and a Rust core that lists and watches directories in
-shared memory, serves its configuration, commands and keymap, and runs copy,
-move and delete jobs on per-disk queues, all over a user-only named pipe
-(`core/`, 266 tests, CI green). Phase 5, the WinUI 3 shell, needs the .NET
-SDK; the core-side parts of Phases 6–8 (indexer, plugin host, terminal host)
+Status: pre-alpha. Phases 0 to 4 of [the plan](docs/PLAN.md) are done, and
+the core side of Phase 7: the governing documents, and a Rust core that lists
+and watches directories in shared memory, serves its configuration, commands
+and keymap, runs copy, move and delete jobs on per-disk queues, and runs
+sandboxed WebAssembly plugins whose crashes it contains, all over a user-only
+named pipe (`core/`, 307 tests, CI green). Phase 5, the WinUI 3 shell, needs
+the .NET SDK; the core-side parts of Phases 6 and 8 (indexer, terminal host)
 continue meanwhile.
 
 ## Documents
@@ -39,6 +40,7 @@ continue meanwhile.
 | [docs/config.md](docs/config.md) | `cabinetos.json`: every key, its default, and how changes apply live. |
 | [docs/keybindings.md](docs/keybindings.md) | Key grammar, chords, the Immutable System Tier, conflict rules. |
 | [docs/jobs.md](docs/jobs.md) | Copy, move and delete jobs: scheduler, conflicts, progress. |
+| [docs/plugins.md](docs/plugins.md) | Core Plugins: manifest, capabilities, sandbox, limits, crashes. |
 
 ## Layout
 
