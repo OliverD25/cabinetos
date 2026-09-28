@@ -89,6 +89,23 @@ pub enum Request {
     /// Asks for the configuration in effect and the path of its file. The
     /// core answers `config`.
     GetConfig,
+    /// Asks for one setting in effect, defaults included. The core answers
+    /// `value`.
+    GetValue {
+        /// The setting as a dotted path, for example `ui.dualPane` or
+        /// `panes.sort`: object keys only, as `config_changed` names them.
+        path: String,
+    },
+    /// Changes one setting. The core checks it as it checks the file,
+    /// writes the file and answers `ok`; every connection that said `hello`
+    /// then gets `config_changed`.
+    SetValue {
+        /// The setting as a dotted path, for example `ui.dualPane`.
+        path: String,
+        /// Its new value, in the file's own format: `false`, `"rail"`,
+        /// `["D:\\work"]`.
+        value: Value,
+    },
     /// Asks for the compiled keymap. The core answers `keymap`.
     GetKeymap,
     /// Asks for every command, for the command palette. The core answers
@@ -258,6 +275,8 @@ impl Request {
         "volume_info",
         "list_volumes",
         "get_config",
+        "get_value",
+        "set_value",
         "get_keymap",
         "list_commands",
         "search_commands",
@@ -293,6 +312,8 @@ impl Request {
             Self::VolumeInfo { .. } => "volume_info",
             Self::ListVolumes => "list_volumes",
             Self::GetConfig => "get_config",
+            Self::GetValue { .. } => "get_value",
+            Self::SetValue { .. } => "set_value",
             Self::GetKeymap => "get_keymap",
             Self::ListCommands => "list_commands",
             Self::SearchCommands { .. } => "search_commands",
@@ -408,6 +429,11 @@ pub enum Response {
         /// file's own format (see `sdk/config/cabinetos.schema.json`).
         config: Value,
     },
+    /// Reply to `get_value`.
+    Value {
+        /// The setting in effect, in the file's own format.
+        value: Value,
+    },
     /// Reply to `get_keymap`, `set_keybinding` and `reset_keybinding`.
     Keymap(Keymap),
     /// Reply to `list_commands`.
@@ -495,6 +521,7 @@ impl Response {
         "volume_info",
         "volumes",
         "config",
+        "value",
         "keymap",
         "commands",
         "search_results",
@@ -521,6 +548,7 @@ impl Response {
             Self::VolumeInfo(_) => "volume_info",
             Self::Volumes { .. } => "volumes",
             Self::Config { .. } => "config",
+            Self::Value { .. } => "value",
             Self::Keymap(_) => "keymap",
             Self::Commands { .. } => "commands",
             Self::SearchResults { .. } => "search_results",
@@ -934,6 +962,7 @@ mod tests {
         }
     }
 
+    #[expect(clippy::too_many_lines, reason = "one example of every request")]
     fn every_request() -> Vec<Request> {
         vec![
             Request::Ping,
@@ -957,6 +986,13 @@ mod tests {
             },
             Request::ListVolumes,
             Request::GetConfig,
+            Request::GetValue {
+                path: "ui.dualPane".to_owned(),
+            },
+            Request::SetValue {
+                path: "ui.pinned".to_owned(),
+                value: json!([r"D:\work"]),
+            },
             Request::GetKeymap,
             Request::ListCommands,
             Request::SearchCommands {
@@ -1112,6 +1148,9 @@ mod tests {
             Response::Config {
                 path: r"C:\Users\me\AppData\Roaming\CabinetOS\cabinetos.json".to_owned(),
                 config: json!({"version": 1, "ui": {"layout": "classic"}}),
+            },
+            Response::Value {
+                value: json!(false),
             },
             Response::Keymap(keymap()),
             Response::Commands {

@@ -21,8 +21,8 @@ use cabinetos_commands::{
     search,
 };
 use cabinetos_config::{
-    Config, ConfigError, ConfigStore, ConfigWatcher, LogLevel, Opened, PluginSettings, Reload,
-    UpdateError, WatchEvent,
+    Config, ConfigError, ConfigStore, ConfigWatcher, LogLevel, Opened, PluginSettings, Rejection,
+    Reload, UpdateError, WatchEvent,
 };
 use cabinetos_plugins::PluginCommand;
 use cabinetos_protocol::{
@@ -140,6 +140,53 @@ impl Settings {
                 config,
             },
             Err(error) => error_reply(ErrorCode::Internal, error.to_string()),
+        }
+    }
+
+    /// The reply to `get_value`: one setting in effect, by its dotted path.
+    pub(crate) fn get_value(&self, path: &str) -> Response {
+        let config = match serde_json::to_value(&self.snapshot().config) {
+            Ok(config) => config,
+            Err(error) => return error_reply(ErrorCode::Internal, error.to_string()),
+        };
+        let mut value = &config;
+        for key in path.split('.') {
+            match value.get(key) {
+                Some(inner) => value = inner,
+                None => {
+                    return error_reply(
+                        ErrorCode::ConfigError,
+                        format!("there is no setting `{path}`"),
+                    );
+                }
+            }
+        }
+        Response::Value {
+            value: value.clone(),
+        }
+    }
+
+    /// The reply to `set_value`: changes one setting by its dotted path,
+    /// checked as a file would be, and writes the file. Blocking.
+    pub(crate) fn set_value(&self, path: &str, value: Value) -> Response {
+        let mut store = self.lock_store();
+        let mut compiled = None;
+        let result = store.set_value(path, value, |config| {
+            compiled = Some(compile(&self.registry(), &config.overrides())?);
+            Ok(())
+        });
+        match result {
+            Ok(changed) => {
+                if !changed.is_empty() {
+                    self.apply(store.config().clone(), compiled, changed);
+                }
+                Response::Ok
+            }
+            Err(UpdateError::Rejected(Rejection { message, .. })) => {
+                error_reply(ErrorCode::ConfigError, message)
+            }
+            Err(UpdateError::FileHasError(error)) => self.file_has_error(&error),
+            Err(UpdateError::Io(error)) => self.cannot_write(&error),
         }
     }
 
@@ -357,18 +404,26 @@ impl Settings {
     fn update_failure(&self, error: UpdateError<KeymapError>) -> Response {
         match error {
             UpdateError::Rejected(error) => keymap_failure(&error),
-            UpdateError::FileHasError(error) => error_reply(
-                ErrorCode::ConfigError,
-                format!(
-                    "{} has an error to fix first ({error}); nothing was changed",
-                    self.path.display()
-                ),
-            ),
-            UpdateError::Io(error) => error_reply(
-                ErrorCode::ConfigError,
-                format!("cannot write {}: {error}", self.path.display()),
-            ),
+            UpdateError::FileHasError(error) => self.file_has_error(&error),
+            UpdateError::Io(error) => self.cannot_write(&error),
         }
+    }
+
+    fn file_has_error(&self, error: &ConfigError) -> Response {
+        error_reply(
+            ErrorCode::ConfigError,
+            format!(
+                "{} has an error to fix first ({error}); nothing was changed",
+                self.path.display()
+            ),
+        )
+    }
+
+    fn cannot_write(&self, error: &std::io::Error) -> Response {
+        error_reply(
+            ErrorCode::ConfigError,
+            format!("cannot write {}: {error}", self.path.display()),
+        )
     }
 
     fn on_watch(&self, event: WatchEvent) {

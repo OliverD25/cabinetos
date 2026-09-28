@@ -71,7 +71,8 @@ file search (`search`, `file_search_results`) and `index_status`. Version 7
 `terminal_opened` and `terminal_sessions`, the event `terminal_exited`, and
 the error codes `no_such_session`, `unknown_profile` and `spawn_failed`.
 Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
-`volumes`, and the error code `already_exists`.
+`volumes`, `get_value` and `set_value` with the reply `value`, and the
+error code `already_exists`.
 
 ## Requests and replies
 
@@ -85,6 +86,8 @@ Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
 | `volume_info` | `path` (need not exist) | `volume_info` |
 | `list_volumes` | — | `volumes` (`volumes`) |
 | `get_config` | — | `config` (`path`, `config`) |
+| `get_value` | `path` (a dotted path, such as `ui.dualPane`) | `value` (`value`) |
+| `set_value` | `path`, `value` | `ok` |
 | `get_keymap` | — | `keymap` |
 | `list_commands` | — | `commands` |
 | `search_commands` | `query`; `limit` (default 20) | `search_results` (`hits`) |
@@ -137,7 +140,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
 
 Requests on one connection are independent: `list_directory`,
-`volume_info`, `list_volumes`, `set_keybinding`, `reset_keybinding`, `start_job`,
+`volume_info`, `list_volumes`, `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
 `terminal_open`, `terminal_close` and `terminal_sync_cwd` run in the
@@ -341,6 +344,28 @@ them and never reads the file itself.
 
 `config` is the whole configuration in effect, defaults included, in the
 file's own format.
+
+```json
+{"id":"01M…","type":"get_value","path":"ui.dualPane"}
+{"id":"01M…","type":"value","value":true}
+{"id":"01M…","type":"set_value","path":"ui.dualPane","value":false}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"config_changed","changed":["ui.dualPane"]}
+```
+
+`get_value` and `set_value` read and change one setting, named by the
+dotted path that `config_changed` uses: object keys only, such as
+`ui.lastPaths` or `panes.sort` (an array is one setting and is replaced
+whole). The value has the file's own format. `set_value` goes through the
+same steps as a keybinding change ("When the core writes the file" in
+[config.md](config.md)): the core reads the file as it is on disk, checks
+the new value as it checks a saved file (the type, the version, the
+terminal profiles, the keybindings), rewrites the file atomically, and
+tells every connection that said `hello`, the one that asked too, with
+`config_changed`. A setting that does not exist, or a value it cannot
+hold, is refused with `config_error` and the reason; so is any change
+while the file on disk has an error. The file is not touched then. A
+value equal to the one in effect is `ok` and changes nothing.
 
 ```json
 {"id":"01M…","type":"get_keymap"}
@@ -667,7 +692,8 @@ by force). When the core stops, it closes every session.
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
 `ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
-`volumes` prints `volumes`,
+`volumes` prints `volumes`, `config get` and `config set` send
+`get_value` and `set_value`,
 `config`, `commands` and `keys` cover the configuration messages (`keys
 watch` prints their events), `copy`, `move`, `delete`, `jobs` and `job`
 cover the jobs, `plugins`, `commands exec` and `events watch` cover the

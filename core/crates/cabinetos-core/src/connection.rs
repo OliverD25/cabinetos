@@ -8,8 +8,8 @@
 //!   queued, so a `listing_opened` always goes out before the events of that
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
-//!   (`list_directory`, `volume_info`, `list_volumes`, the keybinding and
-//!   plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
+//!   (`list_directory`, `volume_info`, `list_volumes`, `set_value`, the
+//!   keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`)
 //!   as tasks, so one slow directory, plugin, search or shell never holds up
 //!   the next request. After `hello` it also forwards the configuration,
@@ -270,34 +270,22 @@ impl Session {
                     sort,
                     watch,
                 } => self.list_directory(&id, &span, path, include_hidden, sort, watch),
-                Request::VolumeInfo { path } => {
-                    self.volume_info(&id, &span, path);
+                request @ (Request::VolumeInfo { .. } | Request::ListVolumes) => {
+                    self.file_request(&id, &span, kind, request);
                     None
                 }
-                Request::ListVolumes => {
-                    self.spawn_task_reply(&id, &span, kind, volumes::list_volumes());
-                    None
-                }
-                Request::GetConfig => Some(self.services.settings.get_config()),
-                Request::GetKeymap => Some(self.services.settings.get_keymap()),
-                Request::ListCommands => Some(self.services.settings.list_commands()),
-                Request::SearchCommands { query, limit } => {
-                    Some(self.services.settings.search_commands(&query, limit))
+                request @ (Request::GetConfig
+                | Request::GetValue { .. }
+                | Request::SetValue { .. }
+                | Request::GetKeymap
+                | Request::ListCommands
+                | Request::SearchCommands { .. }
+                | Request::SetKeybinding { .. }
+                | Request::ResetKeybinding { .. }) => {
+                    self.settings_request(&id, &span, kind, request)
                 }
                 Request::ExecuteCommand { command, args } => {
                     self.execute_command(&id, &span, command, &args)
-                }
-                Request::SetKeybinding { command, keys } => {
-                    self.write_keybinding(&id, &span, kind, move |settings| {
-                        settings.set_keybinding(&command, &keys)
-                    });
-                    None
-                }
-                Request::ResetKeybinding { command } => {
-                    self.write_keybinding(&id, &span, kind, move |settings| {
-                        settings.reset_keybinding(&command)
-                    });
-                    None
                 }
                 request @ (Request::StartJob(_)
                 | Request::ListJobs
@@ -413,6 +401,65 @@ impl Session {
         None
     }
 
+    /// The volume and file requests, as tasks: each asks the disk, the
+    /// network or the shell.
+    fn file_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) {
+        match request {
+            Request::VolumeInfo { path } => self.volume_info(id, span, path),
+            Request::ListVolumes => {
+                self.spawn_task_reply(id, span, kind, volumes::list_volumes());
+            }
+            _ => {}
+        }
+    }
+
+    /// The configuration, command and keymap requests. The reads answer at
+    /// once from the settings in effect; the changes write the file on the
+    /// blocking pool.
+    fn settings_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        let settings = &self.services.settings;
+        match request {
+            Request::GetConfig => Some(settings.get_config()),
+            Request::GetValue { path } => Some(settings.get_value(&path)),
+            Request::GetKeymap => Some(settings.get_keymap()),
+            Request::ListCommands => Some(settings.list_commands()),
+            Request::SearchCommands { query, limit } => {
+                Some(settings.search_commands(&query, limit))
+            }
+            Request::SetValue { path, value } => {
+                self.write_setting(id, span, kind, move |settings| {
+                    settings.set_value(&path, value)
+                });
+                None
+            }
+            Request::SetKeybinding { command, keys } => {
+                self.write_setting(id, span, kind, move |settings| {
+                    settings.set_keybinding(&command, &keys)
+                });
+                None
+            }
+            Request::ResetKeybinding { command } => {
+                self.write_setting(id, span, kind, move |settings| {
+                    settings.reset_keybinding(&command)
+                });
+                None
+            }
+            _ => None,
+        }
+    }
+
     fn volume_info(&mut self, id: &RequestId, span: &tracing::Span, path: String) {
         let out = self.out.clone();
         let request_id = id.clone();
@@ -439,9 +486,9 @@ impl Session {
         );
     }
 
-    /// Changes a keybinding on the blocking pool: it reads and writes the
-    /// configuration file.
-    fn write_keybinding(
+    /// Changes a setting or a keybinding on the blocking pool: it reads and
+    /// writes the configuration file.
+    fn write_setting(
         &mut self,
         id: &RequestId,
         span: &tracing::Span,

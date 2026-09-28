@@ -160,11 +160,14 @@ uses the defaults until the file is fixed.
 
 `cabinetos-cli config validate [file]` checks a file the same way without a
 core, for example before copying it into place. `cabinetos-cli config show`
-prints the settings in effect, and `cabinetos-cli keys watch` prints each
-change as the core announces it, with the time since the file was written.
+prints the settings in effect, `cabinetos-cli config get ui.dualPane` one of
+them, and `cabinetos-cli keys watch` prints each change as the core
+announces it, with the time since the file was written.
 
 ## When the core writes the file
 
+`set_value` (the settings UI and the shell's own state, such as
+`ui.lastPaths`, or `cabinetos-cli config set ui.dualPane false`),
 `set_keybinding` and `reset_keybinding` (the settings UI, or
 `cabinetos-cli keys set` and `keys reset`), and `grant_capabilities` and
 `set_plugin_enabled` (the permissions review dialog, or
@@ -175,6 +178,10 @@ through the core:
   moment ago is kept. If that edit has an error, the core writes nothing and
   answers with the error code `config_error`: overwriting it would lose the
   user's unfinished work.
+- It checks the result as it checks a saved file. A value `set_value`
+  cannot put there (a wrong type, a setting that does not exist, a
+  `terminal.defaultProfile` no profile has) is refused with
+  `config_error`, and the file stays as it was.
 - It writes the whole file: two-space indentation, the settings in the fixed
   order shown above, keys in their normal form. Comments cannot be lost,
   because strict JSON has none.

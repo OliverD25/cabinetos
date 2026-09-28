@@ -9,6 +9,7 @@ use anyhow::{Context, bail};
 use cabinetos_commands::{CommandRegistry, compile};
 use cabinetos_ipc::PipeClient;
 use cabinetos_protocol::{CommandInfo, CommandSource, Envelope, Event, Keymap, Request, Response};
+use serde_json::Value;
 
 use crate::{expect_welcome, failure, say, send};
 
@@ -27,6 +28,55 @@ pub(crate) async fn config_show(client: &mut PipeClient) -> anyhow::Result<()> {
     let (_, config) = get_config(client).await?;
     say(format_args!("{}", serde_json::to_string_pretty(&config)?));
     Ok(())
+}
+
+/// `config get <path>`: one setting in effect, as JSON.
+pub(crate) async fn config_get(client: &mut PipeClient, path: &str) -> anyhow::Result<()> {
+    let reply = send(
+        client,
+        Request::GetValue {
+            path: path.to_owned(),
+        },
+    )
+    .await?;
+    match reply.body {
+        Response::Value { value } => {
+            say(format_args!("{}", serde_json::to_string_pretty(&value)?));
+            Ok(())
+        }
+        other => Err(failure(path, &other)),
+    }
+}
+
+/// `config set <path> <value>`: the core checks the value and writes the
+/// file.
+pub(crate) async fn config_set(
+    client: &mut PipeClient,
+    path: &str,
+    text: &str,
+) -> anyhow::Result<()> {
+    let value = json_or_text(text);
+    let reply = send(
+        client,
+        Request::SetValue {
+            path: path.to_owned(),
+            value: value.clone(),
+        },
+    )
+    .await?;
+    match reply.body {
+        Response::Ok => {
+            say(format_args!("{path} = {value}"));
+            Ok(())
+        }
+        other => Err(failure(path, &other)),
+    }
+}
+
+/// `text` as JSON, or as a JSON string when it is not JSON, so `false` is a
+/// boolean and `rail` needs no quotes.
+fn json_or_text(text: &str) -> Value {
+    serde_json::from_str(text).unwrap_or_else(|_| Value::String(text.to_owned()))
 }
 
 /// `config validate [file]`: checks a file the way the core would, without
@@ -303,8 +353,19 @@ fn keymap_changes(old: &Keymap, new: &Keymap) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use cabinetos_protocol::KeymapBinding;
+    use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn values_are_json_or_else_text() {
+        assert_eq!(json_or_text("false"), json!(false));
+        assert_eq!(json_or_text("3"), json!(3));
+        assert_eq!(json_or_text(r#""rail""#), json!("rail"));
+        assert_eq!(json_or_text("rail"), json!("rail"));
+        assert_eq!(json_or_text(r#"["D:\\work"]"#), json!([r"D:\work"]));
+        assert_eq!(json_or_text("[1,"), json!("[1,"));
+    }
 
     fn keymap(bindings: &[(&str, &str)]) -> Keymap {
         Keymap {

@@ -11,7 +11,7 @@ use cabinetos_commands::KeySequence;
 use serde_json::Value;
 
 use crate::diff::changed_paths;
-use crate::parse::{ConfigError, Rejection, parse, parse_checked};
+use crate::parse::{ConfigError, Rejection, check_values, parse, parse_checked};
 use crate::{Config, KeybindingEntry, Keys, SCHEMA_JSON, SCHEMA_REFERENCE};
 
 /// Environment variable with the full path of the configuration file.
@@ -335,7 +335,9 @@ impl ConfigStore {
     }
 
     /// Sets one setting by its dotted path, for example `ui.layout` to
-    /// `"rail"`. The path must exist and the value must fit it.
+    /// `"rail"`. The path must exist and the value must fit it; the result
+    /// must pass the checks a file must pass (the version, the terminal
+    /// profiles) and `validate`.
     pub fn set_value(
         &mut self,
         path: &str,
@@ -359,7 +361,7 @@ impl ConfigStore {
                 *slot = value;
                 *config = serde_json::from_value(document)
                     .map_err(|error| refuse(format!("{path}: {error}")))?;
-                Ok(())
+                check_values(config).map_err(refuse)
             },
             validate,
         )
@@ -650,6 +652,35 @@ mod tests {
             store.set_value("ui.dualPane", Value::from("yes"), accept),
             Err(UpdateError::Rejected(_))
         ));
+        let changed = store
+            .set_value("ui.pinned", serde_json::json!([r"D:\work"]), accept)
+            .unwrap();
+        assert_eq!(changed, ["ui.pinned"]);
+        assert_eq!(store.config().ui.pinned, [r"D:\work"]);
+        assert!(matches!(
+            store.set_value("ui.lastPaths", Value::from(r"C:\"), accept),
+            Err(UpdateError::Rejected(_))
+        ));
+    }
+
+    #[test]
+    fn set_value_keeps_the_file_readable() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let before = std::fs::read_to_string(&path).unwrap();
+        // Each of these parses, but a file that says so would not load.
+        for (setting, value) in [
+            ("terminal.defaultProfile", Value::from("fish")),
+            ("version", Value::from(2)),
+        ] {
+            let result = store.set_value(setting, value, accept);
+            let Err(UpdateError::Rejected(rejection)) = result else {
+                panic!("{setting}: {result:?}")
+            };
+            assert!(!rejection.message.contains("line"), "{}", rejection.message);
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        assert_eq!(*store.config(), parse(&before).unwrap());
     }
 
     #[test]

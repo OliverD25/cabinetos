@@ -112,6 +112,13 @@ fn without_byte_order_mark(text: &str) -> &str {
     text.strip_prefix('\u{feff}').unwrap_or(text)
 }
 
+/// The checks of [`parse`] that go beyond the shape of the file, for
+/// settings that come from elsewhere (`set_value`): the message alone, as
+/// there is no text to point into.
+pub(crate) fn check_values(config: &Config) -> Result<(), String> {
+    check("", config).map_err(|error| error.message)
+}
+
 /// The checks that go beyond the shape of the file.
 fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
     if config.version != FORMAT_VERSION {

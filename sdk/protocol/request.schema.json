@@ -167,6 +167,46 @@
       ]
     },
     {
+      "description": "Asks for one setting in effect, defaults included. The core answers\n`value`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The setting as a dotted path, for example `ui.dualPane` or\n`panes.sort`: object keys only, as `config_changed` names them.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "get_value"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
+      "description": "Changes one setting. The core checks it as it checks the file,\nwrites the file and answers `ok`; every connection that said `hello`\nthen gets `config_changed`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The setting as a dotted path, for example `ui.dualPane`.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "set_value"
+        },
+        "value": {
+          "description": "Its new value, in the file's own format: `false`, `\"rail\"`,\n`[\"D:\\\\work\"]`."
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "value"
+      ]
+    },
+    {
       "description": "Asks for the compiled keymap. The core answers `keymap`.",
       "type": "object",
       "properties": {

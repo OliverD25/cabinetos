@@ -418,6 +418,20 @@ enum ConfigAction {
     Path,
     /// Print the settings in effect, defaults included.
     Show,
+    /// Print one setting in effect, for example: config get ui.dualPane.
+    Get {
+        /// The setting, as a dotted path.
+        path: String,
+    },
+    /// Change one setting, for example: config set ui.dualPane false. The
+    /// core checks the value and writes the configuration file.
+    Set {
+        /// The setting, as a dotted path.
+        path: String,
+        /// The new value as JSON: false, 3, "rail", ["D:\\work"]. A word
+        /// that is not JSON is taken as text: rail.
+        value: String,
+    },
     /// Check a configuration file the way the core would, without a core.
     /// Without FILE, checks the file a core would read by default.
     Validate {
@@ -697,6 +711,8 @@ async fn settings_command(client: &mut PipeClient, command: &Command) -> anyhow:
         Command::Config { action } => match action {
             ConfigAction::Path => settings::config_path(client).await?,
             ConfigAction::Show => settings::config_show(client).await?,
+            ConfigAction::Get { path } => settings::config_get(client, path).await?,
+            ConfigAction::Set { path, value } => settings::config_set(client, path, value).await?,
             ConfigAction::Validate { .. } => unreachable!("handled without a connection"),
         },
         Command::Commands { action } => match action {
@@ -1063,6 +1079,27 @@ mod tests {
             Command::Config {
                 action: ConfigAction::Validate { file: None }
             }
+        );
+        assert_eq!(
+            parse(&["config", "get", "ui.dualPane"]).unwrap(),
+            Command::Config {
+                action: ConfigAction::Get {
+                    path: "ui.dualPane".to_owned()
+                }
+            }
+        );
+        assert_eq!(
+            parse(&["config", "set", "ui.pinned", r#"["D:\\work"]"#]).unwrap(),
+            Command::Config {
+                action: ConfigAction::Set {
+                    path: "ui.pinned".to_owned(),
+                    value: r#"["D:\\work"]"#.to_owned()
+                }
+            }
+        );
+        assert!(
+            parse(&["config", "set", "ui.dualPane"]).is_err(),
+            "a value is required"
         );
         assert_eq!(
             parse(&["commands", "list", "--json"]).unwrap(),
