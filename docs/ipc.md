@@ -56,9 +56,8 @@ configuration events (`config_changed`, `config_error`, `keymap_changed`),
 the job events (`job_progress`, `job_conflict`, `job_state_changed`),
 the plugin events (`plugin_state_changed`, `plugin_crashed`,
 `plugin_event`), `terminal_exited` and `volumes_changed`, and right after
-`welcome` a
-`job_conflict` for every conflict that already waits for a decision. Every
-other request works without `hello`.
+`welcome` a `job_conflict` for every conflict that already waits for a
+decision. Every other request works without `hello`.
 
 Protocol version 3 (Phase 3) added the configuration, command and keymap
 messages, and made the `list_directory` options `include_hidden` and `sort`
@@ -343,9 +342,9 @@ thread in the core, not one per request.
 When a drive letter appears or goes away (a USB stick, a card put into a
 reader or taken out, a network share mapped or unmapped, a `subst`
 letter), every connection that said `hello` gets `volumes_changed` with
-the list `list_volumes` would answer now. Windows announces such changes with
-`WM_DEVICECHANGE` broadcasts, which reach only top-level windows, so the
-core keeps a top-level window that is never shown, on a thread of its
+the list `list_volumes` would answer now. Windows announces such changes
+with `WM_DEVICECHANGE` broadcasts, which reach only top-level windows, so
+the core keeps a top-level window that is never shown, on a thread of its
 own. It waits 500 ms for the rest of a burst (one stick may bring two
 volumes, and Windows may repeat a message) and sends the event only when
 the drives differ from the ones it sent last (free space does not count).
