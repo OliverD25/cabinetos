@@ -35,11 +35,13 @@ pub use shm::{MappedView, RawHandleValue, SharedSection};
 /// Everything that can go wrong on the transport.
 #[derive(Debug, thiserror::Error)]
 pub enum IpcError {
-    /// Reading or writing the pipe failed.
-    #[error("pipe I/O failed: {0}")]
+    // The two wrappers below are transparent: their message is the OS
+    // message, so a caller that prints the whole cause chain shows it once.
+    /// Reading, writing or opening the pipe failed.
+    #[error(transparent)]
     Io(#[from] std::io::Error),
     /// A Windows API call failed.
-    #[error("Windows API call failed: {0}")]
+    #[error(transparent)]
     Windows(#[from] windows::core::Error),
     /// A frame was longer than [`MAX_FRAME`]. The connection cannot be
     /// resynchronized after this and must be closed.

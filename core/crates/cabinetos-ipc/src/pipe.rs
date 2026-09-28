@@ -110,13 +110,18 @@ impl PipeServer {
     /// Waits for the next client. As soon as one connects, a fresh instance
     /// is created for the client after it, so a new client never finds the
     /// pipe missing. Cancel-safe: dropping the future loses no client.
+    ///
+    /// If connecting fails (for example, a client left before the connection
+    /// completed), the instance is replaced as well, so the next call starts
+    /// clean and the error concerns only that one client.
     pub async fn accept(&mut self) -> Result<PipeConnection, IpcError> {
-        self.next.connect().await?;
-        let next = self
+        let connected = self.next.connect().await;
+        let fresh = self
             .security
             .create_pipe(&server_options(false), self.name.as_str())?;
-        let connected = std::mem::replace(&mut self.next, next);
-        Ok(PipeConnection { pipe: connected })
+        let instance = std::mem::replace(&mut self.next, fresh);
+        connected?;
+        Ok(PipeConnection { pipe: instance })
     }
 }
 

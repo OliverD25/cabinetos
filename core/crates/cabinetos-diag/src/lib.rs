@@ -31,6 +31,7 @@ use cabinetos_protocol::RequestId;
 use serde::Serialize;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::Layer;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::Registry;
@@ -87,8 +88,9 @@ pub struct DiagConfig {
     /// Log directory. When `None`, the `CABINETOS_LOG_DIR` environment
     /// variable is used, and without it `%LOCALAPPDATA%\CabinetOS\logs`.
     pub dir: Option<PathBuf>,
-    /// Write the JSON Lines file. When `false`, events go to stderr only; the
-    /// CLI runs this way unless it is given a log directory.
+    /// Write the JSON Lines file. When `false`, events go to stderr only, and
+    /// only warnings and errors unless `CABINETOS_LOG` asks for more; the CLI
+    /// runs this way unless it is given a log directory.
     pub log_file: bool,
 }
 
@@ -207,11 +209,19 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
 
     let stderr_wanted =
         !log_file || std::env::var_os(LOG_STDERR_ENV).is_some_and(|value| value == "1");
+    // When stderr is the only output (the CLI), it is also where the program
+    // prints its results, so keep it to warnings unless asked for more.
+    let stderr_level = if !log_file && filter_text.is_none() {
+        LevelFilter::WARN
+    } else {
+        LevelFilter::TRACE
+    };
     let stderr_layer = stderr_wanted.then(|| {
         tracing_subscriber::fmt::layer()
             .pretty()
             .with_writer(std::io::stderr)
             .with_ansi(std::io::stderr().is_terminal())
+            .with_filter(stderr_level)
     });
 
     let subscriber = Registry::default()
