@@ -39,6 +39,18 @@ struct Args {
     #[arg(long, value_name = "PATH")]
     config: Option<PathBuf>,
 
+    /// Load the Core Plugins from this folder instead of
+    /// %LOCALAPPDATA%\CabinetOS\plugins (or the `CABINETOS_PLUGINS_DIR`
+    /// variable): one subfolder per plugin, with plugin.json and plugin.wasm.
+    #[arg(long, value_name = "PATH")]
+    plugins_dir: Option<PathBuf>,
+
+    /// Keep each plugin's own folder under this folder instead of
+    /// %LOCALAPPDATA%\CabinetOS\plugins-data (or the
+    /// `CABINETOS_PLUGINS_DATA_DIR` variable).
+    #[arg(long, value_name = "PATH")]
+    plugins_data_dir: Option<PathBuf>,
+
     /// Log one event, then panic: tests crash traces.
     #[arg(long, hide = true)]
     self_test_panic: bool,
@@ -70,6 +82,8 @@ fn main() -> ExitCode {
         parent_pid: args.parent_pid,
         log_dir: args.log_dir,
         config_path: args.config,
+        plugins_dir: args.plugins_dir,
+        plugins_data_dir: args.plugins_data_dir,
     };
     match runtime.block_on(run(config, CancellationToken::new())) {
         Ok(()) => ExitCode::SUCCESS,
@@ -127,6 +141,10 @@ mod tests {
             r"C:\logs",
             "--config",
             r"D:\c.json",
+            "--plugins-dir",
+            r"E:\plugins",
+            "--plugins-data-dir",
+            r"E:\plugins-data",
             "--self-test-panic",
         ])
         .unwrap();
@@ -134,6 +152,11 @@ mod tests {
         assert_eq!(args.parent_pid, Some(42));
         assert_eq!(args.log_dir, Some(PathBuf::from(r"C:\logs")));
         assert_eq!(args.config, Some(PathBuf::from(r"D:\c.json")));
+        assert_eq!(args.plugins_dir, Some(PathBuf::from(r"E:\plugins")));
+        assert_eq!(
+            args.plugins_data_dir,
+            Some(PathBuf::from(r"E:\plugins-data"))
+        );
         assert!(args.self_test_panic);
     }
 }

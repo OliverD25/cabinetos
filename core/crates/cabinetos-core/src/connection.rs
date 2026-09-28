@@ -8,9 +8,10 @@
 //!   queued, so a `listing_opened` always goes out before the events of that
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
-//!   (`list_directory`, `volume_info`, the keybinding writes, `start_job`)
-//!   as tasks, so one slow directory never holds up the next request. After
-//!   `hello` it also forwards the configuration and job events every
+//!   (`list_directory`, `volume_info`, the keybinding and plugin settings
+//!   writes, `start_job`, a plugin's command, `reload_plugin`) as tasks, so
+//!   one slow directory or plugin never holds up the next request. After
+//!   `hello` it also forwards the configuration, job and plugin events every
 //!   connection receives.
 
 use std::collections::HashMap;
@@ -26,6 +27,7 @@ use cabinetos_protocol::{
     SortSpec,
 };
 use serde::Serialize;
+use serde_json::Value;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
 use tokio::task::{AbortHandle, JoinError, JoinSet};
@@ -34,6 +36,7 @@ use tracing::Instrument;
 
 use crate::events::Services;
 use crate::listing::{self, Failure, Published, WatchedListing};
+use crate::plugins::check_grants;
 use crate::settings::{Settings, every_section};
 use crate::{CORE_VERSION, decode_request};
 
@@ -271,9 +274,8 @@ impl Session {
                 Request::SearchCommands { query, limit } => {
                     Some(self.services.settings.search_commands(&query, limit))
                 }
-                Request::ExecuteCommand { command, args: _ } => {
-                    tracing::info!(command = %command, "command requested");
-                    Some(self.services.settings.execute(&command))
+                Request::ExecuteCommand { command, args } => {
+                    self.execute_command(&id, &span, command, &args)
                 }
                 Request::SetKeybinding { command, keys } => {
                     self.write_keybinding(&id, &span, kind, move |settings| {
@@ -291,6 +293,12 @@ impl Session {
                 | Request::ListJobs
                 | Request::JobControl { .. }
                 | Request::ResolveConflict { .. }) => self.job_request(&id, &span, request),
+                request @ (Request::ListPlugins
+                | Request::ReloadPlugin { .. }
+                | Request::SetPluginEnabled { .. }
+                | Request::GrantCapabilities { .. }) => {
+                    self.plugin_request(&id, &span, kind, request)
+                }
             }
         };
         // Requests handled right here are done; the others log when they end.
@@ -421,13 +429,24 @@ impl Session {
         kind: &'static str,
         write: impl FnOnce(&Settings) -> Response + Send + 'static,
     ) {
-        let out = self.out.clone();
         let settings = Arc::clone(&self.services.settings);
+        self.spawn_reply(id, span, kind, move || write(&settings));
+    }
+
+    /// Runs `work` on the blocking pool and replies with its answer.
+    fn spawn_reply(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        work: impl FnOnce() -> Response + Send + 'static,
+    ) {
+        let out = self.out.clone();
         let request_id = id.clone();
         let started = Instant::now();
         self.tasks.spawn(
             async move {
-                let reply = match tokio::task::spawn_blocking(move || write(&settings)).await {
+                let reply = match tokio::task::spawn_blocking(work).await {
                     Ok(reply) => reply,
                     Err(error) => {
                         rethrow_panic(Err(error));
@@ -440,6 +459,136 @@ impl Session {
             }
             .instrument(span.clone()),
         );
+    }
+
+    /// `execute_command`: a plugin's command runs on the plugin's thread
+    /// (as a task: it may take up to the plugin's deadline); the core's
+    /// own answer at once. A command that is gone because its plugin
+    /// crashed or stopped says so.
+    fn execute_command(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        command: String,
+        args: &Value,
+    ) -> Option<Response> {
+        tracing::info!(command = %command, "command requested");
+        if let (Some(plugins), Some(plugin_id)) = (
+            &self.services.plugins,
+            self.services.settings.plugin_of(&command),
+        ) {
+            let plugins = Arc::clone(plugins);
+            // A plugin always gets a JSON object or value, never nothing.
+            let args = if args.is_null() {
+                "{}".to_owned()
+            } else {
+                args.to_string()
+            };
+            self.spawn_reply(id, span, "execute_command", move || {
+                match plugins.execute(&plugin_id, &command, &args) {
+                    Ok(result) => match serde_json::from_str(&result) {
+                        Ok(result) => Response::CommandResult { result },
+                        Err(error) => failure_reply((
+                            ErrorCode::PluginError,
+                            format!("{command} answered with text that is not JSON: {error}"),
+                        )),
+                    },
+                    Err(error) => failure_reply((error.code, error.message)),
+                }
+            });
+            return None;
+        }
+        let reply = self.services.settings.execute(&command);
+        if let Response::Error {
+            code: ErrorCode::UnknownCommand,
+            message,
+        } = &reply
+            && let Some(why) = self
+                .services
+                .plugins
+                .as_ref()
+                .and_then(|plugins| plugins.explain_missing(&command))
+        {
+            return Some(failure_reply((
+                ErrorCode::UnknownCommand,
+                format!("{message}: {why}"),
+            )));
+        }
+        Some(reply)
+    }
+
+    /// The plugin requests. `list_plugins` answers at once; the others run
+    /// as tasks (they read plugin folders or write the configuration file).
+    fn plugin_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        let Some(plugins) = self.services.plugins.clone() else {
+            return Some(match request {
+                Request::ListPlugins => Response::Plugins {
+                    plugins: Vec::new(),
+                },
+                _ => failure_reply((
+                    ErrorCode::NoSuchPlugin,
+                    "the plugin host is not running; see the core's log".to_owned(),
+                )),
+            });
+        };
+        let settings = Arc::clone(&self.services.settings);
+        match request {
+            Request::ListPlugins => Some(Response::Plugins {
+                plugins: plugins.list(),
+            }),
+            Request::ReloadPlugin { plugin_id } => {
+                self.spawn_reply(id, span, kind, move || match plugins.reload(&plugin_id) {
+                    Ok(()) => Response::Ok,
+                    Err(error) => failure_reply((error.code, error.message)),
+                });
+                None
+            }
+            Request::SetPluginEnabled { plugin_id, enabled } => {
+                if !plugins.contains(&plugin_id) {
+                    return Some(no_such_plugin(&plugin_id));
+                }
+                self.spawn_reply(id, span, kind, move || {
+                    let reply = settings.update_plugin(&plugin_id, |entry| entry.enabled = enabled);
+                    if matches!(reply, Response::Ok) {
+                        plugins.apply_settings(&settings.snapshot().config.plugins);
+                    }
+                    reply
+                });
+                None
+            }
+            Request::GrantCapabilities {
+                plugin_id,
+                capabilities,
+            } => {
+                if !plugins.contains(&plugin_id) {
+                    return Some(no_such_plugin(&plugin_id));
+                }
+                if let Err(message) = check_grants(&capabilities) {
+                    return Some(failure_reply((ErrorCode::PluginError, message)));
+                }
+                self.spawn_reply(id, span, kind, move || {
+                    let reply = settings.update_plugin(&plugin_id, |entry| {
+                        for capability in capabilities {
+                            if !entry.granted.contains(&capability) {
+                                entry.granted.push(capability);
+                            }
+                        }
+                    });
+                    if matches!(reply, Response::Ok) {
+                        plugins.apply_settings(&settings.snapshot().config.plugins);
+                    }
+                    reply
+                });
+                None
+            }
+            _ => None,
+        }
     }
 
     /// The job requests. `start_job` runs as a task (it looks at the file
@@ -536,6 +685,15 @@ impl Session {
                         Event::JobConflict(conflict),
                     ));
                 }
+                for plugin in self.services.plugins.iter().flat_map(|host| host.list()) {
+                    self.out.send(&Envelope::new(
+                        RequestId::new(),
+                        Event::PluginStateChanged {
+                            plugin_id: plugin.id,
+                            state: plugin.state,
+                        },
+                    ));
+                }
             }
             Err(RecvError::Closed) => self.events = None,
         }
@@ -608,6 +766,9 @@ impl Session {
         // Queued before the refresh task starts, so the client learns the
         // listing ID before any event about it.
         self.out.reply(request_id, reply);
+        if let Some(plugins) = &self.services.plugins {
+            plugins.listing_opened(&path, published.entry_count);
+        }
 
         let slot = match watch {
             None => ListingSlot::Static(published.section),
@@ -699,6 +860,13 @@ async fn run_blocking<T: Send + 'static>(
         Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
         Err(_) => Err((ErrorCode::Internal, "the request was cancelled".to_owned())),
     }
+}
+
+fn no_such_plugin(plugin_id: &str) -> Response {
+    failure_reply((
+        ErrorCode::NoSuchPlugin,
+        format!("no plugin `{plugin_id}` is installed"),
+    ))
 }
 
 fn protocol_error(message: &str) -> Response {

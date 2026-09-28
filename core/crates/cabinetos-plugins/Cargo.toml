@@ -1,12 +1,41 @@
 [package]
 name = "cabinetos-plugins"
-description = "WebAssembly plugin host with capability sandboxing (stub until Phase 7)."
+description = "WebAssembly plugin host: components in wasmtime, capability sandboxing, trap containment."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+
+[dependencies]
+bytes.workspace = true
+cabinetos-commands.workspace = true
+cabinetos-config.workspace = true
+cabinetos-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# Only for the AsyncWrite trait WASI's output streams implement.
+tokio.workspace = true
+tracing.workspace = true
+# The component model, compiled with Cranelift; backtraces with symbol names
+# for the trap log. No wasmtime cache, no GC proposals, no profiling.
+wasmtime = { workspace = true, features = [
+  "addr2line",
+  "backtrace",
+  "component-model",
+  "cranelift",
+  "demangle",
+  "parallel-compilation",
+  "runtime",
+  "std",
+] }
+# WASI Preview 2 only.
+wasmtime-wasi = { workspace = true, features = ["p2"] }
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

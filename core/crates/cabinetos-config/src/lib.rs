@@ -32,7 +32,7 @@ mod watch;
 pub use diff::changed_paths;
 pub use model::{
     Config, FORMAT_VERSION, KeybindingEntry, Keys, Layout, LogLevel, LoggingConfig, PanesConfig,
-    SCHEMA_REFERENCE, SortConfig, TerminalConfig, TerminalProfile, UiConfig,
+    PluginSettings, SCHEMA_REFERENCE, SortConfig, TerminalConfig, TerminalProfile, UiConfig,
 };
 pub use parse::{ConfigError, Rejection, parse, parse_checked};
 pub use store::{

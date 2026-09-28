@@ -40,6 +40,9 @@ fn core_command(pipe: &PipeName, log_dir: &Path) -> Command {
     command
         .args(["--pipe", pipe.token()])
         .env("CABINETOS_LOG_DIR", log_dir)
+        // Never the real plugins folder, whatever is installed there.
+        .env("CABINETOS_PLUGINS_DIR", log_dir.join("plugins"))
+        .env("CABINETOS_PLUGINS_DATA_DIR", log_dir.join("plugins-data"))
         .env(
             "CABINETOS_CONFIG",
             log_dir.join("config").join("cabinetos.json"),

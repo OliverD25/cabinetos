@@ -222,6 +222,19 @@ impl CommandRegistry {
         Ok(())
     }
 
+    /// Removes the command with this ID.
+    pub fn unregister(&mut self, id: &str) -> Option<Command> {
+        let index = self.commands.iter().position(|command| command.id == id)?;
+        Some(self.commands.remove(index))
+    }
+
+    /// Removes every command the plugin registered: it stopped or crashed.
+    pub fn unregister_plugin(&mut self, plugin_id: &str) {
+        self.commands.retain(
+            |command| !matches!(&command.source, CommandSource::Plugin { id, .. } if id == plugin_id),
+        );
+    }
+
     /// The command with this ID.
     #[must_use]
     pub fn get(&self, id: &str) -> Option<&Command> {
@@ -315,8 +328,30 @@ mod tests {
         copy.id = "plugin.hello".to_owned();
         copy.source = CommandSource::Plugin {
             id: "hello".to_owned(),
+            name: "Hello".to_owned(),
         };
         registry.register(copy).unwrap();
         assert!(registry.get("plugin.hello").is_some());
+    }
+
+    #[test]
+    fn a_plugin_s_commands_leave_together() {
+        let mut registry = CommandRegistry::core();
+        let core_count = registry.commands().len();
+        let mut command = registry.get("help.about").unwrap().clone();
+        command.source = CommandSource::Plugin {
+            id: "hello".to_owned(),
+            name: "Hello".to_owned(),
+        };
+        for id in ["hello.say", "hello.wave"] {
+            command.id = id.to_owned();
+            registry.register(command.clone()).unwrap();
+        }
+        assert_eq!(registry.unregister("hello.wave").unwrap().id, "hello.wave");
+        assert_eq!(registry.unregister("hello.wave"), None);
+        registry.unregister_plugin("other");
+        assert_eq!(registry.commands().len(), core_count + 1);
+        registry.unregister_plugin("hello");
+        assert_eq!(registry.commands().len(), core_count);
     }
 }

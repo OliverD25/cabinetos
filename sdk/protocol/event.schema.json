@@ -215,6 +215,80 @@
         "job_id",
         "state"
       ]
+    },
+    {
+      "description": "A plugin changed state. Sent to every connection that said `hello`.",
+      "type": "object",
+      "properties": {
+        "plugin_id": {
+          "description": "The plugin.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Its new state.",
+          "$ref": "#/$defs/PluginState"
+        },
+        "type": {
+          "type": "string",
+          "const": "plugin_state_changed"
+        }
+      },
+      "required": [
+        "type",
+        "plugin_id",
+        "state"
+      ]
+    },
+    {
+      "description": "A plugin trapped or ran out of time, fuel or memory. Its instance is\ngone and its commands are unregistered; the core goes on.",
+      "type": "object",
+      "properties": {
+        "message": {
+          "description": "The trap.",
+          "type": "string"
+        },
+        "plugin_id": {
+          "description": "The plugin.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "plugin_crashed"
+        }
+      },
+      "required": [
+        "type",
+        "plugin_id",
+        "message"
+      ]
+    },
+    {
+      "description": "An event a plugin sent (capability `events:emit`).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The event's name, chosen by the plugin.",
+          "type": "string"
+        },
+        "payload": {
+          "description": "Its payload, as the plugin wrote it (usually JSON).",
+          "type": "string"
+        },
+        "plugin_id": {
+          "description": "The plugin.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "plugin_event"
+        }
+      },
+      "required": [
+        "type",
+        "plugin_id",
+        "name",
+        "payload"
+      ]
     }
   ],
   "required": [
@@ -681,6 +755,114 @@
       "required": [
         "keys",
         "command"
+      ]
+    },
+    "PluginState": {
+      "description": "Where a plugin is in its life.",
+      "oneOf": [
+        {
+          "description": "Being compiled and started.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "loading"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Running; its commands are registered.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "active"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Turned off in the configuration.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "disabled"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "It asks for capabilities the user has not granted; it does not run\nuntil they are.",
+          "type": "object",
+          "properties": {
+            "missing": {
+              "description": "The capabilities still to grant.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "needs_review"
+            }
+          },
+          "required": [
+            "type",
+            "missing"
+          ]
+        },
+        {
+          "description": "It could not start: a bad manifest, a component that does not load,\nor `activate` failed.",
+          "type": "object",
+          "properties": {
+            "message": {
+              "description": "Why.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ]
+        },
+        {
+          "description": "It trapped or ran out of time, fuel or memory; its instance was\ndropped.",
+          "type": "object",
+          "properties": {
+            "at_ms": {
+              "description": "When, in milliseconds since 1970-01-01 UTC.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "message": {
+              "description": "The trap.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "crashed"
+            }
+          },
+          "required": [
+            "type",
+            "message",
+            "at_ms"
+          ]
+        }
       ]
     },
     "RefreshReason": {

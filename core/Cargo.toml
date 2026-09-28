@@ -18,10 +18,12 @@ cabinetos-diag = { path = "crates/cabinetos-diag" }
 cabinetos-fs = { path = "crates/cabinetos-fs" }
 cabinetos-ipc = { path = "crates/cabinetos-ipc" }
 cabinetos-jobs = { path = "crates/cabinetos-jobs" }
+cabinetos-plugins = { path = "crates/cabinetos-plugins" }
 cabinetos-protocol = { path = "crates/cabinetos-protocol" }
 
 # External crates. Each crate adds the features it needs on top of these.
 anyhow = "1.0"
+bytes = { version = "1.11", default-features = false }
 clap = { version = "4.6", features = ["derive"] }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 crossbeam-queue = "0.3"
@@ -38,6 +40,8 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "registry", "std"] }
 ulid = "3.0"
+wasmtime = { version = "49.0.1", default-features = false }
+wasmtime-wasi = { version = "49.0.1", default-features = false }
 windows = "0.62"
 
 [profile.release]

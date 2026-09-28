@@ -355,6 +355,86 @@
         "conflict_id",
         "resolution"
       ]
+    },
+    {
+      "description": "Asks for every installed plugin. The core answers `plugins`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "list_plugins"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Starts a plugin again from its folder: after a crash, or after its\nfiles changed. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "plugin_id": {
+          "description": "The plugin. (Named `plugin_id`, not `id`: `id` is the request's\nown ID in the same object.)",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "reload_plugin"
+        }
+      },
+      "required": [
+        "type",
+        "plugin_id"
+      ]
+    },
+    {
+      "description": "Turns a plugin on or off. The core writes the configuration file\nand answers `ok`.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "On or off.",
+          "type": "boolean"
+        },
+        "plugin_id": {
+          "description": "The plugin.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "set_plugin_enabled"
+        }
+      },
+      "required": [
+        "type",
+        "plugin_id",
+        "enabled"
+      ]
+    },
+    {
+      "description": "Grants capabilities a plugin asks for. The core writes the\nconfiguration file and answers `ok`; the plugin starts once it has\nevery capability it asks for.",
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "description": "Capability names, for example `fs:read`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "plugin_id": {
+          "description": "The plugin.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "grant_capabilities"
+        }
+      },
+      "required": [
+        "type",
+        "plugin_id",
+        "capabilities"
+      ]
     }
   ],
   "required": [

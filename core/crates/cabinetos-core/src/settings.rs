@@ -7,18 +7,27 @@
 //! store on a blocking thread, and every connection that said `hello` hears
 //! about them as events: `config_changed`, then `keymap_changed` when the
 //! keymap differs, or `config_error` when the file cannot be used.
+//!
+//! Plugins add and remove their commands while the core runs. Locks are
+//! always taken in one order: the store, then the registry. `Settings`
+//! never calls into the plugin host, so the host may call in here while it
+//! holds its own lock.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use cabinetos_commands::{
-    CommandRegistry, Compiled, KeySequence, Keymap, KeymapError, command_info, compile, search,
+    Command, CommandRegistry, Compiled, KeySequence, Keymap, KeymapError, command_info, compile,
+    search,
 };
 use cabinetos_config::{
-    Config, ConfigError, ConfigStore, ConfigWatcher, LogLevel, Opened, Reload, UpdateError,
-    WatchEvent,
+    Config, ConfigError, ConfigStore, ConfigWatcher, LogLevel, Opened, PluginSettings, Reload,
+    UpdateError, WatchEvent,
 };
-use cabinetos_protocol::{CommandTarget, ErrorCode, Event, PROTOCOL_VERSION, Response};
+use cabinetos_plugins::PluginCommand;
+use cabinetos_protocol::{
+    CommandSource, CommandTarget, ErrorCode, Event, PROTOCOL_VERSION, Response,
+};
 use serde_json::{Value, json};
 use tokio::sync::watch;
 
@@ -34,7 +43,8 @@ pub(crate) struct Snapshot {
 
 /// The configuration, the commands and the keymap of this core.
 pub(crate) struct Settings {
-    registry: CommandRegistry,
+    /// The core's commands and the running plugins' commands.
+    registry: RwLock<CommandRegistry>,
     path: PathBuf,
     /// Held while the file is read or written, so changes apply in order.
     store: Mutex<ConfigStore>,
@@ -83,7 +93,7 @@ impl Settings {
         };
         let (current, _) = watch::channel(Arc::new(snapshot));
         Arc::new(Self {
-            registry,
+            registry: RwLock::new(registry),
             path,
             store: Mutex::new(store),
             current,
@@ -117,6 +127,11 @@ impl Settings {
         self.current.borrow().clone()
     }
 
+    /// The settings in effect, now and after every change.
+    pub(crate) fn subscribe(&self) -> watch::Receiver<Arc<Snapshot>> {
+        self.current.subscribe()
+    }
+
     /// The reply to `get_config`.
     pub(crate) fn get_config(&self) -> Response {
         match serde_json::to_value(&self.snapshot().config) {
@@ -138,7 +153,7 @@ impl Settings {
         let snapshot = self.snapshot();
         Response::Commands {
             commands: self
-                .registry
+                .registry()
                 .commands()
                 .iter()
                 .map(|command| command_info(command, &snapshot.keymap))
@@ -150,21 +165,22 @@ impl Settings {
     pub(crate) fn search_commands(&self, query: &str, limit: u32) -> Response {
         Response::SearchResults {
             hits: search(
-                &self.registry,
+                &self.registry(),
                 query,
                 usize::try_from(limit).unwrap_or(usize::MAX),
             ),
         }
     }
 
-    /// The reply to `execute_command`: the core runs its own commands and
-    /// hands the UI's back. Of the core's commands only `help.about` exists
-    /// yet; the file operations arrive with their phase.
+    /// The reply to `execute_command` for a command that is not a plugin's
+    /// (the connection sends those to the plugin host): the core runs its
+    /// own commands and hands the UI's back. Of the core's commands only
+    /// `help.about` exists yet; the file operations arrive with their phase.
     pub(crate) fn execute(&self, command: &str) -> Response {
-        let Some(found) = self.registry.get(command) else {
+        let Some(target) = self.registry().get(command).map(|found| found.target) else {
             return unknown_command(command);
         };
-        match (found.target, command) {
+        match (target, command) {
             (CommandTarget::Ui, _) => Response::CommandRouted {
                 target: CommandTarget::Ui,
             },
@@ -187,10 +203,10 @@ impl Settings {
     /// string: no binding), writes the file and answers with the new keymap.
     /// Blocking.
     pub(crate) fn set_keybinding(&self, command: &str, keys: &str) -> Response {
-        let Some(found) = self.registry.get(command) else {
+        let Some(immutable) = self.registry().get(command).map(|found| found.immutable) else {
             return unknown_command(command);
         };
-        if found.immutable {
+        if immutable {
             return keymap_failure(&KeymapError::ImmutableCommand {
                 command: command.to_owned(),
                 entry: None,
@@ -206,7 +222,7 @@ impl Settings {
         let mut store = self.lock_store();
         let mut compiled = None;
         let result = store.set_keybinding(command, keys, |config| {
-            compiled = Some(compile(&self.registry, &config.overrides())?);
+            compiled = Some(compile(&self.registry(), &config.overrides())?);
             Ok(())
         });
         self.finish_update(&store, result, compiled)
@@ -224,16 +240,101 @@ impl Settings {
         };
         // Entries for a command nobody registers (a plugin that was removed)
         // can still be cleaned up.
-        if self.registry.get(command).is_none() && !has_entries() {
+        if self.registry().get(command).is_none() && !has_entries() {
             return unknown_command(command);
         }
         let mut store = self.lock_store();
         let mut compiled = None;
         let result = store.unset_keybinding(command, |config| {
-            compiled = Some(compile(&self.registry, &config.overrides())?);
+            compiled = Some(compile(&self.registry(), &config.overrides())?);
             Ok(())
         });
         self.finish_update(&store, result, compiled)
+    }
+
+    /// Changes the settings of one plugin (`plugins.<id>`) and writes the
+    /// file. Answers `ok`; the caller then lets the plugin host act on it.
+    /// Blocking.
+    pub(crate) fn update_plugin(
+        &self,
+        plugin_id: &str,
+        change: impl FnOnce(&mut PluginSettings),
+    ) -> Response {
+        let mut store = self.lock_store();
+        let mut compiled = None;
+        let result = store.update(
+            |config| {
+                change(config.plugins.entry(plugin_id.to_owned()).or_default());
+                Ok(())
+            },
+            |config| {
+                compiled = Some(compile(&self.registry(), &config.overrides())?);
+                Ok(())
+            },
+        );
+        match result {
+            Ok(changed) => {
+                if !changed.is_empty() {
+                    self.apply(store.config().clone(), compiled, changed);
+                }
+                Response::Ok
+            }
+            Err(error) => self.update_failure(error),
+        }
+    }
+
+    /// The plugin that registered `command`, if a plugin did.
+    pub(crate) fn plugin_of(&self, command: &str) -> Option<String> {
+        match &self.registry().get(command)?.source {
+            CommandSource::Plugin { id, .. } => Some(id.clone()),
+            CommandSource::Core => None,
+        }
+    }
+
+    /// Replaces the commands of one plugin (none: it stopped or crashed)
+    /// and compiles the keymap again. A default key that clashes with a
+    /// binding in use is dropped with a warning: the command stays, without
+    /// keys. Called on a plugin host thread.
+    pub(crate) fn set_plugin_commands(
+        &self,
+        plugin_id: &str,
+        plugin_name: &str,
+        commands: &[PluginCommand],
+    ) {
+        let store = self.lock_store();
+        let overrides = store.config().overrides();
+        let compiled = {
+            let mut registry = self.registry_mut();
+            registry.unregister_plugin(plugin_id);
+            for command in commands {
+                add_plugin_command(&mut registry, &overrides, plugin_id, plugin_name, command);
+            }
+            compile(&registry, &overrides)
+        };
+        match compiled {
+            Ok(compiled) => {
+                let previous = self.snapshot();
+                if compiled.keymap != previous.keymap {
+                    log_warnings(&compiled.warnings);
+                    let wire = compiled.keymap.to_wire();
+                    self.current.send_replace(Arc::new(Snapshot {
+                        config: store.config().clone(),
+                        keymap: compiled.keymap,
+                    }));
+                    self.publish(Event::KeymapChanged { keymap: wire });
+                }
+            }
+            Err(error) => tracing::warn!(
+                plugin_id,
+                %error,
+                "the keybindings do not fit the plugin's commands; the keymap in use stays"
+            ),
+        }
+        tracing::info!(
+            plugin_id,
+            commands = commands.len(),
+            "plugin commands registered"
+        );
     }
 
     fn finish_update(
@@ -249,15 +350,21 @@ impl Settings {
                 }
                 self.get_keymap()
             }
-            Err(UpdateError::Rejected(error)) => keymap_failure(&error),
-            Err(UpdateError::FileHasError(error)) => error_reply(
+            Err(error) => self.update_failure(error),
+        }
+    }
+
+    fn update_failure(&self, error: UpdateError<KeymapError>) -> Response {
+        match error {
+            UpdateError::Rejected(error) => keymap_failure(&error),
+            UpdateError::FileHasError(error) => error_reply(
                 ErrorCode::ConfigError,
                 format!(
                     "{} has an error to fix first ({error}); nothing was changed",
                     self.path.display()
                 ),
             ),
-            Err(UpdateError::Io(error)) => error_reply(
+            UpdateError::Io(error) => error_reply(
                 ErrorCode::ConfigError,
                 format!("cannot write {}: {error}", self.path.display()),
             ),
@@ -286,7 +393,7 @@ impl Settings {
         let mut store = self.lock_store();
         let mut compiled = None;
         let outcome = store.reload(|config| {
-            compiled = Some(compile(&self.registry, &config.overrides())?);
+            compiled = Some(compile(&self.registry(), &config.overrides())?);
             Ok(())
         });
         match outcome {
@@ -337,6 +444,64 @@ impl Settings {
 
     fn lock_store(&self) -> MutexGuard<'_, ConfigStore> {
         self.store.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn registry(&self) -> RwLockReadGuard<'_, CommandRegistry> {
+        self.registry.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn registry_mut(&self) -> RwLockWriteGuard<'_, CommandRegistry> {
+        self.registry
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Registers one plugin command; its default keys are dropped when they
+/// clash with a binding in use.
+fn add_plugin_command(
+    registry: &mut CommandRegistry,
+    overrides: &[cabinetos_commands::Override],
+    plugin_id: &str,
+    plugin_name: &str,
+    command: &PluginCommand,
+) {
+    let mut entry = Command {
+        id: command.id.clone(),
+        category: command.category.clone(),
+        title: command.title.clone(),
+        // The host checked them against the key grammar already.
+        default_keys: command
+            .default_keys
+            .iter()
+            .filter_map(|keys| keys.parse().ok())
+            .collect(),
+        source: CommandSource::Plugin {
+            id: plugin_id.to_owned(),
+            name: plugin_name.to_owned(),
+        },
+        target: CommandTarget::Core,
+        when: None,
+        immutable: false,
+    };
+    if registry.register(entry.clone()).is_err() {
+        tracing::warn!(
+            plugin_id,
+            command = %entry.id,
+            "another command has this ID already; the plugin's command is left out"
+        );
+        return;
+    }
+    if !entry.default_keys.is_empty() && compile(registry, overrides).is_err() {
+        registry.unregister(&entry.id);
+        tracing::warn!(
+            plugin_id,
+            command = %entry.id,
+            keys = ?command.default_keys,
+            "the plugin's default keys clash with a binding in use; the command has no keys"
+        );
+        entry.default_keys.clear();
+        let _ = registry.register(entry);
     }
 }
 

@@ -68,6 +68,12 @@ fn start_core_with(initial: Option<&str>) -> Core {
         .arg("--config")
         .arg(&config)
         .env("CABINETOS_LOG_DIR", dir.path().join("logs"))
+        // Never the real plugins folder, whatever is installed there.
+        .env("CABINETOS_PLUGINS_DIR", dir.path().join("plugins"))
+        .env(
+            "CABINETOS_PLUGINS_DATA_DIR",
+            dir.path().join("plugins-data"),
+        )
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")

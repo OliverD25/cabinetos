@@ -2,6 +2,8 @@
 //! leave anything out; an unknown key is an error, so a typo is caught
 //! instead of silently ignored.
 
+use std::collections::BTreeMap;
+
 use cabinetos_commands::{KeySequence, Override};
 use cabinetos_protocol::{SortKey, SortSpec};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -35,6 +37,9 @@ pub struct Config {
     pub keybindings: Vec<KeybindingEntry>,
     /// Diagnostics.
     pub logging: LoggingConfig,
+    /// Core Plugins, by ID: which run, and what they may do. A plugin that
+    /// is not listed is on, with nothing granted.
+    pub plugins: BTreeMap<String, PluginSettings>,
 }
 
 impl Default for Config {
@@ -47,6 +52,7 @@ impl Default for Config {
             terminal: TerminalConfig::default(),
             keybindings: Vec::new(),
             logging: LoggingConfig::default(),
+            plugins: BTreeMap::new(),
         }
     }
 }
@@ -236,6 +242,27 @@ impl schemars::JsonSchema for Keys {
             "description": "One combination (`ctrl+shift+p`) or a chord of two separated by a space (`ctrl+k ctrl+c`); an empty string for none. Modifiers: ctrl, shift, alt, win.",
             "type": "string"
         })
+    }
+}
+
+/// One plugin's settings.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default, rename_all = "camelCase")]
+pub struct PluginSettings {
+    /// Run the plugin.
+    pub enabled: bool,
+    /// The capabilities the user granted it, for example `fs:read`. It runs
+    /// only when it has every capability it asks for (docs/plugins.md).
+    pub granted: Vec<String>,
+}
+
+impl Default for PluginSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            granted: Vec::new(),
+        }
     }
 }
 

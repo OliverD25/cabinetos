@@ -4,23 +4,25 @@
 //! The UI is only a view (brief §1, the Dumb UI Rule): all work happens here,
 //! behind the named pipe. The core lists directories into shared memory,
 //! keeps watched listings current with events, reports volumes and disks,
-//! owns the configuration file, the commands and the keymap, logs every
-//! request with its ID, and exits with its parent process. The protocol is
-//! in `docs/ipc.md`.
+//! owns the configuration file, the commands and the keymap, runs the jobs
+//! and the Core Plugins, logs every request with its ID, and exits with its
+//! parent process. The protocol is in `docs/ipc.md`.
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: every
 //! connection is served asynchronously, so no request waits on another),
 //! Article 6 (Universal Configuration: an edit to `cabinetos.json` takes
 //! effect at once), Article 7 (Absolute Keyboard Control: the keymap and
-//! the Immutable System Tier live here), Article 10 (The Zero-Bloat
-//! Foundation: the core is the bare navigation engine; features arrive as
-//! extensions) and Article 12 (Unified Diagnostics: each request is handled
-//! inside a span carrying its ID).
+//! the Immutable System Tier live here), Article 8 (Sandboxed
+//! Extensibility: a plugin that crashes is removed and the core goes on),
+//! Article 10 (The Zero-Bloat Foundation: the core is the bare navigation
+//! engine; features arrive as extensions) and Article 12 (Unified
+//! Diagnostics: each request is handled inside a span carrying its ID).
 #![forbid(unsafe_code)]
 
 mod connection;
 mod events;
 mod listing;
+mod plugins;
 mod settings;
 
 use std::path::{Path, PathBuf};
@@ -93,6 +95,12 @@ pub struct CoreConfig {
     /// The configuration file; `None` uses `CABINETOS_CONFIG` or
     /// `%APPDATA%\CabinetOS\cabinetos.json`.
     pub config_path: Option<PathBuf>,
+    /// The plugins folder; `None` uses `CABINETOS_PLUGINS_DIR` or
+    /// `%LOCALAPPDATA%\CabinetOS\plugins`.
+    pub plugins_dir: Option<PathBuf>,
+    /// The folder of the plugins' own folders; `None` uses
+    /// `CABINETOS_PLUGINS_DATA_DIR` or `%LOCALAPPDATA%\CabinetOS\plugins-data`.
+    pub plugins_data_dir: Option<PathBuf>,
 }
 
 /// Why the core stopped with an error.
@@ -141,6 +149,8 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         parent_pid,
         log_dir,
         config_path,
+        plugins_dir,
+        plugins_data_dir,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
     if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
@@ -167,12 +177,29 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         EngineConfig::default(),
         Arc::new(move |event| job_events.publish(event)),
     );
+    let plugins = plugins::start(
+        cabinetos_plugins::plugins_dir(plugins_dir),
+        cabinetos_plugins::plugins_data_dir(plugins_data_dir),
+        &settings,
+        &events,
+        &jobs,
+    );
+    if let Some(host) = &plugins {
+        tokio::spawn(plugins::follow_settings(
+            Arc::clone(host),
+            settings.subscribe(),
+        ));
+    }
     let services = Arc::new(Services {
         settings,
         jobs,
         events,
+        plugins,
     });
     let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
+    if let Some(host) = &services.plugins {
+        host.shutdown();
+    }
     let stopping = Arc::clone(&services);
     let _ = tokio::task::spawn_blocking(move || stopping.jobs.shutdown(JOBS_GRACE)).await;
     match &result {

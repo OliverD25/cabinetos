@@ -15,6 +15,7 @@ cabinetos-diag.workspace = true
 cabinetos-fs.workspace = true
 cabinetos-ipc.workspace = true
 cabinetos-jobs.workspace = true
+cabinetos-plugins.workspace = true
 cabinetos-protocol.workspace = true
 clap.workspace = true
 serde.workspace = true

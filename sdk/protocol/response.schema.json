@@ -318,12 +318,88 @@
         "type",
         "jobs"
       ]
+    },
+    {
+      "description": "Reply to `list_plugins`: every installed plugin, by ID.",
+      "type": "object",
+      "properties": {
+        "plugins": {
+          "description": "The plugins.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginInfo"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "plugins"
+        }
+      },
+      "required": [
+        "type",
+        "plugins"
+      ]
     }
   ],
   "required": [
     "id"
   ],
   "$defs": {
+    "CapabilityInfo": {
+      "description": "One capability a plugin asks for.",
+      "type": "object",
+      "properties": {
+        "granted": {
+          "description": "Whether the user granted it.",
+          "type": "boolean"
+        },
+        "level": {
+          "description": "How much it lets the plugin do.",
+          "$ref": "#/$defs/CapabilityLevel"
+        },
+        "name": {
+          "description": "For example `fs:read`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The plugin's own plain-language reason.",
+          "type": "string"
+        },
+        "roots": {
+          "description": "The folders it concerns, for `fs:read` and `fs:write`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "level",
+        "granted",
+        "reason"
+      ]
+    },
+    "CapabilityLevel": {
+      "description": "How much a capability lets a plugin do, as the review dialog colors it.",
+      "oneOf": [
+        {
+          "description": "Little risk: registering commands, reading the settings.",
+          "type": "string",
+          "const": "low"
+        },
+        {
+          "description": "Access to the user's files.",
+          "type": "string",
+          "const": "medium"
+        },
+        {
+          "description": "Reaching outside the machine or the user's secrets.",
+          "type": "string",
+          "const": "high"
+        }
+      ]
+    },
     "CommandInfo": {
       "description": "A command, as the palette shows it.",
       "type": "object",
@@ -402,7 +478,7 @@
           ]
         },
         {
-          "description": "Registered by a plugin (Phase 7).",
+          "description": "Registered by a plugin.",
           "type": "object",
           "properties": {
             "id": {
@@ -412,11 +488,16 @@
             "kind": {
               "type": "string",
               "const": "plugin"
+            },
+            "name": {
+              "description": "The plugin's display name, for the badge on its commands.",
+              "type": "string"
             }
           },
           "required": [
             "kind",
-            "id"
+            "id",
+            "name"
           ]
         }
       ]
@@ -562,6 +643,16 @@
           "description": "The resolution does not fit the conflict, such as\n`delete_permanently` for a file that exists.",
           "type": "string",
           "const": "invalid_resolution"
+        },
+        {
+          "description": "No plugin has that ID.",
+          "type": "string",
+          "const": "no_such_plugin"
+        },
+        {
+          "description": "A plugin's command failed: the plugin reported an error, crashed, or\nis not running.",
+          "type": "string",
+          "const": "plugin_error"
         }
       ]
     },
@@ -901,6 +992,168 @@
       "required": [
         "keys",
         "command"
+      ]
+    },
+    "PluginInfo": {
+      "description": "One installed plugin.",
+      "type": "object",
+      "properties": {
+        "author": {
+          "description": "Who made it.",
+          "type": "string"
+        },
+        "capabilities": {
+          "description": "What it asks to do, for the review dialog.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityInfo"
+          }
+        },
+        "commands": {
+          "description": "The IDs of the commands it registered (while it is active).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "description": "What it does, in a sentence or two.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The plugin's ID, from its `plugin.json`; also its folder's name.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its display name, shown as a badge on its commands.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Where it is in its life.",
+          "$ref": "#/$defs/PluginState"
+        },
+        "version": {
+          "description": "Its version.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "author",
+        "description",
+        "state",
+        "capabilities",
+        "commands"
+      ]
+    },
+    "PluginState": {
+      "description": "Where a plugin is in its life.",
+      "oneOf": [
+        {
+          "description": "Being compiled and started.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "loading"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Running; its commands are registered.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "active"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Turned off in the configuration.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "disabled"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "It asks for capabilities the user has not granted; it does not run\nuntil they are.",
+          "type": "object",
+          "properties": {
+            "missing": {
+              "description": "The capabilities still to grant.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "needs_review"
+            }
+          },
+          "required": [
+            "type",
+            "missing"
+          ]
+        },
+        {
+          "description": "It could not start: a bad manifest, a component that does not load,\nor `activate` failed.",
+          "type": "object",
+          "properties": {
+            "message": {
+              "description": "Why.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ]
+        },
+        {
+          "description": "It trapped or ran out of time, fuel or memory; its instance was\ndropped.",
+          "type": "object",
+          "properties": {
+            "at_ms": {
+              "description": "When, in milliseconds since 1970-01-01 UTC.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "message": {
+              "description": "The trap.",
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "crashed"
+            }
+          },
+          "required": [
+            "type",
+            "message",
+            "at_ms"
+          ]
+        }
       ]
     },
     "RequestId": {

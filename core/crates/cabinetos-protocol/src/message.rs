@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use crate::RequestId;
 use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution};
+use crate::plugin::{PluginInfo, PluginState};
 
 /// One message on the control channel: a request ID plus the message body.
 ///
@@ -150,6 +151,32 @@ pub enum Request {
         #[serde(default)]
         apply_to_same_kind: bool,
     },
+    /// Asks for every installed plugin. The core answers `plugins`.
+    ListPlugins,
+    /// Starts a plugin again from its folder: after a crash, or after its
+    /// files changed. The core answers `ok`.
+    ReloadPlugin {
+        /// The plugin. (Named `plugin_id`, not `id`: `id` is the request's
+        /// own ID in the same object.)
+        plugin_id: String,
+    },
+    /// Turns a plugin on or off. The core writes the configuration file
+    /// and answers `ok`.
+    SetPluginEnabled {
+        /// The plugin.
+        plugin_id: String,
+        /// On or off.
+        enabled: bool,
+    },
+    /// Grants capabilities a plugin asks for. The core writes the
+    /// configuration file and answers `ok`; the plugin starts once it has
+    /// every capability it asks for.
+    GrantCapabilities {
+        /// The plugin.
+        plugin_id: String,
+        /// Capability names, for example `fs:read`.
+        capabilities: Vec<String>,
+    },
 }
 
 fn default_search_limit() -> u32 {
@@ -177,6 +204,10 @@ impl Request {
         "list_jobs",
         "job_control",
         "resolve_conflict",
+        "list_plugins",
+        "reload_plugin",
+        "set_plugin_enabled",
+        "grant_capabilities",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -200,6 +231,10 @@ impl Request {
             Self::ListJobs => "list_jobs",
             Self::JobControl { .. } => "job_control",
             Self::ResolveConflict { .. } => "resolve_conflict",
+            Self::ListPlugins => "list_plugins",
+            Self::ReloadPlugin { .. } => "reload_plugin",
+            Self::SetPluginEnabled { .. } => "set_plugin_enabled",
+            Self::GrantCapabilities { .. } => "grant_capabilities",
         }
     }
 }
@@ -323,6 +358,11 @@ pub enum Response {
         /// The jobs.
         jobs: Vec<JobInfo>,
     },
+    /// Reply to `list_plugins`: every installed plugin, by ID.
+    Plugins {
+        /// The plugins.
+        plugins: Vec<PluginInfo>,
+    },
 }
 
 impl Response {
@@ -342,6 +382,7 @@ impl Response {
         "command_result",
         "job_started",
         "jobs",
+        "plugins",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -362,6 +403,7 @@ impl Response {
             Self::CommandResult { .. } => "command_result",
             Self::JobStarted { .. } => "job_started",
             Self::Jobs { .. } => "jobs",
+            Self::Plugins { .. } => "plugins",
         }
     }
 }
@@ -467,10 +509,12 @@ pub struct CommandInfo {
 pub enum CommandSource {
     /// Built into the core.
     Core,
-    /// Registered by a plugin (Phase 7).
+    /// Registered by a plugin.
     Plugin {
         /// The plugin's ID.
         id: String,
+        /// The plugin's display name, for the badge on its commands.
+        name: String,
     },
 }
 
@@ -565,6 +609,30 @@ pub enum Event {
         /// Its new state.
         state: JobState,
     },
+    /// A plugin changed state. Sent to every connection that said `hello`.
+    PluginStateChanged {
+        /// The plugin.
+        plugin_id: String,
+        /// Its new state.
+        state: PluginState,
+    },
+    /// A plugin trapped or ran out of time, fuel or memory. Its instance is
+    /// gone and its commands are unregistered; the core goes on.
+    PluginCrashed {
+        /// The plugin.
+        plugin_id: String,
+        /// The trap.
+        message: String,
+    },
+    /// An event a plugin sent (capability `events:emit`).
+    PluginEvent {
+        /// The plugin.
+        plugin_id: String,
+        /// The event's name, chosen by the plugin.
+        name: String,
+        /// Its payload, as the plugin wrote it (usually JSON).
+        payload: String,
+    },
 }
 
 impl Event {
@@ -579,6 +647,9 @@ impl Event {
         "job_progress",
         "job_conflict",
         "job_state_changed",
+        "plugin_state_changed",
+        "plugin_crashed",
+        "plugin_event",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -593,6 +664,9 @@ impl Event {
             Self::JobProgress(_) => "job_progress",
             Self::JobConflict(_) => "job_conflict",
             Self::JobStateChanged { .. } => "job_state_changed",
+            Self::PluginStateChanged { .. } => "plugin_state_changed",
+            Self::PluginCrashed { .. } => "plugin_crashed",
+            Self::PluginEvent { .. } => "plugin_event",
         }
     }
 }
@@ -671,6 +745,11 @@ pub enum ErrorCode {
     /// The resolution does not fit the conflict, such as
     /// `delete_permanently` for a file that exists.
     InvalidResolution,
+    /// No plugin has that ID.
+    NoSuchPlugin,
+    /// A plugin's command failed: the plugin reported an error, crashed, or
+    /// is not running.
+    PluginError,
 }
 
 #[cfg(test)]
@@ -768,6 +847,18 @@ mod tests {
                 },
                 apply_to_same_kind: true,
             },
+            Request::ListPlugins,
+            Request::ReloadPlugin {
+                plugin_id: "hello".to_owned(),
+            },
+            Request::SetPluginEnabled {
+                plugin_id: "hello".to_owned(),
+                enabled: false,
+            },
+            Request::GrantCapabilities {
+                plugin_id: "reader".to_owned(),
+                capabilities: vec!["fs:read".to_owned()],
+            },
         ]
     }
 
@@ -857,6 +948,26 @@ mod tests {
                 result: json!({"product": "CabinetOS"}),
             },
             Response::JobStarted { job_id: 3 },
+            Response::Plugins {
+                plugins: vec![PluginInfo {
+                    id: "reader".to_owned(),
+                    name: "Reader".to_owned(),
+                    version: "0.1.0".to_owned(),
+                    author: "CabinetOS tests".to_owned(),
+                    description: "Reads.".to_owned(),
+                    state: PluginState::NeedsReview {
+                        missing: vec!["fs:read".to_owned()],
+                    },
+                    capabilities: vec![crate::plugin::CapabilityInfo {
+                        name: "fs:read".to_owned(),
+                        level: crate::plugin::CapabilityLevel::Medium,
+                        granted: false,
+                        reason: "Reads files.".to_owned(),
+                        roots: vec![r"C:\\data".to_owned()],
+                    }],
+                    commands: Vec::new(),
+                }],
+            },
             Response::Jobs {
                 jobs: vec![JobInfo {
                     kind: JobKind::Move,
@@ -909,6 +1020,22 @@ mod tests {
                 state: JobState::Failed {
                     message: "the destination disk is gone".to_owned(),
                 },
+            },
+            Event::PluginStateChanged {
+                plugin_id: "crashy".to_owned(),
+                state: PluginState::Crashed {
+                    message: "wasm trap: unreachable".to_owned(),
+                    at_ms: 1_790_000_000_000,
+                },
+            },
+            Event::PluginCrashed {
+                plugin_id: "crashy".to_owned(),
+                message: "wasm trap: unreachable".to_owned(),
+            },
+            Event::PluginEvent {
+                plugin_id: "hello".to_owned(),
+                name: "hello.said".to_owned(),
+                payload: r#"{"greeting":"hello"}"#.to_owned(),
             },
         ]
     }
@@ -1071,6 +1198,8 @@ mod tests {
             (ErrorCode::NoSuchJob, "no_such_job"),
             (ErrorCode::NoSuchConflict, "no_such_conflict"),
             (ErrorCode::InvalidResolution, "invalid_resolution"),
+            (ErrorCode::NoSuchPlugin, "no_such_plugin"),
+            (ErrorCode::PluginError, "plugin_error"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));
@@ -1085,10 +1214,11 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(CommandSource::Plugin {
-                id: "md".to_owned()
+                id: "md".to_owned(),
+                name: "Markdown Preview".to_owned(),
             })
             .unwrap(),
-            json!({"kind": "plugin", "id": "md"})
+            json!({"kind": "plugin", "id": "md", "name": "Markdown Preview"})
         );
         assert_eq!(
             serde_json::to_value(CommandTarget::Ui).unwrap(),

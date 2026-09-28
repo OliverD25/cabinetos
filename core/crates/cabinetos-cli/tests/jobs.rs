@@ -47,6 +47,9 @@ fn start_core(dir: &Path) -> Core {
         .arg("--config")
         .arg(dir.join("cabinetos.json"))
         .env("CABINETOS_LOG_DIR", dir.join("logs"))
+        // Never the real plugins folder, whatever is installed there.
+        .env("CABINETOS_PLUGINS_DIR", dir.join("plugins"))
+        .env("CABINETOS_PLUGINS_DATA_DIR", dir.join("plugins-data"))
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .stdin(Stdio::null())

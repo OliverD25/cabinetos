@@ -37,6 +37,14 @@
         }
       }
     },
+    "plugins": {
+      "description": "Core Plugins, by ID: which run, and what they may do. A plugin that\nis not listed is on, with nothing granted.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PluginSettings"
+      },
+      "default": {}
+    },
     "terminal": {
       "description": "The integrated terminal.",
       "$ref": "#/$defs/TerminalConfig",
@@ -190,6 +198,26 @@
           "default": {
             "descending": false,
             "key": "name"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PluginSettings": {
+      "description": "One plugin's settings.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Run the plugin.",
+          "type": "boolean",
+          "default": true
+        },
+        "granted": {
+          "description": "The capabilities the user granted it, for example `fs:read`. It runs\nonly when it has every capability it asks for (docs/plugins.md).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
           }
         }
       },

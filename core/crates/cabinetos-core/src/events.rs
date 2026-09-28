@@ -1,9 +1,10 @@
 //! The events every connection that said `hello` receives, whoever caused
-//! them: configuration changes and job progress.
+//! them: configuration changes, job progress and plugin news.
 
 use std::sync::Arc;
 
 use cabinetos_jobs::JobQueueManager;
+use cabinetos_plugins::PluginHost;
 use cabinetos_protocol::{Envelope, Event, RequestId};
 use tokio::sync::broadcast;
 
@@ -41,4 +42,6 @@ pub(crate) struct Services {
     pub(crate) settings: Arc<Settings>,
     pub(crate) jobs: JobQueueManager,
     pub(crate) events: Arc<EventHub>,
+    /// `None` when the plugin host could not start: no plugins then.
+    pub(crate) plugins: Option<Arc<PluginHost>>,
 }

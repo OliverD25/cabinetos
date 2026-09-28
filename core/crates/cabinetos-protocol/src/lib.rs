@@ -20,6 +20,7 @@
 mod id;
 mod job;
 mod message;
+mod plugin;
 pub mod shm;
 
 #[cfg(feature = "schema")]
@@ -35,6 +36,7 @@ pub use message::{
     Keymap, KeymapBinding, RefreshReason, Request, Response, SearchHit, SortKey, SortSpec,
     VolumeDetails,
 };
+pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 
 /// Version of the control-channel protocol. The core reports it in
 /// [`Response::Pong`] and [`Response::Welcome`]. Raise it whenever a message
@@ -43,5 +45,5 @@ pub use message::{
 /// and commands, and made `list_directory`'s `include_hidden` and `sort`
 /// optional (the configuration fills them in); version 4 the jobs (copy,
 /// move, delete); version 5 the Recycle Bin conflict
-/// (`recycle_bin_too_small`, `delete_permanently`).
+/// (`recycle_bin_too_small`, `delete_permanently`) and the plugins.
 pub const PROTOCOL_VERSION: u32 = 5;

@@ -39,6 +39,12 @@ fn start_core() -> Core {
     let child = Command::new(CORE_EXE)
         .args(["--pipe", pipe.token()])
         .env("CABINETOS_LOG_DIR", log_dir.path())
+        // Never the real plugins folder, whatever is installed there.
+        .env("CABINETOS_PLUGINS_DIR", log_dir.path().join("plugins"))
+        .env(
+            "CABINETOS_PLUGINS_DATA_DIR",
+            log_dir.path().join("plugins-data"),
+        )
         .env("CABINETOS_CONFIG", log_dir.path().join("cabinetos.json"))
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
