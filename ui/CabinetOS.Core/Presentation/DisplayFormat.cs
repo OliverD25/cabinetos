@@ -130,6 +130,24 @@ public static class DisplayFormat
         return crumbs[^2].Path;
     }
 
+    /// <summary>
+    /// A search hit's folder as the results show it: from the searched
+    /// folder's own name down (<c>docs\log</c> for a search of <c>C:\repo\docs</c>),
+    /// so the part that tells hits apart is not cut off; the whole path when
+    /// the search had no folder, was a drive, or the hit lies outside it.
+    /// </summary>
+    public static string FolderUnder(string folder, string? searched)
+    {
+        if (searched is null || folder.Length == 0 || Parent(searched) is not { } above)
+        {
+            return folder;
+        }
+        var root = searched.TrimEnd('\\');
+        var inside = string.Equals(folder.TrimEnd('\\'), root, StringComparison.OrdinalIgnoreCase)
+            || folder.StartsWith(root + '\\', StringComparison.OrdinalIgnoreCase);
+        return inside ? folder[(above.TrimEnd('\\').Length + 1)..] : folder;
+    }
+
     /// <summary>A child path: <paramref name="folder"/> joined with <paramref name="name"/>.</summary>
     public static string Join(string folder, string name) =>
         folder.EndsWith('\\') ? folder + name : folder + '\\' + name;

@@ -64,6 +64,18 @@ public class DisplayFormatTests
         Assert.Equal("C:", DisplayFormat.FolderName(@"C:\"));
     }
 
+    [Theory]
+    [InlineData(@"C:\repo\docs\log\2026", @"C:\repo\docs", @"docs\log\2026")]
+    [InlineData(@"C:\repo\docs", @"C:\repo\docs", "docs")]
+    [InlineData(@"C:\repo\docs", @"C:\repo\docs\", "docs")]
+    [InlineData(@"E:\docs\log", @"E:\docs", @"docs\log")]
+    [InlineData(@"C:\repo\docsx", @"C:\repo\docs", @"C:\repo\docsx")]
+    [InlineData(@"D:\other", @"C:\repo\docs", @"D:\other")]
+    [InlineData(@"C:\Windows\System32", @"C:\", @"C:\Windows\System32")]
+    [InlineData(@"C:\Windows\System32", null, @"C:\Windows\System32")]
+    public void A_hit_s_folder_reads_from_the_searched_folder_down(string folder, string? searched, string shown) =>
+        Assert.Equal(shown, DisplayFormat.FolderUnder(folder, searched));
+
     [Fact]
     public void Drives_read_like_the_design()
     {

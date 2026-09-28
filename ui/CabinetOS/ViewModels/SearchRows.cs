@@ -10,7 +10,7 @@ namespace CabinetOS.ViewModels;
 /// the type comes from what the core said about the extension before, and
 /// there is no size or time.
 /// </summary>
-public sealed class SearchRowItem(FileHit hit, int index, IRowDetails? details)
+public sealed class SearchRowItem(FileHit hit, int index, IRowDetails? details, string? searched = null)
 {
     /// <summary>The hit.</summary>
     public FileHit Hit { get; } = hit;
@@ -24,12 +24,15 @@ public sealed class SearchRowItem(FileHit hit, int index, IRowDetails? details)
     /// <summary>The name: the path's last part.</summary>
     public string Name => DisplayFormat.FolderName(Hit.Path);
 
-    /// <summary>The folder the hit is in, or "" for a drive's root.</summary>
+    /// <summary>The folder the hit is in, or "" for a drive's root: where Enter goes.</summary>
     public string Folder => DisplayFormat.Parent(Hit.Path) ?? "";
+
+    /// <summary>The folder as the row shows it: from the searched folder's name down.</summary>
+    public string FolderText => DisplayFormat.FolderUnder(Folder, searched);
 }
 
 /// <summary>The hits for <c>ItemsRepeater</c>, in the core's order; the UI ranks nothing.</summary>
-public sealed class SearchRows(IReadOnlyList<FileHit> hits, IRowDetails? details) : IReadOnlyList<SearchRowItem>, IList
+public sealed class SearchRows(IReadOnlyList<FileHit> hits, IRowDetails? details, string? searched = null) : IReadOnlyList<SearchRowItem>, IList
 {
     /// <summary>The hits.</summary>
     public IReadOnlyList<FileHit> Hits { get; } = hits;
@@ -38,7 +41,7 @@ public sealed class SearchRows(IReadOnlyList<FileHit> hits, IRowDetails? details
     public int Count => Hits.Count;
 
     /// <inheritdoc/>
-    public SearchRowItem this[int index] => new(Hits[index], index, details);
+    public SearchRowItem this[int index] => new(Hits[index], index, details, searched);
 
     bool IList.IsFixedSize => true;
 

@@ -116,7 +116,7 @@ public sealed partial class FileRow : UserControl
         _hit = hit;
         Index = hit.Index;
         NameText.Text = hit.Name;
-        ModifiedText.Text = hit.Folder;
+        ModifiedText.Text = hit.FolderText;
         SizeText.Text = "";
         ShowTypeAndIcon(hit.Name, hit.Hit.IsFolder ? EntryKind.Directory : EntryKind.File, hit.Hit.IsFolder, hit.Details, -1);
         _pointerOver = false;

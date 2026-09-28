@@ -478,7 +478,9 @@ nothing.
   keyboard there without waiting.
 - The hits replace the folder in the active pane, in the same rows: the
   name with its type's icon, the folder the hit is in (where a listing
-  shows "Modified"), and the type name. The reply has paths only, so the
+  shows "Modified"; from the searched folder's name down, `docs\log`, so
+  the part that tells hits apart is not cut off; the whole path for a
+  whole-volume search), and the type name. The reply has paths only, so the
   type and icon are what the core said about that extension in a listing
   before, and there is no size or time. The pane's title reads
   "Search: {query} · {n} hits · {index or walk} · {time}", and its right

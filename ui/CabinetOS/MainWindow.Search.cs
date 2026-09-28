@@ -122,7 +122,7 @@ public sealed partial class MainWindow
             return;
         }
         var rows = _search.Results is { } results
-            ? ReferenceEquals(results.Hits, pane.Search?.Rows?.Hits) ? pane.Search!.Rows : new SearchRows(results.Hits, pane.KnownDetails)
+            ? ReferenceEquals(results.Hits, pane.Search?.Rows?.Hits) ? pane.Search!.Rows : new SearchRows(results.Hits, pane.KnownDetails, _search.Shown?.Root)
             : null;
         pane.Search = new PaneSearch(_search.Header, _search.Scope, _search.Note, _search.WholeVolume, rows);
         UpdateStatus();
