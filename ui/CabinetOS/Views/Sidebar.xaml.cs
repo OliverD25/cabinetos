@@ -2,6 +2,8 @@ using System.ComponentModel;
 using CabinetOS.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 
 namespace CabinetOS.Views;
 
@@ -15,6 +17,9 @@ public sealed partial class Sidebar : UserControl
 
     /// <summary>Raised with a folder the user picked: the window runs <c>go.toPath</c>.</summary>
     public event Action<string>? Navigate;
+
+    /// <summary>Raised with a user-pinned folder to unpin: the window runs <c>sidebar.unpin</c>.</summary>
+    public event Action<string>? UnpinRequested;
 
     /// <summary>The sidebar's content.</summary>
     public SidebarModel? Model
@@ -50,10 +55,25 @@ public sealed partial class Sidebar : UserControl
 
     private void OnPinnedClick(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: string path })
+        if (sender is FrameworkElement { Tag: PinnedItem item })
         {
-            Navigate?.Invoke(path);
+            Navigate?.Invoke(item.Path);
         }
+    }
+
+    // Only the folders the user pinned can be unpinned; the known folders always stay.
+    private void OnPinnedRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: PinnedItem { IsUserPinned: true } item } row)
+        {
+            return;
+        }
+        e.Handled = true;
+        var unpin = new MenuFlyoutItem { Text = "Unpin from sidebar", Icon = new FontIcon { Glyph = "" } };
+        unpin.Click += (_, _) => UnpinRequested?.Invoke(item.Path);
+        var menu = new MenuFlyout();
+        menu.Items.Add(unpin);
+        menu.ShowAt(row, new FlyoutShowOptions { Position = e.GetPosition(row) });
     }
 
     private void OnDriveClick(object sender, RoutedEventArgs e)

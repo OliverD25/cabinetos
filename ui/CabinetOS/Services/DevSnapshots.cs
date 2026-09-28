@@ -13,12 +13,18 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// A development aid, off unless <c>CABINETOS_UI_SNAPSHOT</c> names a folder.
 /// Once the first folders are shown, the window runs the steps of
 /// <c>CABINETOS_UI_SNAPSHOT_STEPS</c> (default <c>shot:window</c>), separated
-/// by <c>;</c>: <c>cmd:&lt;command&gt;</c> runs a command through the router,
-/// <c>path:&lt;folder&gt;</c> runs <c>go.toPath</c>, <c>type:&lt;text&gt;</c> types
-/// into the palette, <c>wait:&lt;ms&gt;</c> waits, and <c>shot:&lt;name&gt;</c>
-/// renders the window's content to <c>&lt;name&gt;.png</c>. The window draws
-/// its own content, so this works when the screen is locked or off; the Mica
-/// backdrop is not part of that content and comes out transparent.
+/// by <c>;</c>:
+/// <c>cmd:&lt;command&gt; [json]</c> runs a command through the router and waits for it,
+/// <c>cmd-nowait:</c> runs one that waits for the user (a dialog, a rename),
+/// <c>path:&lt;folder&gt;</c> goes there in the active pane, <c>pane:0|1</c> makes a pane active,
+/// <c>select:&lt;name&gt;</c> selects a row, <c>selectall</c> selects every row,
+/// <c>menu:&lt;name&gt;</c> opens the context menu on a row (<c>menu:*</c> on the empty space),
+/// <c>rename:&lt;text&gt;</c> types a name into the rename box and presses Enter,
+/// <c>dismiss</c> closes an open dialog, <c>type:&lt;text&gt;</c> types into the palette,
+/// <c>until:running|conflict</c> waits for a job, <c>wait:&lt;ms&gt;</c> waits, and
+/// <c>shot:&lt;name&gt;</c> renders the window's content to <c>&lt;name&gt;.png</c>.
+/// The window draws its own content, so this works when the screen is locked
+/// or off; the Mica backdrop and dialogs (a popup layer) are not part of it.
 /// </summary>
 internal static class DevSnapshots
 {

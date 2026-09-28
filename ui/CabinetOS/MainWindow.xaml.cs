@@ -1,10 +1,17 @@
 using System.ComponentModel;
+using System.Globalization;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using CabinetOS.Core.Commands;
 using CabinetOS.Core.Diagnostics;
+using CabinetOS.Core.Files;
 using CabinetOS.Core.Ipc;
+using CabinetOS.Core.Jobs;
 using CabinetOS.Core.Keys;
+using CabinetOS.Core.Listing;
+using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
@@ -12,25 +19,27 @@ using CabinetOS.Services;
 using CabinetOS.ViewModels;
 using CabinetOS.Views;
 using Microsoft.UI;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.ApplicationModel.DataTransfer;
+using Windows.Foundation;
 using Windows.Graphics;
 using Windows.System;
-using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 using Windows.UI.Core;
+using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace CabinetOS;
 
 /// <summary>
-/// The window (design view A with the palette of view B). It is the
-/// composition root: it owns the connection to the core, the command router,
-/// the key state machine, the panes and the palette, and turns every button,
-/// key and menu choice into a command ID for the router (brief §5).
+/// The window (design views A, B, D and E). It is the composition root: it
+/// owns the connection to the core, the command router, the key state
+/// machine, the panes, the palette, the transfers and the context menu, and
+/// turns every button, key and menu choice into a command ID for the router
+/// (brief §5).
 /// </summary>
 public sealed partial class MainWindow : Window
 {
@@ -43,10 +52,17 @@ public sealed partial class MainWindow : Window
     private readonly FilePane[] _paneViews;
     private readonly SidebarModel _sidebar = new();
     private readonly PaletteModel _palette;
+    private readonly TransferCenter _transfers;
+    private readonly FileClipboard _clipboard = new();
+    private readonly SettingsWriter _settingsWriter;
+    private readonly Dictionary<string, bool> _pendingSettings = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _unavailable = new(StringComparer.Ordinal);
     private readonly DispatcherQueueTimer _chordTimer;
     private readonly DispatcherQueueTimer _noticeTimer;
+    private readonly DispatcherQueueTimer _speedTimer;
     private readonly bool _selfTestCrash;
     private UiSettings _settings = UiSettings.Defaults;
+    private ShellState _shell = ShellState.Empty;
     private bool _dual = true;
     private bool _sidebarOpen = true;
     private int _active;
@@ -54,6 +70,8 @@ public sealed partial class MainWindow : Window
     private bool _closed;
     private bool _started;
     private bool _volumesLogged;
+    private bool _dialogOpen;
+    private bool _systemClipboardHolds;
     private readonly Queue<DateTime> _restarts = new();
 
     /// <summary>Creates the window; the core starts once the content is loaded.</summary>
@@ -65,6 +83,8 @@ public sealed partial class MainWindow : Window
         _panes = [new PaneModel(0, _session), new PaneModel(1, _session)];
         _paneViews = [LeftPane, RightPane];
         _palette = new PaletteModel(_session, _router);
+        _transfers = new TransferCenter(_session);
+        _settingsWriter = new SettingsWriter(_session);
 
         SetUpWindow();
         _chordTimer = DispatcherQueue.CreateTimer();
@@ -74,14 +94,19 @@ public sealed partial class MainWindow : Window
         _noticeTimer.IsRepeating = false;
         _noticeTimer.Interval = TimeSpan.FromSeconds(5);
         _noticeTimer.Tick += (_, _) => NoticeText.Text = "";
+        // The speed graph's samples: the design's 40 points, one every 500 ms.
+        _speedTimer = DispatcherQueue.CreateTimer();
+        _speedTimer.Interval = TimeSpan.FromMilliseconds(500);
+        _speedTimer.Tick += (_, _) => _transfers.SampleSpeeds();
 
         for (var i = 0; i < _panes.Length; i++)
         {
             var pane = _panes[i];
             var view = _paneViews[i];
             view.Model = pane;
-            view.RunCommand = (id, trigger) => _router.ExecuteAsync(id, trigger: trigger);
+            view.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
             view.Activated += OnPaneActivated;
+            view.ContextMenuRequested += OnContextMenuRequested;
             pane.PropertyChanged += OnPaneChanged;
             pane.Notice += text => ShowNotice(text, isError: true);
         }
@@ -89,12 +114,23 @@ public sealed partial class MainWindow : Window
 
         SidebarView.Model = _sidebar;
         SidebarView.Navigate += path => _ = _router.ExecuteAsync("go.toPath", CommandArgs.With("path", path), "sidebar");
+        SidebarView.UnpinRequested += path => _ = _router.ExecuteAsync("sidebar.unpin", CommandArgs.With("path", path), "sidebar");
         SetPinnedFolders();
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         _palette.Closed += () => _paneViews[_active].Focus(FocusState.Programmatic);
         _palette.KeymapUpdated += keymap => _keys.SetKeymap(Keymap.From(keymap));
+
+        TransferView.Center = _transfers;
+        TransferView.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
+        _transfers.Changed += UpdateTransfers;
+        TransferPill.Click += (_, _) => _ = _router.ExecuteAsync("transfer.restore", trigger: "button");
+        PillFill.Scale = new Vector3(0, 1, 1);
+        PillFill.CenterPoint = new Vector3(0, 2, 0);
+
+        FileMenu.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
+        FileMenu.Closed += () => _paneViews[_active].Focus(FocusState.Programmatic);
 
         BackButton.Click += (_, _) => _ = _router.ExecuteAsync("go.back", trigger: "button");
         ForwardButton.Click += (_, _) => _ = _router.ExecuteAsync("go.forward", trigger: "button");
@@ -133,6 +169,8 @@ public sealed partial class MainWindow : Window
     }
 
     private PaneModel Active => _panes[_active];
+
+    private PaneModel Other => _panes[1 - _active];
 
     // ----- Window -----
 
@@ -198,6 +236,7 @@ public sealed partial class MainWindow : Window
         _closing = true;
         sender.Hide();
         Diag.Info(Target, "window closing");
+        await SaveLastPathsAsync();
         await _session.StopAsync();
         foreach (var pane in _panes)
         {
@@ -249,14 +288,61 @@ public sealed partial class MainWindow : Window
         {
             switch (step.Kind)
             {
-                case "cmd":
-                    await _router.ExecuteAsync(step.Argument, trigger: "snapshot");
+                case "cmd" or "cmd-nowait":
+                    var space = step.Argument.IndexOf(' ');
+                    JsonElement? args = space < 0 ? null : JsonDocument.Parse(step.Argument[(space + 1)..]).RootElement.Clone();
+                    var run = _router.ExecuteAsync(space < 0 ? step.Argument : step.Argument[..space], args, "snapshot");
+                    // A command that waits for the user (a dialog, a rename) must not hold the steps up.
+                    if (step.Kind == "cmd")
+                    {
+                        await run;
+                    }
+                    break;
+                case "selectall":
+                    Active.Selection.SelectAll();
+                    break;
+                case "rename":
+                    _paneViews[_active].CommitRename(step.Argument);
+                    break;
+                case "dismiss":
+                    foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot))
+                    {
+                        if (popup.Child is ContentDialog dialog)
+                        {
+                            dialog.Hide();
+                        }
+                    }
                     break;
                 case "path":
                     await _router.ExecuteAsync("go.toPath", CommandArgs.With("path", step.Argument), "snapshot");
                     break;
+                case "pane" when int.TryParse(step.Argument, out var pane) && pane is 0 or 1:
+                    // GotFocus comes after the fact: let earlier focus changes land first.
+                    _paneViews[pane].Focus(FocusState.Programmatic);
+                    await Task.Delay(150);
+                    SetActive(pane);
+                    break;
+                case "select":
+                    var index = Active.View?.IndexOfName(step.Argument) ?? -1;
+                    if (index >= 0)
+                    {
+                        Active.Selection.MoveTo(index, SelectMode.Single);
+                    }
+                    break;
+                case "menu":
+                    // "menu:*" is the pane's empty space; "menu:" the focused row; else a row by name.
+                    var row = step.Argument == "*" ? -1 : step.Argument.Length == 0 ? Active.FocusIndex : Active.View?.IndexOfName(step.Argument) ?? -1;
+                    if (row >= 0)
+                    {
+                        Active.Selection.MoveTo(row, SelectMode.Single);
+                    }
+                    OnContextMenuRequested(_paneViews[_active], row, null);
+                    break;
                 case "type":
                     Palette.TypeQuery(step.Argument);
+                    break;
+                case "until":
+                    await WaitUntilAsync(step.Argument);
                     break;
                 case "wait" when int.TryParse(step.Argument, out var milliseconds):
                     await Task.Delay(milliseconds);
@@ -269,6 +355,25 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // Snapshot steps that wait for the core: "until:running" (a job moves bytes) or "until:conflict".
+    private async Task WaitUntilAsync(string condition)
+    {
+        for (var waited = 0; waited < 20_000; waited += 100)
+        {
+            var met = condition switch
+            {
+                "conflict" => _transfers.Conflicts.Current is not null,
+                "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
+                _ => true,
+            };
+            if (met)
+            {
+                return;
+            }
+            await Task.Delay(100);
+        }
+    }
+
     private async Task LoadAsync(bool firstStart)
     {
         try
@@ -277,6 +382,7 @@ public sealed partial class MainWindow : Window
             var keymap = ReadKeymapAsync();
             var commands = _router.RefreshAsync();
             var volumes = ReadVolumesAsync();
+            var jobs = _transfers.LoadAsync();
             if (firstStart)
             {
                 await OpenFirstFoldersAsync();
@@ -292,7 +398,7 @@ public sealed partial class MainWindow : Window
                     }
                 }
             }
-            await Task.WhenAll(keymap, commands, volumes);
+            await Task.WhenAll(keymap, commands, volumes, jobs);
         }
         catch (IOException error)
         {
@@ -302,14 +408,22 @@ public sealed partial class MainWindow : Window
 
     private async Task OpenFirstFoldersAsync()
     {
-        // Dual pane on first start (PLAN.md, consistency check B): the profile on
-        // the left, its Documents on the right when the profile lists one, else C:\.
+        // The folders of the last session (ui.lastPaths), else dual pane on first
+        // start (PLAN.md, consistency check B): the profile on the left, its
+        // Documents on the right when the profile lists one, else C:\.
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        await _panes[0].NavigateAsync(profile);
-        var left = _panes[0].View;
-        var documents = left?.IndexOfName("Documents") ?? -1;
-        var right = documents >= 0 && left!.IsFolder(documents) ? DisplayFormat.Join(profile, "Documents") : @"C:\";
-        await _panes[1].NavigateAsync(right);
+        var last = _shell.LastPaths;
+        if (last.Count < 1 || !await _panes[0].NavigateAsync(last[0]))
+        {
+            await _panes[0].NavigateAsync(profile);
+        }
+        if (last.Count < 2 || !await _panes[1].NavigateAsync(last[1]))
+        {
+            var left = _panes[0].View;
+            var documents = string.Equals(_panes[0].Path, profile, StringComparison.OrdinalIgnoreCase) ? left?.IndexOfName("Documents") ?? -1 : -1;
+            var right = documents >= 0 && left!.IsFolder(documents) ? DisplayFormat.Join(profile, "Documents") : @"C:\";
+            await _panes[1].NavigateAsync(right);
+        }
         _paneViews[_active].Focus(FocusState.Programmatic);
     }
 
@@ -318,6 +432,8 @@ public sealed partial class MainWindow : Window
         var reply = await _session.RequestAsync(new GetConfigRequest());
         if (reply is ConfigReply config)
         {
+            _shell = ShellState.FromConfig(config.Config);
+            SetPinnedFolders();
             ApplySettings(UiSettings.FromConfig(config.Config), firstStart);
         }
     }
@@ -358,11 +474,11 @@ public sealed partial class MainWindow : Window
     {
         var previous = _settings;
         _settings = settings;
-        if (firstStart || settings.DualPane != previous.DualPane)
+        if ((firstStart || settings.DualPane != previous.DualPane) && !IsOwnWrite(ShellState.DualPaneKey, settings.DualPane))
         {
             ApplyDual(settings.DualPane);
         }
-        if (firstStart || settings.Sidebar != previous.Sidebar)
+        if ((firstStart || settings.Sidebar != previous.Sidebar) && !IsOwnWrite(ShellState.SidebarKey, settings.Sidebar))
         {
             ApplySidebar(settings.Sidebar);
         }
@@ -386,6 +502,42 @@ public sealed partial class MainWindow : Window
                 _ = pane.ReloadAsync();
             }
         }
+    }
+
+    // While a toggle's own set_value is on its way, the configuration the core
+    // sends meanwhile may still hold the old value: it must not flip the view back.
+    private bool IsOwnWrite(string key, bool value)
+    {
+        if (!_pendingSettings.TryGetValue(key, out var pending))
+        {
+            return false;
+        }
+        if (pending == value)
+        {
+            _pendingSettings.Remove(key);
+        }
+        return true;
+    }
+
+    private async Task PersistAsync(string key, bool value)
+    {
+        _pendingSettings[key] = value;
+        if (!await _settingsWriter.SetAsync(key, value))
+        {
+            _pendingSettings.Remove(key);
+        }
+    }
+
+    private async Task SaveLastPathsAsync()
+    {
+        var paths = _panes.Select(p => p.Path).Where(p => p.Length > 0).ToList();
+        if (paths.Count == 0 || paths.SequenceEqual(_shell.LastPaths, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        // Closing must stay quick: a core that does not answer within a second is not waited for.
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        await _settingsWriter.SetAsync(ShellState.LastPathsKey, paths, deadline.Token);
     }
 
     private void OnCoreEvent(CoreEvent coreEvent)
@@ -416,8 +568,29 @@ public sealed partial class MainWindow : Window
             case KeymapChangedEvent keymap:
                 _keys.SetKeymap(Keymap.From(keymap.Keymap));
                 break;
+            case JobProgressEvent or JobStateChangedEvent or JobConflictEvent:
+                _transfers.OnEvent(coreEvent);
+                OnJobEvent(coreEvent);
+                return;
         }
         _ = RefreshCommandsAsync(coreEvent);
+    }
+
+    private void OnJobEvent(CoreEvent coreEvent)
+    {
+        if (coreEvent is JobStateChangedEvent { State: { IsFinal: true } state } changed && _transfers.Find(changed.JobId) is { } job)
+        {
+            var verb = TransferText.Words(job.Kind).Verb;
+            switch (state.Type)
+            {
+                case JobState.Failed:
+                    ShowNotice($"{verb} failed: {state.Message}", isError: true);
+                    break;
+                case JobState.CompletedWithErrors:
+                    ShowNotice($"{TransferText.Title(job)}.", isError: true);
+                    break;
+            }
+        }
     }
 
     private async Task ReadConfigSafelyAsync()
@@ -447,12 +620,13 @@ public sealed partial class MainWindow : Window
             return;
         }
         // The core stops on any panic (docs/diagnostics.md); the UI starts it
-        // again, at most three times a minute.
+        // again, at most three times a minute. Its jobs ended with it.
         var now = DateTime.UtcNow;
         while (_restarts.Count > 0 && now - _restarts.Peek() > TimeSpan.FromMinutes(1))
         {
             _restarts.Dequeue();
         }
+        _transfers.Reset();
         if (_restarts.Count >= 3)
         {
             await ShowStartFailureAsync($"The core stopped three times within a minute. Last reason: {reason}");
@@ -469,6 +643,8 @@ public sealed partial class MainWindow : Window
             await ShowStartFailureAsync(error.Message);
             return;
         }
+        _settingsWriter.Reset();
+        _unavailable.Clear();
         await LoadAsync(firstStart: false);
         ShowNotice("The core is running again.");
     }
@@ -488,7 +664,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Close CabinetOS",
             DefaultButton = ContentDialogButton.Primary,
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        if (await ShowDialogAsync(dialog) == ContentDialogResult.Primary)
         {
             _started = true;
             await StartAsync();
@@ -496,6 +672,24 @@ public sealed partial class MainWindow : Window
         else
         {
             Close();
+        }
+    }
+
+    // WinUI allows one ContentDialog at a time; a second one would throw.
+    private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
+    {
+        if (_dialogOpen)
+        {
+            return ContentDialogResult.None;
+        }
+        _dialogOpen = true;
+        try
+        {
+            return await dialog.ShowAsync();
+        }
+        finally
+        {
+            _dialogOpen = false;
         }
     }
 
@@ -508,16 +702,47 @@ public sealed partial class MainWindow : Window
         // The palette lists every command with its keys and edits them: it is
         // the shortcut editor of this version.
         _router.RegisterUiHandler("keys.open", _ => _palette.Open());
-        _router.RegisterUiHandler("view.toggleDualPane", _ => ApplyDual(!_dual));
+        _router.RegisterUiHandler("view.toggleDualPane", invocation =>
+        {
+            ApplyDual(!_dual);
+            _ = PersistAsync(ShellState.DualPaneKey, _dual);
+        });
         _router.RegisterUiHandler("view.focusOtherPane", _ => FocusOtherPane());
-        _router.RegisterUiHandler("view.toggleSidebar", _ => ApplySidebar(!_sidebarOpen));
+        _router.RegisterUiHandler("view.toggleSidebar", invocation =>
+        {
+            ApplySidebar(!_sidebarOpen);
+            _ = PersistAsync(ShellState.SidebarKey, _sidebarOpen);
+        });
         _router.RegisterUiHandler("go.toPath", GoToPathAsync);
 
-        // Navigation the core's registry does not list yet: UI-only commands.
+        // The core lists these as its own but answers not_implemented: the UI
+        // starts their jobs itself (start_job) or asks for the one folder.
+        _router.RegisterUiOverride("file.copyToOtherPane", invocation => TransferToOtherPaneAsync(JobKind.Copy, invocation));
+        _router.RegisterUiOverride("file.moveToOtherPane", invocation => TransferToOtherPaneAsync(JobKind.Move, invocation));
+        _router.RegisterUiOverride("file.newFolder", NewFolderAsync);
+
+        // UI-only commands the core's registry does not list yet.
         _router.RegisterLocal("go.back", invocation => Active.GoBackAsync(invocation.RequestId));
         _router.RegisterLocal("go.forward", invocation => Active.GoForwardAsync(invocation.RequestId));
         _router.RegisterLocal("go.up", invocation => Active.GoUpAsync(invocation.RequestId));
-        _router.RegisterLocal("pane.openSelected", invocation => Active.OpenSelectedAsync(invocation.RequestId));
+        _router.RegisterLocal("file.open", OpenAsync);
+        _router.RegisterLocal("file.openInOtherPane", OpenInOtherPaneAsync);
+        _router.RegisterLocal("file.delete", DeleteAsync);
+        _router.RegisterLocal("file.rename", invocation => Active.FocusIndex >= 0 ? RenameAtAsync(Active, Active.FocusIndex, invocation.RequestId) : Task.CompletedTask);
+        _router.RegisterLocal("file.properties", ShowPropertiesAsync);
+        _router.RegisterLocal("edit.cut", _ => PutOnClipboard(ClipboardMode.Cut));
+        _router.RegisterLocal("edit.copy", _ => PutOnClipboard(ClipboardMode.Copy));
+        _router.RegisterLocal("edit.paste", PasteAsync);
+        _router.RegisterLocal("transfer.pause", invocation => ControlShownAsync(JobActions.Pause, invocation));
+        _router.RegisterLocal("transfer.resume", invocation => ControlShownAsync(JobActions.Resume, invocation));
+        _router.RegisterLocal("transfer.cancel", invocation => ControlShownAsync(JobActions.Cancel, invocation));
+        _router.RegisterLocal("transfer.close", _ => _transfers.Close());
+        _router.RegisterLocal("transfer.minimize", _ => _transfers.Minimize());
+        _router.RegisterLocal("transfer.restore", _ => _transfers.Restore());
+        _router.RegisterLocal("transfer.next", _ => _transfers.ShowNext());
+        _router.RegisterLocal("conflict.resolve", ResolveConflictAsync);
+        _router.RegisterLocal("sidebar.pin", PinAsync);
+        _router.RegisterLocal("sidebar.unpin", UnpinAsync);
         _router.RegisterLocal("keys.rebind", invocation =>
         {
             if (CommandArgs.Text(invocation.Args, "command") is { } command)
@@ -567,7 +792,7 @@ public sealed partial class MainWindow : Window
             Content = new TextBlock { Text = text.ToString().TrimEnd(), TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true },
             CloseButtonText = "Close",
         };
-        await dialog.ShowAsync();
+        await ShowDialogAsync(dialog);
     }
 
     private async Task GoToPathAsync(CommandInvocation invocation)
@@ -593,15 +818,25 @@ public sealed partial class MainWindow : Window
         else
         {
             EndAddressEdit();
+            FileMenu.Close();
             _palette.Open();
         }
     }
 
+    // Esc: the palette, then the context menu, then an edit in place, then the address box (the design's order).
     private void CloseOverlay()
     {
         if (_palette.IsOpen)
         {
             _palette.Close();
+        }
+        else if (FileMenu.IsOpen)
+        {
+            FileMenu.Close();
+        }
+        else if (_paneViews.FirstOrDefault(v => v.IsRenaming) is { } renaming)
+        {
+            renaming.CancelRename();
         }
         else if (AddressEdit.Visibility == Visibility.Visible)
         {
@@ -609,6 +844,552 @@ public sealed partial class MainWindow : Window
             _paneViews[_active].Focus(FocusState.Programmatic);
         }
     }
+
+    // ----- File commands -----
+
+    private async Task TransferToOtherPaneAsync(JobKind kind, CommandInvocation invocation)
+    {
+        var verb = TransferText.Words(kind).Verb;
+        if (!_dual)
+        {
+            ShowNotice($"{verb} to the other pane needs two panes: press Ctrl+Shift+D.");
+            return;
+        }
+        var sources = Active.Targets();
+        if (sources.Count == 0 || Other.Path.Length == 0)
+        {
+            return;
+        }
+        var start = await _transfers.StartAsync(kind, sources.Select(s => s.Path).ToList(), Other.Path, invocation.RequestId);
+        if (!start.Started)
+        {
+            ShowNotice($"{verb}: {start.ErrorMessage}", isError: true);
+        }
+    }
+
+    private async Task DeleteAsync(CommandInvocation invocation)
+    {
+        var permanent = CommandArgs.Bool(invocation.Args, "permanent");
+        var targets = Active.Targets();
+        if (targets.Count == 0)
+        {
+            return;
+        }
+        if (permanent)
+        {
+            var what = targets.Count == 1 ? $"\u201C{targets[0].Name}\u201D" : $"These {targets.Count:N0} items";
+            var dialog = new ContentDialog
+            {
+                XamlRoot = RootGrid.XamlRoot,
+                Title = targets.Count == 1 ? "Delete 1 item permanently?" : $"Delete {targets.Count:N0} items permanently?",
+                Content = new TextBlock
+                {
+                    Text = $"{what} will be deleted for good. {(targets.Count == 1 ? "It does" : "They do")} not go to the Recycle Bin, and this cannot be undone.",
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                PrimaryButtonText = "Delete permanently",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+            };
+            if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary)
+            {
+                Diag.Request(LogLevel.Info, invocation.RequestId, Target, "permanent delete cancelled", new LogField("items", targets.Count));
+                _paneViews[_active].Focus(FocusState.Programmatic);
+                return;
+            }
+            _paneViews[_active].Focus(FocusState.Programmatic);
+        }
+        var start = await _transfers.StartAsync(JobKind.Delete(permanent), targets.Select(t => t.Path).ToList(), null, invocation.RequestId);
+        if (!start.Started)
+        {
+            ShowNotice($"Delete: {start.ErrorMessage}", isError: true);
+        }
+    }
+
+    private async Task OpenAsync(CommandInvocation invocation)
+    {
+        var pane = Active;
+        if (pane.EntryAt(pane.FocusIndex) is not { } entry)
+        {
+            return;
+        }
+        if (entry.IsFolder)
+        {
+            await pane.NavigateAsync(entry.Path, invocation.RequestId);
+            return;
+        }
+        if (_unavailable.Contains("open_path"))
+        {
+            ShowNotice("Opening files needs a newer core.");
+            return;
+        }
+        // open_path runs in the core, a background process: let it bring the application to the front.
+        if (_session.CoreProcessId is { } corePid)
+        {
+            WindowsPlatform.AllowForeground(corePid);
+        }
+        var reply = await RequestSafelyAsync(new OpenPathRequest(entry.Path) { Id = invocation.RequestId });
+        switch (reply)
+        {
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                Unavailable("open_path", "Opening files needs a newer core.");
+                break;
+            case ErrorReply error:
+                ShowNotice($"Cannot open {entry.Name}: {error.Message}", isError: true);
+                break;
+        }
+    }
+
+    private async Task OpenInOtherPaneAsync(CommandInvocation invocation)
+    {
+        if (Active.EntryAt(Active.FocusIndex) is not { } entry)
+        {
+            return;
+        }
+        if (!entry.IsFolder)
+        {
+            ShowNotice("Open in other pane opens folders.");
+            return;
+        }
+        if (!_dual)
+        {
+            ApplyDual(true);
+            _ = PersistAsync(ShellState.DualPaneKey, true);
+        }
+        await Other.NavigateAsync(entry.Path, invocation.RequestId);
+    }
+
+    private async Task NewFolderAsync(CommandInvocation invocation)
+    {
+        var pane = Active;
+        if (pane.Path.Length == 0 || pane.View is null)
+        {
+            return;
+        }
+        if (_unavailable.Contains("create_directory"))
+        {
+            ShowNotice("Making folders needs a newer core.");
+            return;
+        }
+        // The name the listing does not have yet; if another program takes it
+        // meanwhile, the core says already_exists and the next free one is tried.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var name = pane.FreeName("New folder");
+            var reply = await RequestSafelyAsync(new CreateDirectoryRequest(DisplayFormat.Join(pane.Path, name)) { Id = attempt == 0 ? invocation.RequestId : "" });
+            switch (reply)
+            {
+                case OkReply:
+                    var index = await pane.SelectWhenListedAsync(name, TimeSpan.FromSeconds(2));
+                    if (index < 0 && await pane.ReloadAsync())
+                    {
+                        index = pane.View?.IndexOfName(name) ?? -1;
+                    }
+                    if (index >= 0)
+                    {
+                        pane.Selection.MoveTo(index, SelectMode.Single);
+                        await RenameAtAsync(pane, index, requestId: null);
+                    }
+                    return;
+                case ErrorReply { Code: ErrorCodes.AlreadyExists }:
+                    await pane.ReloadAsync();
+                    continue;
+                case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                    Unavailable("create_directory", "Making folders needs a newer core.");
+                    return;
+                case ErrorReply error:
+                    ShowNotice($"New folder: {error.Message}", isError: true);
+                    return;
+                default:
+                    return;
+            }
+        }
+    }
+
+    private async Task RenameAtAsync(PaneModel pane, int index, string? requestId)
+    {
+        if (_unavailable.Contains("rename"))
+        {
+            ShowNotice("Renaming needs a newer core.");
+            return;
+        }
+        var view = _paneViews[pane.Index];
+        if (pane.EntryAt(index) is not { } entry)
+        {
+            return;
+        }
+        var newName = await view.BeginRenameAsync(index, entry.Name, selectStem: !entry.IsFolder);
+        if (newName is null)
+        {
+            return;
+        }
+        // The refresh that shows the new name selects it (by name: the ID may change).
+        pane.ExpectName(newName);
+        var reply = await RequestSafelyAsync(new RenameRequest(entry.Path, newName) { Id = requestId ?? "" });
+        switch (reply)
+        {
+            case OkReply:
+                break;
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                pane.ForgetExpectedName();
+                Unavailable("rename", "Renaming needs a newer core.");
+                break;
+            case ErrorReply error:
+                pane.ForgetExpectedName();
+                var row = pane.View?.IndexOfName(entry.Name) ?? -1;
+                view.ShowRowNote(row >= 0 ? row : index, error.Message);
+                break;
+            default:
+                pane.ForgetExpectedName();
+                break;
+        }
+    }
+
+    private void PutOnClipboard(ClipboardMode mode)
+    {
+        var targets = Active.Targets();
+        if (targets.Count == 0)
+        {
+            return;
+        }
+        var text = _clipboard.Set(targets.Select(t => t.Path).ToList(), mode);
+        try
+        {
+            // Other programs get the paths as text, one per line (a terminal, an editor).
+            var package = new DataPackage { RequestedOperation = mode == ClipboardMode.Cut ? DataPackageOperation.Move : DataPackageOperation.Copy };
+            package.SetText(text);
+            Clipboard.SetContent(package);
+            _systemClipboardHolds = true;
+        }
+        catch (Exception error) when (error is COMException or UnauthorizedAccessException)
+        {
+            _systemClipboardHolds = false;
+            Diag.Info(Target, "the Windows clipboard is busy; the paths stay in CabinetOS only", new LogField("error", error.Message));
+        }
+        var items = targets.Count == 1 ? targets[0].Name : $"{targets.Count:N0} items";
+        ShowNotice(mode == ClipboardMode.Cut ? $"Cut {items}. Ctrl+V moves them." : $"Copied {items}. Ctrl+V copies them.");
+    }
+
+    private async Task PasteAsync(CommandInvocation invocation)
+    {
+        var pane = Active;
+        if (pane.Path.Length == 0)
+        {
+            return;
+        }
+        // Other text copied since (anywhere) replaces the paths, as Windows' clipboard
+        // would; unless Windows' clipboard never got them (it was busy).
+        if (_systemClipboardHolds && await ReadClipboardTextAsync() is { } systemText)
+        {
+            _clipboard.KeepIfSystemTextIs(systemText);
+        }
+        if (_clipboard.Plan(pane.Path) is not { } plan)
+        {
+            ShowNotice("Nothing to paste: copy or cut files first (Ctrl+C, Ctrl+X).");
+            return;
+        }
+        var start = await _transfers.StartAsync(plan.Kind, plan.Sources, plan.Destination, invocation.RequestId);
+        if (start.Started)
+        {
+            _clipboard.OnPasted();
+        }
+        else
+        {
+            ShowNotice($"Paste: {start.ErrorMessage}", isError: true);
+        }
+    }
+
+    // What Windows' clipboard holds as text: "" when it holds something else, null when it cannot be read.
+    private static async Task<string?> ReadClipboardTextAsync()
+    {
+        try
+        {
+            var content = Clipboard.GetContent();
+            return content.Contains(StandardDataFormats.Text) ? await content.GetTextAsync() : "";
+        }
+        catch (Exception error) when (error is COMException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private async Task ShowPropertiesAsync(CommandInvocation invocation)
+    {
+        var pane = Active;
+        if (pane.View is not { } view)
+        {
+            return;
+        }
+        var culture = CultureInfo.CurrentCulture;
+        var rows = new List<(string Label, string Value)>();
+        string title;
+        var targets = pane.Targets();
+        if (CommandArgs.Text(invocation.Args, "scope") == "folder" || targets.Count == 0)
+        {
+            title = pane.FolderName;
+            var (files, folders, bytes) = Tally(view, Enumerable.Range(0, view.Count));
+            rows.Add(("Location", DisplayFormat.Parent(pane.Path) ?? pane.Path));
+            rows.Add(("Contains", $"{files:N0} files, {folders:N0} folders"));
+            rows.Add(("Size of the files", DisplayFormat.SizeWithBytes(bytes, culture)));
+        }
+        else if (targets.Count == 1)
+        {
+            var entry = targets[0];
+            var index = entry.Index;
+            title = entry.Name;
+            rows.Add(("Type", DisplayFormat.TypeText(entry.Name, view.Kind(index), entry.IsFolder)));
+            rows.Add(("Location", pane.Path));
+            if (!entry.IsFolder)
+            {
+                rows.Add(("Size", DisplayFormat.SizeWithBytes(entry.Size, culture)));
+            }
+            rows.Add(("Created", FullTime(view.Created(index))));
+            rows.Add(("Modified", FullTime(view.Modified(index))));
+            rows.Add(("Accessed", FullTime(view.Accessed(index))));
+            var attributes = DisplayFormat.AttributeNames(view.Attributes(index));
+            rows.Add(("Attributes", attributes.Length == 0 ? "None" : attributes));
+        }
+        else
+        {
+            title = $"{targets.Count:N0} items";
+            var (files, folders, bytes) = Tally(view, targets.Select(t => t.Index));
+            rows.Add(("Location", pane.Path));
+            rows.Add(("Contains", $"{files:N0} files, {folders:N0} folders"));
+            rows.Add(("Size of the files", DisplayFormat.SizeWithBytes(bytes, culture)));
+        }
+
+        var grid = new Grid { ColumnSpacing = 16, RowSpacing = 6, MinWidth = 360 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (var i = 0; i < rows.Count; i++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var label = new TextBlock { Text = rows[i].Label, Foreground = ThemeResources.Brush("CbTextTertiaryBrush") };
+            var value = new TextBlock { Text = rows[i].Value, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+            Grid.SetRow(label, i);
+            Grid.SetRow(value, i);
+            Grid.SetColumn(value, 1);
+            grid.Children.Add(label);
+            grid.Children.Add(value);
+        }
+        var dialog = new ContentDialog
+        {
+            XamlRoot = RootGrid.XamlRoot,
+            Title = title,
+            Content = grid,
+            CloseButtonText = "Close",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        await ShowDialogAsync(dialog);
+        _paneViews[_active].Focus(FocusState.Programmatic);
+
+        static string FullTime(DateTime utc) => utc == DateTime.MinValue ? "" : utc.ToLocalTime().ToString("G", CultureInfo.CurrentCulture);
+    }
+
+    // Files, folders and the bytes of the files among some rows of the listing (nothing is read from the disk).
+    private static (int Files, int Folders, ulong Bytes) Tally(ListingView view, IEnumerable<int> indexes)
+    {
+        int files = 0, folders = 0;
+        ulong bytes = 0;
+        foreach (var index in indexes)
+        {
+            if (view.IsFolder(index))
+            {
+                folders++;
+            }
+            else
+            {
+                files++;
+                bytes += view.Size(index);
+            }
+        }
+        return (files, folders, bytes);
+    }
+
+    private async Task ControlShownAsync(string action, CommandInvocation invocation)
+    {
+        if (_transfers.Shown is not { } job)
+        {
+            return;
+        }
+        if (await _transfers.ControlAsync(job.Id, action, invocation.RequestId) is { } error)
+        {
+            ShowNotice($"The job could not {action}: {error}", isError: true);
+        }
+    }
+
+    private async Task ResolveConflictAsync(CommandInvocation invocation)
+    {
+        var id = CommandArgs.Number(invocation.Args, "conflict_id");
+        var resolution = CommandArgs.Text(invocation.Args, "resolution");
+        if (id is null || resolution is null
+            || _transfers.Conflicts.Waiting.FirstOrDefault(c => c.ConflictId == id) is not { } conflict)
+        {
+            return;
+        }
+        var apply = CommandArgs.Bool(invocation.Args, "apply_to_same_kind");
+        if (await _transfers.ResolveAsync(conflict, new Resolution(resolution), apply, invocation.RequestId) is { } error)
+        {
+            ShowNotice($"{ConflictText.Name(conflict)}: {error}", isError: true);
+        }
+    }
+
+    private async Task PinAsync(CommandInvocation invocation)
+    {
+        var path = CommandArgs.Text(invocation.Args, "path") ?? Active.Path;
+        if (path.Length == 0 || _sidebar.IsPinned(path))
+        {
+            return;
+        }
+        _shell = _shell with { Pinned = [.. _shell.Pinned, path] };
+        SetPinnedFolders();
+        await SavePinnedAsync();
+    }
+
+    private async Task UnpinAsync(CommandInvocation invocation)
+    {
+        if (CommandArgs.Text(invocation.Args, "path") is not { } path)
+        {
+            return;
+        }
+        _shell = _shell with { Pinned = _shell.Pinned.Where(p => !string.Equals(p, path, StringComparison.OrdinalIgnoreCase)).ToList() };
+        SetPinnedFolders();
+        await SavePinnedAsync();
+    }
+
+    private async Task SavePinnedAsync()
+    {
+        if (!await _settingsWriter.SetAsync(ShellState.PinnedKey, _shell.Pinned) && _settingsWriter.IsAvailable)
+        {
+            ShowNotice("The pinned folders could not be saved in cabinetos.json.", isError: true);
+        }
+    }
+
+    private async Task<CoreReply?> RequestSafelyAsync(CoreRequest request)
+    {
+        try
+        {
+            return await _session.RequestAsync(request);
+        }
+        catch (IOException error)
+        {
+            ShowNotice(error.Message, isError: true);
+            return null;
+        }
+    }
+
+    // A request this core does not know: the feature hides, with one line in the log.
+    private void Unavailable(string request, string notice)
+    {
+        if (_unavailable.Add(request))
+        {
+            Diag.Info(Target, $"the core does not answer {request}; the UI stops offering it");
+        }
+        ShowNotice(notice);
+    }
+
+    // ----- Context menu (design view D) -----
+
+    private void OnContextMenuRequested(FilePane view, int index, Point? at)
+    {
+        var paneIndex = Array.IndexOf(_paneViews, view);
+        if (paneIndex < 0)
+        {
+            return;
+        }
+        SetActive(paneIndex);
+        var pane = _panes[paneIndex];
+        var position = at ?? view.RowAnchor(index);
+        EndAddressEdit();
+        if (index < 0 || pane.EntryAt(index) is not { } entry)
+        {
+            FileMenu.Show(position, [], FolderMenu(pane), fromKeyboard: at is null);
+            return;
+        }
+        FileMenu.Show(position, RowStrip(pane), RowMenu(pane, entry), fromKeyboard: at is null);
+    }
+
+    private IReadOnlyList<MenuEntry> RowStrip(PaneModel pane) =>
+    [
+        new(MenuEntryKind.Item, "Cut", "\uE8C6", "edit.cut", Tooltip: "Cut (Ctrl+X)"),
+        new(MenuEntryKind.Item, "Copy", "\uE8C8", "edit.copy", Tooltip: "Copy (Ctrl+C)"),
+        new(MenuEntryKind.Item, "Paste", "\uE77F", "edit.paste", IsEnabled: !_clipboard.IsEmpty, Tooltip: "Paste (Ctrl+V)"),
+        new(MenuEntryKind.Item, "Rename", "\uE8AC", "file.rename", IsEnabled: !_unavailable.Contains("rename") && pane.Selection.SelectedCount <= 1, Tooltip: "Rename (F2)"),
+        new(MenuEntryKind.Item, "Delete", "\uE74D", "file.delete", Tooltip: "Delete to the Recycle Bin (Delete)"),
+    ];
+
+    private IReadOnlyList<MenuEntry> RowMenu(PaneModel pane, PaneEntry entry)
+    {
+        var items = new List<MenuEntry>
+        {
+            new(MenuEntryKind.Item, "Open", "\uE8E5", "file.open", Keys: "Enter", IsEnabled: entry.IsFolder || !_unavailable.Contains("open_path")),
+            new(MenuEntryKind.Item, "Open in other pane", "\uE8A7", "file.openInOtherPane", Keys: "Ctrl+Enter", IsEnabled: entry.IsFolder),
+            new(MenuEntryKind.Item, "Copy to other pane", "\uE8C8", "file.copyToOtherPane", Keys: KeysOf("file.copyToOtherPane"), IsEnabled: _dual),
+            new(MenuEntryKind.Item, "Open in Terminal", "\uE756", Keys: "Ctrl+`", IsEnabled: false, Tooltip: "The terminal pane arrives in a later version"),
+        };
+        var plugins = _router.Commands.Where(c => c.Source.Kind == "plugin" && c.When == KeyContexts.FilesView).ToList();
+        if (plugins.Count > 0)
+        {
+            // Plugins cannot read the selection yet (docs/plugins.md): the menu hands them the paths.
+            var args = CommandArgs.Object(("path", entry.Path), ("paths", pane.Targets().Select(t => t.Path).ToList()));
+            items.Add(MenuEntry.Separator);
+            items.Add(MenuEntry.Header("From plugins"));
+            items.AddRange(plugins.Select(p => new MenuEntry(MenuEntryKind.Item, p.Title, CommandId: p.Id, Args: args,
+                Keys: KeysOf(p.Id), Badge: p.Source.Name ?? p.Source.Id ?? "plugin")));
+        }
+        items.Add(MenuEntry.Separator);
+        items.Add(new(MenuEntryKind.Item, "Properties", "\uE946", "file.properties", Keys: "Alt+Enter"));
+        return items;
+    }
+
+    private List<MenuEntry> FolderMenu(PaneModel pane)
+    {
+        var items = new List<MenuEntry>
+        {
+            new(MenuEntryKind.Item, "Paste", "\uE77F", "edit.paste", Keys: "Ctrl+V", IsEnabled: !_clipboard.IsEmpty),
+            new(MenuEntryKind.Item, "New folder", "\uE8F4", "file.newFolder", Keys: KeysOf("file.newFolder"), IsEnabled: !_unavailable.Contains("create_directory")),
+        };
+        if (pane.Path.Length > 0 && !_sidebar.IsPinned(pane.Path))
+        {
+            items.Add(new(MenuEntryKind.Item, "Pin this folder to the sidebar", "\uE718", "sidebar.pin", CommandArgs.With("path", pane.Path)));
+        }
+        items.Add(MenuEntry.Separator);
+        items.Add(new(MenuEntryKind.Item, "Properties", "\uE946", "file.properties", CommandArgs.With("scope", "folder")));
+        return items;
+    }
+
+    // A registry command's first binding as the menu shows it: "F5", "Ctrl+K Ctrl+H".
+    private string? KeysOf(string commandId) =>
+        _router.Find(commandId)?.Keys is [var first, ..] && KeySequence.TryParse(first, out var keys)
+            ? string.Join(' ', keys.DisplayParts())
+            : null;
+
+    // ----- Transfers (design view E) -----
+
+    private void UpdateTransfers()
+    {
+        if (_transfers.IsPillVisible && _transfers.Shown is { } job)
+        {
+            TransferPill.Visibility = Visibility.Visible;
+            PillText.Text = TransferText.PillText(job);
+            PillFill.Scale = new Vector3((float)TransferText.Fraction(job), 1, 1);
+        }
+        else
+        {
+            TransferPill.Visibility = Visibility.Collapsed;
+        }
+        var running = _transfers.Visible.Any(j => !j.IsFinal);
+        if (running && !_speedTimer.IsRunning)
+        {
+            _speedTimer.Start();
+        }
+        else if (!running && _speedTimer.IsRunning)
+        {
+            _speedTimer.Stop();
+        }
+    }
+
+    // ----- Panes -----
 
     private void ApplyDual(bool dual)
     {
@@ -680,7 +1461,7 @@ public sealed partial class MainWindow : Window
             case nameof(PaneModel.CanGoBack) or nameof(PaneModel.CanGoForward) or nameof(PaneModel.CanGoUp):
                 UpdateNavigationButtons();
                 break;
-            case nameof(PaneModel.Count) or nameof(PaneModel.SelectedName) or nameof(PaneModel.Rows):
+            case nameof(PaneModel.Count) or nameof(PaneModel.Selection) or nameof(PaneModel.Rows):
                 UpdateStatus();
                 break;
         }
@@ -811,7 +1592,10 @@ public sealed partial class MainWindow : Window
         var focused = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
         if (focused is TextBox or PasswordBox or RichEditBox or AutoSuggestBox)
         {
+            // A text box inside a pane (rename in place) is text input, not the files view:
+            // F5 must not start a copy while a name is being typed (keybindings.md).
             contexts.Add(KeyContexts.TextInput);
+            return contexts;
         }
         for (var element = focused; element is not null; element = VisualTreeHelper.GetParent(element))
         {
@@ -872,7 +1656,14 @@ public sealed partial class MainWindow : Window
     {
         var pane = Active;
         ItemsText.Text = pane.Count == 1 ? "1 item" : $"{pane.Count:N0} items";
-        SelectionText.Text = pane.SelectedName is { } name ? $"1 selected · {name}" : "";
+        var (count, bytes, anyFile) = pane.SelectionSize();
+        SelectionText.Text = count switch
+        {
+            0 => "",
+            1 => $"1 selected · {pane.EntryAt(pane.Selection.SelectedUnordered.First())?.Name}",
+            // Folders have no size in the listing; only the files' bytes are added up.
+            _ => anyFile ? $"{count:N0} selected, {DisplayFormat.Bytes(bytes)}" : $"{count:N0} selected",
+        };
     }
 
     private void UpdateNavigationButtons()
@@ -901,7 +1692,7 @@ public sealed partial class MainWindow : Window
         {
             downloads = Windows.Storage.UserDataPaths.GetDefault().Downloads;
         }
-        catch (Exception error) when (error is System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
+        catch (Exception error) when (error is COMException or UnauthorizedAccessException)
         {
             downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
         }
@@ -909,6 +1700,8 @@ public sealed partial class MainWindow : Window
             Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
             downloads,
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            _shell.Pinned);
+        _sidebar.SetActivePath(Active.Path);
     }
 }

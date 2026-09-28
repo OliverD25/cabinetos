@@ -1,22 +1,29 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.Json;
 using CabinetOS.Core.Diagnostics;
+using CabinetOS.Core.Listing;
+using CabinetOS.Services;
 using CabinetOS.ViewModels;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Core;
+using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace CabinetOS.Views;
 
 /// <summary>
 /// One file pane (design view A): header, column headings, and the rows in a
 /// virtualizing <c>ItemsRepeater</c>. Only the rows on screen exist. Keys the
-/// window's keymap does not claim arrive here: the arrows move the selection
-/// like in any list, and Enter and Backspace run commands through the router.
+/// window's keymap does not claim arrive here: the arrows move the focus and
+/// the selection like in any Windows list (Shift extends, Ctrl moves the focus
+/// alone), Insert toggles a row as in Total Commander, and the file keys run
+/// commands through the router.
 /// </summary>
 public sealed partial class FilePane : UserControl
 {
@@ -24,12 +31,17 @@ public sealed partial class FilePane : UserControl
     private const double RowHeight = 30;
     private const double ListPadding = 4;
 
+    private readonly HashSet<FileRow> _realized = [];
+    private readonly DispatcherQueueTimer _noteTimer;
     private PaneModel? _model;
     private string? _shownPath;
-    private int _markedIndex = -1;
     private NavigationTiming? _timing;
     private long _firstRowTicks;
     private bool _renderingHooked;
+    private TaskCompletionSource<string?>? _rename;
+    private int _renameIndex = -1;
+    private string _renameOriginal = "";
+    private int _noteIndex = -1;
 
     /// <summary>Creates the pane; <see cref="Model"/> gives it its content.</summary>
     public FilePane()
@@ -39,17 +51,35 @@ public sealed partial class FilePane : UserControl
         Repeater.ElementClearing += OnElementClearing;
         Repeater.Tapped += OnRowTapped;
         Repeater.DoubleTapped += OnRowDoubleTapped;
+        Frame.RightTapped += OnRightTapped;
         KeyDown += OnKeyDown;
         GotFocus += (_, _) => Activated?.Invoke(this);
         AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => Focus(FocusState.Pointer)), handledEventsToo: true);
         Header.SizeChanged += (_, e) => PathText.MaxWidth = Math.Max(0, e.NewSize.Width * 0.45);
+        Scroller.ViewChanged += (_, _) => PositionEditors();
+        EditLayer.SizeChanged += (_, e) => EditLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
+        RenameBox.KeyDown += OnRenameKeyDown;
+        RenameBox.LostFocus += (_, _) => EndRename(commit: true);
+        _noteTimer = DispatcherQueue.CreateTimer();
+        _noteTimer.IsRepeating = false;
+        _noteTimer.Interval = TimeSpan.FromSeconds(3);
+        _noteTimer.Tick += (_, _) => HideRowNote();
     }
 
     /// <summary>Raised when the pane gets the focus: it becomes the active pane.</summary>
     public event Action<FilePane>? Activated;
 
-    /// <summary>Runs a command by ID through the window's router: (command, trigger).</summary>
-    public Func<string, string, Task>? RunCommand { get; set; }
+    /// <summary>
+    /// Raised for a context menu: the row (-1 for the pane's empty space) and
+    /// where the pointer was, in the window's coordinates (null from the keyboard).
+    /// </summary>
+    public event Action<FilePane, int, Point?>? ContextMenuRequested;
+
+    /// <summary>Runs a command by ID through the window's router: (command, arguments, trigger).</summary>
+    public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
+
+    /// <summary>Whether a name is being edited in place.</summary>
+    public bool IsRenaming => _rename is not null;
 
     /// <summary>The pane's model.</summary>
     public PaneModel? Model
@@ -72,6 +102,63 @@ public sealed partial class FilePane : UserControl
         }
     }
 
+    /// <summary>
+    /// Edits row <paramref name="index"/>'s name in place (F2, or a new folder).
+    /// Returns the new name, or null when the user cancelled or left it as it
+    /// was. For a file only the part before the extension is selected, as in Explorer.
+    /// </summary>
+    public Task<string?> BeginRenameAsync(int index, string name, bool selectStem)
+    {
+        EndRename(commit: false);
+        var pending = new TaskCompletionSource<string?>();
+        _rename = pending;
+        _renameIndex = index;
+        _renameOriginal = name;
+        ScrollIntoView(index);
+        UpdateLayout();
+        RenameBox.Text = name;
+        RenameBox.Visibility = Visibility.Visible;
+        PositionEditors();
+        RenameBox.Focus(FocusState.Programmatic);
+        var dot = selectStem ? name.LastIndexOf('.') : -1;
+        RenameBox.Select(0, dot > 0 ? dot : name.Length);
+        return pending.Task;
+    }
+
+    /// <summary>Stops an edit without renaming (Esc).</summary>
+    public void CancelRename() => EndRename(commit: false);
+
+    /// <summary>Types <paramref name="text"/> into the edit and presses Enter (development snapshots).</summary>
+    public void CommitRename(string text)
+    {
+        if (IsRenaming)
+        {
+            RenameBox.Text = text;
+            EndRename(commit: true);
+        }
+    }
+
+    /// <summary>Shows a red note under row <paramref name="index"/> for 3 s: why a rename or a new folder failed.</summary>
+    public void ShowRowNote(int index, string text)
+    {
+        _noteIndex = index;
+        RowNoteText.Text = text;
+        RowNote.Visibility = Visibility.Visible;
+        PositionEditors();
+        _noteTimer.Stop();
+        _noteTimer.Start();
+    }
+
+    /// <summary>Where a context menu opened from the keyboard goes: under the row's name, in the window's coordinates.</summary>
+    public Point RowAnchor(int index)
+    {
+        if (index >= 0 && Repeater.TryGetElement(index) is FileRow row)
+        {
+            return row.TransformToVisual(null).TransformPoint(new Point(40, RowHeight));
+        }
+        return Frame.TransformToVisual(null).TransformPoint(new Point(40, 80));
+    }
+
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -79,7 +166,7 @@ public sealed partial class FilePane : UserControl
             case nameof(PaneModel.Rows):
                 ApplyRows();
                 break;
-            case nameof(PaneModel.SelectedIndex):
+            case nameof(PaneModel.Selection):
                 MarkSelection();
                 break;
             case nameof(PaneModel.Path):
@@ -87,6 +174,7 @@ public sealed partial class FilePane : UserControl
                 break;
             case nameof(PaneModel.ShowsActiveStroke) or nameof(PaneModel.HasBrightTitle):
                 UpdateActivity();
+                MarkSelection();
                 break;
             case nameof(PaneModel.Message):
                 UpdateMessage();
@@ -119,7 +207,6 @@ public sealed partial class FilePane : UserControl
 
     private void ApplyRows()
     {
-        _markedIndex = -1;
         _timing = _model?.PendingTiming;
         if (_model is not null)
         {
@@ -133,9 +220,25 @@ public sealed partial class FilePane : UserControl
             // Another folder starts at its top (a refresh keeps the scroll position).
             _shownPath = _model?.Path;
             Scroller.ChangeView(null, 0, null, disableAnimation: true);
-            if (_model is { SelectedIndex: > 0 } model)
+            EndRename(commit: false);
+            HideRowNote();
+            if (_model is { FocusIndex: > 0 } model)
             {
-                ScrollIntoView(model.SelectedIndex);
+                ScrollIntoView(model.FocusIndex);
+            }
+        }
+        else if (IsRenaming)
+        {
+            // A refresh while editing: the row may have moved, or gone.
+            var index = _model?.View?.IndexOfName(_renameOriginal) ?? -1;
+            if (index < 0)
+            {
+                EndRename(commit: false);
+            }
+            else
+            {
+                _renameIndex = index;
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, PositionEditors);
             }
         }
         if (_timing is not null && !_renderingHooked)
@@ -150,7 +253,8 @@ public sealed partial class FilePane : UserControl
     {
         if (args.Element is FileRow row)
         {
-            row.IsSelected = args.Index == _model?.SelectedIndex;
+            _realized.Add(row);
+            Mark(row, args.Index);
         }
         if (_timing is not null && _firstRowTicks == 0)
         {
@@ -162,7 +266,9 @@ public sealed partial class FilePane : UserControl
     {
         if (args.Element is FileRow row)
         {
+            _realized.Remove(row);
             row.IsSelected = false;
+            row.ShowsCursor = false;
         }
     }
 
@@ -199,25 +305,36 @@ public sealed partial class FilePane : UserControl
 
     private void MarkSelection()
     {
-        var selected = _model?.SelectedIndex ?? -1;
-        if (_markedIndex >= 0 && Repeater.TryGetElement(_markedIndex) is FileRow previous)
+        foreach (var row in _realized)
         {
-            previous.IsSelected = false;
+            Mark(row, row.Index);
         }
-        if (selected >= 0 && Repeater.TryGetElement(selected) is FileRow current)
+    }
+
+    private void Mark(FileRow row, int index)
+    {
+        if (_model is not { } model)
         {
-            current.IsSelected = true;
+            return;
         }
-        _markedIndex = selected;
+        var selection = model.Selection;
+        var selected = selection.IsSelected(index);
+        row.IsSelected = selected;
+        // The outline marks the keyboard's row when the fill alone would not say which it is.
+        row.ShowsCursor = index == selection.Focus && model.IsActive && (!selected || selection.SelectedCount > 1);
     }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (_model is null)
+        if (_model is null || e.OriginalSource is TextBox)
         {
             return;
         }
+        var ctrl = IsDown(VirtualKey.Control);
+        var shift = IsDown(VirtualKey.Shift);
         var alt = IsDown(VirtualKey.Menu);
+        var mode = shift ? SelectMode.Extend : ctrl ? SelectMode.FocusOnly : SelectMode.Single;
+        var focus = _model.Selection.Focus;
         var handled = true;
         switch (e.Key)
         {
@@ -231,28 +348,60 @@ public sealed partial class FilePane : UserControl
                 _ = Run("go.up");
                 break;
             case VirtualKey.Up:
-                MoveSelection(_model.SelectedIndex - 1);
+                MoveFocus(focus - 1, mode);
                 break;
             case VirtualKey.Down:
-                MoveSelection(_model.SelectedIndex + 1);
+                MoveFocus(focus + 1, mode);
                 break;
             case VirtualKey.Home:
-                MoveSelection(0);
+                MoveFocus(0, mode);
                 break;
             case VirtualKey.End:
-                MoveSelection(_model.Count - 1);
+                MoveFocus(_model.Count - 1, mode);
                 break;
             case VirtualKey.PageUp:
-                MoveSelection(_model.SelectedIndex - RowsPerPage());
+                MoveFocus(focus - RowsPerPage(), mode);
                 break;
             case VirtualKey.PageDown:
-                MoveSelection(_model.SelectedIndex + RowsPerPage());
+                MoveFocus(focus + RowsPerPage(), mode);
+                break;
+            case VirtualKey.Insert:
+                _model.Selection.ToggleFocusAndAdvance();
+                ScrollIntoView(_model.Selection.Focus);
+                break;
+            case VirtualKey.A when ctrl:
+                _model.Selection.SelectAll();
+                break;
+            case VirtualKey.Enter when alt:
+                _ = Run("file.properties");
+                break;
+            case VirtualKey.Enter when ctrl:
+                _ = Run("file.openInOtherPane");
                 break;
             case VirtualKey.Enter:
-                _ = Run("pane.openSelected");
+                _ = Run("file.open");
                 break;
             case VirtualKey.Back:
                 _ = Run("go.up");
+                break;
+            case VirtualKey.Delete:
+                _ = Run("file.delete", shift ? CommandArgs.Object(("permanent", true)) : null);
+                break;
+            case VirtualKey.F2:
+                _ = Run("file.rename");
+                break;
+            case VirtualKey.X when ctrl:
+                _ = Run("edit.cut");
+                break;
+            case VirtualKey.C when ctrl:
+                _ = Run("edit.copy");
+                break;
+            case VirtualKey.V when ctrl:
+                _ = Run("edit.paste");
+                break;
+            case VirtualKey.F10 when shift:
+            case VirtualKey.Application:
+                ContextMenuRequested?.Invoke(this, focus, null);
                 break;
             default:
                 handled = false;
@@ -261,22 +410,27 @@ public sealed partial class FilePane : UserControl
         e.Handled = handled;
     }
 
-    private Task Run(string commandId) => RunCommand?.Invoke(commandId, "key") ?? Task.CompletedTask;
+    private Task Run(string commandId, JsonElement? args = null, string trigger = "key") =>
+        RunCommand?.Invoke(commandId, args, trigger) ?? Task.CompletedTask;
 
-    private void MoveSelection(int index)
+    private void MoveFocus(int index, SelectMode mode)
     {
         if (_model is null || _model.Count == 0)
         {
             return;
         }
-        _model.SelectedIndex = index;
-        ScrollIntoView(_model.SelectedIndex);
+        _model.Selection.MoveTo(index, mode);
+        ScrollIntoView(_model.Selection.Focus);
     }
 
     private int RowsPerPage() => Math.Max(1, (int)((Scroller.ViewportHeight - (2 * ListPadding)) / RowHeight) - 1);
 
     private void ScrollIntoView(int index)
     {
+        if (index < 0)
+        {
+            return;
+        }
         var top = ListPadding + (index * RowHeight);
         var bottom = top + RowHeight;
         var offset = Scroller.VerticalOffset;
@@ -293,9 +447,17 @@ public sealed partial class FilePane : UserControl
 
     private void OnRowTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (RowFrom(e.OriginalSource) is { Index: >= 0 } row && _model is not null)
+        if (RowFrom(e.OriginalSource) is not { Index: >= 0 } row || _model is null)
         {
-            _model.SelectedIndex = row.Index;
+            return;
+        }
+        if (IsDown(VirtualKey.Control))
+        {
+            _model.Selection.Toggle(row.Index);
+        }
+        else
+        {
+            _model.Selection.MoveTo(row.Index, IsDown(VirtualKey.Shift) ? SelectMode.Extend : SelectMode.Single);
         }
     }
 
@@ -303,9 +465,26 @@ public sealed partial class FilePane : UserControl
     {
         if (RowFrom(e.OriginalSource) is { Index: >= 0 } row && _model is not null)
         {
-            _model.SelectedIndex = row.Index;
-            _ = RunCommand?.Invoke("pane.openSelected", "mouse");
+            _model.Selection.MoveTo(row.Index, SelectMode.Single);
+            _ = Run("file.open", trigger: "mouse");
         }
+    }
+
+    private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (_model is null || e.OriginalSource is TextBox)
+        {
+            return;
+        }
+        e.Handled = true;
+        Focus(FocusState.Pointer);
+        var index = RowFrom(e.OriginalSource)?.Index ?? -1;
+        if (index >= 0)
+        {
+            // A right-click inside the selection keeps it (Explorer); outside, it selects that row.
+            _model.Selection.MoveTo(index, _model.Selection.IsSelected(index) ? SelectMode.FocusOnly : SelectMode.Single);
+        }
+        ContextMenuRequested?.Invoke(this, index, e.GetPosition(null));
     }
 
     private FileRow? RowFrom(object source)
@@ -318,6 +497,87 @@ public sealed partial class FilePane : UserControl
             }
         }
         return null;
+    }
+
+    private void OnRenameKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case VirtualKey.Enter:
+                EndRename(commit: true);
+                e.Handled = true;
+                break;
+            case VirtualKey.Escape:
+                EndRename(commit: false);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void EndRename(bool commit)
+    {
+        if (_rename is not { } pending)
+        {
+            return;
+        }
+        _rename = null;
+        // Windows cannot open a name that ends in a space; the core would refuse it.
+        var text = RenameBox.Text.Trim();
+        var result = commit && text.Length > 0 && !string.Equals(text, _renameOriginal, StringComparison.Ordinal) ? text : null;
+        // The pane takes the focus back before the box collapses: a collapsing
+        // focused box hands the focus to the next pane, which would become active.
+        if (ReferenceEquals(FocusManager.GetFocusedElement(XamlRoot), RenameBox))
+        {
+            Focus(FocusState.Programmatic);
+        }
+        RenameBox.Visibility = Visibility.Collapsed;
+        pending.TrySetResult(result);
+    }
+
+    private void HideRowNote()
+    {
+        _noteTimer.Stop();
+        RowNote.Visibility = Visibility.Collapsed;
+        _noteIndex = -1;
+    }
+
+    private void PositionEditors()
+    {
+        if (_rename is not null && _renameIndex >= 0)
+        {
+            var (left, top, width) = NameBox(_renameIndex);
+            Canvas.SetLeft(RenameBox, left - 7);
+            Canvas.SetTop(RenameBox, top + 2);
+            RenameBox.Width = Math.Max(80, width + 14);
+        }
+        if (RowNote.Visibility == Visibility.Visible && _noteIndex >= 0)
+        {
+            var (left, top, width) = NameBox(_noteIndex);
+            Canvas.SetLeft(RowNote, left - 7);
+            Canvas.SetTop(RowNote, top + RowHeight);
+            RowNote.MaxWidth = Math.Max(160, width + 120);
+        }
+    }
+
+    // The name column of row `index` in the edit layer's coordinates: from the
+    // row itself when it is on screen, else from the grid's own proportions.
+    private (double Left, double Top, double Width) NameBox(int index)
+    {
+        var top = ListPadding + (index * RowHeight) - Scroller.VerticalOffset;
+        if (Repeater.TryGetElement(index) is FileRow row && row.NameElement.ActualWidth > 0)
+        {
+            var name = row.NameElement;
+            var origin = name.TransformToVisual(EditLayer).TransformPoint(new Point(0, 0));
+            // The whole name column, not just the text: a new name may be longer.
+            var width = name.ActualWidth;
+            if (VisualTreeHelper.GetParent(name) is FrameworkElement column)
+            {
+                width = Math.Max(width, column.ActualWidth - name.TransformToVisual(column).TransformPoint(new Point(0, 0)).X);
+            }
+            return (origin.X, top, width);
+        }
+        var rowWidth = Math.Max(0, Scroller.ViewportWidth - (2 * ListPadding));
+        return (40, top, Math.Max(120, (rowWidth - 84) / 2) - 26);
     }
 
     private static bool IsDown(VirtualKey key) =>

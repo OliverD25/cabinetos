@@ -11,14 +11,18 @@ namespace CabinetOS.ViewModels;
 /// <summary>How long one navigation took, for the "listing shown" log line.</summary>
 public sealed record NavigationTiming(string RequestId, string Path, int Entries, ulong CoreUs, long StartedTicks, long RepliedTicks);
 
+/// <summary>One entry of a pane, as a command needs it.</summary>
+public sealed record PaneEntry(int Index, string Name, string Path, bool IsFolder, ulong Size);
+
 /// <summary>
 /// One file pane: its folder, its listing in shared memory, the selection and
 /// the history. The core lists, sorts and watches; the pane only asks and shows.
 /// </summary>
-public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
+public sealed class PaneModel : ObservableObject
 {
     private const string Target = "cabinetos_ui::pane";
 
+    private readonly ICoreChannel _core;
     private readonly Stack<string> _back = new();
     private readonly Stack<string> _forward = new();
     private ListingView? _view;
@@ -26,16 +30,29 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
     private int _navigation;
     private string _path = "";
     private ListingRows? _rows;
-    private int _selectedIndex = -1;
     private bool _isActive;
     private bool _isDual = true;
     private string? _message;
+    private string? _expectedName;
+    private TaskCompletionSource<int>? _expectedListed;
+
+    /// <summary>Creates pane <paramref name="index"/>, asking <paramref name="core"/> for its listings.</summary>
+    public PaneModel(int index, ICoreChannel core)
+    {
+        Index = index;
+        _core = core;
+        Selection.Changed += () =>
+        {
+            OnPropertyChanged(nameof(Selection));
+            OnPropertyChanged(nameof(FocusName));
+        };
+    }
 
     /// <summary>Raised when something the user should read goes to the status bar.</summary>
     public event Action<string>? Notice;
 
     /// <summary>0 for the left pane, 1 for the right.</summary>
-    public int Index { get; } = index;
+    public int Index { get; }
 
     /// <summary>The folder shown.</summary>
     public string Path
@@ -70,22 +87,14 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
     /// <summary>Entries in the listing.</summary>
     public int Count => _rows?.Count ?? 0;
 
-    /// <summary>The selected row, or -1.</summary>
-    public int SelectedIndex
-    {
-        get => _selectedIndex;
-        set
-        {
-            var clamped = Count == 0 ? -1 : Math.Clamp(value, 0, Count - 1);
-            if (SetProperty(ref _selectedIndex, clamped))
-            {
-                OnPropertyChanged(nameof(SelectedName));
-            }
-        }
-    }
+    /// <summary>The focus, the anchor and the selected rows.</summary>
+    public SelectionModel Selection { get; } = new();
 
-    /// <summary>The selected entry's name, for the status bar.</summary>
-    public string? SelectedName => _view is { } view && _selectedIndex >= 0 ? view.Name(_selectedIndex) : null;
+    /// <summary>The focused row (the keyboard's row), or -1.</summary>
+    public int FocusIndex => Selection.Focus;
+
+    /// <summary>The focused entry's name.</summary>
+    public string? FocusName => _view is { } view && Selection.Focus >= 0 ? view.Name(Selection.Focus) : null;
 
     /// <summary>Whether this pane has the focus (or is the only one).</summary>
     public bool IsActive
@@ -146,6 +155,111 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
     /// <summary>The last navigation's timing, until the view logs its first paint.</summary>
     public NavigationTiming? PendingTiming { get; set; }
 
+    /// <summary>Entry <paramref name="index"/> of the listing, or null.</summary>
+    public PaneEntry? EntryAt(int index)
+    {
+        if (_view is not { } view || (uint)index >= (uint)view.Count)
+        {
+            return null;
+        }
+        var name = view.Name(index);
+        return new PaneEntry(index, name, DisplayFormat.Join(Path, name), view.IsFolder(index), view.Size(index));
+    }
+
+    /// <summary>What a command acts on: the selected entries, or the focused one (listing order).</summary>
+    public IReadOnlyList<PaneEntry> Targets() =>
+        Selection.Targets().Select(EntryAt).OfType<PaneEntry>().ToList();
+
+    /// <summary>
+    /// How many rows are selected, and the bytes of the selected files: the
+    /// status bar's "12 selected, 1.4 MB". Folders count as none; the listing
+    /// has no size for them. Nothing is read from the disk.
+    /// </summary>
+    public (int Count, ulong FileBytes, bool AnyFile) SelectionSize()
+    {
+        if (_view is not { } view)
+        {
+            return (0, 0, false);
+        }
+        ulong bytes = 0;
+        var anyFile = false;
+        foreach (var index in Selection.SelectedUnordered)
+        {
+            if (!view.IsFolder(index))
+            {
+                bytes += view.Size(index);
+                anyFile = true;
+            }
+        }
+        return (Selection.SelectedCount, bytes, anyFile);
+    }
+
+    /// <summary>
+    /// A name for a new entry that the listing does not have yet:
+    /// <paramref name="baseName"/>, then "<paramref name="baseName"/> (2)", …
+    /// </summary>
+    public string FreeName(string baseName)
+    {
+        if (_view is not { } view || view.IndexOfName(baseName) < 0)
+        {
+            return baseName;
+        }
+        for (var n = 2; ; n++)
+        {
+            var candidate = $"{baseName} ({n})";
+            if (view.IndexOfName(candidate) < 0)
+            {
+                return candidate;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Selects <paramref name="name"/> once a listing has it: at once when the
+    /// one on screen does, else at the next refresh from the core's watcher.
+    /// Returns the row, or -1 when it did not show up in time.
+    /// </summary>
+    public async Task<int> SelectWhenListedAsync(string name, TimeSpan timeout)
+    {
+        var index = _view?.IndexOfName(name) ?? -1;
+        if (index >= 0)
+        {
+            Selection.Reset(Count, index);
+            return index;
+        }
+        ExpectName(name);
+        var listed = _expectedListed!.Task;
+        if (await Task.WhenAny(listed, Task.Delay(timeout)) == listed)
+        {
+            return listed.Result;
+        }
+        if (_expectedListed?.Task == listed)
+        {
+            ForgetExpectedName();
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// The next refresh that lists <paramref name="name"/> selects it: after a
+    /// rename, the entry keeps its ID on NTFS, but not on file systems without
+    /// file IDs (the ID is then a hash of the name), so the name decides.
+    /// </summary>
+    public void ExpectName(string name)
+    {
+        _expectedListed?.TrySetResult(-1);
+        _expectedName = name;
+        _expectedListed = new TaskCompletionSource<int>();
+    }
+
+    /// <summary>Stops waiting for a name (the rename failed).</summary>
+    public void ForgetExpectedName()
+    {
+        _expectedListed?.TrySetResult(-1);
+        _expectedName = null;
+        _expectedListed = null;
+    }
+
     /// <summary>
     /// Lists <paramref name="path"/> and shows it. <paramref name="requestId"/>
     /// is the command's ID, so the key press and the core's work share one ID
@@ -159,7 +273,7 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
         CoreReply reply;
         try
         {
-            reply = await core.RequestAsync(request);
+            reply = await _core.RequestAsync(request);
         }
         catch (IOException error)
         {
@@ -224,7 +338,7 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
         Message = view.Count == 0 ? "This folder is empty." : null;
         Rows = new ListingRows(view);
         var select = selectName is null ? -1 : view.IndexOfName(selectName);
-        SelectInNewListing(select >= 0 ? select : 0);
+        Selection.Reset(view.Count, select >= 0 ? select : 0);
         RaiseHistoryChanged();
         oldView?.Dispose();
         if (oldListing != 0)
@@ -234,25 +348,9 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
         return true;
     }
 
-    /// <summary>Lists the same folder again, keeping the selected entry.</summary>
+    /// <summary>Lists the same folder again, keeping the focused entry.</summary>
     public Task<bool> ReloadAsync(string? requestId = null) =>
-        NavigateAsync(Path, requestId, NavigationKind.Reload, SelectedName);
-
-    /// <summary>Opens the selected entry if it is a folder (files open in a later phase).</summary>
-    public Task OpenSelectedAsync(string requestId)
-    {
-        if (_view is not { } view || _selectedIndex < 0)
-        {
-            return Task.CompletedTask;
-        }
-        if (!view.IsFolder(_selectedIndex))
-        {
-            Diag.Request(LogLevel.Debug, requestId, Target, "opening files is not part of this version",
-                new LogField("name", view.Name(_selectedIndex)));
-            return Task.CompletedTask;
-        }
-        return NavigateAsync(DisplayFormat.Join(Path, view.Name(_selectedIndex)), requestId);
-    }
+        NavigateAsync(Path, requestId, NavigationKind.Reload, FocusName);
 
     /// <summary>Goes to the parent folder and selects the folder it came from.</summary>
     public Task GoUpAsync(string requestId) =>
@@ -269,9 +367,10 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
         _forward.TryPop(out var path) ? NavigateAsync(path, requestId, NavigationKind.Forward) : Task.CompletedTask;
 
     /// <summary>
-    /// Shows a refreshed listing of a watched folder (<c>listing_refreshed</c>),
-    /// keeping the selected entry by its ID. Returns false when the event is not
-    /// for this pane's listing; the caller then closes the section.
+    /// Shows a refreshed listing of a watched folder (<c>listing_refreshed</c>).
+    /// The selection follows its entries by ID, and a name the pane waits for
+    /// (a new folder, a rename) is selected when it shows up. Returns false
+    /// when the event is not for this pane's listing.
     /// </summary>
     public bool ApplyRefresh(ListingRefreshedEvent refreshed)
     {
@@ -293,13 +392,32 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
             Diag.Warn(Target, "a refreshed listing could not be read", new LogField("listing_id", _listingId), new LogField("error", failure.Message));
             return true;
         }
-        var selectedId = _selectedIndex >= 0 ? old.Id(_selectedIndex) : (ulong?)null;
-        var previousIndex = _selectedIndex;
+
+        var focusId = Selection.Focus >= 0 ? old.Id(Selection.Focus) : (ulong?)null;
+        var anchorId = Selection.Anchor >= 0 ? old.Id(Selection.Anchor) : (ulong?)null;
+        var selectedIds = Selection.SelectedUnordered.Select(old.Id).ToList();
+        var previousFocus = Selection.Focus;
+
         _view = view;
         Message = view.Count == 0 ? "This folder is empty." : null;
         Rows = new ListingRows(view);
-        var keep = selectedId is { } id ? view.IndexOfId(id) : -1;
-        SelectInNewListing(keep >= 0 ? keep : previousIndex);
+
+        var expected = _expectedName is { } name ? view.IndexOfName(name) : -1;
+        if (expected >= 0)
+        {
+            Selection.Reset(view.Count, expected);
+            var listed = _expectedListed;
+            _expectedName = null;
+            _expectedListed = null;
+            listed?.TrySetResult(expected);
+        }
+        else
+        {
+            var indexOf = IndexById(view, selectedIds.Count > 1);
+            var focus = focusId is { } id ? indexOf(id) : -1;
+            var anchor = anchorId is { } anchorEntry ? indexOf(anchorEntry) : -1;
+            Selection.Restore(view.Count, selectedIds.Select(indexOf).Where(i => i >= 0), focus >= 0 ? focus : previousFocus, anchor);
+        }
         Diag.Debug(Target, "listing refreshed", new LogField("listing_id", _listingId),
             new LogField("generation", refreshed.Generation), new LogField("entries", view.Count), new LogField("reason", refreshed.Reason));
         old.Dispose();
@@ -342,12 +460,19 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
         _listingId = 0;
     }
 
-    /// <summary>Selects a row of a listing that just replaced the old one; the same index may name another entry now.</summary>
-    private void SelectInNewListing(int index)
+    // A dictionary pays off only when many entries must be found again; one is found by a scan.
+    private static Func<ulong, int> IndexById(ListingView view, bool many)
     {
-        _selectedIndex = Count == 0 ? -1 : Math.Clamp(index, 0, Count - 1);
-        OnPropertyChanged(nameof(SelectedIndex));
-        OnPropertyChanged(nameof(SelectedName));
+        if (!many)
+        {
+            return view.IndexOfId;
+        }
+        var map = new Dictionary<ulong, int>(view.Count);
+        for (var i = 0; i < view.Count; i++)
+        {
+            map.TryAdd(view.Id(i), i);
+        }
+        return id => map.TryGetValue(id, out var index) ? index : -1;
     }
 
     private void Fail(string path, string why)
@@ -358,6 +483,7 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
             Path = path;
             Message = $"Cannot open this folder: {why}";
             Rows = null;
+            Selection.Reset(0, 0);
         }
         else
         {
@@ -379,7 +505,7 @@ public sealed class PaneModel(int index, ICoreChannel core) : ObservableObject
     {
         try
         {
-            await core.RequestAsync(new CloseListingRequest(listingId));
+            await _core.RequestAsync(new CloseListingRequest(listingId));
         }
         catch (IOException error)
         {

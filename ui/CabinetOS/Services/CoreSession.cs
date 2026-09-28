@@ -29,6 +29,9 @@ public sealed class CoreSession : ICoreChannel
     /// <summary>The core's protocol version, from <c>welcome</c>.</summary>
     public uint ProtocolVersion { get; private set; }
 
+    /// <summary>The running core's process ID, or null.</summary>
+    public int? CoreProcessId => _connection?.Process is { HasExited: false } process ? process.Id : null;
+
     /// <summary>
     /// Finds and starts the core, connects and says hello. Call it on the UI
     /// thread: the event pump then continues there.

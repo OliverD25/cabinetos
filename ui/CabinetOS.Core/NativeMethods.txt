@@ -2,3 +2,4 @@ MapViewOfFile
 UnmapViewOfFile
 CloseHandle
 MessageBox
+AllowSetForegroundWindow

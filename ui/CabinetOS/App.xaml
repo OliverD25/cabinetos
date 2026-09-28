@@ -50,6 +50,19 @@
                     <SolidColorBrush x:Key="CbUsageTrackBrush" Color="#1AFFFFFF" />
                     <SolidColorBrush x:Key="CbErrorTextBrush" Color="#FFF27A6C" />
                     <AcrylicBrush x:Key="CbPaletteAcrylicBrush" TintColor="#FF2C2C2C" TintOpacity="0.15" TintLuminosityOpacity="0.72" FallbackColor="#F22C2C2C" />
+                    <!-- The design's menu (.78) and transfer flyout (rgba(40,40,40,.82)) Acrylic. -->
+                    <AcrylicBrush x:Key="CbMenuAcrylicBrush" TintColor="#FF2C2C2C" TintOpacity="0.15" TintLuminosityOpacity="0.78" FallbackColor="#F52C2C2C" />
+                    <AcrylicBrush x:Key="CbFlyoutAcrylicBrush" TintColor="#FF282828" TintOpacity="0.15" TintLuminosityOpacity="0.82" FallbackColor="#F7282828" />
+                    <SolidColorBrush x:Key="CbCursorStrokeBrush" Color="#4DFFFFFF" />
+                    <SolidColorBrush x:Key="CbNoteFillBrush" Color="#F2202020" />
+                    <SolidColorBrush x:Key="CbGraphFillBrush" Color="#4D000000" />
+                    <SolidColorBrush x:Key="CbProgressTrackBrush" Color="#1FFFFFFF" />
+                    <SolidColorBrush x:Key="CbPillFillBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbPillTrackBrush" Color="#26FFFFFF" />
+                    <SolidColorBrush x:Key="CbCardFillBrush" Color="#0DFFFFFF" />
+                    <SolidColorBrush x:Key="CbMenuHoverFillBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbPluginBadgeFillBrush" Color="#2660CDFF" />
+                    <SolidColorBrush x:Key="CbDangerHoverFillBrush" Color="#99C42B1C" />
                     <StaticResource x:Key="CbAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
@@ -87,6 +100,18 @@
                     <StaticResource x:Key="CbUsageTrackBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
                     <StaticResource x:Key="CbErrorTextBrush" ResourceKey="SystemFillColorCriticalBrush" />
                     <StaticResource x:Key="CbPaletteAcrylicBrush" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbMenuAcrylicBrush" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbFlyoutAcrylicBrush" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbCursorStrokeBrush" ResourceKey="ControlStrongStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbNoteFillBrush" ResourceKey="SolidBackgroundFillColorBaseBrush" />
+                    <StaticResource x:Key="CbGraphFillBrush" ResourceKey="ControlFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbProgressTrackBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbPillFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbPillTrackBrush" ResourceKey="ControlStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbCardFillBrush" ResourceKey="CardBackgroundFillColorDefaultBrush" />
+                    <StaticResource x:Key="CbMenuHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbPluginBadgeFillBrush" ResourceKey="AccentFillColorTertiaryBrush" />
+                    <StaticResource x:Key="CbDangerHoverFillBrush" ResourceKey="SystemFillColorCriticalBackgroundBrush" />
                     <StaticResource x:Key="CbAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
@@ -166,6 +191,57 @@
                                         <VisualState x:Name="Pressed">
                                             <VisualState.Setters>
                                                 <Setter Target="Root.Background" Value="{ThemeResource CbPressedFillBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="Presenter.Foreground" Value="{ThemeResource CbTextDisabledBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- A footer button whose hover warns: the flyout's Cancel (the design's rgba(196,43,28,.6)). -->
+            <Style x:Key="CbDangerButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{ThemeResource CbPillFillBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="12,0" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="MinWidth" Value="32" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="AllowFocusOnInteraction" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid
+                                x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}">
+                                <ContentPresenter
+                                    x:Name="Presenter"
+                                    Padding="{TemplateBinding Padding}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Content="{TemplateBinding Content}"
+                                    Foreground="{TemplateBinding Foreground}" />
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="Root.Background" Value="{ThemeResource CbDangerHoverFillBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="Root.Background" Value="{ThemeResource CbDangerHoverFillBrush}" />
                                             </VisualState.Setters>
                                         </VisualState>
                                         <VisualState x:Name="Disabled">

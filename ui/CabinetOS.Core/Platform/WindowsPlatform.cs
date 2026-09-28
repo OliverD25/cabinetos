@@ -19,4 +19,12 @@ public static class WindowsPlatform
     /// </summary>
     public static void ShowError(string title, string text) =>
         PInvoke.MessageBox(default, text, title, MESSAGEBOX_STYLE.MB_OK | MESSAGEBOX_STYLE.MB_ICONERROR);
+
+    /// <summary>
+    /// Lets the core bring a window to the front: <c>open_path</c> runs in the
+    /// core, a background process, and Windows would otherwise open the
+    /// application behind this window (docs/ipc.md, "Opening files").
+    /// Returns false when Windows refused; the file still opens.
+    /// </summary>
+    public static bool AllowForeground(int processId) => PInvoke.AllowSetForegroundWindow((uint)processId);
 }

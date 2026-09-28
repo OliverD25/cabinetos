@@ -148,6 +148,21 @@ public class TransferCenterTests
     }
 
     [Fact]
+    public async Task A_new_job_replaces_a_finished_one_on_screen_and_it_does_not_come_back()
+    {
+        var (center, _) = Create();
+        await center.StartAsync(JobKind.Delete(false), [@"C:\a"], null);
+        center.OnEvent(new JobStateChangedEvent(7, new JobState(JobState.Completed)));
+        var copy = (await center.StartAsync(JobKind.Copy, [@"C:\b"], @"D:\x")).Job!;
+
+        Assert.Same(copy, center.Shown);
+        Assert.Equal(0, center.OthersCount);
+        center.OnEvent(new JobStateChangedEvent(8, new JobState(JobState.Cancelled)));
+        center.Close();
+        Assert.Null(center.Shown);
+    }
+
+    [Fact]
     public async Task The_more_link_cycles_through_the_other_jobs()
     {
         var (center, _) = Create();
@@ -204,6 +219,25 @@ public class TransferCenterTests
 
         center.OnEvent(new JobStateChangedEvent(7, new JobState(JobState.Cancelled)));
         Assert.Null(center.Conflicts.Current);
+    }
+
+    [Fact]
+    public async Task The_flyout_follows_the_next_waiting_conflict_to_its_job()
+    {
+        var (center, _) = Create();
+        var first = (await center.StartAsync(JobKind.Copy, [@"C:\a"], @"D:\x")).Job!;
+        var second = (await center.StartAsync(JobKind.Copy, [@"C:\b"], @"D:\y")).Job!;
+        center.OnEvent(Conflict(1, 7));
+        center.OnEvent(Conflict(2, 8));
+        Assert.Same(first, center.Shown);
+
+        await center.ResolveAsync(center.Conflicts.Current!, new Resolution(Resolution.SkipType), false);
+        Assert.Same(second, center.Shown);
+
+        center.OnEvent(Conflict(3, 7));
+        center.OnEvent(new JobStateChangedEvent(8, new JobState(JobState.Cancelled)));
+        Assert.Same(first, center.Shown);
+        Assert.Equal(3UL, center.Conflicts.Current!.ConflictId);
     }
 
     [Fact]

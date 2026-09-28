@@ -6,7 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace CabinetOS.ViewModels;
 
 /// <summary>A pinned folder of the sidebar.</summary>
-public sealed class PinnedItem(string name, string path) : ObservableObject
+public sealed class PinnedItem(string name, string path, bool isUserPinned = false) : ObservableObject
 {
     private bool _isActive;
 
@@ -15,6 +15,9 @@ public sealed class PinnedItem(string name, string path) : ObservableObject
 
     /// <summary>Where it goes.</summary>
     public string Path { get; } = path;
+
+    /// <summary>Whether the user pinned it (<c>ui.pinned</c>), so it can be unpinned; the known folders cannot.</summary>
+    public bool IsUserPinned { get; } = isUserPinned;
 
     /// <summary>Whether the active pane shows this folder (the design's pill).</summary>
     public bool IsActive
@@ -39,7 +42,10 @@ public sealed class SidebarModel : ObservableObject
 {
     private bool _showDrives;
 
-    /// <summary>Desktop, Downloads, Documents and the profile folder. Only paths are read, no folder.</summary>
+    /// <summary>
+    /// Desktop, Downloads, Documents and the profile folder, then the folders
+    /// the user pinned (<c>ui.pinned</c>). Only paths are read, no folder.
+    /// </summary>
     public ObservableCollection<PinnedItem> Pinned { get; } = [];
 
     /// <summary>The drives, once the core can list them.</summary>
@@ -52,8 +58,8 @@ public sealed class SidebarModel : ObservableObject
         private set => SetProperty(ref _showDrives, value);
     }
 
-    /// <summary>Fills the pinned folders from the user's known folders.</summary>
-    public void SetPinned(string desktop, string downloads, string documents, string profile)
+    /// <summary>Fills the pinned folders: the user's known folders, then <paramref name="userPinned"/>.</summary>
+    public void SetPinned(string desktop, string downloads, string documents, string profile, IReadOnlyList<string> userPinned)
     {
         Pinned.Clear();
         foreach (var (name, path) in new[] { ("Desktop", desktop), ("Downloads", downloads), ("Documents", documents), (DisplayFormat.FolderName(profile), profile) })
@@ -63,7 +69,18 @@ public sealed class SidebarModel : ObservableObject
                 Pinned.Add(new PinnedItem(name, path));
             }
         }
+        foreach (var path in userPinned)
+        {
+            if (!IsPinned(path))
+            {
+                Pinned.Add(new PinnedItem(DisplayFormat.FolderName(path), path, isUserPinned: true));
+            }
+        }
     }
+
+    /// <summary>Whether <paramref name="path"/> already has a row.</summary>
+    public bool IsPinned(string path) =>
+        Pinned.Any(item => string.Equals(item.Path.TrimEnd('\\'), path.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Marks the pinned folder the active pane shows.</summary>
     public void SetActivePath(string path)

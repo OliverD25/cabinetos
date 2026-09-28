@@ -25,8 +25,9 @@
                         <Button
                             AutomationProperties.Name="{x:Bind Name}"
                             Click="OnPinnedClick"
+                            RightTapped="OnPinnedRightTapped"
                             Style="{StaticResource CbSidebarRowButtonStyle}"
-                            Tag="{x:Bind Path}"
+                            Tag="{x:Bind}"
                             ToolTipService.ToolTip="{x:Bind Path}">
                             <Grid Height="32">
                                 <Border

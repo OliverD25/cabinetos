@@ -130,6 +130,33 @@
                 TextAlignment="Center"
                 TextWrapping="Wrap"
                 Visibility="Collapsed" />
+
+            <!-- Inline rename: one text box over the row's name, and a note under the row for an error. -->
+            <Canvas x:Name="EditLayer" Grid.Row="2">
+                <TextBox
+                    x:Name="RenameBox"
+                    Height="26"
+                    MinHeight="0"
+                    Padding="6,3,6,0"
+                    AutomationProperties.Name="New name"
+                    FontSize="13"
+                    Visibility="Collapsed" />
+                <Border
+                    x:Name="RowNote"
+                    Padding="8,3"
+                    Background="{ThemeResource CbNoteFillBrush}"
+                    BorderBrush="{ThemeResource CbErrorTextBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="RowNoteText"
+                        FontSize="12"
+                        Foreground="{ThemeResource CbErrorTextBrush}"
+                        TextWrapping="Wrap" />
+                </Border>
+            </Canvas>
         </Grid>
     </Border>
 </UserControl>

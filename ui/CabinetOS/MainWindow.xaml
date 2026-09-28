@@ -255,6 +255,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock
                         x:Name="ItemsText"
@@ -283,21 +284,55 @@
                         FontSize="11"
                         Foreground="{ThemeResource CbAccentBrush}"
                         Visibility="Collapsed" />
-                    <TextBlock
+                    <!-- The minimized transfer (design view E): an 80 x 4 px track and "Copying · 45%". -->
+                    <Button
+                        x:Name="TransferPill"
                         Grid.Column="4"
+                        Height="20"
+                        MinWidth="0"
+                        Padding="8,0"
+                        AllowFocusOnInteraction="False"
+                        AutomationProperties.Name="Show the transfer"
+                        Background="{ThemeResource CbPillFillBrush}"
+                        CornerRadius="10"
+                        Style="{StaticResource CbSubtleButtonStyle}"
+                        ToolTipService.ToolTip="Show the transfer"
+                        Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Grid
+                                Width="80"
+                                Height="4"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource CbPillTrackBrush}"
+                                CornerRadius="2">
+                                <Rectangle
+                                    x:Name="PillFill"
+                                    Fill="{ThemeResource CbAccentBrush}"
+                                    RadiusX="2"
+                                    RadiusY="2" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="PillText"
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Foreground="{ThemeResource CbTextPrimaryBrush}" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock
+                        Grid.Column="5"
                         VerticalAlignment="Center"
                         FontSize="11"
                         Foreground="{ThemeResource CbStatusTextBrush}"
                         Text="UTF-8" />
                     <TextBlock
                         x:Name="LayoutText"
-                        Grid.Column="5"
+                        Grid.Column="6"
                         VerticalAlignment="Center"
                         FontSize="11"
                         Foreground="{ThemeResource CbStatusTextBrush}" />
                     <Button
                         x:Name="PaletteKeycap"
-                        Grid.Column="6"
+                        Grid.Column="7"
                         Height="18"
                         MinWidth="0"
                         Padding="6,1"
@@ -314,6 +349,15 @@
                 </Grid>
             </Border>
         </Grid>
+
+        <!-- The transfer flyout: right 16 px, bottom 36 px (above the status bar), non-modal. -->
+        <views:TransferFlyout
+            x:Name="TransferView"
+            Margin="0,0,16,36"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom" />
+
+        <views:FileContextMenu x:Name="FileMenu" />
 
         <views:CommandPalette x:Name="Palette" Visibility="Collapsed" />
     </Grid>

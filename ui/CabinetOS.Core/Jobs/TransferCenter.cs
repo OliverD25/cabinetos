@@ -83,7 +83,7 @@ public sealed class TransferCenter(ICoreChannel core)
                 var job = GetOrCreate(started.JobId, out _);
                 job.Describe(kind, sources, destination);
                 job.IsDismissed = false;
-                Shown = job;
+                ShowInstead(job);
                 IsMinimized = false;
                 Diag.Request(LogLevel.Info, request.Id, Target, "job started",
                     new LogField("job_id", started.JobId), new LogField("kind", kind.Type),
@@ -177,11 +177,10 @@ public sealed class TransferCenter(ICoreChannel core)
                 {
                     return true;
                 }
-                var job = Track(conflict.JobId);
-                // A decision is needed: the flyout opens on the conflict's job.
-                job.IsDismissed = false;
-                Shown = job;
+                Track(conflict.JobId);
+                // A decision is needed: the flyout opens, on the job whose conflict is first in line.
                 IsMinimized = false;
+                FollowConflict();
                 break;
             }
             default:
@@ -250,10 +249,12 @@ public sealed class TransferCenter(ICoreChannel core)
         {
             case OkReply:
                 Conflicts.Resolve(conflict, applyToSameKind);
+                FollowConflict();
                 Raise();
                 return null;
             case ErrorReply { Code: ErrorCodes.NoSuchConflict or ErrorCodes.NoSuchJob }:
                 Conflicts.Resolve(conflict, applyToSameKind: false);
+                FollowConflict();
                 Raise();
                 return null;
             case ErrorReply error:
@@ -386,22 +387,40 @@ public sealed class TransferCenter(ICoreChannel core)
             {
                 job.IsDismissed = true;
             }
-            return;
         }
-        if (!IsMinimized)
-        {
-            return;
-        }
-        if (quiet)
+        else if (IsMinimized && quiet)
         {
             job.IsDismissed = true;
             Shown = Visible.FirstOrDefault();
         }
-        else
+        else if (IsMinimized)
         {
             // Errors or a failure: the user should see it, not a pill.
             IsMinimized = false;
         }
+        FollowConflict();
+    }
+
+    // A waiting decision comes first: the flyout shows the job of the conflict at the head of the queue.
+    private void FollowConflict()
+    {
+        if (Conflicts.Current is { } conflict && Find(conflict.JobId) is { } job && job != Shown)
+        {
+            job.IsDismissed = false;
+            ShowInstead(job);
+            IsMinimized = false;
+        }
+    }
+
+    // A job that ended quietly and was already seen gives way for good; one with errors waits its turn.
+    private void ShowInstead(TransferJob job)
+    {
+        if (Shown is { IsFinal: true } previous && previous != job
+            && previous.State.Type is JobState.Completed or JobState.Cancelled)
+        {
+            previous.IsDismissed = true;
+        }
+        Shown = job;
     }
 
     private static int IndexOf(IReadOnlyList<TransferJob> jobs, TransferJob job)

@@ -48,16 +48,29 @@ public sealed partial class FileRow : UserControl
     /// <summary>The row's index in its listing, or -1.</summary>
     public int Index { get; private set; } = -1;
 
-    /// <summary>Whether this row is the pane's selected row.</summary>
+    /// <summary>Whether this row is selected.</summary>
     public bool IsSelected
     {
         get => _selected;
         set
         {
-            _selected = value;
-            UpdateState();
+            if (_selected != value)
+            {
+                _selected = value;
+                UpdateState();
+            }
         }
     }
+
+    /// <summary>Whether the row shows the keyboard's outline.</summary>
+    public bool ShowsCursor
+    {
+        get => CursorOutline.Visibility == Visibility.Visible;
+        set => CursorOutline.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>The name's text, where inline rename puts its text box.</summary>
+    public FrameworkElement NameElement => NameText;
 
     private void Bind(RowItem? item)
     {

@@ -27,6 +27,14 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
+        <!-- The keyboard's row when it is not simply the one selected row. -->
+        <Border
+            x:Name="CursorOutline"
+            BorderBrush="{ThemeResource CbCursorStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="4"
+            Visibility="Collapsed" />
+
         <Rectangle
             x:Name="Pill"
             Width="3"
