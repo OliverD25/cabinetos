@@ -15,13 +15,13 @@ schema = ["dep:schemars"]
 [dependencies]
 schemars = { workspace = true, optional = true }
 serde.workspace = true
+serde_json.workspace = true
 ulid.workspace = true
 
 [dev-dependencies]
 # Turns on the `schema` feature for this crate's own tests, so the schema
 # snapshot test runs under a plain `cargo test --workspace`.
 cabinetos-protocol = { path = ".", features = ["schema"] }
-serde_json.workspace = true
 
 [lints]
 workspace = true

@@ -71,9 +71,10 @@ enum Command {
         /// Include hidden and system entries.
         #[arg(long)]
         hidden: bool,
-        /// What to sort by; directories always come first.
-        #[arg(long, value_enum, default_value_t = SortArg::Name)]
-        sort: SortArg,
+        /// What to sort by; directories always come first. Without it (and
+        /// without --desc) the core's configured order applies.
+        #[arg(long, value_enum)]
+        sort: Option<SortArg>,
         /// Reverse the order within directories and within the rest.
         #[arg(long)]
         desc: bool,
@@ -193,11 +194,12 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             let args = ls::LsArgs {
                 path: path.clone(),
                 long: *long,
-                include_hidden: *hidden,
-                sort: SortSpec {
-                    key: (*sort).into(),
+                // Absent options let the core use its configured defaults.
+                include_hidden: hidden.then_some(true),
+                sort: (sort.is_some() || *desc).then(|| SortSpec {
+                    key: sort.unwrap_or(SortArg::Name).into(),
                     descending: *desc,
-                },
+                }),
                 watch: *watch,
             };
             ls::ls(&mut client, args).await?;
@@ -404,7 +406,7 @@ mod tests {
                 path: r"C:\Windows".to_owned(),
                 long: true,
                 hidden: true,
-                sort: SortArg::Modified,
+                sort: Some(SortArg::Modified),
                 desc: true,
                 watch: true,
             }
@@ -413,7 +415,7 @@ mod tests {
         assert!(matches!(
             plain.command,
             Command::Ls {
-                sort: SortArg::Name,
+                sort: None,
                 long: false,
                 watch: false,
                 ..

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EventEnvelope",
-  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":2,\"core_version\":\"0.1.0\"}\n```",
+  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":3,\"core_version\":\"0.1.0\"}\n```",
   "type": "object",
   "properties": {
     "id": {
@@ -87,12 +87,143 @@
         "listing_id",
         "message"
       ]
+    },
+    {
+      "description": "The configuration file changed and the new settings are in effect.\nSent to every connection that said `hello`.",
+      "type": "object",
+      "properties": {
+        "changed": {
+          "description": "The settings that changed, as dotted paths such as `ui.layout`,\n`panes.sort` or `keybindings`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "config_changed"
+        }
+      },
+      "required": [
+        "type",
+        "changed"
+      ]
+    },
+    {
+      "description": "The configuration file changed but cannot be used; the previous\nsettings stay in effect.",
+      "type": "object",
+      "properties": {
+        "column": {
+          "description": "The column of the problem, counting from 1, when known.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "line": {
+          "description": "The line of the problem, counting from 1, when known.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "message": {
+          "description": "What is wrong.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "config_error"
+        }
+      },
+      "required": [
+        "type",
+        "message"
+      ]
+    },
+    {
+      "description": "The compiled keymap changed (after `config_changed` for the same\nchange). Sent to every connection that said `hello`.",
+      "type": "object",
+      "properties": {
+        "keymap": {
+          "description": "The new keymap.",
+          "$ref": "#/$defs/Keymap"
+        },
+        "type": {
+          "type": "string",
+          "const": "keymap_changed"
+        }
+      },
+      "required": [
+        "type",
+        "keymap"
+      ]
     }
   ],
   "required": [
     "id"
   ],
   "$defs": {
+    "Keymap": {
+      "description": "The compiled keymap: every binding in effect. The UI runs the chord state\nmachine with it; the core stays the source of truth.",
+      "type": "object",
+      "properties": {
+        "bindings": {
+          "description": "The bindings, grouped by command in registry order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KeymapBinding"
+          }
+        },
+        "chord_window_ms": {
+          "description": "After the first key of a two-key chord, how long the second may take.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "immutable": {
+          "description": "The commands of the Immutable System Tier: their bindings cannot be\nchanged, and no other command may use their keys.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "chord_window_ms",
+        "bindings",
+        "immutable"
+      ]
+    },
+    "KeymapBinding": {
+      "description": "One key binding.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "The command the keys run.",
+          "type": "string"
+        },
+        "keys": {
+          "description": "Normalized keys, for example `ctrl+shift+p` or `ctrl+k ctrl+s` (a\nchord: two combinations, one after the other). Grammar in\n`docs/keybindings.md`.",
+          "type": "string"
+        },
+        "when": {
+          "description": "The context in which the binding applies, for example `filesView`;\nabsent means everywhere.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "keys",
+        "command"
+      ]
+    },
     "RefreshReason": {
       "description": "Why a watched listing was read again.",
       "oneOf": [

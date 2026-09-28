@@ -237,6 +237,16 @@ impl Session {
                     self.volume_info(&id, &span, path);
                     None
                 }
+                Request::GetConfig
+                | Request::GetKeymap
+                | Request::ListCommands
+                | Request::SearchCommands { .. }
+                | Request::ExecuteCommand { .. }
+                | Request::SetKeybinding { .. }
+                | Request::ResetKeybinding { .. } => Some(Response::Error {
+                    code: ErrorCode::NotImplemented,
+                    message: format!("{kind} is not implemented yet"),
+                }),
             }
         };
         // Requests handled right here are done; the others log when they end.
@@ -289,8 +299,8 @@ impl Session {
         id: &RequestId,
         span: &tracing::Span,
         path: String,
-        include_hidden: bool,
-        sort: SortSpec,
+        include_hidden: Option<bool>,
+        sort: Option<SortSpec>,
         watch: bool,
     ) -> Option<Response> {
         let Some(client) = &self.client else {
@@ -299,8 +309,8 @@ impl Session {
         let client_pid = client.pid;
         let listing_id = NEXT_LISTING_ID.fetch_add(1, Ordering::Relaxed);
         let options = ListOptions {
-            include_hidden,
-            sort,
+            include_hidden: include_hidden.unwrap_or(false),
+            sort: sort.unwrap_or_default(),
             ..ListOptions::default()
         };
         let request_id = id.clone();

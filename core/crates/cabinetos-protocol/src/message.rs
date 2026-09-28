@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::RequestId;
 
@@ -8,7 +9,7 @@ use crate::RequestId;
 ///
 /// ```json
 /// {"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"ping"}
-/// {"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"pong","protocol_version":2,"core_version":"0.1.0"}
+/// {"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"pong","protocol_version":3,"core_version":"0.1.0"}
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -38,7 +39,8 @@ pub enum Request {
     /// Asks the core to exit cleanly. The core answers `ok`, then exits.
     Shutdown,
     /// Introduces the client. Must come before `list_directory` on each
-    /// connection. The core answers `welcome`.
+    /// connection, and subscribes the connection to configuration events.
+    /// The core answers `welcome`.
     Hello {
         /// The client's process ID. The core duplicates shared-memory handles
         /// into this process, so it must be the process on the other end of
@@ -52,12 +54,14 @@ pub enum Request {
     ListDirectory {
         /// The directory, as an absolute or relative Windows path.
         path: String,
-        /// Also list entries with the hidden or the system attribute.
-        #[serde(default)]
-        include_hidden: bool,
-        /// The order of the entries. Directories always come first.
-        #[serde(default)]
-        sort: SortSpec,
+        /// Also list entries with the hidden or the system attribute. When
+        /// absent, the configuration's `panes.showHidden` decides.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        include_hidden: Option<bool>,
+        /// The order of the entries; directories always come first. When
+        /// absent, the configuration's `panes.sort` decides.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sort: Option<SortSpec>,
         /// Keep watching the directory and send `listing_refreshed` events
         /// when it changes.
         #[serde(default)]
@@ -75,6 +79,51 @@ pub enum Request {
         /// Any path on the volume; it does not have to exist.
         path: String,
     },
+    /// Asks for the configuration in effect and the path of its file. The
+    /// core answers `config`.
+    GetConfig,
+    /// Asks for the compiled keymap. The core answers `keymap`.
+    GetKeymap,
+    /// Asks for every command, for the command palette. The core answers
+    /// `commands`.
+    ListCommands,
+    /// Ranks the commands against what the user typed in the palette. The
+    /// core answers `search_results`.
+    SearchCommands {
+        /// The text typed so far; spaces are ignored.
+        query: String,
+        /// At most this many results.
+        #[serde(default = "default_search_limit")]
+        limit: u32,
+    },
+    /// Runs a command. The core answers `command_result` for commands it
+    /// runs itself and `command_routed` for commands the UI runs.
+    ExecuteCommand {
+        /// The command's ID, for example `help.about`. (Named `command`,
+        /// not `id`: `id` is the request's own ID in the same object.)
+        command: String,
+        /// Arguments, if the command takes any.
+        #[serde(default)]
+        args: Value,
+    },
+    /// Binds a command to new keys, replacing its current binding. The core
+    /// writes the configuration file and answers `keymap`.
+    SetKeybinding {
+        /// The command's ID.
+        command: String,
+        /// The keys, for example `ctrl+alt+b` or `ctrl+k ctrl+b`.
+        keys: String,
+    },
+    /// Returns a command to its default binding. The core writes the
+    /// configuration file and answers `keymap`.
+    ResetKeybinding {
+        /// The command's ID.
+        command: String,
+    },
+}
+
+fn default_search_limit() -> u32 {
+    20
 }
 
 impl Request {
@@ -87,6 +136,13 @@ impl Request {
         "list_directory",
         "close_listing",
         "volume_info",
+        "get_config",
+        "get_keymap",
+        "list_commands",
+        "search_commands",
+        "execute_command",
+        "set_keybinding",
+        "reset_keybinding",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -99,6 +155,13 @@ impl Request {
             Self::ListDirectory { .. } => "list_directory",
             Self::CloseListing { .. } => "close_listing",
             Self::VolumeInfo { .. } => "volume_info",
+            Self::GetConfig => "get_config",
+            Self::GetKeymap => "get_keymap",
+            Self::ListCommands => "list_commands",
+            Self::SearchCommands { .. } => "search_commands",
+            Self::ExecuteCommand { .. } => "execute_command",
+            Self::SetKeybinding { .. } => "set_keybinding",
+            Self::ResetKeybinding { .. } => "reset_keybinding",
         }
     }
 }
@@ -140,7 +203,7 @@ pub enum SortKey {
 pub enum Response {
     /// Reply to `ping`.
     Pong {
-        /// The protocol version the core speaks (`PROTOCOL_VERSION`, now 2).
+        /// The protocol version the core speaks (`PROTOCOL_VERSION`, now 3).
         protocol_version: u32,
         /// The core's version, for example `0.1.0`.
         core_version: String,
@@ -156,7 +219,7 @@ pub enum Response {
     },
     /// Reply to `hello`.
     Welcome {
-        /// The protocol version the core speaks (`PROTOCOL_VERSION`, now 2).
+        /// The protocol version the core speaks (`PROTOCOL_VERSION`, now 3).
         protocol_version: u32,
         /// The core's version, for example `0.1.0`.
         core_version: String,
@@ -180,6 +243,37 @@ pub enum Response {
     },
     /// Reply to `volume_info`.
     VolumeInfo(VolumeDetails),
+    /// Reply to `get_config`.
+    Config {
+        /// The configuration file the core reads.
+        path: String,
+        /// The configuration in effect, with defaults filled in, in the
+        /// file's own format (see `sdk/config/cabinetos.schema.json`).
+        config: Value,
+    },
+    /// Reply to `get_keymap`, `set_keybinding` and `reset_keybinding`.
+    Keymap(Keymap),
+    /// Reply to `list_commands`.
+    Commands {
+        /// Every command, in registry order.
+        commands: Vec<CommandInfo>,
+    },
+    /// Reply to `search_commands`: the best matches first.
+    SearchResults {
+        /// The matching commands with their scores.
+        hits: Vec<SearchHit>,
+    },
+    /// Reply to `execute_command` for a command the UI runs: the core does
+    /// nothing and hands it back.
+    CommandRouted {
+        /// Always `ui` for now.
+        target: CommandTarget,
+    },
+    /// Reply to `execute_command` for a command the core ran.
+    CommandResult {
+        /// What the command returned.
+        result: Value,
+    },
 }
 
 impl Response {
@@ -191,6 +285,12 @@ impl Response {
         "welcome",
         "listing_opened",
         "volume_info",
+        "config",
+        "keymap",
+        "commands",
+        "search_results",
+        "command_routed",
+        "command_result",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -203,6 +303,12 @@ impl Response {
             Self::Welcome { .. } => "welcome",
             Self::ListingOpened { .. } => "listing_opened",
             Self::VolumeInfo(_) => "volume_info",
+            Self::Config { .. } => "config",
+            Self::Keymap(_) => "keymap",
+            Self::Commands { .. } => "commands",
+            Self::SearchResults { .. } => "search_results",
+            Self::CommandRouted { .. } => "command_routed",
+            Self::CommandResult { .. } => "command_result",
         }
     }
 }
@@ -245,6 +351,97 @@ pub struct DiskIdentity {
     pub media_type: Option<String>,
 }
 
+/// The compiled keymap: every binding in effect. The UI runs the chord state
+/// machine with it; the core stays the source of truth.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Keymap {
+    /// After the first key of a two-key chord, how long the second may take.
+    pub chord_window_ms: u32,
+    /// The bindings, grouped by command in registry order.
+    pub bindings: Vec<KeymapBinding>,
+    /// The commands of the Immutable System Tier: their bindings cannot be
+    /// changed, and no other command may use their keys.
+    pub immutable: Vec<String>,
+}
+
+/// One key binding.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct KeymapBinding {
+    /// Normalized keys, for example `ctrl+shift+p` or `ctrl+k ctrl+s` (a
+    /// chord: two combinations, one after the other). Grammar in
+    /// `docs/keybindings.md`.
+    pub keys: String,
+    /// The command the keys run.
+    pub command: String,
+    /// The context in which the binding applies, for example `filesView`;
+    /// absent means everywhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<String>,
+}
+
+/// A command, as the palette shows it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct CommandInfo {
+    /// The command's ID, `category.verbObject`, for example
+    /// `view.toggleDualPane`.
+    pub id: String,
+    /// The palette group, for example `View`.
+    pub category: String,
+    /// The human name, for example `Toggle Dual Pane`.
+    pub title: String,
+    /// The keys bound now (after the user's changes).
+    pub keys: Vec<String>,
+    /// The keys it has by default.
+    pub default_keys: Vec<String>,
+    /// Who provides the command.
+    pub source: CommandSource,
+    /// Who runs it.
+    pub target: CommandTarget,
+    /// The context of its default bindings; absent means everywhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<String>,
+    /// Whether it belongs to the Immutable System Tier.
+    pub immutable: bool,
+}
+
+/// Who provides a command.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CommandSource {
+    /// Built into the core.
+    Core,
+    /// Registered by a plugin (Phase 7).
+    Plugin {
+        /// The plugin's ID.
+        id: String,
+    },
+}
+
+/// Who runs a command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum CommandTarget {
+    /// The core runs it.
+    Core,
+    /// The UI runs it itself (views, panes, overlays).
+    Ui,
+}
+
+/// One command matching a palette search.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct SearchHit {
+    /// The command's ID.
+    pub id: String,
+    /// Higher is better; only the order matters.
+    pub score: i32,
+}
+
 /// A message the core sends on its own, not as a reply. Events share the
 /// connection with replies; a client tells them apart by `type`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -277,12 +474,41 @@ pub enum Event {
         /// What happened, for logs and the user.
         message: String,
     },
+    /// The configuration file changed and the new settings are in effect.
+    /// Sent to every connection that said `hello`.
+    ConfigChanged {
+        /// The settings that changed, as dotted paths such as `ui.layout`,
+        /// `panes.sort` or `keybindings`.
+        changed: Vec<String>,
+    },
+    /// The configuration file changed but cannot be used; the previous
+    /// settings stay in effect.
+    ConfigError {
+        /// The line of the problem, counting from 1, when known.
+        line: Option<u32>,
+        /// The column of the problem, counting from 1, when known.
+        column: Option<u32>,
+        /// What is wrong.
+        message: String,
+    },
+    /// The compiled keymap changed (after `config_changed` for the same
+    /// change). Sent to every connection that said `hello`.
+    KeymapChanged {
+        /// The new keymap.
+        keymap: Keymap,
+    },
 }
 
 impl Event {
     /// Every `type` tag an event can carry. None of them is also a response
     /// tag, so a client can parse both from one stream.
-    pub const TYPES: &'static [&'static str] = &["listing_refreshed", "listing_lost"];
+    pub const TYPES: &'static [&'static str] = &[
+        "listing_refreshed",
+        "listing_lost",
+        "config_changed",
+        "config_error",
+        "keymap_changed",
+    ];
 
     /// The `type` tag of this event on the wire.
     #[must_use]
@@ -290,6 +516,9 @@ impl Event {
         match self {
             Self::ListingRefreshed { .. } => "listing_refreshed",
             Self::ListingLost { .. } => "listing_lost",
+            Self::ConfigChanged { .. } => "config_changed",
+            Self::ConfigError { .. } => "config_error",
+            Self::KeymapChanged { .. } => "keymap_changed",
         }
     }
 }
@@ -345,6 +574,22 @@ pub enum ErrorCode {
     NoSuchListing,
     /// Reading from the disk or the network failed.
     Io,
+    /// No command has that ID.
+    UnknownCommand,
+    /// The command exists but the core cannot run it yet (it arrives in a
+    /// later phase).
+    NotImplemented,
+    /// The keys do not follow the key grammar (`docs/keybindings.md`).
+    InvalidKeys,
+    /// The binding would take keys another command already uses, or make a
+    /// chord's first key also a binding of its own.
+    KeybindingConflict,
+    /// The change touches the Immutable System Tier: its commands keep their
+    /// bindings, and nobody else may use their keys.
+    ImmutableBinding,
+    /// The configuration file cannot be changed now: it has an error the
+    /// user must fix first, or it cannot be written.
+    ConfigError,
 }
 
 #[cfg(test)]
@@ -359,6 +604,25 @@ mod tests {
         ID.parse().unwrap()
     }
 
+    fn keymap() -> Keymap {
+        Keymap {
+            chord_window_ms: 1000,
+            bindings: vec![
+                KeymapBinding {
+                    keys: "ctrl+shift+p".to_owned(),
+                    command: "palette.show".to_owned(),
+                    when: None,
+                },
+                KeymapBinding {
+                    keys: "f5".to_owned(),
+                    command: "file.copyToOtherPane".to_owned(),
+                    when: Some("filesView".to_owned()),
+                },
+            ],
+            immutable: vec!["palette.show".to_owned()],
+        }
+    }
+
     fn every_request() -> Vec<Request> {
         vec![
             Request::Ping,
@@ -369,16 +633,34 @@ mod tests {
             },
             Request::ListDirectory {
                 path: r"C:\Windows".to_owned(),
-                include_hidden: true,
-                sort: SortSpec {
+                include_hidden: Some(true),
+                sort: Some(SortSpec {
                     key: SortKey::Modified,
                     descending: true,
-                },
+                }),
                 watch: true,
             },
             Request::CloseListing { listing_id: 7 },
             Request::VolumeInfo {
                 path: r"C:\".to_owned(),
+            },
+            Request::GetConfig,
+            Request::GetKeymap,
+            Request::ListCommands,
+            Request::SearchCommands {
+                query: "dual".to_owned(),
+                limit: 5,
+            },
+            Request::ExecuteCommand {
+                command: "help.about".to_owned(),
+                args: json!({"verbose": true}),
+            },
+            Request::SetKeybinding {
+                command: "view.toggleSidebar".to_owned(),
+                keys: "ctrl+alt+b".to_owned(),
+            },
+            Request::ResetKeybinding {
+                command: "view.toggleSidebar".to_owned(),
             },
         ]
     }
@@ -386,7 +668,7 @@ mod tests {
     fn every_response() -> Vec<Response> {
         vec![
             Response::Pong {
-                protocol_version: 2,
+                protocol_version: 3,
                 core_version: "0.1.0".to_owned(),
             },
             Response::Ok,
@@ -395,7 +677,7 @@ mod tests {
                 message: "no such directory".to_owned(),
             },
             Response::Welcome {
-                protocol_version: 2,
+                protocol_version: 3,
                 core_version: "0.1.0".to_owned(),
             },
             Response::ListingOpened {
@@ -420,6 +702,36 @@ mod tests {
                     media_type: Some("SSD".to_owned()),
                 }),
             }),
+            Response::Config {
+                path: r"C:\Users\me\AppData\Roaming\CabinetOS\cabinetos.json".to_owned(),
+                config: json!({"version": 1, "ui": {"layout": "classic"}}),
+            },
+            Response::Keymap(keymap()),
+            Response::Commands {
+                commands: vec![CommandInfo {
+                    id: "view.toggleDualPane".to_owned(),
+                    category: "View".to_owned(),
+                    title: "Toggle Dual Pane".to_owned(),
+                    keys: vec!["ctrl+shift+d".to_owned()],
+                    default_keys: vec!["ctrl+shift+d".to_owned()],
+                    source: CommandSource::Core,
+                    target: CommandTarget::Ui,
+                    when: None,
+                    immutable: false,
+                }],
+            },
+            Response::SearchResults {
+                hits: vec![SearchHit {
+                    id: "view.toggleDualPane".to_owned(),
+                    score: 120,
+                }],
+            },
+            Response::CommandRouted {
+                target: CommandTarget::Ui,
+            },
+            Response::CommandResult {
+                result: json!({"product": "CabinetOS"}),
+            },
         ]
     }
 
@@ -437,6 +749,15 @@ mod tests {
                 listing_id: 7,
                 message: "the directory was deleted".to_owned(),
             },
+            Event::ConfigChanged {
+                changed: vec!["ui.layout".to_owned(), "keybindings".to_owned()],
+            },
+            Event::ConfigError {
+                line: Some(12),
+                column: Some(5),
+                message: "unknown field `dualPan`".to_owned(),
+            },
+            Event::KeymapChanged { keymap: keymap() },
         ]
     }
 
@@ -449,23 +770,32 @@ mod tests {
     #[test]
     fn pong_has_the_documented_wire_form() {
         let pong = Response::Pong {
-            protocol_version: 2,
+            protocol_version: 3,
             core_version: "0.1.0".to_owned(),
         };
         let json = serde_json::to_string(&Envelope::new(id(), pong)).unwrap();
         assert_eq!(
             json,
-            format!(r#"{{"id":"{ID}","type":"pong","protocol_version":2,"core_version":"0.1.0"}}"#)
+            format!(r#"{{"id":"{ID}","type":"pong","protocol_version":3,"core_version":"0.1.0"}}"#)
         );
     }
 
     #[test]
-    fn volume_info_is_flat_on_the_wire() {
-        let reply = every_response().pop().unwrap();
-        let value = serde_json::to_value(Envelope::new(id(), reply)).unwrap();
+    fn newtype_replies_are_flat_on_the_wire() {
+        let volume = every_response()
+            .into_iter()
+            .find(|response| matches!(response, Response::VolumeInfo(_)))
+            .unwrap();
+        let value = serde_json::to_value(Envelope::new(id(), volume)).unwrap();
         assert_eq!(value["type"], "volume_info");
         assert_eq!(value["drive_letter"], "C");
         assert_eq!(value["disk"]["bus_type"], "NVMe");
+
+        let value = serde_json::to_value(Envelope::new(id(), Response::Keymap(keymap()))).unwrap();
+        assert_eq!(value["type"], "keymap");
+        assert_eq!(value["chord_window_ms"], 1000);
+        assert_eq!(value["bindings"][1]["when"], "filesView");
+        assert!(value["bindings"][0].get("when").is_none());
     }
 
     #[test]
@@ -513,18 +843,15 @@ mod tests {
     }
 
     #[test]
-    fn list_directory_fields_have_defaults() {
+    fn optional_fields_have_defaults() {
         let minimal = json!({"id": ID, "type": "list_directory", "path": r"C:\"});
         let envelope: Envelope<Request> = serde_json::from_value(minimal).unwrap();
         assert_eq!(
             envelope.body,
             Request::ListDirectory {
                 path: r"C:\".to_owned(),
-                include_hidden: false,
-                sort: SortSpec {
-                    key: SortKey::Name,
-                    descending: false,
-                },
+                include_hidden: None,
+                sort: None,
                 watch: false,
             }
         );
@@ -534,13 +861,41 @@ mod tests {
         assert!(matches!(
             envelope.body,
             Request::ListDirectory {
-                sort: SortSpec {
+                sort: Some(SortSpec {
                     key: SortKey::Size,
                     descending: false
-                },
+                }),
                 ..
             }
         ));
+        // Absent fields stay absent on the wire.
+        let json = serde_json::to_value(Envelope::new(
+            id(),
+            Request::ListDirectory {
+                path: "x".to_owned(),
+                include_hidden: None,
+                sort: None,
+                watch: false,
+            },
+        ))
+        .unwrap();
+        assert!(json.get("include_hidden").is_none() && json.get("sort").is_none());
+
+        let search = json!({"id": ID, "type": "search_commands", "query": "dual"});
+        let envelope: Envelope<Request> = serde_json::from_value(search).unwrap();
+        assert!(matches!(
+            envelope.body,
+            Request::SearchCommands { limit: 20, .. }
+        ));
+        let execute = json!({"id": ID, "type": "execute_command", "command": "help.about"});
+        let envelope: Envelope<Request> = serde_json::from_value(execute).unwrap();
+        assert_eq!(
+            envelope.body,
+            Request::ExecuteCommand {
+                command: "help.about".to_owned(),
+                args: Value::Null,
+            }
+        );
     }
 
     #[test]
@@ -555,10 +910,35 @@ mod tests {
             (ErrorCode::InvalidPath, "invalid_path"),
             (ErrorCode::NoSuchListing, "no_such_listing"),
             (ErrorCode::Io, "io"),
+            (ErrorCode::UnknownCommand, "unknown_command"),
+            (ErrorCode::NotImplemented, "not_implemented"),
+            (ErrorCode::InvalidKeys, "invalid_keys"),
+            (ErrorCode::KeybindingConflict, "keybinding_conflict"),
+            (ErrorCode::ImmutableBinding, "immutable_binding"),
+            (ErrorCode::ConfigError, "config_error"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));
         }
+    }
+
+    #[test]
+    fn command_sources_and_targets_have_stable_names() {
+        assert_eq!(
+            serde_json::to_value(CommandSource::Core).unwrap(),
+            json!({"kind": "core"})
+        );
+        assert_eq!(
+            serde_json::to_value(CommandSource::Plugin {
+                id: "md".to_owned()
+            })
+            .unwrap(),
+            json!({"kind": "plugin", "id": "md"})
+        );
+        assert_eq!(
+            serde_json::to_value(CommandTarget::Ui).unwrap(),
+            json!("ui")
+        );
     }
 
     #[test]

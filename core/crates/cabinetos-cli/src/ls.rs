@@ -16,8 +16,10 @@ use crate::{expect_welcome, failure, say, send};
 pub(crate) struct LsArgs {
     pub(crate) path: String,
     pub(crate) long: bool,
-    pub(crate) include_hidden: bool,
-    pub(crate) sort: SortSpec,
+    /// `None` leaves it to the core's configuration.
+    pub(crate) include_hidden: Option<bool>,
+    /// `None` leaves it to the core's configuration.
+    pub(crate) sort: Option<SortSpec>,
     pub(crate) watch: bool,
 }
 

@@ -26,12 +26,15 @@ pub mod schema;
 
 pub use id::{InvalidRequestId, RequestId};
 pub use message::{
-    DiskIdentity, Envelope, ErrorCode, Event, Incoming, RefreshReason, Request, Response, SortKey,
-    SortSpec, VolumeDetails,
+    CommandInfo, CommandSource, CommandTarget, DiskIdentity, Envelope, ErrorCode, Event, Incoming,
+    Keymap, KeymapBinding, RefreshReason, Request, Response, SearchHit, SortKey, SortSpec,
+    VolumeDetails,
 };
 
 /// Version of the control-channel protocol. The core reports it in
 /// [`Response::Pong`] and [`Response::Welcome`]. Raise it whenever a message
 /// is added or changes shape. Version 2 added `hello`, directory listings,
-/// volume information and events.
-pub const PROTOCOL_VERSION: u32 = 2;
+/// volume information and events; version 3 the configuration, the keymap
+/// and commands, and made `list_directory`'s `include_hidden` and `sort`
+/// optional (the configuration fills them in).
+pub const PROTOCOL_VERSION: u32 = 3;

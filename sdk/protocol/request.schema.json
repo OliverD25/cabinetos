@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RequestEnvelope",
-  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":2,\"core_version\":\"0.1.0\"}\n```",
+  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":3,\"core_version\":\"0.1.0\"}\n```",
   "type": "object",
   "properties": {
     "id": {
@@ -37,7 +37,7 @@
       ]
     },
     {
-      "description": "Introduces the client. Must come before `list_directory` on each\nconnection. The core answers `welcome`.",
+      "description": "Introduces the client. Must come before `list_directory` on each\nconnection, and subscribes the connection to configuration events.\nThe core answers `welcome`.",
       "type": "object",
       "properties": {
         "client_name": {
@@ -66,21 +66,26 @@
       "type": "object",
       "properties": {
         "include_hidden": {
-          "description": "Also list entries with the hidden or the system attribute.",
-          "type": "boolean",
-          "default": false
+          "description": "Also list entries with the hidden or the system attribute. When\nabsent, the configuration's `panes.showHidden` decides.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "path": {
           "description": "The directory, as an absolute or relative Windows path.",
           "type": "string"
         },
         "sort": {
-          "description": "The order of the entries. Directories always come first.",
-          "$ref": "#/$defs/SortSpec",
-          "default": {
-            "descending": false,
-            "key": "name"
-          }
+          "description": "The order of the entries; directories always come first. When\nabsent, the configuration's `panes.sort` decides.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SortSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "type": {
           "type": "string",
@@ -133,6 +138,133 @@
       "required": [
         "type",
         "path"
+      ]
+    },
+    {
+      "description": "Asks for the configuration in effect and the path of its file. The\ncore answers `config`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "get_config"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Asks for the compiled keymap. The core answers `keymap`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "get_keymap"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Asks for every command, for the command palette. The core answers\n`commands`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "list_commands"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Ranks the commands against what the user typed in the palette. The\ncore answers `search_results`.",
+      "type": "object",
+      "properties": {
+        "limit": {
+          "description": "At most this many results.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 20,
+          "minimum": 0
+        },
+        "query": {
+          "description": "The text typed so far; spaces are ignored.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "search_commands"
+        }
+      },
+      "required": [
+        "type",
+        "query"
+      ]
+    },
+    {
+      "description": "Runs a command. The core answers `command_result` for commands it\nruns itself and `command_routed` for commands the UI runs.",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Arguments, if the command takes any.",
+          "default": null
+        },
+        "command": {
+          "description": "The command's ID, for example `help.about`. (Named `command`,\nnot `id`: `id` is the request's own ID in the same object.)",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "execute_command"
+        }
+      },
+      "required": [
+        "type",
+        "command"
+      ]
+    },
+    {
+      "description": "Binds a command to new keys, replacing its current binding. The core\nwrites the configuration file and answers `keymap`.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "The command's ID.",
+          "type": "string"
+        },
+        "keys": {
+          "description": "The keys, for example `ctrl+alt+b` or `ctrl+k ctrl+b`.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "set_keybinding"
+        }
+      },
+      "required": [
+        "type",
+        "command",
+        "keys"
+      ]
+    },
+    {
+      "description": "Returns a command to its default binding. The core writes the\nconfiguration file and answers `keymap`.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "The command's ID.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "reset_keybinding"
+        }
+      },
+      "required": [
+        "type",
+        "command"
       ]
     }
   ],

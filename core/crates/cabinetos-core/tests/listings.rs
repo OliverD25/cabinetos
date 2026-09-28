@@ -10,7 +10,7 @@ use cabinetos_fs::ListingReader;
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::shm::EntryKind;
 use cabinetos_protocol::{
-    Envelope, ErrorCode, Event, PROTOCOL_VERSION, RefreshReason, Request, Response, SortSpec,
+    Envelope, ErrorCode, Event, PROTOCOL_VERSION, RefreshReason, Request, Response,
 };
 use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -83,8 +83,8 @@ async fn greeted(core: &Core) -> PipeClient {
 fn list(path: &Path, watch: bool) -> Request {
     Request::ListDirectory {
         path: path.to_str().unwrap().to_owned(),
-        include_hidden: false,
-        sort: SortSpec::default(),
+        include_hidden: None,
+        sort: None,
         watch,
     }
 }
@@ -236,7 +236,7 @@ async fn a_watched_listing_is_refreshed_when_a_file_appears() {
                 ["after.txt", "before.txt"]
             );
         }
-        other @ Event::ListingLost { .. } => panic!("expected listing_refreshed, got {other:?}"),
+        other => panic!("expected listing_refreshed, got {other:?}"),
     }
     assert!(created.elapsed() < EVENT_DEADLINE);
 
@@ -275,7 +275,7 @@ async fn a_watched_listing_is_lost_when_its_directory_goes() {
         Event::ListingLost {
             listing_id: lost, ..
         } => assert_eq!(lost, listing_id),
-        other @ Event::ListingRefreshed { .. } => panic!("expected listing_lost, got {other:?}"),
+        other => panic!("expected listing_lost, got {other:?}"),
     }
     let closed = client
         .request(Request::CloseListing { listing_id })
