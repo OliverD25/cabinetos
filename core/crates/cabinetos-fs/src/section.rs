@@ -303,8 +303,8 @@ fn write_range(
         );
         put(
             meta_out,
-            at + offset_of!(ListingMeta, reserved),
-            &0u32.to_le_bytes(),
+            at + offset_of!(ListingMeta, reparse_tag),
+            &meta.reparse_tag.to_le_bytes(),
         );
 
         let at = name_offset - name_start;
@@ -454,7 +454,7 @@ impl<'a> ListingReader<'a> {
                 .ok_or_else(malformed)?,
             attributes: read_u32(bytes, at + offset_of!(ListingMeta, attributes))
                 .ok_or_else(malformed)?,
-            reserved: read_u32(bytes, at + offset_of!(ListingMeta, reserved))
+            reparse_tag: read_u32(bytes, at + offset_of!(ListingMeta, reparse_tag))
                 .ok_or_else(malformed)?,
         };
 
@@ -539,7 +539,7 @@ mod tests {
                     created: 132_000_000_000_000_000,
                     accessed: 134_000_000_000_000_000,
                     attributes,
-                    reserved: 0,
+                    reparse_tag: 0,
                 },
                 name_start: u32::try_from(start).unwrap(),
                 name_len: u16::try_from(listing.names.len() - start).unwrap(),

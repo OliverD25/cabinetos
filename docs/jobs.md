@@ -185,6 +185,28 @@ Decisions (`resolve_conflict`):
 | `delete_permanently` | Delete for good what the Recycle Bin cannot take. Answers only `recycle_bin_too_small`, and `path_too_long` in a delete to the Recycle Bin. |
 | `cancel_job` | Stop the whole job. |
 
+### Links
+
+A junction, a symbolic link or a mount point is one item to a job: the
+link, never what it points to, unless `copy_links` says otherwise.
+
+- **Delete** removes the link and leaves what it points to as it was, for
+  a link given as the source and for one inside a folder being deleted
+  (tested with a junction, a symbolic link to a folder and one to a file,
+  each leading to a folder of files that stays whole).
+- **Copy** with `as_link`, the default, makes a link that points where the
+  original points, as robocopy does; with `follow_target` it copies what
+  the link points to, as Explorer does for a junction. Following stops at
+  a link that leads back into what is being copied: that link is copied as
+  a link, so the job ends.
+- **Move** on one volume renames the link; what it points to stays where
+  it is. Across volumes the link is copied as a link, then removed. With
+  `follow_target`, what the link points to is copied and then the link is
+  removed; nothing reached through the link is ever deleted, so its target
+  stays whole.
+- **To the Recycle Bin** the shell takes the link. The test for that runs
+  only where `CABINETOS_TEST_RECYCLE_BIN=1` (CI), like the other bin tests.
+
 ### The Recycle Bin and long paths
 
 The shell's Recycle Bin takes paths shorter than 260 characters (UTF-16
@@ -269,7 +291,7 @@ after the same gap, and then `job_state_changed`.
 | What | How |
 |---|---|
 | Copy a file | `CopyFileExW` with a progress routine. `COPY_FILE_FAIL_IF_EXISTS` unless the decision is to overwrite. `COPY_FILE_NO_BUFFERING` for files of 256 MiB and more: a huge copy does not push everything else out of the file cache. |
-| Copy a link to a file | `CopyFileExW` with `COPY_FILE_COPY_SYMLINK`. |
+| Copy a link to a file | `CopyFileExW` with `COPY_FILE_COPY_SYMLINK`. That asks for the privilege to create symbolic links, which Developer Mode does not give; when it is missing, the link's reparse data is written into a new empty file, as for a link to a folder (Developer Mode allows that). |
 | Copy a link to a folder | The reparse data is read with `FSCTL_GET_REPARSE_POINT` and written to a new folder with `FSCTL_SET_REPARSE_POINT`: the copy points where the original points. A junction needs no rights; a symbolic link needs the right to create one. |
 | Pause | The progress routine blocks on a condition variable. The copying thread is the job's own, so blocking it stalls nothing else. |
 | Cancel | The progress routine returns `PROGRESS_CANCEL`; Windows deletes the partial destination. |

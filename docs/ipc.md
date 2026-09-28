@@ -299,8 +299,12 @@ offset 0                                        the section
  8  name_offset  u32  bytes from the start of the name arena
 12  name_len     u16  UTF-16 code units, not bytes
 14  kind         u8   0 unknown, 1 file, 2 directory, 3 link (symlink or junction)
-15  flags        u8   bit 0: id is a hash of the upper-cased name, top bit set
-                      (for file systems without file IDs)
+15  flags        u8   bit 0 (1): id is a hash of the upper-cased name, top bit
+                             set (for file systems without file IDs)
+                      bit 1 (2): a junction
+                      bit 2 (4): a symbolic link (to a folder when the
+                             attributes have FILE_ATTRIBUTE_DIRECTORY)
+                      bit 3 (8): a mount point (a junction to a volume)
 ```
 
 `ListingMeta` (40 bytes, 8-byte aligned), same index as the entry:
@@ -310,15 +314,30 @@ offset 0                                        the section
  8  modified    i64  FILETIME ticks (100 ns since 1601-01-01 UTC)
 16  created     i64  FILETIME ticks
 24  accessed    i64  FILETIME ticks
-32  attributes  u32  FILE_ATTRIBUTE_* bits
-36  reserved    u32  0
+32  attributes   u32  FILE_ATTRIBUTE_* bits
+36  reparse_tag  u32  IO_REPARSE_TAG_* of a reparse point; 0 otherwise
 ```
 
 A reader checks `magic` and `version` before anything else, then that every
-part lies inside `section_size`. Unknown `kind` values read as unknown.
-Links are only name-surrogate reparse points (symbolic links, junctions, WSL
-links); cloud placeholders such as OneDrive files keep kind file or
-directory, with the reparse-point bit in `attributes`.
+part lies inside `section_size`. Unknown `kind` values read as unknown, and
+unknown `flags` bits are ignored.
+
+**Links.** Kind 3 is a name-surrogate reparse point: an entry that stands
+for another path. The flags say which kind: a junction (`IO_REPARSE_TAG_MOUNT_POINT`
+to a folder), a symbolic link (`IO_REPARSE_TAG_SYMLINK`, to a file or a
+folder), or a mount point (the junction tag again, with a volume as its
+target; the core reads the link's reparse data to tell, one open per
+junction in the folder). A link of another name-surrogate kind (a WSL link,
+`IO_REPARSE_TAG_LX_SYMLINK`) has kind 3, no kind flag, and its tag in
+`reparse_tag`. Other reparse points are not links: OneDrive files, Windows'
+compressed system files (`IO_REPARSE_TAG_WOF`) and the like keep kind file
+or directory, with the reparse-point bit in `attributes` and their tag in
+`reparse_tag`, so a client can name them without opening them.
+
+The flags and the tag are additive: `reparse_tag` was a reserved field,
+always 0, and clients ignore flag bits they do not know, so the layout
+version stays 2. A link whose target is gone is still listed as a link;
+listing its path is `not_found`.
 
 ## Type names and icons
 
@@ -493,9 +512,12 @@ Three things go through the shell, which keeps Windows' old limit of 259
 characters:
 
 - `open_path` hands the file to its program by `ShellExecuteExW`, which
-  refuses a longer path, and its short 8.3 form too (the shell turns it
-  back into the long one). The answer is then `invalid_path`, with the
-  path's length and the limit in the message; nothing runs.
+  may refuse a longer path; it depends on the program. On one PC a
+  339-character `.txt` opened in Notepad, while a 311-character `.cmd` was
+  refused, in its short 8.3 form too (the shell turns that back into the
+  long one). When the shell refuses a path of 260 characters or more, the
+  answer is `invalid_path`, with the path's length and the limit in the
+  message; nothing runs.
 - The Recycle Bin: a delete to the bin of an item with a path of 260
   characters or more anywhere in it stops at a `path_too_long` conflict
   before the shell sees it
@@ -546,8 +568,11 @@ given (`not_found` otherwise): the core never lets the shell look further,
 so `notepad` in a folder without such a file runs nothing. Other errors
 are `access_denied`, or `io` with the shell's error code in the message
 (`os error 1155`: no application is associated with the file). A path of
-260 characters or more is `invalid_path` with the reason
-([Paths of any length](#paths-of-any-length)).
+260 characters or more that the shell refuses is `invalid_path` with the
+reason ([Paths of any length](#paths-of-any-length)). A link opens what it points
+to, as a double-click on it in Explorer does; a link whose target is gone
+is `not_found`, and the message names the target, before the shell is
+asked (the shell would say only "unspecified error").
 
 Opening a file is core infrastructure: it is the last step of
 navigation, and it hands the file to the application Windows has for it.

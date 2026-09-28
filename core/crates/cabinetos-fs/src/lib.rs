@@ -29,8 +29,8 @@
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
 //! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `com`,
-//! `hydrate`, and one function in `sort`), each block with a `SAFETY:`
-//! comment.
+//! `hydrate`, `link`, and one function in `sort`), each block with a
+//! `SAFETY:` comment.
 
 #[allow(unsafe_code)]
 mod com;
@@ -41,6 +41,8 @@ mod enumerate;
 mod error;
 #[allow(unsafe_code)]
 mod hydrate;
+#[allow(unsafe_code)]
+mod link;
 #[allow(unsafe_code)]
 mod open;
 #[allow(unsafe_code)]
@@ -105,11 +107,15 @@ impl Default for ListOptions {
 /// Reads the directory at `path` (absolute or relative; any length) and
 /// sorts it. `.` and `..` are never included.
 pub fn list_directory(path: &str, options: &ListOptions) -> Result<Listing, FsError> {
-    if options.pipelined {
-        return pipeline::list(path, options);
-    }
-    let mut listing = enumerate::read_directory(path, options.include_hidden, options.buffer_size)?;
-    sort::sort(&mut listing, options.sort);
+    let mut listing = if options.pipelined {
+        pipeline::list(path, options)?
+    } else {
+        let mut listing =
+            enumerate::read_directory(path, options.include_hidden, options.buffer_size)?;
+        sort::sort(&mut listing, options.sort);
+        listing
+    };
+    link::find_mount_points(path, &mut listing);
     Ok(listing)
 }
 

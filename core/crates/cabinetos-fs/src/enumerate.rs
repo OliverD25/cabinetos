@@ -31,7 +31,7 @@ use windows::Win32::Storage::FileSystem::{
 use windows::Win32::System::IO::IO_STATUS_BLOCK;
 use windows::core::PCWSTR;
 
-use crate::{Entry, FsError, Listing, attributes, path};
+use crate::{Entry, FsError, Listing, attributes, link, path};
 
 /// `STATUS_PENDING`: never expected on a handle opened for synchronous I/O.
 const STATUS_PENDING: NTSTATUS = NTSTATUS(0x103);
@@ -216,9 +216,16 @@ pub(crate) fn parse_records(
                 created: read_i64(record, field::CREATION_TIME).ok_or_else(malformed)?,
                 accessed: read_i64(record, field::LAST_ACCESS_TIME).ok_or_else(malformed)?,
                 attributes: attrs,
-                reserved: 0,
+                reparse_tag: 0,
             };
-            let reparse_tag = read_u32(record, field::EA_SIZE).ok_or_else(malformed)?;
+            // For a reparse point the extended attributes' size field holds
+            // the reparse tag instead (`FILE_ID_FULL_DIR_INFORMATION`).
+            let tag_or_size = read_u32(record, field::EA_SIZE).ok_or_else(malformed)?;
+            let reparse_tag = if attrs & attributes::REPARSE_POINT != 0 {
+                tag_or_size
+            } else {
+                0
+            };
             let file_id = read_i64(record, field::FILE_ID).ok_or_else(malformed)?;
             listing
                 .push(
@@ -228,7 +235,11 @@ pub(crate) fn parse_records(
                         .map(|pair| u16::from_le_bytes(*pair)),
                     file_id.cast_unsigned(),
                     kind_of(attrs, reparse_tag),
-                    meta,
+                    ListingMeta {
+                        reparse_tag,
+                        ..meta
+                    },
+                    link::flag_of(attrs, reparse_tag),
                 )
                 .map_err(|()| malformed())?;
         }
@@ -303,6 +314,7 @@ impl Listing {
         file_id: u64,
         kind: EntryKind,
         meta: ListingMeta,
+        link_flag: u8,
     ) -> Result<(), ()> {
         let start = self.names.len();
         self.names.extend(name);
@@ -319,7 +331,7 @@ impl Listing {
         self.entries.push(Entry {
             id,
             kind,
-            flags,
+            flags: flags | link_flag,
             meta,
             name_start,
             name_len,

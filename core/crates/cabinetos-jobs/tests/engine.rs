@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::hash::{DefaultHasher, Hasher};
-use std::os::windows::fs::MetadataExt;
+use std::os::windows::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use cabinetos_jobs::{EngineConfig, EventSink, JobError, JobGate, JobPreview, JobQueueManager};
 use cabinetos_protocol::{
     Conflict, ConflictKind, ConflictPolicy, ErrorCode, Event, JobAction, JobKind, JobOptions,
-    JobProgress, JobRequest, JobState, Resolution,
+    JobProgress, JobRequest, JobState, LinkPolicy, Resolution,
 };
 use tempfile::TempDir;
 
@@ -1145,6 +1145,274 @@ fn a_path_too_long_for_the_recycle_bin_waits_for_an_explicit_decision() {
     let (last, _) = engine.finish(job);
     assert_eq!(last.state, JobState::Completed, "{last:?}");
     assert!(!folder.exists(), "deleted for good, as decided");
+}
+
+/// A symbolic link, or `false` when this user may not make one (Windows
+/// asks for Developer Mode or an elevated process).
+fn symbolic_link(link: &Path, target: &Path, folder: bool) -> bool {
+    let made = if folder {
+        std::os::windows::fs::symlink_dir(target, link)
+    } else {
+        std::os::windows::fs::symlink_file(target, link)
+    };
+    match made {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!("skipped a symbolic link: {error}");
+            false
+        }
+    }
+}
+
+/// A folder with three files, the kind a link must never take with it.
+fn precious(folder: &Path) -> BTreeMap<String, String> {
+    fs::create_dir_all(folder.join("inner")).unwrap();
+    for (number, name) in (1..).zip(["one.txt", "two.txt", r"inner\three.txt"]) {
+        write_file(&folder.join(name), 100, number);
+    }
+    describe(folder)
+}
+
+#[test]
+fn deleting_a_link_removes_the_link_and_never_what_it_points_to() {
+    let dir = scratch("delete-link");
+    let target = dir.path().join("target");
+    let before = precious(&target);
+    let links = dir.path().join("links");
+    fs::create_dir(&links).unwrap();
+    junction(&links.join("junction"), &target);
+    let mut made = vec![links.join("junction")];
+    if symbolic_link(&links.join("folder symlink"), &target, true) {
+        made.push(links.join("folder symlink"));
+    }
+    if symbolic_link(
+        &links.join("file symlink.txt"),
+        &target.join("one.txt"),
+        false,
+    ) {
+        made.push(links.join("file symlink.txt"));
+    }
+    let engine = engine();
+    for link in &made {
+        let job = engine.start(
+            JobKind::Delete { permanent: true },
+            &[link],
+            None,
+            JobOptions::default(),
+        );
+        let (last, conflicts) = engine.finish(job);
+        assert_eq!(
+            last.state,
+            JobState::Completed,
+            "{}: {last:?}",
+            link.display()
+        );
+        assert!(conflicts.is_empty(), "{conflicts:?}");
+        assert!(
+            fs::symlink_metadata(link).is_err(),
+            "{} is gone",
+            link.display()
+        );
+        assert_eq!(
+            describe(&target),
+            before,
+            "{} took nothing with it",
+            link.display()
+        );
+    }
+}
+
+#[test]
+fn a_link_given_as_the_source_is_copied_as_a_link_or_followed_and_moved_as_a_link() {
+    let dir = scratch("copy-link");
+    let target = dir.path().join("target");
+    let before = precious(&target);
+    let link = dir.path().join("junction");
+    junction(&link, &target);
+    let engine = engine();
+
+    // as_link, the default: the copy points where the original points.
+    let as_link = dir.path().join("as link");
+    let job = engine.start(
+        JobKind::Copy,
+        &[&link],
+        Some(&as_link),
+        JobOptions::default(),
+    );
+    let (last, _) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    let copied = as_link.join("junction");
+    assert!(
+        fs::symlink_metadata(&copied)
+            .unwrap()
+            .file_type()
+            .is_symlink_dir()
+    );
+    assert_eq!(
+        fs::read_link(&copied).unwrap(),
+        fs::read_link(&link).unwrap()
+    );
+    assert_eq!(describe(&copied), before, "it leads to the same files");
+
+    // follow_target: what it points to is copied, as Explorer does.
+    let followed = dir.path().join("followed");
+    let job = engine.start(
+        JobKind::Copy,
+        &[&link],
+        Some(&followed),
+        JobOptions {
+            copy_links: LinkPolicy::FollowTarget,
+            ..JobOptions::default()
+        },
+    );
+    let (last, _) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    let real = followed.join("junction");
+    assert!(
+        !fs::symlink_metadata(&real)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(describe(&real), before);
+
+    // A move on one volume renames the link; what it points to stays put.
+    let moved_into = dir.path().join("moved");
+    fs::create_dir(&moved_into).unwrap();
+    let job = engine.start(
+        JobKind::Move,
+        &[&link],
+        Some(&moved_into),
+        JobOptions::default(),
+    );
+    let (last, _) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(fs::symlink_metadata(&link).is_err());
+    assert!(
+        fs::symlink_metadata(moved_into.join("junction"))
+            .unwrap()
+            .file_type()
+            .is_symlink_dir()
+    );
+    assert_eq!(describe(&target), before, "the target did not move");
+}
+
+#[test]
+fn a_symbolic_link_to_a_file_is_copied_as_a_link_wherever_this_user_may_make_one() {
+    // Developer Mode lets a user make symbolic links without the privilege
+    // that CopyFileExW's COPY_FILE_COPY_SYMLINK asks for; the copy must
+    // work wherever making the link works.
+    let dir = scratch("copy-file-link");
+    let target = dir.path().join("kept.txt");
+    fs::write(&target, "kept").unwrap();
+    let absolute = dir.path().join("absolute.txt");
+    if !symbolic_link(&absolute, &target, false) {
+        return;
+    }
+    let relative = dir.path().join("relative.txt");
+    std::os::windows::fs::symlink_file("kept.txt", &relative).unwrap();
+    let destination = dir.path().join("dst");
+    let engine = engine();
+    let job = engine.start(
+        JobKind::Copy,
+        &[&absolute, &relative],
+        Some(&destination),
+        JobOptions::default(),
+    );
+    let deadline = Instant::now() + JOB_DEADLINE;
+    loop {
+        match engine.next(job, deadline) {
+            Some(Event::JobConflict(conflict)) => panic!("{conflict:?}"),
+            Some(Event::JobStateChanged { state, .. }) if state.is_terminal() => {
+                assert_eq!(state, JobState::Completed);
+                break;
+            }
+            Some(_) => {}
+            None => panic!("the copy did not end"),
+        }
+    }
+    for name in ["absolute.txt", "relative.txt"] {
+        let copy = destination.join(name);
+        assert!(
+            fs::symlink_metadata(&copy)
+                .unwrap()
+                .file_type()
+                .is_symlink_file(),
+            "{name} is a link"
+        );
+        assert_eq!(
+            fs::read_link(&copy).unwrap(),
+            fs::read_link(dir.path().join(name)).unwrap(),
+            "{name} points where the original points"
+        );
+    }
+    assert_eq!(fs::read_to_string(&target).unwrap(), "kept");
+}
+
+#[test]
+fn following_links_stops_at_a_link_back_into_the_copy() {
+    let dir = scratch("follow-loop");
+    let source = dir.path().join("src");
+    fs::create_dir_all(source.join("sub")).unwrap();
+    write_file(&source.join("sub").join("file.txt"), 10, 1);
+    junction(&source.join("sub").join("back to src"), &source);
+    let destination = dir.path().join("dst");
+    let engine = engine();
+    let job = engine.start(
+        JobKind::Copy,
+        &[&source],
+        Some(&destination),
+        JobOptions {
+            copy_links: LinkPolicy::FollowTarget,
+            ..JobOptions::default()
+        },
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?}");
+    assert!(conflicts.is_empty(), "{conflicts:?}");
+    // The loop is copied as a link, not followed forever.
+    let back = destination.join("src").join("sub").join("back to src");
+    assert!(
+        fs::symlink_metadata(&back)
+            .unwrap()
+            .file_type()
+            .is_symlink_dir()
+    );
+    assert!(
+        destination
+            .join("src")
+            .join("sub")
+            .join("file.txt")
+            .is_file()
+    );
+}
+
+#[test]
+fn the_recycle_bin_takes_a_junction_and_not_what_it_points_to() {
+    // Puts a junction into the Recycle Bin of the machine running the
+    // test: CI only, as above.
+    if std::env::var_os("CABINETOS_TEST_RECYCLE_BIN").is_none_or(|value| value != "1") {
+        eprintln!(
+            "skipped: set CABINETOS_TEST_RECYCLE_BIN=1 to send a test junction to the Recycle Bin"
+        );
+        return;
+    }
+    let dir = scratch("recycle-link");
+    let target = dir.path().join("target");
+    let before = precious(&target);
+    let link = dir.path().join("junction");
+    junction(&link, &target);
+    let engine = engine();
+    let job = engine.start(
+        JobKind::Delete { permanent: false },
+        &[&link],
+        None,
+        JobOptions::default(),
+    );
+    let (last, conflicts) = engine.finish(job);
+    assert_eq!(last.state, JobState::Completed, "{last:?} {conflicts:?}");
+    assert!(fs::symlink_metadata(&link).is_err());
+    assert_eq!(describe(&target), before);
 }
 
 #[test]

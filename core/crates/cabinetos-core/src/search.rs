@@ -444,6 +444,51 @@ mod tests {
     }
 
     #[test]
+    fn a_walk_never_follows_a_link_into_a_loop() {
+        let root = std::env::temp_dir().join("cabinetos-index-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("walk-loop")
+            .tempdir_in(root)
+            .unwrap();
+        let junction = |link: &Path, target: &Path| {
+            let output = std::process::Command::new("cmd")
+                .args(["/c", "mklink", "/J"])
+                .arg(link)
+                .arg(target)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+        };
+        let lp = dir.path().join("loop");
+        std::fs::create_dir_all(lp.join("inner")).unwrap();
+        std::fs::write(lp.join("inner").join("needle.txt"), "x").unwrap();
+        junction(&lp.join("inner").join("back to loop"), &lp);
+        junction(&dir.path().join("needle junction"), &lp);
+        if let Err(error) = std::os::windows::fs::symlink_dir(&lp, lp.join("needle symlink")) {
+            println!("no symbolic link here: {error}");
+        }
+        let root = dir.path().display().to_string();
+        let outcome = walk(&root, &Matcher::new("needle").unwrap(), 50, WALK_LIMITS).unwrap();
+        assert!(outcome.complete);
+        assert!(outcome.visited < 20, "{outcome:?}");
+        let mut found: Vec<&str> = outcome
+            .hits
+            .iter()
+            .map(|hit| &hit.path[root.len() + 1..])
+            .collect();
+        found.sort_unstable();
+        // The file once, by its real path; the links as entries of their
+        // own, never entered.
+        let mut wanted = vec![r"loop\inner\needle.txt", "needle junction"];
+        if lp.join("needle symlink").exists() {
+            wanted.push(r"loop\needle symlink");
+        }
+        wanted.sort_unstable();
+        assert_eq!(found, wanted);
+    }
+
+    #[test]
     fn the_entry_limit_stops_the_walk() {
         let dir = tree();
         let root = dir.path().display().to_string();

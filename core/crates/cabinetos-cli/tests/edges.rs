@@ -1,6 +1,6 @@
 //! `cabinetos-cli` against a real core with the edge cases of the core's
 //! hardening, one section per class: names beyond ASCII (docs/ui.md, "Edge
-//! cases") and paths longer than 260 characters. What the CLI prints into a
+//! cases"), paths longer than 260 characters, and links. What the CLI prints into a
 //! pipe is UTF-8; on a console the standard library writes through
 //! `WriteConsoleW`, so the console's code page plays no part. Everything
 //! written lives under `%TEMP%\cabinetos-core-test\`.
@@ -282,4 +282,47 @@ fn a_folder_deeper_than_260_characters_works_like_any_other() {
     assert!(error.contains("260"), "{error}");
     std::thread::sleep(Duration::from_millis(500));
     assert!(!marker.exists(), "the shell ran the script");
+}
+
+// Junctions, symbolic links and mount points.
+
+#[test]
+fn ls_long_names_the_kind_of_each_link() {
+    let core = start_core();
+    let dir = scratch("cli-links");
+    let target = dir.path().join("target");
+    std::fs::create_dir(&target).unwrap();
+    let junction = |link: &str, target: &str| {
+        let output = Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(dir.path().join(link))
+            .arg(target)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+    };
+    // A mount point is flagged the same way; cabinetos-fs's tests make one.
+    junction("junction", target.to_str().unwrap());
+    let symlink = std::os::windows::fs::symlink_dir(&target, dir.path().join("symlink")).is_ok();
+    let text = stdout(&cli(
+        &core,
+        &["ls", "--long", &dir.path().display().to_string()],
+    ));
+    let line = |name: &str| {
+        text.lines()
+            .find(|line| line.contains(&format!(" {name}")))
+            .unwrap_or_else(|| panic!("no line for {name}: {text}"))
+            .to_owned()
+    };
+    assert!(
+        line("junction").starts_with("l ") && line("junction").ends_with("junction [junction]"),
+        "{text}"
+    );
+    if symlink {
+        assert!(
+            line("symlink").ends_with("symlink [symbolic link]"),
+            "{text}"
+        );
+    }
+    assert!(line("target").ends_with(" target"), "{text}");
 }

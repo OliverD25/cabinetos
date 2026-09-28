@@ -110,3 +110,27 @@ fn watches_a_folder_deeper_than_260_characters() {
     assert_eq!(changes.recv_timeout(WAIT), Ok(DirectoryChanged::Changed));
     watcher.stop();
 }
+
+#[test]
+fn watching_a_junction_reports_changes_in_what_it_points_to() {
+    let root = std::env::temp_dir().join("cabinetos-fs-test");
+    fs::create_dir_all(&root).unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("watch-link")
+        .tempdir_in(root)
+        .unwrap();
+    let target = dir.path().join("target");
+    fs::create_dir(&target).unwrap();
+    let link = dir.path().join("junction");
+    let output = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(&link)
+        .arg(&target)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let (watcher, changes) = start(&link);
+    fs::write(target.join("new.txt"), b"through the real path").unwrap();
+    assert_eq!(changes.recv_timeout(WAIT), Ok(DirectoryChanged::Changed));
+    watcher.stop();
+}

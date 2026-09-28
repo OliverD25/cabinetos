@@ -492,3 +492,245 @@ fn a_long_path_lists_the_same_in_the_plain_and_the_verbatim_form() {
     assert_eq!(names(&verbatim), names(&plain));
     assert!(deep.join("deep file.txt").as_os_str().len() > 300);
 }
+
+/// `IO_REPARSE_TAG_MOUNT_POINT`: junctions and mount points both.
+const TAG_MOUNT_POINT: u32 = 0xA000_0003;
+/// `IO_REPARSE_TAG_SYMLINK`.
+const TAG_SYMLINK: u32 = 0xA000_000C;
+const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+
+/// A junction at `link` to `target`, which need not exist; no rights needed.
+fn junction(link: &Path, target: &str) {
+    let output = Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(link)
+        .arg(target)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "mklink /J failed: {output:?}");
+}
+
+/// A mount point at `link` (a new, empty folder) to `volume`
+/// (`Volume{…}`): a junction whose target is a volume, written with
+/// `FSCTL_SET_REPARSE_POINT` as Windows writes one. `mklink /J` checks that
+/// the volume exists, and a test must not lead into a real one; through a
+/// volume that does not exist nothing can ever be reached.
+#[allow(unsafe_code)]
+fn mount_point(link: &Path, volume: &str) {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+
+    use windows::Win32::Foundation::{GENERIC_WRITE, HANDLE};
+    use windows::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ,
+        OPEN_EXISTING,
+    };
+    use windows::Win32::System::IO::DeviceIoControl;
+    use windows::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
+    use windows::core::PCWSTR;
+
+    fs::create_dir(link).unwrap();
+    let substitute: Vec<u16> = format!(r"\??\{volume}\").encode_utf16().collect();
+    let print: Vec<u16> = format!(r"\\?\{volume}\").encode_utf16().collect();
+    let names = (substitute.len() + 1 + print.len() + 1) * 2;
+    let small = |value: usize| u16::try_from(value).unwrap().to_le_bytes();
+    let mut data = Vec::new();
+    data.extend(TAG_MOUNT_POINT.to_le_bytes());
+    data.extend(small(8 + names));
+    data.extend(small(0));
+    data.extend(small(0));
+    data.extend(small(substitute.len() * 2));
+    data.extend(small((substitute.len() + 1) * 2));
+    data.extend(small(print.len() * 2));
+    for unit in substitute.iter().chain(&[0]).chain(&print).chain(&[0]) {
+        data.extend(unit.to_le_bytes());
+    }
+    let wide: Vec<u16> = format!(r"\\?\{}", link.display())
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    // SAFETY: `wide` is NUL-terminated and outlives the call; the folder
+    // itself is opened, for writing its reparse data.
+    let raw = unsafe {
+        CreateFileW(
+            PCWSTR(wide.as_ptr()),
+            GENERIC_WRITE.0,
+            FILE_SHARE_READ,
+            None,
+            OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+            None,
+        )
+    }
+    .unwrap();
+    // SAFETY: CreateFileW returned a new handle nothing else owns.
+    let folder = unsafe { OwnedHandle::from_raw_handle(raw.0) };
+    let length = u32::try_from(data.len()).unwrap();
+    // SAFETY: the handle is open for writing; `data` is a whole reparse
+    // buffer of `length` bytes that outlives the call.
+    unsafe {
+        DeviceIoControl(
+            HANDLE(folder.as_raw_handle()),
+            FSCTL_SET_REPARSE_POINT,
+            Some(data.as_ptr().cast()),
+            length,
+            None,
+            0,
+            None,
+            None,
+        )
+    }
+    .unwrap();
+}
+
+/// A symbolic link, or `false` when this user may not make one (Windows
+/// asks for Developer Mode or an elevated process).
+fn symbolic_link(link: &Path, target: &Path, folder: bool) -> bool {
+    let made = if folder {
+        std::os::windows::fs::symlink_dir(target, link)
+    } else {
+        std::os::windows::fs::symlink_file(target, link)
+    };
+    match made {
+        Ok(()) => true,
+        Err(error) => {
+            println!("skipped a symbolic link: {error}");
+            false
+        }
+    }
+}
+
+#[test]
+fn links_say_what_they_are() {
+    let dir = scratch("links");
+    let target = dir.path().join("target");
+    fs::create_dir(&target).unwrap();
+    touch(&target.join("kept.txt"), b"kept");
+    let links = dir.path().join("links");
+    fs::create_dir(&links).unwrap();
+    fs::create_dir(links.join("plain folder")).unwrap();
+    touch(&links.join("plain.txt"), b"x");
+    junction(&links.join("junction"), target.to_str().unwrap());
+    mount_point(
+        &links.join("mount point"),
+        "Volume{00000000-0000-0000-0000-000000000000}",
+    );
+    let folder_link = symbolic_link(&links.join("folder symlink"), &target, true);
+    let file_link = symbolic_link(
+        &links.join("file symlink.txt"),
+        &target.join("kept.txt"),
+        false,
+    );
+
+    let listing = list(&links);
+    let find = |name: &str| {
+        listing
+            .entries()
+            .iter()
+            .find(|entry| listing.name_string(entry) == name)
+            .copied()
+            .unwrap_or_else(|| panic!("{name} is not listed"))
+    };
+    let link_flags = ListingEntry::FLAG_JUNCTION
+        | ListingEntry::FLAG_SYMBOLIC_LINK
+        | ListingEntry::FLAG_MOUNT_POINT;
+    let check = |name: &str, flag: u8, tag: u32, directory: bool| {
+        let entry = find(name);
+        assert_eq!(entry.kind, EntryKind::ReparsePoint, "{name}");
+        assert_eq!(
+            entry.flags & link_flags,
+            flag,
+            "{name}: flags {:#x}",
+            entry.flags
+        );
+        assert_eq!(entry.meta.reparse_tag, tag, "{name}");
+        assert_eq!(
+            entry.meta.attributes & FILE_ATTRIBUTE_DIRECTORY != 0,
+            directory,
+            "{name}"
+        );
+    };
+    check(
+        "junction",
+        ListingEntry::FLAG_JUNCTION,
+        TAG_MOUNT_POINT,
+        true,
+    );
+    check(
+        "mount point",
+        ListingEntry::FLAG_MOUNT_POINT,
+        TAG_MOUNT_POINT,
+        true,
+    );
+    if folder_link {
+        check(
+            "folder symlink",
+            ListingEntry::FLAG_SYMBOLIC_LINK,
+            TAG_SYMLINK,
+            true,
+        );
+    }
+    if file_link {
+        check(
+            "file symlink.txt",
+            ListingEntry::FLAG_SYMBOLIC_LINK,
+            TAG_SYMLINK,
+            false,
+        );
+    }
+    for plain in ["plain folder", "plain.txt"] {
+        let entry = find(plain);
+        assert_eq!(entry.flags & link_flags, 0, "{plain}");
+        assert_eq!(entry.meta.reparse_tag, 0, "{plain}");
+    }
+
+    // The same through the shared-memory section.
+    let writer = ListingWriter::new(&listing).unwrap();
+    let mut section = vec![0u8; writer.section_size()];
+    writer.write(&mut section, 1).unwrap();
+    let reader = ListingReader::new(&section).unwrap();
+    let junction_view = reader
+        .entries()
+        .map(Result::unwrap)
+        .find(|entry| entry.name == "junction")
+        .unwrap();
+    assert_eq!(
+        junction_view.flags & link_flags,
+        ListingEntry::FLAG_JUNCTION
+    );
+    assert_eq!(junction_view.meta.reparse_tag, TAG_MOUNT_POINT);
+}
+
+#[test]
+fn a_link_lists_what_it_points_to_and_a_broken_one_is_still_a_link() {
+    let dir = scratch("link-target");
+    let target = dir.path().join("target");
+    fs::create_dir(&target).unwrap();
+    touch(&target.join("kept.txt"), b"kept");
+    junction(&dir.path().join("junction"), target.to_str().unwrap());
+    assert_eq!(names(&list(&dir.path().join("junction"))), ["kept.txt"]);
+    if symbolic_link(&dir.path().join("folder symlink"), &target, true) {
+        assert_eq!(
+            names(&list(&dir.path().join("folder symlink"))),
+            ["kept.txt"]
+        );
+    }
+
+    let gone = dir.path().join("gone");
+    fs::create_dir(&gone).unwrap();
+    junction(&dir.path().join("broken"), gone.to_str().unwrap());
+    fs::remove_dir(&gone).unwrap();
+    let listing = list(dir.path());
+    let broken = listing
+        .entries()
+        .iter()
+        .find(|entry| listing.name_string(entry) == "broken")
+        .unwrap();
+    assert_eq!(broken.kind, EntryKind::ReparsePoint);
+    assert_ne!(broken.flags & ListingEntry::FLAG_JUNCTION, 0);
+    let error = list_directory(
+        dir.path().join("broken").to_str().unwrap(),
+        &ListOptions::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(error, FsError::NotFound { .. }), "{error:?}");
+}

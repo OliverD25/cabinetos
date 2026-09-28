@@ -9,8 +9,8 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use windows::Win32::Foundation::{FILETIME, GENERIC_WRITE, HANDLE};
 use windows::Win32::Storage::FileSystem::{
     COPY_FILE_COPY_SYMLINK, COPY_FILE_FAIL_IF_EXISTS, COPY_FILE_NO_BUFFERING, COPYFILE_FLAGS,
-    COPYPROGRESSROUTINE_PROGRESS, CopyFileExW, CreateDirectoryW, CreateFileW, DeleteFileW,
-    FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_READONLY, FILE_CREATION_DISPOSITION,
+    COPYPROGRESSROUTINE_PROGRESS, CREATE_NEW, CopyFileExW, CreateDirectoryW, CreateFileW,
+    DeleteFileW, FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_READONLY, FILE_CREATION_DISPOSITION,
     FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAGS_AND_ATTRIBUTES,
     FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
     FILE_WRITE_ATTRIBUTES, FIND_FIRST_EX_FLAGS, FindClose, FindExInfoBasic, FindExSearchNameMatch,
@@ -38,6 +38,7 @@ pub(crate) mod code {
     pub(crate) const FILE_EXISTS: u32 = 80;
     pub(crate) const DISK_FULL: u32 = 112;
     pub(crate) const INVALID_NAME: u32 = 123;
+    pub(crate) const PRIVILEGE_NOT_HELD: u32 = 1314;
     pub(crate) const DIR_NOT_EMPTY: u32 = 145;
     pub(crate) const ALREADY_EXISTS: u32 = 183;
     pub(crate) const FILENAME_EXCED_RANGE: u32 = 206;
@@ -372,8 +373,40 @@ pub(crate) fn set_times(path: &str, times: Times, directory: bool) -> Result<(),
 /// link: a new folder with the same reparse data, so it points where the
 /// original points. The target is not copied.
 pub(crate) fn copy_directory_link(source: &str, destination: &str) -> Result<(), Code> {
+    let data = reparse_data(source)?;
+    create_directory(destination)?;
+    let written = write_reparse_data(destination, &data);
+    if written.is_err() {
+        // Our own empty folder; nothing of the user's is lost.
+        let _ = remove_directory(destination);
+    }
+    written
+}
+
+/// Copies a symbolic link to a file as a link, the way
+/// [`copy_directory_link`] copies one to a folder: a new empty file with
+/// the same reparse data. `CopyFileExW` asks for the privilege to create
+/// symbolic links; this needs only what Developer Mode grants.
+pub(crate) fn copy_file_link(source: &str, destination: &str) -> Result<(), Code> {
+    let data = reparse_data(source)?;
+    drop(open(
+        destination,
+        GENERIC_WRITE.0,
+        CREATE_NEW,
+        FILE_ATTRIBUTE_NORMAL,
+    )?);
+    let written = write_reparse_data(destination, &data);
+    if written.is_err() {
+        // Our own empty file; nothing of the user's is lost.
+        let _ = delete_file(destination);
+    }
+    written
+}
+
+/// The reparse data of the link at `path`, which is not followed.
+fn reparse_data(path: &str) -> Result<Vec<u8>, Code> {
     let link = open(
-        source,
+        path,
         FILE_READ_ATTRIBUTES.0,
         OPEN_EXISTING,
         FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
@@ -395,37 +428,34 @@ pub(crate) fn copy_directory_link(source: &str, destination: &str) -> Result<(),
         )
     }
     .map_err(|error| code_of(&error))?;
-    drop(link);
+    buffer.truncate(length as usize);
+    Ok(buffer)
+}
 
-    create_directory(destination)?;
-    let written = open(
-        destination,
+/// Gives the file or folder at `path` the reparse data `data`.
+fn write_reparse_data(path: &str, data: &[u8]) -> Result<(), Code> {
+    let handle = open(
+        path,
         GENERIC_WRITE.0,
         OPEN_EXISTING,
         FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
-    )
-    .and_then(|handle| {
-        // SAFETY: the handle is open with write access for the call; the
-        // first `length` bytes of `buffer` are the reparse data read above.
-        unsafe {
-            DeviceIoControl(
-                HANDLE(handle.as_raw_handle()),
-                FSCTL_SET_REPARSE_POINT,
-                Some(buffer.as_ptr().cast::<c_void>()),
-                length,
-                None,
-                0,
-                None,
-                None,
-            )
-        }
-        .map_err(|error| code_of(&error))
-    });
-    if written.is_err() {
-        // Our own empty folder; nothing of the user's is lost.
-        let _ = remove_directory(destination);
+    )?;
+    let length = u32::try_from(data.len()).map_err(|_| code::INVALID_NAME)?;
+    // SAFETY: the handle is open with write access for the call; `data` is
+    // the whole reparse buffer read from the original link.
+    unsafe {
+        DeviceIoControl(
+            HANDLE(handle.as_raw_handle()),
+            FSCTL_SET_REPARSE_POINT,
+            Some(data.as_ptr().cast::<c_void>()),
+            length,
+            None,
+            0,
+            None,
+            None,
+        )
     }
-    written
+    .map_err(|error| code_of(&error))
 }
 
 #[cfg(test)]

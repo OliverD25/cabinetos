@@ -222,9 +222,11 @@ pub(crate) fn add_copy_root(
     stop: &dyn Stop,
 ) -> Result<(), PlanError> {
     let mut info = root(source)?;
+    let mut through_link = false;
     if let Some(kind) = info.link {
         if let (LinkPolicy::FollowTarget, Some(followed)) = (links, target(source)) {
             info = followed;
+            through_link = true;
         } else {
             plan.files.push(FileItem {
                 source: source.to_owned(),
@@ -265,8 +267,8 @@ pub(crate) fn add_copy_root(
         times: info.times,
         remove_source: transfer != Transfer::Copy,
     });
-    let mut pending = vec![plan.dirs.len() - 1];
-    while let Some(dir_index) = pending.pop() {
+    let mut pending = vec![(plan.dirs.len() - 1, inside(transfer, through_link))];
+    while let Some((dir_index, transfer)) = pending.pop() {
         if stop.stop() {
             return Err(PlanError::Cancelled);
         }
@@ -287,6 +289,18 @@ pub(crate) fn add_copy_root(
     Ok(())
 }
 
+/// How the contents of a folder are transferred, when the folder itself
+/// is by `transfer`. What a followed folder link holds is copied and never
+/// deleted: the delete half of a move removes the link (its folder item,
+/// with `RemoveDirectoryW`, which takes a link alone) and nothing through it.
+fn inside(transfer: Transfer, through_link: bool) -> Transfer {
+    if through_link && transfer == Transfer::CopyAndDelete {
+        Transfer::Copy
+    } else {
+        transfer
+    }
+}
+
 /// One folder's listing going into a copy plan.
 struct Walk<'a> {
     links: LinkPolicy,
@@ -303,7 +317,7 @@ impl Walk<'_> {
         plan: &mut Plan,
         listing: &cabinetos_fs::Listing,
         followed: &mut Vec<std::path::PathBuf>,
-        pending: &mut Vec<usize>,
+        pending: &mut Vec<(usize, Transfer)>,
     ) {
         for entry in listing.entries() {
             let child_name = listing.name_string(entry);
@@ -316,6 +330,7 @@ impl Walk<'_> {
             let is_dir_link = entry.meta.attributes & DIRECTORY != 0;
             let mut kind = entry.kind;
             let mut size = entry.meta.size;
+            let mut through_link = false;
             if kind == EntryKind::ReparsePoint && self.links == LinkPolicy::FollowTarget {
                 match target(&child) {
                     // Following a folder link that leads back into what is
@@ -331,6 +346,7 @@ impl Walk<'_> {
                         if !cycle {
                             followed.extend(canonical);
                             kind = EntryKind::Directory;
+                            through_link = true;
                         }
                     }
                     Some(found) => {
@@ -349,7 +365,7 @@ impl Walk<'_> {
                         times,
                         remove_source: self.transfer != Transfer::Copy,
                     });
-                    pending.push(plan.dirs.len() - 1);
+                    pending.push((plan.dirs.len() - 1, inside(self.transfer, through_link)));
                 }
                 EntryKind::ReparsePoint => plan.files.push(FileItem {
                     source: child,
@@ -527,6 +543,85 @@ fn fs_code(error: &cabinetos_fs::FsError) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn junction(link: &std::path::Path, target: &std::path::Path) {
+        let output = std::process::Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+    }
+
+    #[test]
+    fn a_move_that_follows_a_link_never_deletes_through_it() {
+        let dir = tempfile::Builder::new()
+            .prefix("plan-follow")
+            .tempdir_in(crate::test_dir())
+            .unwrap();
+        let target = dir.path().join("target");
+        std::fs::create_dir_all(target.join("deep")).unwrap();
+        std::fs::write(target.join("c.txt"), "c").unwrap();
+        std::fs::write(target.join("deep").join("d.txt"), "d").unwrap();
+        let source = dir.path().join("src");
+        std::fs::create_dir_all(source.join("sub")).unwrap();
+        std::fs::write(source.join("a.txt"), "a").unwrap();
+        std::fs::write(source.join("sub").join("b.txt"), "b").unwrap();
+        junction(&source.join("link"), &target);
+        let stop = || false;
+
+        // Inside a moved folder: its own files are moved, what the link
+        // leads to is only copied; the link's own folder item goes at the
+        // end (removing a link removes the link alone).
+        let mut plan = Plan::default();
+        let text = |path: &std::path::Path| path.display().to_string();
+        add_copy_root(
+            &mut plan,
+            &text(&source),
+            "src",
+            None,
+            Transfer::CopyAndDelete,
+            LinkPolicy::FollowTarget,
+            &stop,
+        )
+        .unwrap();
+        for file in &plan.files {
+            let through_link = file.source.contains(r"\link\");
+            let wanted = if through_link {
+                Transfer::Copy
+            } else {
+                Transfer::CopyAndDelete
+            };
+            assert_eq!(file.transfer, wanted, "{}", file.source);
+        }
+        assert_eq!(plan.files.len(), 4);
+        for folder in &plan.dirs {
+            let wanted = !folder.source.contains(r"\link\");
+            assert_eq!(folder.remove_source, wanted, "{}", folder.source);
+        }
+
+        // A link given as the source, followed: the same.
+        let mut plan = Plan::default();
+        add_copy_root(
+            &mut plan,
+            &text(&source.join("link")),
+            "link",
+            None,
+            Transfer::CopyAndDelete,
+            LinkPolicy::FollowTarget,
+            &stop,
+        )
+        .unwrap();
+        assert_eq!(plan.files.len(), 2);
+        assert!(
+            plan.files
+                .iter()
+                .all(|file| file.transfer == Transfer::Copy)
+        );
+        assert!(plan.dirs[0].remove_source, "the link itself goes");
+        assert!(plan.dirs[1..].iter().all(|folder| !folder.remove_source));
+    }
 
     #[test]
     fn names_and_joins() {

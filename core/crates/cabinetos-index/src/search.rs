@@ -349,6 +349,32 @@ mod tests {
     }
 
     #[test]
+    fn a_link_is_an_entry_of_its_own_and_is_never_entered() {
+        // The index holds what the MFT holds: a junction is one entry with
+        // its parent, and nothing has it as a parent. So what it points to
+        // is found once, by its real path, and a search under the link
+        // finds nothing: the index does not follow links, and cannot loop.
+        let mut index = VolumeIndex::new('E');
+        index.upsert(ROOT, ROOT, &utf16("."), 0x10);
+        let lp = 0x0001_0000_0000_4000;
+        index.upsert(lp, ROOT, &utf16("loop"), 0x10);
+        index.upsert(0x0001_0000_0000_4001, lp, &utf16("needle.txt"), 0x20);
+        let link = 0x0001_0000_0000_4002;
+        // FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT
+        index.upsert(link, lp, &utf16("back to loop"), 0x410);
+        let paths = |query: &str, root: Option<Frn>| -> Vec<String> {
+            index
+                .search(&Matcher::new(query).unwrap(), root, 10)
+                .into_iter()
+                .map(|hit| hit.path)
+                .collect()
+        };
+        assert_eq!(paths("needle", None), [r"E:\loop\needle.txt"]);
+        assert_eq!(paths("back to", None), [r"E:\loop\back to loop"]);
+        assert!(paths("needle", Some(link)).is_empty());
+    }
+
+    #[test]
     fn the_root_filter_keeps_descendants_only() {
         let mut index = sample();
         index.upsert(0x0001_0000_0000_0700, ROOT, &utf16("cat.txt"), 0x20);

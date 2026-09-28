@@ -7,7 +7,7 @@ use anyhow::{Context, bail};
 use cabinetos_fs::time::local_time;
 use cabinetos_fs::{EntryView, ListingReader};
 use cabinetos_ipc::PipeClient;
-use cabinetos_protocol::shm::EntryKind;
+use cabinetos_protocol::shm::{EntryKind, ListingEntry};
 use cabinetos_protocol::{Envelope, Event, RefreshReason, Request, Response, SortSpec};
 
 use crate::{expect_welcome, failure, say, send};
@@ -119,12 +119,13 @@ fn print_entries(entries: &[EntryView], long: bool) -> bool {
         let written = if long {
             writeln!(
                 out,
-                "{} {} {} {:>15} {}",
+                "{} {} {} {:>15} {}{}",
                 glyph(entry.kind),
                 attribute_letters(entry.meta.attributes),
                 modified(entry.meta.modified),
                 size(entry),
-                entry.name
+                entry.name,
+                link_kind(entry.flags)
             )
         } else {
             writeln!(out, "{} {}", glyph(entry.kind), entry.name)
@@ -143,6 +144,19 @@ fn glyph(kind: EntryKind) -> char {
         EntryKind::ReparsePoint => 'l',
         EntryKind::File => '-',
         EntryKind::Unknown => '?',
+    }
+}
+
+/// What kind of link the listing says an entry is, after its name.
+fn link_kind(flags: u8) -> &'static str {
+    if flags & ListingEntry::FLAG_JUNCTION != 0 {
+        " [junction]"
+    } else if flags & ListingEntry::FLAG_SYMBOLIC_LINK != 0 {
+        " [symbolic link]"
+    } else if flags & ListingEntry::FLAG_MOUNT_POINT != 0 {
+        " [mount point]"
+    } else {
+        ""
     }
 }
 

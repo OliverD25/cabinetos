@@ -30,6 +30,22 @@ pub fn open_path(path: &str) -> Result<(), FsError> {
             &windows::core::Error::from_thread(),
         ));
     }
+    // A link whose target is gone exists itself, but the shell can open
+    // nothing through it and says only "unspecified error": name the target.
+    if std::fs::symlink_metadata(path).is_ok_and(|link| link.file_type().is_symlink())
+        && std::fs::metadata(path).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+    {
+        let target = std::fs::read_link(path).map_or_else(
+            |_| path.to_owned(),
+            |target| {
+                let target = target.display().to_string();
+                target
+                    .strip_prefix(r"\\?\")
+                    .map_or_else(|| target.clone(), str::to_owned)
+            },
+        );
+        return Err(FsError::NotFound { path: target });
+    }
     // The shell parses plain paths, not the `\\?\` form.
     let plain = std::path::absolute(path).map_err(|error| FsError::InvalidPath {
         path: path.to_owned(),
@@ -53,14 +69,16 @@ pub fn open_path(path: &str) -> Result<(), FsError> {
         // The terminating NUL is not part of the length.
         let length = plain.len() - 1;
         if length >= MAX_PATH {
-            // The shell gives no reason here, and the short (8.3) form
-            // does not help: the shell turns it back into the long one.
+            // Whether the shell takes such a path depends on the program
+            // (Notepad took 339 characters, cmd refused 311). It gives no
+            // reason, and the short (8.3) form does not help: the shell
+            // turns it back into the long one.
             return FsError::InvalidPath {
                 path: path.to_owned(),
                 reason: format!(
-                    "the path is {length} characters long, and Windows opens files with \
-                     their programs only by paths shorter than {MAX_PATH} characters; \
-                     move the file or shorten a folder name on the way"
+                    "the shell refused to open it; its path has {length} characters, and \
+                     many programs take only paths shorter than {MAX_PATH}; move the file \
+                     or shorten a folder name on the way"
                 ),
             };
         }
@@ -130,6 +148,45 @@ mod tests {
 
         let missing = deep.join("missing.txt");
         let error = open_path(missing.to_str().unwrap()).unwrap_err();
+        assert!(matches!(error, FsError::NotFound { .. }), "{error:?}");
+    }
+
+    #[test]
+    fn a_link_whose_target_is_gone_is_not_found_before_the_shell_is_asked() {
+        let root = std::env::temp_dir().join("cabinetos-fs-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("open-link")
+            .tempdir_in(&root)
+            .unwrap();
+        // An extension nothing is associated with: if the shell were asked,
+        // it would refuse without opening anything.
+        let target = dir.path().join("gone.cabinetos-link-test");
+        std::fs::write(&target, "x").unwrap();
+        let link = dir.path().join("link.cabinetos-link-test");
+        if let Err(error) = std::os::windows::fs::symlink_file(&target, &link) {
+            println!("skipped: this user may not make a symbolic link: {error}");
+            return;
+        }
+        std::fs::remove_file(&target).unwrap();
+        let error = open_path(link.to_str().unwrap()).unwrap_err();
+        let FsError::NotFound { path } = &error else {
+            panic!("{error:?}")
+        };
+        assert!(path.contains("gone.cabinetos-link-test"), "{path}");
+
+        let folder = dir.path().join("gone folder");
+        std::fs::create_dir(&folder).unwrap();
+        let junction = dir.path().join("junction");
+        let output = std::process::Command::new("cmd")
+            .args(["/c", "mklink", "/J"])
+            .arg(&junction)
+            .arg(&folder)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        std::fs::remove_dir(&folder).unwrap();
+        let error = open_path(junction.to_str().unwrap()).unwrap_err();
         assert!(matches!(error, FsError::NotFound { .. }), "{error:?}");
     }
 

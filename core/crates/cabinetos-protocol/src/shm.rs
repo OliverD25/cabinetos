@@ -77,6 +77,16 @@ impl ListingEntry {
     /// `id` is not a file reference number (the file system has none) but a
     /// hash of the upper-cased name with the top bit set.
     pub const FLAG_ID_IS_NAME_HASH: u8 = 1;
+    /// A junction: a folder that stands for another folder on a local
+    /// volume (kind [`EntryKind::ReparsePoint`]).
+    pub const FLAG_JUNCTION: u8 = 2;
+    /// A symbolic link, to a file or to a folder (the folder attribute says
+    /// which); kind [`EntryKind::ReparsePoint`].
+    pub const FLAG_SYMBOLIC_LINK: u8 = 4;
+    /// A mount point: a folder that stands for a whole volume (kind
+    /// [`EntryKind::ReparsePoint`]). Its reparse tag is a junction's; the
+    /// target, a volume, tells them apart.
+    pub const FLAG_MOUNT_POINT: u8 = 8;
 }
 
 /// The metadata of one entry: 40 bytes, 8-byte aligned. Times are Windows
@@ -94,8 +104,12 @@ pub struct ListingMeta {
     pub accessed: i64,
     /// Windows file attributes (`FILE_ATTRIBUTE_*`).
     pub attributes: u32,
-    /// Always 0.
-    pub reserved: u32,
+    /// The reparse tag (`IO_REPARSE_TAG_*`) of a reparse point: which kind
+    /// of link it is, or which other kind of reparse point (a cloud file,
+    /// a compressed system file). 0 for any other entry. These bytes were
+    /// reserved and always 0 before, so a reader that ignores them misses
+    /// nothing else.
+    pub reparse_tag: u32,
 }
 
 const _: () = assert!(size_of::<ListingHeader>() == 40);
@@ -179,7 +193,7 @@ mod tests {
         assert_eq!(offset_of!(ListingMeta, created), 16);
         assert_eq!(offset_of!(ListingMeta, accessed), 24);
         assert_eq!(offset_of!(ListingMeta, attributes), 32);
-        assert_eq!(offset_of!(ListingMeta, reserved), 36);
+        assert_eq!(offset_of!(ListingMeta, reparse_tag), 36);
     }
 
     #[test]
@@ -192,6 +206,9 @@ mod tests {
     #[test]
     fn flags_are_pinned() {
         assert_eq!(ListingEntry::FLAG_ID_IS_NAME_HASH, 1);
+        assert_eq!(ListingEntry::FLAG_JUNCTION, 2);
+        assert_eq!(ListingEntry::FLAG_SYMBOLIC_LINK, 4);
+        assert_eq!(ListingEntry::FLAG_MOUNT_POINT, 8);
     }
 
     #[test]

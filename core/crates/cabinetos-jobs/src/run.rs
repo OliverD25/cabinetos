@@ -682,9 +682,8 @@ impl Run<'_> {
                 item.times.modified,
             ),
             (_, FileKind::DirLink) => copy_dir_link(&item, &destination, overwrite),
-            (_, FileKind::File | FileKind::FileLink) => {
-                self.copy_file(&item, &destination, overwrite)
-            }
+            (_, FileKind::FileLink) => self.copy_file_link(&item, &destination, overwrite),
+            (_, FileKind::File) => self.copy_file(&item, &destination, overwrite),
         };
         if matches!(outcome, Outcome::Done) && item.transfer == Transfer::CopyAndDelete {
             return delete_moved_source(&item);
@@ -747,6 +746,36 @@ impl Run<'_> {
             }
         }
         Outcome::Done
+    }
+
+    /// A symbolic link to a file, copied as a link: by `CopyFileExW`, or,
+    /// when that asks for a privilege this user lacks (Developer Mode lets
+    /// a user make links without it), with the link's reparse data written
+    /// directly.
+    fn copy_file_link(&self, item: &FileItem, destination: &str, overwrite: bool) -> Outcome {
+        let outcome = self.copy_file(item, destination, overwrite);
+        let Outcome::Conflict {
+            kind:
+                ConflictKind::Io {
+                    code: code::PRIVILEGE_NOT_HELD,
+                    ..
+                },
+            ..
+        } = outcome
+        else {
+            return outcome;
+        };
+        if overwrite
+            && win::exists(destination)
+            && let Err(error) = win::delete_file(destination)
+        {
+            return conflict_for(error, &item.source, Some(destination.to_owned()));
+        }
+        match win::copy_file_link(&item.source, destination) {
+            Ok(()) => Outcome::Done,
+            Err(error) if is_exists(error) => exists(item.size, item.times.modified, destination),
+            Err(error) => conflict_for(error, &item.source, Some(destination.to_owned())),
+        }
     }
 
     fn rename_root(&self, index: usize, work: &Work) -> Outcome {

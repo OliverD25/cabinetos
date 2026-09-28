@@ -110,6 +110,17 @@ A radix tree or a trigram index would make searches faster still. That
 waits until the scan is measured too slow; at 11.5 ms for 1.36 million
 entries it is not.
 
+### Links
+
+The index holds what the MFT holds: a junction, a symbolic link or a mount
+point is one entry, with the folder it sits in as its parent, and nothing
+has it as a parent. So what a link points to is found once, under its real
+path; a search limited to a link's folder finds nothing below it; and the
+index can never loop through a link, whatever the link points to. The
+core's own walk ([Without the indexer](#without-the-indexer)) does the
+same: it enters folders only, never a link (kind 3), so a junction that
+points back at its own folder costs one entry and ends there.
+
 ### What the index reveals
 
 The index holds names, parents and attributes, never file contents. It
