@@ -16,10 +16,11 @@ workspace architecture of VS Code.
 - **The mouse is optional.** Every action is a named command with a shortcut,
   reachable from a command palette, with chord keybindings.
 
-Status: pre-alpha. Phases 0 and 1 of [the plan](docs/PLAN.md) are done: the
-governing documents, and a Rust core that starts, logs in JSON Lines, and
-answers `ping` over a user-only named pipe (`core/`, 73 tests, CI green).
-Phase 2, the filesystem engine, is next.
+Status: pre-alpha. Phases 0 to 3 of [the plan](docs/PLAN.md) are done: the
+governing documents, and a Rust core that lists directories into shared
+memory, watches them for changes, and serves its configuration file, command
+registry and keymap over a user-only named pipe (`core/`, 226 tests, CI
+green). Phase 4, the job engine for copy, move and delete, is next.
 
 ## Documents
 

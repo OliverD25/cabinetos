@@ -80,7 +80,7 @@ Places where the brief or the design handout disagree with the Constitution, or 
 | B | Design §1 vs §3A | §1: first run is a single pane. §3A: dual pane by default. Article 5 makes dual-pane the primary paradigm; Article 4 wants a casual user at ease | Recommend dual by default with single one toggle away; confirm before the UI phase | Phase 5 |
 | C | Brief §6 Layer 2 | "WinUI UserControls or WebView2" and "if they crash, the window must remain responsive". An in-process control cannot guarantee that | WebView2 for third-party Tool Extensions; native controls only first-party (section 2 default) | Phase 7 |
 | D | Design sidebar "Tags" | File tagging is a feature, not navigation. Article 10 says features are opt-in | Tags become a first-party plugin (core plugin stores tags; UI hook draws the dot). Not in the core | Phase 7 |
-| E | Design keybinding hint | Sidebar shows "Ctrl+K W"; the command list says "Ctrl+K then Ctrl+W" | Pick one when seeding the command registry | Phase 3 |
+| E | Design keybinding hint | Sidebar shows "Ctrl+K W"; the command list says "Ctrl+K then Ctrl+W" | Pick one when seeding the command registry | Phase 3 (done: `ctrl+k ctrl+w`, [keybindings.md](keybindings.md)) |
 | F | Brief §2 "requiring Admin privileges" | Resolved by decision 2 (separate elevated indexer) | Done | — |
 | G | Design: marketplace as a core view | Article 10 says zero supplementary tools, but Article 8 makes the marketplace the way to add everything else | Marketplace stays core: it is infrastructure, like the terminal (decision 5) | — |
 
@@ -121,13 +121,15 @@ Measured 2026-09-28 on this PC, warm cache: 100,000 entries take 72 ms to list a
 
 Articles: 1, 5 (two independent pane sessions).
 
-### Phase 3 — Config, commands and keybindings
+### Phase 3 — Config, commands and keybindings — done 2026-09-28
 
 Goal: the command architecture exists before any button does.
 
 Produces: `cabinetos.json` schema and defaults; file watcher with parse, validate, diff, and change events (Article 6 real-time sync); command registry seeded from the design's command list (id, category, name, default binding, source); chord semantics (1000 ms window) written as a spec shared by core and UI; the Immutable System Tier list (Article 7); keymap export to the UI.
 
 Done when: editing the file by hand changes a binding in the running core within one second, and a test proves an immutable binding cannot be overridden.
+
+Measured 2026-09-28 on this PC (debug build): a hand edit saved with `sed -i` reached a watching client 119 ms after the save; a broken save was reported as `config_error` 104 ms after it (`cabinetos-cli keys watch`). The end-to-end test `the_immutable_tier_cannot_be_rebound` proves the tier holds. Specs: [keybindings.md](keybindings.md), [config.md](config.md).
 
 Articles: 6, 7.
 
@@ -244,7 +246,7 @@ Directory listing, shared-memory data (only the section-creation helper), file o
 
 1. **Terminal rendering control (Phase 8).** WinUI 3 has no public terminal control. Options: xterm.js inside WebView2 (fast to build, proven), or a custom text renderer (native look, months of work). Recommendation: xterm.js first.
 2. **First-run layout (Phase 5).** Dual or single pane on first start; see conflict B.
-3. **Config comments (Phase 3).** Strict JSON, or JSON with comments (JSONC, as VS Code uses)? Strict JSON keeps tooling simple; comments help hand editing.
+3. **Config comments (Phase 3).** Settled 2026-09-28: strict JSON for version 1 ([config.md](config.md)); every JSON tool can read it and there is one parser. JSONC stays possible later by stripping comments before parsing.
 4. **Indexer install (Phase 6).** Windows service installed once with one UAC prompt, or elevated on demand every session? Service is smoother; on-demand is simpler to ship first.
 5. **IoRing vs CopyFileExW (Phase 4).** Measure before adopting. IoRing's API surface in `windows-rs` must be checked.
 6. **Packaging (Phase 10).** MSIX gives clean install and updates but complicates the elevated service; unpackaged is simpler.
