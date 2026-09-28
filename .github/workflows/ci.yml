@@ -92,8 +92,11 @@ jobs:
     runs-on: windows-latest
     # A hung test must not burn hours of paid Windows minutes. A run without
     # the cache builds wasmtime twice (debug and release) and took 33 minutes
-    # on 2026-09-28; with the cache it is much shorter.
-    timeout-minutes: 45
+    # on 2026-09-28; with the cache it is much shorter. The first run after
+    # new dependencies (the marketplace's TLS stack, 2026-09-28) needed 41
+    # minutes for its steps and 4 more to save the cache, which a 45-minute
+    # limit cut off, so the next run would have started cold again.
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
