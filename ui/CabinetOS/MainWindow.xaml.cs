@@ -973,6 +973,8 @@ public sealed partial class MainWindow : Window
     {
         if (CommandArgs.Text(invocation.Args, "path") is { Length: > 0 } path)
         {
+            // The pane takes the keyboard before the address box collapses (see the palette).
+            FocusActivePane();
             EndAddressEdit();
             await Active.NavigateAsync(path, invocation.RequestId);
             FocusActivePane();
@@ -1018,7 +1020,9 @@ public sealed partial class MainWindow : Window
 
     // Esc: the palette, then the context menu, then an edit in place, then the address box
     // (the design's order), then the search results (back to the folder). The plugin review
-    // and the plugin list come right after the palette: they cover the window.
+    // and the plugin list come right after the palette: they cover the window. Last, an open
+    // transfer flyout folds into the pill: it never takes the keyboard, so without this a
+    // keyboard user could not put it away (Article 7).
     private void CloseOverlay()
     {
         if (_palette.IsOpen)
@@ -1041,13 +1045,6 @@ public sealed partial class MainWindow : Window
         {
             CloseMarketLevel();
         }
-        else if (_transfers.IsFlyoutOpen && IsFocusWithin(TransferView))
-        {
-            // Esc in the flyout does what its minimize button does: it folds into the
-            // pill, and an ended transfer closes. The pane takes the keyboard first.
-            FocusActivePane();
-            _transfers.Minimize();
-        }
         else if (FileMenu.IsOpen)
         {
             FileMenu.Close();
@@ -1058,12 +1055,14 @@ public sealed partial class MainWindow : Window
         }
         else if (AddressEdit.Visibility == Visibility.Visible)
         {
-            EndAddressEdit();
+            // The pane takes the keyboard before the address box collapses (see the palette).
             FocusActivePane();
+            EndAddressEdit();
         }
-        else
+        else if (!EndSearch(focusPane: true) && _transfers.IsFlyoutOpen)
         {
-            EndSearch(focusPane: true);
+            // What the flyout's minimize button does: a running job folds into the pill, an ended one closes.
+            _transfers.Minimize();
         }
     }
 
