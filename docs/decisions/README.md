@@ -17,6 +17,7 @@ The Constitution outranks every record here. A record may refine the brief
 | [0006](0006-control-channel-json.md) | The control channel carries JSON | 2026-09-28 | accepted |
 | [0007](0007-monorepo.md) | One repository holds core, UI, SDK and docs | 2026-09-28 | accepted |
 | [0008](0008-brief-and-design-committed.md) | The brief and the design handout live in the repo; the brief is a living document | 2026-09-28 | accepted |
+| [0009](0009-packaging.md) | Version 1 ships unpackaged, as a zip with an install script | 2026-09-28 | accepted |
 
 ## Template
 
