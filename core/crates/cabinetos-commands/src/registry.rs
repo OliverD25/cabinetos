@@ -69,11 +69,13 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 
 /// The core's commands, in palette order: the design's command list
 /// (`docs/design/FileForge.dc.html`, `COMMANDS`) without its plugin commands,
-/// the shell's own navigation, file, edit and search commands, then the
-/// palette, overlays and About. Every one of them runs in the UI except
-/// `help.about`: the shell starts the file jobs itself (`start_job`) and
-/// makes a folder with `create_directory`.
-const SEED: [Seed; 32] = [
+/// the shell's own navigation, file, edit and search commands, the window's
+/// own commands (the sidebar's pins, the editor tabs, the transfer panel,
+/// the plugin list, the terminal tabs), then the palette, overlays and
+/// About. Every one of them runs in the UI except `help.about`: the shell
+/// starts the file jobs itself (`start_job`) and makes a folder with
+/// `create_directory`.
+const SEED: [Seed; 51] = [
     seed(
         "palette.show",
         "View",
@@ -132,6 +134,8 @@ const SEED: [Seed; 32] = [
         UI,
         None,
     ),
+    seed("sidebar.pin", "Sidebar", "Pin Folder", "", UI, None),
+    seed("sidebar.unpin", "Sidebar", "Unpin Folder", "", UI, None),
     seed(
         "pane.openSelected",
         "Pane",
@@ -207,6 +211,40 @@ const SEED: [Seed; 32] = [
     seed("go.up", "Go", "Up One Level", "alt+up", UI, None),
     seed("go.toPath", "Go", "Go to Path…", "ctrl+l", UI, None),
     seed("search.focus", "Search", "Find Files…", "ctrl+f", UI, None),
+    seed("search.scope", "Search", "Whole Volume", "", UI, None),
+    // The design's binding: the second key without Ctrl.
+    seed(
+        "editor.openMarkdownPreview",
+        "Editor",
+        "Open Markdown Preview",
+        "ctrl+k v",
+        UI,
+        FILES,
+    ),
+    seed("editor.close", "Editor", "Close Editor", "", UI, None),
+    seed("editor.reload", "Editor", "Reload Editor", "", UI, None),
+    seed("transfer.pause", "Transfer", "Pause", "", UI, None),
+    seed("transfer.resume", "Transfer", "Resume", "", UI, None),
+    seed("transfer.cancel", "Transfer", "Cancel", "", UI, None),
+    seed(
+        "transfer.minimize",
+        "Transfer",
+        "Minimize Panel",
+        "",
+        UI,
+        None,
+    ),
+    seed("transfer.restore", "Transfer", "Show Panel", "", UI, None),
+    seed("transfer.next", "Transfer", "Show Next Job", "", UI, None),
+    seed("transfer.close", "Transfer", "Close Panel", "", UI, None),
+    seed(
+        "conflict.resolve",
+        "Transfer",
+        "Resolve Conflict",
+        "",
+        UI,
+        None,
+    ),
     seed(
         "marketplace.browse",
         "Marketplace",
@@ -215,6 +253,7 @@ const SEED: [Seed; 32] = [
         UI,
         None,
     ),
+    seed("plugins.list", "Plugins", "Show Plugins", "", UI, None),
     seed(
         "workspace.switch",
         "Workspace",
@@ -239,6 +278,17 @@ const SEED: [Seed; 32] = [
         UI,
         None,
     ),
+    seed("terminal.new", "Terminal", "New Terminal", "", UI, None),
+    seed("terminal.show", "Terminal", "Show Terminal", "", UI, None),
+    seed("terminal.close", "Terminal", "Close Terminal", "", UI, None),
+    seed(
+        "terminal.reload",
+        "Terminal",
+        "Reload Terminal",
+        "",
+        UI,
+        None,
+    ),
     seed("help.about", "Help", "About CabinetOS", "", CORE, None),
 ];
 
@@ -256,9 +306,10 @@ pub struct DuplicateCommand(pub String);
 impl CommandRegistry {
     /// The core's own commands, seeded from the design's command list and
     /// the shell's own commands, so every one of them can be rebound
-    /// (Article 7). Commands the design attributes to plugins (Markdown
-    /// preview, hex view, Git, compression) are not here: plugins register
-    /// them (Article 10).
+    /// (Article 7). Commands the design attributes to plugins (hex view,
+    /// Git, compression) are not here: plugins register them (Article 10).
+    /// The Markdown preview is a Tool Extension the window opens, so its
+    /// command, `editor.openMarkdownPreview`, is the window's and is here.
     #[must_use]
     pub fn core() -> Self {
         let commands = SEED
@@ -327,7 +378,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 32);
+        assert_eq!(registry.commands().len(), 51);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -344,6 +395,7 @@ mod tests {
         // sidebar hint "Ctrl+K W".
         assert_eq!(keys("workspace.switch"), ["ctrl+k ctrl+w"]);
         assert!(keys("help.about").is_empty());
+        assert_eq!(keys("editor.openMarkdownPreview"), ["ctrl+k v"]);
         for plugin_command in ["md", "hex", "gitcommit", "gitlog", "compress"] {
             assert!(
                 registry
@@ -389,6 +441,40 @@ mod tests {
             assert_eq!(seeded, [keys], "{id}");
             assert_eq!(command.when.as_deref(), when, "{id}");
         }
+        // The window's own commands, so the palette ranks them and the user
+        // can bind them; only the Markdown preview has keys of its own.
+        for id in [
+            "plugins.list",
+            "terminal.new",
+            "terminal.show",
+            "terminal.close",
+            "terminal.reload",
+            "search.scope",
+            "editor.close",
+            "editor.reload",
+            "transfer.pause",
+            "transfer.resume",
+            "transfer.cancel",
+            "transfer.close",
+            "transfer.minimize",
+            "transfer.restore",
+            "transfer.next",
+            "conflict.resolve",
+            "sidebar.pin",
+            "sidebar.unpin",
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert!(command.default_keys.is_empty(), "{id}");
+        }
+        let preview = registry.get("editor.openMarkdownPreview").unwrap();
+        assert_eq!(preview.when.as_deref(), Some("filesView"));
+        assert_eq!(
+            registry
+                .get("plugins.list")
+                .map(|command| command.title.as_str()),
+            Some("Show Plugins")
+        );
         // The core runs only About; the file jobs are started by the shell.
         let core: Vec<&str> = registry
             .commands()

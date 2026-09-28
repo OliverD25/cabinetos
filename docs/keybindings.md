@@ -39,6 +39,8 @@ The core's commands, in palette order:
 | `view.toggleTerminal` | View: Toggle Integrated Terminal | `ctrl+backquote` | | UI |
 | `view.focusOtherPane` | View: Focus Other Pane | `tab` | `filesView` | UI |
 | `view.toggleSidebar` | View: Toggle Sidebar | `ctrl+b` | | UI |
+| `sidebar.pin` | Sidebar: Pin Folder | | | UI |
+| `sidebar.unpin` | Sidebar: Unpin Folder | | | UI |
 | `pane.openSelected` | Pane: Open Selected Item | `enter` | `filesView` | UI |
 | `file.copyToOtherPane` | File: Copy to Other Pane | `f5` | `filesView` | UI |
 | `file.moveToOtherPane` | File: Move to Other Pane | `f6` | `filesView` | UI |
@@ -58,19 +60,44 @@ The core's commands, in palette order:
 | `go.up` | Go: Up One Level | `alt+up` | | UI |
 | `go.toPath` | Go: Go to Path… | `ctrl+l` | | UI |
 | `search.focus` | Search: Find Files… | `ctrl+f` | | UI |
+| `search.scope` | Search: Whole Volume | | | UI |
+| `editor.openMarkdownPreview` | Editor: Open Markdown Preview | `ctrl+k v` | `filesView` | UI |
+| `editor.close` | Editor: Close Editor | | | UI |
+| `editor.reload` | Editor: Reload Editor | | | UI |
+| `transfer.pause` | Transfer: Pause | | | UI |
+| `transfer.resume` | Transfer: Resume | | | UI |
+| `transfer.cancel` | Transfer: Cancel | | | UI |
+| `transfer.minimize` | Transfer: Minimize Panel | | | UI |
+| `transfer.restore` | Transfer: Show Panel | | | UI |
+| `transfer.next` | Transfer: Show Next Job | | | UI |
+| `transfer.close` | Transfer: Close Panel | | | UI |
+| `conflict.resolve` | Transfer: Resolve Conflict | | | UI |
 | `marketplace.browse` | Marketplace: Browse Plugins and Themes | `ctrl+shift+x` | | UI |
+| `plugins.list` | Plugins: Show Plugins | | | UI |
 | `workspace.switch` | Workspace: Switch Workspace… | `ctrl+k ctrl+w` | | UI |
 | `preferences.selectColorTheme` | Preferences: Color Theme | `ctrl+k ctrl+t` | | UI |
 | `terminal.runTask` | Terminal: Run Task… | `ctrl+shift+b` | | UI |
+| `terminal.new` | Terminal: New Terminal | | | UI |
+| `terminal.show` | Terminal: Show Terminal | | | UI |
+| `terminal.close` | Terminal: Close Terminal | | | UI |
+| `terminal.reload` | Terminal: Reload Terminal | | | UI |
 | `help.about` | Help: About CabinetOS | | | core |
 
 - The list is the design's `COMMANDS` array without its plugin commands
-  (Markdown preview, hex view, Git, compression), and the shell's own
-  commands: moving between folders, the pane's file and edit keys, and the
-  search field. Plugin commands arrive with their plugins and register
-  themselves (Article 10). The palette, the overlay exit, the shortcut
-  editor and About are added. The shell's commands are in the registry so
-  that each of them can be rebound like any other (Article 7).
+  (hex view, Git, compression), and the shell's own commands: moving
+  between folders, the pane's file and edit keys, the search field, and
+  the window's own buttons and menus (the sidebar's pins, the editor tabs,
+  the transfer panel, the plugin list, the terminal tabs). Plugin commands
+  arrive with their plugins and register themselves (Article 10). The
+  palette, the overlay exit, the shortcut editor and About are added. The
+  shell's commands are in the registry so that each of them ranks in the
+  palette and can be rebound like any other (Article 7); the window's
+  buttons run the same commands, with arguments (a session, a path) that
+  the palette leaves out.
+- The Markdown preview is a Tool Extension that the window opens
+  ([tool-extensions.md](tool-extensions.md)), so its command,
+  `editor.openMarkdownPreview`, is the window's. It keeps the design's
+  binding, `ctrl+k v`: the one chord whose second key goes without Ctrl.
 - The design wrote the workspace switcher as "Ctrl+K W" in one place and
   "Ctrl+K then Ctrl+W" in another (PLAN.md, conflict E). The registry uses
   `ctrl+k ctrl+w`: Ctrl stays held for the second key, like every other chord

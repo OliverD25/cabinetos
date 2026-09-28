@@ -146,13 +146,31 @@ mod tests {
     #[test]
     fn a_word_finds_its_command_first() {
         assert_eq!(ids("dual")[0], "view.toggleDualPane");
-        assert_eq!(ids("sidebar")[0], "view.toggleSidebar");
-        // Both terminal commands lead; "Terminal: Run Task…" has the word
-        // as its category, at the very start.
+        // The three sidebar commands lead; the two whose category is the
+        // word itself come first.
+        let sidebar = ids("sidebar");
+        for id in ["sidebar.pin", "sidebar.unpin", "view.toggleSidebar"] {
+            assert!(sidebar[..3].contains(&id.to_owned()), "{sidebar:?}");
+        }
+        assert_eq!(ids("toggle sidebar")[0], "view.toggleSidebar");
+        // Every terminal command leads, the ones whose category is the word
+        // first; toggling the panel comes right after them.
         let terminal = ids("terminal");
-        assert_eq!(terminal[..2], ["terminal.runTask", "view.toggleTerminal"]);
+        assert_eq!(
+            terminal[..6],
+            [
+                "terminal.runTask",
+                "terminal.new",
+                "terminal.show",
+                "terminal.close",
+                "terminal.reload",
+                "view.toggleTerminal"
+            ]
+        );
         assert_eq!(ids("toggle term")[0], "view.toggleTerminal");
         assert_eq!(ids("about")[0], "help.about");
+        assert_eq!(ids("plugins")[0], "plugins.list");
+        assert_eq!(ids("markdown")[0], "editor.openMarkdownPreview");
     }
 
     #[test]
