@@ -32,8 +32,8 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
-| `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, the editor tabs of Tool Extensions, the plugin list and review, and `Assets/xterm` (the terminal page and xterm.js). |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper and the theme picker's model, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
+| `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, the editor tabs of Tool Extensions, the plugin list and review, the theme applier (brushes, WinUI's accent, the tinted Mica backdrop) and the theme picker, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
 Shared settings: `ui/Directory.Build.props` (target
@@ -66,8 +66,10 @@ The end-to-end tests start the real core: a listing read from shared
 memory; 200 files copied through `TransferCenter` with one conflict
 answered Skip, which must end `completed` with that file untouched; a
 folder made and renamed; the type names and icon keys of a listing's rows,
-and the icon PNGs at every offered size; and a `cmd` session whose echo
-comes back through the terminal's byte pump. They run when
+and the icon PNGs at every offered size; a `cmd` session whose echo
+comes back through the terminal's byte pump; and the theme picker choosing
+Nord, whose `theme_changed` the mapper turns into Nord's accent and Mica
+tint. They run when
 `CABINETOS_CORE_EXE` is set or the core is built in `core/target`, and
 skip themselves otherwise (as in the CI job `ui`, which builds no core).
 
@@ -79,9 +81,10 @@ skip themselves otherwise (as in the CI job `ui`, which builds no core).
 | `CABINETOS_LOG_DIR` | Where `ui.<date>.jsonl` and crash traces go; the core it starts inherits it |
 | `CABINETOS_LOG` | The level filter, in the core's syntax: `debug`, or `info,cabinetos_ui::pipe=trace` |
 | `CABINETOS_CONFIG` | Not read by the UI; the core it starts inherits it and uses that `cabinetos.json` |
+| `CABINETOS_THEMES_DIR` | Not read by the UI; the core it starts inherits it and reads the themes there ([themes.md](themes.md)) |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
-| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` for a light theme) with the theme's Mica tint over it. |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -91,7 +94,7 @@ a background thread with a bounded, lock-free queue; it keeps 14 daily
 files, as the core does. Targets are `cabinetos_ui::<area>`: `app`,
 `session`, `launcher`, `pipe`, `commands`, `keys`, `pane`, `palette`,
 `jobs`, `settings`, `shell`, `frames`, `xaml`, `icons`, `terminal`,
-`webview`, `snapshot`. The UI thread is named `ui`.
+`webview`, `theme`, `snapshot`. The UI thread is named `ui`.
 
 Every request the UI sends is logged under its request ID (`request sent`,
 then `reply received` or `request failed`). A command started by a key or a
@@ -730,6 +733,106 @@ variable `CABINETOS_TOOLS_DIR`).
   went on navigating, and Reload showed the README again.
 - **The Tool Dock** holds the terminal, under or beside the panes. A tool
   with `placement: dock` opens in a pane in this version.
+
+## Themes
+
+A theme from the core changes the window's colours at once, without a
+restart: the accent, the Mica tint, text, fills and strokes, the Acrylic of
+the palette and menus, the terminal, the file icons and the capability
+levels. [themes.md](themes.md) has the format and the shipped themes
+(Constitution Articles 3, 6 and 8).
+
+- **When.** At start the window asks `get_theme` for the theme in effect.
+  Each `theme_changed` applies the theme it carries: a choice in the
+  picker, `set_value ui.theme` from any client, or a saved edit of the
+  theme's file. A core before protocol 10 answers `unknown_request`, and
+  the design's colours stay.
+- **How.** Each design token (`Cb…Brush` in `App.xaml`) is one brush for
+  the whole app. The theme changes the brush's colour in place, so
+  everything drawn with it repaints, open views included. `ThemeMapper`
+  (in `CabinetOS.Core`, tested) turns a theme into the colour of each
+  token; `ThemeApplier` sets them. The `default` theme maps to exactly the
+  design's values; a test compares the two.
+- **Where the palette keys go.** `textPrimary`, `textSecondary`,
+  `textTertiary` and `textDisabled` are the four text levels. The design's
+  other white-on-dark tokens (dividers, the selected row, keycaps, badges,
+  the pressed fill, tracks) are `textPrimary` at the design's alpha, so
+  they follow the text. `layerFill` and `layerStroke` are the panes, cards
+  and sidebar rows; `layerStrokeActive` is the focused pane's border;
+  `controlFill` and `controlFillHover` are buttons and fields.
+  `acrylicTint` is the Acrylic of the palette, the context menu and the
+  transfer flyout, and the dialog's fill. `terminalBackground` is the
+  terminal panel. `folderIcon` and `folderIconFront` are the two parts of
+  the folder icon (the design's two-tone folder, drawn until the shell's
+  icon for that folder arrives, and in the sidebar). `fileTypeColors` is the
+  stroke of the file glyphs by extension. The three `permission…` colours
+  are the capability levels, and `permissionHigh` is also the colour of
+  error text.
+- **The accent.** The theme's `accent` also becomes WinUI's accent:
+  `SystemAccentColor` and its six shades, and the accent brushes of
+  WinUI's own controls. So buttons, toggles and text selection agree with
+  the design's accent (the focus edge, the highlight pill, the drive bars,
+  the app tile). The shades are made from the accent: for a dark theme the
+  accent is Light2, the shade WinUI uses on dark (the design's `#60CDFF` is
+  Windows' default Light2); for a light theme it is Dark1. `accent: null`
+  uses the Windows accent and its shades, and follows a change of it in
+  Windows settings while the window runs.
+- **Mica.** `mica` sets the tint colour and opacity of the window's Mica
+  (a `MicaController` in the app's own backdrop class, since `MicaBackdrop`
+  has no tint). The tint is also the fallback colour for when Mica is off,
+  for example with battery saver. `mica: null` is plain Mica.
+- **Light and dark.** `kind: light` sets the window's `RequestedTheme` to
+  Light, so WinUI's own controls and the dialogs draw their light forms;
+  `dark` sets Dark. The caption buttons follow, and Tool Extension pages
+  get it as `prefers-color-scheme`. The theme decides, not Windows: the
+  `default` theme is dark, so the window is dark when Windows is in light
+  mode too. Before this version, the window fell back to WinUI's light
+  brushes in light mode; the design has no light tokens.
+- **The terminal.** The xterm.js page gets the theme's foreground, cursor
+  and 16 ANSI colours, a selection in the accent at 30 %, and the scheme's
+  background with alpha 0. Cells with the default background then show the
+  panel (`terminalBackground`) over Mica, and reverse video uses the
+  scheme's background, which xterm.js draws opaque.
+- **The picker.** "Preferences: Color Theme" (`preferences.selectColorTheme`,
+  Ctrl+K Ctrl+T) opens a list in the palette's frame, one row per theme:
+  a swatch (the accent as a dot on the Mica tint; a theme without its own
+  accent shows the Windows accent), the name, the author, "light" for a
+  light theme, and a check on the theme in effect. Up, Down, Home and End
+  move; Enter or a click applies it with `set_value ui.theme`. The picker
+  closes once the core accepts, and `theme_changed` then repaints the
+  window. A refusal shows in red in the footer. Esc or a click outside
+  closes the picker. It reads each theme with `get_theme` when it opens,
+  because `list_themes` has no Mica tint for the swatch.
+- **A theme that cannot be used.** The core checks every theme before it
+  sends one. If a colour still cannot be read, the mapper names its key in
+  the log and nothing of that theme is applied; the last theme stays.
+- **Logs.** Target `cabinetos_ui::theme`: "theme applied" with the ID, the
+  accent, and the Mica tint and opacity; "theme chosen"; "a theme token
+  could not be set" (once per token) if a brush refuses a colour.
+
+Checked on 2026-09-28 (release builds, locked screen): Nord named in
+`cabinetos.json` was applied at start ("theme applied nord accent
+#FF88C0D0 mica #FF2E3440 at 0.88"). The picker listed the four shipped
+themes with their swatches and applied Rosé Pine Moon live: panes, the
+accent, the terminal and the caption buttons changed at once. In pwsh under
+Catppuccin Mocha, SGR 31, 32, 36, 94 and 95 drew the theme's red, green,
+cyan, bright blue and bright magenta.
+
+What a theme does not change:
+
+- Four tokens stay as the design has them: the text on the accent
+  (`CbOnAccentBrush`), the transfer graph's fill (`CbGraphFillBrush`), the
+  red hover of close buttons (`CbDangerHoverFillBrush`) and the 40 % black
+  scrim of dialogs (`CbScrimBrush`).
+- Plugin tiles and the badges of plugin menu entries take their colour
+  from the plugin's ID.
+- The plugin list and the review dialog draw the level colours when they
+  open; one that is open during a change keeps the old colours until it
+  opens again.
+- Tool Extension pages get light or dark only. The tool messages have no
+  theme colours yet ([tool-extensions.md](tool-extensions.md)).
+- Menus and tooltips have not been checked under a light theme, because
+  none ships. Dialogs take the window's light or dark when they open.
 
 ## Not in this version
 
