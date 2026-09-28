@@ -203,6 +203,7 @@ public class EndToEndTests
             Directory.CreateDirectory(Path.Combine(folder, "a folder"));
             File.WriteAllText(Path.Combine(folder, "notes.txt"), "x");
             File.WriteAllText(Path.Combine(folder, "README"), "x");
+            File.WriteAllText(Path.Combine(folder, ".gitattributes"), "* text=auto");
 
             await using var core = await StartCoreAsync(coreExe, root);
             var client = core.Client;
@@ -222,12 +223,16 @@ public class EndToEndTests
             }
             var details = Assert.IsType<EntryDetailsReply>(reply);
             Assert.True(cache.Apply(details));
-            Assert.Equal(3, details.Details.Count);
+            Assert.Equal(4, details.Details.Count);
             Assert.Equal("folder", cache.Get(view.IndexOfName("a folder"))!.IconKey);
             Assert.Equal("ext:.txt", cache.Get(view.IndexOfName("notes.txt"))!.IconKey);
             Assert.Equal("generic", cache.Get(view.IndexOfName("README"))!.IconKey);
             // The shell's names are in the user's language: only that there is one.
             Assert.All(details.Details, detail => Assert.False(string.IsNullOrWhiteSpace(detail.TypeName)));
+            // Protocol 11: where the shell answers a program identifier (txtfile, on the PC this was written on),
+            // the core names the type as Explorer does, "GITATTRIBUTES File". Either way the column shows words.
+            var gitattributes = cache.Get(view.IndexOfName(".gitattributes"))!.TypeName;
+            Assert.False(IsProgramIdentifier(gitattributes), $"the Type column would show {gitattributes}");
 
             foreach (var size in IconSizes.Offered)
             {
@@ -413,6 +418,11 @@ public class EndToEndTests
             Repo.RemoveTempFolder(root);
         }
     }
+
+    // The core's own rule for a program identifier (cabinetos-fs, readable_type_name): no whitespace,
+    // and either no capital letter or a name that ends in "file".
+    private static bool IsProgramIdentifier(string name) =>
+        !name.Any(char.IsWhiteSpace) && (!name.Any(char.IsUpper) || name.EndsWith("file", StringComparison.OrdinalIgnoreCase));
 
     private static string FindCoreOrSkip()
     {
