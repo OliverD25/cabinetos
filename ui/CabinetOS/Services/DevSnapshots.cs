@@ -36,8 +36,9 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>until:running|conflict|terminal|search|tool</c> waits for a job, a shell, an answer or a tool page, <c>wait:&lt;ms&gt;</c> waits, and
 /// <c>shot:&lt;name&gt;</c> renders the window's content to <c>&lt;name&gt;.png</c>.
 /// The window draws its own content, so this works when the screen is locked
-/// or off; the Mica backdrop and dialogs (a popup layer) are not part of it.
-/// WebView2 pages are drawn by WebView2 itself and laid over their place.
+/// or off; the Mica backdrop is not part of it (a stand-in colour is).
+/// WebView2 pages are drawn by WebView2 itself, and open dialogs (the popup
+/// layer) on their own, and both are laid over their place.
 /// </summary>
 internal static class DevSnapshots
 {
@@ -64,12 +65,15 @@ internal static class DevSnapshots
     /// Renders <paramref name="element"/> to <c>&lt;folder&gt;\&lt;name&gt;.png</c>.
     /// A WebView2 draws outside XAML, so <c>RenderTargetBitmap</c> leaves it
     /// empty: each page of <paramref name="pages"/> that is on screen is
-    /// captured by WebView2 itself and drawn over its place. The backdrop
-    /// (Mica) is not part of the window's content either; with a
-    /// <paramref name="backdrop"/> colour the image is laid over it, opaque,
-    /// as a stand-in for Mica and its tint.
+    /// captured by WebView2 itself and drawn over its place. A dialog sits in
+    /// the popup layer, outside the window's content: each of
+    /// <paramref name="dialogs"/> is rendered on its own and laid over the
+    /// image, scrim included. The backdrop (Mica) is not part of the window's
+    /// content either; with a <paramref name="backdrop"/> colour the image is
+    /// laid over it, opaque, as a stand-in for Mica and its tint.
     /// </summary>
-    public static async Task RenderAsync(FrameworkElement element, string name, IEnumerable<WebViewHost>? pages = null, Windows.UI.Color? backdrop = null)
+    public static async Task RenderAsync(FrameworkElement element, string name, IEnumerable<WebViewHost>? pages = null, Windows.UI.Color? backdrop = null,
+        IEnumerable<UIElement>? dialogs = null)
     {
         if (Folder is not { } folder)
         {
@@ -81,6 +85,10 @@ internal static class DevSnapshots
         foreach (var page in pages ?? [])
         {
             await DrawPageAsync(page, element, pixels, bitmap.PixelWidth, bitmap.PixelHeight);
+        }
+        foreach (var dialog in dialogs ?? [])
+        {
+            await DrawDialogAsync(dialog, element, pixels, bitmap.PixelWidth, bitmap.PixelHeight);
         }
         if (backdrop is { } under)
         {
@@ -146,6 +154,53 @@ internal static class DevSnapshots
                     continue;
                 }
                 var from = ((y * pageWidth) + x) * 4;
+                var to = ((targetY * width) + targetX) * 4;
+                var alpha = source[from + 3];
+                for (var channel = 0; channel < 4; channel++)
+                {
+                    pixels[to + channel] = (byte)(source[from + channel] + (pixels[to + channel] * (255 - alpha) / 255));
+                }
+            }
+        }
+    }
+
+    // A dialog of the popup layer, rendered on its own and laid over the image at its place ("over", premultiplied).
+    private static async Task DrawDialogAsync(UIElement dialog, FrameworkElement root, byte[] pixels, int width, int height)
+    {
+        var bitmap = new RenderTargetBitmap();
+        try
+        {
+            await bitmap.RenderAsync(dialog);
+        }
+        catch (ArgumentException)
+        {
+            // Not rendered yet (its first frame): the image has no dialog.
+            return;
+        }
+        if (bitmap.PixelWidth == 0 || bitmap.PixelHeight == 0)
+        {
+            return;
+        }
+        var source = (await bitmap.GetPixelsAsync()).ToArray();
+        var scale = width / root.ActualWidth;
+        var at = dialog.TransformToVisual(null).TransformPoint(new Point(0, 0));
+        var left = (int)Math.Round(at.X * scale);
+        var top = (int)Math.Round(at.Y * scale);
+        for (var y = 0; y < bitmap.PixelHeight; y++)
+        {
+            var targetY = top + y;
+            if (targetY < 0 || targetY >= height)
+            {
+                continue;
+            }
+            for (var x = 0; x < bitmap.PixelWidth; x++)
+            {
+                var targetX = left + x;
+                if (targetX < 0 || targetX >= width)
+                {
+                    continue;
+                }
+                var from = ((y * bitmap.PixelWidth) + x) * 4;
                 var to = ((targetY * width) + targetX) * 4;
                 var alpha = source[from + 3];
                 for (var channel = 0; channel < 4; channel++)

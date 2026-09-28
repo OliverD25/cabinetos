@@ -434,7 +434,8 @@ public sealed partial class MainWindow : Window
                     break;
                 case "shot":
                     await Task.Delay(400);
-                    await DevSnapshots.RenderAsync(RootGrid, step.Argument, WebPages(), SnapshotBackdrop());
+                    await DevSnapshots.RenderAsync(RootGrid, step.Argument, WebPages(), SnapshotBackdrop(),
+                        VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Select(p => p.Child).OfType<ContentDialog>().ToList());
                     break;
             }
         }
@@ -978,17 +979,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // The dialog's default button (else Close) takes the keyboard, unless something in the dialog has it already.
-    private void FocusDialog(ContentDialog dialog)
+    // The dialog's default button (else Close) takes the keyboard, so Enter does what the dialog
+    // offers first; WinUI would give it to the first focusable part, a link in About.
+    private static void FocusDialog(ContentDialog dialog)
     {
-        var focused = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
-        for (var current = focused; current is not null; current = VisualTreeHelper.GetParent(current))
-        {
-            if (current == dialog)
-            {
-                return;
-            }
-        }
         var name = dialog.DefaultButton switch
         {
             ContentDialogButton.Primary => "PrimaryButton",
@@ -1119,6 +1113,7 @@ public sealed partial class MainWindow : Window
         RegisterToolCommands();
         RegisterThemeCommands();
         RegisterMarketCommands();
+        RegisterAboutCommand();
 
         _router.Completed += OnCommandCompleted;
         // A plugin's command from the palette or a key gets the active pane's files, as the
@@ -1159,6 +1154,10 @@ public sealed partial class MainWindow : Window
                 break;
             case CommandOutcomeKind.Failed:
                 ShowNotice($"{name}: {outcome.ErrorMessage}", isError: true);
+                break;
+            case CommandOutcomeKind.CoreResult when outcome.CommandId == "help.about":
+                // A core that still runs help.about itself: the window's About view shows instead of its raw result.
+                _ = ShowAboutAsync();
                 break;
             case CommandOutcomeKind.CoreResult when outcome.Result is { } result:
                 _ = ShowResultAsync(name, result);

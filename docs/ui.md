@@ -44,6 +44,33 @@ errors), `ui/Directory.Packages.props` (every package version in one
 place) and `ui/global.json` (the .NET SDK, and the test mode of
 `dotnet test`). Package versions: [dev-setup.md](dev-setup.md), "Phase 5".
 
+The window references the Windows App SDK 2.5.1 as the four components it
+uses, not the `Microsoft.WindowsAppSDK` metapackage: `WinUI` (with WebView2
+through it), `Foundation` (the bootstrapper of an unpackaged app, and MRT
+resources), `InteractiveExperiences` (windowing, input, composition, Mica)
+and `Runtime` (the Windows App Runtime version the bootstrapper asks for).
+The metapackage also brings the AI, ML, Search, Widgets and DWriteCore
+components, which the window never touches (Constitution Article 10). The
+versions are the metapackage's; the `Runtime` package's build checks that
+they match it. A publish with the release script's flags went from 60 files
+and 80.5 MiB to 45 files and 39.8 MiB (28.1 to 11.2 MB zipped): gone are
+`onnxruntime.dll` (21 MB), `DirectML.dll` (18 MB), the Windows AI and
+machine-learning libraries, `System.Numerics.Tensors` and eleven
+projection assemblies. Foundation's own twenty small projections (about
+1 MB: notifications, pickers and the like) stay, since Foundation is one
+package.
+
+Publishing: `dotnet publish CabinetOS\CabinetOS.csproj -c Release -r
+win-x64 --self-contained false -o <folder>` from `ui\` is enough. The
+project keeps the Windows App SDK's MSIX tooling on (`EnableMsixTooling`)
+for its resource step: without it a publish had no `CabinetOS.pri`, the
+compiled XAML, and the published window stopped at start ("Cannot locate
+resource from 'ms-appx:///MainWindow.xaml'"). The app stays unpackaged
+(`WindowsPackageType` `None`); the build and `dotnet run` are unchanged.
+Checked on 2026-09-29: a plain publish held the same 45 files as one with
+`-p:EnableMsixTooling=true`, and the published window started its core and
+opened a terminal. [release.md](release.md) has the release build.
+
 ## Building, running, testing
 
 Everything below runs from a WSL terminal; `dotnet.exe` and `cargo.exe` are
@@ -126,7 +153,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_THEMES_DIR` | Not read by the UI; the core it starts inherits it and reads the themes there ([themes.md](themes.md)) |
 | `CABINETOS_PLUGINS_DIR`, `CABINETOS_MARKETPLACE_DIR` | Not read by the UI, except the plugins folder for the empty plugin list's hint; the core it starts inherits them and installs there ([marketplace.md](marketplace.md), "Folders"). Set both to a scratch folder to try installs without touching `%LOCALAPPDATA%\CabinetOS` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
-| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
+| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
 | `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to the button, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
@@ -359,7 +386,7 @@ search hit. From the context menu it gets the menu's rows
 | `keys.open` | Opens the palette: it lists every command with its keys and edits them |
 | `view.toggleDualPane`, `view.toggleSidebar`, `view.focusOtherPane` | As named; the first two are saved in `cabinetos.json` |
 | `go.toPath` | With `{"path": …}` goes there; without, turns the crumbs into a text box |
-| `help.about` | Runs in the core; the result is shown in a dialog |
+| `help.about` | Shows About CabinetOS ("About", below); a core that still runs it itself answers `command_result`, and the window shows the same view |
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
 | `view.toggleTerminal` | Shows the terminal, gives the keyboard back to the pane, or hides it ("The terminal") |
 | `marketplace.browse`, `preferences.selectColorTheme` | Open the marketplace and the theme picker ("The marketplace", "Themes") |
@@ -368,9 +395,9 @@ search hit. From the context menu it gets the menu's rows
 ### Dialogs
 
 The window's dialogs are WinUI `ContentDialog`s (Properties, delete
-permanently, uninstall, a command's result, the core that cannot start)
-and the permissions review ("Plugins"). While one is open, nothing under
-it reacts:
+permanently, uninstall, About, a command's result, the core that cannot
+start) and the permissions review ("Plugins"). While one is open, nothing
+under it reacts:
 
 - **No command runs.** The router refuses every command that is not the
   dialog's own (`SetModal`, tested), whatever sent it: a key, a web page's
@@ -383,8 +410,8 @@ it reacts:
   itself. A key that reaches the window while the dialog is open (the
   keyboard was left under it) does nothing: Esc closes the dialog, and any
   other key puts the keyboard back into it.
-- **The keyboard starts in it.** When a dialog opens and the keyboard is
-  not in it, it goes to the dialog's default button (else Close).
+- **The keyboard starts in it,** on the dialog's default button (else
+  Close), even when the keyboard was left elsewhere.
 - The log says "dialog shown" and "dialog closed" with the title and how
   it was closed, and "key held by a dialog" for a key that reached the
   window under it. A key pressed in the dialog is the dialog's own and is
@@ -398,6 +425,45 @@ in the pane and the terminal opened. The permissions review refused
 `view.toggleTerminal` and `palette.show`, and closed with `overlay.close`.
 With real keys (`ui/livecheck/livecheck.ps1`, 2026-09-29): Esc closed
 Properties, and Ctrl+` pressed while it was open ran nothing.
+
+Starting on the default button means Enter does what the dialog offers
+first (Close, Cancel, Try again); WinUI would give the keyboard to the
+first focusable part, such as a link in About.
+
+### About
+
+"Help: About CabinetOS" (`help.about`) opens a dialog with the product's
+version (the window's, the same as the core's in a release), the core's
+version and protocol from `ping`, and the build: the commit and the build
+time from `release.json` next to `CabinetOS.exe` (written by
+[build/release.ps1](../build/release.ps1)), with "with uncommitted changes"
+when the release says so; without that file, "Development build". Two
+links open `LICENSE` and `THIRD-PARTY-NOTICES.md` next to the program with
+`open_path` (the core opens them with their default application); a
+development build, which has neither, says so instead. The copyright line
+comes from the program's assembly. It is a dialog like the others: Esc
+closes it, and no command runs while it is open ("Dialogs"). Its links are
+the dialog's own and do not go through the router.
+
+`release.json` is the one file besides the tools' `tool.json` that the
+window's process reads itself (brief §1 keeps file I/O out of the UI): a
+few hundred bytes next to the program, read off the UI thread when the
+view opens (`ReleaseFolder`, tested). A file that cannot be read shows as
+such.
+
+A core whose registry still runs `help.about` itself (target `core`, as
+up to now) answers `command_result`; the window then shows this view
+instead of the raw result. Once the core lists it for the window
+(target `ui`), the window's handler runs it.
+
+Checked on 2026-09-29 (release builds, snapshot aid): in a published folder
+with a stand-in `release.json`, `LICENSE` and notices, the view showed
+"0.1.0", "0.1.0, protocol 11", the commit, the build time and both links;
+in the development build it said "Development build" and that the two
+documents come with a release. The keyboard started on Close, and
+`view.toggleTerminal` was refused while it was open. The links were not
+clicked in the check (that would open Notepad on the desktop); Enter on a
+file uses the same `open_path`.
 
 ## File operations
 
