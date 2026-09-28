@@ -284,7 +284,7 @@ list them yet ("Plugins", "Tool Extensions").
 
 | Command | In this version |
 |---|---|
-| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, the plugin review, the plugin list, the context menu, a rename, the address box, the search results |
+| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, the theme picker, the plugin review, the plugin list, the marketplace (its detail column first), the context menu, a rename, the address box, the search results, and last folds the transfer flyout into the pill |
 | `search.focus` | Puts the keyboard in the search field ("Search") |
 | `keys.open` | Opens the palette: it lists every command with its keys and edits them |
 | `view.toggleDualPane`, `view.toggleSidebar`, `view.focusOtherPane` | As named; the first two are saved in `cabinetos.json` |
@@ -349,7 +349,8 @@ and the design's 200 ms slide-up. It shows one job:
 The minimize button folds the flyout into the status-bar pill: an
 80 × 4 px track and "Copying · 45%". A click on the pill opens the flyout
 again. The flyout never takes the keyboard focus, so the panes keep
-working while a job runs.
+working while a job runs. Esc folds it into the pill (an ended job
+closes) when nothing else is open or being edited and no search is shown.
 
 Several jobs: the flyout shows the newest one, and a "N more" link in its
 header cycles through the others, oldest last, then around. A job that
@@ -460,7 +461,8 @@ Acrylic, and the design's 160 ms entrance. What the user types goes to the
 core as `search_commands` after 30 ms of quiet; the UI ranks nothing
 itself. Up and Down move the highlight, Enter or a click runs the command
 through the router and closes the palette, a click on the scrim or Esc
-closes it.
+closes it. A row shows the command's first binding as keycaps, and "+N"
+when it has more; its tooltip lists them all.
 
 Rebinding: the pencil (or F2 on the highlighted row) starts recording. The
 next key that is not a modifier forms a combination; a second one within
@@ -833,9 +835,6 @@ What a theme does not change:
   scrim of dialogs (`CbScrimBrush`).
 - Plugin tiles and the badges of plugin menu entries take their colour
   from the plugin's ID.
-- The plugin list and the review dialog draw the level colours when they
-  open; one that is open during a change keeps the old colours until it
-  opens again.
 - Tool Extension pages get light or dark only. The tool messages have no
   theme colours yet ([tool-extensions.md](tool-extensions.md)).
 - No light theme ships. A light one from a scratch index turned the
@@ -965,3 +964,22 @@ plugin is active, and uninstalls it.
 | Sorting by a column | The column headers are static; the order is `panes.sort` from `cabinetos.json` |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
 | A shell property sheet | Properties shows the listing's metadata |
+
+## Known gaps
+
+What is built but not finished, as of the self-review of 2026-09-28:
+
+- **Not checked with real keys yet.** All checks ran on a locked screen
+  with the snapshot aid, which runs commands and types text but presses no
+  keys. Still to do on an unlocked screen: scrolling 100,000 entries with
+  PageDown held, keys inside the terminal and the Markdown Preview,
+  Ctrl+Shift+X, Ctrl+K Ctrl+T and Tab through the marketplace, the
+  uninstall confirmation, and menus and tooltips under a light theme.
+- **The icon cache has no limit.** Every icon the core sent stays until
+  the window closes. They are 16 to 32 px bitmaps, so a session that shows
+  thousands of program icons holds a few MB.
+- **WinUI's clear button (×).** The palette's input and the search fields
+  show it while they have the keyboard; the design has none there. The
+  rename box hides it, since a click on it would end the edit.
+- **Esc and the transfer flyout.** The flyout never takes the keyboard, so
+  Esc reaches it only last, after everything else Esc closes.
