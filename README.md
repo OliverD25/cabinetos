@@ -16,11 +16,13 @@ workspace architecture of VS Code.
 - **The mouse is optional.** Every action is a named command with a shortcut,
   reachable from a command palette, with chord keybindings.
 
-Status: pre-alpha. Phases 0 to 3 of [the plan](docs/PLAN.md) are done: the
-governing documents, and a Rust core that lists directories into shared
-memory, watches them for changes, and serves its configuration file, command
-registry and keymap over a user-only named pipe (`core/`, 226 tests, CI
-green). Phase 4, the job engine for copy, move and delete, is next.
+Status: pre-alpha. Phases 0 to 4 of [the plan](docs/PLAN.md) are done: the
+governing documents, and a Rust core that lists and watches directories in
+shared memory, serves its configuration, commands and keymap, and runs copy,
+move and delete jobs on per-disk queues, all over a user-only named pipe
+(`core/`, 266 tests, CI green). Phase 5, the WinUI 3 shell, needs the .NET
+SDK; the core-side parts of Phases 6–8 (indexer, plugin host, terminal host)
+continue meanwhile.
 
 ## Documents
 
@@ -32,6 +34,11 @@ green). Phase 4, the job engine for copy, move and delete, is next.
 | [docs/decisions/](docs/decisions/README.md) | One record per architecture decision. |
 | [docs/design/](docs/design/ABOUT.md) | The design handout and clickable prototype. |
 | [docs/dev-setup.md](docs/dev-setup.md) | What to install to build and test. |
+| [docs/ipc.md](docs/ipc.md) | The control-channel protocol and the shared-memory listing layout. |
+| [docs/diagnostics.md](docs/diagnostics.md) | The JSON Lines log format and crash traces. |
+| [docs/config.md](docs/config.md) | `cabinetos.json`: every key, its default, and how changes apply live. |
+| [docs/keybindings.md](docs/keybindings.md) | Key grammar, chords, the Immutable System Tier, conflict rules. |
+| [docs/jobs.md](docs/jobs.md) | Copy, move and delete jobs: scheduler, conflicts, progress. |
 
 ## Layout
 
