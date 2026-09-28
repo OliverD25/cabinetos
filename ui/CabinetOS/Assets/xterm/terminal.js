@@ -81,9 +81,18 @@
     return bytes;
   }
 
+  // VK_PACKET: a character sent as a Unicode key event (the touch keyboard, Voice Access,
+  // automation tools). Its keydown can carry the character of an earlier packet, which
+  // xterm.js would type (the live check of 2026-09-28 got "ttttttttttttttt"); the keypress
+  // that follows has the right one.
+  const VK_PACKET = 231;
+
   function onKey(term, event) {
     if (event.type !== 'keydown') {
       return true;
+    }
+    if (event.keyCode === VK_PACKET) {
+      return false;
     }
     const keys = combo(event);
     if (keys && passKeys.has(keys)) {
