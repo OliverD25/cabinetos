@@ -669,7 +669,7 @@ impl Session {
         let started = Instant::now();
         self.tasks.spawn(
             async move {
-                let reply = match tokio::task::spawn_blocking(move || {
+                let reply = match blocking_in_span(move || {
                     cabinetos_fs::volume::info_for_path(&path)
                 })
                 .await
@@ -844,7 +844,7 @@ impl Session {
         let started = Instant::now();
         self.tasks.spawn(
             async move {
-                let reply = match tokio::task::spawn_blocking(work).await {
+                let reply = match blocking_in_span(work).await {
                     Ok(reply) => reply,
                     Err(error) => {
                         rethrow_panic(Err(error));
@@ -1033,9 +1033,7 @@ impl Session {
         let started = Instant::now();
         self.tasks.spawn(
             async move {
-                let reply = match tokio::task::spawn_blocking(move || services.jobs.start(request))
-                    .await
-                {
+                let reply = match blocking_in_span(move || services.jobs.start(request)).await {
                     Ok(Ok(job_id)) => Response::JobStarted { job_id },
                     Ok(Err(error)) => job_error(error),
                     Err(error) => {
@@ -1270,11 +1268,21 @@ async fn open_listing(
     })
 }
 
+/// Runs `work` on Tokio's blocking pool inside the current span. The
+/// pool's threads start with no span, so without this what the work logs
+/// (such as "job queued") would lose the request's ID.
+fn blocking_in_span<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+) -> tokio::task::JoinHandle<T> {
+    let span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || span.in_scope(work))
+}
+
 /// Runs blocking work on Tokio's blocking pool, never on an async worker.
 async fn run_blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, Failure> + Send + 'static,
 ) -> Result<T, Failure> {
-    match tokio::task::spawn_blocking(work).await {
+    match blocking_in_span(work).await {
         Ok(result) => result,
         Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
         Err(_) => Err((ErrorCode::Internal, "the request was cancelled".to_owned())),

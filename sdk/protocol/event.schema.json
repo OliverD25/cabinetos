@@ -791,6 +791,17 @@
           "format": "uint64",
           "minimum": 0
         },
+        "items_per_second": {
+          "description": "Files and folders handled per second, averaged like `speed_bps`,\nwith two decimals: the pace of a delete or of a move on one volume,\nwhich move no bytes. 0 while paused and in the final record; absent\nin a job's first record, before there is anything to average.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "job_id": {
           "description": "The job, from `job_started`.",
           "type": "integer",
@@ -1218,6 +1229,11 @@
           ]
         }
       ]
+    },
+    "Rate": {
+      "description": "A rate per second, at least 0.",
+      "type": "number",
+      "minimum": 0
     },
     "RefreshReason": {
       "description": "Why a watched listing was read again.",

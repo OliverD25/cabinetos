@@ -1190,7 +1190,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::job::{ConflictKind, ConflictPolicy, JobKind, JobOptions, LinkPolicy};
+    use crate::job::{ConflictKind, ConflictPolicy, JobKind, JobOptions, LinkPolicy, Rate};
     use crate::market::{Author, Download, MarketCapability};
     use crate::theme::ThemeKind;
 
@@ -1464,6 +1464,7 @@ mod tests {
             conflicts_open: 1,
             current_path: Some(r"C:\a\big.bin".to_owned()),
             speed_bps: 610_000_000,
+            items_per_second: Rate::new(412.5),
             eta_seconds: Some(3),
             elapsed_ms: 2400,
         }
@@ -2047,6 +2048,12 @@ mod tests {
         assert_eq!(value["type"], "job_progress");
         assert_eq!(value["state"], json!({"type": "running"}));
         assert_eq!(value["files_total"], 10_001);
+        assert_eq!(value["items_per_second"], 412.5);
+        let mut first = progress();
+        first.items_per_second = None;
+        let value = serde_json::to_value(Event::JobProgress(first)).unwrap();
+        assert!(value.get("items_per_second").is_none());
+        assert!(serde_json::from_value::<Rate>(json!(-1)).is_err());
         let listed = every_response()
             .into_iter()
             .find(|response| matches!(response, Response::Jobs { .. }))

@@ -5,7 +5,7 @@
 
 use std::time::{Duration, Instant};
 
-use cabinetos_protocol::{Event, JobProgress};
+use cabinetos_protocol::{Event, JobProgress, Rate};
 
 use crate::EventSink;
 use crate::job::{Counters, Job, lock};
@@ -21,9 +21,9 @@ const AVERAGE_OVER_SECONDS: f64 = 1.0;
 /// settling.
 const ETA_AFTER_MS: u64 = 2000;
 
-/// The copy speed as an exponential moving average: each sample weighs in
-/// by the time it covers, so a sample one second old counts for about a
-/// third of a fresh one.
+/// A rate (bytes or items per second) as an exponential moving average:
+/// each sample weighs in by the time it covers, so a sample one second old
+/// counts for about a third of a fresh one.
 #[derive(Debug, Default)]
 pub(crate) struct Meter {
     last: Option<(Instant, u64)>,
@@ -31,25 +31,32 @@ pub(crate) struct Meter {
 }
 
 impl Meter {
+    /// Takes a reading of the count done so far and returns the rate per
+    /// second; `None` at the first reading, which has no interval yet.
+    #[expect(clippy::cast_precision_loss, reason = "a rate for display")]
+    pub(crate) fn rate(&mut self, now: Instant, count: u64) -> Option<f64> {
+        let measured = self.last.is_some();
+        if let Some((then, before)) = self.last {
+            let seconds = now.duration_since(then).as_secs_f64();
+            if seconds > 0.0 {
+                let rate = count.saturating_sub(before) as f64 / seconds;
+                let weight = 1.0 - (-seconds / AVERAGE_OVER_SECONDS).exp();
+                self.speed += weight * (rate - self.speed);
+            }
+        }
+        self.last = Some((now, count));
+        measured.then_some(self.speed.max(0.0))
+    }
+
     /// Takes a reading of the bytes done so far and returns the speed in
     /// bytes per second.
     #[expect(
-        clippy::cast_precision_loss,
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         reason = "a speed for display"
     )]
     pub(crate) fn sample(&mut self, now: Instant, bytes: u64) -> u64 {
-        if let Some((then, before)) = self.last {
-            let seconds = now.duration_since(then).as_secs_f64();
-            if seconds > 0.0 {
-                let rate = bytes.saturating_sub(before) as f64 / seconds;
-                let weight = 1.0 - (-seconds / AVERAGE_OVER_SECONDS).exp();
-                self.speed += weight * (rate - self.speed);
-            }
-        }
-        self.last = Some((now, bytes));
-        self.speed.max(0.0) as u64
+        self.rate(now, bytes).unwrap_or(0.0) as u64
     }
 
     /// Forgets the speed (paused, or finished).
@@ -100,13 +107,19 @@ pub(crate) fn publish(job: &Job, sink: &EventSink, gap: Duration, last: bool) {
     }
     let now = Instant::now();
     let bytes = Counters::get(&job.counters.bytes_done);
-    let speed = if last || job.control.is_paused() {
+    let items = Counters::get(&job.counters.files_done);
+    let (speed, pace) = if last || job.control.is_paused() {
         emitter.meter.reset(now, bytes);
-        0
+        emitter.items.reset(now, items);
+        (0, Some(0.0))
     } else {
-        emitter.meter.sample(now, bytes)
+        (
+            emitter.meter.sample(now, bytes),
+            emitter.items.rate(now, items),
+        )
     };
-    let mut progress = job.progress(speed, None);
+    let pace = pace.and_then(|rate| Rate::new((rate * 100.0).round() / 100.0));
+    let mut progress = job.progress(speed, pace, None);
     progress.eta_seconds = eta(&progress);
     let send = last
         || emitter
@@ -145,6 +158,20 @@ mod tests {
     }
 
     #[test]
+    fn the_pace_counts_items_and_waits_for_a_second_reading() {
+        let start = Instant::now();
+        let mut meter = Meter::default();
+        assert_eq!(meter.rate(start, 0), None);
+        let mut pace = 0.0;
+        // 400 files a second, read every 34 ms for two seconds.
+        for step in 1..=59_u32 {
+            let now = start + MIN_PROGRESS_GAP * step;
+            pace = meter.rate(now, u64::from(step) * 400 * 34 / 1000).unwrap();
+        }
+        assert!((330.0..=420.0).contains(&pace), "{pace}");
+    }
+
+    #[test]
     fn the_time_left_waits_for_the_speed_to_settle() {
         let mut progress = JobProgress {
             job_id: 1,
@@ -158,6 +185,7 @@ mod tests {
             conflicts_open: 0,
             current_path: None,
             speed_bps: 1_000,
+            items_per_second: None,
             eta_seconds: None,
             elapsed_ms: 1_500,
         };

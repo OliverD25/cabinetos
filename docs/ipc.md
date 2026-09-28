@@ -44,7 +44,7 @@ connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":10,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":11,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
@@ -85,7 +85,8 @@ marketplace: `marketplace_refresh` and `marketplace_search` with the reply
 `list_tools` with its reply `tools`, the events `install_progress`,
 `install_finished` and `tools_changed`, and the error codes
 `no_such_extension`, `marketplace_error`, `hash_mismatch` and
-`incompatible`.
+`incompatible`. Version 11 added what the shell asked for after Phases 5
+and 9: `items_per_second` in `job_progress`.
 
 ## Requests and replies
 
@@ -563,7 +564,7 @@ hits.
 ```json
 {"id":"01M…","type":"execute_command","command":"help.about"}
 {"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
- "core_version":"0.1.0","protocol_version":10,"config_path":"C:\\…\\cabinetos.json"}}
+ "core_version":"0.1.0","protocol_version":11,"config_path":"C:\\…\\cabinetos.json"}}
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
@@ -631,7 +632,7 @@ disconnects, and `list_jobs` from any connection shows it.
 {"id":"01M…","type":"job_progress","job_id":7,"state":{"type":"running"},
  "bytes_done":1200000000,"bytes_total":2700000000,"files_done":8412,"files_total":10001,
  "files_skipped":0,"files_failed":0,"conflicts_open":1,"current_path":"C:\\photos\\big.raw",
- "speed_bps":610000000,"eta_seconds":3,"elapsed_ms":2400}
+ "speed_bps":610000000,"items_per_second":412.5,"eta_seconds":3,"elapsed_ms":2400}
 {"id":"01M…","type":"job_conflict","conflict_id":9,"job_id":7,
  "kind":{"type":"file_exists","source_size":10,"source_modified":133000000000000000,
          "dest_size":12,"dest_modified":132000000000000000},

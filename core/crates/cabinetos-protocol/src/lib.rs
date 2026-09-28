@@ -37,7 +37,7 @@ pub use index::{
 };
 pub use job::{
     Conflict, ConflictKind, ConflictPolicy, JobAction, JobInfo, JobKind, JobOptions, JobProgress,
-    JobRequest, JobState, LinkPolicy, Resolution,
+    JobRequest, JobState, LinkPolicy, Rate, Resolution,
 };
 pub use market::{
     Author, Download, ExtensionKind, INDEX_SCHEMA_VERSION, MarketCapability, MarketIndex,
@@ -77,5 +77,6 @@ pub use theme::{
 /// `install_extension`, `uninstall_extension`, `list_tools` and `tools`,
 /// the events `install_progress`, `install_finished` and `tools_changed`,
 /// the error codes `no_such_extension`, `marketplace_error`,
-/// `hash_mismatch` and `incompatible`).
-pub const PROTOCOL_VERSION: u32 = 10;
+/// `hash_mismatch` and `incompatible`); version 11 the shell's small
+/// requests: `items_per_second` in `job_progress`.
+pub const PROTOCOL_VERSION: u32 = 11;

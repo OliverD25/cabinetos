@@ -11,8 +11,9 @@ use std::time::{Duration, Instant};
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
     Conflict, ConflictKind, Envelope, ErrorCode, Event, JobAction, JobKind, JobOptions,
-    JobProgress, JobRequest, JobState, Request, Resolution, Response,
+    JobProgress, JobRequest, JobState, Rate, Request, RequestId, Resolution, Response,
 };
+use serde_json::Value;
 use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -36,7 +37,7 @@ fn scratch(name: &str) -> TempDir {
 struct Core {
     child: Child,
     pipe: PipeName,
-    _dir: TempDir,
+    dir: TempDir,
 }
 
 impl Drop for Core {
@@ -69,10 +70,35 @@ fn start_core() -> Core {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    Core {
-        child,
-        pipe,
-        _dir: dir,
+    Core { child, pipe, dir }
+}
+
+impl Core {
+    /// Asks the core to exit and waits, so its log is complete.
+    async fn stop(&mut self, client: &mut PipeClient) {
+        assert_eq!(ask(client, Request::Shutdown).await, Response::Ok);
+        let until = Instant::now() + STARTUP_DEADLINE;
+        while self.child.try_wait().unwrap().is_none() {
+            assert!(Instant::now() < until, "the core did not exit");
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+
+    /// Every line of the core's log, parsed.
+    fn log_lines(&self) -> Vec<Value> {
+        let mut lines = Vec::new();
+        for entry in fs::read_dir(self.dir.path().join("logs")).unwrap() {
+            let path = entry.unwrap().path();
+            if path
+                .extension()
+                .is_some_and(|extension| extension == "jsonl")
+            {
+                for line in fs::read_to_string(&path).unwrap().lines() {
+                    lines.push(serde_json::from_str(line).unwrap());
+                }
+            }
+        }
+        lines
     }
 }
 
@@ -415,4 +441,69 @@ async fn bad_job_requests_get_error_codes() {
         assert!(Instant::now() < deadline, "the copy did not end");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+}
+
+/// The log line "job queued" carries the ID of the `start_job` request
+/// that queued the job, and a delete, which moves no bytes, reports its
+/// pace in items per second.
+#[tokio::test]
+async fn a_job_is_logged_under_its_request_and_reports_its_pace() {
+    let mut core = start_core();
+    let (mut client, mut events) = greeted(&core).await;
+    let dir = scratch("pace");
+    let doomed = dir.path().join("doomed");
+    fs::create_dir(&doomed).unwrap();
+    for index in 0..2000 {
+        fs::write(doomed.join(format!("{index}.txt")), "x").unwrap();
+    }
+    let id = RequestId::new();
+    let reply = client
+        .request_with_id(
+            id.clone(),
+            Request::StartJob(JobRequest {
+                kind: JobKind::Delete { permanent: true },
+                sources: vec![doomed.display().to_string()],
+                destination: None,
+                options: JobOptions::default(),
+            }),
+        )
+        .await
+        .unwrap();
+    let Response::JobStarted { job_id } = reply.body else {
+        panic!("expected job_started, got {:?}", reply.body);
+    };
+    let paces: Vec<Option<Rate>> = until_done(&mut events, job_id)
+        .await
+        .into_iter()
+        .filter_map(|(_, event)| match event {
+            Event::JobProgress(progress) => Some(progress.items_per_second),
+            _ => None,
+        })
+        .collect();
+    assert!(!doomed.exists());
+    assert_eq!(paces.last(), Some(&Rate::new(0.0)), "{paces:?}");
+    // A job quicker than one tick of the publisher sends only its final
+    // record; otherwise the first has nothing to average yet, and the
+    // records between show the pace.
+    if paces.len() > 1 {
+        assert_eq!(paces[0], None, "{paces:?}");
+    }
+    if paces.len() > 2 {
+        assert!(
+            paces[1..paces.len() - 1]
+                .iter()
+                .any(|pace| pace.is_some_and(|pace| pace.get() > 0.0)),
+            "{paces:?}"
+        );
+    }
+
+    // Stopped, the core has written its whole log.
+    core.stop(&mut client).await;
+    let lines = core.log_lines();
+    let queued = lines
+        .iter()
+        .find(|line| line["message"] == "job queued")
+        .expect("a job queued line");
+    assert_eq!(queued["request_id"], id.as_str(), "{queued}");
+    assert_eq!(queued["fields"]["job_id"], job_id, "{queued}");
 }

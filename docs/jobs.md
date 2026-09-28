@@ -53,8 +53,8 @@ queued ──► scanning ──► running ──► completed
 **Progress** (`job_progress`): `bytes_done` and `bytes_total`,
 `files_done` and `files_total` (folders count as items too),
 `files_skipped` and `files_failed` (both included in `files_done`),
-`conflicts_open`, `current_path`, `speed_bps`, `eta_seconds` and
-`elapsed_ms`. A skipped or failed file leaves `bytes_total`, so the
+`conflicts_open`, `current_path`, `speed_bps`, `items_per_second`,
+`eta_seconds` and `elapsed_ms`. A skipped or failed file leaves `bytes_total`, so the
 percentage still ends at 100. A delete and a move on one volume count
 items, not bytes: their `bytes_total` is 0.
 
@@ -211,6 +211,10 @@ after the same gap, and then `job_state_changed`.
 - **Speed** (`speed_bps`) is a moving average over about the last second:
   each reading weighs in by the time it covers. It drops to 0 while
   paused.
+- **Pace** (`items_per_second`) is the same average over the files and
+  folders handled, with two decimals, so a delete or a move on one
+  volume, which move no bytes, shows its pace too. It is absent in a job's
+  first record, and 0 while paused and in the final record.
 - **Time left** (`eta_seconds`) is the remaining bytes divided by the
   speed. It is absent for the first two seconds, while the speed settles,
   and for jobs with no bytes to count.

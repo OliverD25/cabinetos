@@ -166,12 +166,69 @@ pub struct JobProgress {
     pub current_path: Option<String>,
     /// Bytes per second, averaged over about the last second.
     pub speed_bps: u64,
+    /// Files and folders handled per second, averaged like `speed_bps`,
+    /// with two decimals: the pace of a delete or of a move on one volume,
+    /// which move no bytes. 0 while paused and in the final record; absent
+    /// in a job's first record, before there is anything to average.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub items_per_second: Option<Rate>,
     /// Seconds left at the current speed; absent in the first two seconds
     /// and when there are no bytes to count.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eta_seconds: Option<u64>,
     /// Milliseconds since the job started working (after `queued`).
     pub elapsed_ms: u64,
+}
+
+/// A rate per second: never negative and never NaN, so it compares like a
+/// whole number.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(try_from = "f64", into = "f64")]
+pub struct Rate(f64);
+
+impl Eq for Rate {}
+
+impl Rate {
+    /// The rate, if `value` is a finite number of at least 0.
+    #[must_use]
+    pub fn new(value: f64) -> Option<Self> {
+        (value.is_finite() && value >= 0.0).then_some(Self(value))
+    }
+
+    /// The value.
+    #[must_use]
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+
+impl TryFrom<f64> for Rate {
+    type Error = String;
+
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        Self::new(value).ok_or_else(|| format!("{value} is not a rate"))
+    }
+}
+
+impl From<Rate> for f64 {
+    fn from(rate: Rate) -> Self {
+        rate.0
+    }
+}
+
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for Rate {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Rate".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "A rate per second, at least 0.",
+            "type": "number",
+            "minimum": 0
+        })
+    }
 }
 
 /// A job as `list_jobs` describes it: its progress and what it works on.

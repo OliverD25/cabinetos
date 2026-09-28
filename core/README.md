@@ -224,7 +224,7 @@ terminal first (Run as administrator), in `core/`:
 cargo run --release -p cabinetos-indexer -- --console --volumes C
 ```
 
-- `ping` prints `pong id=<ulid> protocol=10 core=<version> rtt=<ms>ms`.
+- `ping` prints `pong id=<ulid> protocol=11 core=<version> rtt=<ms>ms`.
 - `ls <path>` lists a directory the way the UI will: the core reads it into
   shared memory, the CLI maps the section and prints it. Options: `--long`
   (attributes, local modification time, size), `--hidden` (hidden and system

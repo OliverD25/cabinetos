@@ -454,6 +454,7 @@ mod tests {
             conflicts_open: 1,
             current_path: None,
             speed_bps: 610_000_000,
+            items_per_second: None,
             eta_seconds: Some(3),
             elapsed_ms: 2000,
         }

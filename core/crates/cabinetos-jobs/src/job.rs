@@ -7,7 +7,7 @@ use std::sync::{Condvar, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Instant;
 
 use cabinetos_protocol::{
-    Conflict, ConflictKind, JobInfo, JobProgress, JobRequest, JobState, Resolution,
+    Conflict, ConflictKind, JobInfo, JobProgress, JobRequest, JobState, Rate, Resolution,
 };
 
 use crate::progress::Meter;
@@ -197,7 +197,10 @@ pub(crate) struct Emitter {
     pub(crate) last_emit: Option<Instant>,
     /// The last progress sent, to send only changes.
     pub(crate) last_sent: Option<JobProgress>,
+    /// Bytes per second.
     pub(crate) meter: Meter,
+    /// Files and folders per second.
+    pub(crate) items: Meter,
     /// The final progress went out; nothing more is sent.
     pub(crate) finished: bool,
 }
@@ -278,8 +281,13 @@ impl Job {
         })
     }
 
-    /// A progress record with the given speed and time left.
-    pub(crate) fn progress(&self, speed_bps: u64, eta_seconds: Option<u64>) -> JobProgress {
+    /// A progress record with the given speed, pace and time left.
+    pub(crate) fn progress(
+        &self,
+        speed_bps: u64,
+        items_per_second: Option<Rate>,
+        eta_seconds: Option<u64>,
+    ) -> JobProgress {
         let counters = &self.counters;
         JobProgress {
             job_id: self.id,
@@ -293,6 +301,7 @@ impl Job {
             conflicts_open: Counters::get(&counters.conflicts_open),
             current_path: lock(&self.current_path).clone(),
             speed_bps,
+            items_per_second,
             eta_seconds,
             elapsed_ms: self.elapsed_ms(),
         }
@@ -300,18 +309,17 @@ impl Job {
 
     /// The job as `list_jobs` shows it.
     pub(crate) fn info(&self) -> JobInfo {
-        let (speed, eta) = {
+        let (speed, pace, eta) = {
             let emitter = lock(&self.emitter);
-            emitter
-                .last_sent
-                .as_ref()
-                .map_or((0, None), |sent| (sent.speed_bps, sent.eta_seconds))
+            emitter.last_sent.as_ref().map_or((0, None, None), |sent| {
+                (sent.speed_bps, sent.items_per_second, sent.eta_seconds)
+            })
         };
         JobInfo {
             kind: self.request.kind.clone(),
             sources: self.request.sources.clone(),
             destination: self.request.destination.clone(),
-            progress: self.progress(speed, eta),
+            progress: self.progress(speed, pace, eta),
         }
     }
 
