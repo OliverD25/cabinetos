@@ -65,6 +65,17 @@ function Step($text) {
   }
   "{0:HH:mm:ss.fff} {1}" -f (Get-Date), $text
 }
+# A key a dialog holds reaches no command: no "command executed" line of the window's log lies
+# between a "dialog shown" and its "dialog closed" (the dialog takes the key; nothing logs it there).
+function NothingRanUnderDialog($lines) {
+  $open = $false; $ran = 0
+  foreach ($line in $lines) {
+    if ($line -match '"dialog shown"') { $open = $true }
+    elseif ($line -match '"dialog closed"') { $open = $false }
+    elseif ($open -and $line -match '"command executed"') { $ran++ }
+  }
+  $ran -eq 0
+}
 function Shot([IntPtr]$h, [string]$path) {
   $r = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$r, 16)
   $bmp = New-Object System.Drawing.Bitmap ($r.Right - $r.Left), ($r.Bottom - $r.Top)
@@ -222,7 +233,7 @@ Step "Ctrl+Backquote while the dialog is open: nothing may run under it"
 Shot $h "$ShotDir\phase-5b-properties-closed.png"
 $log = Get-Content "$root\logs\ui.*.jsonl"
 "Esc closed the dialog: $([bool]($log | Where-Object { $_ -match '"dialog closed"' }))"
-"the terminal key was refused while it was open: $([bool]($log | Where-Object { $_ -match 'command refused' -and $_ -match 'view.toggleTerminal' }))"
+"no command ran while the dialog was open: $(NothingRanUnderDialog $log)"
 
 # ----- Phase 5c: keys inside WebView2 pages need real key presses -----
 Step "Ctrl+Backquote: the terminal opens and takes the keyboard"

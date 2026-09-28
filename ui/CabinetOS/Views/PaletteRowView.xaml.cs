@@ -22,6 +22,9 @@ public sealed partial class PaletteRowView : UserControl
     {
         InitializeComponent();
         _pulse = (Storyboard)Resources["Pulse"];
+        // The palette closes under a resting mouse: these tooltips must not open after it.
+        OpenToolTips.Set(PencilButton, "Change keybinding (F2)");
+        OpenToolTips.Set(LockIcon, "Part of the Immutable System Tier");
         DataContextChanged += (_, _) => Bind(DataContext as PaletteRow);
         PointerEntered += (_, _) =>
         {
@@ -167,6 +170,6 @@ public sealed partial class PaletteRowView : UserControl
                 Foreground = ThemeResources.Brush("CbTextTertiaryBrush"),
             });
         }
-        ToolTipService.SetToolTip(Keycaps, row.MoreKeys is null ? null : row.AllKeys);
+        OpenToolTips.Set(Keycaps, row.MoreKeys is null ? null : row.AllKeys);
     }
 }

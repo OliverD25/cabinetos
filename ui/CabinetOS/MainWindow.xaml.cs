@@ -414,6 +414,9 @@ public sealed partial class MainWindow : Window
                 case "focus":
                     LogFocusForSnapshot(step.Argument);
                     break;
+                case "tooltip":
+                    await OpenToolTipForSnapshotAsync(step.Argument);
+                    break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
                     var shown = Active.View?.IndexOfName(step.Argument) ?? -1;
@@ -469,6 +472,38 @@ public sealed partial class MainWindow : Window
             }
         }
         Diag.Info(Target, "snapshot click: no shown button has that name", new LogField("name", name));
+    }
+
+    // The snapshot aid's tooltip: step: opens the tooltip of the first element with that accessible
+    // name, shown or not, as the end of a hover delay would, and logs whether it stayed open.
+    private async Task OpenToolTipForSnapshotAsync(string name)
+    {
+        var pending = new Stack<DependencyObject>();
+        pending.Push(RootGrid);
+        FrameworkElement? owner = null;
+        while (owner is null && pending.Count > 0)
+        {
+            var element = pending.Pop();
+            if (element is FrameworkElement candidate && Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(candidate) == name)
+            {
+                owner = candidate;
+                break;
+            }
+            for (var i = VisualTreeHelper.GetChildrenCount(element) - 1; i >= 0; i--)
+            {
+                pending.Push(VisualTreeHelper.GetChild(element, i));
+            }
+        }
+        if (owner is null || ToolTipService.GetToolTip(owner) is not ToolTip tip)
+        {
+            Diag.Info("cabinetos_ui::snapshot", "tooltip: no element with that name has a tooltip object", new LogField("name", name));
+            return;
+        }
+        tip.IsOpen = true;
+        await Task.Delay(300);
+        Diag.Info("cabinetos_ui::snapshot", "tooltip", new LogField("name", name), new LogField("owner_shown", OpenToolTips.IsShown(owner)),
+            new LogField("open", tip.IsOpen));
+        tip.IsOpen = false;
     }
 
     // The snapshot aid's focus: step: where the keyboard is, in the log (the label names the moment).
@@ -2034,6 +2069,7 @@ public sealed partial class MainWindow : Window
             // under it reacts. Esc closes the dialog, as it would there; any other key takes the
             // keyboard back into it.
             e.Handled = true;
+            Diag.Info(Target, "key held by a dialog", new LogField("key", e.Key.ToString()), new LogField("dialog", dialog.Title as string ?? ""));
             if (e.Key == VirtualKey.Escape)
             {
                 dialog.Hide();

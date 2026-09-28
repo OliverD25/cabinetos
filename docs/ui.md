@@ -127,7 +127,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_PLUGINS_DIR`, `CABINETOS_MARKETPLACE_DIR` | Not read by the UI, except the plugins folder for the empty plugin list's hint; the core it starts inherits them and installs there ([marketplace.md](marketplace.md), "Folders"). Set both to a scratch folder to try installs without touching `%LOCALAPPDATA%\CabinetOS` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to the button, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to the button, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -386,14 +386,18 @@ it reacts:
 - **The keyboard starts in it.** When a dialog opens and the keyboard is
   not in it, it goes to the dialog's default button (else Close).
 - The log says "dialog shown" and "dialog closed" with the title and how
-  it was closed.
+  it was closed, and "key held by a dialog" for a key that reached the
+  window under it. A key pressed in the dialog is the dialog's own and is
+  not logged; the live check proves that nothing ran by finding no
+  "command executed" between "dialog shown" and "dialog closed".
 
 Checked on 2026-09-29 with the snapshot aid (release builds): Properties
 opened with the keyboard on its button, `view.toggleTerminal` and `go.up`
 were refused while it was open, and after it closed the keyboard was back
 in the pane and the terminal opened. The permissions review refused
 `view.toggleTerminal` and `palette.show`, and closed with `overlay.close`.
-Esc itself needs real keys ("The live check").
+With real keys (`ui/livecheck/livecheck.ps1`, 2026-09-29): Esc closed
+Properties, and Ctrl+` pressed while it was open ran nothing.
 
 ## File operations
 
@@ -587,7 +591,13 @@ closes a tooltip when the pointer leaves its button, and a button that
 collapses under a resting mouse is never left: the pencil's "Change
 keybinding (F2)" stayed on screen in the live check of 2026-09-28. The
 theme picker, the plugin list, the permissions review, the context menu
-and the marketplace do the same when they close.
+and the marketplace do the same when they close. A tooltip can also open
+after its overlay closed, from the hover delay WinUI started while the
+mouse was on the button (the re-run of 2026-09-29 showed it). So the
+row's tooltips (the pencil, the lock, the keycaps' "+N") close themselves
+when they open for a button that is not shown (`OpenToolTips.Set`).
+Checked with the snapshot step `tooltip:Change keybinding`: open with the
+palette shown, and closed at once after the palette closed.
 
 ## Search
 
@@ -766,8 +776,8 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   not their `keydown`. The `keydown` can carry the character of an earlier
   packet, which xterm.js typed instead: the live check of 2026-09-28 got
   `ttttttttttttttt` for `echo unicode-5c`. Keys of a physical keyboard are
-  not affected. This needs the real-key check to confirm ("The live
-  check").
+  not affected. Confirmed with real input on 2026-09-29: `echo live-5c`
+  typed as Unicode key events answered `live-5c`.
 - **The core stops.** Its shells end with it, and the tabs close.
 
 How it is built:
@@ -1173,11 +1183,12 @@ the protocol 11 work that night:
   live check of 2026-09-28 ([log/2026-09-28/live-check.md](log/2026-09-28/live-check.md))
   passed the window, the palette and rebinding, scrolling 100,000 entries
   with PageDown held, the file keys, the conflict card, the terminal's keys
-  and search. Its five findings are fixed and checked with the tests and
-  the snapshot aid, but the real-key parts wait for a re-run of
-  `ui/livecheck/`: Esc in a dialog and a key under it, Unicode key events
-  in the terminal, the pencil's tooltip after the palette closes, Ctrl+K V
-  on the open preview, and Skip through UI Automation. Not checked with
+  and search. Its five findings are fixed. A re-run of `ui/livecheck/`
+  on 2026-09-29 confirmed four with real input (Ctrl+K V on the open
+  preview, Esc in a dialog and a key under it, Unicode key events in the
+  terminal, the keyboard after Skip through UI Automation); the pencil's
+  tooltip still opened after the palette closed, which the guarded
+  tooltips answer and the next run checks. Not checked with
   real keys yet: Ctrl+Shift+X, Ctrl+K Ctrl+T and Tab through the
   marketplace, the uninstall confirmation, a real drag of the dock's
   splitter, keys inside the Markdown Preview, menus and tooltips in light

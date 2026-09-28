@@ -117,8 +117,7 @@
                 Height="24"
                 AutomationProperties.Name="Change keybinding"
                 Opacity="0.25"
-                Style="{StaticResource CbSubtleButtonStyle}"
-                ToolTipService.ToolTip="Change keybinding (F2)">
+                Style="{StaticResource CbSubtleButtonStyle}">
                 <FontIcon FontSize="13" Glyph="&#xE70F;" />
             </Button>
             <FontIcon
@@ -128,7 +127,6 @@
                 FontSize="13"
                 Foreground="{ThemeResource CbTextTertiaryBrush}"
                 Glyph="&#xE72E;"
-                ToolTipService.ToolTip="Part of the Immutable System Tier"
                 Visibility="Collapsed" />
         </Grid>
     </Grid>
