@@ -231,6 +231,169 @@ Built 2026-09-28; nothing published or signed. Unpackaged for version 1 ([ADR 00
 
 Articles: 2, 3.
 
+### Phase 11 — Total Commander parity (proposed 2026-09-29)
+
+Goal: a Total Commander user finds the features and keys they rely on, each
+one in the layer the Constitution gives it. The research behind this phase,
+feature by feature and key by key, is
+[research/total-commander.md](research/total-commander.md). The opt-in rule
+(Article 10) decides every item. Navigation, selection, keys and jobs go into
+the core. Viewers, archives, remote servers, batch renaming, syncing,
+splitting and text search become extensions in the marketplace, and the core
+only gets the hooks they need (brief §1). The sub-phases go from small to
+large. Each one starts only when the creator says so; 11a started on
+2026-09-29 on the creator's desk card "List of most used Total Commander
+Shortcuts" ("check what we lack, then do them"). The research note ends with
+ten questions only the creator can answer (Ctrl+B, folder tabs, the default
+marking rules, Windows property columns in the core, text search as plugin or
+core, a "Commander pack" at first start, `net` grants for one server, the
+public marketplace repository, the order of 11f, and a copy dialog before F5).
+
+#### 11a — Keys and small commands (small: about a day per item)
+
+Covers features 1, 2, 8, 13, 16 and 17 of the research note, and the F3 and
+Alt+F7 keys of features 6 and 10.
+
+Produces: in the core, keypad keys in the key grammar (`numpadadd`,
+`numpadsubtract`, `numpadmultiply`, `numpaddivide`, `numpaddecimal`); several
+default keys per command in the registry seed; the aliases and new commands
+of the note's list "Small keys and commands to add now"; the requests
+`create_file`, `edit_path` (with the setting `files.editor`),
+`show_properties`, `measure_paths` (with its events and cancel),
+`match_entries` and `terminal_type_paths`; the sort key `extension`; the
+setting `panes.selection` (`windows` or `commander`). In the shell: the
+handlers, a drive list under each pane (Alt+F1, Alt+F2), the pattern box, the
+list of pinned folders (Ctrl+D), quick search by typing in a pane, and
+measured folder sizes in the Size column. In the marketplace: nothing.
+
+Done when: every key on the desk card "List of most used Total Commander
+Shortcuts" either works or names the sub-phase that brings it; the grammar,
+registry and keymap tests cover the new keys (no conflict, no chord prefix,
+the Immutable System Tier untouched); the UI tests cover the keypad key
+names, the commander selection mode, invert and restore; and a live check
+with real keys presses F8, Shift+F8, Num +, Num *, Space on a folder,
+Alt+Shift+Enter, Ctrl+\, Alt+F1, Ctrl+U, F3, F4, Shift+F4 and Ctrl+P.
+
+Articles: 1, 5, 7, 9.
+
+#### 11b — Navigation depth (medium)
+
+Covers features 12 (branch view), 14 (folder tabs), 11 (the transfer
+queue), 13 (files to and from Explorer), 7 (comparing the two panes), 17
+(quick filter), 10 (search hits as a listing), and the optional parts of 1
+(the copy dialog) and 2 (the function-key bar).
+
+Produces: in the core, listings built from a tree (branch view) and from a
+list of paths (search hits), with a folder for each entry, which changes the
+section layout's version; `compare_listings` for the two open panes;
+`list_directory` with a name filter; `start_job` with `new_name` for a single
+source, `options.max_bytes_per_second`, and the `job_control` actions
+`set_speed_limit` and `move_to_front`. In the shell: a tab strip per pane
+(Ctrl+T, Ctrl+W, Ctrl+Tab, locked tabs) saved as `ui.tabs`; branch view
+(Ctrl+K Ctrl+B); the quick filter (Ctrl+S); file commands on search hits;
+Shift+F2 marking the differences; the list of all jobs with speed limits;
+the copy dialog behind `panes.confirmTransfers` (off by default); the
+function-key bar behind `ui.functionKeys` (off by default); the Windows
+clipboard's file list (`CF_HDROP`) in both directions, and drag and drop.
+In the marketplace: nothing.
+
+Done when: tabs and their locks come back after a restart; a branch view of
+the 100,000-entry benchmark folder and of a deep tree shows with a Folder
+column, and F5 copies from it; F5 copies a search hit; a copy with a speed
+limit stays within 5 % of the limit (first-cut target, to be measured);
+files copied in Explorer paste in CabinetOS, and the other way; Shift+F2
+marks exactly the rows that differ in a prepared pair of folders.
+
+Articles: 1, 4, 5, 6.
+
+#### 11c — Columns, search filters and settings (medium)
+
+Covers features 15 (the column framework and Windows property columns), 10
+(search filters), 19 (settings view, fonts, command bar, user commands) and
+16 (tasks for `terminal.runTask`).
+
+Produces: in the core, `panes.columns` and sorting by any field of the
+listing; Windows property fields in `describe_entries`, off by default; a
+search query syntax with wildcards, regular expressions, and size, date and
+attribute filters, on the index and on the walk; user commands from
+`userCommands` in the registry; the settings the settings view needs. In the
+shell: live column headers and a column chooser; the search filter flyout
+(Alt+F7 opens it); the graphical settings view (Article 6); tasks for
+`terminal.runTask`. In the marketplace: nothing.
+
+Done when: a column added in the view appears in `cabinetos.json`, and one
+added in the file appears in the view within a second; a click on a header
+sorts by it; a search for `*.log size:>1mb modified:2026-09` answers from the
+index and from the walk; a user command appears in the palette, takes a key
+and runs with the selected paths.
+
+Articles: 1, 3, 4, 6, 7, 9.
+
+#### 11d — Extension platform, version 0.2 (medium to large)
+
+Covers the core hooks of features 3, 6, 7, 9, 10, 15 and 18. The features
+themselves come in 11e.
+
+Produces: in the core, the plugin interface `cabinetos:plugin@0.2.0` with
+per-request file grants (`fs:selection`), plugin work run as core jobs
+(progress, pause, cancel), a content-field hook and a quick-input host
+function; the `rename` job kind with an undo list; `compare_trees`; commands
+in `tool.json`, tools opened without a file, and plans (renames, copies,
+deletes) that a tool hands to the window, which asks the user and starts the
+jobs; `open` with two files; the range-request spike, and a byte-range read
+for tools if the spike needs it; marketplace packs. In the SDK: a template
+and a documented sample for each hook. In the marketplace: nothing yet; the
+samples are test fixtures.
+
+Done when: a fixture plugin and a fixture tool prove each hook; a plugin is
+refused a file it was not given; a 20 GB plan runs as a job and pauses and
+cancels; a crashing plugin inside a job leaves the core serving listings.
+
+Articles: 8, 10, 11.
+
+#### 11e — First-party opt-in extensions (medium each)
+
+Covers features 3, 6, 7, 10, 15 and 18.
+
+Produces: in the marketplace only, nothing in the core, a viewer pack (text,
+hex on Ctrl+K H, image, media, and Quick View on Ctrl+Q); Multi-Rename
+(Ctrl+M); Sync and Text Compare; Split and Combine with checksum files; Text
+Search; Media Fields (EXIF and MP3 tags); and a "Commander pack" that
+installs them together.
+
+Needs: the public marketplace index (ADR 0012), which waits for the creator
+to create its repository. Until then the extensions install from a local
+index (`sdk/marketplace/build-index.ps1`).
+
+Done when: each extension installs from the index, passes its permissions
+review, does its job, and uninstalls without leaving files; the core's size
+and start time do not change with them installed.
+
+Articles: 2, 8, 10, 11.
+
+#### 11f — Virtual file systems: archives and servers (large: several phases)
+
+Covers features 4 (archives), 5 (FTP and SFTP), the Packer and File System
+kinds of feature 9, and search inside archives (feature 10).
+
+Produces: in the core, the virtual file system hook (`vfs:provide`), whose
+listings use the shared-memory format and whose paths lead into archives and
+servers; jobs that read and write through a provider; running a file from an
+archive through a temporary copy; dragging files in and out; `net` grants
+narrowed to one server; passwords in Windows Credential Manager through the
+core. In the marketplace: Archives (zip, 7z, the tar family; Alt+F5 packs,
+Alt+F9 unpacks), and FTP, FTPS and SFTP, after an SSH spike.
+
+Done when: a 10 GB archive lists, and extracts through a job that pauses and
+resumes; a crashing provider leaves the core serving; an FTP plugin granted
+one server cannot reach another address.
+
+Articles: 1, 8, 10, 11.
+
+Not in Phase 11: the Android app (feature 20; Articles 1 and 3), and Total
+Commander's own plugin DLLs, which are native code that cannot be sandboxed
+(Article 8).
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 This is the first coding task. The creator will give the exact instruction; this

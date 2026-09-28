@@ -64,6 +64,7 @@ every third-party license; signing and publishing wait for the creator.
 | [docs/marketplace.md](docs/marketplace.md) | The marketplace: the index format, where installs go, the trust rules, a local index for testing. |
 | [docs/release.md](docs/release.md) | Releases: how the zip is built, installed, removed, signed and published. |
 | [CHANGELOG.md](CHANGELOG.md) | What each version adds. |
+| [docs/research/](docs/research/README.md) | Research notes and proposals, not decisions: the Total Commander gap analysis behind the proposed Phase 11. |
 | [docs/log/](docs/log/2026-09-28/README.md) | The build log: one report per phase, with every decision and its undo. |
 
 ## Layout
