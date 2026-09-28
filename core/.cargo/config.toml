@@ -1,0 +1,6 @@
+# Every program of this workspace carries the C runtime inside it instead of
+# loading VCRUNTIME140.dll, which comes with the Visual C++ Redistributable
+# and is missing on a clean Windows 11 (ADR 0009). Cargo reads this file only
+# when it runs from core/ or below, as the build commands and CI do.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
