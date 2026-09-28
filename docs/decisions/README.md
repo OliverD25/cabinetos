@@ -18,6 +18,9 @@ The Constitution outranks every record here. A record may refine the brief
 | [0007](0007-monorepo.md) | One repository holds core, UI, SDK and docs | 2026-09-28 | accepted |
 | [0008](0008-brief-and-design-committed.md) | The brief and the design handout live in the repo; the brief is a living document | 2026-09-28 | accepted |
 | [0009](0009-packaging.md) | Version 1 ships unpackaged, as a zip with an install script | 2026-09-28 | accepted |
+| [0010](0010-windows-app-sdk-license-exception.md) | The UI layer depends on Microsoft's Windows App SDK and WebView2 under their own license terms; a recorded exception | 2026-09-28 | accepted |
+| [0011](0011-search-without-per-user-filtering.md) | Version 1 answers file names to any logged-on user, regardless of folder rights | 2026-09-28 | accepted |
+| [0012](0012-marketplace-index-on-github-pages.md) | The marketplace index is served from GitHub Pages of a separate public repository | 2026-09-28 | accepted |
 
 ## Template
 

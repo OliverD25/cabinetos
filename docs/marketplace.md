@@ -228,9 +228,14 @@ cabinetos-cli market tools
 
 ## Not yet
 
-- There is no public index: `marketplace.index` defaults to a placeholder,
-  `https://marketplace.cabinetos.invalid/index.json`, which can never
-  resolve. Publishing an index is a decision for the project's creator.
+- There is no public index yet: `marketplace.index` defaults to a
+  placeholder, `https://marketplace.cabinetos.invalid/index.json`, which can
+  never resolve. Where the real one will live is decided
+  ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)): GitHub
+  Pages of a separate public repository, at
+  `https://oliverd25.github.io/cabinetos-marketplace/index.json`. Once the
+  creator has created it, the default changes here, in the config schema
+  and in the shell's empty state.
 - Publisher identities and signatures; until then `verified` is only shown.
 - The marketplace view is UI work. The window reads the tools folders at
   its start, so a tool installed while it runs shows at its next start;

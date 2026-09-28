@@ -78,4 +78,7 @@ Windows 11 22H2 (build 22621) or newer. See
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). The WinUI 3 frontend builds on Microsoft's Windows App SDK,
+which comes under Microsoft's own license terms
+([ADR 0010](docs/decisions/0010-windows-app-sdk-license-exception.md)); the
+core, the indexer and the CLI have no such dependency.

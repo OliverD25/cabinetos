@@ -90,6 +90,16 @@ A radix tree or a trigram index would make searches faster still. That
 waits until the scan is measured too slow; at 11.5 ms for 1.36 million
 entries it is not.
 
+### What the index reveals
+
+The index holds names, parents and attributes, never file contents. It
+answers any user logged on to the PC, regardless of that user's rights on
+the folders the names sit in, as the "Everything" tool does
+([ADR 0011](decisions/0011-search-without-per-user-filtering.md)). Opening
+a hit still goes through NTFS, which refuses what the user may not read. A
+user who needs otherwise runs without the indexer: the core's own walk sees
+only what that user may see.
+
 ## Keeping the index current
 
 One thread per volume reads the change journal (`FSCTL_READ_USN_JOURNAL`,
