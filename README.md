@@ -36,7 +36,9 @@ Tool Extensions each in a WebView2 process of its own, with Markdown
 Preview as the first (opt-in, in `sdk/tools`), colour themes applied live
 with a theme picker, and the marketplace view, which installs plugins and
 themes from an index through the core; checked with real keys on
-2026-09-28, with five findings queued for the shell.
+2026-09-28, with five findings queued for the shell. Phase 10's buildable
+parts are done: one command builds a release zip with an installer and
+every third-party license; signing and publishing wait for the creator.
 
 ## Documents
 
@@ -60,6 +62,8 @@ themes from an index through the core; checked with real keys on
 | [docs/tool-extensions.md](docs/tool-extensions.md) | Tool Extensions: `tool.json`, where tools live, the page's rules, the messages between the window and a tool, Markdown Preview. |
 | [docs/themes.md](docs/themes.md) | Colour themes: the JSON format, the shipped themes, the themes folder, live editing. |
 | [docs/marketplace.md](docs/marketplace.md) | The marketplace: the index format, where installs go, the trust rules, a local index for testing. |
+| [docs/release.md](docs/release.md) | Releases: how the zip is built, installed, removed, signed and published. |
+| [CHANGELOG.md](CHANGELOG.md) | What each version adds. |
 | [docs/log/](docs/log/2026-09-28/README.md) | The build log: one report per phase, with every decision and its undo. |
 
 ## Layout
@@ -70,11 +74,41 @@ themes from an index through the core; checked with real keys on
 | `ui/` | C# WinUI 3 solution: `CabinetOS.exe` |
 | `sdk/` | Plugin interface (WIT), protocol schema, templates, themes |
 | `docs/` | Governing documents, plan, decisions, design |
+| `build/` | Release scripts: `release.ps1`, the installer and uninstaller, the notices generator, the winget manifests |
 
 ## Requirements
 
-Windows 11 22H2 (build 22621) or newer. See
-[docs/dev-setup.md](docs/dev-setup.md) for the toolchains.
+- Windows 11 22H2 (build 22621) or newer, x64.
+- To run it: the .NET 10 runtime, the Windows App Runtime 2.5.1 or newer
+  (x64), and the WebView2 Runtime, which every Windows 11 has. The installer
+  checks all three and prints the command that installs a missing one.
+- To build it: the toolchains in [docs/dev-setup.md](docs/dev-setup.md).
+
+## Install
+
+No release is published yet; build the zip with `build/release.ps1`
+([docs/release.md](docs/release.md)). With the zip in your Downloads folder,
+in PowerShell:
+
+```powershell
+Unblock-File "$env:USERPROFILE\Downloads\CabinetOS-0.1.0-win-x64.zip"
+Expand-Archive "$env:USERPROFILE\Downloads\CabinetOS-0.1.0-win-x64.zip" "$env:TEMP\CabinetOS-0.1.0" -Force
+powershell -ExecutionPolicy Bypass -File "$env:TEMP\CabinetOS-0.1.0\install.ps1" -StartMenu -AddToPath
+```
+
+This installs CabinetOS for you alone, in `%LOCALAPPDATA%\Programs\CabinetOS`,
+with no administrator rights; `-StartMenu` and `-AddToPath` are optional.
+`-AllUsers` installs into Program Files instead (run as administrator), and
+`-AllUsers -Indexer` adds the indexer service for instant search of whole
+volumes. To remove CabinetOS:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Programs\CabinetOS\uninstall.ps1"
+```
+
+Settings, plugins and logs stay unless you add `-RemoveData`. The release is
+not signed yet, so Windows SmartScreen may ask before the first start.
+Details: [docs/release.md](docs/release.md).
 
 ## License
 

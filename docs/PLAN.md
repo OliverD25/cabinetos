@@ -217,11 +217,13 @@ Core side done 2026-09-28. Built: the JSON theme format as one Rust type (`Theme
 
 Articles: 2, 8.
 
-### Phase 10 — Packaging and release
+### Phase 10 — Packaging and release — buildable parts done 2026-09-28 (signing and publishing wait for the creator)
 
 Goal: a stranger can install it.
 
 Produces: MSIX or unpackaged decision; `winget` manifest; code signing; the indexer service installer step; release notes; the repo goes public.
+
+Built 2026-09-28; nothing published or signed. Unpackaged for version 1 ([ADR 0009](decisions/0009-packaging.md)): one folder, zipped, with a script installer; MSIX waits until the indexer can ship as an optional component. `build/release.ps1` (PowerShell 7) builds everything with one command: the three Rust programs, which now carry the C runtime inside them because a clean Windows 11 has no `VCRUNTIME140.dll`; the window, published framework-dependent on .NET 10 and the Windows App Runtime with `-p:EnableMsixTooling=true` (without it the published window cannot find its compiled XAML and stops at start); the programs' `.pdb` files; the four themes and Markdown Preview under `extras\` (opt-in); `LICENSE`; `THIRD-PARTY-NOTICES.md` (271 components, every license text); `install.ps1`, `uninstall.ps1` and `release.json`; then the zip, its SHA-256 and the winget manifests (a portable zip, accepted by `winget validate`). The version comes from `core/Cargo.toml` alone. `install.ps1` checks Windows 11 22H2+, the .NET 10 runtime, the Windows App Runtime 2.5.1+ and WebView2, and prints the install command for each missing one. It installs per user without elevation, or with `-AllUsers` into Program Files. The Start Menu shortcut, the PATH entry and the indexer service are opt-in. The service needs `-AllUsers`, because a LocalSystem service must not run a program the user can replace. `uninstall.ps1` removes exactly what the install recorded and keeps the data unless `-RemoveData`. A manual CI job builds the zip as an artifact; it has not run (GitHub Actions starts no jobs for this account). `CHANGELOG.md` lists the first version's capabilities. Measured 2026-09-28 on this PC: a 77 MB zip (83 files, 246 MB unpacked; 38 MB of the zip are Rust symbols, 17 MB Windows App SDK AI libraries CabinetOS does not use). Installed from the zip into `%TEMP%` in Windows PowerShell 5.1 and PowerShell 7, the window started its own core (protocol 11, version 0.1.0), and uninstall left nothing behind. Still open for the creator: a code-signing certificate, making the repository public, `gh release create`, the winget submission (which waits until winget carries Windows App Runtime 2.5), and whether the `.pdb` files stay in the zip or move to a symbols zip of their own. Queued for the shell: dropping the unused AI libraries by referencing only the Windows App SDK components it uses (Article 10), producing the `.pri` on publish, and an About view with the version. Guide: [release.md](release.md).
 
 Articles: 2, 3.
 
