@@ -6,11 +6,13 @@ on:
     paths:
       - "core/**"
       - "sdk/protocol/**"
+      - "sdk/config/**"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
       - "core/**"
       - "sdk/protocol/**"
+      - "sdk/config/**"
       - ".github/workflows/ci.yml"
 
 concurrency:
