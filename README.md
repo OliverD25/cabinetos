@@ -24,8 +24,8 @@ per-disk queues, runs sandboxed WebAssembly plugins whose crashes it
 contains, searches whole NTFS volumes through an elevated indexer (or walks
 folders without it), and runs shells in pseudo-consoles for the terminal
 pane, all over a user-only named pipe, with the indexer behind a read-only
-pipe of its own and each shell's bytes on a pipe of their own (`core/`, 393
-tests, CI green). Phase 5, the WinUI 3 shell, is next.
+pipe of its own and each shell's bytes on a pipe of their own (`core/`, 398
+tests, CI green). Phase 5, the WinUI 3 shell, is in progress under `ui/`.
 
 ## Documents
 

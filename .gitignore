@@ -22,6 +22,7 @@ launchSettings.json
 
 # Local tool state
 .claude/settings.local.json
+.claude/worktrees/
 *.local.json
 *.log
 /logs/
