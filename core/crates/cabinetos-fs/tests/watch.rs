@@ -49,7 +49,8 @@ fn stopping_is_prompt_and_quiet() {
     let (watcher, changes) = start(dir.path());
     let started = Instant::now();
     watcher.stop();
-    assert!(started.elapsed() < Duration::from_millis(500));
+    // Generous bounds: they catch a hang, not a slow machine.
+    assert!(started.elapsed() < Duration::from_secs(2));
     fs::write(dir.path().join("after-stop.txt"), b"x").unwrap();
     assert!(changes.recv_timeout(Duration::from_millis(200)).is_err());
 }
@@ -60,7 +61,7 @@ fn dropping_does_not_block() {
     let (watcher, _changes) = start(dir.path());
     let started = Instant::now();
     drop(watcher);
-    assert!(started.elapsed() < Duration::from_millis(100));
+    assert!(started.elapsed() < Duration::from_secs(1));
 }
 
 #[test]

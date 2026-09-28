@@ -240,11 +240,15 @@ async fn a_watched_listing_is_refreshed_when_a_file_appears() {
     }
     assert!(created.elapsed() < EVENT_DEADLINE);
 
-    // After close_listing no more events come.
+    // After close_listing no more events come. Windows may report one new
+    // file in two batches, so a second refresh can be queued before the
+    // close; the core's replies and events share one ordered queue, so
+    // anything queued before the close is already here once the reply is.
     client
         .request(Request::CloseListing { listing_id })
         .await
         .unwrap();
+    while events.try_recv().is_ok() {}
     File::create(dir.path().join("ignored.txt")).unwrap();
     assert!(
         tokio::time::timeout(Duration::from_millis(300), events.recv())

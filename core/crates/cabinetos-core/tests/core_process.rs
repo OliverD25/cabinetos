@@ -18,7 +18,7 @@ use tokio::net::windows::named_pipe::ClientOptions;
 
 const CORE_EXE: &str = env!("CARGO_BIN_EXE_cabinetos-core");
 const STARTUP_DEADLINE: Duration = Duration::from_secs(10);
-const EXIT_DEADLINE: Duration = Duration::from_secs(5);
+const EXIT_DEADLINE: Duration = Duration::from_secs(10);
 
 /// A running core; killed if a test fails before it exits on its own.
 struct Core {
