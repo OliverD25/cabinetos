@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use cabinetos_fs::Hydrator;
 use cabinetos_jobs::JobQueueManager;
 use cabinetos_plugins::PluginHost;
 use cabinetos_protocol::{Envelope, Event, RequestId};
@@ -52,4 +53,6 @@ pub(crate) struct Services {
     /// The terminal sessions. They belong to the core, not to a
     /// connection: a client may leave and a new one attach.
     pub(crate) terminals: Arc<Terminals>,
+    /// Type names and icons, with their caches, for every connection.
+    pub(crate) hydrator: Arc<Hydrator>,
 }

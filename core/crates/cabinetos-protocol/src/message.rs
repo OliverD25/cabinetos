@@ -77,6 +77,26 @@ pub enum Request {
         /// The listing, from `listing_opened`.
         listing_id: u64,
     },
+    /// Asks for the shell's type name and an icon key of some entries of a
+    /// listing, in the order of its current section. The core answers
+    /// `entry_details`.
+    DescribeEntries {
+        /// The listing, from `listing_opened`.
+        listing_id: u64,
+        /// The first entry, by its index in the section.
+        from: u32,
+        /// How many entries, at most [`MAX_DESCRIBED`]; fewer come back at
+        /// the end of the listing.
+        count: u32,
+    },
+    /// Asks for the icon of an icon key, as a PNG. The core answers `icon`.
+    GetIcon {
+        /// The key, from `entry_details`: `folder`, `generic`, `ext:.txt` or
+        /// `path:…`.
+        key: String,
+        /// Its width and height in pixels: 16, 24, 32 or 48.
+        size: u32,
+    },
     /// Asks which volume and physical disk a path lives on. The core answers
     /// `volume_info`.
     VolumeInfo {
@@ -292,6 +312,8 @@ impl Request {
         "hello",
         "list_directory",
         "close_listing",
+        "describe_entries",
+        "get_icon",
         "volume_info",
         "list_volumes",
         "open_path",
@@ -332,6 +354,8 @@ impl Request {
             Self::Hello { .. } => "hello",
             Self::ListDirectory { .. } => "list_directory",
             Self::CloseListing { .. } => "close_listing",
+            Self::DescribeEntries { .. } => "describe_entries",
+            Self::GetIcon { .. } => "get_icon",
             Self::VolumeInfo { .. } => "volume_info",
             Self::ListVolumes => "list_volumes",
             Self::OpenPath { .. } => "open_path",
@@ -440,6 +464,27 @@ pub enum Response {
         /// Microseconds the core spent reading, sorting and writing it.
         elapsed_us: u64,
     },
+    /// Reply to `describe_entries`: one detail per entry, from `from` on.
+    EntryDetails {
+        /// The listing.
+        listing_id: u64,
+        /// The generation of the section the entries were read from; the
+        /// details belong to that one.
+        generation: u32,
+        /// The index of the first entry described.
+        from: u32,
+        /// The entries' details, in section order.
+        details: Vec<EntryDetail>,
+    },
+    /// Reply to `get_icon`.
+    Icon {
+        /// The key asked for.
+        key: String,
+        /// The width and height in pixels.
+        size: u32,
+        /// The icon as a PNG with an alpha channel, in base64.
+        png_base64: String,
+    },
     /// Reply to `volume_info`.
     VolumeInfo(VolumeDetails),
     /// Reply to `list_volumes`: the volumes that answered, by drive letter.
@@ -544,6 +589,8 @@ impl Response {
         "error",
         "welcome",
         "listing_opened",
+        "entry_details",
+        "icon",
         "volume_info",
         "volumes",
         "config",
@@ -571,6 +618,8 @@ impl Response {
             Self::Error { .. } => "error",
             Self::Welcome { .. } => "welcome",
             Self::ListingOpened { .. } => "listing_opened",
+            Self::EntryDetails { .. } => "entry_details",
+            Self::Icon { .. } => "icon",
             Self::VolumeInfo(_) => "volume_info",
             Self::Volumes { .. } => "volumes",
             Self::Config { .. } => "config",
@@ -589,6 +638,23 @@ impl Response {
             Self::TerminalSessions { .. } => "terminal_sessions",
         }
     }
+}
+
+/// The most entries one `describe_entries` may ask for.
+pub const MAX_DESCRIBED: u32 = 512;
+
+/// What a file pane shows beside a name, from the shell.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct EntryDetail {
+    /// The shell's name for the type, in the user's language, for example
+    /// `Text Document` or `File folder`.
+    pub type_name: String,
+    /// The icon to show, for `get_icon`: `folder` for every folder,
+    /// `ext:<extension>` (lower case, with its dot) for a file by its
+    /// extension, `generic` for a file without one, and `path:<16 hex
+    /// digits>` for an `.exe`, `.ico` or `.lnk` file, whose icon is its own.
+    pub icon_key: String,
 }
 
 /// The volume a path lives on, and the physical disk under it.
@@ -1016,6 +1082,15 @@ mod tests {
                 watch: true,
             },
             Request::CloseListing { listing_id: 7 },
+            Request::DescribeEntries {
+                listing_id: 7,
+                from: 0,
+                count: 128,
+            },
+            Request::GetIcon {
+                key: "ext:.txt".to_owned(),
+                size: 32,
+            },
             Request::VolumeInfo {
                 path: r"C:\".to_owned(),
             },
@@ -1175,6 +1250,26 @@ mod tests {
                 entry_count: 12,
                 generation: 1,
                 elapsed_us: 1234,
+            },
+            Response::EntryDetails {
+                listing_id: 7,
+                generation: 2,
+                from: 0,
+                details: vec![
+                    EntryDetail {
+                        type_name: "File folder".to_owned(),
+                        icon_key: "folder".to_owned(),
+                    },
+                    EntryDetail {
+                        type_name: "Text Document".to_owned(),
+                        icon_key: "ext:.txt".to_owned(),
+                    },
+                ],
+            },
+            Response::Icon {
+                key: "ext:.txt".to_owned(),
+                size: 32,
+                png_base64: "iVBORw0KGgo=".to_owned(),
             },
             Response::VolumeInfo(volume()),
             Response::Volumes {

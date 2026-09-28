@@ -3,19 +3,16 @@
 //! it (a viewer, an editor, Explorer for a folder, the program itself for
 //! an `.exe`) is the user's choice in Windows, not the core's.
 
-use std::marker::PhantomData;
 use std::os::windows::ffi::OsStrExt;
 
 use windows::Win32::Storage::FileSystem::{GetFileAttributesW, INVALID_FILE_ATTRIBUTES};
-use windows::Win32::System::Com::{
-    COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoUninitialize,
-};
 use windows::Win32::UI::Shell::{
     SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, ShellExecuteExW,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use windows::core::{PCWSTR, w};
 
+use crate::com::Apartment;
 use crate::{FsError, path};
 
 /// Opens `path`, a file or a folder, with its default application: the
@@ -53,38 +50,6 @@ pub fn open_path(path: &str) -> Result<(), FsError> {
     // strings are NUL-terminated and outlive the call, which returns once
     // the shell is done with them (SEE_MASK_NOASYNC).
     unsafe { ShellExecuteExW(&raw mut info) }.map_err(|error| FsError::from_windows(path, &error))
-}
-
-/// A single-threaded COM apartment on this thread, left when dropped. Not
-/// `Send`: COM must be left on the thread that entered it.
-struct Apartment {
-    entered: bool,
-    _thread_bound: PhantomData<*const ()>,
-}
-
-impl Apartment {
-    /// Joins an apartment. A thread already in another kind of apartment
-    /// stays in it (the shell works there too), and nothing is left then.
-    fn enter() -> Self {
-        // SAFETY: a plain call; a success is balanced by CoUninitialize in
-        // `drop`, on this same thread (the type is not Send).
-        let result =
-            unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
-        Self {
-            entered: result.is_ok(),
-            _thread_bound: PhantomData,
-        }
-    }
-}
-
-impl Drop for Apartment {
-    fn drop(&mut self) {
-        if self.entered {
-            // SAFETY: balances the successful CoInitializeEx of `enter` on
-            // this thread; `open_path` keeps no COM object past the call.
-            unsafe { CoUninitialize() };
-        }
-    }
 }
 
 #[cfg(test)]

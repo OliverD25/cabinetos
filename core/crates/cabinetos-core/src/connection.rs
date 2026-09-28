@@ -8,9 +8,9 @@
 //!   queued, so a `listing_opened` always goes out before the events of that
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
-//!   (`list_directory`, `volume_info`, `list_volumes`, `open_path`,
-//!   `create_directory`, `rename`, `set_value`, the keybinding and plugin
-//!   settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
+//!   (`list_directory`, `describe_entries`, `get_icon`, `volume_info`,
+//!   `list_volumes`, `open_path`, `create_directory`, `rename`, `set_value`,
+//!   the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`)
 //!   as tasks, so one slow directory, plugin, search or shell never holds up
 //!   the next request. After `hello` it also forwards the configuration,
@@ -21,12 +21,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use cabinetos_diag::span_for_request;
 use cabinetos_fs::{DirectoryWatcher, ListOptions};
-use cabinetos_ipc::{IpcError, PipeConnection, SharedSection};
+use cabinetos_ipc::{IpcError, PipeConnection};
 use cabinetos_protocol::{
-    Envelope, ErrorCode, Event, JobRequest, PROTOCOL_VERSION, Request, RequestId, Response,
-    SortSpec, TerminalState,
+    Envelope, ErrorCode, Event, JobRequest, MAX_DESCRIBED, PROTOCOL_VERSION, Request, RequestId,
+    Response, SortSpec, TerminalState,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -37,7 +39,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::events::Services;
-use crate::listing::{self, Failure, Published, WatchedListing};
+use crate::listing::{self, CurrentSection, Failure, Published, WatchedListing};
 use crate::plugins::check_grants;
 use crate::search;
 use crate::settings::{Settings, every_section};
@@ -78,13 +80,15 @@ struct Client {
 }
 
 /// What the session keeps for each open listing.
-enum ListingSlot {
-    /// Not watched: the core's handle to its section.
-    Static(SharedSection),
-    /// Watched: the task that keeps it current (and owns its section).
-    Watched(AbortHandle),
-    /// Its directory was lost; only `close_listing` is left to do.
-    Lost,
+struct ListingSlot {
+    /// The folder, as the client named it.
+    path: String,
+    /// The section clients read now, shared with a watched listing's
+    /// refresh task. Dropping the last reference closes the core's handle.
+    current: Arc<CurrentSection>,
+    /// A watched listing's refresh task, until it ends (the directory was
+    /// lost); only `close_listing` is left to do then.
+    refresh: Option<AbortHandle>,
 }
 
 /// What a finished task reports to the session loop.
@@ -265,6 +269,12 @@ impl Session {
                     client_name,
                 } => Some(self.hello(client_pid, &client_name)),
                 Request::CloseListing { listing_id } => Some(self.close_listing(listing_id)),
+                Request::DescribeEntries {
+                    listing_id,
+                    from,
+                    count,
+                } => self.describe_entries(&id, &span, kind, (listing_id, from, count)),
+                Request::GetIcon { key, size } => self.get_icon(&id, &span, kind, key, size),
                 Request::ListDirectory {
                     path,
                     include_hidden,
@@ -348,19 +358,79 @@ impl Session {
     }
 
     fn close_listing(&mut self, listing_id: u64) -> Response {
-        match self.listings.remove(&listing_id) {
-            Some(ListingSlot::Watched(task)) => task.abort(),
-            Some(ListingSlot::Static(section)) => drop(section),
-            Some(ListingSlot::Lost) => {}
-            None => {
-                return Response::Error {
-                    code: ErrorCode::NoSuchListing,
-                    message: format!("no open listing {listing_id} on this connection"),
-                };
-            }
+        let Some(slot) = self.listings.remove(&listing_id) else {
+            return no_such_listing(listing_id);
+        };
+        if let Some(task) = slot.refresh {
+            task.abort();
         }
         tracing::debug!(listing_id, "listing closed");
         Response::Ok
+    }
+
+    /// `describe_entries`, on the blocking pool: the shell may be asked.
+    fn describe_entries(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        (listing_id, from, count): (u64, u32, u32),
+    ) -> Option<Response> {
+        if count > MAX_DESCRIBED {
+            return Some(protocol_error(&format!(
+                "count is {count}; at most {MAX_DESCRIBED} entries are described at once"
+            )));
+        }
+        let Some(slot) = self.listings.get(&listing_id) else {
+            return Some(no_such_listing(listing_id));
+        };
+        let (_, section) = slot.current.get();
+        let folder = slot.path.clone();
+        let hydrator = Arc::clone(&self.services.hydrator);
+        self.spawn_reply(id, span, kind, move || {
+            let view = match section.map_readonly() {
+                Ok(view) => view,
+                Err(error) => return failure_reply((ErrorCode::Internal, error.to_string())),
+            };
+            match hydrator.describe(view.as_slice(), &folder, from, count) {
+                Ok((generation, details)) => Response::EntryDetails {
+                    listing_id,
+                    generation,
+                    from,
+                    details,
+                },
+                Err(error) => failure_reply((ErrorCode::Internal, error.to_string())),
+            }
+        });
+        None
+    }
+
+    /// `get_icon`, on the blocking pool: the shell draws the icon.
+    fn get_icon(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        key: String,
+        size: u32,
+    ) -> Option<Response> {
+        if !cabinetos_fs::ICON_SIZES.contains(&size) {
+            return Some(protocol_error(&format!(
+                "size is {size}; icons come in 16, 24, 32 or 48 pixels"
+            )));
+        }
+        let hydrator = Arc::clone(&self.services.hydrator);
+        self.spawn_reply(id, span, kind, move || {
+            match hydrator.icon_png(&key, size) {
+                Ok(png) => Response::Icon {
+                    key,
+                    size,
+                    png_base64: BASE64.encode(png),
+                },
+                Err(error) => failure_reply(listing::fs_failure(&error)),
+            }
+        });
+        None
     }
 
     /// Starts a listing; the reply comes when the task ends. Returns an
@@ -951,7 +1021,7 @@ impl Session {
             } => self.listing_ready(request_id, listing_id, started, result),
             TaskDone::RefreshEnded { listing_id } => {
                 if let Some(slot) = self.listings.get_mut(&listing_id) {
-                    *slot = ListingSlot::Lost;
+                    slot.refresh = None;
                 }
             }
             TaskDone::Replied => {}
@@ -1007,32 +1077,35 @@ impl Session {
             plugins.listing_opened(&path, published.entry_count);
         }
 
-        let slot = match watch {
-            None => ListingSlot::Static(published.section),
-            Some((directory_watcher, changes)) => {
-                let listing = WatchedListing {
-                    listing_id,
-                    path,
-                    options,
-                    client_pid: self.client.as_ref().map_or(0, |client| client.pid),
-                    section: published.section,
-                    generation: 1,
-                    changes,
-                    _watcher: directory_watcher,
-                    out: self.out.clone(),
-                };
-                let span = tracing::info_span!("listing", listing_id);
-                let task = self.tasks.spawn(
-                    async move {
-                        let listing_id = listing::refresh_loop(listing).await;
-                        TaskDone::RefreshEnded { listing_id }
-                    }
-                    .instrument(span),
-                );
-                ListingSlot::Watched(task)
-            }
-        };
-        self.listings.insert(listing_id, slot);
+        let current = CurrentSection::new(1, published.section);
+        let refresh = watch.map(|(directory_watcher, changes)| {
+            let listing = WatchedListing {
+                listing_id,
+                path: path.clone(),
+                options,
+                client_pid: self.client.as_ref().map_or(0, |client| client.pid),
+                current: Arc::clone(&current),
+                changes,
+                _watcher: directory_watcher,
+                out: self.out.clone(),
+            };
+            let span = tracing::info_span!("listing", listing_id);
+            self.tasks.spawn(
+                async move {
+                    let listing_id = listing::refresh_loop(listing).await;
+                    TaskDone::RefreshEnded { listing_id }
+                }
+                .instrument(span),
+            )
+        });
+        self.listings.insert(
+            listing_id,
+            ListingSlot {
+                path,
+                current,
+                refresh,
+            },
+        );
     }
 
     fn reject_frame_too_large(&self, len: usize, max: usize) {
@@ -1103,6 +1176,13 @@ fn no_such_plugin(plugin_id: &str) -> Response {
     failure_reply((
         ErrorCode::NoSuchPlugin,
         format!("no plugin `{plugin_id}` is installed"),
+    ))
+}
+
+fn no_such_listing(listing_id: u64) -> Response {
+    failure_reply((
+        ErrorCode::NoSuchListing,
+        format!("no open listing {listing_id} on this connection"),
     ))
 }
 

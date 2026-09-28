@@ -123,6 +123,65 @@
       ]
     },
     {
+      "description": "Asks for the shell's type name and an icon key of some entries of a\nlisting, in the order of its current section. The core answers\n`entry_details`.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "How many entries, at most [`MAX_DESCRIBED`]; fewer come back at\nthe end of the listing.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "from": {
+          "description": "The first entry, by its index in the section.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "listing_id": {
+          "description": "The listing, from `listing_opened`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "describe_entries"
+        }
+      },
+      "required": [
+        "type",
+        "listing_id",
+        "from",
+        "count"
+      ]
+    },
+    {
+      "description": "Asks for the icon of an icon key, as a PNG. The core answers `icon`.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "The key, from `entry_details`: `folder`, `generic`, `ext:.txt` or\n`path:…`.",
+          "type": "string"
+        },
+        "size": {
+          "description": "Its width and height in pixels: 16, 24, 32 or 48.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "get_icon"
+        }
+      },
+      "required": [
+        "type",
+        "key",
+        "size"
+      ]
+    },
+    {
       "description": "Asks which volume and physical disk a path lives on. The core answers\n`volume_info`.",
       "type": "object",
       "properties": {

@@ -156,6 +156,8 @@ cargo run -p cabinetos-cli -- --pipe demo ls C:\Windows\System32 --long
 cargo run -p cabinetos-cli -- --pipe demo ls C:\Users --watch
 cargo run -p cabinetos-cli -- --pipe demo volume C:\
 cargo run -p cabinetos-cli -- --pipe demo volumes
+cargo run -p cabinetos-cli -- --pipe demo describe C:\Windows --count 10
+cargo run -p cabinetos-cli -- --pipe demo icon ext:.txt --size 32 --out txt.png
 cargo run -p cabinetos-cli -- --pipe demo config get ui.dualPane
 cargo run -p cabinetos-cli -- --pipe demo config set ui.dualPane false
 cargo run -p cabinetos-cli -- --pipe demo mkdir "D:\work\New folder"
@@ -188,7 +190,7 @@ terminal first (Run as administrator), in `core/`:
 cargo run --release -p cabinetos-indexer -- --console --volumes C
 ```
 
-- `ping` prints `pong id=<ulid> protocol=8 core=<version> rtt=<ms>ms`.
+- `ping` prints `pong id=<ulid> protocol=9 core=<version> rtt=<ms>ms`.
 - `ls <path>` lists a directory the way the UI will: the core reads it into
   shared memory, the CLI maps the section and prints it. Options: `--long`
   (attributes, local modification time, size), `--hidden` (hidden and system
@@ -204,6 +206,10 @@ cargo run --release -p cabinetos-indexer -- --console --volumes C
   and `config set <path> <value>` changes one (the value is JSON, or a
   bare word as text; the core writes the file); `config validate [file]`
   checks a file without a core.
+- `describe <path> [--from N] [--count M]` lists a folder and prints each
+  entry's index, name, the shell's type name and its icon key, then the
+  round trip; `icon <key> [--size N] --out <file.png>` writes that icon
+  (16, 24, 32 or 48 pixels) and prints its size from the PNG's header.
 - `mkdir <path>` creates a folder, `rename <path> <new name>` renames a
   file or folder in place (never replacing anything), and `open <path>`
   opens a file or folder with its default application, as a double-click

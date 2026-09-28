@@ -38,9 +38,9 @@ pub use job::{
     JobRequest, JobState, LinkPolicy, Resolution,
 };
 pub use message::{
-    CommandInfo, CommandSource, CommandTarget, DiskIdentity, Envelope, ErrorCode, Event, Incoming,
-    Keymap, KeymapBinding, RefreshReason, Request, Response, SearchHit, SortKey, SortSpec,
-    VolumeDetails,
+    CommandInfo, CommandSource, CommandTarget, DiskIdentity, EntryDetail, Envelope, ErrorCode,
+    Event, Incoming, Keymap, KeymapBinding, MAX_DESCRIBED, RefreshReason, Request, Response,
+    SearchHit, SortKey, SortSpec, VolumeDetails,
 };
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 pub use terminal::{TerminalSession, TerminalState};
@@ -58,5 +58,7 @@ pub use terminal::{TerminalSession, TerminalState};
 /// other `terminal_*` messages); version 8 what the shell needs beyond
 /// listing: `list_volumes` and the event `volumes_changed`, `get_value` and
 /// `set_value` (with the reply `value`), `open_path`, `create_directory`
-/// and `rename`, and the error code `already_exists`.
-pub const PROTOCOL_VERSION: u32 = 8;
+/// and `rename`, and the error code `already_exists`; version 9 the shell's
+/// type names and icons (`describe_entries` and `entry_details`, `get_icon`
+/// and `icon`).
+pub const PROTOCOL_VERSION: u32 = 9;

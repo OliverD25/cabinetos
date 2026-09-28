@@ -23,17 +23,24 @@
 //!
 //! [`create_directory`] and [`rename`] are the changes a user makes to a
 //! folder without a job; [`open_path`] opens a file or folder with its
-//! default application.
+//! default application. [`Hydrator`] gives the shell's type names and icons
+//! of listed entries; size, times and attributes need no such step, as
+//! they arrive with the listing itself.
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
-//! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, and one
-//! function in `sort`), each block with a `SAFETY:` comment.
+//! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `com`,
+//! `hydrate`, and one function in `sort`), each block with a `SAFETY:`
+//! comment.
 
+#[allow(unsafe_code)]
+mod com;
 #[allow(unsafe_code)]
 mod drives;
 #[allow(unsafe_code)]
 mod enumerate;
 mod error;
+#[allow(unsafe_code)]
+mod hydrate;
 #[allow(unsafe_code)]
 mod open;
 #[allow(unsafe_code)]
@@ -55,6 +62,7 @@ use cabinetos_protocol::shm::{EntryKind, ListingMeta};
 
 pub use drives::DriveWatcher;
 pub use error::FsError;
+pub use hydrate::{Hydrator, ICON_SIZES, ICONS_KEPT};
 pub use open::open_path;
 pub use ops::{create_directory, rename};
 pub use path::verbatim_wide;
@@ -195,10 +203,3 @@ pub(crate) mod attributes {
     pub(crate) const DIRECTORY: u32 = 0x10;
     pub(crate) const REPARSE_POINT: u32 = 0x400;
 }
-
-/// Fetches expensive, display-only details in the background and streams them
-/// to the UI: icons and shell type names. Size, times and attributes do not
-/// need it; they arrive with the listing itself.
-///
-/// Placeholder: Phase 5 of `docs/PLAN.md` fills it in.
-pub struct Hydrator;

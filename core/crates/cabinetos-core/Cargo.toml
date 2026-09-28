@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64.workspace = true
 cabinetos-commands.workspace = true
 cabinetos-config.workspace = true
 cabinetos-diag.workspace = true
@@ -29,6 +30,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 cabinetos-indexer.workspace = true
+png.workspace = true
 rand.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }

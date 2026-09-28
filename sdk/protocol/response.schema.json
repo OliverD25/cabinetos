@@ -152,6 +152,78 @@
       ]
     },
     {
+      "description": "Reply to `describe_entries`: one detail per entry, from `from` on.",
+      "type": "object",
+      "properties": {
+        "details": {
+          "description": "The entries' details, in section order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntryDetail"
+          }
+        },
+        "from": {
+          "description": "The index of the first entry described.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "generation": {
+          "description": "The generation of the section the entries were read from; the\ndetails belong to that one.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "listing_id": {
+          "description": "The listing.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "entry_details"
+        }
+      },
+      "required": [
+        "type",
+        "listing_id",
+        "generation",
+        "from",
+        "details"
+      ]
+    },
+    {
+      "description": "Reply to `get_icon`.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "The key asked for.",
+          "type": "string"
+        },
+        "png_base64": {
+          "description": "The icon as a PNG with an alpha channel, in base64.",
+          "type": "string"
+        },
+        "size": {
+          "description": "The width and height in pixels.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "icon"
+        }
+      },
+      "required": [
+        "type",
+        "key",
+        "size",
+        "png_base64"
+      ]
+    },
+    {
       "description": "Reply to `volume_info`.",
       "type": "object",
       "properties": {
@@ -704,6 +776,24 @@
       "required": [
         "device_number",
         "bus_type"
+      ]
+    },
+    "EntryDetail": {
+      "description": "What a file pane shows beside a name, from the shell.",
+      "type": "object",
+      "properties": {
+        "icon_key": {
+          "description": "The icon to show, for `get_icon`: `folder` for every folder,\n`ext:<extension>` (lower case, with its dot) for a file by its\nextension, `generic` for a file without one, and `path:<16 hex\ndigits>` for an `.exe`, `.ico` or `.lnk` file, whose icon is its own.",
+          "type": "string"
+        },
+        "type_name": {
+          "description": "The shell's name for the type, in the user's language, for example\n`Text Document` or `File folder`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type_name",
+        "icon_key"
       ]
     },
     "ErrorCode": {

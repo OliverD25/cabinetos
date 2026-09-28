@@ -205,6 +205,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         plugins,
         indexer: search::IndexerLink::from_env(),
         terminals,
+        hydrator: Arc::new(cabinetos_fs::Hydrator::new()),
     });
     let result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     // The shells get their hang-up; together they may take up to 2 s to end.

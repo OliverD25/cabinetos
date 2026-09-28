@@ -1,10 +1,11 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
-//! UI will), `volume` and `volumes`, `shutdown`, the configuration (`config`), the command
-//! registry (`commands`), the keymap (`keys`), jobs (`copy`, `move`,
-//! `delete`, `jobs`, `job`), the Core Plugins (`plugins`), the events the
-//! core sends (`events watch`), file search (`search`, `index status`), and
-//! the terminal sessions (`term`).
+//! UI will), `describe` and `icon` (the shell's type names and icons),
+//! `volume` and `volumes`, `open`, `mkdir` and `rename`, `shutdown`, the
+//! configuration (`config`), the command registry (`commands`), the keymap
+//! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
+//! Plugins (`plugins`), the events the core sends (`events watch`), file
+//! search (`search`, `index status`), and the terminal sessions (`term`).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -16,6 +17,7 @@
 //! client through the pipe into the core).
 #![forbid(unsafe_code)]
 
+mod describe;
 mod jobs;
 mod ls;
 mod plugins;
@@ -91,6 +93,30 @@ enum Command {
         /// Keep watching and print a line for each refresh, until Ctrl+C.
         #[arg(long)]
         watch: bool,
+    },
+    /// List a folder and print the shell's type name and icon key of some
+    /// of its entries.
+    Describe {
+        /// The folder.
+        path: String,
+        /// The first entry, by its place in the listing.
+        #[arg(long, default_value_t = 0)]
+        from: u32,
+        /// How many entries, at most 512.
+        #[arg(long, default_value_t = 50)]
+        count: u32,
+    },
+    /// Write the icon of an icon key (as `describe` prints them) to a PNG
+    /// file, for example: icon ext:.txt --size 32 --out txt.png.
+    Icon {
+        /// The key: folder, generic, ext:.txt or path:….
+        key: String,
+        /// Its size in pixels: 16, 24, 32 or 48.
+        #[arg(long, default_value_t = 32)]
+        size: u32,
+        /// The file to write.
+        #[arg(long, value_name = "FILE")]
+        out: PathBuf,
     },
     /// Show which volume and physical disk a path is on.
     Volume {
@@ -630,6 +656,10 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Open { .. } | Command::Mkdir { .. } | Command::Rename { .. } => {
             file_command(&mut client, &cli.command).await?;
         }
+        Command::Describe { path, from, count } => {
+            describe::describe(&mut client, &absolute(path)?, *from, *count).await?;
+        }
+        Command::Icon { key, size, out } => describe::icon(&mut client, key, *size, out).await?,
         Command::Config { .. } | Command::Commands { .. } | Command::Keys { .. } => {
             settings_command(&mut client, &cli.command).await?;
         }
@@ -1106,6 +1136,55 @@ mod tests {
         );
         let cli = Cli::try_parse_from(["cabinetos-cli", "volumes"]).unwrap();
         assert_eq!(cli.command, Command::Volumes);
+        let cli = Cli::try_parse_from(["cabinetos-cli", "describe", r"C:\Windows"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Describe {
+                path: r"C:\Windows".to_owned(),
+                from: 0,
+                count: 50
+            }
+        );
+        let cli = Cli::try_parse_from([
+            "cabinetos-cli",
+            "describe",
+            ".",
+            "--from",
+            "10",
+            "--count",
+            "5",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Describe {
+                from: 10,
+                count: 5,
+                ..
+            }
+        ));
+        let cli = Cli::try_parse_from([
+            "cabinetos-cli",
+            "icon",
+            "ext:.txt",
+            "--size",
+            "48",
+            "--out",
+            "t.png",
+        ])
+        .unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Icon {
+                key: "ext:.txt".to_owned(),
+                size: 48,
+                out: PathBuf::from("t.png")
+            }
+        );
+        assert!(
+            Cli::try_parse_from(["cabinetos-cli", "icon", "folder"]).is_err(),
+            "--out is required"
+        );
         let cli = Cli::try_parse_from(["cabinetos-cli", "open", "notes.txt"]).unwrap();
         assert_eq!(
             cli.command,

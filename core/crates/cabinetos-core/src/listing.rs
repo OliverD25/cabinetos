@@ -1,6 +1,7 @@
 //! Directory listings: reading a directory into a shared-memory section for a
 //! client, and keeping a watched listing current.
 
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use cabinetos_fs::{DirectoryChanged, DirectoryWatcher, FsError, ListOptions, ListingWriter};
@@ -93,15 +94,36 @@ pub(crate) fn micros(duration: Duration) -> u64 {
     u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
 }
 
+/// A listing's current section and its generation. A watched listing's
+/// refresh task replaces them; `describe_entries` reads them.
+#[derive(Debug)]
+pub(crate) struct CurrentSection(Mutex<(u32, Arc<SharedSection>)>);
+
+impl CurrentSection {
+    pub(crate) fn new(generation: u32, section: SharedSection) -> Arc<Self> {
+        Arc::new(Self(Mutex::new((generation, Arc::new(section)))))
+    }
+
+    /// The generation and the section clients read now.
+    pub(crate) fn get(&self) -> (u32, Arc<SharedSection>) {
+        let current = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        (current.0, Arc::clone(&current.1))
+    }
+
+    /// Makes `section` the current one.
+    fn set(&self, generation: u32, section: SharedSection) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = (generation, Arc::new(section));
+    }
+}
+
 /// Everything a watched listing needs after it has been opened.
 pub(crate) struct WatchedListing {
     pub(crate) listing_id: u64,
     pub(crate) path: String,
     pub(crate) options: ListOptions,
     pub(crate) client_pid: u32,
-    /// The current section; replaced at every refresh.
-    pub(crate) section: SharedSection,
-    pub(crate) generation: u32,
+    /// The current section and its generation; replaced at every refresh.
+    pub(crate) current: Arc<CurrentSection>,
     pub(crate) changes: mpsc::UnboundedReceiver<DirectoryChanged>,
     /// Kept alive for as long as the listing is; dropping it stops watching.
     pub(crate) _watcher: DirectoryWatcher,
@@ -139,7 +161,7 @@ pub(crate) async fn refresh_loop(mut watched: WatchedListing) -> u64 {
             }
         }
 
-        let generation = watched.generation + 1;
+        let generation = watched.current.get().0 + 1;
         let (path, options, client_pid) =
             (watched.path.clone(), watched.options, watched.client_pid);
         let published = match tokio::task::spawn_blocking(move || {
@@ -173,9 +195,9 @@ pub(crate) async fn refresh_loop(mut watched: WatchedListing) -> u64 {
                     "listing refreshed"
                 );
                 // The event is queued; the core's handle to the previous
-                // section closes here. The client's handle keeps it alive.
-                watched.section = published.section;
-                watched.generation = generation;
+                // section closes here, or when a description that reads it
+                // ends. The client's handle keeps it alive.
+                watched.current.set(generation, published.section);
                 last_refresh = Some(Instant::now());
             }
             Err((_, message)) => {
@@ -242,8 +264,7 @@ mod tests {
             path,
             options,
             client_pid,
-            section: first.section,
-            generation: 1,
+            current: CurrentSection::new(1, first.section),
             changes: changes_rx,
             _watcher: watcher,
             out: Outbox(out_tx),

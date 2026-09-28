@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use cabinetos_fs::ListingReader;
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{Envelope, ErrorCode, Event, Request, Response};
@@ -453,4 +455,211 @@ async fn new_folders_and_renames_are_refused_with_the_reason() {
         .collect();
     names.sort();
     assert_eq!(names, ["a.txt", "b.txt"]);
+}
+
+/// Width, height and whether any pixel is partly clear, from a PNG.
+fn png_facts(png: &[u8]) -> (u32, u32, bool, bool) {
+    let decoder = png::Decoder::new(std::io::Cursor::new(png));
+    let mut reader = decoder.read_info().unwrap();
+    let mut pixels = vec![0u8; reader.output_buffer_size().unwrap()];
+    let frame = reader.next_frame(&mut pixels).unwrap();
+    assert_eq!(frame.color_type, png::ColorType::Rgba);
+    let alpha: Vec<u8> = pixels[..frame.buffer_size()]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|pixel| pixel[3])
+        .collect();
+    (
+        frame.width,
+        frame.height,
+        alpha.iter().any(|&a| a > 0),
+        alpha.iter().any(|&a| a < 255),
+    )
+}
+
+#[tokio::test]
+async fn entries_are_described_and_their_icons_drawn() {
+    let core = start_core();
+    let (mut client, _events) = greeted(&core).await;
+    let files = core.files();
+    std::fs::write(files.join("notes.txt"), "text").unwrap();
+    std::fs::write(files.join("README"), "read me").unwrap();
+    std::fs::create_dir(files.join("sub")).unwrap();
+    std::fs::copy(CORE_EXE, files.join("tool.exe")).unwrap();
+    let reply = ask(
+        &mut client,
+        Request::ListDirectory {
+            path: text(&files),
+            include_hidden: None,
+            sort: None,
+            watch: false,
+        },
+    )
+    .await;
+    let Response::ListingOpened {
+        listing_id,
+        section_handle,
+        ..
+    } = reply
+    else {
+        panic!("expected listing_opened, got {reply:?}")
+    };
+    assert_eq!(
+        names_in(&client, section_handle),
+        ["sub", "notes.txt", "README", "tool.exe"]
+    );
+
+    let describe = |from, count| Request::DescribeEntries {
+        listing_id,
+        from,
+        count,
+    };
+    let reply = ask(&mut client, describe(0, 10)).await;
+    let Response::EntryDetails {
+        listing_id: described,
+        generation,
+        from,
+        details,
+    } = reply
+    else {
+        panic!("expected entry_details, got {reply:?}")
+    };
+    assert_eq!(
+        (described, generation, from, details.len()),
+        (listing_id, 1, 0, 4)
+    );
+    let keys: Vec<&str> = details.iter().map(|d| d.icon_key.as_str()).collect();
+    assert_eq!(keys[..3], ["folder", "ext:.txt", "generic"]);
+    assert!(keys[3].starts_with("path:"), "{keys:?}");
+    assert!(
+        details.iter().all(|d| !d.type_name.is_empty()),
+        "{details:?}"
+    );
+
+    for key in &keys {
+        for size in [16, 48] {
+            let reply = ask(
+                &mut client,
+                Request::GetIcon {
+                    key: (*key).to_owned(),
+                    size,
+                },
+            )
+            .await;
+            let Response::Icon {
+                key: answered,
+                size: answered_size,
+                png_base64,
+            } = reply
+            else {
+                panic!("{key} at {size}: expected icon, got {reply:?}")
+            };
+            assert_eq!((answered.as_str(), answered_size), (*key, size));
+            let (width, height, shows, clear) = png_facts(&BASE64.decode(png_base64).unwrap());
+            assert_eq!((width, height), (size, size), "{key}");
+            assert!(
+                shows && clear,
+                "{key} at {size}: the alpha channel is empty or full"
+            );
+        }
+    }
+
+    refusals(&mut client, listing_id).await;
+    assert_eq!(
+        ask(&mut client, Request::CloseListing { listing_id }).await,
+        Response::Ok
+    );
+}
+
+/// A range past the end, an unknown listing, too many, unknown icons.
+async fn refusals(client: &mut PipeClient, listing_id: u64) {
+    let describe = |from, count| Request::DescribeEntries {
+        listing_id,
+        from,
+        count,
+    };
+    let reply = ask(client, describe(4, 10)).await;
+    assert!(
+        matches!(&reply, Response::EntryDetails { details, .. } if details.is_empty()),
+        "{reply:?}"
+    );
+    let reply = ask(
+        client,
+        Request::DescribeEntries {
+            listing_id: 999_999,
+            from: 0,
+            count: 1,
+        },
+    )
+    .await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::NoSuchListing),
+        "{reply:?}"
+    );
+    let reply = ask(client, describe(0, 513)).await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::ProtocolError),
+        "{reply:?}"
+    );
+    for (key, size, code) in [
+        ("path:0123456789abcdef", 32, ErrorCode::NotFound),
+        ("nothing", 32, ErrorCode::NotFound),
+        ("folder", 20, ErrorCode::ProtocolError),
+    ] {
+        let reply = ask(
+            client,
+            Request::GetIcon {
+                key: key.to_owned(),
+                size,
+            },
+        )
+        .await;
+        assert_eq!(error_code(&reply), Some(code), "{key} {size}: {reply:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_watched_listing_is_described_at_its_current_generation() {
+    let core = start_core();
+    let (mut client, mut events) = greeted(&core).await;
+    let files = core.files();
+    std::fs::write(files.join("a.txt"), "a").unwrap();
+    let reply = ask(
+        &mut client,
+        Request::ListDirectory {
+            path: text(&files),
+            include_hidden: None,
+            sort: None,
+            watch: true,
+        },
+    )
+    .await;
+    let Response::ListingOpened { listing_id, .. } = reply else {
+        panic!("expected listing_opened, got {reply:?}")
+    };
+    std::fs::create_dir(files.join("new")).unwrap();
+    refreshed_to(&client, &mut events, &["new", "a.txt"]).await;
+    let reply = ask(
+        &mut client,
+        Request::DescribeEntries {
+            listing_id,
+            from: 0,
+            count: 10,
+        },
+    )
+    .await;
+    let Response::EntryDetails {
+        generation,
+        details,
+        ..
+    } = reply
+    else {
+        panic!("expected entry_details, got {reply:?}")
+    };
+    assert!(generation >= 2, "{generation}");
+    let keys: Vec<&str> = details.iter().map(|d| d.icon_key.as_str()).collect();
+    assert_eq!(keys, ["folder", "ext:.txt"]);
 }

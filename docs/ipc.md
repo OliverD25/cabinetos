@@ -44,7 +44,7 @@ connection:
 
 ```json
 {"id":"01M…","type":"hello","client_pid":4242,"client_name":"CabinetOS"}
-{"id":"01M…","type":"welcome","protocol_version":8,"core_version":"0.1.0"}
+{"id":"01M…","type":"welcome","protocol_version":9,"core_version":"0.1.0"}
 ```
 
 `client_pid` must be the process on the other end of the pipe; the core asks
@@ -73,7 +73,9 @@ the error codes `no_such_session`, `unknown_profile` and `spawn_failed`.
 Version 8 (for the shell of Phase 5) added `list_volumes` with its reply
 `volumes` and the event `volumes_changed`, `get_value` and `set_value`
 with the reply `value`, `open_path`, `create_directory` and `rename`, and
-the error code `already_exists`.
+the error code `already_exists`. Version 9 added the shell's type names and
+icons: `describe_entries` with its reply `entry_details`, and `get_icon`
+with its reply `icon`.
 
 ## Requests and replies
 
@@ -84,6 +86,8 @@ the error code `already_exists`.
 | `hello` | `client_pid`, `client_name` | `welcome` (`protocol_version`, `core_version`) |
 | `list_directory` | `path`; `include_hidden` and `sort` (when left out, the `panes` settings of [config.md](config.md) decide: by default `false` and `{"key":"name","descending":false}`); `watch` (default `false`) | `listing_opened` |
 | `close_listing` | `listing_id` | `ok` |
+| `describe_entries` | `listing_id`, `from`, `count` (at most 512) | `entry_details` (`listing_id`, `generation`, `from`, `details`) |
+| `get_icon` | `key`, `size` (16, 24, 32 or 48) | `icon` (`key`, `size`, `png_base64`) |
 | `volume_info` | `path` (need not exist) | `volume_info` |
 | `list_volumes` | — | `volumes` (`volumes`) |
 | `open_path` | `path` (absolute) | `ok` |
@@ -144,7 +148,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
 
 Requests on one connection are independent: `list_directory`,
-`volume_info`, `list_volumes`, `open_path`, `create_directory`, `rename`,
+`describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `create_directory`, `rename`,
 `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
@@ -256,6 +260,64 @@ part lies inside `section_size`. Unknown `kind` values read as unknown.
 Links are only name-surrogate reparse points (symbolic links, junctions, WSL
 links); cloud placeholders such as OneDrive files keep kind file or
 directory, with the reparse-point bit in `attributes`.
+
+## Type names and icons
+
+A listing carries names, sizes, times and attributes, but not what
+Explorer shows beside a name: the type ("Text Document") and the icon. The
+UI asks for those for the rows it shows, a screenful at a time.
+
+```json
+{"id":"01M…","type":"describe_entries","listing_id":7,"from":0,"count":3}
+{"id":"01M…","type":"entry_details","listing_id":7,"generation":1,"from":0,"details":[
+ {"type_name":"File folder","icon_key":"folder"},
+ {"type_name":"Text Document","icon_key":"ext:.txt"},
+ {"type_name":"Application","icon_key":"path:396bbcd455199596"}]}
+```
+
+- `details` has one element per entry, from index `from` of the listing's
+  current section on, in section order: `count` of them (at most 512), or
+  fewer at the end, or none past it. `generation` is the generation of the
+  section the entries were read from; after a refresh the UI asks again
+  for rows whose details carry an older one.
+- `type_name` is the shell's name for the type, in the user's language:
+  `SHGetFileInfoW` with `SHGFI_TYPENAME | SHGFI_USEFILEATTRIBUTES`, by the
+  extension and the folder attribute only, so no file is read. The core
+  keeps it per extension.
+- `icon_key` names an icon for `get_icon`. Every folder has `folder`. A
+  file has `ext:` and its extension in lower case with its dot
+  (`ext:.txt`, and `ext:.gitignore` for `.gitignore`); a file without one
+  has `generic`. `.exe`, `.ico` and `.lnk` files carry their own icon, so
+  each has `path:` and 16 hex digits: FNV-1a (64 bits) of the lower-case
+  full path, the last-write time and the size. A changed file gets a new
+  key, so a client may keep icons by key for as long as it likes. The
+  core remembers which file a `path:` key stands for (the last 16,384 of
+  them); a key it forgot, or whose file is gone, is `not_found`, and
+  describing the folder again brings it back.
+- An unknown `listing_id` is `no_such_listing`; `count` over 512 is
+  `protocol_error`.
+
+```json
+{"id":"01M…","type":"get_icon","key":"ext:.txt","size":32}
+{"id":"01M…","type":"icon","key":"ext:.txt","size":32,"png_base64":"iVBORw0KGgo…"}
+```
+
+- The icon is a PNG of `size` by `size` pixels with an alpha channel,
+  base64-encoded. Sizes are 16, 24, 32 and 48 (`protocol_error` for
+  others). The pixels come from the system image lists: `SHIL_SMALL` for
+  16, `SHIL_LARGE` for 32 and `SHIL_EXTRALARGE` for 48. The 24-pixel icon
+  is the 48-pixel one halved (each pixel the alpha-weighted average of
+  four), which is sharper than enlarging the 16-pixel one; a UI on a
+  high-DPI screen asks for 24 or 48 where it draws 16 or 32 at 150 % or
+  200 %.
+- A `path:` key's icon is read from its file (`SHGetFileInfoW` without
+  `SHGFI_USEFILEATTRIBUTES`). A shortcut's icon is its target's, without
+  the arrow Explorer draws over it.
+- The core keeps the last 2,000 PNGs by key and size. The first icon of a
+  program may take long, as the shell loads it from the file (up to about
+  a second, measured in a debug build); icons are drawn one at a time.
+- An unknown key is `not_found`; a failure of the shell is `io` with its
+  message.
 
 ## Watched listings and events
 
@@ -474,7 +536,7 @@ hits.
 ```json
 {"id":"01M…","type":"execute_command","command":"help.about"}
 {"id":"01M…","type":"command_result","result":{"name":"CabinetOS",
- "core_version":"0.1.0","protocol_version":8,"config_path":"C:\\…\\cabinetos.json"}}
+ "core_version":"0.1.0","protocol_version":9,"config_path":"C:\\…\\cabinetos.json"}}
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
@@ -768,7 +830,9 @@ by force). When the core stops, it closes every session.
 
 `cabinetos-cli` speaks this protocol: `ls` maps the section and prints it,
 `ls --watch` prints each `listing_refreshed`, `volume` prints `volume_info`,
-`volumes` prints `volumes`, `open`, `mkdir` and `rename` send
+`describe` prints `entry_details` beside the names, `icon` writes an
+`icon` to a PNG file, `volumes` prints `volumes`, `open`, `mkdir` and
+`rename` send
 `open_path`, `create_directory` and `rename`, `config get` and
 `config set` send `get_value` and `set_value`,
 `config`, `commands` and `keys` cover the configuration messages (`keys

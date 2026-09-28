@@ -26,6 +26,7 @@ cabinetos-terminal = { path = "crates/cabinetos-terminal" }
 
 # External crates. Each crate adds the features it needs on top of these.
 anyhow = "1.0"
+base64 = "0.22"
 bytes = { version = "1.11", default-features = false }
 clap = { version = "4.6", features = ["derive"] }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
@@ -33,6 +34,7 @@ crossbeam-channel = "0.5"
 crossbeam-queue = "0.3"
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"] }
 memchr = "2.8"
+png = "0.18"
 rand = "0.10"
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }

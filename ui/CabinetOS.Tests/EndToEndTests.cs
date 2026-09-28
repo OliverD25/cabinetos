@@ -49,7 +49,7 @@ public class EndToEndTests
             var client = core.Client;
 
             var welcome = await client.HelloAsync();
-            Assert.Equal(8u, welcome.ProtocolVersion);
+            Assert.Equal(9u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);
