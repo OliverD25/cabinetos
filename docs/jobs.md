@@ -169,7 +169,7 @@ copy a.txt, replacing: done
 | `access_denied` | Windows refused, for example a read-only file. | `overwrite` clears the read-only attribute, then tries again. |
 | `sharing_violation` | Another program has the file open. | `retry` once it is closed. |
 | `path_too_long` | The destination file system refuses the length. | |
-| `disk_full` | The destination is full. | The whole job pauses: every other file would fail the same way. Any decision on this conflict resumes the job. |
+| `disk_full` | The destination is full. | The whole job pauses: every other file would fail the same way. Any decision on this conflict resumes the job, unless a client paused the job itself after that: then only `resume` does. |
 | `source_vanished` | The source disappeared after the scan. | No event: the file counts as failed. |
 | `recycle_bin_too_small` | A Recycle Bin delete of an item the bin cannot take. Carries the item's `size`. | Nothing is deleted. Only `delete_permanently` or `skip` answer it (`retry` checks again, for example after the bin was made bigger); any other answer gets `invalid_resolution`. No policy answers it on its own; a rule made with `apply_to_same_kind` does. |
 | `io` | Any other error, with the Windows code and text. | Also used when `verify` finds a difference (code 23); the bad copy is removed first. |

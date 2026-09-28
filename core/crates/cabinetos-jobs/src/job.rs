@@ -135,8 +135,18 @@ impl Control {
         self.cancelled.load(Ordering::SeqCst)
     }
 
+    /// Pauses because a client asked: only a client's resume ends it, even
+    /// when the job had paused itself for a full disk before.
     pub(crate) fn pause(&self) {
         *lock(&self.paused) = true;
+        self.paused_by_disk_full.store(false, Ordering::SeqCst);
+    }
+
+    /// Pauses because a disk is full: the decision on that conflict resumes
+    /// the job.
+    pub(crate) fn pause_for_disk_full(&self) {
+        *lock(&self.paused) = true;
+        self.paused_by_disk_full.store(true, Ordering::SeqCst);
     }
 
     pub(crate) fn resume(&self) {
@@ -349,4 +359,29 @@ pub(crate) fn as_policy(resolution: &Resolution) -> Option<Resolution> {
 /// The conflict kind of a waiting file, for `apply_to_same_kind`.
 pub(crate) fn kind_tag(conflict: &Conflict) -> &'static str {
     ConflictKind::tag(&conflict.kind)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A job pauses itself when the disk is full, and the decision on that
+    /// conflict resumes it. A pause a client asks for afterwards is the
+    /// user's: that decision must not undo it.
+    #[test]
+    fn a_pause_a_client_asks_for_outlives_the_disk_full_pause() {
+        let control = Control::default();
+        control.pause_for_disk_full();
+        assert!(control.is_paused());
+        assert!(control.paused_by_disk_full.load(Ordering::SeqCst));
+        // A client pauses it too.
+        control.pause();
+        assert!(control.is_paused());
+        assert!(
+            !control.paused_by_disk_full.load(Ordering::SeqCst),
+            "the pause is the user's now"
+        );
+        control.resume();
+        assert!(!control.is_paused());
+    }
 }

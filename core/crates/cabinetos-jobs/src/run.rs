@@ -504,11 +504,7 @@ impl Run<'_> {
         if disk_full {
             // Every other file would fail the same way: stop until the user
             // makes room and says retry.
-            self.job
-                .control
-                .paused_by_disk_full
-                .store(true, Ordering::SeqCst);
-            self.job.control.pause();
+            self.job.control.pause_for_disk_full();
             self.engine.announce(self.job);
         }
     }
