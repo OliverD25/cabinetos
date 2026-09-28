@@ -63,6 +63,9 @@
                     <SolidColorBrush x:Key="CbMenuHoverFillBrush" Color="#14FFFFFF" />
                     <SolidColorBrush x:Key="CbPluginBadgeFillBrush" Color="#2660CDFF" />
                     <SolidColorBrush x:Key="CbDangerHoverFillBrush" Color="#99C42B1C" />
+                    <SolidColorBrush x:Key="CbTerminalFillBrush" Color="#59000000" />
+                    <SolidColorBrush x:Key="CbTerminalStrokeBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="CbCloseHoverFillBrush" Color="#1AFFFFFF" />
                     <StaticResource x:Key="CbAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
@@ -112,6 +115,9 @@
                     <StaticResource x:Key="CbMenuHoverFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
                     <StaticResource x:Key="CbPluginBadgeFillBrush" ResourceKey="AccentFillColorTertiaryBrush" />
                     <StaticResource x:Key="CbDangerHoverFillBrush" ResourceKey="SystemFillColorCriticalBackgroundBrush" />
+                    <StaticResource x:Key="CbTerminalFillBrush" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="CbTerminalStrokeBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                    <StaticResource x:Key="CbCloseHoverFillBrush" ResourceKey="SubtleFillColorTertiaryBrush" />
                     <StaticResource x:Key="CbAccentBrush" ResourceKey="AccentFillColorDefaultBrush" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
@@ -119,6 +125,8 @@
             <!-- Content colors: the same in both themes. -->
             <SolidColorBrush x:Key="CbFolderBrush" Color="#FFF2C063" />
             <SolidColorBrush x:Key="CbOnAccentBrush" Color="#FF111111" />
+            <!-- A running shell's dot on its tab. -->
+            <SolidColorBrush x:Key="CbRunningBrush" Color="#FF6CCB5F" />
             <FontFamily x:Key="CbMonoFont">Cascadia Code, Cascadia Mono, Consolas</FontFamily>
 
             <x:Double x:Key="CbRowHeight">30</x:Double>
@@ -264,6 +272,16 @@
                 <Setter Property="CornerRadius" Value="3" />
                 <Setter Property="MinWidth" Value="0" />
                 <Setter Property="Height" Value="24" />
+            </Style>
+
+            <!-- A tab of the Tool Dock's header (26 px) and its small buttons. -->
+            <Style x:Key="CbDockTabButtonStyle" BasedOn="{StaticResource CbSubtleButtonStyle}" TargetType="Button">
+                <Setter Property="Foreground" Value="{ThemeResource CbStatusTextBrush}" />
+                <Setter Property="Height" Value="26" />
+                <Setter Property="MinWidth" Value="26" />
+                <Setter Property="Padding" Value="10,0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="AllowFocusOnInteraction" Value="False" />
             </Style>
 
             <!-- A sidebar row: pinned folder or drive. -->

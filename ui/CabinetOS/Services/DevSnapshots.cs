@@ -1,8 +1,11 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using CabinetOS.Core.Diagnostics;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Foundation;
 using Windows.Graphics.Imaging;
+using Windows.Storage.Streams;
 
 namespace CabinetOS.Services;
 
@@ -21,10 +24,13 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>menu:&lt;name&gt;</c> opens the context menu on a row (<c>menu:*</c> on the empty space),
 /// <c>rename:&lt;text&gt;</c> types a name into the rename box and presses Enter,
 /// <c>dismiss</c> closes an open dialog, <c>type:&lt;text&gt;</c> types into the palette,
-/// <c>until:running|conflict</c> waits for a job, <c>wait:&lt;ms&gt;</c> waits, and
+/// <c>terminal:&lt;text&gt;</c> types into the shown shell (<c>{enter}</c> is Enter),
+/// <c>crash:terminal</c> ends the terminal page's browser process,
+/// <c>until:running|conflict|terminal</c> waits for a job or a shell, <c>wait:&lt;ms&gt;</c> waits, and
 /// <c>shot:&lt;name&gt;</c> renders the window's content to <c>&lt;name&gt;.png</c>.
 /// The window draws its own content, so this works when the screen is locked
 /// or off; the Mica backdrop and dialogs (a popup layer) are not part of it.
+/// WebView2 pages are drawn by WebView2 itself and laid over their place.
 /// </summary>
 internal static class DevSnapshots
 {
@@ -47,8 +53,13 @@ internal static class DevSnapshots
             .ToList();
     }
 
-    /// <summary>Renders <paramref name="element"/> to <c>&lt;folder&gt;\&lt;name&gt;.png</c>.</summary>
-    public static async Task RenderAsync(UIElement element, string name)
+    /// <summary>
+    /// Renders <paramref name="element"/> to <c>&lt;folder&gt;\&lt;name&gt;.png</c>.
+    /// A WebView2 draws outside XAML, so <c>RenderTargetBitmap</c> leaves it
+    /// empty: each page of <paramref name="pages"/> that is on screen is
+    /// captured by WebView2 itself and drawn over its place.
+    /// </summary>
+    public static async Task RenderAsync(FrameworkElement element, string name, IEnumerable<WebViewHost>? pages = null)
     {
         if (Folder is not { } folder)
         {
@@ -57,6 +68,10 @@ internal static class DevSnapshots
         var bitmap = new RenderTargetBitmap();
         await bitmap.RenderAsync(element);
         var pixels = (await bitmap.GetPixelsAsync()).ToArray();
+        foreach (var page in pages ?? [])
+        {
+            await DrawPageAsync(page, element, pixels, bitmap.PixelWidth, bitmap.PixelHeight);
+        }
         Directory.CreateDirectory(folder);
         var path = Path.Combine(folder, name + ".png");
         using (var file = File.Create(path))
@@ -68,5 +83,66 @@ internal static class DevSnapshots
         }
         Diag.Info("cabinetos_ui::snapshot", "snapshot written", new LogField("path", path),
             new LogField("width", bitmap.PixelWidth), new LogField("height", bitmap.PixelHeight));
+    }
+
+    private static async Task DrawPageAsync(WebViewHost page, FrameworkElement root, byte[] pixels, int width, int height)
+    {
+        if (page.View is not { ActualWidth: > 0, ActualHeight: > 0 } view || !IsShown(view, root))
+        {
+            return;
+        }
+        using var stream = new InMemoryRandomAccessStream();
+        if (!await page.CaptureAsync(stream))
+        {
+            return;
+        }
+        stream.Seek(0);
+        var decoder = await BitmapDecoder.CreateAsync(stream);
+        var scale = width / root.ActualWidth;
+        var bounds = view.TransformToVisual(root).TransformBounds(new Rect(0, 0, view.ActualWidth, view.ActualHeight));
+        var left = (int)Math.Round(bounds.X * scale);
+        var top = (int)Math.Round(bounds.Y * scale);
+        var pageWidth = Math.Max(1, (int)Math.Round(bounds.Width * scale));
+        var pageHeight = Math.Max(1, (int)Math.Round(bounds.Height * scale));
+        var transform = new BitmapTransform { ScaledWidth = (uint)pageWidth, ScaledHeight = (uint)pageHeight, InterpolationMode = BitmapInterpolationMode.Fant };
+        var data = await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, transform,
+            ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage);
+        var source = data.DetachPixelData();
+        // Premultiplied "over": the page's transparent parts keep the window's fill.
+        for (var y = 0; y < pageHeight; y++)
+        {
+            var targetY = top + y;
+            if (targetY < 0 || targetY >= height)
+            {
+                continue;
+            }
+            for (var x = 0; x < pageWidth; x++)
+            {
+                var targetX = left + x;
+                if (targetX < 0 || targetX >= width)
+                {
+                    continue;
+                }
+                var from = ((y * pageWidth) + x) * 4;
+                var to = ((targetY * width) + targetX) * 4;
+                var alpha = source[from + 3];
+                for (var channel = 0; channel < 4; channel++)
+                {
+                    pixels[to + channel] = (byte)(source[from + channel] + (pixels[to + channel] * (255 - alpha) / 255));
+                }
+            }
+        }
+    }
+
+    private static bool IsShown(UIElement element, UIElement root)
+    {
+        for (var current = element as DependencyObject; current is not null && current != root; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is UIElement { Visibility: Visibility.Collapsed })
+            {
+                return false;
+            }
+        }
+        return true;
     }
 }

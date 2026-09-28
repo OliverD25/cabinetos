@@ -15,6 +15,7 @@ using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
+using CabinetOS.Core.Terminal;
 using CabinetOS.Services;
 using CabinetOS.ViewModels;
 using CabinetOS.Views;
@@ -128,10 +129,12 @@ public sealed partial class MainWindow : Window
         SidebarView.UnpinRequested += path => _ = _router.ExecuteAsync("sidebar.unpin", CommandArgs.With("path", path), "sidebar");
         SetPinnedFolders();
 
+        SetUpTerminal();
+
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
-        _palette.Closed += () => _paneViews[_active].Focus(FocusState.Programmatic);
-        _palette.KeymapUpdated += keymap => _keys.SetKeymap(Keymap.From(keymap));
+        _palette.Closed += ReturnFocusAfterPalette;
+        _palette.KeymapUpdated += keymap => ApplyKeymap(Keymap.From(keymap));
 
         TransferView.Center = _transfers;
         TransferView.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
@@ -371,6 +374,13 @@ public sealed partial class MainWindow : Window
                 case "type":
                     Palette.TypeQuery(step.Argument);
                     break;
+                case "terminal":
+                    // Typed into the shown shell as keys; {enter} is Enter.
+                    await _terminal.TypeAsync(step.Argument.Replace("{enter}", "\r", StringComparison.Ordinal));
+                    break;
+                case "crash":
+                    CrashPageForSnapshot(step.Argument);
+                    break;
                 case "until":
                     await WaitUntilAsync(step.Argument);
                     break;
@@ -379,9 +389,32 @@ public sealed partial class MainWindow : Window
                     break;
                 case "shot":
                     await Task.Delay(400);
-                    await DevSnapshots.RenderAsync(RootGrid, step.Argument);
+                    await DevSnapshots.RenderAsync(RootGrid, step.Argument, WebPages());
                     break;
             }
+        }
+    }
+
+    // Every WebView2 the window hosts, for the snapshot aid.
+    private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage];
+
+    // The crash-isolation check: ends a page's browser process, as a crash would.
+    private void CrashPageForSnapshot(string which)
+    {
+        var page = which == "terminal" ? Dock.TerminalPage : null;
+        if (page is not { BrowserProcessId: > 0 and var pid })
+        {
+            Diag.Info(Target, "nothing to crash", new LogField("page", which));
+            return;
+        }
+        Diag.Info(Target, "ending a page's browser process (snapshot step)", new LogField("page", which), new LogField("pid", pid));
+        try
+        {
+            System.Diagnostics.Process.GetProcessById(pid).Kill();
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Diag.Info(Target, "the browser process could not be ended", new LogField("error", error.Message));
         }
     }
 
@@ -394,6 +427,7 @@ public sealed partial class MainWindow : Window
             {
                 "conflict" => _transfers.Conflicts.Current is not null,
                 "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
+                "terminal" => _terminal.Shown is { Pipe: not null },
                 _ => true,
             };
             if (met)
@@ -466,6 +500,8 @@ public sealed partial class MainWindow : Window
             _shell = ShellState.FromConfig(config.Config);
             SetPinnedFolders();
             ApplySettings(UiSettings.FromConfig(config.Config), firstStart);
+            _terminal.Profiles = TerminalProfiles.FromConfig(config.Config);
+            Dock.SetProfiles(_terminal.Profiles);
         }
     }
 
@@ -474,8 +510,15 @@ public sealed partial class MainWindow : Window
         var reply = await _session.RequestAsync(new GetKeymapRequest());
         if (reply is KeymapReply keymap)
         {
-            _keys.SetKeymap(Keymap.From(keymap.ToData()));
+            ApplyKeymap(Keymap.From(keymap.ToData()));
         }
+    }
+
+    // The window's keys, and the few a terminal passes back to it.
+    private void ApplyKeymap(Keymap keymap)
+    {
+        _keys.SetKeymap(keymap);
+        _terminal.SetKeymap(keymap);
     }
 
     private async Task ReadVolumesAsync()
@@ -519,6 +562,10 @@ public sealed partial class MainWindow : Window
             "rail" => "Activity rail",
             _ => "Terminal: bottom",
         };
+        if (firstStart || settings.Layout != previous.Layout)
+        {
+            ApplyDockPlacement(DockLayout.PlacementFor(settings.Layout));
+        }
         if (firstStart && settings.Layout == "rail")
         {
             Diag.Info(Target, "the rail layout arrives in a later phase; showing the sidebar");
@@ -597,11 +644,14 @@ public sealed partial class MainWindow : Window
                 ShowNotice($"cabinetos.json{where}: {error.Message}", isError: true);
                 break;
             case KeymapChangedEvent keymap:
-                _keys.SetKeymap(Keymap.From(keymap.Keymap));
+                ApplyKeymap(Keymap.From(keymap.Keymap));
                 break;
             case VolumesChangedEvent volumes:
                 // A USB stick or a mapped share came or went: the Drives section follows.
                 _sidebar.SetDrives(volumes.Volumes);
+                return;
+            case TerminalExitedEvent exited:
+                _ = _terminal.OnExitedAsync(exited);
                 return;
             case JobProgressEvent or JobStateChangedEvent or JobConflictEvent:
                 _transfers.OnEvent(coreEvent);
@@ -662,6 +712,8 @@ public sealed partial class MainWindow : Window
             _restarts.Dequeue();
         }
         _transfers.Reset();
+        // The core closes its shells when it stops; the tabs go with them.
+        _terminal.Reset();
         if (_restarts.Count >= 3)
         {
             await ShowStartFailureAsync($"The core stopped three times within a minute. Last reason: {reason}");
@@ -793,6 +845,7 @@ public sealed partial class MainWindow : Window
         _router.RegisterLocal("conflict.resolve", ResolveConflictAsync);
         _router.RegisterLocal("sidebar.pin", PinAsync);
         _router.RegisterLocal("sidebar.unpin", UnpinAsync);
+        RegisterTerminalCommands();
 
         _router.Completed += OnCommandCompleted;
     }
@@ -862,8 +915,22 @@ public sealed partial class MainWindow : Window
         {
             EndAddressEdit();
             FileMenu.Close();
+            // Ctrl+Shift+P from a shell: the keyboard goes back there when the palette closes.
+            _paletteFromTerminal = Dock.HasTerminalFocus;
             _palette.Open();
         }
+    }
+
+    private void ReturnFocusAfterPalette()
+    {
+        if (_paletteFromTerminal && _dockVisible)
+        {
+            _paletteFromTerminal = false;
+            FocusTerminal();
+            return;
+        }
+        _paletteFromTerminal = false;
+        _paneViews[_active].Focus(FocusState.Programmatic);
     }
 
     // Esc: the palette, then the context menu, then an edit in place, then the address box (the design's order).
@@ -1367,7 +1434,9 @@ public sealed partial class MainWindow : Window
             new(MenuEntryKind.Item, "Open", "\uE8E5", "pane.openSelected", Keys: KeysOf("pane.openSelected"), IsEnabled: entry.IsFolder || !_unavailable.Contains("open_path")),
             new(MenuEntryKind.Item, "Open in other pane", "\uE8A7", "file.openInOtherPane", Keys: KeysOf("file.openInOtherPane"), IsEnabled: entry.IsFolder),
             new(MenuEntryKind.Item, "Copy to other pane", "\uE8C8", "file.copyToOtherPane", Keys: KeysOf("file.copyToOtherPane"), IsEnabled: _dual),
-            new(MenuEntryKind.Item, "Open in Terminal", "\uE756", Keys: KeysOf("view.toggleTerminal"), IsEnabled: false, Tooltip: "The terminal pane arrives in a later version"),
+            // A new shell in the row's folder (a file's own folder for a file). No keys shown:
+            // Ctrl+` toggles the pane, which is not the same thing.
+            new(MenuEntryKind.Item, "Open in Terminal", "\uE756", "terminal.new", CommandArgs.With("cwd", entry.IsFolder ? entry.Path : pane.Path)),
         };
         var plugins = _router.Commands.Where(c => c.Source.Kind == "plugin" && c.When == KeyContexts.FilesView).ToList();
         if (plugins.Count > 0)
@@ -1487,6 +1556,7 @@ public sealed partial class MainWindow : Window
         UpdateNavigationButtons();
         UpdateCrumbs();
         _sidebar.SetActivePath(Active.Path);
+        _terminal.SetActiveFolder(Active.Path);
     }
 
     private void OnPaneChanged(object? sender, PropertyChangedEventArgs e)
@@ -1501,6 +1571,7 @@ public sealed partial class MainWindow : Window
                 UpdateCrumbs();
                 _sidebar.SetActivePath(Active.Path);
                 UpdateNavigationButtons();
+                _terminal.SetActiveFolder(Active.Path);
                 break;
             case nameof(PaneModel.CanGoBack) or nameof(PaneModel.CanGoForward) or nameof(PaneModel.CanGoUp):
                 UpdateNavigationButtons();
@@ -1590,6 +1661,13 @@ public sealed partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (RootGrid.XamlRoot is { } focusRoot && FocusManager.GetFocusedElement(focusRoot) is WebView2)
+        {
+            // A web page (the terminal, a tool) takes its own keys and passes the
+            // window's back as messages (TerminalKeys); a key that also arrives
+            // here must not run twice.
+            return;
+        }
         var virtualKey = (int)e.Key;
         var modifiers = CurrentModifiers();
         if (_palette.IsRecording)

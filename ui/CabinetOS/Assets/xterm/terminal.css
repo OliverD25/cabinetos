@@ -1,0 +1,36 @@
+/* The panel's own fill (rgba(0,0,0,.35)) is drawn by the window behind this page. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* The design's body padding: 8px 12px. */
+#terminals {
+  position: absolute;
+  inset: 8px 4px 4px 12px;
+}
+
+/* Hidden sessions keep their size (visibility, not display), so they fit and draw at once when shown. */
+.session {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+
+.session.shown {
+  visibility: visible;
+}
+
+.xterm .xterm-viewport,
+.xterm .xterm-screen {
+  background-color: transparent !important;
+}
+
+/* xterm.js 6 draws its own scrollbar (the theme's slider colors); the old
+   viewport's native bar would show beside it, white and with arrows. */
+.xterm .xterm-viewport {
+  scrollbar-width: none;
+}

@@ -1,6 +1,9 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using CabinetOS.Core.Keys;
+using CabinetOS.Core.Presentation;
+using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Terminal;
 
 namespace CabinetOS.Tests;
@@ -172,5 +175,58 @@ public class TerminalTests
         Assert.Equal(["pwsh", "cmd"], profiles.Names);
         using var empty = JsonDocument.Parse("{}");
         Assert.Same(TerminalProfiles.Defaults, TerminalProfiles.FromConfig(empty.RootElement));
+    }
+
+    [Fact]
+    public void In_the_terminal_only_the_ways_out_and_terminal_bindings_leave_the_shell()
+    {
+        var keymap = Keymap.From(new KeymapData(1000,
+        [
+            new KeymapBinding("ctrl+shift+p", "palette.show", null),
+            new KeymapBinding("escape", "overlay.close", null),
+            new KeymapBinding("ctrl+k ctrl+s", "keys.open", null),
+            new KeymapBinding("ctrl+backquote", "view.toggleTerminal", null),
+            new KeymapBinding("ctrl+b", "view.toggleSidebar", null),
+            new KeymapBinding("f5", "file.copyToOtherPane", KeyContexts.FilesView),
+            new KeymapBinding("ctrl+shift+t", "terminal.new", KeyContexts.TerminalFocus),
+            new KeymapBinding("ctrl+k ctrl+t", "terminal.clear", KeyContexts.TerminalFocus),
+            // A terminal binding on a way-out key wins there: it is the more specific one.
+            new KeymapBinding("ctrl+backquote", "test.terminalOnly", KeyContexts.TerminalFocus),
+        ],
+        ["palette.show", "overlay.close", "keys.open"]));
+
+        var keys = TerminalKeys.PassKeys(keymap);
+
+        Assert.Equal(new Dictionary<string, string>
+        {
+            ["ctrl+shift+p"] = "palette.show",
+            ["ctrl+backquote"] = "test.terminalOnly",
+            ["ctrl+shift+t"] = "terminal.new",
+        }, keys);
+    }
+
+    [Theory]
+    [InlineData(DockPlacement.Bottom, 300, 120)]
+    [InlineData(DockPlacement.Bottom, 600, 180)]
+    [InlineData(DockPlacement.Bottom, 1000, 240)]
+    [InlineData(DockPlacement.Right, 500, 220)]
+    [InlineData(DockPlacement.Right, 1000, 320)]
+    [InlineData(DockPlacement.Right, 2000, 380)]
+    public void The_dock_starts_at_the_design_s_clamp(DockPlacement placement, double available, double expected) =>
+        Assert.Equal(expected, DockLayout.DefaultSize(placement, available), 3);
+
+    [Fact]
+    public void A_dragged_dock_keeps_its_minimum_and_leaves_the_panes_room()
+    {
+        Assert.Equal(DockPlacement.Right, DockLayout.PlacementFor("right"));
+        Assert.Equal(DockPlacement.Bottom, DockLayout.PlacementFor("rail"));
+        Assert.Equal(DockPlacement.Bottom, DockLayout.PlacementFor(null));
+
+        Assert.Equal(120, DockLayout.Clamp(DockPlacement.Bottom, 40, 800));
+        Assert.Equal(632, DockLayout.Clamp(DockPlacement.Bottom, 700, 800));
+        Assert.Equal(400, DockLayout.Clamp(DockPlacement.Bottom, 400, 800));
+        // A window too small for both keeps the minimum.
+        Assert.Equal(120, DockLayout.Clamp(DockPlacement.Bottom, 300, 250));
+        Assert.Equal(872, DockLayout.Clamp(DockPlacement.Right, 2000, 1200));
     }
 }

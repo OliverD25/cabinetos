@@ -21,4 +21,9 @@
   <ItemGroup>
     <ProjectReference Include="..\CabinetOS.Core\CabinetOS.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The terminal page and xterm.js, served to WebView2 from next to the
+         program, never from a CDN (docs/ui.md, "The terminal"). -->
+    <Content Include="Assets\xterm\**\*" Exclude="Assets\xterm\README.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

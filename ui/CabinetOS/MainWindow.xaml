@@ -189,10 +189,13 @@
                 <Button
                     x:Name="TerminalButton"
                     Grid.Column="7"
-                    AutomationProperties.Name="Terminal (arrives in a later version)"
-                    IsEnabled="False"
-                    Style="{StaticResource CbSubtleButtonStyle}">
-                    <FontIcon FontSize="14" Glyph="&#xE756;" />
+                    AutomationProperties.Name="Toggle terminal"
+                    Style="{StaticResource CbSubtleButtonStyle}"
+                    ToolTipService.ToolTip="Toggle terminal (Ctrl+`)">
+                    <FontIcon
+                        x:Name="TerminalIcon"
+                        FontSize="14"
+                        Glyph="&#xE756;" />
                 </Button>
                 <Button
                     x:Name="MarketplaceButton"
@@ -219,7 +222,7 @@
                 </Button>
             </Grid>
 
-            <!-- Body: sidebar and panes, 8 px gutters. -->
+            <!-- Body: sidebar and the main column, 8 px gutters. -->
             <Grid
                 Grid.Row="2"
                 Padding="8,0,8,8">
@@ -228,16 +231,48 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <views:Sidebar x:Name="SidebarView" Margin="0,0,8,0" />
-                <Grid x:Name="PanesGrid" Grid.Column="1">
+
+                <!--
+                  The main column: the panes, and the Tool Dock under them (layout
+                  classic) or beside them (layout right), behind an 8 px splitter.
+                  The dock only changes cells, so its WebView2 is never re-parented.
+                -->
+                <Grid x:Name="MainColumn" Grid.Column="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition x:Name="BottomGapRow" Height="0" />
+                        <RowDefinition x:Name="BottomDockRow" Height="0" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition x:Name="RightColumn" Width="*" />
+                        <ColumnDefinition x:Name="RightGapColumn" Width="0" />
+                        <ColumnDefinition x:Name="RightDockColumn" Width="0" />
                     </Grid.ColumnDefinitions>
-                    <views:FilePane x:Name="LeftPane" Margin="0,0,4,0" />
-                    <views:FilePane
-                        x:Name="RightPane"
+                    <Grid x:Name="PanesGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="RightColumn" Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <views:FilePane x:Name="LeftPane" Margin="0,0,4,0" />
+                        <views:FilePane
+                            x:Name="RightPane"
+                            Grid.Column="1"
+                            Margin="4,0,0,0" />
+                    </Grid>
+                    <views:SplitterBar
+                        x:Name="BottomSplitter"
+                        Grid.Row="1"
+                        Orientation="Horizontal"
+                        Visibility="Collapsed" />
+                    <views:SplitterBar
+                        x:Name="RightSplitter"
                         Grid.Column="1"
-                        Margin="4,0,0,0" />
+                        Orientation="Vertical"
+                        Visibility="Collapsed" />
+                    <views:ToolDock
+                        x:Name="Dock"
+                        Grid.Row="2"
+                        Visibility="Collapsed" />
                 </Grid>
             </Grid>
 

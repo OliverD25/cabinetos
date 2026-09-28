@@ -1,0 +1,242 @@
+using System.Text.Json;
+using CabinetOS.Core.Commands;
+using CabinetOS.Core.Presentation;
+using CabinetOS.Core.Terminal;
+using CabinetOS.Services;
+using CabinetOS.Views;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Windows.UI;
+
+namespace CabinetOS;
+
+// The terminal and the Tool Dock around it (docs/ui.md, "The terminal").
+public sealed partial class MainWindow
+{
+    private TerminalController _terminal = null!;
+    private DockPlacement _dockPlacement = DockPlacement.Bottom;
+    private bool _dockVisible;
+    private double? _dockUserSize;
+    private double _dockDragStart;
+    private bool _paletteFromTerminal;
+
+    private void SetUpTerminal()
+    {
+        _terminal = new TerminalController(_session, DispatcherQueue, Dock.TerminalPage) { EstimateSize = Dock.EstimateCells };
+        _terminal.Changed += UpdateDockHeader;
+        _terminal.Notice += (text, isError) => ShowNotice(text, isError);
+        _terminal.KeyCommand += command => _ = _router.ExecuteAsync(command, trigger: "key");
+        _terminal.LastClosed += () =>
+        {
+            if (_dockVisible)
+            {
+                HideDock();
+            }
+        };
+        Dock.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
+        Dock.TerminalPage.Failed += reason =>
+        {
+            var hadFocus = Dock.HasTerminalFocus;
+            Dock.ShowStopped("The terminal stopped", $"Its page failed: {reason}. The shells still run.");
+            if (hadFocus)
+            {
+                _paneViews[_active].Focus(FocusState.Programmatic);
+            }
+        };
+        BottomSplitter.DragStarted += () => _dockDragStart = CurrentDockSize();
+        BottomSplitter.Dragged += delta => ResizeDock(_dockDragStart - delta);
+        RightSplitter.DragStarted += () => _dockDragStart = CurrentDockSize();
+        RightSplitter.Dragged += delta => ResizeDock(_dockDragStart - delta);
+        MainColumn.SizeChanged += (_, _) => ApplyDockSize();
+        TerminalButton.Click += (_, _) => _ = _router.ExecuteAsync("view.toggleTerminal", trigger: "button");
+        RootGrid.ActualThemeChanged += (_, _) => SendTerminalTheme();
+        SendTerminalTheme();
+        Dock.SetProfiles(_terminal.Profiles);
+    }
+
+    private void RegisterTerminalCommands()
+    {
+        _router.RegisterUiHandler("view.toggleTerminal", ToggleTerminalAsync);
+        // The dock's own buttons and the menu's "Open in Terminal"; not in the core's registry yet.
+        _router.RegisterLocal("terminal.new", invocation =>
+            NewTerminalAsync(CommandArgs.Text(invocation.Args, "profile"), CommandArgs.Text(invocation.Args, "cwd"), invocation.RequestId));
+        _router.RegisterLocal("terminal.show", invocation =>
+        {
+            if (CommandArgs.Number(invocation.Args, "session") is { } session)
+            {
+                _terminal.Show(session);
+                FocusTerminal();
+            }
+        });
+        _router.RegisterLocal("terminal.close", invocation =>
+            CommandArgs.Number(invocation.Args, "session") is { } session ? _terminal.CloseAsync(session) : Task.CompletedTask);
+        _router.RegisterLocal("terminal.reload", _ => ReloadTerminalAsync());
+    }
+
+    // Ctrl+`: hidden -> shown, with the keyboard; shown with the keyboard -> the keyboard goes
+    // back to the pane; shown, keyboard elsewhere -> hidden. {"visible": false} hides it.
+    private async Task ToggleTerminalAsync(CommandInvocation invocation)
+    {
+        var wanted = VisibleArgument(invocation.Args);
+        if (wanted == false || (wanted is null && _dockVisible && !Dock.HasTerminalFocus))
+        {
+            HideDock();
+            return;
+        }
+        if (wanted is null && _dockVisible)
+        {
+            _paneViews[_active].Focus(FocusState.Programmatic);
+            return;
+        }
+        await ShowDockAsync(invocation.RequestId);
+    }
+
+    private static bool? VisibleArgument(JsonElement? args) =>
+        args is { ValueKind: JsonValueKind.Object } value && value.TryGetProperty("visible", out var visible)
+            && visible.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? visible.GetBoolean()
+            : null;
+
+    private async Task ShowDockAsync(string requestId)
+    {
+        SetDockVisible(true);
+        if (_terminal.Tabs.Count == 0)
+        {
+            Dock.ShowStarting();
+            if (await _terminal.OpenAsync(null, TerminalFolder(), requestId) is null && _terminal.Tabs.Count == 0)
+            {
+                // The status bar says why; an empty dock would only be in the way.
+                SetDockVisible(false);
+                return;
+            }
+        }
+        FocusTerminal();
+    }
+
+    private async Task NewTerminalAsync(string? profile, string? folder, string requestId)
+    {
+        SetDockVisible(true);
+        if (_terminal.Tabs.Count == 0)
+        {
+            Dock.ShowStarting();
+        }
+        if (await _terminal.OpenAsync(profile, folder ?? TerminalFolder(), requestId) is null)
+        {
+            if (_terminal.Tabs.Count == 0)
+            {
+                SetDockVisible(false);
+            }
+            return;
+        }
+        FocusTerminal();
+    }
+
+    private async Task ReloadTerminalAsync()
+    {
+        Dock.HideStopped();
+        if (!await _terminal.ReloadAsync())
+        {
+            Dock.ShowStopped("The terminal could not start again", "WebView2 did not load its page.");
+            return;
+        }
+        FocusTerminal();
+    }
+
+    private string? TerminalFolder() => Active.Path.Length > 0 ? Active.Path : null;
+
+    private void FocusTerminal()
+    {
+        if (!_dockVisible)
+        {
+            return;
+        }
+        // A dock that was collapsed a moment ago has no size yet, and a WebView2 without one takes no focus.
+        MainColumn.UpdateLayout();
+        if (Dock.FocusTerminalPage())
+        {
+            _terminal.FocusPage();
+        }
+    }
+
+    private void HideDock()
+    {
+        SetDockVisible(false);
+        // The collapsed page cannot keep the keyboard; the pane takes it.
+        _paneViews[_active].Focus(FocusState.Programmatic);
+    }
+
+    private void SetDockVisible(bool visible)
+    {
+        _dockVisible = visible;
+        Dock.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        BottomSplitter.Visibility = visible && _dockPlacement == DockPlacement.Bottom ? Visibility.Visible : Visibility.Collapsed;
+        RightSplitter.Visibility = visible && _dockPlacement == DockPlacement.Right ? Visibility.Visible : Visibility.Collapsed;
+        ApplyDockSize();
+        _terminal.IsVisible = visible;
+        TerminalIcon.Foreground = ThemeResources.Brush(visible ? "CbAccentBrush" : "CbTextSecondaryBrush");
+    }
+
+    private void ApplyDockPlacement(DockPlacement placement)
+    {
+        if (placement != _dockPlacement)
+        {
+            // A height the user dragged to means nothing as a width.
+            _dockUserSize = null;
+        }
+        _dockPlacement = placement;
+        var bottom = placement == DockPlacement.Bottom;
+        Grid.SetRow(Dock, bottom ? 2 : 0);
+        Grid.SetColumn(Dock, bottom ? 0 : 2);
+        SetDockVisible(_dockVisible);
+        UpdateDockHeader();
+    }
+
+    private void ApplyDockSize()
+    {
+        var bottom = _dockPlacement == DockPlacement.Bottom;
+        var size = _dockVisible ? CurrentDockSize() : 0;
+        BottomGapRow.Height = new GridLength(_dockVisible && bottom ? DockLayout.Gap : 0);
+        BottomDockRow.Height = new GridLength(_dockVisible && bottom ? size : 0);
+        RightGapColumn.Width = new GridLength(_dockVisible && !bottom ? DockLayout.Gap : 0);
+        RightDockColumn.Width = new GridLength(_dockVisible && !bottom ? size : 0);
+    }
+
+    private double DockSpace() => _dockPlacement == DockPlacement.Bottom ? MainColumn.ActualHeight : MainColumn.ActualWidth;
+
+    private double CurrentDockSize() => _dockUserSize is { } size
+        ? DockLayout.Clamp(_dockPlacement, size, DockSpace())
+        : DockLayout.DefaultSize(_dockPlacement, DockSpace());
+
+    private void ResizeDock(double size)
+    {
+        _dockUserSize = DockLayout.Clamp(_dockPlacement, size, DockSpace());
+        ApplyDockSize();
+    }
+
+    private void UpdateDockHeader()
+    {
+        Dock.SetTabs(_terminal.Tabs, _terminal.Shown);
+        Dock.SetCaption(_terminal.Caption(_dockPlacement));
+    }
+
+    private void SendTerminalTheme()
+    {
+        var dark = RootGrid.ActualTheme != ElementTheme.Light;
+        var accent = AccentColor(dark);
+        _terminal.SetTheme(TerminalPageMessages.Theme(
+            background: "#00000000",
+            foreground: dark ? "#FFFFFFE6" : "#000000E4",
+            cursor: Css(accent, 0xFF),
+            selection: Css(accent, 0x4D),
+            fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
+            fontSize: 12));
+    }
+
+    // The design's accent (#60CDFF is the default blue's Light2): Light2 on dark, Dark1 on light.
+    private static Color AccentColor(bool dark) =>
+        Application.Current.Resources.TryGetValue(dark ? "SystemAccentColorLight2" : "SystemAccentColorDark1", out var value) && value is Color color
+            ? color
+            : Color.FromArgb(0xFF, 0x60, 0xCD, 0xFF);
+
+    private static string Css(Color color, byte alpha) => $"#{color.R:X2}{color.G:X2}{color.B:X2}{alpha:X2}";
+}

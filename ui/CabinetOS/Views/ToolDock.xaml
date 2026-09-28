@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.ToolDock"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The Tool Dock (design view A, "Integrated terminal"): rgba(0,0,0,.35), 8 px radius. -->
+    <Border
+        Background="{ThemeResource CbTerminalFillBrush}"
+        BorderBrush="{ThemeResource CbTerminalStrokeBrush}"
+        BorderThickness="1"
+        CornerRadius="8">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="34" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Header, 34 px: a tab per session, "+", the other profiles, the sync caption, close. -->
+            <Border BorderBrush="{ThemeResource CbDividerBrush}" BorderThickness="0,0,0,1">
+                <Grid Padding="12,0,6,0" ColumnSpacing="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ScrollViewer
+                        x:Name="TabScroller"
+                        HorizontalScrollBarVisibility="Hidden"
+                        HorizontalScrollMode="Enabled"
+                        IsTabStop="False"
+                        VerticalScrollBarVisibility="Disabled"
+                        VerticalScrollMode="Disabled">
+                        <StackPanel
+                            x:Name="TabStrip"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="2" />
+                    </ScrollViewer>
+                    <Button
+                        x:Name="NewButton"
+                        Grid.Column="1"
+                        Padding="0"
+                        AutomationProperties.Name="New terminal"
+                        Style="{StaticResource CbDockTabButtonStyle}"
+                        ToolTipService.ToolTip="New terminal">
+                        <FontIcon FontSize="12" Glyph="&#xE710;" />
+                    </Button>
+                    <Button
+                        x:Name="ProfilesButton"
+                        Grid.Column="2"
+                        Width="20"
+                        MinWidth="20"
+                        Padding="0"
+                        AutomationProperties.Name="Other shells"
+                        Style="{StaticResource CbDockTabButtonStyle}"
+                        ToolTipService.ToolTip="Other shells">
+                        <FontIcon FontSize="9" Glyph="&#xE70D;" />
+                        <Button.Flyout>
+                            <MenuFlyout x:Name="ProfilesMenu" Placement="BottomEdgeAlignedLeft" />
+                        </Button.Flyout>
+                    </Button>
+                    <TextBlock
+                        x:Name="CaptionText"
+                        Grid.Column="3"
+                        Padding="0,0,10,0"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{ThemeResource CbHintTextBrush}"
+                        TextAlignment="Right"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
+                    <Button
+                        x:Name="CloseButton"
+                        Grid.Column="4"
+                        Width="24"
+                        Height="24"
+                        MinWidth="24"
+                        Padding="0"
+                        AutomationProperties.Name="Hide the terminal"
+                        Style="{StaticResource CbDockTabButtonStyle}"
+                        ToolTipService.ToolTip="Hide the terminal">
+                        <FontIcon FontSize="9" Glyph="&#xE711;" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Body: the terminal page (one WebView2 for every session). -->
+            <Grid x:Name="Body" Grid.Row="1">
+                <Border x:Name="TerminalFrame" />
+                <TextBlock
+                    x:Name="StartingText"
+                    Margin="12,8"
+                    FontFamily="{StaticResource CbMonoFont}"
+                    FontSize="12"
+                    Foreground="{ThemeResource CbHintTextBrush}"
+                    Text="Starting the terminal…"
+                    Visibility="Collapsed" />
+                <!-- When the page's process ends: the window goes on, and Reload brings the page back. -->
+                <StackPanel
+                    x:Name="StoppedPanel"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="10"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="StoppedText"
+                        HorizontalAlignment="Center"
+                        FontSize="13"
+                        Foreground="{ThemeResource CbTextPrimaryBrush}"
+                        Text="The terminal stopped" />
+                    <TextBlock
+                        x:Name="StoppedReason"
+                        HorizontalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{ThemeResource CbHintTextBrush}" />
+                    <Button
+                        x:Name="ReloadButton"
+                        HorizontalAlignment="Center"
+                        Content="Reload" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

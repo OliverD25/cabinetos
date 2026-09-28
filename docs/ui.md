@@ -32,8 +32,8 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
-| `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout. |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
+| `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
 Shared settings: `ui/Directory.Build.props` (target
@@ -80,8 +80,8 @@ skip themselves otherwise (as in the CI job `ui`, which builds no core).
 | `CABINETOS_LOG` | The level filter, in the core's syntax: `debug`, or `info,cabinetos_ui::pipe=trace` |
 | `CABINETOS_CONFIG` | Not read by the UI; the core it starts inherits it and uses that `cabinetos.json` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
-| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `until:running` or `until:conflict` waits for a job; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict` |
+| `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica and dialogs (a popup layer) are not part of that content. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` ends the terminal page's browser process; `until:running`, `until:conflict` or `until:terminal` waits for a job or a shell; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict` |
 
 ### Logs and crashes
 
@@ -90,7 +90,8 @@ format of [diagnostics.md](diagnostics.md), with `boundary: "frontend"`, on
 a background thread with a bounded, lock-free queue; it keeps 14 daily
 files, as the core does. Targets are `cabinetos_ui::<area>`: `app`,
 `session`, `launcher`, `pipe`, `commands`, `keys`, `pane`, `palette`,
-`jobs`, `settings`, `shell`, `frames`, `xaml`. The UI thread is named `ui`.
+`jobs`, `settings`, `shell`, `frames`, `xaml`, `icons`, `terminal`,
+`webview`, `snapshot`. The UI thread is named `ui`.
 
 Every request the UI sends is logged under its request ID (`request sent`,
 then `reply received` or `request failed`). A command started by a key or a
@@ -262,9 +263,11 @@ window registers a handler for each one (`RegisterUiHandler`).
 These commands exist only in the UI, because they belong to the window's
 own controls: `transfer.pause`, `transfer.resume`, `transfer.cancel`,
 `transfer.close`, `transfer.minimize`, `transfer.restore`,
-`transfer.next`, `conflict.resolve`, `sidebar.pin` and `sidebar.unpin`
-(`RegisterLocal`). They run through the router like the others, but they
-are not in the palette and cannot be rebound.
+`transfer.next`, `conflict.resolve`, `sidebar.pin`, `sidebar.unpin`, and
+the terminal's `terminal.new` (`{"profile": …, "cwd": …}`),
+`terminal.show` and `terminal.close` (`{"session": …}`) and
+`terminal.reload` (`RegisterLocal`). They run through the router like the
+others, but they are not in the palette and cannot be rebound.
 
 | Command | In this version |
 |---|---|
@@ -274,7 +277,8 @@ are not in the palette and cannot be rebound.
 | `go.toPath` | With `{"path": …}` goes there; without, turns the crumbs into a text box |
 | `help.about` | Runs in the core; the result is shown in a dialog |
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
-| `view.toggleTerminal`, `marketplace.browse`, `workspace.switch`, `preferences.selectColorTheme`, `terminal.runTask` | "arrives in a later version" in the status bar |
+| `view.toggleTerminal` | Shows the terminal, gives the keyboard back to the pane, or hides it ("The terminal") |
+| `marketplace.browse`, `workspace.switch`, `preferences.selectColorTheme`, `terminal.runTask` | "arrives in a later version" in the status bar |
 
 ## File operations
 
@@ -388,8 +392,9 @@ kept inside the window: in-app Acrylic, 260 px, the design's 120 ms
 entrance. Shift+F10 and the Menu key open it under the focused row. The
 icon strip holds Cut, Copy, Paste, Rename and Delete. The rows: Open
 (Enter), Open in other pane (Ctrl+Enter, folders), Copy to other pane (its
-keys from the keymap, F5), Open in Terminal (Ctrl+`, disabled until the
-terminal pane), then "FROM PLUGINS" with every plugin command whose `when`
+keys from the keymap, F5), Open in Terminal (a new shell in the row's
+folder; no keys shown, because Ctrl+` toggles the terminal instead), then
+"FROM PLUGINS" with every plugin command whose `when`
 is `filesView`, with the plugin's name as a badge, then Properties
 (Alt+Enter). A plugin command gets `{"path": …, "paths": […]}`: the
 right-clicked entry and the selection, since plugins cannot read the
@@ -452,13 +457,129 @@ keymap. A refusal (`immutable_binding`, `keybinding_conflict`, …) is shown
 in the row. Commands of the Immutable System Tier show a lock instead of a
 pencil.
 
+## The terminal
+
+Ctrl+` (`view.toggleTerminal`), the terminal button in the command bar,
+and "Open in Terminal" in a row's context menu open the terminal: the
+first occupant of the Tool Dock (Constitution Articles 9 and 11). The core
+runs the shells ([terminal.md](terminal.md)); the window draws them with
+xterm.js in WebView2 and sends the keys back. Nothing starts before the
+terminal is first shown: no WebView2 and no shell (Article 4).
+
+Measured on 2026-09-28 (release builds, locked screen, four runs): the
+first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
+0.35–0.41 s is creating WebView2. Once the page is loaded, opening a shell
+(`terminal_open` and its tab) takes 35–44 ms.
+
+- **Where it goes.** Under the panes when `ui.layout` is `classic` or
+  `rail`: 30 % of the main column's height, at least 120 and at most
+  240 px. Beside them when it is `right`: 32 % of the width, 220 to
+  380 px. The 8 px gap before the dock is a splitter: a drag sets the
+  size, at least the minimum above and at most what leaves the panes 160 px
+  of height (320 px of width). The dragged size lasts until the window
+  closes; there is no setting for it yet.
+- **The header, 34 px.** One tab per shell: a green dot while it runs,
+  the profile's name, and × to end it. "+" starts the default profile
+  (`terminal.defaultProfile`); the arrow next to it lists every profile of
+  `terminal.profiles`. The caption says whether the shell follows the
+  active pane: "cwd synced to active pane · {folder}", "cwd not synced: a
+  command is being typed", "cwd not synced: a full-screen program runs",
+  or "pwsh exited with code 0" (shorter on the right). The × at the end
+  hides the dock; the shells go on running.
+- **Ctrl+`.** In a pane, it shows the terminal and gives it the keyboard;
+  the first time, it starts the default profile in the active pane's
+  folder. In the terminal, it gives the keyboard back to the pane. In a
+  pane while the terminal is shown, it hides the terminal.
+- **Open in Terminal** starts another shell in the row's folder (a file's
+  own folder for a file).
+- **Following the active pane.** When the active pane's folder changes,
+  by navigation or by switching panes, the shown shell gets
+  `terminal_sync_cwd` once 300 ms pass without another change. The core
+  types the shell's own `cd` command and Enter, so the rule is about what
+  that typing would break. The sync is skipped when a line is half typed
+  (keys went in since the last Enter or Ctrl+C: the command would be
+  added to that line), when a full-screen program runs (xterm.js shows the
+  alternate screen: vim, less, a TUI would get the line), when the shell
+  is in that folder already, or when it ended. A skipped sync is not tried
+  again when the line is finished, because that line may be the user's own
+  `cd`; the next change of the pane's folder tries again. Only the shown
+  tab follows, and only while the dock is shown; when it is shown again,
+  it catches up.
+- **When a shell ends** (`terminal_exited`), its last output stays and a
+  dim line "[exited with code N]" follows, the dot turns grey, and the
+  caption names the code. After 3 s the tab closes (`terminal_close`);
+  when the last tab closes, the dock hides.
+- **Keys in the terminal** go to the shell, with these exceptions: a
+  single combination bound with `when: terminalFocus`, and the keys of
+  `palette.show` and `view.toggleTerminal` (the ways out), go to the
+  window; Ctrl+C with text selected copies it (as in Windows Terminal),
+  and Ctrl+V pastes (bracketed when the shell asked for it). Esc, Tab and
+  chords such as Ctrl+K … stay in the shell, which needs them. The page
+  hands the window's keys over as messages, and a key that also reaches
+  the window through XAML is ignored there, so none runs twice. The
+  palette opened from the terminal gives the keyboard back to it.
+- **The core stops.** Its shells end with it, and the tabs close.
+
+How it is built:
+
+- One WebView2 holds every session, each an xterm.js terminal: the DOM
+  renderer, Cascadia Code 12 px, line height 1.25 (the design's 1.6 is for
+  the prototype's static lines and would cost a third of the rows), 5,000
+  lines of scrollback, and `windowsPty` set for ConPTY with the Windows
+  build number (so xterm.js reflows and scrolls the way ConPTY expects).
+- The page is `ui/CabinetOS/Assets/xterm/terminal.html`, served from
+  `https://terminal.cabinetos.example/`, a virtual host mapped to the
+  folder next to `CabinetOS.exe`. `@xterm/xterm` 6.0.0 and
+  `@xterm/addon-fit` 0.11.0 are copied there unchanged, with their MIT
+  licenses and SHA-256 hashes ([the folder's
+  README](../ui/CabinetOS/Assets/xterm/README.md)). Nothing comes from a
+  CDN. xterm.js 6 does not implement win32-input-mode, so it ignores the
+  pseudo-console's request for it, and Enter reaches the shell as `\r`.
+- **The byte pump.** The window opens each session's byte pipe (the
+  `pipe` of `terminal_opened`); a background task reads it into a buffer
+  (`OutputCoalescer`). The UI thread sends that buffer to the page as
+  base64 with `PostWebMessageAsString`, at most once every 16 ms per
+  session (60 a second) and at most 192 KiB per message, so a shell that
+  prints a million lines costs 60 messages a second. Keys come back
+  through `WebMessageReceived`, as text (`input`) or base64 (`binary`,
+  mouse reports), and go into the pipe in order. The fit addon measures
+  the cells; a new size goes to the core as `terminal_resize`.
+- **Messages** (`TerminalPageMessages`, tested): window to page `create`,
+  `output`, `show`, `close`, `exited`, `focus`, `passKeys`, `theme`; page
+  to window `ready`, `input`, `binary`, `resize`, `buffer` (the alternate
+  screen came or went), `key`. Anything malformed, unknown or over 1 MiB
+  is dropped.
+- **Safety.** The page loads only from its virtual host. Every other
+  navigation, frame, new window, download, permission and request, http
+  and https included, is refused and logged. Browser keys (F5, Ctrl+F,
+  Ctrl+P) go to the shell, not to the browser. Developer tools exist only
+  in Debug builds. `WebViewHost` does all of this, for Tool Extensions too.
+- **Crash isolation.** The terminal has a browser process of its own
+  (user-data folder `%LOCALAPPDATA%\CabinetOS\WebView2\terminal`). When
+  its page or browser process ends, the dock shows "The terminal stopped"
+  with Reload, and the rest of the window goes on. Reload starts a new
+  WebView2, draws each session again and has the pseudo-console repaint
+  its screen (a resize by one column and back), so the screen and
+  everything the shell did meanwhile come back. Output that arrived while
+  the page was down is not replayed; the repaint shows the current screen.
+  Checked on 2026-09-28 by ending the browser process
+  (`CoreWebView2.BrowserProcessId`, with the snapshot step
+  `crash:terminal`): the dock said so, the other pane went on navigating,
+  Reload brought back the screen of the same pwsh, and it took new input.
+- **Logs.** Target `cabinetos_ui::terminal`: "terminal session opened",
+  "terminal shell exited", "cwd sync" with its decision (debug level),
+  "terminal tab closed". Target `cabinetos_ui::webview`: "WebView2
+  started" with its browser process ID, every blocked request, and "a
+  WebView2 process failed" with the kind and reason.
+
 ## Not in this version
 
 | What | Why |
 |---|---|
 | The search field | In place and disabled, with the design's placeholder; file search comes with its phase |
-| The terminal pane and toggle | The toggle and the menu's "Open in Terminal" are disabled; Phase 5c |
-| The marketplace button, the Tool Dock | Disabled or absent; Phase 5c and 9 |
+| The marketplace button | Disabled; Phase 9 |
+| Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
+| Saving the dock's dragged size | No setting for it yet |
 | Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |
 | Sorting by a column | The column headers are static; the order is `panes.sort` from `cabinetos.json` |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
