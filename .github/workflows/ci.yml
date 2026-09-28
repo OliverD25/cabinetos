@@ -72,6 +72,10 @@ jobs:
       # realistic build and search times (printed in the log).
       - name: Elevated tests (index, indexer)
         run: cargo test --release -p cabinetos-index -p cabinetos-indexer -- --ignored --nocapture
+        env:
+          # Installs, starts, stops and removes the cabinetos-indexer
+          # service; allowed here because the runner is thrown away.
+          CABINETOS_TEST_SERVICE: "1"
 
       # Benchmarks need a quiet machine and a 100,000-file fixture; CI only
       # checks that they still compile. Run them locally (core/README.md).
