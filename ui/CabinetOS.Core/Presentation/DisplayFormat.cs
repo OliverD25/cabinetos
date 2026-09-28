@@ -112,6 +112,15 @@ public static class DisplayFormat
     public static IReadOnlyList<(string Label, string Path)> Crumbs(string path)
     {
         var crumbs = new List<(string, string)>();
+        // \\?\C:\… and \\?\UNC\server\share\… lift the 260-character limit; they name the same folders.
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) || path.StartsWith(@"\\.\UNC\", StringComparison.OrdinalIgnoreCase))
+        {
+            path = @"\\" + path[8..];
+        }
+        else if (path.StartsWith(@"\\?\", StringComparison.Ordinal) || path.StartsWith(@"\\.\", StringComparison.Ordinal))
+        {
+            path = path[4..];
+        }
         if (path.StartsWith(@"\\", StringComparison.Ordinal))
         {
             var parts = path.TrimStart('\\').Split('\\', StringSplitOptions.RemoveEmptyEntries);
@@ -128,6 +137,40 @@ public static class DisplayFormat
             crumbs.Add((pieces[i], i == 0 ? upTo + '\\' : upTo));
         }
         return crumbs;
+    }
+
+    /// <summary>
+    /// A path for a line too narrow for it: the drive or share, an ellipsis,
+    /// and as many of its last names as fit in <paramref name="maxChars"/>,
+    /// each whole (<c>C:\…\names\Звіт 2026.txt</c>). The last name is kept
+    /// even when it alone is longer; the view cuts its end. A path that fits
+    /// is shown as it is.
+    /// </summary>
+    public static string ShortPath(string path, int maxChars)
+    {
+        if (path.Length <= maxChars)
+        {
+            return path;
+        }
+        var crumbs = Crumbs(path);
+        var rootCount = path.StartsWith(@"\\", StringComparison.Ordinal) && crumbs.Count > 1 ? 2 : 1;
+        if (crumbs.Count <= rootCount)
+        {
+            return path;
+        }
+        var root = crumbs[rootCount - 1].Path.TrimEnd('\\');
+        var tail = crumbs[^1].Label;
+        for (var i = crumbs.Count - 2; i >= rootCount; i--)
+        {
+            var longer = crumbs[i].Label + '\\' + tail;
+            if (root.Length + 3 + longer.Length > maxChars)
+            {
+                break;
+            }
+            tail = longer;
+        }
+        var shown = $@"{root}\…\{tail}";
+        return shown.Length < path.Length ? shown : path;
     }
 
     /// <summary>The parent folder of a path, or null at a drive or share root.</summary>

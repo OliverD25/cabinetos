@@ -275,18 +275,96 @@ public class ToolTests
         Assert.Null(Map(("ctrl+k ctrl+s", "keys.open")).With(Extra("ctrl+k")));
     }
 
+    [Fact]
+    public async Task A_folder_the_page_cannot_serve_ends_the_open_and_says_why()
+    {
+        // WebView2 refused a folder 333 characters long (edge cases, class B): the open must end, not leave a blank tool.
+        // Any refusal ends it so, such as a folder gone since the listing.
+        var page = new RecordingPage { Refuse = folder => folder.EndsWith("gone", StringComparison.Ordinal) };
+        var files = new ToolFileSession("markdown-preview", "cabinetos.example", page);
+
+        Assert.False(await files.OpenAsync(@"C:\edge\gone\notes.md"));
+        Assert.Null(files.Host);
+        Assert.Contains("cannot serve", files.Problem);
+        Assert.DoesNotContain("load", page.Calls);
+
+        // The next file, in a folder it can serve, opens as usual.
+        Assert.True(await files.OpenAsync(@"C:\docs\README.md"));
+        Assert.Null(files.Problem);
+        Assert.Equal("f2.markdown-preview.cabinetos.example", files.Host);
+    }
+
+    [Fact]
+    public async Task A_folder_refused_when_the_page_first_starts_ends_the_open_too()
+    {
+        // Before its first start, WebView2 only notes a folder; it serves (or refuses) it while the page starts.
+        var page = new RecordingPage { Refuse = folder => folder.EndsWith("gone", StringComparison.Ordinal), Unstarted = true };
+        var files = new ToolFileSession("markdown-preview", "cabinetos.example", page);
+
+        Assert.False(await files.OpenAsync(@"C:\edge\gone\notes.md"));
+        Assert.Null(files.Host);
+        Assert.Contains("cannot serve", files.Problem);
+        // The refused folder is let go, so the next start does not refuse it again.
+        Assert.Equal("unmap f1.markdown-preview.cabinetos.example", page.Calls[^1]);
+
+        Assert.True(await files.OpenAsync(@"C:\docs\README.md"));
+        Assert.Null(files.Problem);
+    }
+
+    [Fact]
+    public async Task A_file_whose_path_webview2_cannot_read_is_not_offered_to_the_page()
+    {
+        // On 2026-09-29 WebView2 showed a 255-character path from a 250-character folder it served,
+        // failed to fetch a 272-character one from the same folder, and refused a 333-character folder.
+        var page = new RecordingPage();
+        var files = new ToolFileSession("markdown-preview", "cabinetos.example", page);
+        var folder = @"C:\edge\band\" + new string('b', 250 - 13);
+        Assert.Equal(250, folder.Length);
+
+        Assert.True(await files.OpenAsync(folder + @"\n.md"));
+        Assert.False(await files.OpenAsync(folder + @"\band notes, longer.md"));
+
+        Assert.Contains("272 characters", files.Problem);
+        Assert.Null(files.Host);
+        // The page loses the first file's folder and is asked nothing for the second.
+        Assert.Equal(["map", "load", "unmap"], page.Calls.Select(call => call.Split(' ')[0]));
+    }
+
     // A page that writes down what the file session asks of it.
     private sealed class RecordingPage : IToolPage
     {
+        private readonly Dictionary<string, string> _noted = [];
+
         public List<string> Calls { get; } = [];
 
-        public void MapFolder(string host, string folder) => Calls.Add($"map {host} {folder}");
+        public Func<string, bool>? Refuse { get; init; }
 
-        public void UnmapFolder(string host) => Calls.Add($"unmap {host}");
+        // Like a WebView2 that has not started yet: folders are checked when the page loads.
+        public bool Unstarted { get; init; }
+
+        public void MapFolder(string host, string folder)
+        {
+            if (!Unstarted && Refuse?.Invoke(folder) == true)
+            {
+                throw new DirectoryNotFoundException("The system cannot find the path specified.");
+            }
+            _noted[host] = folder;
+            Calls.Add($"map {host} {folder}");
+        }
+
+        public void UnmapFolder(string host)
+        {
+            _noted.Remove(host);
+            Calls.Add($"unmap {host}");
+        }
 
         public Task<bool> LoadAsync()
         {
             Calls.Add("load");
+            if (Unstarted && _noted.Values.Any(folder => Refuse?.Invoke(folder) == true))
+            {
+                return Task.FromException<bool>(new DirectoryNotFoundException("The system cannot find the path specified."));
+            }
             return Task.FromResult(true);
         }
 

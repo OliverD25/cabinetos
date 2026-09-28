@@ -31,14 +31,14 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>dock:&lt;pixels&gt;</c> drags the dock's splitter to that size (and saves it, as a drag does),
 /// <c>mode:light|dark|windows</c> makes the window take Windows as set to that mode (a theme of
 /// kind <c>system</c> follows) without changing the PC's setting,
-/// <c>click:&lt;name&gt;</c> presses the first shown button with that name as UI Automation reports it
+/// <c>click:&lt;name&gt;</c> presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it
 /// (the keyboard moves to it, then its automation peer invokes it), <c>focus:&lt;label&gt;</c> logs where the keyboard is,
 /// <c>until:running|conflict|terminal|search|tool</c> waits for a job, a shell, an answer or a tool page, <c>wait:&lt;ms&gt;</c> waits, and
 /// <c>shot:&lt;name&gt;</c> renders the window's content to <c>&lt;name&gt;.png</c>.
 /// The window draws its own content, so this works when the screen is locked
 /// or off; the Mica backdrop is not part of it (a stand-in colour is).
-/// WebView2 pages are drawn by WebView2 itself, and open dialogs (the popup
-/// layer) on their own, and both are laid over their place.
+/// WebView2 pages are drawn by WebView2 itself, and open dialogs and menus
+/// (the popup layer) on their own, and all are laid over their place.
 /// </summary>
 internal static class DevSnapshots
 {

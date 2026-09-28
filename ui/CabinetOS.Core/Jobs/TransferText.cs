@@ -57,6 +57,39 @@ public static class TransferText
         return job.Destination is null ? from : $"{from} → {job.Destination}";
     }
 
+    /// <summary>
+    /// <see cref="Subtitle"/> for a line of about <paramref name="maxChars"/>
+    /// characters: each path keeps its drive and its last names
+    /// (<see cref="DisplayFormat.ShortPath"/>), so both ends of a long copy
+    /// stay readable; the tooltip has the whole line.
+    /// </summary>
+    public static string ShortSubtitle(TransferJob job, int maxChars)
+    {
+        if (job.State.Type == JobState.Failed && !string.IsNullOrEmpty(job.State.Message))
+        {
+            return job.State.Message;
+        }
+        var from = job.Sources.Count switch
+        {
+            0 => "",
+            1 => job.Sources[0],
+            _ => DisplayFormat.Parent(job.Sources[0]) ?? job.Sources[0],
+        };
+        if (job.Kind?.Type == "delete")
+        {
+            var end = job.Kind.IsPermanentDelete ? " → deleted for good" : " → Recycle Bin";
+            return DisplayFormat.ShortPath(from, Math.Max(10, maxChars - end.Length)) + end;
+        }
+        if (job.Destination is not { } destination)
+        {
+            return DisplayFormat.ShortPath(from, maxChars);
+        }
+        // Half the line each; a side that needs less leaves the rest to the other.
+        var half = Math.Max(10, (maxChars - 3) / 2);
+        var to = DisplayFormat.ShortPath(destination, Math.Max(half, maxChars - 3 - Math.Min(from.Length, half)));
+        return $"{DisplayFormat.ShortPath(from, Math.Max(half, maxChars - 3 - to.Length))} → {to}";
+    }
+
     /// <summary>How much is done, from 0 to 1: bytes when the job counts bytes, else items.</summary>
     public static double Fraction(TransferJob job)
     {

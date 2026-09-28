@@ -154,7 +154,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_PLUGINS_DIR`, `CABINETOS_MARKETPLACE_DIR` | Not read by the UI, except the plugins folder for the empty plugin list's hint; the core it starts inherits them and installs there ([marketplace.md](marketplace.md), "Folders"). Set both to a scratch folder to try installs without touching `%LOCALAPPDATA%\CabinetOS` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to the button, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -1278,6 +1278,53 @@ case-sensitive folder `Report.txt` and `report.txt`.
   real-key check is `ui/livecheck/livecheck.ps1`'s.
 
 Tests: `NamesBeyondAsciiTests` (14).
+
+### Long paths
+
+The fixture's `long\` folder nests `segment-of-a-long-path-0123456789`
+until the path has 333 characters, with `deep file.txt` and
+`deep notes.md` at the bottom.
+
+- **The crumbs keep the drive, a "…", and the last folders that fit**
+  (`CrumbFit`, in pixels), so the bar never grows and the folder shown is
+  always there. The "…" opens a menu of the folders left out, the drive's
+  end first; each goes there. A single name wider than the bar ends in a
+  "…" of its own. The fit is made again when the window changes size.
+  Before, the bar scrolled to its end: the drive and the start of the path
+  were cut off with no sign.
+- **The pane header's path and the transfer flyout's line keep the drive
+  and the last names around "…"** (`DisplayFormat.ShortPath`), never
+  cutting a name: `C:\…\deep file.txt → C:\…\edge\names\Ґанок`. Before,
+  the flyout cut the line's end, which lost the file and the destination.
+  The whole text is in the tooltip. The crumbs and `ShortPath` read
+  `\\?\C:\…` as the drive and `\\?\UNC\server\share\…` as the share.
+- The address box shows the whole path, selected and scrolled to its end.
+  Properties wraps the Location. The status bar names the selected row,
+  not its path. The search's note wraps the searched folder, and the
+  hits' Folder column starts at the searched folder's name. All unchanged.
+- **In and out:** Enter on the last folder goes into the 333-character
+  path; Up, Back and a folder of the "…" menu go out and come back.
+- **A tool is not offered a file whose path has more than 259
+  characters.** WebView2 showed a 255-character path from a 250-character
+  folder, failed to fetch a 272-character path from the same folder, and
+  refused to serve the 333-character folder at all, with Windows' long
+  paths turned on (2026-09-29). So the status bar says "Markdown Preview
+  cannot show deep notes.md: its path has 347 characters, and WebView2
+  reads none longer than 259." (`ToolFileSession.LongestPath`). Before,
+  Enter on `deep notes.md` left the preview empty and logged "UI command
+  handler failed". A folder WebView2 refuses for another reason (one
+  deleted since the listing) ends the open the same way, with WebView2's
+  reason.
+- Enter on `deep file.txt` asks the core's `open_path` to start its
+  default application. It was not run in the check, because it would open
+  Notepad on the desktop.
+- Tooltips that hold a whole path (the flyout's line and the conflict's
+  name, the "…" menu's folders, the editor tab's file) wrap at WinUI's
+  tooltip width; they are not in the snapshots, since the snapshot aid
+  opens only the window's own tooltip objects.
+
+Tests: `LongPathTests` (11), and three in `ToolTests` for a path or a
+folder WebView2 cannot serve.
 
 ## Not in this version
 

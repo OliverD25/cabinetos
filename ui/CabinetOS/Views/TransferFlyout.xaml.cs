@@ -82,7 +82,8 @@ public sealed partial class TransferFlyout : UserControl
 
         TitleText.Text = TransferText.Title(job);
         var subtitle = TransferText.Subtitle(job);
-        SubtitleText.Text = subtitle;
+        // About 52 characters of 11 px text fit beside "N more": long paths keep their drive and their last names.
+        SubtitleText.Text = TransferText.ShortSubtitle(job, 52);
         ToolTipService.SetToolTip(SubtitleText, subtitle);
         var others = center.OthersCount;
         MoreLink.Visibility = others > 0 ? Visibility.Visible : Visibility.Collapsed;

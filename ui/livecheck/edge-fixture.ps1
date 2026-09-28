@@ -42,6 +42,8 @@ $segment = 'segment-of-a-long-path-0123456789'
 while ($deep.Length -lt 300) { $deep = Join-Path $deep $segment }
 [void][System.IO.Directory]::CreateDirectory($deep)
 Put $deep 'deep file.txt' 'deep'
+# Enter on it opens Markdown Preview inside the window: a file in a long path, with no program started.
+Put $deep 'deep notes.md' "# Deep notes`n`nA Markdown file more than 300 characters down."
 "long path: $($deep.Length) characters"
 
 $links = New-Item -ItemType Directory -Force -Path (Join-Path $Root 'links')

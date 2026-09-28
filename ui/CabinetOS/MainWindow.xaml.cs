@@ -166,6 +166,7 @@ public sealed partial class MainWindow : Window
         PaletteButton.Click += (_, _) => _ = _router.ExecuteAsync("palette.show", trigger: "button");
         PaletteKeycap.Click += (_, _) => _ = _router.ExecuteAsync("palette.show", trigger: "button");
         CrumbBar.Tapped += OnCrumbBarTapped;
+        CrumbScroller.SizeChanged += (_, _) => FitCrumbs();
         AddressEdit.KeyDown += OnAddressKeyDown;
         AddressEdit.LostFocus += (_, _) => EndAddressEdit();
 
@@ -435,7 +436,7 @@ public sealed partial class MainWindow : Window
                 case "shot":
                     await Task.Delay(400);
                     await DevSnapshots.RenderAsync(RootGrid, step.Argument, WebPages(), SnapshotBackdrop(),
-                        VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Select(p => p.Child).OfType<ContentDialog>().ToList());
+                        VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Select(p => p.Child).Where(c => c is ContentDialog or MenuFlyoutPresenter).ToList());
                     break;
             }
         }
@@ -444,12 +445,17 @@ public sealed partial class MainWindow : Window
     // Every WebView2 the window hosts, for the snapshot aid.
     private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage, .. _toolHosts.OfType<ToolHost>().Select(h => h.Page)];
 
-    // The snapshot aid's click: step: the first shown button with that accessible name, pressed
-    // as assistive technology may press it: the keyboard moves to it, then its automation peer invokes it.
+    // The snapshot aid's click: step: the first shown button or menu item (open menus included) with that
+    // accessible name, pressed as assistive technology may press it: the keyboard moves to it, then its
+    // automation peer invokes it.
     private void ClickForSnapshot(string name)
     {
         var pending = new Stack<DependencyObject>();
         pending.Push(RootGrid);
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot))
+        {
+            pending.Push(popup.Child);
+        }
         while (pending.Count > 0)
         {
             var element = pending.Pop();
@@ -458,7 +464,8 @@ public sealed partial class MainWindow : Window
                 continue;
             }
             // The peer's name is what UI Automation reports: the accessible name, else the button's text.
-            if (element is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase button
+            if (element is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase or MenuFlyoutItem
+                && element is Control button
                 && Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(button) is { } peer
                 && peer.GetName() == name
                 && peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invoke)
@@ -1952,36 +1959,135 @@ public sealed partial class MainWindow : Window
 
     // ----- Address bar -----
 
+    // The crumbs, the separator after each, and their widths with nothing hidden, for CrumbFit.
+    private readonly List<Button> _crumbButtons = [];
+    private readonly List<FontIcon> _crumbSeparators = [];
+    private readonly List<(string Label, string Path)> _crumbPaths = [];
+    private Button? _crumbMore;
+    private FontIcon? _crumbMoreSeparator;
+    private double[] _crumbWidths = [];
+    private double _crumbSeparatorWidth;
+    private double _crumbMoreWidth;
+
     private void UpdateCrumbs()
     {
         Crumbs.Children.Clear();
+        _crumbButtons.Clear();
+        _crumbSeparators.Clear();
+        _crumbPaths.Clear();
+        _crumbMore = null;
+        _crumbMoreSeparator = null;
         var crumbs = DisplayFormat.Crumbs(Active.Path);
         for (var i = 0; i < crumbs.Count; i++)
         {
             var (label, path) = crumbs[i];
             var button = new Button
             {
-                Content = label,
+                // A single name wider than the bar ends in "\u2026" (FitCrumbs caps the button).
+                Content = new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis },
                 Style = (Style)ThemeResources.Get("CbCrumbButtonStyle")!,
                 Tag = path,
             };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, path);
             button.Click += (_, _) => _ = _router.ExecuteAsync("go.toPath", CommandArgs.With("path", path), "crumb");
+            _crumbButtons.Add(button);
+            _crumbPaths.Add((label, path));
             Crumbs.Children.Add(button);
             if (i < crumbs.Count - 1)
             {
-                Crumbs.Children.Add(new FontIcon
+                var separator = CrumbSeparator();
+                _crumbSeparators.Add(separator);
+                Crumbs.Children.Add(separator);
+            }
+            if (i == 0 && crumbs.Count > 1)
+            {
+                // Stands for the crumbs a long path leaves out; its menu goes to them.
+                _crumbMore = new Button
                 {
-                    Glyph = "\uE76C",
-                    FontSize = 10,
-                    Opacity = 0.5,
-                    VerticalAlignment = VerticalAlignment.Center,
-                });
+                    Content = "\u2026",
+                    Style = (Style)ThemeResources.Get("CbCrumbButtonStyle")!,
+                    Flyout = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft },
+                };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_crumbMore, "Folders in between");
+                ToolTipService.SetToolTip(_crumbMore, "Folders in between");
+                ((MenuFlyout)_crumbMore.Flyout).Opening += OnCrumbMoreOpening;
+                _crumbMoreSeparator = CrumbSeparator();
+                Crumbs.Children.Add(_crumbMore);
+                Crumbs.Children.Add(_crumbMoreSeparator);
             }
         }
         SearchBox.PlaceholderText = $"Search {Active.FolderName}";
+        // Everything shown once, to learn each width; FitCrumbs then hides what does not fit.
+        CrumbScroller.UpdateLayout();
+        var spacing = Crumbs.Spacing;
+        _crumbWidths = [.. _crumbButtons.Select(b => b.DesiredSize.Width)];
+        _crumbSeparatorWidth = _crumbSeparators.Count > 0 ? _crumbSeparators[0].DesiredSize.Width + (2 * spacing) : 0;
+        _crumbMoreWidth = _crumbMore?.DesiredSize.Width ?? 0;
+        FitCrumbs();
+    }
+
+    private static FontIcon CrumbSeparator() => new()
+    {
+        Glyph = "\uE76C",
+        FontSize = 10,
+        Opacity = 0.5,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    // A path too long for the bar keeps its root, a "\u2026", and its last crumbs (docs/ui.md, "Long paths").
+    private void FitCrumbs()
+    {
+        var count = _crumbButtons.Count;
+        if (count == 0 || _crumbWidths.Length != count)
+        {
+            return;
+        }
+        // A little slack, so rounding never leaves a pixel to scroll.
+        var available = CrumbScroller.ActualWidth - 4;
+        var fit = available > 0 ? CrumbFit.Fit(_crumbWidths, available, _crumbSeparatorWidth, _crumbMoreWidth) : new CrumbLayout(true, 1, false);
+        _crumbButtons[0].Visibility = Shown(fit.ShowRoot);
+        for (var i = 1; i < count; i++)
+        {
+            _crumbButtons[i].Visibility = Shown(!fit.Ellipsis || i >= fit.FirstTail);
+        }
+        for (var i = 0; i < _crumbSeparators.Count; i++)
+        {
+            // The separator after a crumb shows with it; the root's only while the root shows.
+            _crumbSeparators[i].Visibility = i == 0 ? Shown(fit.ShowRoot) : _crumbButtons[i].Visibility;
+        }
+        if (_crumbMore is { } more && _crumbMoreSeparator is { } moreSeparator)
+        {
+            more.Visibility = Shown(fit.Ellipsis);
+            moreSeparator.Visibility = Shown(fit.Ellipsis);
+        }
+        _crumbButtons[^1].MaxWidth = fit.ShowRoot ? double.PositiveInfinity : Math.Max(40, available - _crumbMoreWidth - _crumbSeparatorWidth);
         CrumbScroller.UpdateLayout();
         CrumbScroller.ChangeView(CrumbScroller.ScrollableWidth, null, null, disableAnimation: true);
+
+        static Visibility Shown(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // The "\u2026" menu: the crumbs left out, the root first.
+    private void OnCrumbMoreOpening(object? sender, object e)
+    {
+        if (sender is not MenuFlyout menu)
+        {
+            return;
+        }
+        menu.Items.Clear();
+        for (var i = 0; i < _crumbButtons.Count; i++)
+        {
+            if (_crumbButtons[i].Visibility == Visibility.Visible)
+            {
+                continue;
+            }
+            var path = _crumbPaths[i].Path;
+            var item = new MenuFlyoutItem { Text = _crumbPaths[i].Label, Icon = new FontIcon { Glyph = "\uE8B7" } };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, path);
+            ToolTipService.SetToolTip(item, path);
+            item.Click += (_, _) => _ = _router.ExecuteAsync("go.toPath", CommandArgs.With("path", path), "crumb");
+            menu.Items.Add(item);
+        }
     }
 
     private void OnCrumbBarTapped(object sender, TappedRoutedEventArgs e)

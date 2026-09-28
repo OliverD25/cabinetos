@@ -48,6 +48,8 @@ public sealed partial class FilePane : UserControl
     private string _renameOriginal = "";
     private int _noteIndex = -1;
     private bool _searchShown;
+    private string _headerPath = "";
+    private double _pathCharWidth;
 
     /// <summary>Creates the pane; <see cref="Model"/> gives it its content.</summary>
     public FilePane()
@@ -61,7 +63,11 @@ public sealed partial class FilePane : UserControl
         KeyDown += OnKeyDown;
         GotFocus += (_, _) => Activated?.Invoke(this);
         AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => Focus(FocusState.Pointer)), handledEventsToo: true);
-        Header.SizeChanged += (_, e) => PathText.MaxWidth = Math.Max(0, e.NewSize.Width * 0.45);
+        Header.SizeChanged += (_, e) =>
+        {
+            PathText.MaxWidth = Math.Max(0, e.NewSize.Width * 0.45);
+            FitPathText();
+        };
         Scroller.ViewChanged += (_, _) => PositionEditors();
         EditLayer.SizeChanged += (_, e) => EditLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
         RenameBox.KeyDown += OnRenameKeyDown;
@@ -235,11 +241,31 @@ public sealed partial class FilePane : UserControl
         if (_model?.Search is { } search)
         {
             TitleText.Text = search.Header;
-            PathText.Text = search.Scope;
-            return;
+            _headerPath = search.Scope;
         }
-        TitleText.Text = _model?.FolderName ?? "";
-        PathText.Text = _model?.Path ?? "";
+        else
+        {
+            TitleText.Text = _model?.FolderName ?? "";
+            _headerPath = _model?.Path ?? "";
+        }
+        FitPathText();
+    }
+
+    // The header's path keeps its drive and its last names around "…" when it is too long for
+    // its room (docs/ui.md, "Long paths"); the font is fixed-width, so a character count is exact.
+    private void FitPathText()
+    {
+        if (_pathCharWidth <= 0)
+        {
+            var probe = new TextBlock { FontFamily = PathText.FontFamily, FontSize = PathText.FontSize, Text = new string('0', 10) };
+            probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            _pathCharWidth = probe.DesiredSize.Width / 10;
+        }
+        var room = PathText.MaxWidth is > 0 and < double.PositiveInfinity && _pathCharWidth > 0
+            ? (int)(PathText.MaxWidth / _pathCharWidth)
+            : int.MaxValue;
+        PathText.Text = DisplayFormat.ShortPath(_headerPath, room);
+        ToolTipService.SetToolTip(PathText, PathText.Text == _headerPath ? null : _headerPath);
     }
 
     // Search mode (docs/ui.md, "Search"): the hits in the same rows, the search's title and

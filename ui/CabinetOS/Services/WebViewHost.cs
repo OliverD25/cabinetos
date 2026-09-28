@@ -89,8 +89,9 @@ internal sealed class WebViewHost
     /// </summary>
     public void MapFolder(string host, string folder, CoreWebView2HostResourceAccessKind access, bool navigable = true)
     {
-        _mappings[host] = (folder, access, navigable);
+        // First, so a folder WebView2 refuses is not kept for the next start.
         _core?.SetVirtualHostNameToFolderMapping(host, folder, access);
+        _mappings[host] = (folder, access, navigable);
     }
 
     /// <summary>Stops serving a folder.</summary>
@@ -139,9 +140,19 @@ internal sealed class WebViewHost
         _core = core;
         _browserGone = false;
         Configure(core);
-        foreach (var (host, (folder, access, _)) in _mappings)
+        try
         {
-            core.SetVirtualHostNameToFolderMapping(host, folder, access);
+            foreach (var (host, (folder, access, _)) in _mappings)
+            {
+                core.SetVirtualHostNameToFolderMapping(host, folder, access);
+            }
+        }
+        catch (Exception error) when (error is COMException or IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            // Back to not started, so the caller can let go of the folder and start again.
+            Diag.Error(Target, "WebView2 refused a folder", new LogField("host", _name), new LogField("error", error.Message));
+            Close();
+            throw;
         }
         core.Profile.PreferredColorScheme = _colorScheme;
         if (HostScript is { } script)

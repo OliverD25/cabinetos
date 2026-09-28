@@ -28,6 +28,14 @@ public interface IToolPage
 /// </summary>
 public sealed class ToolFileSession(string toolId, string domain, IToolPage page)
 {
+    /// <summary>
+    /// The longest file path WebView2 reads from a mapped folder (MAX_PATH less
+    /// its end). On 2026-09-29 it showed a 255-character path, failed to fetch
+    /// a 272-character one from a folder it served, and refused a 333-character
+    /// folder, with Windows' long paths turned on.
+    /// </summary>
+    public const int LongestPath = 259;
+
     private int _serial;
 
     /// <summary>The file on screen, or null.</summary>
@@ -39,18 +47,51 @@ public sealed class ToolFileSession(string toolId, string domain, IToolPage page
     /// <summary>Whether the page said <c>ready</c> since it last loaded.</summary>
     public bool IsReady { get; private set; }
 
-    /// <summary>Shows <paramref name="path"/>: its folder on a new host, then the page loads. False when WebView2 could not start.</summary>
-    public Task<bool> OpenAsync(string path)
+    /// <summary>Why the last open failed, to follow "cannot show {name}: ", or null.</summary>
+    public string? Problem { get; private set; }
+
+    /// <summary>
+    /// Shows <paramref name="path"/>: its folder on a new host, then the page
+    /// loads. False when WebView2 could not start, cannot read a path that
+    /// long, or could not serve the folder (<see cref="Problem"/> says why).
+    /// </summary>
+    public async Task<bool> OpenAsync(string path)
     {
         FilePath = path;
+        Problem = null;
+        IsReady = false;
         if (Host is { } previous)
         {
             page.UnmapFolder(previous);
+            Host = null;
         }
-        Host = ToolFileUrls.Host(toolId, ++_serial, domain);
-        page.MapFolder(Host, Path.GetDirectoryName(path) ?? path);
-        IsReady = false;
-        return page.LoadAsync();
+        if (path.Length > LongestPath)
+        {
+            // Not offered at all: the page would only say "Failed to fetch".
+            Problem = $"its path has {path.Length} characters, and WebView2 reads none longer than {LongestPath}";
+            return false;
+        }
+        var host = ToolFileUrls.Host(toolId, ++_serial, domain);
+        var mapped = false;
+        try
+        {
+            page.MapFolder(host, Path.GetDirectoryName(path) ?? path);
+            mapped = true;
+            Host = host;
+            // A WebView2 that has not started yet serves its folders while it starts, so a refusal can come from here too.
+            return await page.LoadAsync();
+        }
+        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+        {
+            // A folder WebView2 refuses (one gone since the listing, say) ends the open, not a blank tool.
+            if (mapped)
+            {
+                page.UnmapFolder(host);
+            }
+            Host = null;
+            Problem = $"WebView2 cannot serve its folder ({error.Message.TrimEnd('.', ' ')})";
+            return false;
+        }
     }
 
     /// <summary>The page said <c>ready</c>: it gets <paramref name="context"/> (if any), then the file.</summary>

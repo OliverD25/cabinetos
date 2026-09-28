@@ -162,7 +162,14 @@ public sealed partial class MainWindow
         _paneViews[pane].Visibility = Visibility.Collapsed;
         if (!await host.OpenAsync(path))
         {
-            ShowNotice($"{tool.Manifest.Name} could not start: WebView2 did not load it.", isError: true);
+            if (host.Problem is { } problem)
+            {
+                Diag.Warn(ToolsTarget, "a tool could not open a file", new LogField("tool", tool.Manifest.Id), new LogField("path", path),
+                    new LogField("problem", problem));
+            }
+            ShowNotice(host.Problem is { } why
+                ? $"{tool.Manifest.Name} cannot show {Path.GetFileName(path)}: {why}."
+                : $"{tool.Manifest.Name} could not start: WebView2 did not load it.", isError: true);
             CloseEditor(pane, focusPane: covered);
             return;
         }

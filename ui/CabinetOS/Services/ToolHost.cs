@@ -51,6 +51,9 @@ internal sealed class ToolHost : IToolPage
     /// <summary>Whether the page said <c>ready</c> and has the file.</summary>
     public bool IsReady => _files.IsReady;
 
+    /// <summary>Why the last open failed (a path too long for WebView2, a folder it refused), or null.</summary>
+    public string? Problem => _files.Problem;
+
     /// <summary>The page's process ended (the text says which).</summary>
     public event Action<string>? Failed;
 
@@ -66,7 +69,8 @@ internal sealed class ToolHost : IToolPage
     /// <summary>
     /// Shows <paramref name="path"/>: its folder is served on a new host, the
     /// page loads (again), and it gets <c>open</c> when it says <c>ready</c>.
-    /// False when WebView2 could not start.
+    /// False when WebView2 could not start, or could not serve the folder
+    /// (<see cref="Problem"/>).
     /// </summary>
     public Task<bool> OpenAsync(string path) => _files.OpenAsync(path);
 
