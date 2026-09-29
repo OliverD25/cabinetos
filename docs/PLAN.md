@@ -628,8 +628,9 @@ in `cabinetos.json` (the question named `diagnostics.level`; the `logging`
 section already exists), the palette command "Diagnostics: Toggle Heavy
 Logging", and `cabinetos-cli config set logging.heavy true` for an agent;
 on until turned off; a HEAVY LOG pill in the status bar and a notice at
-start. (4) Separate `heavy.<date>.jsonl` files per process, 2 GB in total,
-oldest deleted first; "Diagnostics: Open Log Folder". (5) Trace ids in
+start. (4) Separate heavy files per process (built as
+`heavy-<process>.<date>[.<part>].jsonl`), 2 GB in total, oldest deleted
+first; "Diagnostics: Open Log Folder". (5) Trace ids in
 both modes: the window's ULID per action travels as `trace` on every
 request, into the jobs and plugin calls the core starts for it, and onto
 every line; `cabinetos-cli log trace <id>` prints the chain in time order.
@@ -690,7 +691,7 @@ has open. The queue is counted in bytes: over 256 MiB a thread waits in
 with the trace); the core's async workers and its main thread, which
 carry the pipe, never wait and get 32 MiB of extra room, then drop and
 count. That is the exception the creator chose to Article 12, for heavy
-mode only, to be recorded as ADR 0013. Heavy-only lines carry a target
+mode only, recorded as [ADR 0013](decisions/0013-heavy-logging-may-wait.md). Heavy-only lines carry a target
 under `heavy::` and stay out of the normal file: the request and reply
 payloads (masked, 64 KB per line, `truncated` when cut), one `entry done`
 per piece of job work with its kind, paths, bytes, milliseconds and
@@ -724,6 +725,56 @@ building at the same time. Tests +8, 679 core tests. Guide:
 bundles". Left for the window's half: the C# crash bundle, the notice
 "Open crash folder", the palette command, ADR 0013 and the window's own
 heavy file.
+
+**Heavy mode in the window, built 2026-09-30 (c6e826b, 2352d46).** The
+window's `LogWriter` has a second, byte-counted queue for
+`heavy-ui.<date>[.<part>].jsonl`, 64 MiB. A background thread waits above
+that and writes `heavy log waited` afterwards. The UI thread, the pipe's
+reader and the crash hook never wait: their lines are dropped and counted
+8 MiB above the cap, and the count goes into the file and into the status
+bar's `HEAVY LOG` pill ("HEAVY LOG, 1,204 lines lost"). The parts of
+256 MiB, the 2 GiB cap over every process's heavy files and the
+no-delete-sharing rule are the core's. `LogMask` masks payloads with the
+core's rules, capped at 64 KB. The window follows `logging.heavy` at start
+and on `config_changed` (`CABINETOS_LOG_HEAVY` wins). "Diagnostics: Toggle
+Heavy Logging" writes the setting with `set_value`, so both processes
+follow; "Open Log Folder" and "Save Log Bundle" are seeded too, without
+keys, 93 commands now. Heavy lines: every request and reply payload, every
+key by name and modifiers with the element that has the keyboard (a key
+typed into a text box is `text input` without the character, and AltGr
+counts as typing), every command with source, trigger and arguments,
+focus changes with where Windows sends the keys, the frame table every
+second, and web page messages by name and size. A key press gets a ULID
+that a command it starts takes as its trace, so the key, the command and
+its requests are one chain. Tests: UI +68 (`HeavyLogTests`), 766 UI
+tests; the core's five checks pass at 690 tests. Not yet seen in a running
+window, since the keyboard belonged to another agent: the pill after a
+toggle, the start notice, a key and a focus line in the heavy file, and
+"Open crash folder" after a self-test crash with heavy mode on. Guide:
+[ui.md](ui.md), "Heavy logging".
+
+**The window's crash bundle, built 2026-09-30 (566b690).** A crash of the
+window while heavy mode is on writes `crash-<stamp>.zip` next to the crash
+trace, in C# with the core's contents: the last 10 minutes of every log,
+read from the end so a large heavy file is not read whole, the crash
+traces of the last 24 hours, and `bundle.json` with the versions, the
+Windows build, the `CABINETOS_*` variables and the last configuration,
+secrets masked. A failed zip leaves the trace and no half zip. At the next
+start the window compares the newest crash zip with its last start
+(`ui.last-start` in the log folder) and shows "Open crash folder" in the
+status bar until it is used. "Diagnostics: Save Log Bundle" asks the core
+for a bundle of 10 minutes and opens the folder. Tests: UI +11
+(`LogBundleTests`), including `save_log_bundle` against the real core.
+
+**ADR 0013 and the Constitution, 2026-09-30.** The exception the creator
+chose is written as [ADR 0013](decisions/0013-heavy-logging-may-wait.md):
+only in heavy mode, only for the core's operations, never the UI thread
+or the pipe's reader, always logged, never silent. The Constitution is
+not edited. The record proposes one sentence the creator could add to
+Article 12 after "or the UI thread", for the creator to accept or refuse:
+"The one exception is the opt-in heavy mode, where a thread of the core
+may wait for the log writer so that no operation goes unrecorded (ADR
+0013)." [ARCHITECTURE.md](ARCHITECTURE.md) gained the row for its §8.
 
 
 ## 6. Phase 1 in detail — the Rust core scaffold
