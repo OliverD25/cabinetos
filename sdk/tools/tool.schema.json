@@ -49,6 +49,10 @@
     "placement": {
       "description": "pane: a pane's editor tab (design view D). dock: the Tool Dock; this version opens it in a pane too.",
       "enum": ["pane", "dock"]
+    },
+    "sidebar": {
+      "description": "Optional, false when absent. true: the tool also has a page in the sidebar, with a button of its own in the activity rail (ui.layout rail). It starts with no file; give accepts an empty list if it opens none.",
+      "type": "boolean"
     }
   }
 }

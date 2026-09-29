@@ -10,7 +10,8 @@ public sealed class ToolManifestException(string message) : Exception(message);
 /// <summary>
 /// A Tool Extension's manifest, <c>tool.json</c> (docs/tool-extensions.md):
 /// its ID, name, version, author, description, the page it starts from, the
-/// file names it opens, and where it goes. Read strictly, like
+/// file names it opens, where it goes, and whether it also has a page in the
+/// sidebar (<c>"sidebar": true</c>, optional). Read strictly, like
 /// <c>plugin.json</c>: an unknown key, a missing key or a bad value stops the
 /// tool with a message that names the file and the problem.
 /// </summary>
@@ -22,7 +23,8 @@ public sealed partial record ToolManifest(
     string Description,
     string Entry,
     IReadOnlyList<string> Accepts,
-    string Placement)
+    string Placement,
+    bool Sidebar = false)
 {
     /// <summary>A tool that opens as a pane's editor tab (design view D).</summary>
     public const string InPane = "pane";
@@ -31,7 +33,7 @@ public sealed partial record ToolManifest(
     public const string InDock = "dock";
 
     private static readonly FrozenSet<string> Keys = FrozenSet.ToFrozenSet(
-        ["id", "name", "version", "author", "description", "entry", "accepts", "placement"], StringComparer.Ordinal);
+        ["id", "name", "version", "author", "description", "entry", "accepts", "placement", "sidebar"], StringComparer.Ordinal);
 
     /// <summary>
     /// Reads <paramref name="json"/>, the <c>tool.json</c> of the folder named
@@ -103,7 +105,16 @@ public sealed partial record ToolManifest(
             {
                 throw new ToolManifestException($"{file}: `placement` must be `pane` or `dock`: {placement}");
             }
-            return new ToolManifest(id, name, version, author, description, entry, accepts, placement);
+            var sidebar = false;
+            if (root.TryGetProperty("sidebar", out var sidebarElement))
+            {
+                if (sidebarElement.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                {
+                    throw new ToolManifestException($"{file}: `sidebar` must be true or false");
+                }
+                sidebar = sidebarElement.GetBoolean();
+            }
+            return new ToolManifest(id, name, version, author, description, entry, accepts, placement, sidebar);
         }
     }
 

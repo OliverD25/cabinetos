@@ -60,6 +60,7 @@ names the file and the problem.
 | `entry` | The page the tool starts from: an `.html` file inside the folder, without `..` or a drive. |
 | `accepts` | The file names it opens, without case: `*.ext` or a whole name such as `README`. May be empty. |
 | `placement` | `pane`: the pane's editor tab. `dock`: the Tool Dock; this version opens a dock tool in a pane too, until the dock has tabs for tools. |
+| `sidebar` | Optional, `false` when it is left out. `true`: the tool also has a page in the sidebar, with a button of its own in the activity rail of the rail layout. Give `accepts` an empty list when the tool opens no file. |
 
 The window reads the file strictly, like `plugin.json`: an unknown key, a
 missing key or a bad value leaves the tool out. The JSON Schema is

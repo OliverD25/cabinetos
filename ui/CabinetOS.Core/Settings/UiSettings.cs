@@ -11,6 +11,12 @@ namespace CabinetOS.Core.Settings;
 /// <c>ui.dockSize</c>: the Tool Dock's dragged size, or null for the design's.
 /// <see cref="Selection"/> is <c>panes.selection</c>. <see cref="HeavyLogging"/> is
 /// <c>logging.heavy</c>, which the window's own log follows as the core's does.
+/// The rail layout's four settings are read when the core sends them:
+/// <see cref="Rail"/> (<c>ui.rail</c>: the rail's button IDs in order; null for the default order),
+/// <see cref="SidebarWidth"/> (<c>ui.sidebarWidth</c>: whole pixels, or null for the design's width),
+/// <see cref="SidebarView"/> (<c>ui.sidebarView</c>: <c>explorer</c>, <c>search</c> or a tool's ID) and
+/// <see cref="SidebarAutoReveal"/> (<c>ui.sidebarAutoReveal</c>: whether the folder tree follows the active pane).
+/// A core that does not know them leaves them out, and the window keeps them in memory.
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -23,7 +29,11 @@ public sealed record UiSettings(
     double? DockBottom = null,
     double? DockRight = null,
     SelectionStyle Selection = SelectionStyle.Windows,
-    bool HeavyLogging = false)
+    bool HeavyLogging = false,
+    IReadOnlyList<string>? Rail = null,
+    double? SidebarWidth = null,
+    string? SidebarView = null,
+    bool SidebarAutoReveal = true)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -49,7 +59,22 @@ public sealed record UiSettings(
             Pixels(dock, "bottom"),
             Pixels(dock, "right"),
             String(panes, "selection") == "commander" ? SelectionStyle.Commander : SelectionStyle.Windows,
-            Bool(Section(config, "logging"), "heavy") ?? Defaults.HeavyLogging);
+            Bool(Section(config, "logging"), "heavy") ?? Defaults.HeavyLogging,
+            Strings(ui, "rail"),
+            Pixels(ui, "sidebarWidth"),
+            String(ui, "sidebarView"),
+            Bool(ui, "sidebarAutoReveal") ?? Defaults.SidebarAutoReveal);
+    }
+
+    // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).
+    private static IReadOnlyList<string>? Strings(JsonElement? parent, string name)
+    {
+        if (parent is not { } p || !p.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+        var list = value.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => item.GetString()!).ToList();
+        return list.Count > 0 ? list : null;
     }
 
     private static double? Pixels(JsonElement? parent, string name) =>
