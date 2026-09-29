@@ -194,10 +194,45 @@ Findings:
   the link goes), so the "Delete permanently" button the script looked
   for did not exist; the junction went and the files behind it stayed.
 
+## Run 5: the two shell findings fixed, 2026-09-30, 00:15 to 00:18
+
+The shell agent fixed the two findings of run 4 for the shell (commits
+"the cursor row the Windows style selects is no mark" and "the terminal's
+page takes the keyboard when it shows"), rebased on `main` at 054a1fa, and
+ran `ui/livecheck/run-livecheck.ps1` from its worktree with release builds
+of that tree, screen unlocked, nobody at the PC. The script now keeps the
+Markdown Preview open in the other pane through 11a's Ctrl+P and has no
+palette fallback there. Output: `_io\live-check\run-2026-09-30-item1-b.txt`.
+Every check answered True; the run exits 1 only for the scroll goal
+(`-Strict`).
+
+- **Num \* counts only the marks.** "after Num \*: 6 selected, 29 B (the 6
+  files expected, docs and photos not)". Cause: in the Windows style the
+  row the keyboard is on is selected, and Num \* kept that selection (the
+  folder `docs` under the cursor) with the files it marked. That selection
+  is the cursor, not a mark; Num \*, Num + and Alt+Num + drop it first.
+- **The terminal takes the keyboard after Ctrl+P, the preview open.** "the
+  terminal's page has the keyboard after Ctrl+P (hand-overs: 2), the preview
+  open in the other pane: True" and "Ctrl+Backquote reached the window after
+  Ctrl+P, the preview open in the other pane: True". The fault happened in
+  this run too: the window's first check, 150 ms after Ctrl+P, found the
+  keys in its own input window (`InputSiteWindowClass`) while XAML's focus
+  was on the terminal's WebView2; the second hand-over reached the page.
+  Cause: WinUI moves the keys into a page only when XAML's focus arrives
+  while the page's controller is visible, and a dock shown a moment before
+  is visible to it only from the next frame; a move that finds it hidden
+  stays pending for good (docs/ui.md, "The terminal", "Handing the
+  keyboard to the page"). After Ctrl+` hid the terminal, the keys went to
+  the pane ("FilePane, window").
+- Alt+F1 reached the window (the creator freed the key).
+- Scrolling, unchanged: 303 frames in 5 s, 88 gaps over 20 ms (29.0 %),
+  2 over 33 ms, worst 47.9 ms, the machine at 12.4 %.
+
 ## Leftovers
 
 - One test file in the Recycle Bin, `cabinetos-live-check-delete-me.txt`
   (3 bytes), from run 1, and one more from run 3; run 4's thirteen runs
-  added two tiny files each (the Delete and F8 checks).
-- The runs' folders `%TEMP%\cabinetos-ui-test\live` and `live2`
+  added two tiny files each (the Delete and F8 checks), and so did run 5's
+  four runs (two whole, two probe copies without the scroll).
+- The runs' folders `%TEMP%\cabinetos-ui-test\live`, `live2` and `probe`
   (configuration, logs, test files, full-size screenshots).
