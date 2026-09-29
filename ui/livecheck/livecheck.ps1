@@ -75,7 +75,8 @@ function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   # A flyout (the drive list) is a window of its own, so the test is the process, not the window.
   if ($script:h -and [Live]::ForegroundPid() -ne [uint32]$script:p.Id) {
-    "{0:HH:mm:ss.fff} STOP: CabinetOS is not the foreground window before '{1}'" -f (Get-Date), $text
+    $front = Get-Process -Id ([Live]::ForegroundPid()) -ErrorAction SilentlyContinue
+    "{0:HH:mm:ss.fff} STOP: CabinetOS is not the foreground window before '{1}' (in front: {2} pid {3}, '{4}')" -f (Get-Date), $text, $front.ProcessName, $front.Id, $front.MainWindowTitle
     if ($script:p -and -not $script:p.HasExited) { [void]$script:p.CloseMainWindow(); [void]$script:p.WaitForExit(8000) }
     exit 1
   }
