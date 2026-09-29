@@ -9,12 +9,15 @@ use crate::plugin::{PluginInfo, PluginState};
 use crate::terminal::TerminalSession;
 use crate::theme::{Theme, ThemeInfo};
 
-/// One message on the control channel: a request ID plus the message body.
+/// One message on the control channel: a request ID, the trace of the user
+/// action it belongs to, and the message body.
 ///
-/// On the wire the body's fields sit next to `id` in one flat JSON object:
+/// On the wire the body's fields sit next to `id` and `trace` in one flat
+/// JSON object:
 ///
 /// ```json
 /// {"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"ping"}
+/// {"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","trace":"01J9ZQ4X7K3M5N8P2R6S0T1V4V","type":"ping"}
 /// {"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"pong","protocol_version":3,"core_version":"0.1.0"}
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,15 +26,38 @@ pub struct Envelope<T> {
     /// Created by the sender of a request. The reply carries the same ID. An
     /// event carries a fresh ID of its own.
     pub id: RequestId,
+    /// The user action this message belongs to: one ULID per action, made
+    /// by the window (or one per CLI run), carried by every request of the
+    /// action, by its replies, and by the events of the jobs and plugin
+    /// calls it started. A request without one is its own action: the core
+    /// uses its `id`. Older peers leave it out and ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace: Option<RequestId>,
     /// The message itself.
     #[serde(flatten)]
     pub body: T,
 }
 
 impl<T> Envelope<T> {
-    /// Wraps `body` with the given ID.
+    /// Wraps `body` with the given ID and no trace.
     pub fn new(id: RequestId, body: T) -> Self {
-        Self { id, body }
+        Self {
+            id,
+            trace: None,
+            body,
+        }
+    }
+
+    /// Wraps `body` with the given ID and trace.
+    pub fn traced(id: RequestId, trace: Option<RequestId>, body: T) -> Self {
+        Self { id, trace, body }
+    }
+
+    /// The action's trace: `trace`, or the message's own `id` when it
+    /// carries none.
+    #[must_use]
+    pub fn trace_or_id(&self) -> &RequestId {
+        self.trace.as_ref().unwrap_or(&self.id)
     }
 }
 
@@ -1986,6 +2012,33 @@ mod tests {
     fn ping_has_the_documented_wire_form() {
         let json = serde_json::to_string(&Envelope::new(id(), Request::Ping)).unwrap();
         assert_eq!(json, format!(r#"{{"id":"{ID}","type":"ping"}}"#));
+    }
+
+    #[test]
+    fn the_trace_sits_next_to_the_id_and_may_be_left_out() {
+        let trace: RequestId = "01J9ZQ4X7K3M5N8P2R6S0T1V4V".parse().unwrap();
+        let traced = Envelope::traced(id(), Some(trace.clone()), Request::Ping);
+        let json = serde_json::to_string(&traced).unwrap();
+        assert_eq!(
+            json,
+            format!(r#"{{"id":"{ID}","trace":"{trace}","type":"ping"}}"#)
+        );
+        let parsed: Envelope<Request> = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, traced);
+        assert_eq!(parsed.trace_or_id(), &trace);
+
+        let untraced: Envelope<Request> =
+            serde_json::from_value(json!({"id": ID, "type": "ping"})).unwrap();
+        assert_eq!(untraced.trace, None);
+        assert_eq!(untraced.trace_or_id(), &id());
+
+        let bad = json!({"id": ID, "trace": "nope", "type": "ping"});
+        assert!(serde_json::from_value::<Envelope<Request>>(bad).is_err());
+
+        let event = Envelope::traced(id(), Some(trace.clone()), every_event().remove(0));
+        let incoming: Envelope<Incoming> =
+            serde_json::from_str(&serde_json::to_string(&event).unwrap()).unwrap();
+        assert_eq!(incoming.trace, Some(trace));
     }
 
     #[test]

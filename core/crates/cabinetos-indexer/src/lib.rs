@@ -180,7 +180,8 @@ async fn answer(frame: &[u8], source: &Arc<dyn IndexSource>) -> Envelope<Indexer
         .get("type")
         .and_then(Value::as_str)
         .map(|kind| kind.chars().take(64).collect::<String>());
-    let Envelope { id, body } = match serde_json::from_value::<Envelope<IndexerRequest>>(value) {
+    let Envelope { id, body, .. } = match serde_json::from_value::<Envelope<IndexerRequest>>(value)
+    {
         Ok(envelope) => envelope,
         Err(error) => {
             let (code, message) = match kind {

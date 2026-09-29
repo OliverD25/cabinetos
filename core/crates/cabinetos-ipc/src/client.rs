@@ -201,6 +201,7 @@ async fn read_loop(
         match serde_json::from_slice::<Envelope<Incoming>>(&payload) {
             Ok(Envelope {
                 id,
+                trace,
                 body: Incoming::Response(response),
             }) => {
                 if let Response::ListingOpened {
@@ -214,7 +215,7 @@ async fn read_loop(
                 let waiter = lock(&shared).pending.remove(&id);
                 match waiter {
                     Some(waiter) => {
-                        let _ = waiter.send(Ok(Envelope::new(id, response)));
+                        let _ = waiter.send(Ok(Envelope::traced(id, trace, response)));
                     }
                     None => {
                         break IpcError::Protocol(format!(
@@ -225,6 +226,7 @@ async fn read_loop(
             }
             Ok(Envelope {
                 id,
+                trace,
                 body: Incoming::Event(event),
             }) => {
                 if let Event::ListingRefreshed {
@@ -235,7 +237,7 @@ async fn read_loop(
                 {
                     record_section(&shared, *section_handle, *section_size);
                 }
-                let _ = events.send(Envelope::new(id, event));
+                let _ = events.send(Envelope::traced(id, trace, event));
             }
             Err(error) => {
                 // A reply this client cannot read fails its own request;

@@ -1,12 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RequestEnvelope",
-  "description": "One message on the control channel: a request ID plus the message body.\n\nOn the wire the body's fields sit next to `id` in one flat JSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":3,\"core_version\":\"0.1.0\"}\n```",
+  "description": "One message on the control channel: a request ID, the trace of the user\naction it belongs to, and the message body.\n\nOn the wire the body's fields sit next to `id` and `trace` in one flat\nJSON object:\n\n```json\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"trace\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4V\",\"type\":\"ping\"}\n{\"id\":\"01J9ZQ4X7K3M5N8P2R6S0T1V4W\",\"type\":\"pong\",\"protocol_version\":3,\"core_version\":\"0.1.0\"}\n```",
   "type": "object",
   "properties": {
     "id": {
       "description": "Created by the sender of a request. The reply carries the same ID. An\nevent carries a fresh ID of its own.",
       "$ref": "#/$defs/RequestId"
+    },
+    "trace": {
+      "description": "The user action this message belongs to: one ULID per action, made\nby the window (or one per CLI run), carried by every request of the\naction, by its replies, and by the events of the jobs and plugin\ncalls it started. A request without one is its own action: the core\nuses its `id`. Older peers leave it out and ignore it.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequestId"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "oneOf": [

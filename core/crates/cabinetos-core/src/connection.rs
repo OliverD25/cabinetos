@@ -268,7 +268,7 @@ impl Session {
                 return;
             }
         };
-        let Envelope { id, body: request } = envelope;
+        let (id, request) = (envelope.id, envelope.body);
         let span = span_for_request(&id);
         let kind = request.type_tag();
         let reply = {
