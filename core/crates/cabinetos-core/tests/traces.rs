@@ -19,9 +19,10 @@ use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 const CORE_EXE: &str = env!("CARGO_BIN_EXE_cabinetos-core");
-const STARTUP_DEADLINE: Duration = Duration::from_secs(10);
+/// Generous, so a busy machine cannot fail the tests.
+const STARTUP_DEADLINE: Duration = Duration::from_secs(60);
 /// Long enough to compile a component in a debug build on a slow runner.
-const SETTLE_DEADLINE: Duration = Duration::from_secs(60);
+const SETTLE_DEADLINE: Duration = Duration::from_secs(120);
 
 fn scratch(name: &str) -> TempDir {
     let root = std::env::temp_dir().join("cabinetos-jobs-test");

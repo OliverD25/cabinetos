@@ -85,6 +85,7 @@ impl Settings {
         log_warnings(&compiled.warnings);
         apply_log_level(store.config().logging.level);
         apply_heavy(store.config().logging.heavy);
+        bundle_config(store.config());
         let snapshot = Snapshot {
             config: store.config().clone(),
             keymap: compiled.keymap,
@@ -485,6 +486,7 @@ impl Settings {
         if config.logging.heavy != previous.config.logging.heavy {
             apply_heavy(config.logging.heavy);
         }
+        bundle_config(&config);
         tracing::info!(?changed, keymap_changed, "configuration changed");
         let wire_keymap = keymap_changed.then(|| keymap.to_wire());
         self.current
@@ -591,6 +593,13 @@ fn apply_log_level(level: LogLevel) {
             ?level,
             "logging.level is not applied: CABINETOS_LOG sets the log filter"
         );
+    }
+}
+
+/// Tells later log bundles the configuration in effect (masked there).
+fn bundle_config(config: &Config) {
+    if let Ok(value) = serde_json::to_value(config) {
+        cabinetos_diag::set_bundle_config(&value);
     }
 }
 

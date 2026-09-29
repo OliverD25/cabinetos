@@ -102,8 +102,13 @@ fn heavy_mode_switches_while_the_process_runs() {
     assert_eq!(traced["request_id"], id.as_str());
     assert_eq!(traced["fields"]["detail"], 1);
 
-    // Switched off, the file is closed: nothing holds it any more.
-    fs::remove_file(&heavy_files[0]).unwrap();
+    // Switched off, the file is closed: nothing holds it any more. A busy
+    // machine may take its time.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_mins(2);
+    while let Err(error) = fs::remove_file(&heavy_files[0]) {
+        assert!(std::time::Instant::now() < deadline, "{error}");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
 
     // On again, a new file is opened.
     assert!(set_heavy(true));

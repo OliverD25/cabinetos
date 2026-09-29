@@ -1,7 +1,8 @@
-//! `log`: reading the log folder without a core. `log trace <id>` prints
-//! every line of one user action (or one request) from every process's
-//! files, normal and heavy, in time order; `log tail` prints the newest
-//! lines of one process's file (docs/diagnostics.md).
+//! `log`: the log folder. `log trace <id>` prints every line of one user
+//! action (or one request) from every process's files, normal and heavy,
+//! in time order; `log tail` prints the newest lines of one process's
+//! file. Both read the files and need no core. `log bundle` asks the core
+//! for a zip of the last minutes (docs/diagnostics.md).
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -11,9 +12,23 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use cabinetos_ipc::PipeClient;
+use cabinetos_protocol::{Request, Response};
 use serde_json::Value;
 
 use crate::say;
+
+/// `log bundle`: asks the core to write a bundle and prints its path.
+pub(crate) async fn bundle(client: &mut PipeClient, minutes: u32) -> anyhow::Result<()> {
+    let reply = crate::send(client, Request::SaveLogBundle { minutes }).await?;
+    match reply.body {
+        Response::LogBundle { path } => {
+            say(format_args!("{path}"));
+            Ok(())
+        }
+        other => Err(crate::failure("save_log_bundle", &other)),
+    }
+}
 
 /// Heavy files start with this, then the process name: `heavy-core.<date>.jsonl`.
 const HEAVY_PREFIX: &str = "heavy-";

@@ -407,6 +407,9 @@ impl Session {
                     });
                     None
                 }
+                Request::SaveLogBundle { minutes } => {
+                    self.save_log_bundle(&id, &span, kind, minutes)
+                }
                 Request::WindowState(state) => Some(self.window_state(state)),
                 Request::GetWindowState { client } => {
                     Some(self.services.windows.get(client.as_deref()))
@@ -1218,6 +1221,38 @@ impl Session {
             }),
             _ => None,
         }
+    }
+
+    /// `save_log_bundle`, on the blocking pool: it reads the log folder and
+    /// writes a zip into it.
+    fn save_log_bundle(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        minutes: u32,
+    ) -> Option<Response> {
+        let most = cabinetos_diag::MAX_BUNDLE_MINUTES;
+        if !(1..=most).contains(&minutes) {
+            return Some(protocol_error(&format!(
+                "minutes is {minutes}; a bundle holds 1 to {most} minutes"
+            )));
+        }
+        self.spawn_reply(id, span, kind, move || {
+            match cabinetos_diag::save_bundle(minutes) {
+                Ok(path) => {
+                    tracing::info!(path = %path.display(), minutes, "log bundle saved");
+                    Response::LogBundle {
+                        path: path.display().to_string(),
+                    }
+                }
+                Err(error) => failure_reply((
+                    ErrorCode::Internal,
+                    format!("cannot write the log bundle: {error}"),
+                )),
+            }
+        });
+        None
     }
 
     /// Where a search without a root walks: the folder listed last on this

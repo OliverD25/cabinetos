@@ -185,8 +185,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         marketplace_dir,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
-    // This thread runs the pipe server: it never waits for the heavy log.
-    cabinetos_diag::never_wait_for_heavy_log();
+    prepare_diagnostics();
     let panicked = stop_on_panic(&shutdown);
     warn_about_workers();
     let config_path = cabinetos_config::default_path(config_path);
@@ -281,6 +280,16 @@ fn warn_about_workers() {
             value = %rejected,
             "ignoring {WORKERS_ENV}: expected a whole number from 1 to {MAX_WORKERS}; using {DEFAULT_WORKERS}"
         );
+    }
+}
+
+/// What the core adds to its diagnostics once they run: this thread runs the
+/// pipe server, so it never waits for the heavy log; and log bundles name
+/// the Windows build.
+fn prepare_diagnostics() {
+    cabinetos_diag::never_wait_for_heavy_log();
+    if let Some(build) = cabinetos_fs::windows_build() {
+        cabinetos_diag::set_bundle_windows_build(build);
     }
 }
 

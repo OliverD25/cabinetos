@@ -28,6 +28,7 @@
 //! and Article 1 (logging never blocks the caller). Brief §8.
 #![forbid(unsafe_code)]
 
+mod bundle;
 mod clock;
 mod format;
 mod heavy;
@@ -53,6 +54,9 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::{LookupSpan, Registry};
 use tracing_subscriber::reload;
 
+pub use bundle::{
+    BUNDLE_MINUTES, MAX_BUNDLE_MINUTES, save_bundle, set_bundle_config, set_bundle_windows_build,
+};
 pub use heavy::{
     HEAVY_CAP_CHECK_BYTES, HEAVY_DISK_CAP, HEAVY_FILE_BYTES, HEAVY_FILE_PREFIX,
     HEAVY_NEVER_WAIT_EXTRA, HEAVY_QUEUE_CAP, HEAVY_TARGET_PREFIX, LOG_HEAVY_ENV, heavy_enabled,

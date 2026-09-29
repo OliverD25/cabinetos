@@ -16,7 +16,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::format::thread_label;
-use crate::{Boundary, PROCESS, ProcessInfo, clock, flush_log_writer, ring};
+use crate::{Boundary, PROCESS, ProcessInfo, bundle, clock, flush_log_writer, heavy, ring};
 
 /// The contents of `crash-<timestamp>.json`.
 #[derive(Serialize)]
@@ -66,6 +66,13 @@ pub(crate) fn install_panic_hook() {
                 write_crash_trace(process, info);
             }
             flush_log_writer();
+            // After the flush, so the zip has the lines logged just before
+            // the crash; the crash trace is on disk whatever happens here.
+            if heavy::heavy_enabled()
+                && let Some(process) = PROCESS.get()
+            {
+                write_crash_bundle(process);
+            }
             if let Some(callback) = ON_PANIC.get() {
                 callback();
             }
@@ -110,6 +117,16 @@ fn write_crash_trace(process: &ProcessInfo, info: &PanicHookInfo<'_>) {
             "could not write a crash trace to {}: {error}",
             process.log_dir.display()
         ),
+    };
+}
+
+/// Writes `crash-<time>.zip`, the log bundle of a crash in heavy mode, and
+/// says where on stderr.
+fn write_crash_bundle(process: &ProcessInfo) {
+    let mut stderr = std::io::stderr();
+    let _ = match bundle::save_crash_bundle(&process.log_dir, process.process) {
+        Ok(path) => writeln!(stderr, "crash bundle written to {}", path.display()),
+        Err(error) => writeln!(stderr, "could not write a crash bundle: {error}"),
     };
 }
 

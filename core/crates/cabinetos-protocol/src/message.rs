@@ -503,6 +503,19 @@ pub enum Request {
     /// Asks for the names of every stored secret. The core answers
     /// `secret_names`.
     SecretList,
+    /// Asks the core for a log bundle: a zip in the log folder with the last
+    /// `minutes` of every process's log files, the recent crash traces and
+    /// a `bundle.json` about the machine (docs/diagnostics.md, "Bundles").
+    /// The core answers `log_bundle`.
+    SaveLogBundle {
+        /// How many minutes back, 1 to 1,440; 10 when left out.
+        #[serde(default = "default_bundle_minutes")]
+        minutes: u32,
+    },
+}
+
+fn default_bundle_minutes() -> u32 {
+    10
 }
 
 fn default_search_limit() -> u32 {
@@ -573,6 +586,7 @@ impl Request {
         "secret_get",
         "secret_delete",
         "secret_list",
+        "save_log_bundle",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -639,6 +653,7 @@ impl Request {
             Self::SecretGet { .. } => "secret_get",
             Self::SecretDelete { .. } => "secret_delete",
             Self::SecretList => "secret_list",
+            Self::SaveLogBundle { .. } => "save_log_bundle",
         }
     }
 }
@@ -918,6 +933,11 @@ pub enum Response {
         /// The names.
         names: Vec<String>,
     },
+    /// Reply to `save_log_bundle`.
+    LogBundle {
+        /// The zip's full path, in the log folder.
+        path: String,
+    },
 }
 
 impl Response {
@@ -957,6 +977,7 @@ impl Response {
         "jobs_started",
         "secret",
         "secret_names",
+        "log_bundle",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -997,6 +1018,7 @@ impl Response {
             Self::JobsStarted { .. } => "jobs_started",
             Self::Secret { .. } => "secret",
             Self::SecretNames { .. } => "secret_names",
+            Self::LogBundle { .. } => "log_bundle",
         }
     }
 }
@@ -1864,6 +1886,7 @@ mod tests {
                 name: "anthropic".to_owned(),
             },
             Request::SecretList,
+            Request::SaveLogBundle { minutes: 5 },
         ]
     }
 
@@ -2143,6 +2166,10 @@ mod tests {
             Response::SecretNames {
                 names: vec!["anthropic".to_owned(), "openai".to_owned()],
             },
+            Response::LogBundle {
+                path: r"C:\Users\me\AppData\Local\CabinetOS\logs\bundle-20260930T010203004Z.zip"
+                    .to_owned(),
+            },
         ]
     }
 
@@ -2358,6 +2385,24 @@ mod tests {
         let incoming: Envelope<Incoming> =
             serde_json::from_str(&serde_json::to_string(&event).unwrap()).unwrap();
         assert_eq!(incoming.trace, Some(trace));
+    }
+
+    #[test]
+    fn a_log_bundle_asks_for_ten_minutes_unless_told() {
+        let asked: Envelope<Request> =
+            serde_json::from_value(json!({"id": ID, "type": "save_log_bundle"})).unwrap();
+        assert_eq!(asked.body, Request::SaveLogBundle { minutes: 10 });
+        let value = serde_json::to_value(Envelope::new(
+            id(),
+            Response::LogBundle {
+                path: r"C:\logs\bundle-20260930T010203004Z.zip".to_owned(),
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            value,
+            json!({"id": ID, "type": "log_bundle", "path": r"C:\logs\bundle-20260930T010203004Z.zip"})
+        );
     }
 
     #[test]

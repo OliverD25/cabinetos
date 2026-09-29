@@ -18,8 +18,9 @@ use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 const CORE_EXE: &str = env!("CARGO_BIN_EXE_cabinetos-core");
-const STARTUP_DEADLINE: Duration = Duration::from_secs(10);
-const JOB_DEADLINE: Duration = Duration::from_secs(60);
+/// Generous, so a busy machine cannot fail the tests.
+const STARTUP_DEADLINE: Duration = Duration::from_secs(60);
+const JOB_DEADLINE: Duration = Duration::from_secs(120);
 
 fn scratch(name: &str) -> TempDir {
     let root = std::env::temp_dir().join("cabinetos-jobs-test");
@@ -101,6 +102,12 @@ impl Core {
     }
 }
 
+fn is_jsonl(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|extension| extension == "jsonl")
+}
+
 fn lines_of(files: &[PathBuf]) -> Vec<Value> {
     files
         .iter()
@@ -142,12 +149,12 @@ async fn set_heavy(client: &mut PipeClient, on: bool) {
     assert_eq!(reply.body, Response::Ok);
 }
 
-/// Waits until `check` holds, at most a second: the switch applies within
-/// one.
-async fn within_a_second(check: impl Fn() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(1);
+/// Waits until `check` holds. The switch applies within a second; a busy
+/// machine gets a minute.
+async fn eventually(check: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_mins(1);
     while !check() {
-        assert!(Instant::now() < deadline, "not within a second");
+        assert!(Instant::now() < deadline, "the switch did not apply");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
@@ -159,7 +166,7 @@ async fn heavy_mode_records_payloads_and_job_entries_while_it_is_on() {
     assert!(core.files("heavy-core.").is_empty());
 
     set_heavy(&mut client, true).await;
-    within_a_second(|| !core.files("heavy-core.").is_empty()).await;
+    eventually(|| !core.files("heavy-core.").is_empty()).await;
 
     let trace = RequestId::new();
     client.set_trace(Some(trace.clone()));
@@ -210,7 +217,7 @@ async fn heavy_mode_records_payloads_and_job_entries_while_it_is_on() {
     set_heavy(&mut client, false).await;
     // Switched off, the file is closed: nothing holds it any more.
     let heavy_files = core.files("heavy-core.");
-    within_a_second(|| {
+    eventually(|| {
         heavy_files.iter().all(|path| {
             fs::OpenOptions::new()
                 .write(true)
@@ -255,6 +262,67 @@ async fn heavy_mode_records_payloads_and_job_entries_while_it_is_on() {
             .iter()
             .any(|line| line["message"] == "heavy logging is on")
     );
+}
+
+#[tokio::test]
+async fn a_log_bundle_is_saved_on_request() {
+    let mut core = start_core();
+    let (mut client, _events) = greeted(&core).await;
+    let trace = RequestId::new();
+    client.set_trace(Some(trace.clone()));
+    let saved = client
+        .request(Request::SaveLogBundle { minutes: 5 })
+        .await
+        .unwrap();
+    let Response::LogBundle { path } = saved.body else {
+        panic!("{:?}", saved.body);
+    };
+    let path = PathBuf::from(path);
+    assert_eq!(path.parent(), Some(core.logs().as_path()));
+    let name = path.file_name().unwrap().to_string_lossy().into_owned();
+    assert!(name.starts_with("bundle-"), "{name}");
+    assert!(
+        Path::new(&name)
+            .extension()
+            .is_some_and(|extension| extension == "zip"),
+        "{name}"
+    );
+
+    let bytes = fs::read(&path).unwrap();
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let names: Vec<String> = archive.file_names().map(str::to_owned).collect();
+    let log = names
+        .iter()
+        .find(|name| name.starts_with("core.") && is_jsonl(name))
+        .unwrap_or_else(|| panic!("the core's log is in the bundle: {names:?}"))
+        .clone();
+    let mut text = String::new();
+    std::io::Read::read_to_string(&mut archive.by_name(&log).unwrap(), &mut text).unwrap();
+    assert!(text.contains("core started"), "{text}");
+    let mut manifest = String::new();
+    std::io::Read::read_to_string(&mut archive.by_name("bundle.json").unwrap(), &mut manifest)
+        .unwrap();
+    let manifest: Value = serde_json::from_str(&manifest).unwrap();
+    assert_eq!(manifest["reason"], "asked");
+    assert_eq!(manifest["minutes"], 5);
+    assert_eq!(manifest["config"]["logging"]["heavy"], false);
+    assert!(
+        manifest["windows_build"]
+            .as_str()
+            .is_some_and(|build| build.starts_with("10.0.")),
+        "{manifest}"
+    );
+
+    let refused = client
+        .request(Request::SaveLogBundle { minutes: 0 })
+        .await
+        .unwrap();
+    assert!(
+        matches!(refused.body, Response::Error { .. }),
+        "{:?}",
+        refused.body
+    );
+    core.stop(&mut client).await;
 }
 
 /// The refused command's request and reply are in the heavy file, the

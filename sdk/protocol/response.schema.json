@@ -852,6 +852,24 @@
         "type",
         "names"
       ]
+    },
+    {
+      "description": "Reply to `save_log_bundle`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The zip's full path, in the log folder.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "log_bundle"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
     }
   ],
   "required": [

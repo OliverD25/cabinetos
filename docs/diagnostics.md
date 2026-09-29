@@ -14,6 +14,7 @@ The Rust processes (core, indexer, CLI) get all of this from the
 | Directory | `%LOCALAPPDATA%\CabinetOS\logs\` |
 | Log files | One per process and UTC day: `core.2026-09-28.jsonl`, `indexer.<date>.jsonl`, `ui.<date>.jsonl` (Phase 5). The CLI writes `cli.<date>.jsonl` only when it is given `--log-dir`. The indexer running as a service writes to `%ProgramData%\CabinetOS\logs` instead ([indexer.md](indexer.md)). |
 | Crash traces | `crash-<YYYYMMDDTHHMMSSmmmZ>.json` in the same directory, for example `crash-20260928T010203004Z.json` |
+| Bundles | `bundle-<YYYYMMDDTHHMMSSmmmZ>.zip`, made on request, and `crash-<YYYYMMDDTHHMMSSmmmZ>.zip`, made by the panic hook while heavy mode is on ("Bundles", below). Never deleted by CabinetOS. |
 | Heavy log files | Only while heavy mode is on ("Heavy mode", below): `heavy-<process>.<date>.jsonl`, for example `heavy-core.2026-09-29.jsonl`, and `heavy-core.2026-09-29.1.jsonl` for the next part of the same day. At most 2 GiB for all of them together. |
 
 - **Other directory.** `--log-dir <path>` on `cabinetos-core` and
@@ -249,3 +250,34 @@ Crash file format:
 To see one without a real bug:
 `cabinetos-core --self-test-panic --log-dir <some directory>`. It logs
 `about to panic (self-test)` and then panics with `self-test panic`.
+
+## Bundles
+
+A bundle is one zip with what someone needs to find a problem: the last
+minutes of every process's logs, the recent crash traces, and facts about
+the machine. It is written into the log folder and never sent anywhere.
+
+**Made on request.** The core's request `save_log_bundle` (`minutes`, 1 to
+1,440, default 10) writes `bundle-<YYYYMMDDTHHMMSSmmmZ>.zip` and answers
+`log_bundle` with its path ([ipc.md](ipc.md), "Log bundles").
+`cabinetos-cli log bundle [--minutes 10]` prints the path.
+
+**Made by a crash in heavy mode.** When a Rust process panics while heavy
+mode is on, the panic hook writes the crash trace, flushes both log
+writers, and then writes `crash-<YYYYMMDDTHHMMSSmmmZ>.zip` with the last 10
+minutes. It works from the files on disk, on the panicking thread, and
+waits for no lock: if another thread holds the configuration the bundle
+leaves it out. If the zip fails, the crash trace is there anyway; stderr
+says which was written. `CABINETOS_LOG_HEAVY=1 cabinetos-core
+--self-test-panic --log-dir <folder>` shows one.
+
+**What is in it.**
+
+| Entry | Contents |
+|---|---|
+| `<name>.jsonl` | Every log file of the folder (every process, normal and heavy files) cut to the lines stamped within the last `minutes`, under its own name. A file with no such line is left out. Each file is read from its end, a megabyte at a time, until a piece holds only older lines, so a large heavy file is not read whole. |
+| `crash-*.json` | Every crash trace changed in the last 24 hours |
+| `bundle.json` | `created`, `reason` (`asked` or `crash`), `process` (the process that wrote it), `minutes`, `since` (the oldest time a line may have), `versions` (`cabinetos`, `protocol`), `windows_build` (such as `10.0.26200.6899 (25H2)`, from the registry), `environment` (every `CABINETOS_*` variable, those that look like keys as `"***"`), `config` (the configuration in effect, secrets masked as in heavy mode), and `files` (each entry's `name`, `lines` and `bytes`) |
+
+Zips are written with Deflate at its fastest level: a crash bundle is
+written while the process goes down.

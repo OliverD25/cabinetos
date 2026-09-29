@@ -1281,6 +1281,26 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Asks the core for a log bundle: a zip in the log folder with the last\n`minutes` of every process's log files, the recent crash traces and\na `bundle.json` about the machine (docs/diagnostics.md, \"Bundles\").\nThe core answers `log_bundle`.",
+      "type": "object",
+      "properties": {
+        "minutes": {
+          "description": "How many minutes back, 1 to 1,440; 10 when left out.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 10,
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "save_log_bundle"
+        }
+      },
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [

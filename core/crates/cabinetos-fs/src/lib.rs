@@ -34,8 +34,8 @@
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
 //! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `com`,
-//! `hydrate`, `link`, and one function in `sort`), each block with a
-//! `SAFETY:` comment.
+//! `hydrate`, `link`, `system`, and one function in `sort`), each block
+//! with a `SAFETY:` comment.
 
 #[allow(unsafe_code)]
 mod com;
@@ -59,6 +59,8 @@ mod pipeline;
 mod preview;
 mod section;
 mod sort;
+#[allow(unsafe_code)]
+mod system;
 pub mod time;
 #[allow(unsafe_code)]
 pub mod volume;
@@ -80,6 +82,7 @@ pub use path::verbatim_wide;
 pub use pattern::{NamePatterns, match_entries};
 pub use preview::{PreviewEntry, PreviewWriter};
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter, PreviewView};
+pub use system::windows_build;
 pub use watch::{DirectoryChanged, DirectoryWatcher};
 
 /// The default buffer for one `NtQueryDirectoryFile` call: 256 KiB. NTFS

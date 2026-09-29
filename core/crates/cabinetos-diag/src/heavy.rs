@@ -26,7 +26,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::os::windows::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -146,6 +146,8 @@ pub(crate) struct HeavyQueue {
     room: Mutex<()>,
     room_made: Condvar,
     writing: AtomicBool,
+    /// Threads waiting for room now.
+    waiting: AtomicUsize,
     limits: Limits,
 }
 
@@ -167,6 +169,7 @@ impl HeavyQueue {
             }
         } else if self.over(len) {
             let started = Instant::now();
+            self.waiting.fetch_add(1, Ordering::AcqRel);
             let mut guard = lock(&self.room);
             while self.over(len) {
                 guard = self
@@ -176,6 +179,7 @@ impl HeavyQueue {
                     .0;
             }
             drop(guard);
+            self.waiting.fetch_sub(1, Ordering::AcqRel);
             waited = Some(started.elapsed());
         }
         self.enqueue(line, len);
@@ -261,6 +265,7 @@ impl Heavy {
             room: Mutex::new(()),
             room_made: Condvar::new(),
             writing: AtomicBool::new(true),
+            waiting: AtomicUsize::new(0),
             limits,
         });
         let writer_queue = Arc::clone(&queue);
@@ -573,9 +578,19 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::AtomicUsize;
-
     use super::*;
+
+    /// A generous limit for anything a busy machine may slow down.
+    const PATIENCE: Duration = Duration::from_mins(2);
+
+    /// Polls `done` until it holds, at most [`PATIENCE`].
+    fn wait_until(what: &str, done: impl Fn() -> bool) {
+        let deadline = Instant::now() + PATIENCE;
+        while !done() {
+            assert!(Instant::now() < deadline, "{what} did not happen");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
 
     fn limits(queue: u64) -> Limits {
         Limits {
@@ -608,6 +623,10 @@ mod tests {
     #[test]
     fn a_thread_waits_for_a_slow_writer_and_no_line_is_lost() {
         let dir = tempfile::tempdir().unwrap();
+        // The writer holds its first batch until a thread waits for it: the
+        // wait happens whatever the machine's speed.
+        let released = Arc::new(AtomicBool::new(false));
+        let holding = Arc::clone(&released);
         let batches = Arc::new(AtomicUsize::new(0));
         let counted = Arc::clone(&batches);
         let heavy = Heavy::start_with(
@@ -616,22 +635,32 @@ mod tests {
             limits(2048),
             Box::new(move |_| {
                 counted.fetch_add(1, Ordering::Relaxed);
-                std::thread::sleep(Duration::from_millis(5));
+                let deadline = Instant::now() + PATIENCE;
+                while !holding.load(Ordering::Acquire) && Instant::now() < deadline {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
             }),
         )
         .unwrap();
-        let mut waits = 0;
-        let mut longest = Duration::ZERO;
-        for n in 0..400 {
-            if let Some(waited) = heavy
-                .queue
-                .push(format!("{{\"n\":{n},\"pad\":\"{}\"}}", "x".repeat(90)))
-            {
-                waits += 1;
-                longest = longest.max(waited);
+        let queue = Arc::clone(&heavy.queue);
+        let producer = std::thread::spawn(move || {
+            let mut waits = 0;
+            let mut longest = Duration::ZERO;
+            for n in 0..400 {
+                let line = format!("{{\"n\":{n},\"pad\":\"{}\"}}", "x".repeat(90));
+                if let Some(waited) = queue.push(line) {
+                    waits += 1;
+                    longest = longest.max(waited);
+                }
             }
-        }
-        assert!(heavy.queue.flush(true, Duration::from_secs(10)));
+            (waits, longest)
+        });
+        wait_until("a wait for the writer", || {
+            heavy.queue.waiting.load(Ordering::Acquire) > 0
+        });
+        released.store(true, Ordering::Release);
+        let (waits, longest) = producer.join().unwrap();
+        assert!(heavy.queue.flush(true, PATIENCE));
         assert!(waits > 0, "400 lines of 100 bytes do not fit a 2 KiB queue");
         assert!(longest > Duration::ZERO);
         let lines = read_lines(dir.path());
@@ -661,7 +690,7 @@ mod tests {
             limits(1000),
             // The writer is stuck until the test lets it go.
             Box::new(move |_| {
-                let _ = gate.recv_timeout(Duration::from_secs(10));
+                let _ = gate.recv_timeout(PATIENCE);
             }),
         )
         .unwrap();
@@ -675,14 +704,13 @@ mod tests {
         })
         .join()
         .unwrap();
-        assert!(
-            started.elapsed() < Duration::from_secs(5),
-            "it never waited"
-        );
+        // Had it waited, it would have waited for the stuck writer until
+        // the test's patience ran out.
+        assert!(started.elapsed() < PATIENCE / 2, "it never waited");
         assert_eq!(kept, 100);
         let _ = release.send(());
         let _ = release.send(());
-        assert!(heavy.queue.flush(true, Duration::from_secs(10)));
+        assert!(heavy.queue.flush(true, PATIENCE));
         let lines: Vec<Value> = read_lines(dir.path())
             .iter()
             .map(|line| serde_json::from_str(line).unwrap_or(Value::Null))

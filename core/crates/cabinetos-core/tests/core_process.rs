@@ -228,6 +228,67 @@ async fn a_panic_writes_a_crash_trace_and_flushes_the_log() {
     );
 }
 
+/// In heavy mode the panic hook also writes `crash-<time>.zip`: the crash
+/// trace and the last minutes of every log, the heavy file included.
+#[tokio::test]
+async fn a_panic_in_heavy_mode_also_writes_a_crash_bundle() {
+    let log_dir = tempfile::tempdir().unwrap();
+    let mut child = core_command(&PipeName::random(), log_dir.path())
+        .env("CABINETOS_LOG_HEAVY", "1")
+        .arg("--self-test-panic")
+        .spawn()
+        .unwrap();
+    // Generous: the hook zips the logs before the process ends.
+    let status = wait_for_exit(&mut child, Duration::from_mins(2)).await;
+    assert!(!status.success());
+
+    let crash = crash_files(log_dir.path());
+    assert_eq!(crash.len(), 1, "{crash:?}");
+    let bundles: Vec<PathBuf> = files_in(log_dir.path())
+        .into_iter()
+        .filter(|path| {
+            let name = path.file_name().unwrap().to_string_lossy();
+            name.starts_with("crash-")
+                && path.extension().is_some_and(|extension| extension == "zip")
+        })
+        .collect();
+    assert_eq!(bundles.len(), 1, "{bundles:?}");
+
+    let bytes = fs::read(&bundles[0]).unwrap();
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let names: Vec<String> = archive.file_names().map(str::to_owned).collect();
+    let crash_name = crash[0].file_name().unwrap().to_string_lossy().into_owned();
+    assert!(names.contains(&crash_name), "{names:?}");
+    assert!(names.contains(&"bundle.json".to_owned()), "{names:?}");
+    let read = |archive: &mut zip::ZipArchive<std::io::Cursor<Vec<u8>>>, name: &str| {
+        let mut text = String::new();
+        std::io::Read::read_to_string(&mut archive.by_name(name).unwrap(), &mut text).unwrap();
+        text
+    };
+    let heavy = names
+        .iter()
+        .find(|name| name.starts_with("heavy-core.") && is_jsonl(name))
+        .expect("the heavy file is in the bundle")
+        .clone();
+    assert!(read(&mut archive, &heavy).contains("about to panic (self-test)"));
+    let normal = names
+        .iter()
+        .find(|name| name.starts_with("core.") && is_jsonl(name))
+        .expect("the normal file is in the bundle")
+        .clone();
+    assert!(read(&mut archive, &normal).contains("about to panic (self-test)"));
+    let manifest: Value = serde_json::from_str(&read(&mut archive, "bundle.json")).unwrap();
+    assert_eq!(manifest["reason"], "crash");
+    assert_eq!(manifest["process"], "core");
+    assert_eq!(manifest["environment"]["CABINETOS_LOG_HEAVY"], "1");
+}
+
+fn is_jsonl(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|extension| extension == "jsonl")
+}
+
 /// The crash traces in a log directory.
 fn crash_files(dir: &Path) -> Vec<PathBuf> {
     files_in(dir)

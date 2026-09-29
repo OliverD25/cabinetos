@@ -10,7 +10,7 @@
 //! colour themes (`themes`), the marketplace (`market`), what the window
 //! shows (`state`), secrets in the Credential Manager (`secret`), and the
 //! log folder (`log trace`, `log tail`: these read
-//! files and need no core).
+//! files and need no core; `log bundle` asks the core for a zip).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -85,7 +85,8 @@ enum Command {
     /// Ask the core to exit cleanly.
     Shutdown,
     /// Read the log folder: one action through every process (`log trace`),
-    /// or the newest lines of one process's file (`log tail`).
+    /// the newest lines of one process's file (`log tail`), or a zip of the
+    /// last minutes of every log (`log bundle`).
     Log {
         #[command(subcommand)]
         action: LogAction,
@@ -680,6 +681,25 @@ enum LogAction {
         #[arg(long, value_name = "PATH")]
         dir: Option<PathBuf>,
     },
+    /// Ask the core for a log bundle: a zip in the log folder with the last
+    /// minutes of every process's logs, the recent crash traces and facts
+    /// about the machine. Prints the zip's path.
+    Bundle {
+        /// How many minutes back, 1 to 1440.
+        #[arg(long, default_value_t = 10)]
+        minutes: u32,
+    },
+}
+
+impl LogAction {
+    /// The minutes of `log bundle`; the other log commands never reach the
+    /// core.
+    fn minutes(&self) -> u32 {
+        match self {
+            Self::Bundle { minutes } => *minutes,
+            _ => unreachable!("only log bundle needs the core"),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -811,15 +831,23 @@ fn main() -> ExitCode {
     }
 }
 
-async fn execute(cli: &Cli) -> anyhow::Result<()> {
-    if let Command::Config {
-        action: ConfigAction::Validate { file },
-    } = &cli.command
-    {
-        return settings::config_validate(file.as_deref());
+/// The commands that need no core: `config validate`, `log trace` and
+/// `log tail`. `None` for every other command.
+fn without_core(command: &Command) -> Option<anyhow::Result<()>> {
+    match command {
+        Command::Config {
+            action: ConfigAction::Validate { file },
+        } => Some(settings::config_validate(file.as_deref())),
+        Command::Log { action } if !matches!(action, LogAction::Bundle { .. }) => {
+            Some(log_command(action))
+        }
+        _ => None,
     }
-    if let Command::Log { action } = &cli.command {
-        return log_command(action);
+}
+
+async fn execute(cli: &Cli) -> anyhow::Result<()> {
+    if let Some(result) = without_core(&cli.command) {
+        return result;
     }
     let pipe = PipeName::new(&cli.pipe);
     let mut client = PipeClient::connect(&pipe, CONNECT_TIMEOUT)
@@ -842,7 +870,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             }
             say(format_args!("shutdown acknowledged id={}", reply.id));
         }
-        Command::Log { .. } => unreachable!("the log commands return before connecting"),
+        Command::Log { action } => logs::bundle(&mut client, action.minutes()).await?,
         Command::Ls {
             path,
             long,
@@ -941,6 +969,7 @@ fn log_command(action: &LogAction) -> anyhow::Result<()> {
                 json: *json,
             },
         ),
+        LogAction::Bundle { .. } => unreachable!("log bundle needs the core"),
     }
 }
 

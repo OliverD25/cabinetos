@@ -214,6 +214,51 @@ fn log_trace_says_so_when_nothing_matches_or_the_id_is_not_a_ulid() {
 }
 
 #[test]
+fn log_bundle_asks_the_core_and_prints_the_zip_s_path() {
+    let core_exe = std::path::Path::new(CLI_EXE).with_file_name("cabinetos-core.exe");
+    assert!(
+        core_exe.exists(),
+        "build the core first: cargo build -p cabinetos-core"
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let logs = dir.path().join("logs");
+    let pipe = cabinetos_ipc::PipeName::random();
+    let mut core = Command::new(&core_exe)
+        .args(["--pipe", pipe.token()])
+        .arg("--config")
+        .arg(dir.path().join("cabinetos.json"))
+        .env("CABINETOS_LOG_DIR", &logs)
+        .env("CABINETOS_PLUGINS_DIR", dir.path().join("plugins"))
+        .env("CABINETOS_THEMES_DIR", dir.path().join("themes"))
+        .env_remove("CABINETOS_LOG")
+        .env_remove("CABINETOS_LOG_HEAVY")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    // Generous, so a busy machine cannot fail the test.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_mins(1);
+    let printed = loop {
+        let output = cli(&["--pipe", pipe.token(), "log", "bundle", "--minutes", "3"]);
+        if output.status.success() {
+            break String::from_utf8(output.stdout).unwrap();
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    let _ = cli(&["--pipe", pipe.token(), "shutdown"]);
+    let _ = core.wait();
+    let path = std::path::PathBuf::from(printed.trim());
+    assert_eq!(path.parent(), Some(logs.as_path()), "{printed}");
+    assert!(path.exists(), "{printed}");
+}
+
+#[test]
 fn log_tail_prints_the_newest_lines_of_the_newest_file() {
     let dir = tempfile::tempdir().unwrap();
     let old: Vec<String> = (0..3)

@@ -20,6 +20,8 @@ tracing.workspace = true
 tracing-appender.workspace = true
 # `ansi` provides the pretty stderr format.
 tracing-subscriber = { workspace = true, features = ["ansi"] }
+# Log bundles: zips written with Deflate.
+zip = { workspace = true, features = ["deflate-flate2-zlib-rs"] }
 
 [dev-dependencies]
 tempfile.workspace = true

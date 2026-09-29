@@ -132,7 +132,10 @@ reply `jobs_started`, `preview_cancel`, the events `preview_applied` and
 rows ("Previews"); the job kind `steps` ("Jobs"); and secrets:
 `secret_set`, `secret_get` with the reply `secret`, `secret_delete`,
 `secret_list` with the reply `secret_names`, and the error codes
-`no_such_secret` and `secret_error` ("Secrets").
+`no_such_secret` and `secret_error` ("Secrets"). Phase 15 added to it
+`save_log_bundle` with the reply `log_bundle` ("Log bundles"), and the
+optional `trace` of every message ("The pipe"), which older peers
+ignore.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -205,6 +208,7 @@ as absent from an older core.
 | `secret_get` | `name` | `secret` (`value`) |
 | `secret_delete` | `name` | `ok` |
 | `secret_list` | — | `secret_names` (`names`) |
+| `save_log_bundle` | `minutes` (1 to 1,440; default 10) | `log_bundle` (`path`), once the zip is written ([diagnostics.md](diagnostics.md), "Bundles") |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -1447,6 +1451,21 @@ put it into a request it makes for a plugin (`http-request` with `secret`,
 history; `--value <text>` gives it on the command line instead. `secret get
 <name>` prints the value, `secret delete <name>` removes it, and `secret
 list` prints the names.
+
+## Log bundles
+
+```json
+{"id":"01M…","trace":"01M…","type":"save_log_bundle","minutes":10}
+{"id":"01M…","trace":"01M…","type":"log_bundle","path":"C:\\Users\\me\\AppData\\Local\\CabinetOS\\logs\\bundle-20260930T010203004Z.zip"}
+```
+
+The core writes the zip on its blocking pool, into its own log folder, and
+answers with the zip's full path: the last `minutes` of every log file
+there (every process's, normal and heavy), the crash traces of the last 24
+hours and a `bundle.json` ([diagnostics.md](diagnostics.md), "Bundles").
+`minutes` outside 1 to 1,440 gets `protocol_error`; a zip that cannot be
+written gets `internal`. `cabinetos-cli log bundle [--minutes 10]` sends it
+and prints the path.
 
 ## What the window shows
 
