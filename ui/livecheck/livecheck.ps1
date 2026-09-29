@@ -105,6 +105,19 @@ function Shot([IntPtr]$h, [string]$path) {
   Step "screenshot $path"
 }
 # What the status bar says about the selection ("3 selected, 1.4 MB"), as UI Automation reads it.
+# Presses a key that opens the name box and types only once the window says the box is shown
+# ("rename box shown" in its log), or after 5 s: the box takes the keyboard a moment after the key.
+function PressForNameBox([scriptblock]$press) {
+  $count = @(Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"rename box shown"' }).Count
+  & $press
+  $deadline = (Get-Date).AddSeconds(5)
+  while ((Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 100
+    if (@(Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"rename box shown"' }).Count -gt $count) { Start-Sleep -Milliseconds 300; return }
+  }
+  "the name box did not report itself within 5 s"
+}
+
 # The status bar's selection text, as the window logged it last ("selection shown", written when it
 # changes): a search of the automation tree came back empty once web pages were in the window.
 function SelectionText {
