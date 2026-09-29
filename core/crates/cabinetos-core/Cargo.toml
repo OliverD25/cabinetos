@@ -20,6 +20,7 @@ cabinetos-jobs.workspace = true
 cabinetos-market.workspace = true
 cabinetos-plugins.workspace = true
 cabinetos-protocol.workspace = true
+cabinetos-secrets.workspace = true
 cabinetos-terminal.workspace = true
 cabinetos-themes.workspace = true
 clap.workspace = true

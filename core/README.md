@@ -33,6 +33,7 @@ protocol between UI and core, with the shared-memory layout:
 | `cabinetos-plugins` | library | `PluginHost`: Core Plugins as WebAssembly components in `wasmtime`, strict manifests, capabilities, the WASI sandbox, fuel, deadline and memory limits per call, trap containment and restarts ([../docs/plugins.md](../docs/plugins.md)) | 8, 10, 11 |
 | `cabinetos-terminal` | library | `Terminals`: shells in pseudo-consoles (ConPTY), a byte pipe per session for one client at a time, output bounded to 1 MiB with backpressure, the change-directory line of each shell, and the console side of `cabinetos-cli term` ([../docs/terminal.md](../docs/terminal.md)) | 9, 4, 1 |
 | `cabinetos-themes` | library | `ThemeFolder`: the strict checks of the JSON theme format, the themes folder (the shipped themes written when missing, the schema for editors), listing and loading themes by ID ([../docs/themes.md](../docs/themes.md)) | 6, 8 |
+| `cabinetos-secrets` | library | `Secrets`: named secrets (API keys, tokens) in the Windows Credential Manager as `CabinetOS/<name>`, with a value type that prints as `<hidden>`; the core adds one to a plugin's web request, and no plugin ever reads it ([../docs/ipc.md](../docs/ipc.md), "Secrets") | 8 |
 | `cabinetos-market` | library | `Market`: the marketplace index (from disk, or over HTTPS with `ureq`, rustls and the Windows certificate store, cached with its `ETag`), search, and installs checked by SHA-256, unpacked in a staging folder and recorded file by file, so an uninstall removes exactly them ([../docs/marketplace.md](../docs/marketplace.md)) | 2, 8 |
 
 A stub holds only its crate documentation and the names of its future public
@@ -40,7 +41,7 @@ types, so the shape of the engine can be reviewed before the code exists.
 
 **Unsafe code** is denied in every crate. Crates that will never need it
 forbid it outright. Only the crates that call Windows APIs directly (`ipc`,
-`fs`, `jobs`, `index` and `terminal`) allow it, and only in the modules that need it; every `unsafe` block carries a `// SAFETY:` comment, which clippy
+`fs`, `jobs`, `index`, `terminal` and `secrets`) allow it, and only in the modules that need it; every `unsafe` block carries a `// SAFETY:` comment, which clippy
 enforces.
 
 ## Build and test

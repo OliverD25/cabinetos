@@ -1209,6 +1209,78 @@
         "type",
         "preview"
       ]
+    },
+    {
+      "description": "Stores a secret (an API key, a token) in the Windows Credential\nManager as `CabinetOS/<name>`, replacing one of that name. Only a\nwindow or the command line sends it: no plugin can. The core\nanswers `ok`; it never logs the value.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "1 to 128 letters, digits, `-`, `_` and `.`, such as `anthropic`.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "secret_set"
+        },
+        "value": {
+          "description": "The value, 1 to 2,560 bytes of UTF-8.",
+          "$ref": "#/$defs/SecretText"
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "value"
+      ]
+    },
+    {
+      "description": "Reads a secret. The core answers `secret`.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The secret's name.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "secret_get"
+        }
+      },
+      "required": [
+        "type",
+        "name"
+      ]
+    },
+    {
+      "description": "Removes a secret. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The secret's name.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "secret_delete"
+        }
+      },
+      "required": [
+        "type",
+        "name"
+      ]
+    },
+    {
+      "description": "Asks for the names of every stored secret. The core answers\n`secret_names`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "secret_list"
+        }
+      },
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [
@@ -1741,6 +1813,10 @@
           ]
         }
       ]
+    },
+    "SecretText": {
+      "description": "A secret's value in a message: plain text on the wire, `<hidden>` when\nprinted, so a message logged with `{:?}` never shows it.",
+      "type": "string"
     },
     "SortKey": {
       "description": "What a listing is sorted by.",

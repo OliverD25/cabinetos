@@ -24,6 +24,7 @@ mod market;
 mod message;
 mod plugin;
 mod preview;
+mod secret;
 pub mod shm;
 mod terminal;
 mod theme;
@@ -52,6 +53,7 @@ pub use message::{
 };
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 pub use preview::{ChangeKind, OpenedListing, PreviewRow};
+pub use secret::SecretText;
 pub use terminal::{TerminalSession, TerminalState};
 pub use theme::{
     Chrome, Color, Decimal, FileTypeColors, METRICS, MetricSpec, MetricUnit, Metrics, MicaTint,
@@ -97,5 +99,8 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// `jobs_started`, `preview_cancel`, the events `preview_applied` and
 /// `preview_cancelled`, the error codes `no_such_preview` and
 /// `too_many_previews`, the listing header's preview flag) and the job
-/// kind `steps`.
+/// kind `steps`; secrets in the Windows Credential Manager (`secret_set`,
+/// `secret_get` with the reply `secret`, `secret_delete`, `secret_list`
+/// with the reply `secret_names`, the error codes `no_such_secret` and
+/// `secret_error`).
 pub const PROTOCOL_VERSION: u32 = 13;

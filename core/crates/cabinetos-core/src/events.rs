@@ -74,4 +74,6 @@ pub(crate) struct Services {
     /// The previews of proposed changes, until applied, cancelled or
     /// expired.
     pub(crate) previews: Arc<Previews>,
+    /// The secrets in the Windows Credential Manager.
+    pub(crate) secrets: cabinetos_secrets::Secrets,
 }

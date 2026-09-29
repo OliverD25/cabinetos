@@ -32,6 +32,7 @@ mod measure;
 mod plugins;
 mod preview;
 mod search;
+mod secrets;
 mod settings;
 mod terminal;
 mod themes;
@@ -252,6 +253,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         market,
         windows: window::WindowStates::default(),
         previews,
+        secrets: secrets::from_env(),
     });
     let mut result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     if result.is_ok() && panicked.load(Ordering::SeqCst) {

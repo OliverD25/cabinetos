@@ -1,5 +1,5 @@
 //! The CLI's Phase 14 commands against a real core: `state` prints what a
-//! window told the core.
+//! window told the core; `secret` stores, reads, lists and removes secrets.
 //!
 //! Needs `cabinetos-core.exe` next to `cabinetos-cli.exe`; `cargo test
 //! --workspace` builds both. A test that plays the window talks to the
@@ -49,6 +49,11 @@ fn core_exe() -> PathBuf {
 }
 
 fn start_core() -> Core {
+    start_core_with(&[])
+}
+
+/// A core with extra environment variables.
+fn start_core_with(env: &[(&str, &str)]) -> Core {
     let root = std::env::temp_dir().join("cabinetos-core-test");
     std::fs::create_dir_all(&root).unwrap();
     let dir = tempfile::Builder::new()
@@ -70,6 +75,7 @@ fn start_core() -> Core {
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
+        .envs(env.iter().copied())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -181,4 +187,48 @@ fn state_prints_what_the_window_said() {
     assert!(!output.status.success());
     assert!(stderr(&output).contains("nobody#9"), "{}", stderr(&output));
     drop(window);
+}
+
+#[test]
+fn secret_stores_reads_lists_and_removes() {
+    let prefix = format!("CabinetOS-test-cli-{}/", std::process::id());
+    let core = start_core_with(&[("CABINETOS_SECRETS_PREFIX", prefix.as_str())]);
+    // From standard input, as the docs advise: the value stays out of the
+    // shell's history.
+    let mut child = Command::new(CLI_EXE)
+        .args(["--pipe", core.pipe.token(), "secret", "set", "cli.test"])
+        .env_remove("CABINETOS_LOG")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        use std::io::Write;
+        let mut stdin = child.stdin.take().unwrap();
+        stdin.write_all(b"sk-from-stdin\r\n").unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(stdout(&output), "stored cli.test\n");
+
+    let output = cli(&core, &["secret", "set", "cli.other", "--value", "v2"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let output = cli(&core, &["secret", "get", "cli.test"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(stdout(&output), "sk-from-stdin\n");
+    let output = cli(&core, &["secret", "list"]);
+    assert_eq!(stdout(&output), "cli.other\ncli.test\n");
+    for name in ["cli.test", "cli.other"] {
+        let output = cli(&core, &["secret", "delete", name]);
+        assert!(output.status.success(), "{}", stderr(&output));
+    }
+    let output = cli(&core, &["secret", "get", "cli.test"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("no_such_secret"),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(stdout(&cli(&core, &["secret", "list"])), "no secrets\n");
 }

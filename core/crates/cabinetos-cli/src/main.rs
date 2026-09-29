@@ -8,7 +8,8 @@
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
 //! search (`search`, `index status`), the terminal sessions (`term`), the
 //! colour themes (`themes`), the marketplace (`market`), what the window
-//! shows (`state`), and the log folder (`log trace`, `log tail`: these read
+//! shows (`state`), secrets in the Credential Manager (`secret`), and the
+//! log folder (`log trace`, `log tail`: these read
 //! files and need no core).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
@@ -30,6 +31,7 @@ mod measure;
 mod patterns;
 mod plugins;
 mod search;
+mod secret;
 mod settings;
 mod state;
 mod term;
@@ -300,6 +302,40 @@ enum Command {
         #[arg(long, value_name = "ID")]
         client: Option<String>,
     },
+    /// Store, read, remove or list secrets, such as an API key, in the
+    /// Windows Credential Manager (as CabinetOS/<name>). The core adds one
+    /// to a plugin's web request; no plugin ever reads it.
+    Secret {
+        #[command(subcommand)]
+        action: SecretAction,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
+enum SecretAction {
+    /// Store a secret, replacing one of that name. The value comes from
+    /// --value, else from standard input (one line ending at its end is
+    /// dropped): echo sk-... | cabinetos-cli secret set anthropic.
+    Set {
+        /// 1 to 128 letters, digits, -, _ and ., for example anthropic.
+        name: String,
+        /// The value. Without it, standard input; that keeps the value out
+        /// of the shell's history.
+        #[arg(long)]
+        value: Option<String>,
+    },
+    /// Print a secret's value.
+    Get {
+        /// The secret's name.
+        name: String,
+    },
+    /// Remove a secret.
+    Delete {
+        /// The secret's name.
+        name: String,
+    },
+    /// Print the names of the stored secrets, never their values.
+    List,
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -874,6 +910,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         } => {
             state::state(&mut client, *json, named.as_deref()).await?;
         }
+        Command::Secret { action } => secret_command(&mut client, action).await?,
     }
     Ok(())
 }
@@ -904,6 +941,16 @@ fn log_command(action: &LogAction) -> anyhow::Result<()> {
                 json: *json,
             },
         ),
+    }
+}
+
+/// `secret set|get|delete|list`.
+async fn secret_command(client: &mut PipeClient, action: &SecretAction) -> anyhow::Result<()> {
+    match action {
+        SecretAction::Set { name, value } => secret::set(client, name, value.as_deref()).await,
+        SecretAction::Get { name } => secret::get(client, name).await,
+        SecretAction::Delete { name } => secret::delete(client, name).await,
+        SecretAction::List => secret::list(client).await,
     }
 }
 

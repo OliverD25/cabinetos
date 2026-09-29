@@ -233,6 +233,7 @@ dependencies = [
  "cabinetos-market",
  "cabinetos-plugins",
  "cabinetos-protocol",
+ "cabinetos-secrets",
  "cabinetos-terminal",
  "cabinetos-themes",
  "clap",
@@ -383,6 +384,14 @@ dependencies = [
  "serde",
  "serde_json",
  "ulid",
+]
+
+[[package]]
+name = "cabinetos-secrets"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "windows",
 ]
 
 [[package]]

@@ -813,6 +813,45 @@
         "type",
         "jobs"
       ]
+    },
+    {
+      "description": "Reply to `secret_get`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "secret"
+        },
+        "value": {
+          "description": "The value.",
+          "$ref": "#/$defs/SecretText"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ]
+    },
+    {
+      "description": "Reply to `secret_list`: the names, sorted; never the values.",
+      "type": "object",
+      "properties": {
+        "names": {
+          "description": "The names.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "secret_names"
+        }
+      },
+      "required": [
+        "type",
+        "names"
+      ]
     }
   ],
   "required": [
@@ -1281,6 +1320,16 @@
           "description": "The client has 20 previews alive already; apply or cancel one first.",
           "type": "string",
           "const": "too_many_previews"
+        },
+        {
+          "description": "No secret has that name.",
+          "type": "string",
+          "const": "no_such_secret"
+        },
+        {
+          "description": "The secret's name or value is not one the Credential Manager keeps\n(see `secret_set`), or it refused.",
+          "type": "string",
+          "const": "secret_error"
         }
       ]
     },
@@ -2991,6 +3040,10 @@
           "const": "walk"
         }
       ]
+    },
+    "SecretText": {
+      "description": "A secret's value in a message: plain text on the wire, `<hidden>` when\nprinted, so a message logged with `{:?}` never shows it.",
+      "type": "string"
     },
     "Stars": {
       "description": "From 0 to 5 stars.",

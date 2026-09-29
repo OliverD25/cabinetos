@@ -23,6 +23,7 @@ cabinetos-jobs = { path = "crates/cabinetos-jobs" }
 cabinetos-market = { path = "crates/cabinetos-market" }
 cabinetos-plugins = { path = "crates/cabinetos-plugins" }
 cabinetos-protocol = { path = "crates/cabinetos-protocol" }
+cabinetos-secrets = { path = "crates/cabinetos-secrets" }
 cabinetos-terminal = { path = "crates/cabinetos-terminal" }
 cabinetos-themes = { path = "crates/cabinetos-themes" }
 

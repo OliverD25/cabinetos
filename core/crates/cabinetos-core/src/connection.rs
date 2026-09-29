@@ -387,6 +387,16 @@ impl Session {
                 | Request::OpenPreview { .. }
                 | Request::PreviewApply { .. }
                 | Request::PreviewCancel { .. }) => self.preview_request(&id, &span, kind, request),
+                request @ (Request::SecretSet { .. }
+                | Request::SecretGet { .. }
+                | Request::SecretDelete { .. }
+                | Request::SecretList) => {
+                    let secrets = self.services.secrets.clone();
+                    self.spawn_reply(&id, &span, kind, move || {
+                        crate::secrets::answer(&secrets, request)
+                    });
+                    None
+                }
                 Request::WindowState(state) => Some(self.window_state(state)),
                 Request::GetWindowState { client } => {
                     Some(self.services.windows.get(client.as_deref()))

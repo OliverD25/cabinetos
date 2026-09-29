@@ -7,6 +7,7 @@ use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState
 use crate::market::{ExtensionKind, MarketItem, ToolInfo};
 use crate::plugin::{PluginInfo, PluginState};
 use crate::preview::{OpenedListing, PreviewRow};
+use crate::secret::SecretText;
 use crate::terminal::TerminalSession;
 use crate::theme::{Theme, ThemeInfo};
 use crate::window::WindowState;
@@ -479,6 +480,29 @@ pub enum Request {
         /// The preview.
         preview: String,
     },
+    /// Stores a secret (an API key, a token) in the Windows Credential
+    /// Manager as `CabinetOS/<name>`, replacing one of that name. Only a
+    /// window or the command line sends it: no plugin can. The core
+    /// answers `ok`; it never logs the value.
+    SecretSet {
+        /// 1 to 128 letters, digits, `-`, `_` and `.`, such as `anthropic`.
+        name: String,
+        /// The value, 1 to 2,560 bytes of UTF-8.
+        value: SecretText,
+    },
+    /// Reads a secret. The core answers `secret`.
+    SecretGet {
+        /// The secret's name.
+        name: String,
+    },
+    /// Removes a secret. The core answers `ok`.
+    SecretDelete {
+        /// The secret's name.
+        name: String,
+    },
+    /// Asks for the names of every stored secret. The core answers
+    /// `secret_names`.
+    SecretList,
 }
 
 fn default_search_limit() -> u32 {
@@ -545,6 +569,10 @@ impl Request {
         "open_preview",
         "preview_apply",
         "preview_cancel",
+        "secret_set",
+        "secret_get",
+        "secret_delete",
+        "secret_list",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -607,6 +635,10 @@ impl Request {
             Self::OpenPreview { .. } => "open_preview",
             Self::PreviewApply { .. } => "preview_apply",
             Self::PreviewCancel { .. } => "preview_cancel",
+            Self::SecretSet { .. } => "secret_set",
+            Self::SecretGet { .. } => "secret_get",
+            Self::SecretDelete { .. } => "secret_delete",
+            Self::SecretList => "secret_list",
         }
     }
 }
@@ -876,6 +908,16 @@ pub enum Response {
         /// The jobs' IDs, as `job_started` gives one.
         jobs: Vec<u64>,
     },
+    /// Reply to `secret_get`.
+    Secret {
+        /// The value.
+        value: SecretText,
+    },
+    /// Reply to `secret_list`: the names, sorted; never the values.
+    SecretNames {
+        /// The names.
+        names: Vec<String>,
+    },
 }
 
 impl Response {
@@ -913,6 +955,8 @@ impl Response {
         "window_state",
         "preview_opened",
         "jobs_started",
+        "secret",
+        "secret_names",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -951,6 +995,8 @@ impl Response {
             Self::WindowState { .. } => "window_state",
             Self::PreviewOpened { .. } => "preview_opened",
             Self::JobsStarted { .. } => "jobs_started",
+            Self::Secret { .. } => "secret",
+            Self::SecretNames { .. } => "secret_names",
         }
     }
 }
@@ -1480,6 +1526,11 @@ pub enum ErrorCode {
     NoSuchPreview,
     /// The client has 20 previews alive already; apply or cancel one first.
     TooManyPreviews,
+    /// No secret has that name.
+    NoSuchSecret,
+    /// The secret's name or value is not one the Credential Manager keeps
+    /// (see `secret_set`), or it refused.
+    SecretError,
 }
 
 #[cfg(test)]
@@ -1800,6 +1851,17 @@ mod tests {
             Request::PreviewCancel {
                 preview: "preview-3".to_owned(),
             },
+            Request::SecretSet {
+                name: "anthropic".to_owned(),
+                value: SecretText("sk-ant-example".to_owned()),
+            },
+            Request::SecretGet {
+                name: "anthropic".to_owned(),
+            },
+            Request::SecretDelete {
+                name: "anthropic".to_owned(),
+            },
+            Request::SecretList,
         ]
     }
 
@@ -2071,6 +2133,12 @@ mod tests {
                 },
             },
             Response::JobsStarted { jobs: vec![4, 5] },
+            Response::Secret {
+                value: SecretText("sk-ant-example".to_owned()),
+            },
+            Response::SecretNames {
+                names: vec!["anthropic".to_owned(), "openai".to_owned()],
+            },
         ]
     }
 
@@ -2467,6 +2535,8 @@ mod tests {
             (ErrorCode::NoWindow, "no_window"),
             (ErrorCode::NoSuchPreview, "no_such_preview"),
             (ErrorCode::TooManyPreviews, "too_many_previews"),
+            (ErrorCode::NoSuchSecret, "no_such_secret"),
+            (ErrorCode::SecretError, "secret_error"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));

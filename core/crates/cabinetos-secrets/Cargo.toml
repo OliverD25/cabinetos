@@ -1,0 +1,20 @@
+[package]
+name = "cabinetos-secrets"
+description = "Named secrets (API keys, tokens) in the Windows Credential Manager, which no plugin ever sees."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+windows = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Credentials",
+] }
+
+[lints]
+workspace = true

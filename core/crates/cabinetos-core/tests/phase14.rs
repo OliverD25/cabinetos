@@ -59,7 +59,6 @@ fn start_core_with(env: &[(&str, &str)]) -> Core {
         .unwrap();
     let pipe = PipeName::random();
     let child = Command::new(CORE_EXE)
-        .envs(env.iter().copied())
         .args(["--pipe", pipe.token()])
         .arg("--config")
         .arg(dir.path().join("config").join("cabinetos.json"))
@@ -74,6 +73,7 @@ fn start_core_with(env: &[(&str, &str)]) -> Core {
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
+        .envs(env.iter().copied())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -560,4 +560,101 @@ async fn the_twenty_first_preview_of_a_client_is_refused() {
         ask(&mut client, one()).await,
         Response::PreviewOpened { .. }
     ));
+}
+
+/// Every line of every log file the core wrote so far.
+fn log_text(core: &Core) -> String {
+    let mut text = String::new();
+    let dir = core.dir.path().join("logs");
+    for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+        if let Ok(content) = std::fs::read_to_string(entry.path()) {
+            text.push_str(&content);
+        }
+    }
+    text
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn secrets_are_kept_by_windows_and_never_logged() {
+    let prefix = format!("CabinetOS-test-{}-{}/", std::process::id(), line!());
+    let core = start_core_with(&[
+        ("CABINETOS_SECRETS_PREFIX", prefix.as_str()),
+        // The most detailed log: a value must not reach even a trace line.
+        ("CABINETOS_LOG", "trace"),
+    ]);
+    let mut client = connect(&core.pipe).await;
+    let value = "sk-test-DO-NOT-LOG-7f3a9c";
+    let set = |name: &str, value: &str| Request::SecretSet {
+        name: name.to_owned(),
+        value: cabinetos_protocol::SecretText(value.to_owned()),
+    };
+    assert_eq!(
+        ask(&mut client, set("phase14.one", value)).await,
+        Response::Ok
+    );
+    assert_eq!(
+        ask(&mut client, set("phase14.two", "other")).await,
+        Response::Ok
+    );
+    let reply = ask(
+        &mut client,
+        Request::SecretGet {
+            name: "phase14.one".to_owned(),
+        },
+    )
+    .await;
+    let Response::Secret { value: got } = reply else {
+        panic!("{reply:?}")
+    };
+    assert_eq!(got.0, value);
+    assert_eq!(
+        ask(&mut client, Request::SecretList).await,
+        Response::SecretNames {
+            names: vec!["phase14.one".to_owned(), "phase14.two".to_owned()]
+        }
+    );
+    for name in ["phase14.one", "phase14.two"] {
+        let delete = Request::SecretDelete {
+            name: name.to_owned(),
+        };
+        assert_eq!(ask(&mut client, delete).await, Response::Ok);
+    }
+    let reply = ask(
+        &mut client,
+        Request::SecretGet {
+            name: "phase14.one".to_owned(),
+        },
+    )
+    .await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::NoSuchSecret),
+        "{reply:?}"
+    );
+    let reply = ask(&mut client, set("a/b", value)).await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::SecretError),
+        "{reply:?}"
+    );
+    assert_eq!(
+        ask(&mut client, Request::SecretList).await,
+        Response::SecretNames { names: Vec::new() }
+    );
+
+    // The log names the secrets it handled, never a value.
+    let deadline = Instant::now() + STARTUP_DEADLINE;
+    loop {
+        let text = log_text(&core);
+        if text.contains("secret removed") && text.contains("phase14.two") {
+            assert!(!text.contains(value), "a secret's value reached the log");
+            assert!(
+                !text.contains("other\""),
+                "a secret's value reached the log"
+            );
+            break;
+        }
+        assert!(Instant::now() < deadline, "the log lines did not come");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }

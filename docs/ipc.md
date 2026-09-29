@@ -129,7 +129,10 @@ Phase 14, each general and useful without AI) added `window_state` and
 reply `jobs_started`, `preview_cancel`, the events `preview_applied` and
 `preview_cancelled`, the error codes `no_such_preview` and
 `too_many_previews`, the listing header's preview flag and its preview
-rows ("Previews"); and the job kind `steps` ("Jobs").
+rows ("Previews"); the job kind `steps` ("Jobs"); and secrets:
+`secret_set`, `secret_get` with the reply `secret`, `secret_delete`,
+`secret_list` with the reply `secret_names`, and the error codes
+`no_such_secret` and `secret_error` ("Secrets").
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -198,6 +201,10 @@ as absent from an older core.
 | `open_preview` | `preview` (after `hello`) | `preview_opened` |
 | `preview_apply` | `preview` | `jobs_started` (`jobs`) |
 | `preview_cancel` | `preview` | `ok` |
+| `secret_set` | `name`, `value` | `ok` |
+| `secret_get` | `name` | `secret` (`value`) |
+| `secret_delete` | `name` | `ok` |
+| `secret_list` | — | `secret_names` (`names`) |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -235,6 +242,8 @@ Any request can instead get `error` with a `code` and a `message`:
 | `no_window` | No client told the core what its window shows (`window_state`), or not the client named. |
 | `no_such_preview` | No preview has that ID: it was applied, cancelled or expired, or never made. |
 | `too_many_previews` | The client (or plugin) has 20 previews alive; apply or cancel one first. |
+| `no_such_secret` | No secret has that name. |
+| `secret_error` | The secret's name is not 1 to 128 letters, digits, `-`, `_` and `.`; its value is empty or longer than 2,560 bytes; or the Credential Manager refused. |
 
 Requests on one connection are independent: `list_directory`,
 `describe_entries`, `match_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
@@ -244,7 +253,7 @@ Requests on one connection are independent: `list_directory`,
 `execute_command` for a plugin's command, `search`, `index_status`,
 `terminal_open`, `terminal_close`, `terminal_sync_cwd`, `list_themes`,
 `get_theme` of a named theme, `list_tools`, the marketplace requests,
-`preview_listing`, `open_preview` and `preview_apply`
+`preview_listing`, `open_preview`, `preview_apply` and the secret requests
 run in the background, so a slow directory, plugin, search or shell does not hold up
 the next request, and their replies may come in any order. Match replies to
 requests by `id`.
@@ -1393,6 +1402,48 @@ like a folder.
   expires unapplied.
 - For tests, the environment variable `CABINETOS_PREVIEW_TTL_MS` sets the
   life of a preview in milliseconds.
+
+## Secrets
+
+Secrets, such as an API key a plugin's web requests need, live in the
+Windows Credential Manager: generic credentials named `CabinetOS/<name>`,
+kept for this user on this machine (`CRED_PERSIST_LOCAL_MACHINE`); the
+Credential Manager in the Control Panel shows them under "Windows
+Credentials", with the user name `CabinetOS`. The core reads one only to
+put it into a request it makes for a plugin (`http-request` with `secret`,
+[plugins.md](plugins.md)), so no plugin ever sees a value.
+
+```json
+{"id":"01M…","type":"secret_set","name":"anthropic","value":"sk-ant-…"}
+{"id":"01M…","type":"ok"}
+{"id":"01N…","type":"secret_list"}
+{"id":"01N…","type":"secret_names","names":["anthropic"]}
+{"id":"01P…","type":"secret_get","name":"anthropic"}
+{"id":"01P…","type":"secret","value":"sk-ant-…"}
+{"id":"01Q…","type":"secret_delete","name":"anthropic"}
+{"id":"01Q…","type":"ok"}
+```
+
+- A name is 1 to 128 letters, digits, `-`, `_` and `.`; a value 1 to
+  2,560 bytes of UTF-8 (the Credential Manager's limit). `secret_set`
+  replaces a secret of the same name.
+- Only a pipe client sends these: a window (its settings) or the command
+  line. The pipe admits only this user's processes; a plugin has no way to
+  send them, and none of its host functions returns a value.
+- **Never logged.** The core logs the name of each secret it stores,
+  reads for a client, or removes, never a value; in the protocol crate a
+  value is a `SecretText`, which prints as `<hidden>` wherever a message
+  is formatted for a log. A test sets secrets with the log at `trace` and
+  searches every log file for the value.
+- `secret_list` answers the names, sorted, never the values.
+- For tests, the environment variable `CABINETOS_SECRETS_PREFIX` replaces
+  the `CabinetOS/` prefix, so a test never touches the user's own secrets.
+
+`cabinetos-cli secret set <name>` reads the value from standard input
+(one line ending at its end is dropped), which keeps it out of the shell's
+history; `--value <text>` gives it on the command line instead. `secret get
+<name>` prints the value, `secret delete <name>` removes it, and `secret
+list` prints the names.
 
 ## What the window shows
 
