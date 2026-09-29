@@ -372,6 +372,15 @@ enum TermAction {
         /// The folder.
         path: String,
     },
+    /// Type paths at a session's prompt, quoted for its shell, without
+    /// Enter, as Ctrl+P and Ctrl+Shift+Enter do.
+    Type {
+        /// The session's ID.
+        id: u64,
+        /// The paths.
+        #[arg(required = true, value_name = "PATH")]
+        paths: Vec<String>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -934,7 +943,7 @@ async fn props(client: &mut PipeClient, paths: &[String]) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// The terminal commands: `term`, `term list|close|cd`.
+/// The terminal commands: `term`, `term list|close|cd|type`.
 async fn term_command(client: &mut PipeClient, arguments: &TermArgs) -> anyhow::Result<()> {
     match &arguments.action {
         None => {
@@ -953,6 +962,23 @@ async fn term_command(client: &mut PipeClient, arguments: &TermArgs) -> anyhow::
                 path: path.clone(),
             };
             term::change(client, request, format_args!("session {id}: cd {path}")).await
+        }
+        Some(TermAction::Type { id, paths }) => {
+            let paths: Vec<String> = paths
+                .iter()
+                .map(|path| absolute(path))
+                .collect::<anyhow::Result<_>>()?;
+            let count = paths.len();
+            let request = Request::TerminalTypePaths {
+                session_id: *id,
+                paths,
+            };
+            term::change(
+                client,
+                request,
+                format_args!("session {id}: typed {count} paths"),
+            )
+            .await
         }
     }
 }

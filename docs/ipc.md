@@ -101,7 +101,8 @@ Version 12 (sub-phase 11a, Total Commander's keys and small commands)
 added the sort key `extension`, `create_file`, `edit_path`,
 `show_properties`, `measure_paths` with its reply `measure_started`, the
 events `measure_progress` and `measure_finished`, and `cancel_measure`;
-and `match_entries` with its reply `entry_matches`.
+`match_entries` with its reply `entry_matches`; and
+`terminal_type_paths`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -155,6 +156,7 @@ as absent from an older core.
 | `terminal_resize` | `session_id`, `cols`, `rows` | `ok` |
 | `terminal_close` | `session_id` | `ok`, once the shell has ended |
 | `terminal_sync_cwd` | `session_id`, `path` | `ok` |
+| `terminal_type_paths` | `session_id`, `paths` | `ok` |
 | `terminal_list` | — | `terminal_sessions` (`sessions`) |
 | `list_themes` | — | `themes` (`themes`) |
 | `get_theme` | `theme_id` (without it: the theme in effect) | `theme` (`theme`) |
@@ -189,7 +191,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `invalid_resolution` | The resolution does not fit the conflict, such as `delete_permanently` for a file that exists. |
 | `no_such_plugin` | No plugin with that ID is installed, or the plugin host is not running. |
 | `plugin_error` | A plugin's command failed: the plugin answered with an error or with text that is not JSON, crashed, or is not running. Also a grant the core refuses: an unknown capability, or one it never grants. |
-| `no_such_session` | No terminal session has that `session_id`; or, for `terminal_resize` and `terminal_sync_cwd`, its shell has exited. |
+| `no_such_session` | No terminal session has that `session_id`; or, for `terminal_resize`, `terminal_sync_cwd` and `terminal_type_paths`, its shell has exited. |
 | `unknown_profile` | No profile in `terminal.profiles` has that name. The message lists the names. |
 | `spawn_failed` | A program could not start. A terminal's shell: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. The editor of `files.editor` (`edit_path`): its program is neither a file nor a program on the `PATH`. |
 | `no_such_theme` | No theme with that ID is in the themes folder, or the ID cannot name a theme file. |
@@ -1100,13 +1102,18 @@ whether a client holds the pipe.
 ```json
 {"id":"01M…","type":"terminal_resize","session_id":3,"cols":100,"rows":30}
 {"id":"01M…","type":"terminal_sync_cwd","session_id":3,"path":"D:\\docs"}
+{"id":"01M…","type":"terminal_type_paths","session_id":3,"paths":["D:\\docs\\a b.txt"]}
 {"id":"01M…","type":"terminal_close","session_id":3}
 ```
 
 Each answers `ok`. `terminal_sync_cwd` types the shell's own
 change-directory command, followed by Enter, so the terminal follows the
 active pane; the path must be an absolute path to a folder (`invalid_path`
-or `not_found` otherwise). `terminal_close` closes the pseudo-console,
+or `not_found` otherwise). `terminal_type_paths` types paths at the
+prompt without Enter, each quoted as `terminal_sync_cwd` quotes its
+folder, separated by spaces (the window's Ctrl+P and Ctrl+Shift+Enter;
+[terminal.md](terminal.md), "Typing paths"); a path with a control
+character is `invalid_path`. `terminal_close` closes the pseudo-console,
 which the shell sees as a hang-up, and forgets the session; the reply
 comes once the shell has ended (a shell still running 2 s later is ended
 by force). When the core stops, it closes every session.

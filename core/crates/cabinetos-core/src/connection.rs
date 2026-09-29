@@ -339,6 +339,7 @@ impl Session {
                 | Request::TerminalResize { .. }
                 | Request::TerminalClose { .. }
                 | Request::TerminalSyncCwd { .. }
+                | Request::TerminalTypePaths { .. }
                 | Request::TerminalList) => self.terminal_request(&id, &span, kind, request),
                 request @ (Request::ListThemes
                 | Request::GetTheme { .. }
@@ -939,9 +940,10 @@ impl Session {
         }
     }
 
-    /// The terminal requests. `terminal_resize` and `terminal_list` answer
-    /// at once; the others run on the blocking pool (starting a shell takes
-    /// tens of milliseconds, closing one up to 2 s).
+    /// The terminal requests. `terminal_resize`, `terminal_type_paths` and
+    /// `terminal_list` answer at once; the others run on the blocking pool
+    /// (starting a shell takes tens of milliseconds, closing one up to
+    /// 2 s).
     fn terminal_request(
         &mut self,
         id: &RequestId,
@@ -995,6 +997,9 @@ impl Session {
                     answer(terminals.sync_cwd(session_id, &path))
                 });
                 None
+            }
+            Request::TerminalTypePaths { session_id, paths } => {
+                Some(answer(terminals.type_paths(session_id, &paths)))
             }
             Request::TerminalList => Some(Response::TerminalSessions {
                 sessions: terminals.list(),

@@ -914,6 +914,34 @@
       ]
     },
     {
+      "description": "Types paths at a session's prompt, each quoted as the shell reads it\nliterally (as `terminal_sync_cwd` quotes its folder), separated by\nspaces, without Enter. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "description": "The paths, in the order to type them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_type_paths"
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "paths"
+      ]
+    },
+    {
       "description": "Asks for every session. The core answers `terminal_sessions`.",
       "type": "object",
       "properties": {

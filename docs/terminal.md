@@ -150,6 +150,29 @@ stays in front of it, and a program that runs in the shell (an editor, a
 long build) receives the line instead of the shell. The client decides
 when to sync; the core does not guess.
 
+## Typing paths
+
+`terminal_type_paths` types paths at the prompt for the user to go on
+typing around them (the window's Ctrl+P, the active pane's folder, and
+Ctrl+Shift+Enter, the selected paths; Total Commander's command line has
+the same keys). Each path is quoted as the shell reads it literally, by
+the rules of "Following the active pane" above; the paths are separated
+by one space, and no Enter follows. For `D:\it's here` and `D:\100%x`:
+
+| Program | Text typed |
+|---|---|
+| `pwsh`, `powershell` | `'D:\it''s here' 'D:\100%x'` |
+| `cmd` | `"D:\it's here" "D:\100"%^x""` |
+| `wsl` | `"$(wslpath -a 'D:\it'\''s here')" "$(wslpath -a 'D:\100%x')"` |
+| anything else | `"D:\it's here" "D:\100%x"` |
+
+The text goes in as one chunk, so a key the user presses meanwhile cannot
+land inside it; text already on the line stays in front of it. The paths
+need not exist: they are only text. A path with a control character
+(a line break, Escape) is refused with `invalid_path`, because typed it
+would act as a key. The test types two paths into real cmd, one of them
+`100%CABINETOS_SESSION% & x`, and finds both on the one prompt line.
+
 ## Size
 
 `terminal_open` and `terminal_resize` take the size in character cells,
@@ -221,6 +244,8 @@ cabinetos-cli term list
 4 cmd pid 5120 80x25 exited(0) detached C:\Users\me
 cabinetos-cli term cd 3 D:\docs
 session 3: cd D:\docs
+cabinetos-cli term type 3 "D:\docs\a b.txt" D:\docs\c.md
+session 3: typed 2 paths
 cabinetos-cli term close 3
 session 3 closed
 ```
@@ -248,4 +273,5 @@ session of its own and types into that pseudo-console, `Ctrl+]` included.
 
 The shells run only `echo`, `cd`, `mode con`, `Get-Location`, `pwd` and
 `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which the tests
-remove.
+remove. Paths typed with `terminal_type_paths` are never run: no Enter
+follows them.

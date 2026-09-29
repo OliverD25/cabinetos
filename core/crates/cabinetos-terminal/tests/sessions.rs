@@ -413,6 +413,51 @@ fn a_folder_change_is_typed_as_the_shell_own_cd() {
     );
 }
 
+/// Paths reach cmd's prompt quoted as its `cd` is, and no Enter follows:
+/// typed twice, they stay on one line, after the prompt.
+#[test]
+fn paths_are_typed_at_the_prompt_without_enter() {
+    let dir = scratch("type");
+    let harness = Harness::new();
+    let opened = harness.open(&cmd(), dir.path(), 300, 25);
+    let mut client = harness.attach(&opened);
+    harness.read_until(&mut client, at_prompt);
+
+    let first = [shown(&dir.path().join("a b.txt"))];
+    let second = [shown(&dir.path().join("100%CABINETOS_SESSION% & x"))];
+    harness
+        .terminals
+        .type_paths(opened.session_id, &first)
+        .unwrap();
+    harness
+        .terminals
+        .type_paths(opened.session_id, &second)
+        .unwrap();
+    let folder = shown(dir.path());
+    let line = format!(r#"{folder}>"{folder}\a b.txt""{folder}\100"%^C"ABINETOS_SESSION"%^ "& x""#);
+    harness.read_until(&mut client, |output| has_line(output, &line));
+
+    let refused = |session_id: u64, path: &str| {
+        harness
+            .terminals
+            .type_paths(session_id, &[path.to_owned()])
+            .unwrap_err()
+            .code
+    };
+    assert_eq!(
+        refused(opened.session_id, "C:\\a\rcalc"),
+        ErrorCode::InvalidPath
+    );
+    assert_eq!(
+        refused(opened.session_id, "C:\\a\u{1b}[2J"),
+        ErrorCode::InvalidPath
+    );
+    assert_eq!(
+        refused(opened.session_id + 1000, &folder),
+        ErrorCode::NoSuchSession
+    );
+}
+
 /// A folder name beyond ASCII with the characters each shell's quoting
 /// must keep literal: `'` and `’` (PowerShell and bash quotes), `$`
 /// (PowerShell and bash variables), `%` (cmd variables).

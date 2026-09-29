@@ -1,5 +1,6 @@
-//! What differs between shells: the line that changes their folder, and how
-//! a shell is started (its command line and its environment).
+//! What differs between shells: the line that changes their folder, how a
+//! path is typed at their prompt, and how a shell is started (its command
+//! line and its environment).
 
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
@@ -46,6 +47,22 @@ impl ShellKind {
             Self::Other => format!("cd \"{path}\""),
         };
         command + "\r"
+    }
+
+    /// `paths` as the shell reads each literally, quoted as `cd_line`
+    /// quotes its path, separated by spaces, without Enter: for the user
+    /// to go on typing the command around them.
+    pub(crate) fn typed_paths(self, paths: &[String]) -> String {
+        let quoted: Vec<String> = paths
+            .iter()
+            .map(|path| match self {
+                Self::PowerShell => format!("'{}'", powershell_quoted(path)),
+                Self::Cmd => format!("\"{}\"", cmd_quoted(path)),
+                Self::Wsl => format!("\"$(wslpath -a '{}')\"", path.replace('\'', r"'\''")),
+                Self::Other => format!("\"{path}\""),
+            })
+            .collect();
+        quoted.join(" ")
     }
 }
 
@@ -246,6 +263,33 @@ mod tests {
         assert_eq!(
             ShellKind::Wsl.cd_line(&path),
             "cd \"$(wslpath -a 'E:\\Звіт '\\''проєкт'\\'' $HOME ’x’ 100%PATH% 日本語 📁 cafe\u{301}')\"\r"
+        );
+    }
+
+    #[test]
+    fn typed_paths_are_quoted_as_cd_quotes_them_without_enter() {
+        let paths = [r"E:\a b".to_owned(), r"C:\100%PATH% it's".to_owned()];
+        assert_eq!(
+            ShellKind::PowerShell.typed_paths(&paths),
+            r"'E:\a b' 'C:\100%PATH% it''s'"
+        );
+        assert_eq!(
+            ShellKind::Cmd.typed_paths(&paths),
+            r#""E:\a b" "C:\100"%^P"ATH"%^ "it's""#
+        );
+        assert_eq!(
+            ShellKind::Wsl.typed_paths(&paths),
+            r#""$(wslpath -a 'E:\a b')" "$(wslpath -a 'C:\100%PATH% it'\''s')""#
+        );
+        assert_eq!(
+            ShellKind::Other.typed_paths(&paths),
+            r#""E:\a b" "C:\100%PATH% it's""#
+        );
+        assert_eq!(ShellKind::Cmd.typed_paths(&[]), "");
+        let names = [format!("E:\\Звіт ’x’ 📁 cafe{}", '\u{301}')];
+        assert_eq!(
+            ShellKind::PowerShell.typed_paths(&names),
+            "'E:\\Звіт ’’x’’ 📁 cafe\u{301}'"
         );
     }
 

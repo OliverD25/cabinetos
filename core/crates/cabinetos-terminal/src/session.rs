@@ -540,25 +540,34 @@ impl Session {
     /// Types the shell's change-directory line, as one chunk of input so a
     /// client's keys cannot land inside it.
     pub(crate) fn sync_cwd(&self, path: &str) -> Result<(), TerminalError> {
+        self.type_text(self.kind.cd_line(path), "the folder change")?;
+        path.clone_into(&mut self.info().cwd);
+        Ok(())
+    }
+
+    /// Types `paths` at the prompt, quoted for the shell, without Enter.
+    pub(crate) fn type_paths(&self, paths: &[String]) -> Result<(), TerminalError> {
+        self.type_text(self.kind.typed_paths(paths), "the paths")
+    }
+
+    /// Types `text` as one chunk of input, so a client's keys cannot land
+    /// inside it. `what` names it in the error.
+    fn type_text(&self, text: String, what: &str) -> Result<(), TerminalError> {
         let input = lock(&self.input)
             .clone()
             .ok_or_else(|| no_longer_running(self.id))?;
-        match input.try_send(self.kind.cd_line(path).into_bytes()) {
-            Ok(()) => {}
-            Err(mpsc::error::TrySendError::Closed(_)) => return Err(no_longer_running(self.id)),
-            Err(mpsc::error::TrySendError::Full(_)) => {
-                return Err(TerminalError::new(
-                    ErrorCode::Internal,
-                    format!(
-                        "the shell of terminal session {} does not read its input; \
-                         the folder change was not typed",
-                        self.id
-                    ),
-                ));
-            }
+        match input.try_send(text.into_bytes()) {
+            Ok(()) => Ok(()),
+            Err(mpsc::error::TrySendError::Closed(_)) => Err(no_longer_running(self.id)),
+            Err(mpsc::error::TrySendError::Full(_)) => Err(TerminalError::new(
+                ErrorCode::Internal,
+                format!(
+                    "the shell of terminal session {} does not read its input; \
+                     {what} were not typed",
+                    self.id
+                ),
+            )),
         }
-        path.clone_into(&mut self.info().cwd);
-        Ok(())
     }
 
     pub(crate) fn describe(&self) -> TerminalSession {

@@ -350,6 +350,15 @@ pub enum Request {
         /// The folder to change to.
         path: String,
     },
+    /// Types paths at a session's prompt, each quoted as the shell reads it
+    /// literally (as `terminal_sync_cwd` quotes its folder), separated by
+    /// spaces, without Enter. The core answers `ok`.
+    TerminalTypePaths {
+        /// The session.
+        session_id: u64,
+        /// The paths, in the order to type them.
+        paths: Vec<String>,
+    },
     /// Asks for every session. The core answers `terminal_sessions`.
     TerminalList,
     /// Asks for every valid theme in the themes folder. The core answers
@@ -450,6 +459,7 @@ impl Request {
         "terminal_resize",
         "terminal_close",
         "terminal_sync_cwd",
+        "terminal_type_paths",
         "terminal_list",
         "list_themes",
         "get_theme",
@@ -505,6 +515,7 @@ impl Request {
             Self::TerminalResize { .. } => "terminal_resize",
             Self::TerminalClose { .. } => "terminal_close",
             Self::TerminalSyncCwd { .. } => "terminal_sync_cwd",
+            Self::TerminalTypePaths { .. } => "terminal_type_paths",
             Self::TerminalList => "terminal_list",
             Self::ListThemes => "list_themes",
             Self::GetTheme { .. } => "get_theme",
@@ -1594,6 +1605,10 @@ mod tests {
             Request::TerminalSyncCwd {
                 session_id: 3,
                 path: r"D:\docs".to_owned(),
+            },
+            Request::TerminalTypePaths {
+                session_id: 3,
+                paths: vec![r"D:\docs\a b.txt".to_owned(), r"D:\docs\c.md".to_owned()],
             },
             Request::TerminalList,
             Request::ListThemes,

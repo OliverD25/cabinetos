@@ -297,6 +297,30 @@ impl Terminals {
         Ok(())
     }
 
+    /// Types `paths` at the prompt of a running session, each quoted as
+    /// the shell reads it literally (as [`sync_cwd`](Self::sync_cwd) quotes
+    /// its folder), separated by spaces, without Enter. A path with a
+    /// control character is refused: typed, it would act as a key.
+    pub fn type_paths(&self, session_id: u64, paths: &[String]) -> Result<(), TerminalError> {
+        let session = self.session(session_id)?;
+        if let Some(path) = paths.iter().find(|path| path.chars().any(char::is_control)) {
+            return Err(TerminalError::new(
+                ErrorCode::InvalidPath,
+                format!(
+                    "{}: a path cannot contain control characters; typed, they would act as keys",
+                    path.escape_debug()
+                ),
+            ));
+        }
+        session.type_paths(paths)?;
+        tracing::debug!(
+            session_id,
+            paths = paths.len(),
+            "paths typed into the terminal"
+        );
+        Ok(())
+    }
+
     /// Every session, oldest first.
     #[must_use]
     pub fn list(&self) -> Vec<TerminalSession> {

@@ -1,10 +1,10 @@
 //! `cabinetos-cli term` against a real core: a shell fed from a pipe;
-//! `term list`, `term cd` and `term close` from a second CLI while the
-//! first is attached; and `term` in a console window, which here is a
-//! pseudo-console of this test's own, so the test types the keys. The
+//! `term list`, `term cd`, `term type` and `term close` from a second CLI
+//! while the first is attached; and `term` in a console window, which here
+//! is a pseudo-console of this test's own, so the test types the keys. The
 //! shells run only `echo`, `cd`, `mode con` (which prints the console's
 //! size) and `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which
-//! the tests remove.
+//! the tests remove; typed paths are never run.
 //!
 //! Needs `cabinetos-core.exe` next to `cabinetos-cli.exe`; `cargo test
 //! --workspace` builds both.
@@ -268,6 +268,42 @@ fn list_cd_and_close_act_on_a_running_session() {
         "{}",
         text(&refused.stderr)
     );
+}
+
+#[test]
+fn type_puts_quoted_paths_at_the_prompt_without_enter() {
+    let dir = scratch("cli-type");
+    let core = start_core(dir.path());
+    let cwd = shown(dir.path());
+    let mut term = Attached::start(&core, &["term", "--profile", "cmd", "--cwd", &cwd]);
+    term.wait_for_output(&format!("{cwd}>"));
+    let listed = cli(&core, &["term", "list"]);
+    assert!(listed.status.success(), "{}", text(&listed.stderr));
+    let id = text(&listed.stdout).split(' ').next().unwrap().to_owned();
+
+    let first = shown(&dir.path().join("a b.txt"));
+    let second = shown(&dir.path().join("100%PATH% & x"));
+    let typed = cli(&core, &["term", "type", &id, &first, &second]);
+    assert!(typed.status.success(), "{}", text(&typed.stderr));
+    assert_eq!(
+        text(&typed.stdout).trim_end(),
+        format!("session {id}: typed 2 paths")
+    );
+    // What cmd shows is what it received: the paths, quoted. (cmd draws a
+    // VT sequence between its prompt and them; the terminal crate's test
+    // finds them on the prompt line.)
+    term.wait_for_output(&format!(r#""{first}" "{cwd}\100"%^P"ATH"%^ "& x""#));
+
+    let refused = cli(&core, &["term", "type", "999999", &first]);
+    assert!(!refused.status.success());
+    assert!(
+        text(&refused.stderr).contains("no_such_session"),
+        "{}",
+        text(&refused.stderr)
+    );
+    let closed = cli(&core, &["term", "close", &id]);
+    assert!(closed.status.success(), "{}", text(&closed.stderr));
+    term.finish();
 }
 
 /// The output as text, without VT sequences and control characters; a
