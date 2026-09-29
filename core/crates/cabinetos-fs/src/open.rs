@@ -133,13 +133,7 @@ pub struct Editor {
 /// program is started. A console program gets a console of its own, as
 /// from Explorer: the core's own console has no window.
 pub fn edit_path(path: &str, editor: Option<&Editor>) -> Result<(), FsError> {
-    let attributes = existing(path)?;
-    if attributes & FILE_ATTRIBUTE_DIRECTORY.0 != 0 {
-        return Err(FsError::InvalidPath {
-            path: path.to_owned(),
-            reason: "it is a folder; only a file can be edited".to_owned(),
-        });
-    }
+    check_editable(path)?;
     let plain = plain_wide(path)?;
     let _apartment = Apartment::enter();
     let program = match editor {
@@ -176,6 +170,21 @@ pub fn edit_path(path: &str, editor: Option<&Editor>) -> Result<(), FsError> {
         mask: SEE_MASK_NO_CONSOLE,
     })
     .map_err(|error| shell_error(&program.program.display().to_string(), &error))
+}
+
+/// `Ok` when `path` can be opened for editing: it exists as given (a link
+/// whose target is gone does not), and it is a file. [`edit_path`] checks
+/// it first; a caller that must find the editor on its own asks it before
+/// that, so a bad path is the answer whatever the editor.
+pub fn check_editable(path: &str) -> Result<(), FsError> {
+    let attributes = existing(path)?;
+    if attributes & FILE_ATTRIBUTE_DIRECTORY.0 != 0 {
+        return Err(FsError::InvalidPath {
+            path: path.to_owned(),
+            reason: "it is a folder; only a file can be edited".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 /// The attributes of `path`, which must exist as given. A link whose

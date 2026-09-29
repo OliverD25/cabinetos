@@ -662,7 +662,11 @@ asked (the shell would say only "unspecified error").
 ```
 
 `edit_path` opens a file for editing (the window's F4, `file.edit`), and
-never runs it. The first of these that applies is used:
+never runs it. The path is checked first: it must be absolute
+(`invalid_path`) and exist (`not_found`, also for a link whose target is
+gone, as for `open_path`), and a folder is `invalid_path`. These answers
+come whatever `files.editor` names. Then the first of these that applies
+is used:
 
 1. `files.editor` ([config.md](config.md)): its `command`, found as a
    terminal profile finds its shell (a full path, or a name on the
@@ -680,9 +684,7 @@ It is its own request, not a field of `open_path`, because a core that
 does not know a field ignores it, and would then open the file, which for
 an `.exe` runs the program; an unknown request is `unknown_request`
 instead (decision D7 of
-[research/total-commander.md](research/total-commander.md)). The path
-must be absolute and exist (`invalid_path`, `not_found`, and a link whose
-target is gone as for `open_path`); a folder is `invalid_path`. The editor
+[research/total-commander.md](research/total-commander.md)). The editor
 starts through `ShellExecuteExW` with a console of its own
 (`SEE_MASK_NO_CONSOLE`), so a console editor such as Vim gets a window:
 the core's own console has none. `files.editor` is read at each request.

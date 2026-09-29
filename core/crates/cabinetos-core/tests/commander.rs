@@ -432,3 +432,66 @@ async fn entries_match_patterns_in_the_current_section() {
     assert!(generation >= 2, "{generation}");
     assert_eq!(ranges, [[1, 1], [3, 1], [5, 2]]);
 }
+
+/// The answer to `edit_path` of `path` from a core whose `files.editor`
+/// names a program found nowhere. Nothing starts: every answer comes
+/// before a launch.
+async fn edit_with_an_editor_found_nowhere(core: &Core, path: &Path) -> Response {
+    let mut client = connect(&core.pipe).await;
+    let editor = serde_json::json!({"command": "cabinetos-no-such-editor"});
+    let set = ask(
+        &mut client,
+        Request::SetValue {
+            path: "files.editor".to_owned(),
+            value: editor,
+        },
+    )
+    .await;
+    assert_eq!(set, Response::Ok);
+    ask(&mut client, Request::EditPath { path: text(path) }).await
+}
+
+/// The path is checked before the editor: a folder is a folder, whatever
+/// `files.editor` names.
+#[tokio::test]
+async fn editing_a_folder_is_invalid_path_before_the_editor_is_looked_for() {
+    let core = start_core();
+    let folder = core.files().join("a folder");
+    std::fs::create_dir_all(&folder).unwrap();
+    let reply = edit_with_an_editor_found_nowhere(&core, &folder).await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::InvalidPath),
+        "{reply:?}"
+    );
+}
+
+/// A missing file is `not_found`, whatever `files.editor` names.
+#[tokio::test]
+async fn editing_a_missing_file_is_not_found_before_the_editor_is_looked_for() {
+    let core = start_core();
+    let missing = core.files().join("gone.txt");
+    let reply = edit_with_an_editor_found_nowhere(&core, &missing).await;
+    assert_eq!(error_code(&reply), Some(ErrorCode::NotFound), "{reply:?}");
+}
+
+/// A file that is there, with an editor found nowhere: `spawn_failed`,
+/// naming the setting, and nothing else is tried.
+#[tokio::test]
+async fn editing_a_file_with_an_editor_found_nowhere_is_spawn_failed() {
+    let core = start_core();
+    let file = core.files().join("notes.txt");
+    std::fs::write(&file, "notes").unwrap();
+    let reply = edit_with_an_editor_found_nowhere(&core, &file).await;
+    let Response::Error {
+        code: ErrorCode::SpawnFailed,
+        message,
+    } = &reply
+    else {
+        panic!("expected spawn_failed, got {reply:?}");
+    };
+    assert!(
+        message.contains("files.editor") && message.contains("cabinetos-no-such-editor"),
+        "{message}"
+    );
+}

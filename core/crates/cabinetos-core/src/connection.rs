@@ -1561,9 +1561,14 @@ fn answer_fs(result: Result<(), cabinetos_fs::FsError>) -> Response {
     }
 }
 
-/// `edit_path`: finds the program of `files.editor`, as a terminal profile
-/// finds its shell, and starts it, or the file type's editor.
+/// `edit_path`: the path first, so a folder or a missing file is the answer
+/// whatever `files.editor` names; then the program of `files.editor`, found
+/// as a terminal profile finds its shell; then the start of that program,
+/// or of the file type's editor.
 fn edit_path(path: &str, editor: Option<cabinetos_config::EditorProgram>) -> Response {
+    if let Err(error) = cabinetos_fs::check_editable(path) {
+        return failure_reply(listing::fs_failure(&error));
+    }
     let editor = match editor {
         Some(editor) => match cabinetos_terminal::find_program(&editor.command) {
             Some(program) => Some(cabinetos_fs::Editor {
