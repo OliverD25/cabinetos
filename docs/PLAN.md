@@ -642,6 +642,36 @@ read its own settings under `plugins.<id>.settings`; both go in with 14b.
 Guides: [ipc.md](ipc.md), [plugins.md](plugins.md), [jobs.md](jobs.md)
 ("Chains and steps", "Undo").
 
+**The window's parts of Phase 14, built 2026-09-30 (401d439, cc46f5f,
+2dad54c, 74510e7, 80d5ed8, 409a1b8, d6e2de7).** Nothing in the window
+knows an agent (Article 10); every piece is a general rule. A plugin
+command with an `input` asks for its text in the prompt box first, titled
+by the input's title, and Esc runs nothing. A preview a plugin proposes
+opens with `open_preview` whenever a plugin command's result or any
+plugin event carries a string field `preview`, and shows in the other
+pane in place of its list (in single-pane mode the window switches to
+dual while the preview waits, and back after): a create, a rename, a
+move, a copy and a delete each with its target, a delete tinted red;
+Enter sends `preview_apply` and Esc `preview_cancel` before the keymap,
+and `preview_applied` or `preview_cancelled` from any cause, the
+10-minute expiry included, closes it. Any plugin event carrying a string
+field `notice` shows its text in the status bar. A tool page can follow
+plugins (`subscribe`, at most 16, and `plugin-event`) and receives rows
+dragged from a pane as `paths-dropped`, one path per line, at most 1,000,
+through a catcher layer that covers the page only while a drag runs,
+since a WebView2 takes drops for itself. The permissions review and the
+plugin list show a `net` capability's hosts and the names of the stored
+secrets it may use, never a value (Article 8). The UI test harness sets
+`CABINETOS_UNDO_DIR`, so test jobs never write the real undo journal.
+Checked with the real core (a six-row preview rendered, Enter ran the
+four jobs it makes and the files matched, Esc changed nothing, a preview
+opened by a plugin event, a fake command with input ran with the typed
+text) and with a real mouse drag in the live check's new section 14,
+whose "ask" part waits for the extension. Not yet seen with real keys:
+the preview's Enter and Esc, the review dialog's hosts and secrets lines.
+22 new UI tests, 767 in all. Guide: [ui.md](ui.md), "What plugins ask of
+the window".
+
 ### Phase 15 — Heavy logging mode and trace ids (the creator's idea, 2026-09-29 late evening; built in the sleep-mode run of 2026-09-29/30)
 
 Goal: a switch that makes CabinetOS record every operation, even at the
@@ -777,7 +807,7 @@ core's rules, capped at 64 KB. The window follows `logging.heavy` at start
 and on `config_changed` (`CABINETOS_LOG_HEAVY` wins). "Diagnostics: Toggle
 Heavy Logging" writes the setting with `set_value`, so both processes
 follow; "Open Log Folder" and "Save Log Bundle" are seeded too, without
-keys, 93 commands now. Heavy lines: every request and reply payload, every
+keys (97 commands by the morning, with the rail's four). Heavy lines: every request and reply payload, every
 key by name and modifiers with the element that has the keyboard (a key
 typed into a text box is `text input` without the character, and AltGr
 counts as typing), every command with source, trigger and arguments,
