@@ -257,17 +257,31 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition x:Name="RightColumn" Width="*" />
                         </Grid.ColumnDefinitions>
-                        <views:FilePane x:Name="LeftPane" Margin="0,0,4,0" />
-                        <views:FilePane
-                            x:Name="RightPane"
+                        <!--
+                          Each pane: its tab row (collapsed until a second tab opens) over its listing. A Tool
+                          Extension's editor (design view D) covers the listing while the pane's front tab shows one.
+                        -->
+                        <Grid x:Name="LeftSide" Margin="0,0,4,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <views:PaneTabs x:Name="LeftTabs" />
+                            <views:FilePane x:Name="LeftPane" Grid.Row="1" />
+                            <views:EditorPane x:Name="LeftEditor" Grid.Row="1" />
+                        </Grid>
+                        <Grid
+                            x:Name="RightSide"
                             Grid.Column="1"
-                            Margin="4,0,0,0" />
-                        <!-- A pane's editor tab (design view D) covers its listing while a Tool Extension shows a file. -->
-                        <views:EditorPane x:Name="LeftEditor" Margin="0,0,4,0" />
-                        <views:EditorPane
-                            x:Name="RightEditor"
-                            Grid.Column="1"
-                            Margin="4,0,0,0" />
+                            Margin="4,0,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <views:PaneTabs x:Name="RightTabs" />
+                            <views:FilePane x:Name="RightPane" Grid.Row="1" />
+                            <views:EditorPane x:Name="RightEditor" Grid.Row="1" />
+                        </Grid>
                     </Grid>
                     <!-- Above the panes and the dock: with no gap the handle lies over their edges. -->
                     <views:SplitterBar

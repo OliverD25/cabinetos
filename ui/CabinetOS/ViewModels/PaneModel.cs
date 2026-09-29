@@ -4,6 +4,7 @@ using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Listing;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
+using CabinetOS.Core.Tabs;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace CabinetOS.ViewModels;
@@ -50,6 +51,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     private PaneSearch? _search;
     private SortSpec? _sort;
     private SortSpec _defaultSort = new(PaneSort.Name, false);
+    private bool _isLocked;
 
     /// <summary>
     /// Creates pane <paramref name="index"/>, asking <paramref name="core"/> for
@@ -279,11 +281,36 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// <summary>The listing on screen.</summary>
     public ListingView? View => _view;
 
-    /// <summary>Whether there is a folder to go back to.</summary>
-    public bool CanGoBack => _back.Count > 0;
+    /// <summary>Whether there is a folder to go back to (a locked tab stays where it is).</summary>
+    public bool CanGoBack => _back.Count > 0 && !_isLocked;
 
-    /// <summary>Whether there is a folder to go forward to.</summary>
-    public bool CanGoForward => _forward.Count > 0;
+    /// <summary>Whether there is a folder to go forward to (a locked tab stays where it is).</summary>
+    public bool CanGoForward => _forward.Count > 0 && !_isLocked;
+
+    /// <summary>
+    /// Whether the tab in front is locked (Phase 12): going into another
+    /// folder then opens a new tab (<see cref="LockedNavigation"/>), and Back
+    /// and Forward do nothing.
+    /// </summary>
+    public bool IsLocked
+    {
+        get => _isLocked;
+        set
+        {
+            if (SetProperty(ref _isLocked, value))
+            {
+                OnPropertyChanged(nameof(CanGoBack));
+                OnPropertyChanged(nameof(CanGoForward));
+            }
+        }
+    }
+
+    /// <summary>
+    /// What a locked tab does instead of listing another folder: (folder,
+    /// request ID, name to select) go to a new tab. Returns whether the
+    /// folder was shown there.
+    /// </summary>
+    public Func<string, string?, string?, Task<bool>>? LockedNavigation { get; set; }
 
     /// <summary>Whether the folder has a parent.</summary>
     public bool CanGoUp => DisplayFormat.Parent(Path) is not null;
@@ -374,6 +401,20 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     }
 
     /// <summary>
+    /// The full paths of the marked rows in listing order, at most
+    /// <paramref name="limit"/> of them (the window's state message): only
+    /// real marks, not the cursor row the Windows style selects.
+    /// </summary>
+    public IReadOnlyList<string> MarkedPaths(int limit)
+    {
+        if (_view is not { } view || !Selection.HasMarks)
+        {
+            return [];
+        }
+        return [.. Selection.SelectedUnordered.Where(index => (uint)index < (uint)view.Count).Order().Take(limit).Select(index => DisplayFormat.Join(Path, view.Name(index)))];
+    }
+
+    /// <summary>
     /// A name for a new entry that the listing does not have yet:
     /// <paramref name="baseName"/>, then "<paramref name="baseName"/> (2)", …
     /// </summary>
@@ -444,8 +485,12 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// is the command's ID, so the key press and the core's work share one ID
     /// in both logs (Article 12).
     /// </summary>
-    public async Task<bool> NavigateAsync(string path, string? requestId = null, NavigationKind kind = NavigationKind.New, string? selectName = null)
+    public async Task<bool> NavigateAsync(string path, string? requestId = null, NavigationKind kind = NavigationKind.New, string? selectName = null, bool notify = true)
     {
+        if (kind == NavigationKind.New && LockedNavigation is { } redirect && TabRules.OpensInNewTab(_isLocked, _path, path))
+        {
+            return await redirect(path, requestId, selectName);
+        }
         var navigation = ++_navigation;
         var started = Stopwatch.GetTimestamp();
         var request = new ListDirectoryRequest(path) { Watch = true, Id = requestId ?? "", Sort = _sort };
@@ -456,7 +501,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         }
         catch (IOException error)
         {
-            Fail(path, error.Message);
+            Fail(path, error.Message, notify);
             return false;
         }
 
@@ -472,12 +517,12 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         }
         if (reply is ErrorReply refused)
         {
-            Fail(path, Describe(refused));
+            Fail(path, Describe(refused), notify);
             return false;
         }
         if (reply is not ListingOpenedReply opened || opened.TakeSection() is not { } section)
         {
-            Fail(path, $"unexpected reply {reply.GetType().Name}");
+            Fail(path, $"unexpected reply {reply.GetType().Name}", notify);
             return false;
         }
 
@@ -489,7 +534,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         catch (Exception failure) when (failure is InvalidDataException or IOException)
         {
             CloseListing(opened.ListingId);
-            Fail(path, failure.Message);
+            Fail(path, failure.Message, notify);
             return false;
         }
 
@@ -641,6 +686,63 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         }
     }
 
+    /// <summary>
+    /// Parks the pane's own state in <paramref name="tab"/>, when another tab
+    /// takes the pane over (docs/ui.md, "Tabs"): its order, its history, the
+    /// cursor row and the marks (by name, as Restore Selection keeps them).
+    /// </summary>
+    public void CaptureInto(PaneTab tab)
+    {
+        tab.Sort = _sort;
+        tab.Back = [.. _back];
+        tab.Forward = [.. _forward];
+        tab.CursorName = FocusName;
+        tab.MarkedNames = Selection.HasMarks ? SelectedNames() : [];
+    }
+
+    /// <summary>
+    /// Shows <paramref name="tab"/>: its history and order come back, and its
+    /// folder is listed with the cursor row and the marks found again by
+    /// name. A folder that is gone falls back to its parents, then to
+    /// <paramref name="fallbacks"/>; only the first failure is reported.
+    /// </summary>
+    public async Task<bool> RestoreAsync(PaneTab tab, IEnumerable<string> fallbacks, string? requestId = null)
+    {
+        _back.Clear();
+        _forward.Clear();
+        foreach (var folder in tab.Back.Reverse())
+        {
+            _back.Push(folder);
+        }
+        foreach (var folder in tab.Forward.Reverse())
+        {
+            _forward.Push(folder);
+        }
+        _sort = tab.Sort;
+        OnPropertyChanged(nameof(EffectiveSort));
+        IsLocked = tab.Locked;
+        var candidates = new List<string> { tab.Path };
+        for (var parent = DisplayFormat.Parent(tab.Path); parent is not null; parent = DisplayFormat.Parent(parent))
+        {
+            candidates.Add(parent);
+        }
+        candidates.AddRange(fallbacks);
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            if (!await NavigateAsync(candidates[i], i == 0 ? requestId : null, NavigationKind.Reload, i == 0 ? tab.CursorName : null, notify: i == 0))
+            {
+                continue;
+            }
+            if (i == 0 && tab.MarkedNames.Count > 0 && _view is { } view)
+            {
+                Selection.Restore(view.Count, view.IndexesOfNames(tab.MarkedNames), Selection.Focus, Selection.Anchor);
+            }
+            return true;
+        }
+        RaiseHistoryChanged();
+        return false;
+    }
+
     /// <summary>Goes to the parent folder and selects the folder it came from.</summary>
     public Task GoUpAsync(string requestId) =>
         DisplayFormat.Parent(Path) is { } parent
@@ -770,7 +872,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         return id => map.TryGetValue(id, out var index) ? index : -1;
     }
 
-    private void Fail(string path, string why)
+    private void Fail(string path, string why, bool notify = true)
     {
         Diag.Info(Target, "cannot list a folder", new LogField("path", path), new LogField("error", why));
         if (_view is null)
@@ -780,7 +882,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
             Rows = null;
             Selection.Reset(0, 0);
         }
-        else
+        else if (notify)
         {
             Notice?.Invoke($"Cannot open {path}: {why}");
         }

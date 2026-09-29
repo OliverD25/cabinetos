@@ -239,17 +239,15 @@ public sealed partial class MainWindow
         }
     }
 
-    // A tool installed or removed while the window runs: the tools are read again, and an
-    // editor whose tool is gone closes.
+    // A tool installed or removed while the window runs: the tools are read again, and the
+    // tabs of a tool that is gone close with its editor.
     private async Task ReloadToolsAsync()
     {
         await LoadToolsAsync();
-        for (var pane = 0; pane < _toolHosts.Length; pane++)
+        foreach (var gone in _strips.SelectMany(strip => strip.Tabs).Select(tab => tab.Tool).OfType<string>().Distinct()
+            .Where(id => _tools.Tools.All(t => t.Manifest.Id != id)).ToList())
         {
-            if (_toolHosts[pane] is { } host && _tools.Tools.All(t => t.Manifest.Id != host.Tool.Manifest.Id))
-            {
-                CloseEditor(pane, focusPane: false);
-            }
+            ForgetTool(gone);
         }
     }
 }

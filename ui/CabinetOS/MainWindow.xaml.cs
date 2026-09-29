@@ -16,6 +16,7 @@ using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Search;
 using CabinetOS.Core.Settings;
+using CabinetOS.Core.Tabs;
 using CabinetOS.Core.Terminal;
 using CabinetOS.Services;
 using CabinetOS.ViewModels;
@@ -148,6 +149,7 @@ public sealed partial class MainWindow : Window
         SetUpSearch();
         SetUpPlugins();
         SetUpTools();
+        SetUpTabs();
         SetUpMarket();
 
         Palette.Model = _palette;
@@ -295,7 +297,9 @@ public sealed partial class MainWindow : Window
         _closing = true;
         sender.Hide();
         Diag.Info(Target, "window closing");
-        await SaveLastPathsAsync();
+        // Closing must stay quick: what the core does not answer within a second is not waited for.
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        await Task.WhenAll(SaveLastPathsAsync(), FlushTabsAsync(deadline.Token));
         await _session.StopAsync();
         foreach (var pane in _panes)
         {
@@ -463,6 +467,12 @@ public sealed partial class MainWindow : Window
                     break;
                 case "tooltip":
                     await OpenToolTipForSnapshotAsync(step.Argument);
+                    break;
+                case "tab":
+                    await RunTabStepAsync(step.Argument);
+                    break;
+                case "tabs":
+                    LogTabsForSnapshot(step.Argument);
                     break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
@@ -723,18 +733,35 @@ public sealed partial class MainWindow : Window
         // Documents on the right when the profile lists one, else C:\.
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var last = _shell.LastPaths;
-        if ((_args.Path is not { } start || !await _panes[0].NavigateAsync(start))
+        // The tabs of the last session (ui.tabs) come first; a new window's folder (--path) is one tab of its own.
+        if (_args.Path is null && _savedTabs.Left.ToStrip() is { } savedLeft)
+        {
+            await OpenSavedTabsAsync(0, savedLeft, profile);
+        }
+        else if ((_args.Path is not { } start || !await _panes[0].NavigateAsync(start))
             && (last.Count < 1 || !await _panes[0].NavigateAsync(last[0])))
         {
             await _panes[0].NavigateAsync(profile);
         }
-        if (last.Count < 2 || !await _panes[1].NavigateAsync(last[1]))
+        // Where the right pane starts when nothing is saved, or what is saved is gone.
+        var right = () =>
         {
             var left = _panes[0].View;
             var documents = string.Equals(_panes[0].Path, profile, StringComparison.OrdinalIgnoreCase) ? left?.IndexOfName("Documents") ?? -1 : -1;
-            var right = documents >= 0 && left!.IsFolder(documents) ? DisplayFormat.Join(profile, "Documents") : @"C:\";
-            await _panes[1].NavigateAsync(right);
+            return documents >= 0 && left!.IsFolder(documents) ? DisplayFormat.Join(profile, "Documents") : @"C:\";
+        };
+        if (_savedTabs.Right.ToStrip() is { } savedRight)
+        {
+            await OpenSavedTabsAsync(1, savedRight, right());
         }
+        else if (last.Count < 2 || !await _panes[1].NavigateAsync(last[1]))
+        {
+            await _panes[1].NavigateAsync(right());
+        }
+        _tabsStarted = true;
+        UpdateTabRows();
+        ScheduleWindowState();
+        SaveTabsSoon();
         FocusActivePane();
     }
 
@@ -744,6 +771,11 @@ public sealed partial class MainWindow : Window
         if (reply is ConfigReply config)
         {
             _shell = ShellState.FromConfig(config.Config);
+            if (firstStart)
+            {
+                _savedTabs = TabsConfig.FromConfig(config.Config);
+                _tabsWritten = _savedTabs.ToJson().GetRawText();
+            }
             SetPinnedFolders();
             ApplySettings(UiSettings.FromConfig(config.Config), firstStart);
             _terminal.Profiles = TerminalProfiles.FromConfig(config.Config);
@@ -1185,8 +1217,8 @@ public sealed partial class MainWindow : Window
 
         // The shell's own commands, in the core's registry since protocol 9
         // (target ui, keys in the keymap, so each one can be rebound).
-        _router.RegisterUiHandler("go.back", invocation => Active.GoBackAsync(invocation.RequestId));
-        _router.RegisterUiHandler("go.forward", invocation => Active.GoForwardAsync(invocation.RequestId));
+        _router.RegisterUiHandler("go.back", invocation => Active.IsLocked ? StayInLockedTab() : Active.GoBackAsync(invocation.RequestId));
+        _router.RegisterUiHandler("go.forward", invocation => Active.IsLocked ? StayInLockedTab() : Active.GoForwardAsync(invocation.RequestId));
         _router.RegisterUiHandler("go.up", invocation => Active.GoUpAsync(invocation.RequestId));
         _router.RegisterUiHandler("pane.openSelected", invocation => Active.Search is null ? OpenAsync(invocation) : OpenHitAsync(invocation));
         _router.RegisterUiHandler("file.copyToOtherPane", ListingOnly(invocation => TransferToOtherPaneAsync(JobKind.Copy, invocation)));
@@ -1236,6 +1268,7 @@ public sealed partial class MainWindow : Window
         _router.RegisterUiHandler("sidebar.pin", PinAsync);
         _router.RegisterUiHandler("sidebar.unpin", UnpinAsync);
         RegisterCommanderCommands();
+        RegisterTabCommands();
         RegisterTerminalCommands();
         RegisterSearchCommands();
         RegisterPluginCommands();
@@ -2046,11 +2079,11 @@ public sealed partial class MainWindow : Window
         _dual = dual;
         if (!dual)
         {
-            // The right pane goes away, and its editor with it (the tool's process ends).
-            CloseEditor(1, focusPane: false);
+            // The right pane goes away, and its tool tabs with it (the tool's process ends).
+            CloseToolTabs(1, focusPane: false);
         }
         RightColumn.Width = dual ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
-        RightPane.Visibility = dual ? Visibility.Visible : Visibility.Collapsed;
+        RightSide.Visibility = dual ? Visibility.Visible : Visibility.Collapsed;
         ApplyPaneGaps();
         DualLabel.Text = dual ? "Dual" : "Single";
         var brush = dual ? ThemeResources.Brush("CbAccentBrush") : ThemeResources.Brush("CbTextSecondaryBrush");
@@ -2064,6 +2097,10 @@ public sealed partial class MainWindow : Window
         {
             SetActive(0);
             _paneViews[0].Focus(FocusState.Programmatic);
+        }
+        if (_tabViews is not null)
+        {
+            UpdateTabRows();
         }
     }
 
@@ -2100,11 +2137,23 @@ public sealed partial class MainWindow : Window
         _sidebar.SetActivePath(Active.Path);
         _terminal.SetActiveFolder(Active.Path);
         ScheduleToolContext();
+        UpdateTabRows();
+        ScheduleWindowState();
     }
 
     private void OnPaneChanged(object? sender, PropertyChangedEventArgs e)
     {
         using var timed = FrameParts.Time(FramePart.Status);
+        if (e.PropertyName == nameof(PaneModel.Path) && sender is PaneModel moved)
+        {
+            // The tab in front follows the folder; the row's title and the saved tabs with it.
+            SyncTabFolder(moved);
+        }
+        if (e.PropertyName is nameof(PaneModel.Path) or nameof(PaneModel.Selection) or nameof(PaneModel.Rows))
+        {
+            // The cursor and the marks of either pane are part of what the window tells the core.
+            ScheduleWindowState();
+        }
         if (e.PropertyName == nameof(PaneModel.Path) && _searchPane >= 0 && sender == _panes[_searchPane])
         {
             // The pane went elsewhere (Backspace, a crumb, a lost folder): its results are stale.
@@ -2379,7 +2428,7 @@ public sealed partial class MainWindow : Window
         {
             case KeyOutcome.Run run:
                 e.Handled = true;
-                _ = _router.ExecuteAsync(run.Command, trigger: "key");
+                _ = _router.ExecuteAsync(run.Command, KeyArguments(run.Command, run.Keys), "key");
                 break;
             case KeyOutcome.Pending:
                 e.Handled = true;

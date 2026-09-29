@@ -690,13 +690,26 @@ public sealed partial class MainWindow
             ShowNotice("Swapping needs two panes: press Ctrl+Shift+D.");
             return;
         }
+        if (_strips.Any(strip => strip.Tabs.Any(t => t.IsTool)))
+        {
+            // A tool's process belongs to its pane's editor; the tabs it shows cannot change sides.
+            ShowNotice("Close the tool tabs first: a tool stays in its pane.");
+            return;
+        }
         (_panes[0], _panes[1]) = (_panes[1], _panes[0]);
+        // The tabs go with the panes: each pane's strip, and the tab its model holds.
+        (_strips[0], _strips[1]) = (_strips[1], _strips[0]);
+        (_held[0], _held[1]) = (_held[1], _held[0]);
         for (var i = 0; i < _panes.Length; i++)
         {
             _panes[i].Index = i;
             _panes[i].IsActive = i == _active;
             _paneViews[i].Model = _panes[i];
+            _tabViews[i].Model = _strips[i];
+            var pane = i;
+            _panes[i].LockedNavigation = (path, requestId, selectName) => OpenFolderInNewTabAsync(pane, path, requestId, selectName);
         }
+        OnTabsChanged();
         if (_searchPane >= 0)
         {
             _searchPane = 1 - _searchPane;

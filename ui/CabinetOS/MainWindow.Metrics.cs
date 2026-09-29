@@ -97,6 +97,10 @@ public sealed partial class MainWindow
         {
             editor.ApplyMetrics();
         }
+        foreach (var tabs in _tabViews)
+        {
+            tabs.ApplyMetrics();
+        }
         SidebarView.ApplyMetrics();
         Dock.ApplyMetrics(_dockPlacement == DockPlacement.Bottom);
         MarketView.ApplyMetrics();
@@ -132,10 +136,8 @@ public sealed partial class MainWindow
     {
         var gap = WindowMetrics.Current.Gap;
         var overlap = gap == 0 && WindowMetrics.Chrome.Hairlines ? 1 : 0;
-        LeftPane.Margin = _dual ? new Thickness(0, 0, gap / 2, 0) : new Thickness(0);
-        RightPane.Margin = new Thickness((gap / 2) - overlap, 0, 0, 0);
-        LeftEditor.Margin = LeftPane.Margin;
-        RightEditor.Margin = RightPane.Margin;
+        LeftSide.Margin = _dual ? new Thickness(0, 0, gap / 2, 0) : new Thickness(0);
+        RightSide.Margin = new Thickness((gap / 2) - overlap, 0, 0, 0);
     }
 
     // The status bar's layout: a density preset's name before it ("Commander Compact · Terminal: bottom").

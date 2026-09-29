@@ -3,6 +3,7 @@ using CabinetOS.Core.Commands;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Keys;
 using CabinetOS.Core.Protocol;
+using CabinetOS.Core.Tabs;
 using CabinetOS.Core.Terminal;
 using CabinetOS.Core.Tools;
 using CabinetOS.Services;
@@ -51,7 +52,7 @@ public sealed partial class MainWindow
     private void RegisterToolCommands()
     {
         _router.RegisterUiHandler("editor.openMarkdownPreview", OpenMarkdownPreviewAsync);
-        _router.RegisterUiHandler("editor.close", invocation => CloseEditor(EditorPaneOf(invocation.Args), focusPane: true));
+        _router.RegisterUiHandler("editor.close", invocation => CloseEditorTabAsync(EditorPaneOf(invocation.Args), invocation.RequestId));
         _router.RegisterUiHandler("editor.reload", invocation => ReloadEditorAsync(EditorPaneOf(invocation.Args)));
     }
 
@@ -132,8 +133,9 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Opens <paramref name="path"/> in <paramref name="tool"/>: where the tool
-    /// is open already, else in the other pane (two panes) or this one (one).
+    /// Opens <paramref name="path"/> in <paramref name="tool"/>, as a tab of the
+    /// pane's row: where the tool is open already (its tab shows the next
+    /// file), else in the other pane (two panes) or this one (one).
     /// </summary>
     private async Task OpenInToolAsync(InstalledTool tool, string path)
     {
@@ -141,46 +143,78 @@ public sealed partial class MainWindow
         {
             Diag.Info(ToolsTarget, "dock tools arrive later; opening in a pane", new LogField("tool", tool.Manifest.Id));
         }
-        var pane = Array.FindIndex(_toolHosts, h => h?.Tool.Manifest.Id == tool.Manifest.Id);
+        var pane = Array.FindIndex(_strips, s => s.IndexOfTool(tool.Manifest.Id) >= 0);
         if (pane < 0)
         {
             pane = _dual ? 1 - _active : _active;
-            if (_toolHosts[pane] is not null)
-            {
-                // Another tool had that pane: one editor per pane.
-                CloseEditor(pane, focusPane: false);
-            }
+        }
+        var strip = _strips[pane];
+        var covered = _paneViews[pane].FocusState != FocusState.Unfocused || _editorViews[pane].HasFocus || pane == _active && !_dual;
+        var index = strip.IndexOfTool(tool.Manifest.Id);
+        if (index >= 0)
+        {
+            strip.Tabs[index].Path = path;
+            strip.Select(index);
+            strip.Touch();
+        }
+        else
+        {
+            strip.Add(PaneTab.ForTool(path, tool.Manifest.Id, tool.Manifest.Name));
+        }
+        // Each open loads the tool's page again, the same file too (ToolFileSession).
+        await QueueShow(pane, giveKeys: covered, reopenTool: true);
+    }
+
+    // The tab in front of the pane shows a tool: its host is started (or reused, when it is the same tool), the editor
+    // covers the pane's list, and the file is opened unless the page shows it already. False when the tool cannot show it.
+    private async Task<bool> ShowToolTabAsync(int pane, PaneTab tab, bool giveKeys, bool reopen)
+    {
+        var tool = _tools.Tools.FirstOrDefault(t => t.Manifest.Id == tab.Tool);
+        if (tool is null)
+        {
+            Diag.Warn(ToolsTarget, "a tab shows a tool that is not installed", new LogField("tool", tab.Tool), new LogField("path", tab.Path));
+            ShowNotice($"The tool {tab.Tool} is not installed.", isError: true);
+            return false;
         }
         var host = _toolHosts[pane];
+        if (host is not null && host.Tool.Manifest.Id != tool.Manifest.Id)
+        {
+            // One tool process per pane: the other tool's tabs stay, and open it again when they come to the front.
+            EndToolHost(pane);
+            host = null;
+        }
         if (host is null)
         {
             host = CreateToolHost(tool, pane);
             _toolHosts[pane] = host;
         }
-        var covered = _paneViews[pane].FocusState != FocusState.Unfocused || pane == _active && !_dual;
-        _editorViews[pane].Show(path, tool.Manifest.Name);
+        _editorViews[pane].Show(tab.Path, tool.Manifest.Name);
         _paneViews[pane].Visibility = Visibility.Collapsed;
-        if (!await host.OpenAsync(path))
+        if (reopen || !host.IsReady || host.FilePath != tab.Path)
         {
-            if (host.Problem is { } problem)
+            if (!await host.OpenAsync(tab.Path))
             {
-                Diag.Warn(ToolsTarget, "a tool could not open a file", new LogField("tool", tool.Manifest.Id), new LogField("path", path),
-                    new LogField("problem", problem));
+                if (host.Problem is { } problem)
+                {
+                    Diag.Warn(ToolsTarget, "a tool could not open a file", new LogField("tool", tool.Manifest.Id), new LogField("path", tab.Path),
+                        new LogField("problem", problem));
+                }
+                ShowNotice(host.Problem is { } why
+                    ? $"{tool.Manifest.Name} cannot show {Path.GetFileName(tab.Path)}: {why}."
+                    : $"{tool.Manifest.Name} could not start: WebView2 did not load it.", isError: true);
+                EndToolHost(pane);
+                return false;
             }
-            ShowNotice(host.Problem is { } why
-                ? $"{tool.Manifest.Name} cannot show {Path.GetFileName(path)}: {why}."
-                : $"{tool.Manifest.Name} could not start: WebView2 did not load it.", isError: true);
-            CloseEditor(pane, focusPane: covered);
-            return;
+            Diag.Info(ToolsTarget, "file opened in a tool", new LogField("tool", tool.Manifest.Id), new LogField("path", tab.Path), new LogField("pane", pane));
         }
-        Diag.Info(ToolsTarget, "file opened in a tool", new LogField("tool", tool.Manifest.Id), new LogField("path", path), new LogField("pane", pane));
-        if (covered)
+        if (giveKeys)
         {
             // The pane that had the keyboard is covered by the editor: the page takes it.
             MainColumn.UpdateLayout();
             FocusEditorPage(pane);
         }
         ScheduleToolContext();
+        return true;
     }
 
     private ToolHost CreateToolHost(InstalledTool tool, int pane)
@@ -220,30 +254,42 @@ public sealed partial class MainWindow
         _ = _router.ExecuteAsync(commandId, args, $"tool:{tool.Manifest.Id}");
     }
 
-    private void CloseEditor(int pane, bool focusPane)
+    // The pane's tool process ends and its editor goes; the tool's tabs stay and open it again when they come to the front.
+    private void EndToolHost(int pane)
     {
         if (pane is < 0 or > 1 || _toolHosts[pane] is not { } host)
         {
             return;
         }
-        var hadFocus = _editorViews[pane].HasFocus;
         host.Close();
         _toolHosts[pane] = null;
         _editorViews[pane].Hide();
-        var view = _paneViews[pane];
-        view.Visibility = Visibility.Visible;
-        if (focusPane || hadFocus)
-        {
-            // The list was collapsed until this call, and focus is refused before it is laid out:
-            // in a real-key run the keyboard was left on the collapsed palette and every pane key
-            // was lost. Lay the list out first, and ask again after the next pass if refused.
-            view.UpdateLayout();
-            if (!view.Focus(FocusState.Programmatic))
-            {
-                DispatcherQueue.TryEnqueue(() => view.Focus(FocusState.Programmatic));
-            }
-        }
         Diag.Info(ToolsTarget, "tool closed", new LogField("tool", host.Tool.Manifest.Id), new LogField("pane", pane));
+    }
+
+    // The pane loses its tool tabs and its tool (single-pane mode closes the right pane's); the folder tab in front shows.
+    private void CloseToolTabs(int pane, bool focusPane)
+    {
+        if (pane is < 0 or > 1)
+        {
+            return;
+        }
+        var hadFocus = _editorViews[pane].HasFocus;
+        _strips[pane].RemoveToolTabs();
+        EndToolHost(pane);
+        _ = QueueShow(pane, giveKeys: focusPane || hadFocus);
+    }
+
+    // editor.close: the tool tab in front, else the pane's first tool tab, goes.
+    private Task CloseEditorTabAsync(int pane, string? requestId)
+    {
+        if (pane is < 0 or > 1)
+        {
+            return Task.CompletedTask;
+        }
+        var strip = _strips[pane];
+        var index = strip.Active.IsTool ? strip.ActiveIndex : strip.Tabs.ToList().FindIndex(t => t.IsTool);
+        return index < 0 ? Task.CompletedTask : CloseTabAsync(pane, index, requestId);
     }
 
     private async Task ReloadEditorAsync(int pane)
@@ -267,7 +313,7 @@ public sealed partial class MainWindow
             return (int)pane;
         }
         var focused = Array.FindIndex(_editorViews, v => v.HasFocus);
-        return focused >= 0 ? focused : Array.FindIndex(_toolHosts, h => h is not null);
+        return focused >= 0 ? focused : Array.FindIndex(_strips, strip => strip.Tabs.Any(t => t.IsTool));
     }
 
     private void ScheduleToolContext()

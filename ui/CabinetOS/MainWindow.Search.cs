@@ -64,8 +64,8 @@ public sealed partial class MainWindow
         }
         if (_editorViews[_active].IsOpen && SearchBox.Text.Trim().Length > 0)
         {
-            // One pane shown with a tool in it: the hits need the pane.
-            CloseEditor(_active, focusPane: false);
+            // One pane shown with a tool in it: the hits need the pane, so its folder tab comes to the front (the tool tab stays).
+            ShowFolderTabBehindTool(_active);
         }
         _searchPane = _active;
         _search.SetText(SearchBox.Text, Active.Path.Length > 0 ? Active.Path : null);
