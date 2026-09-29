@@ -154,6 +154,64 @@ public class SelectionModelTests
         Assert.Equal(4, changes);
     }
 
+    // ----- Total Commander's marking commands (sub-phase 11a) -----
+
+    [Fact]
+    public void Space_toggles_the_cursor_row_without_moving_the_cursor()
+    {
+        var selection = Commander(focus: 4);
+        Assert.True(selection.ToggleFocus());
+        Assert.Equal([4], selection.Selected);
+        Assert.Equal(4, selection.Focus);
+        Assert.False(selection.ToggleFocus());
+        Assert.Empty(selection.Selected);
+        Assert.Equal(4, selection.Focus);
+
+        var empty = new SelectionModel();
+        Assert.False(empty.ToggleFocus());
+    }
+
+    [Fact]
+    public void Invert_turns_the_files_marks_around_and_leaves_the_folders_as_they_are()
+    {
+        // Rows 0 and 1 are folders.
+        var selection = Commander(count: 6);
+        selection.Toggle(0);
+        selection.Toggle(2);
+        selection.Toggle(3);
+
+        selection.Invert(isFolder: i => i < 2);
+
+        Assert.Equal([0, 4, 5], selection.Selected);
+    }
+
+    [Fact]
+    public void Unselect_all_leaves_nothing_marked_and_a_command_then_acts_on_the_cursor_row()
+    {
+        var selection = Create(count: 5, focus: 2);
+        selection.SelectAll();
+        selection.Clear();
+        Assert.Empty(selection.Selected);
+        Assert.Equal([2], selection.Targets());
+    }
+
+    [Fact]
+    public void Marking_many_rows_adds_or_removes_them_and_leaves_the_rest()
+    {
+        var selection = Commander(count: 8);
+        selection.SetMarks([1, 2, 3, 9, -1], mark: true);
+        Assert.Equal([1, 2, 3], selection.Selected);
+        selection.SetMarks([2, 5], mark: false);
+        Assert.Equal([1, 3], selection.Selected);
+
+        var changes = 0;
+        selection.Changed += () => changes++;
+        selection.SetMarks([4], mark: true);
+        selection.Invert(_ => false);
+        selection.Clear();
+        Assert.Equal(3, changes);
+    }
+
     // ----- panes.selection: windows (above) and commander (below) -----
 
     private static SelectionModel Commander(int count = 10, int focus = 0)

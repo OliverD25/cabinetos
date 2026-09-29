@@ -1405,6 +1405,8 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
+        // Restore Selection (Num /) brings these marks back after the listing changed.
+        Active.RememberMarks();
         var start = await _transfers.StartAsync(kind, sources.Select(s => s.Path).ToList(), Other.Path, invocation.RequestId);
         if (!start.Started)
         {
@@ -1449,6 +1451,7 @@ public sealed partial class MainWindow : Window
             }
             FocusActivePane();
         }
+        Active.RememberMarks();
         var start = await _transfers.StartAsync(JobKind.Delete(permanent), targets.Select(t => t.Path).ToList(), null, invocation.RequestId);
         if (!start.Started)
         {

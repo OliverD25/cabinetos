@@ -224,6 +224,65 @@ public sealed class SelectionModel
         Raise();
     }
 
+    /// <summary>
+    /// Space: marks or unmarks the focused row, and the focus stays (Total
+    /// Commander). Returns whether the row is marked now.
+    /// </summary>
+    public bool ToggleFocus()
+    {
+        if (Focus < 0)
+        {
+            return false;
+        }
+        var marked = _selected.Add(Focus) || !_selected.Remove(Focus);
+        Raise();
+        return marked;
+    }
+
+    /// <summary>
+    /// Num *: every unmarked file is marked and every marked one unmarked;
+    /// the rows <paramref name="isFolder"/> names stay as they are.
+    /// </summary>
+    public void Invert(Func<int, bool> isFolder)
+    {
+        for (var i = 0; i < Count; i++)
+        {
+            if (!isFolder(i) && !_selected.Add(i))
+            {
+                _selected.Remove(i);
+            }
+        }
+        Raise();
+    }
+
+    /// <summary>Ctrl+Num -: nothing marked; a command then acts on the focused row.</summary>
+    public void Clear()
+    {
+        _selected.Clear();
+        Raise();
+    }
+
+    /// <summary>Marks (or unmarks) the rows <paramref name="indexes"/>; the others stay as they are.</summary>
+    public void SetMarks(IEnumerable<int> indexes, bool mark)
+    {
+        foreach (var index in indexes)
+        {
+            if ((uint)index >= (uint)Count)
+            {
+                continue;
+            }
+            if (mark)
+            {
+                _selected.Add(index);
+            }
+            else
+            {
+                _selected.Remove(index);
+            }
+        }
+        Raise();
+    }
+
     private void SelectRange(int from, int to)
     {
         _selected.Clear();

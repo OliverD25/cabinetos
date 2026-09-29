@@ -548,6 +548,18 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     public IReadOnlyList<string> SelectedNames() =>
         _view is { } view ? Selection.Selected.Select(view.Name).ToList() : [];
 
+    /// <summary>The marks a file command or an unmark cleared last, for Restore Selection (Num /).</summary>
+    public MarkMemory SavedMarks { get; } = new();
+
+    /// <summary>Remembers the marks before a file command or an unmark changes them.</summary>
+    public void RememberMarks()
+    {
+        if (_view is { } view && _search is null)
+        {
+            SavedMarks.Remember(view, Selection);
+        }
+    }
+
     /// <summary>Goes to the parent folder and selects the folder it came from.</summary>
     public Task GoUpAsync(string requestId) =>
         DisplayFormat.Parent(Path) is { } parent

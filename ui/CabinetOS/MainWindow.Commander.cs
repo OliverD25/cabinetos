@@ -23,6 +23,44 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("view.sortByExtension", ListingOnly(invocation => SortActiveAsync(PaneSort.Extension, invocation)));
         _router.RegisterUiHandler("view.sortByModified", ListingOnly(invocation => SortActiveAsync(PaneSort.Modified, invocation)));
         _router.RegisterUiHandler("view.sortBySize", ListingOnly(invocation => SortActiveAsync(PaneSort.Size, invocation)));
+        _router.RegisterUiHandler("edit.toggleSelectionInPlace", ListingOnly(_ => Active.Selection.ToggleFocus()));
+        _router.RegisterUiHandler("edit.invertSelection", ListingOnly(_ => InvertSelection()));
+        _router.RegisterUiHandler("edit.unselectAll", ListingOnly(_ =>
+        {
+            Active.RememberMarks();
+            Active.Selection.Clear();
+        }));
+        _router.RegisterUiHandler("edit.restoreSelection", ListingOnly(_ => RestoreSelection()));
+    }
+
+    // Num *: the files' marks turn around; the folders keep theirs (Total Commander's rule).
+    private void InvertSelection()
+    {
+        if (Active.View is not { } view)
+        {
+            return;
+        }
+        Active.RememberMarks();
+        Active.Selection.Invert(view.IsFolder);
+    }
+
+    // Num /: the marks the last file command or unmark cleared in this pane, by name.
+    private void RestoreSelection()
+    {
+        var pane = Active;
+        if (pane.View is not { } view)
+        {
+            return;
+        }
+        if (pane.SavedMarks.IsEmpty)
+        {
+            ShowNotice("Nothing to restore: no marks were cleared in this pane yet.");
+            return;
+        }
+        if (pane.SavedMarks.Restore(view, pane.Selection) == 0)
+        {
+            ShowNotice($"None of the {pane.SavedMarks.Names.Count:N0} marked names is in this folder.");
+        }
     }
 
     // Ctrl+F3 to Ctrl+F6: the active pane's own order, sent with its listings; the same key again
