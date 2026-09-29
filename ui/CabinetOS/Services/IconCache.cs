@@ -1,10 +1,9 @@
-using System.Runtime.InteropServices.WindowsRuntime;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Ipc;
+using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Windows.Storage.Streams;
 
 namespace CabinetOS.Services;
 
@@ -69,14 +68,10 @@ internal sealed class IconCache(ICoreChannel core)
             case IconReply icon:
                 try
                 {
+                    // The base64 text becomes a PNG stream on a worker thread; the await comes back to this one.
+                    var (png, _) = await IconBytes.DecodeAsync(icon.PngBase64);
+                    using var stream = png;
                     var started = FrameParts.Start();
-                    var bytes = Convert.FromBase64String(icon.PngBase64);
-                    using var stream = new InMemoryRandomAccessStream();
-                    var written = stream.WriteAsync(bytes.AsBuffer());
-                    FrameParts.Stop(FramePart.Icons, started);
-                    await written;
-                    started = FrameParts.Start();
-                    stream.Seek(0);
                     var bitmap = new BitmapImage { DecodePixelWidth = (int)size, DecodePixelHeight = (int)size };
                     var decoded = bitmap.SetSourceAsync(stream);
                     FrameParts.Stop(FramePart.Icons, started);
