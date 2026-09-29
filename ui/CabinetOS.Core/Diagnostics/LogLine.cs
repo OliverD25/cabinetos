@@ -12,8 +12,8 @@ public readonly record struct LogField(string Name, object? Value);
 /// <summary>
 /// The JSON Lines format every CabinetOS process writes (docs/diagnostics.md):
 /// one object per line with the keys <c>ts</c>, <c>level</c>, <c>boundary</c>,
-/// <c>target</c>, <c>message</c>, <c>request_id</c>, <c>span</c>,
-/// <c>fields</c>, <c>thread</c>, always in that order.
+/// <c>target</c>, <c>message</c>, <c>trace_id</c>, <c>request_id</c>,
+/// <c>span</c>, <c>fields</c>, <c>thread</c>, always in that order.
 /// </summary>
 public static class LogLine
 {
@@ -49,12 +49,25 @@ public static class LogLine
             : thread.Name;
     }
 
+    /// <summary>Formats one line without a trace, without the trailing newline.</summary>
+    public static string Format(
+        DateTime utc,
+        LogLevel level,
+        string target,
+        string message,
+        string? requestId,
+        string? span,
+        IReadOnlyList<LogField>? fields,
+        string thread) =>
+        Format(utc, level, target, message, null, requestId, span, fields, thread);
+
     /// <summary>Formats one line, without the trailing newline.</summary>
     public static string Format(
         DateTime utc,
         LogLevel level,
         string target,
         string message,
+        string? traceId,
         string? requestId,
         string? span,
         IReadOnlyList<LogField>? fields,
@@ -69,6 +82,10 @@ public static class LogLine
             writer.WriteString("boundary", Boundary);
             writer.WriteString("target", target);
             writer.WriteString("message", message);
+            if (traceId is not null)
+            {
+                writer.WriteString("trace_id", traceId);
+            }
             if (requestId is not null)
             {
                 writer.WriteString("request_id", requestId);

@@ -1,7 +1,7 @@
 # Diagnostics
 
-How CabinetOS processes write logs, how one request can be followed across
-processes, and what a process writes when it crashes. Constitution Article 12
+How CabinetOS processes write logs, how one user action can be followed
+across processes, and what a process writes when it crashes. Constitution Article 12
 (Unified, Zero-Latency Diagnostics & Logging); brief §8.
 
 The Rust processes (core, indexer, CLI) get all of this from the
@@ -57,6 +57,7 @@ One JSON object per line, with the keys always in this order:
 | `boundary` | string | always | The part of the system that wrote the line: `frontend`, `engine`, `plugin`, `indexer` or `ipc`. The process decides it: the core writes `engine`, the indexer `indexer`, the CLI (standing in for the UI) `frontend`. A line with a `plugin_id` is `plugin`: it was written by a plugin (its `log` calls, its stdout and stderr) or by the core on its behalf (docs/plugins.md). |
 | `target` | string | always | The Rust module that logged the event, for example `cabinetos_core` |
 | `message` | string | always | The event text |
+| `trace_id` | string | inside an action | The ULID of the user action the line belongs to, taken from the innermost enclosing span that has a `trace_id` field ("How an action's trace id travels", below). A request without a trace is its own action, so its `trace_id` equals its `request_id` |
 | `request_id` | string | inside a request | The ULID of the request being handled, taken from the innermost enclosing span that has a `request_id` field |
 | `plugin_id` | string | inside a plugin call | The plugin that caused the event, same rule as `request_id`. Every line a plugin's own thread writes has it. A line the core writes about a plugin elsewhere (a restart, a reload) names it in a `plugin_id` field, which moves here. |
 | `span` | string | inside a span | The name of the innermost span, for example `request` |
@@ -66,28 +67,66 @@ One JSON object per line, with the keys always in this order:
 Example, one line from `core.<date>.jsonl`:
 
 ```json
-{"ts":"2026-09-28T00:16:18.959Z","level":"INFO","boundary":"engine","target":"cabinetos_core","message":"request handled","request_id":"01M3JNX80F5HE9R5F65SBDGNWS","span":"request","fields":{"elapsed_us":57,"request":"ping"},"thread":"core-rt-1"}
+{"ts":"2026-09-28T00:16:18.959Z","level":"INFO","boundary":"engine","target":"cabinetos_core","message":"request handled","trace_id":"01M3JNX7ZQ2B0V3C6H8K1N4P5R","request_id":"01M3JNX80F5HE9R5F65SBDGNWS","span":"request","fields":{"elapsed_us":57,"request":"ping"},"thread":"core-rt-1"}
 ```
 
-## How a request ID travels
+## How an action's trace id travels
 
-1. **The client creates the ID.** Every request gets a new ULID (a 128-bit ID
-   that sorts by creation time). In Phase 5 the UI's `CommandRouter` creates
-   it; today the CLI does. The client logs its own side of the request inside
-   a span that carries the ID.
-2. **The pipe carries it.** The ID is part of every message:
-   `{"id":"01M3JNX80F5HE9R5F65SBDGNWS","type":"ping"}` ([ADR 0006](decisions/0006-control-channel-json.md)).
+One user action makes several requests: a key press becomes a command, the
+command sends `start_job`, the job sends events for minutes, a plugin is
+asked about the job. Each request has its own ID; the action has one trace
+id, a ULID, that all of them carry. Both appear in every log line
+(`trace_id`, `request_id`).
+
+1. **The window creates the trace.** Every command run gets a ULID
+   (`CommandInvocation.RequestId`); it is the run's trace. While the
+   handler runs, `Diag.BeginTrace` makes it the current trace
+   (`Diag.CurrentTrace`, an `AsyncLocal`, so it follows the handler across
+   `await`): every line the window logs meanwhile carries it as
+   `trace_id`, and every request the window sends meanwhile carries it as
+   `trace` (`CoreClient` fills it in). A request sent outside a command
+   carries none. The CLI uses one trace per run.
+2. **The pipe carries it.** `{"id":"01M…","trace":"01M…","type":"start_job",…}`
+   ([ipc.md](ipc.md), "The pipe"). Each request still has its own `id`.
 3. **The core logs under it.** The core handles each request inside a span
-   with `request_id`, so every line it writes while handling the request
-   carries the ID. The reply repeats the ID, and the client rejects a reply
-   whose ID does not match.
-4. **Following one action.** Search every log file for the ID. The same ID
-   appears with `boundary: "frontend"` in the client's log and with
-   `boundary: "engine"` in the core's log.
+   with `request_id` and `trace_id`; a request without a trace gets its own
+   ID as its trace. Every line written while handling the request carries
+   both, and so does the reply.
+4. **What the request starts carries it on.** A job keeps the span it was
+   started in: its threads enter it, and its events are sent inside it, so
+   every job line and every `job_*` event carries the trace. A plugin call
+   runs in a span under the caller's, so what the plugin logs or `emit`s
+   during the call carries the trace; so does a `before-job` call on the
+   job's thread. A measure's events and a `config_changed` caused by
+   `set_value` carry it too. A request the core sends to the indexer for a
+   search carries it on, and the indexer logs under it.
+5. **Nobody's action carries none.** A directory watcher's lines and
+   `listing_refreshed` events, the drive watcher, the configuration file
+   watcher, a plugin's start: no trace.
+6. **The trace does not depend on logging.** Spans that declare an ID are
+   kept whatever the log level, so replies and events carry their trace
+   even at `logging.level: "error"`.
+7. **Following one action.** `cabinetos-cli log trace <id>` reads every
+   `*.jsonl` file in the log folder (every process, normal and heavy files),
+   keeps the lines whose `trace_id` or `request_id` is `<id>`, and prints
+   them oldest first, one readable line each, boundary and process first:
+
+   ```text
+   frontend ui            2026-09-29T10:00:00.001Z INFO  cabinetos_ui::commands: command executed request_id=01M… command=files.copy [main]
+   engine   core          2026-09-29T10:00:00.010Z INFO  cabinetos_jobs: job queued request_id=01M… job_id=4 [core-rt-2]
+   ```
+
+   `--json` prints the lines as they are; `--dir <folder>` reads another
+   folder than the default. The same event in a process's normal file and
+   its heavy file is printed once. Given a request ID instead of a trace,
+   it prints that one request. `cabinetos-cli log tail [--process core]
+   [--heavy] [-n 20] [--follow]` prints the newest lines of one process's
+   newest file, and with `--follow` the lines added after them.
 
 A frame the core cannot parse has no usable ID. The core then answers with a
-new ID and logs the rejection under that new ID, so the client can still find
-the matching log line.
+new ID and logs the rejection under that new ID (and under the frame's
+trace, when that one could be read), so the client can still find the
+matching log line.
 
 ## Crash traces
 

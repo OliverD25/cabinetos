@@ -141,6 +141,8 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
         {
             request.Id = Ulid.NewId();
         }
+        // The request belongs to the action (the command run) that sends it.
+        request.Trace ??= Diag.CurrentTrace;
         var id = request.Id;
         // A caller on the UI thread gets its continuation posted to that thread
         // while the reader is still handling this reply, before it reads the
@@ -150,7 +152,7 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
         var completion = new TaskCompletionSource<CoreReply>(SynchronizationContext.Current is null
             ? TaskCreationOptions.RunContinuationsAsynchronously
             : TaskCreationOptions.None);
-        if (!_pending.TryAdd(id, new Pending(completion, request.Type, Stopwatch.GetTimestamp())))
+        if (!_pending.TryAdd(id, new Pending(completion, request.Type, Stopwatch.GetTimestamp(), request.Trace)))
         {
             throw new InvalidOperationException($"request ID {id} is already waiting for a reply");
         }
@@ -293,7 +295,7 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
         {
             if (message.Body is CoreEvent coreEvent)
             {
-                Diag.Debug(Target, "event received", new LogField("event", message.Type));
+                Diag.Log(LogLevel.Debug, Target, "event received", fields: [new LogField("event", message.Type)], traceId: message.Trace);
                 if (!_events.Writer.TryWrite(coreEvent))
                 {
                     (coreEvent as ICarriesSection)?.TakeSection()?.Dispose();
@@ -312,19 +314,19 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
             switch (message.Body)
             {
                 case ErrorReply error:
-                    Diag.Request(LogLevel.Info, message.Id, Target, "request failed",
+                    Diag.Traced(LogLevel.Info, pending.Trace, message.Id, Target, "request failed",
                         new LogField("request", pending.Type), new LogField("code", error.Code),
                         new LogField("error", error.Message), new LogField("elapsed_us", elapsedUs));
                     pending.Completion.TrySetResult(error);
                     break;
                 case CoreReply reply:
-                    Diag.Request(LogLevel.Info, message.Id, Target, "reply received",
+                    Diag.Traced(LogLevel.Info, pending.Trace, message.Id, Target, "reply received",
                         new LogField("request", pending.Type), new LogField("reply", message.Type),
                         new LogField("elapsed_us", elapsedUs));
                     pending.Completion.TrySetResult(reply);
                     break;
                 default:
-                    Diag.Request(LogLevel.Warn, message.Id, Target, "reply not understood",
+                    Diag.Traced(LogLevel.Warn, pending.Trace, message.Id, Target, "reply not understood",
                         new LogField("request", pending.Type), new LogField("reply", message.Type),
                         new LogField("error", message.Error));
                     pending.Completion.TrySetException(new CoreProtocolException(
@@ -375,5 +377,5 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
         Disconnected?.Invoke(reason);
     }
 
-    private sealed record Pending(TaskCompletionSource<CoreReply> Completion, string Type, long StartedTicks);
+    private sealed record Pending(TaskCompletionSource<CoreReply> Completion, string Type, long StartedTicks, string? Trace);
 }

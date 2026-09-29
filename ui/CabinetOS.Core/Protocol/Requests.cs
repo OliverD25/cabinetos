@@ -14,8 +14,17 @@ public abstract class CoreRequest
     private protected CoreRequest(string type) => Type = type;
 
     /// <summary>The request's ULID; the reply carries the same one.</summary>
-    [JsonPropertyOrder(-2)]
+    [JsonPropertyOrder(-3)]
     public string Id { get; set; } = "";
+
+    /// <summary>
+    /// The user action this request belongs to (docs/diagnostics.md, "Trace
+    /// ids"): the command run's ULID. Null leaves it out, and the core takes
+    /// the request as an action of its own. <see cref="Ipc.CoreClient"/>
+    /// fills it from <see cref="Diagnostics.Diag.CurrentTrace"/>.
+    /// </summary>
+    [JsonPropertyOrder(-2)]
+    public string? Trace { get; set; }
 
     /// <summary>The request type, for example <c>list_directory</c>.</summary>
     [JsonPropertyOrder(-1)]

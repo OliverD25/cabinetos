@@ -37,6 +37,25 @@ There are three channels:
   A reply carries the ID of its request. An event carries a fresh ID of its
   own. A client tells replies from events by `type`; no event type is also a
   reply type.
+- Any message may also carry a `trace`, next to `id`: the ULID of the user
+  action it belongs to ([diagnostics.md](diagnostics.md), "How an action's
+  trace id travels"):
+
+  ```json
+  {"id":"01M3JP62MKWQQNAMJMXY6XDEY1","trace":"01M3JP5ZQ7D9WJ4QG6V1R8T2KA","type":"ping"}
+  ```
+
+  The window sends the trace of the command run with every request of that
+  run; the CLI sends one per run. A request without one is an action of its
+  own: the core uses its `id` as its trace. The core's reply carries the
+  request's trace (its `id` when the request had none), and so do the
+  events of what the request started: the job's `job_progress`,
+  `job_state_changed` and `job_conflict`, a measure's events, a plugin's
+  `plugin_event` emitted during the call, and a `config_changed` that a
+  `set_value` caused. Events nobody's action caused (a watcher's
+  `listing_refreshed`, `volumes_changed`) carry none. A `trace` that is not
+  a ULID makes the message invalid, like a bad `id`. The field is optional
+  and older peers ignore it, so it does not change the protocol version.
 
 ## The handshake
 

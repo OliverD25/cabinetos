@@ -88,13 +88,14 @@ public sealed class LogWriter : IDisposable
         string message,
         string? requestId = null,
         string? span = null,
-        IReadOnlyList<LogField>? fields = null)
+        IReadOnlyList<LogField>? fields = null,
+        string? traceId = null)
     {
         if (!Filter.IsEnabled(level, target))
         {
             return;
         }
-        var line = LogLine.Format(_clock(), level, target, message, requestId, span, fields, LogLine.CurrentThreadLabel());
+        var line = LogLine.Format(_clock(), level, target, message, traceId, requestId, span, fields, LogLine.CurrentThreadLabel());
         Enqueue(line);
     }
 

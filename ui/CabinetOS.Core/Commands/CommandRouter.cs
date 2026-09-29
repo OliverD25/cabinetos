@@ -8,7 +8,10 @@ namespace CabinetOS.Core.Commands;
 /// <summary>One run of a command, as its handler sees it.</summary>
 /// <param name="CommandId">The command's ID.</param>
 /// <param name="Args">Its arguments, if any.</param>
-/// <param name="RequestId">The ULID that names this run in the logs.</param>
+/// <param name="RequestId">
+/// The ULID that names this run in the logs. It is also the run's trace: every request
+/// the run sends and every line it logs carries it (<see cref="Diag.CurrentTrace"/>).
+/// </param>
 /// <param name="Trigger">What started it: <c>key</c>, <c>button</c>, <c>palette</c>, …</param>
 public sealed record CommandInvocation(string CommandId, JsonElement? Args, string RequestId, string Trigger);
 
@@ -172,6 +175,8 @@ public sealed class CommandRouter(ICoreChannel core)
     public async Task<CommandOutcome> ExecuteAsync(string commandId, JsonElement? args = null, string trigger = "api")
     {
         var requestId = Ulid.NewId();
+        // One run is one user action: its requests and its lines carry its ULID as their trace.
+        using var trace = Diag.BeginTrace(requestId);
         if (Modal is { } dialog && !_modalAllows.Contains(commandId))
         {
             // Before Executing: nothing may make room for a command that does not run.

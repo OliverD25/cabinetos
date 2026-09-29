@@ -9,7 +9,11 @@ namespace CabinetOS.Core.Protocol;
 /// or a <see cref="CoreEvent"/>, or null when the type is one this build does
 /// not know (a newer core) or the fields did not parse.
 /// </summary>
-public sealed record IncomingMessage(string? Id, string? Type, object? Body, bool IsEvent, string? Error);
+public sealed record IncomingMessage(string? Id, string? Type, object? Body, bool IsEvent, string? Error)
+{
+    /// <summary>The trace of the user action the message belongs to, when it carries one.</summary>
+    public string? Trace { get; init; }
+}
 
 /// <summary>Turns requests into JSON and JSON into replies and events.</summary>
 public static class MessageCodec
@@ -100,19 +104,19 @@ public static class MessageCodec
     /// </summary>
     public static IncomingMessage Decode(ReadOnlySpan<byte> frame)
     {
-        var (id, type) = PeekIdAndType(frame);
+        var (id, trace, type) = Peek(frame);
         var isEvent = type is not null && EventTypes.Contains(type);
         if (type is null || !Known.TryGetValue(type, out var info))
         {
-            return new IncomingMessage(id, type, null, isEvent, null);
+            return new IncomingMessage(id, type, null, isEvent, null) { Trace = trace };
         }
         try
         {
-            return new IncomingMessage(id, type, JsonSerializer.Deserialize(frame, info), isEvent, null);
+            return new IncomingMessage(id, type, JsonSerializer.Deserialize(frame, info), isEvent, null) { Trace = trace };
         }
         catch (JsonException error)
         {
-            return new IncomingMessage(id, type, null, isEvent, error.Message);
+            return new IncomingMessage(id, type, null, isEvent, error.Message) { Trace = trace };
         }
     }
 
@@ -122,31 +126,47 @@ public static class MessageCodec
     /// </summary>
     public static (string? Id, string? Type) PeekIdAndType(ReadOnlySpan<byte> frame)
     {
+        var (id, _, type) = Peek(frame);
+        return (id, type);
+    }
+
+    /// <summary>
+    /// The top-level <c>id</c>, <c>trace</c> and <c>type</c>, wherever they
+    /// stand in the object, without building a document.
+    /// </summary>
+    public static (string? Id, string? Trace, string? Type) Peek(ReadOnlySpan<byte> frame)
+    {
         var reader = new Utf8JsonReader(frame);
         if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
         {
             throw new JsonException("a message must be a JSON object");
         }
         string? id = null;
+        string? trace = null;
         string? type = null;
         while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
         {
             var isId = reader.ValueTextEquals("id"u8);
-            var isType = !isId && reader.ValueTextEquals("type"u8);
+            var isTrace = !isId && reader.ValueTextEquals("trace"u8);
+            var isType = !isId && !isTrace && reader.ValueTextEquals("type"u8);
             reader.Read();
-            if (isId && reader.TokenType == JsonTokenType.String)
-            {
-                id = reader.GetString();
-            }
-            else if (isType && reader.TokenType == JsonTokenType.String)
-            {
-                type = reader.GetString();
-            }
-            else
+            if (reader.TokenType != JsonTokenType.String)
             {
                 reader.Skip();
             }
+            else if (isId)
+            {
+                id = reader.GetString();
+            }
+            else if (isTrace)
+            {
+                trace = reader.GetString();
+            }
+            else if (isType)
+            {
+                type = reader.GetString();
+            }
         }
-        return (id, type);
+        return (id, trace, type);
     }
 }
