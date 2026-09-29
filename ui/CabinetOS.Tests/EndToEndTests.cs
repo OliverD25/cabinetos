@@ -318,7 +318,9 @@ public class EndToEndTests
             // The window's way: the picker lists the themes and applies one with set_value ui.theme.
             var picker = new ThemePickerModel(client);
             Assert.True(await picker.LoadAsync("default"));
-            Assert.Equal(["catppuccin-mocha", "default", "nord", "rose-pine-moon"], picker.Rows.Select(r => r.Info.Id).Order());
+            // Every theme this core shipped into the empty themes folder, however many it ships (five since 9e4ce98).
+            Assert.Equal(ShippedThemeFiles(Path.Combine(root, "themes")), picker.Rows.Select(r => r.Info.Id).Order());
+            Assert.Contains("nord", picker.Rows.Select(r => r.Info.Id));
             Assert.Equal("#2E3440", picker.Rows.Single(r => r.Info.Id == "nord").Tint);
             Assert.True(await picker.ApplyAsync(picker.Rows.ToList().FindIndex(r => r.Info.Id == "nord")));
 
@@ -373,7 +375,8 @@ public class EndToEndTests
 
                 Assert.True(await market.RefreshAsync(), market.Notice?.Detail);
                 Assert.StartsWith(index, market.Source, StringComparison.OrdinalIgnoreCase);
-                Assert.Equal(4, market.CountOf(MarketTabs.Themes));
+                // build-index.ps1 packs every shipped theme of sdk/themes (five since 9e4ce98).
+                Assert.Equal(ShippedThemeFiles(Path.Combine(Repo.Root, "sdk", "themes")).Count, market.CountOf(MarketTabs.Themes));
                 // The shipped themes are in the themes folder already, but not from the marketplace:
                 // shown as there, never replaced (trust rule 7), and not on the Installed tab.
                 Assert.All(market.All.Where(i => i.Kind == ExtensionKinds.Theme), theme =>
@@ -488,6 +491,17 @@ public class EndToEndTests
     }
 
     // sdk/marketplace/build-index.ps1: the fixture plugins and the shipped themes, hashed, into one folder.
+    // The theme files of a themes folder, by name: one per theme, named by its ID. The schema and
+    // the core's own record of what it wrote (.shipped.json) are not themes.
+    private static List<string> ShippedThemeFiles(string folder) =>
+    [
+        .. Directory.GetFiles(folder, "*.json")
+            .Select(Path.GetFileNameWithoutExtension)
+            .OfType<string>()
+            .Where(name => !name.StartsWith('.') && name != "theme.schema")
+            .Order(StringComparer.Ordinal),
+    ];
+
     private static void BuildLocalIndex(string folder)
     {
         var script = Path.Combine(Repo.Root, "sdk", "marketplace", "build-index.ps1");

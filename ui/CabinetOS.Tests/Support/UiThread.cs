@@ -35,7 +35,22 @@ internal sealed class UiThread : SynchronizationContext, IDisposable
         return done.Task;
     }
 
-    public override void Post(SendOrPostCallback d, object? state) => _queue.Add((d, state));
+    /// <summary>
+    /// Queues a callback. One that comes after the thread finished (an event
+    /// pump still running when its test failed) is dropped: throwing here
+    /// would end the test host and every test after it.
+    /// </summary>
+    public override void Post(SendOrPostCallback d, object? state)
+    {
+        try
+        {
+            _queue.Add((d, state));
+        }
+        catch (InvalidOperationException)
+        {
+            // The queue was marked complete.
+        }
+    }
 
     public override void Send(SendOrPostCallback d, object? state) => throw new NotSupportedException();
 
