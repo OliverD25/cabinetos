@@ -54,7 +54,7 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("view.sortBySize", ListingOnly(invocation => SortActiveAsync(PaneSort.Size, invocation)));
         // Space: a folder it marks is measured, as Total Commander's Space does (the note's decision D8).
         _router.RegisterUiHandler("edit.toggleSelectionInPlace", ListingOnly(invocation =>
-            Active.Selection.ToggleFocus() && Active.EntryAt(Active.FocusIndex) is { IsFolder: true } folder
+            Active.Selection.MarkInPlace() && Active.EntryAt(Active.FocusIndex) is { IsFolder: true } folder
                 ? MeasureFoldersAsync([folder.Path], invocation)
                 : Task.CompletedTask));
         _router.RegisterUiHandler("file.calculateFolderSize", ListingOnly(invocation =>

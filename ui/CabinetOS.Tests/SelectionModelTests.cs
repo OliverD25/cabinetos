@@ -172,6 +172,28 @@ public class SelectionModelTests
     }
 
     [Fact]
+    public void Space_in_the_windows_style_keeps_the_row_the_keys_selected_and_toggles_otherwise()
+    {
+        // The arrow selected row 3 alone: Space keeps it (and measures a folder there).
+        var selection = Create(focus: 3);
+        Assert.True(selection.MarkInPlace());
+        Assert.Equal([3], selection.Selected);
+
+        // With other marks, Space toggles the cursor row as in the Commander style.
+        selection.Toggle(5);
+        selection.MoveTo(3, SelectMode.FocusOnly);
+        Assert.False(selection.MarkInPlace());
+        Assert.Equal([5], selection.Selected);
+        Assert.True(selection.MarkInPlace());
+        Assert.Equal([3, 5], selection.Selected);
+
+        var commander = Commander(focus: 2);
+        Assert.True(commander.MarkInPlace());
+        Assert.False(commander.MarkInPlace());
+        Assert.Empty(commander.Selected);
+    }
+
+    [Fact]
     public void Invert_turns_the_files_marks_around_and_leaves_the_folders_as_they_are()
     {
         // Rows 0 and 1 are folders.

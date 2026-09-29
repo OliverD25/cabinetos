@@ -240,6 +240,16 @@ public sealed class SelectionModel
     }
 
     /// <summary>
+    /// Space (<c>edit.toggleSelectionInPlace</c>): <see cref="ToggleFocus"/>,
+    /// except that in the Windows style the focused row selected alone stays
+    /// selected: the key that moved there selected it, and a Space that took
+    /// away the only selection would look like it did nothing. Returns
+    /// whether the row is marked now (a folder then gets measured).
+    /// </summary>
+    public bool MarkInPlace() =>
+        Style == SelectionStyle.Windows && _selected.Count == 1 && _selected.Contains(Focus) || ToggleFocus();
+
+    /// <summary>
     /// Num *: every unmarked file is marked and every marked one unmarked;
     /// the rows <paramref name="isFolder"/> names stay as they are.
     /// </summary>
