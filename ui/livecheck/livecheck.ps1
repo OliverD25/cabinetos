@@ -39,6 +39,8 @@ public static class Live {
   [DllImport("user32.dll", SetLastError=true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  public static uint ForegroundPid() { uint pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); return pid; }
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
@@ -71,7 +73,8 @@ $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L 
   T = 0x54; Up = 0x26; End = 0x23 }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
-  if ($script:h -and [Live]::GetForegroundWindow() -ne $script:h) {
+  # A flyout (the drive list) is a window of its own, so the test is the process, not the window.
+  if ($script:h -and [Live]::ForegroundPid() -ne [uint32]$script:p.Id) {
     "{0:HH:mm:ss.fff} STOP: CabinetOS is not the foreground window before '{1}'" -f (Get-Date), $text
     if ($script:p -and -not $script:p.HasExited) { [void]$script:p.CloseMainWindow(); [void]$script:p.WaitForExit(8000) }
     exit 1
@@ -102,31 +105,14 @@ function Shot([IntPtr]$h, [string]$path) {
   Step "screenshot $path"
 }
 # What the status bar says about the selection ("3 selected, 1.4 MB"), as UI Automation reads it.
-# The status bar's selection text, by its automation id. A search of the whole tree can stop short
-# of the status bar once web pages (the terminal, a preview) are in the window, so this asks for the
-# one element, first among the window's own children, then anywhere, and tries three times.
+# The status bar's selection text, as the window logged it last ("selection shown", written when it
+# changes): a search of the automation tree came back empty once web pages were in the window.
 function SelectionText {
-  $window = [System.Windows.Automation.AutomationElement]::FromHandle($script:h)
-  $byId = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'SelectionText')
-  $isPane = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Pane)
-  foreach ($try in 1..3) {
-    # The status texts are children of the window's XAML root, a pane: two child lookups reach them
-    # without walking the web pages; the whole-tree search is the fallback.
-    $e = $null
-    foreach ($pane in $window.FindAll([System.Windows.Automation.TreeScope]::Children, $isPane)) {
-      $e = $pane.FindFirst([System.Windows.Automation.TreeScope]::Children, $byId)
-      if ($e) { break }
-    }
-    if (-not $e) { $e = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $byId) }
-    if ($e) {
-        $name = $e.Current.Name
-        if ($name -match '^\d[\d,]* selected') { return $name }
-        if ($name -eq '') { return "(nothing selected)" }
-        return "(status bar says '$name')"
-    }
-    Start-Sleep -Milliseconds 300
-  }
-  return "(the status bar's selection text was not found)"
+  $line = Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"selection shown"' } | Select-Object -Last 1
+  if (-not $line) { return "(the window has not reported a selection yet)" }
+  $text = ($line | ConvertFrom-Json).fields.text
+  if ($text -eq '') { return "(nothing selected)" }
+  return $text
 }
 
 $root = "$env:TEMP\cabinetos-ui-test\$Run"
@@ -229,7 +215,7 @@ $cpuBefore = [Live]::CpuTimes()
 $holdStart = (Get-Date).ToUniversalTime()
 $stop = (Get-Date).AddSeconds(5)
 while ((Get-Date) -lt $stop) {
-  if ([Live]::GetForegroundWindow() -ne $h) { Step "pagedown interrupted" }
+  if ([Live]::ForegroundPid() -ne [uint32]$p.Id) { Step "pagedown interrupted" }
   [Live]::Press($VK.PgDn); Start-Sleep -Milliseconds 33
 }
 $holdEnd = (Get-Date).ToUniversalTime()
@@ -274,14 +260,14 @@ Step "left pane: the source folder; right pane: the destination"
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 
 Step "F7: a new folder, named in place"
-[Live]::Press($VK.F7); Start-Sleep -Milliseconds 1500
+PressForNameBox { [Live]::Press($VK.F7) }
 [Live]::Type("Reports 2026"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 "F7 made the folder and named it: $(Test-Path -LiteralPath "$src\Reports 2026")"
 
 # Rows now: Reports 2026, cabinetos-live-check-delete-me.txt, notes.md, report.txt.
 Step "F2: notes.md becomes readme.md (only 'notes' is selected, as in Explorer)"
 [Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
-[Live]::Press($VK.F2); Start-Sleep -Milliseconds 700
+PressForNameBox { [Live]::Press($VK.F2) }
 [Live]::Type("readme"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 "F2 renamed it: $((Test-Path -LiteralPath "$src\readme.md") -and -not (Test-Path -LiteralPath "$src\notes.md"))"
 
@@ -411,13 +397,13 @@ Step "11a: F4 on a.txt: the stand-in editor gets it, not Notepad"
 [Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.F4); Start-Sleep -Milliseconds 1500
 Step "11a: Shift+F4: a new row, 'todo' over the selected stem, Enter"
-[Live]::Press($VK.Shift, $VK.F4); Start-Sleep -Milliseconds 700
+PressForNameBox { [Live]::Press($VK.Shift, $VK.F4) }
 Shot $h "$ShotDir\11a-new-text-file-live.png"
 [Live]::Type("todo"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2000
 "Shift+F4 made todo.txt: $(Test-Path -LiteralPath "$tc\todo.txt")"
 $edited = if (Test-Path -LiteralPath "$stub.log") { @(Get-Content -LiteralPath "$stub.log" -Encoding Unicode) } else { @() }
 "the stand-in editor got (a.txt, then todo.txt, expected): $($edited -join ' | ')"
-"Notepad opened: $([bool](Get-Process notepad -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $p.StartTime }))"
+"no Notepad opened by F4 or Shift+F4: $(-not [bool](Get-Process notepad -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $p.StartTime }))"
 
 Step "11a: quick search 'cabinetos-live-check-f', then F8: to the Recycle Bin"
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 1200
@@ -539,7 +525,7 @@ Shot $h "$ShotDir\edge-both-panes-live.png"
 # the 255-unit name, the two cafe.txt, then the Ukrainian report: seven rows down from the first.
 Step "edge: F2 on the Ukrainian report, typed Cyrillic, Enter (only the stem is selected)"
 [Live]::Press($VK.Home); foreach ($i in 1..7) { [Live]::Press($VK.Down) }; Start-Sleep -Milliseconds 300
-[Live]::Press($VK.F2); Start-Sleep -Milliseconds 700
+PressForNameBox { [Live]::Press($VK.F2) }
 [Live]::Type("$zvit 2027"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\edge-renamed-live.png"
 "F2 renamed the Cyrillic file: $((Test-Path -LiteralPath "$edge\names\$zvit 2027.txt") -and -not (Test-Path -LiteralPath "$edge\names\$zvit 2026.txt"))"
