@@ -19,10 +19,7 @@ public sealed class MarkMemory
     /// selected row, except, in the Windows style, the focused row selected
     /// alone (that style selects the row the keyboard is on; that is not a mark).
     /// </summary>
-    public static bool HasMarks(SelectionModel selection) =>
-        selection.Style == SelectionStyle.Commander
-            ? selection.SelectedCount > 0
-            : selection.SelectedCount > 1 || (selection.SelectedCount == 1 && !selection.IsSelected(selection.Focus));
+    public static bool HasMarks(SelectionModel selection) => selection.HasMarks;
 
     /// <summary>Remembers the marked names of <paramref name="view"/>, when there are marks; else keeps the last ones.</summary>
     public void Remember(ListingView view, SelectionModel selection)

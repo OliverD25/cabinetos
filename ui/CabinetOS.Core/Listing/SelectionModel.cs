@@ -77,6 +77,15 @@ public sealed class SelectionModel
     public bool IsSelected(int index) => _selected.Contains(index);
 
     /// <summary>
+    /// Whether any row is marked: any selected row, except, in the Windows
+    /// style, the focused row selected alone (that style selects the row the
+    /// keyboard is on; that is the cursor, not a mark).
+    /// </summary>
+    public bool HasMarks => Style == SelectionStyle.Commander
+        ? _selected.Count > 0
+        : _selected.Count > 1 || (_selected.Count == 1 && !_selected.Contains(Focus));
+
+    /// <summary>
     /// What a command acts on: the selected rows, or the focused row when none
     /// is selected (so F5 on a row never does nothing).
     /// </summary>
@@ -251,10 +260,13 @@ public sealed class SelectionModel
 
     /// <summary>
     /// Num *: every unmarked file is marked and every marked one unmarked;
-    /// the rows <paramref name="isFolder"/> names stay as they are.
+    /// the rows <paramref name="isFolder"/> names stay as they are. The
+    /// cursor's own selection (Windows style) is no mark, so it goes first:
+    /// the cursor on a folder must not be counted with the files marked.
     /// </summary>
     public void Invert(Func<int, bool> isFolder)
     {
+        DropCursorSelection();
         for (var i = 0; i < Count; i++)
         {
             if (!isFolder(i) && !_selected.Add(i))
@@ -272,9 +284,17 @@ public sealed class SelectionModel
         Raise();
     }
 
-    /// <summary>Marks (or unmarks) the rows <paramref name="indexes"/>; the others stay as they are.</summary>
+    /// <summary>
+    /// Marks (or unmarks) the rows <paramref name="indexes"/>; the others stay
+    /// as they are, except the cursor's own selection (Windows style), which
+    /// is no mark and goes when rows are marked.
+    /// </summary>
     public void SetMarks(IEnumerable<int> indexes, bool mark)
     {
+        if (mark)
+        {
+            DropCursorSelection();
+        }
         foreach (var index in indexes)
         {
             if ((uint)index >= (uint)Count)
@@ -291,6 +311,14 @@ public sealed class SelectionModel
             }
         }
         Raise();
+    }
+
+    private void DropCursorSelection()
+    {
+        if (Style == SelectionStyle.Windows && !HasMarks)
+        {
+            _selected.Clear();
+        }
     }
 
     private void SelectRange(int from, int to)

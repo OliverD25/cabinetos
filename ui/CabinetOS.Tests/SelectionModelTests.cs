@@ -208,6 +208,61 @@ public class SelectionModelTests
     }
 
     [Fact]
+    public void Invert_in_the_windows_style_leaves_the_cursor_folder_unmarked_and_counts_only_the_files()
+    {
+        // The live check's folder: docs and photos, then six files; Home put the cursor on docs,
+        // which the Windows style selects. Num * then said "7 selected" for six files.
+        var selection = Create(count: 8, focus: 0);
+        Assert.False(selection.HasMarks);
+
+        selection.Invert(isFolder: i => i < 2);
+
+        Assert.Equal([2, 3, 4, 5, 6, 7], selection.Selected);
+        Assert.Equal(6, selection.SelectedCount);
+        Assert.Equal(0, selection.Focus);
+        Assert.False(selection.IsSelected(selection.Focus));
+    }
+
+    [Fact]
+    public void Invert_in_the_windows_style_marks_the_cursor_file_too_when_nothing_was_marked()
+    {
+        var selection = Create(count: 5, focus: 3);
+
+        selection.Invert(isFolder: _ => false);
+
+        Assert.Equal([0, 1, 2, 3, 4], selection.Selected);
+    }
+
+    [Fact]
+    public void Invert_keeps_real_marks_and_the_cursor_row_they_include()
+    {
+        var selection = Create(count: 6, focus: 0);
+        selection.MoveTo(2, SelectMode.Extend);
+        Assert.True(selection.HasMarks);
+
+        selection.Invert(isFolder: i => i == 0);
+
+        // Row 0 is a folder and keeps its mark; the files turn around.
+        Assert.Equal([0, 3, 4, 5], selection.Selected);
+    }
+
+    [Fact]
+    public void Marking_by_pattern_in_the_windows_style_does_not_count_the_cursor_row()
+    {
+        var selection = Create(count: 8, focus: 0);
+
+        selection.SetMarks([2, 3], mark: true);
+
+        Assert.Equal([2, 3], selection.Selected);
+        Assert.Equal(0, selection.Focus);
+
+        // Unmarking leaves the cursor's own selection alone: nothing was marked there.
+        var other = Create(count: 8, focus: 5);
+        other.SetMarks([2, 3], mark: false);
+        Assert.Equal([5], other.Selected);
+    }
+
+    [Fact]
     public void Unselect_all_leaves_nothing_marked_and_a_command_then_acts_on_the_cursor_row()
     {
         var selection = Create(count: 5, focus: 2);

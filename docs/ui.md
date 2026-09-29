@@ -723,7 +723,7 @@ window is in `CabinetOS.Core` and tested there.
 | Space | `edit.toggleSelectionInPlace` | Marks or unmarks the cursor row, and the cursor stays; a folder it marks is measured |
 | Num +, Num - | `edit.selectByPattern`, `edit.unselectByPattern` | The pattern box ("Prompts in the palette's frame") |
 | Alt+Num +, Alt+Num - | `edit.selectSameExtension`, `edit.unselectSameExtension` | Every file with the cursor file's extension: `*.txt`, and `*.` (no dot) for a name without one |
-| Num * | `edit.invertSelection` | The files' marks turn around; folders keep theirs |
+| Num * | `edit.invertSelection` | The files' marks turn around; folders keep theirs. The cursor row the Windows style selects is no mark ("Marking") |
 | Ctrl+Num - | `edit.unselectAll` | Nothing marked; a command then acts on the cursor row |
 | Num / | `edit.restoreSelection` | The marks the last copy, move, delete or unmark cleared in this pane, found again by name; a name that is gone is skipped |
 | Ctrl+Shift+C, Ctrl+K Ctrl+N, Ctrl+K Ctrl+P | `edit.copyFullPath`, `edit.copyName`, `edit.copyFolderPath` | The targets' paths, their names, or the pane's folder, on Windows' clipboard as text: one per line, no quotes. CabinetOS's own file clipboard (Ctrl+C) is not touched |
@@ -766,6 +766,16 @@ nothing selected.
 ### Prompts in the palette's frame
 
 The pattern box, the pinned folders and the drive list use one prompt,
+In the Windows style that cursor row, selected alone, is the cursor, not a
+mark (`SelectionModel.HasMarks`, which Restore Selection also uses). Num *,
+Num + and Alt+Num + drop it before they mark, so a cursor on a folder is
+not counted with the files they mark: after Home and Num * in a folder of
+two folders and six files, the status bar says "6 selected, 29 B" and the
+folder under the cursor is unmarked. Before, it said "7 selected, 29 B"
+(the live check of 2026-09-29), and F5 would have copied the folder too.
+A selection of several rows, or of a row the cursor is not on, is marks,
+and stays.
+
 `PromptBox`: the palette's Acrylic panel, entrance and rows, with a label,
 a box, an optional check box, a few rows and a hint line. Up and Down move
 the highlight, Enter takes it, Esc (`overlay.close`) or a click outside
