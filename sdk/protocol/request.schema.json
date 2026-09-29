@@ -231,6 +231,24 @@
       ]
     },
     {
+      "description": "Opens a file for editing, and never runs it: with `files.editor`\nwhen it is set, else with the `edit` verb of the file's type, else\nwith Notepad. The core answers `ok` once the editor is started.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The file, as an absolute path.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "edit_path"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
       "description": "Creates a folder; its parent must exist. The core answers `ok`.",
       "type": "object",
       "properties": {

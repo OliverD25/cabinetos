@@ -49,6 +49,8 @@ use tokio::runtime::Handle;
 
 use crate::session::{Session, Start};
 
+pub use conpty::find_program;
+
 /// The most sessions, running or exited, the core keeps at once.
 pub const MAX_SESSIONS: usize = 32;
 

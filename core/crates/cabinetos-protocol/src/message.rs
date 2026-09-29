@@ -115,6 +115,13 @@ pub enum Request {
         /// The file or folder, as an absolute path.
         path: String,
     },
+    /// Opens a file for editing, and never runs it: with `files.editor`
+    /// when it is set, else with the `edit` verb of the file's type, else
+    /// with Notepad. The core answers `ok` once the editor is started.
+    EditPath {
+        /// The file, as an absolute path.
+        path: String,
+    },
     /// Creates a folder; its parent must exist. The core answers `ok`.
     CreateDirectory {
         /// The new folder, as an absolute path.
@@ -373,6 +380,7 @@ impl Request {
         "volume_info",
         "list_volumes",
         "open_path",
+        "edit_path",
         "create_directory",
         "create_file",
         "rename",
@@ -423,6 +431,7 @@ impl Request {
             Self::VolumeInfo { .. } => "volume_info",
             Self::ListVolumes => "list_volumes",
             Self::OpenPath { .. } => "open_path",
+            Self::EditPath { .. } => "edit_path",
             Self::CreateDirectory { .. } => "create_directory",
             Self::CreateFile { .. } => "create_file",
             Self::Rename { .. } => "rename",
@@ -1182,9 +1191,10 @@ pub enum ErrorCode {
     NoSuchSession,
     /// No terminal profile has that name.
     UnknownProfile,
-    /// The shell could not be started: its program is not on the `PATH`, the
-    /// folder does not exist, the session limit is reached, or Windows
-    /// refused.
+    /// A program could not be started. A terminal's shell: its program is
+    /// not on the `PATH`, the folder does not exist, the session limit is
+    /// reached, or Windows refused. The editor of `files.editor`: its
+    /// program is neither a file nor a program on the `PATH`.
     SpawnFailed,
     /// No valid theme has that ID in the themes folder.
     NoSuchTheme,
@@ -1358,6 +1368,9 @@ mod tests {
             Request::ListVolumes,
             Request::OpenPath {
                 path: r"C:\Users\me\notes.txt".to_owned(),
+            },
+            Request::EditPath {
+                path: r"C:\Users\me\build.cmd".to_owned(),
             },
             Request::CreateDirectory {
                 path: r"C:\Users\me\New folder".to_owned(),

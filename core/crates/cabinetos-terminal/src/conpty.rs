@@ -214,8 +214,9 @@ pub(crate) fn spawn(
 /// The full path of `command` (with `.exe` added when it has no
 /// extension): itself when absolute, else the first match in the `PATH`'s
 /// folders. The current folder is not searched, so a stray `pwsh.exe` there
-/// is never run.
-pub(crate) fn find_program(command: &str) -> Option<PathBuf> {
+/// is never run. Terminal profiles find their shells this way, and
+/// `files.editor` its editor.
+pub fn find_program(command: &str) -> Option<PathBuf> {
     let path = Path::new(command);
     if path.is_absolute() {
         if path.is_file() {

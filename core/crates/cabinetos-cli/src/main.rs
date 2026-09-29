@@ -1,7 +1,7 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
 //! UI will), `describe` and `icon` (the shell's type names and icons),
-//! `volume` and `volumes`, `open`, `mkdir`, `mkfile` and `rename`, `shutdown`, the
+//! `volume` and `volumes`, `open`, `edit`, `mkdir`, `mkfile` and `rename`, `shutdown`, the
 //! configuration (`config`), the command registry (`commands`), the keymap
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
@@ -132,6 +132,12 @@ enum Command {
     /// double-click in Explorer does.
     Open {
         /// The file or folder.
+        path: String,
+    },
+    /// Open a file for editing, never running it: with files.editor, else
+    /// with its type's edit verb, else with Notepad.
+    Edit {
+        /// The file.
         path: String,
     },
     /// Create a folder; its parent must exist.
@@ -716,6 +722,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             volume_command(&mut client, &cli.command).await?;
         }
         Command::Open { .. }
+        | Command::Edit { .. }
         | Command::Mkdir { .. }
         | Command::Mkfile { .. }
         | Command::Rename { .. } => {
@@ -799,12 +806,16 @@ async fn volume_command(client: &mut PipeClient, command: &Command) -> anyhow::R
     Ok(())
 }
 
-/// The file commands: `open`, `mkdir`, `mkfile`, `rename`.
+/// The file commands: `open`, `edit`, `mkdir`, `mkfile`, `rename`.
 async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
     let (path, request) = match command {
         Command::Open { path } => {
             let path = absolute(path)?;
             (path.clone(), Request::OpenPath { path })
+        }
+        Command::Edit { path } => {
+            let path = absolute(path)?;
+            (path.clone(), Request::EditPath { path })
         }
         Command::Mkdir { path } => {
             let path = absolute(path)?;
@@ -830,6 +841,7 @@ async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Res
     }
     match command {
         Command::Open { .. } => say(format_args!("opened {path}")),
+        Command::Edit { .. } => say(format_args!("opened {path} for editing")),
         Command::Mkdir { .. } | Command::Mkfile { .. } => say(format_args!("created {path}")),
         Command::Rename { new_name, .. } => say(format_args!("renamed {path} to {new_name}")),
         _ => true,
@@ -1309,6 +1321,10 @@ mod tests {
             Cli::try_parse_from(["cabinetos-cli", "icon", "folder"]).is_err(),
             "--out is required"
         );
+    }
+
+    #[test]
+    fn parses_file_commands() {
         let cli = Cli::try_parse_from(["cabinetos-cli", "open", "notes.txt"]).unwrap();
         assert_eq!(
             cli.command,
@@ -1317,6 +1333,14 @@ mod tests {
             }
         );
         assert!(Cli::try_parse_from(["cabinetos-cli", "open"]).is_err());
+        let cli = Cli::try_parse_from(["cabinetos-cli", "edit", "build.cmd"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Edit {
+                path: "build.cmd".to_owned()
+            }
+        );
+        assert!(Cli::try_parse_from(["cabinetos-cli", "edit"]).is_err());
         let cli = Cli::try_parse_from(["cabinetos-cli", "mkdir", r"E:\new"]).unwrap();
         assert_eq!(
             cli.command,

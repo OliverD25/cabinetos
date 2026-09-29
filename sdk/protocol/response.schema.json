@@ -1084,7 +1084,7 @@
           "const": "unknown_profile"
         },
         {
-          "description": "The shell could not be started: its program is not on the `PATH`, the\nfolder does not exist, the session limit is reached, or Windows\nrefused.",
+          "description": "A program could not be started. A terminal's shell: its program is\nnot on the `PATH`, the folder does not exist, the session limit is\nreached, or Windows refused. The editor of `files.editor`: its\nprogram is neither a file nor a program on the `PATH`.",
           "type": "string",
           "const": "spawn_failed"
         },

@@ -9,7 +9,8 @@
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
 //!   (`list_directory`, `describe_entries`, `get_icon`, `volume_info`,
-//!   `list_volumes`, `open_path`, `create_directory`, `create_file`, `rename`, `set_value`,
+//!   `list_volumes`, `open_path`, `edit_path`, `create_directory`, `create_file`, `rename`,
+//!   `set_value`,
 //!   the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`,
 //!   `list_themes`, `get_theme` of a named theme, `list_tools` and the
@@ -289,6 +290,7 @@ impl Session {
                 request @ (Request::VolumeInfo { .. }
                 | Request::ListVolumes
                 | Request::OpenPath { .. }
+                | Request::EditPath { .. }
                 | Request::CreateDirectory { .. }
                 | Request::CreateFile { .. }
                 | Request::Rename { .. }) => self.file_request(&id, &span, kind, request),
@@ -523,6 +525,21 @@ impl Session {
                 self.spawn_reply(id, span, kind, move || {
                     answer_fs(cabinetos_fs::open_path(&path))
                 });
+            }
+            Request::EditPath { path } => {
+                if let Some(refusal) = not_absolute(&path) {
+                    return Some(refusal);
+                }
+                // Read at each edit: a changed editor applies at once.
+                let editor = self
+                    .services
+                    .settings
+                    .snapshot()
+                    .config
+                    .files
+                    .editor
+                    .clone();
+                self.spawn_reply(id, span, kind, move || edit_path(&path, editor));
             }
             // None needs a job: one name, done at once. A watched listing
             // of the folder hears about it from its watcher.
@@ -1368,6 +1385,30 @@ fn answer_fs(result: Result<(), cabinetos_fs::FsError>) -> Response {
         Ok(()) => Response::Ok,
         Err(error) => failure_reply(listing::fs_failure(&error)),
     }
+}
+
+/// `edit_path`: finds the program of `files.editor`, as a terminal profile
+/// finds its shell, and starts it, or the file type's editor.
+fn edit_path(path: &str, editor: Option<cabinetos_config::EditorProgram>) -> Response {
+    let editor = match editor {
+        Some(editor) => match cabinetos_terminal::find_program(&editor.command) {
+            Some(program) => Some(cabinetos_fs::Editor {
+                program,
+                args: editor.args,
+            }),
+            None => {
+                return failure_reply((
+                    ErrorCode::SpawnFailed,
+                    format!(
+                        "files.editor: `{}` is neither a file nor a program on the PATH",
+                        editor.command
+                    ),
+                ));
+            }
+        },
+        None => None,
+    };
+    answer_fs(cabinetos_fs::edit_path(path, editor.as_ref()))
 }
 
 /// `invalid_path` for a path that is not absolute (a drive letter and a

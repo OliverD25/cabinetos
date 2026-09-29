@@ -156,3 +156,64 @@ fn mkfile_creates_an_empty_file_and_never_replaces_one() {
     stdout(&cli(&core, &["mkfile", &shown(&named)]));
     assert!(named.is_file());
 }
+
+/// The text of `path` once a whole line is in it.
+fn wait_for_line(path: &Path) -> String {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        if let Ok(text) = std::fs::read_to_string(path)
+            && text.ends_with('\n')
+        {
+            return text;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "{} was not written",
+            path.display()
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// `edit` starts `files.editor` with its arguments and the file's path
+/// last, and never runs the file. The editor here is a batch file that
+/// writes its arguments next to itself and exits; its console window
+/// closes with it.
+#[test]
+fn edit_starts_the_configured_editor_with_the_file_last() {
+    let core = start_core();
+    let dir = scratch("edit");
+    let stub = dir.path().join("stub editor.cmd");
+    std::fs::write(&stub, "@echo off\r\n>\"%~dp0arguments.txt\" echo %*\r\n").unwrap();
+    let marker = dir.path().join("ran.txt");
+    let script = dir.path().join("build 2026.cmd");
+    std::fs::write(&script, format!("@echo ran> \"{}\"\r\n", shown(&marker))).unwrap();
+
+    // Refused before anything starts.
+    let folder = stderr(&cli(&core, &["edit", &shown(dir.path())]));
+    assert!(folder.contains("invalid_path"), "{folder}");
+    let gone = dir.path().join("gone.txt");
+    let missing = stderr(&cli(&core, &["edit", &shown(&gone)]));
+    assert!(missing.contains("not_found"), "{missing}");
+    let nowhere = serde_json::json!({"command": "cabinetos-no-such-editor"}).to_string();
+    stdout(&cli(&core, &["config", "set", "files.editor", &nowhere]));
+    let unknown = stderr(&cli(&core, &["edit", &shown(&script)]));
+    assert!(
+        unknown.contains("spawn_failed") && unknown.contains("files.editor"),
+        "{unknown}"
+    );
+
+    let editor =
+        serde_json::json!({"command": shown(&stub), "args": ["--from", "a b"]}).to_string();
+    stdout(&cli(&core, &["config", "set", "files.editor", &editor]));
+    assert_eq!(
+        stdout(&cli(&core, &["edit", &shown(&script)])),
+        format!("opened {} for editing\n", shown(&script))
+    );
+    let recorded = wait_for_line(&dir.path().join("arguments.txt"));
+    assert_eq!(
+        recorded.trim_end(),
+        format!(r#"--from "a b" "{}""#, shown(&script))
+    );
+    assert!(!marker.exists(), "the edited script ran");
+}

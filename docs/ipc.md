@@ -98,7 +98,7 @@ command of the UI (its About view), so the core answers it with
 listing's link and "not on this disk" flags and its `reparse_tag`; and a
 theme's optional `metrics` and `chrome`, with `has_metrics` in `themes`.
 Version 12 (sub-phase 11a, Total Commander's keys and small commands)
-added the sort key `extension` and `create_file`.
+added the sort key `extension`, `create_file` and `edit_path`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -121,6 +121,7 @@ as absent from an older core.
 | `volume_info` | `path` (need not exist) | `volume_info` |
 | `list_volumes` | — | `volumes` (`volumes`) |
 | `open_path` | `path` (absolute) | `ok` |
+| `edit_path` | `path` (absolute, a file) | `ok` |
 | `create_directory` | `path` (absolute; the parent must exist) | `ok` |
 | `create_file` | `path` (absolute; the folder must exist) | `ok` |
 | `rename` | `path` (absolute), `new_name` (a name, without a folder) | `ok` |
@@ -183,7 +184,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `plugin_error` | A plugin's command failed: the plugin answered with an error or with text that is not JSON, crashed, or is not running. Also a grant the core refuses: an unknown capability, or one it never grants. |
 | `no_such_session` | No terminal session has that `session_id`; or, for `terminal_resize` and `terminal_sync_cwd`, its shell has exited. |
 | `unknown_profile` | No profile in `terminal.profiles` has that name. The message lists the names. |
-| `spawn_failed` | The shell could not start: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. |
+| `spawn_failed` | A program could not start. A terminal's shell: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. The editor of `files.editor` (`edit_path`): its program is neither a file nor a program on the `PATH`. |
 | `no_such_theme` | No theme with that ID is in the themes folder, or the ID cannot name a theme file. |
 | `no_such_extension` | The index has no extension with that ID (or not that version); or, for `uninstall_extension`, the marketplace did not install one with that ID. |
 | `marketplace_error` | The index cannot be read or is refused (plain `http:` without `marketplace.allowInsecure`, another `schemaVersion`), a download failed or is not what its kind needs, the files cannot be put in place, or the theme to uninstall is in effect. |
@@ -191,8 +192,8 @@ Any request can instead get `error` with a `code` and a `message`:
 | `incompatible` | The extension needs a newer CabinetOS (`minCoreVersion`). |
 
 Requests on one connection are independent: `list_directory`,
-`describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `create_directory`,
-`create_file`, `rename`,
+`describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
+`create_directory`, `create_file`, `rename`,
 `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
@@ -605,16 +606,47 @@ to, as a double-click on it in Explorer does; a link whose target is gone
 is `not_found`, and the message names the target, before the shell is
 asked (the shell would say only "unspecified error").
 
-Opening a file is core infrastructure: it is the last step of
-navigation, and it hands the file to the application Windows has for it.
-Article 10 still holds: the core has no viewer or editor of its own, and
-those come as extensions.
+```json
+{"id":"01M…","type":"edit_path","path":"C:\\Users\\me\\build.cmd"}
+{"id":"01M…","type":"ok"}
+```
+
+`edit_path` opens a file for editing (the window's F4, `file.edit`), and
+never runs it. The first of these that applies is used:
+
+1. `files.editor` ([config.md](config.md)): its `command`, found as a
+   terminal profile finds its shell (a full path, or a name on the
+   `PATH` with `.exe` added when it has no extension, never the current
+   folder), started with its `args` and the file's path last, quoted the
+   way the C runtime reads a command line. A `command` that is found
+   nowhere is `spawn_failed`, and nothing else is tried: the setting is
+   wrong, and the message says so.
+2. The `edit` verb of the file's type, when the type has one with a
+   command (`AssocQueryStringW`): a batch file's opens Notepad, where its
+   `open` would run it.
+3. Notepad, from the system folder, Total Commander's default editor.
+
+It is its own request, not a field of `open_path`, because a core that
+does not know a field ignores it, and would then open the file, which for
+an `.exe` runs the program; an unknown request is `unknown_request`
+instead (decision D7 of
+[research/total-commander.md](research/total-commander.md)). The path
+must be absolute and exist (`invalid_path`, `not_found`, and a link whose
+target is gone as for `open_path`); a folder is `invalid_path`. The editor
+starts through `ShellExecuteExW` with a console of its own
+(`SEE_MASK_NO_CONSOLE`), so a console editor such as Vim gets a window:
+the core's own console has none. `files.editor` is read at each request.
+
+Opening and editing a file are core infrastructure: they are the last
+step of navigation, and they hand the file to the application Windows or
+the user has for it. Article 10 still holds: the core has no viewer or
+editor of its own, and those come as extensions.
 
 The core runs in the background, and Windows may then open the
 application's window behind the current one, flashing in the taskbar. The
 usual cure is for the UI, the foreground process, to call
-`AllowSetForegroundWindow` with the core's process ID before `open_path`;
-the core does not depend on it.
+`AllowSetForegroundWindow` with the core's process ID before `open_path`
+or `edit_path`; the core does not depend on it.
 
 ## Configuration, commands and keybindings
 
