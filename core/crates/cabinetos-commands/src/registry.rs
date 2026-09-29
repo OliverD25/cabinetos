@@ -168,12 +168,21 @@ const SEED: [Seed; 52] = [
         FILES,
     ),
     seed("file.newFolder", "File", "New Folder", &["f7"], UI, FILES),
-    seed("file.rename", "File", "Rename", &["f2"], UI, FILES),
+    // Shift+F6: Total Commander's rename in place, next to Explorer's F2.
+    seed(
+        "file.rename",
+        "File",
+        "Rename",
+        &["f2", "shift+f6"],
+        UI,
+        FILES,
+    ),
     seed(
         "file.delete",
         "File",
         "Delete to Recycle Bin",
-        &["delete"],
+        // F8: Total Commander's delete.
+        &["delete", "f8"],
         UI,
         FILES,
     ),
@@ -181,7 +190,7 @@ const SEED: [Seed; 52] = [
         "file.deletePermanently",
         "File",
         "Delete Permanently",
-        &["shift+delete"],
+        &["shift+delete", "shift+f8"],
         UI,
         FILES,
     ),
@@ -208,7 +217,8 @@ const SEED: [Seed; 52] = [
         "edit.selectAll",
         "Edit",
         "Select All",
-        &["ctrl+a"],
+        // Ctrl+Num +: Total Commander's "mark all".
+        &["ctrl+a", "ctrl+numpadadd"],
         UI,
         FILES,
     ),
@@ -228,7 +238,8 @@ const SEED: [Seed; 52] = [
         "search.focus",
         "Search",
         "Find Files…",
-        &["ctrl+f"],
+        // Alt+F7: Total Commander's search; its filters come in 11c.
+        &["ctrl+f", "alt+f7"],
         UI,
         None,
     ),
@@ -519,25 +530,37 @@ mod tests {
     fn the_shell_s_commands_run_in_the_ui_with_its_keys() {
         let registry = CommandRegistry::core();
         for (id, keys, when) in [
-            ("go.back", "alt+left", None),
-            ("go.forward", "alt+right", None),
-            ("go.up", "alt+up", None),
-            ("pane.openSelected", "enter", Some("filesView")),
-            ("keys.rebind", "f2", Some("paletteOpen")),
-            ("file.rename", "f2", Some("filesView")),
-            ("file.delete", "delete", Some("filesView")),
-            ("file.deletePermanently", "shift+delete", Some("filesView")),
-            ("file.openInOtherPane", "ctrl+enter", Some("filesView")),
-            ("file.properties", "alt+enter", Some("filesView")),
-            ("edit.cut", "ctrl+x", Some("filesView")),
-            ("edit.copy", "ctrl+c", Some("filesView")),
-            ("edit.paste", "ctrl+v", Some("filesView")),
-            ("edit.selectAll", "ctrl+a", Some("filesView")),
-            ("edit.toggleSelection", "insert", Some("filesView")),
-            ("search.focus", "ctrl+f", None),
-            ("file.copyToOtherPane", "f5", Some("filesView")),
-            ("file.moveToOtherPane", "f6", Some("filesView")),
-            ("file.newFolder", "f7", Some("filesView")),
+            ("go.back", &["alt+left"][..], None),
+            ("go.forward", &["alt+right"][..], None),
+            ("go.up", &["alt+up"][..], None),
+            ("pane.openSelected", &["enter"][..], Some("filesView")),
+            ("keys.rebind", &["f2"][..], Some("paletteOpen")),
+            ("file.rename", &["f2", "shift+f6"][..], Some("filesView")),
+            ("file.delete", &["delete", "f8"][..], Some("filesView")),
+            (
+                "file.deletePermanently",
+                &["shift+delete", "shift+f8"][..],
+                Some("filesView"),
+            ),
+            (
+                "file.openInOtherPane",
+                &["ctrl+enter"][..],
+                Some("filesView"),
+            ),
+            ("file.properties", &["alt+enter"][..], Some("filesView")),
+            ("edit.cut", &["ctrl+x"][..], Some("filesView")),
+            ("edit.copy", &["ctrl+c"][..], Some("filesView")),
+            ("edit.paste", &["ctrl+v"][..], Some("filesView")),
+            (
+                "edit.selectAll",
+                &["ctrl+a", "ctrl+numpadadd"][..],
+                Some("filesView"),
+            ),
+            ("edit.toggleSelection", &["insert"][..], Some("filesView")),
+            ("search.focus", &["ctrl+f", "alt+f7"][..], None),
+            ("file.copyToOtherPane", &["f5"][..], Some("filesView")),
+            ("file.moveToOtherPane", &["f6"][..], Some("filesView")),
+            ("file.newFolder", &["f7"][..], Some("filesView")),
         ] {
             let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
             assert_eq!(command.target, CommandTarget::Ui, "{id}");
@@ -546,7 +569,7 @@ mod tests {
                 .iter()
                 .map(ToString::to_string)
                 .collect();
-            assert_eq!(seeded, [keys], "{id}");
+            assert_eq!(seeded, keys, "{id}");
             assert_eq!(command.when.as_deref(), when, "{id}");
         }
         // The window's own commands, so the palette ranks them and the user

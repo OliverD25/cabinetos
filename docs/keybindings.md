@@ -45,21 +45,21 @@ The core's commands, in palette order:
 | `file.copyToOtherPane` | File: Copy to Other Pane | `f5` | `filesView` | UI |
 | `file.moveToOtherPane` | File: Move to Other Pane | `f6` | `filesView` | UI |
 | `file.newFolder` | File: New Folder | `f7` | `filesView` | UI |
-| `file.rename` | File: Rename | `f2` | `filesView` | UI |
-| `file.delete` | File: Delete to Recycle Bin | `delete` | `filesView` | UI |
-| `file.deletePermanently` | File: Delete Permanently | `shift+delete` | `filesView` | UI |
+| `file.rename` | File: Rename | `f2`, `shift+f6` | `filesView` | UI |
+| `file.delete` | File: Delete to Recycle Bin | `delete`, `f8` | `filesView` | UI |
+| `file.deletePermanently` | File: Delete Permanently | `shift+delete`, `shift+f8` | `filesView` | UI |
 | `file.openInOtherPane` | File: Open in Other Pane | `ctrl+enter` | `filesView` | UI |
 | `file.properties` | File: Properties | `alt+enter` | `filesView` | UI |
 | `edit.cut` | Edit: Cut | `ctrl+x` | `filesView` | UI |
 | `edit.copy` | Edit: Copy | `ctrl+c` | `filesView` | UI |
 | `edit.paste` | Edit: Paste | `ctrl+v` | `filesView` | UI |
-| `edit.selectAll` | Edit: Select All | `ctrl+a` | `filesView` | UI |
+| `edit.selectAll` | Edit: Select All | `ctrl+a`, `ctrl+numpadadd` | `filesView` | UI |
 | `edit.toggleSelection` | Edit: Toggle Selection | `insert` | `filesView` | UI |
 | `go.back` | Go: Back | `alt+left` | | UI |
 | `go.forward` | Go: Forward | `alt+right` | | UI |
 | `go.up` | Go: Up One Level | `alt+up` | | UI |
 | `go.toPath` | Go: Go to Path… | `ctrl+l` | | UI |
-| `search.focus` | Search: Find Files… | `ctrl+f` | | UI |
+| `search.focus` | Search: Find Files… | `ctrl+f`, `alt+f7` | | UI |
 | `search.scope` | Search: Whole Volume | | | UI |
 | `editor.openMarkdownPreview` | Editor: Open Markdown Preview | `ctrl+k v` | `filesView` | UI |
 | `editor.close` | Editor: Close Editor | | | UI |
@@ -96,6 +96,11 @@ The core's commands, in palette order:
   palette and can be rebound like any other (Article 7); the window's
   buttons run the same commands, with arguments (a session, a path) that
   the palette leaves out.
+- The second keys of `file.rename` (`shift+f6`), `file.delete` (`f8`),
+  `file.deletePermanently` (`shift+f8`), `edit.selectAll`
+  (`ctrl+numpadadd`) and `search.focus` (`alt+f7`) are Total Commander's
+  keys for the same actions (sub-phase 11a;
+  [research/total-commander.md](research/total-commander.md), Part 2).
 - The Markdown preview is a Tool Extension that the window opens
   ([tool-extensions.md](tool-extensions.md)), so its command,
   `editor.openMarkdownPreview`, is the window's. It keeps the design's
