@@ -247,7 +247,9 @@ public sealed partial class ThemePicker : UserControl
                 Fill = ThemeResources.Brush("CbAccentBrush"),
             });
         }
-        row.PointerEntered += (_, _) => _model?.SetHighlight(index);
+        // On a move only: the rows are built again at every highlight change, and a pointer that
+        // merely sits over the list would snap the highlight back under itself after each key.
+        row.PointerMoved += (_, _) => _model?.SetHighlight(index);
         row.Tapped += (_, _) => _ = RunCommand?.Invoke("theme.apply", CommandArgs.Object(("index", index)), "mouse");
         return row;
     }
