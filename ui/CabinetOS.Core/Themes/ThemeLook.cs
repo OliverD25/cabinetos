@@ -90,7 +90,8 @@ public sealed record TerminalLook(string Foreground, string Background, string C
 /// Everything the window paints from one theme (docs/ui.md, "Themes"): each
 /// design token's colour, the Acrylic brushes, the two-stop gradients, the
 /// accent and its shades, the Mica tint, the file-type and folder colours,
-/// the capability levels, and the terminal's colours.
+/// the capability levels, the terminal's colours, and the sizes and chrome
+/// elements (docs/ui.md, "Metrics and chrome").
 /// </summary>
 public sealed class ThemeLook
 {
@@ -135,6 +136,12 @@ public sealed class ThemeLook
 
     /// <summary>The terminal page's colours.</summary>
     public required TerminalLook Terminal { get; init; }
+
+    /// <summary>Every size the window lays out with (the theme's <c>metrics</c>, the default look's where it has none).</summary>
+    public ThemeMetrics Metrics { get; init; } = MetricsMapper.Default;
+
+    /// <summary>Which chrome elements the window shows (the theme's <c>chrome</c>).</summary>
+    public ChromeLook Chrome { get; init; } = ChromeLook.None;
 }
 
 /// <summary>A theme colour that is not <c>#RRGGBB</c> or <c>#RRGGBBAA</c>: which key, and what it said.</summary>

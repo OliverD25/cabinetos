@@ -334,9 +334,22 @@ public sealed record ThemePalette(
 public sealed record ThemeTerminal(string Foreground, string Background, string Cursor, IReadOnlyList<string> Ansi);
 
 /// <summary>
+/// Which elements of the window a theme shows (docs/themes.md, "Chrome").
+/// Each one left out is off, as in the default theme. The theme's own keys
+/// are camelCase, unlike the protocol's.
+/// </summary>
+public sealed record ThemeChrome(
+    [property: JsonPropertyName("fkeyBar")] bool? FkeyBar = null,
+    [property: JsonPropertyName("rowStripes")] bool? RowStripes = null,
+    [property: JsonPropertyName("hairlines")] bool? Hairlines = null);
+
+/// <summary>
 /// A colour theme (docs/themes.md): what <c>get_theme</c> answers and
 /// <c>theme_changed</c> carries. A null <see cref="Accent"/> follows the
 /// Windows accent colour; a null <see cref="Mica"/> shows plain Mica.
+/// <see cref="Metrics"/> (named sizes, camelCase as in the file) and
+/// <see cref="Chrome"/> came with the theme format's version 2; null keeps
+/// the default look's sizes and elements.
 /// </summary>
 public sealed record ColorTheme(
     string Id,
@@ -348,7 +361,9 @@ public sealed record ColorTheme(
     MicaTint? Mica,
     ThemePalette Palette,
     ThemeTerminal Terminal,
-    string? Attribution = null)
+    string? Attribution = null,
+    IReadOnlyDictionary<string, double>? Metrics = null,
+    ThemeChrome? Chrome = null)
 {
     public const string Dark = "dark";
     public const string Light = "light";
@@ -368,9 +383,12 @@ public sealed record ColorTheme(
 /// <summary>
 /// What the theme picker shows of a theme (<c>list_themes</c>): no palette.
 /// <see cref="Mica"/> came with protocol 11; a core before it leaves it
-/// out, and null also means plain Mica.
+/// out, and null also means plain Mica. <see cref="HasMetrics"/> says the
+/// theme sets sizes (a density preset such as Commander Compact); a core
+/// before the theme format's version 2 leaves it out.
 /// </summary>
-public sealed record ThemeInfo(string Id, string Name, string Author, string Version, string Kind, string? Accent = null, MicaTint? Mica = null);
+public sealed record ThemeInfo(string Id, string Name, string Author, string Version, string Kind, string? Accent = null, MicaTint? Mica = null,
+    bool HasMetrics = false);
 
 /// <summary>Reply to <c>list_themes</c>: every valid theme, by ID.</summary>
 public sealed record ThemesReply(IReadOnlyList<ThemeInfo> Themes) : CoreReply;

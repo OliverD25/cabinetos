@@ -72,6 +72,20 @@
             <SolidColorBrush x:Key="CbFolderFrontBrush" Color="#FFF8D98A" />
             <SolidColorBrush x:Key="CbRunningBrush" Color="#FF6CCB5F" />
             <SolidColorBrush x:Key="CbRatingStarBrush" Color="#FFF2C063" />
+            <!--
+              The chrome a theme may turn on (docs/ui.md, "Metrics and chrome"): hairlines and the
+              bars' fills, the active pane header, row stripes and the selection over them, and the
+              function-key bar's buttons and labels, in the Commander Compact handout's shades.
+            -->
+            <SolidColorBrush x:Key="CbHairlineBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CbHairlineStrongBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="CbBarFillBrush" Color="#08FFFFFF" />
+            <SolidColorBrush x:Key="CbHeaderActiveFillBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="CbRowStripeBrush" Color="#06FFFFFF" />
+            <SolidColorBrush x:Key="CbStripedSelectedFillBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="CbFkeyFillBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="CbFkeyHoverFillBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="CbFkeyLabelBrush" Color="#CCFFFFFF" />
 
             <!-- A 1 px lighter bottom edge, as on a Fluent text field. -->
             <LinearGradientBrush x:Key="CbFieldStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">

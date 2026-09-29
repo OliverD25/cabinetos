@@ -348,6 +348,22 @@ public class ProtocolTests
                     Assert.Equal("#BF616A", theme.Palette.FileTypeColors["pdf"]);
                     Assert.Equal(16, theme.Terminal.Ansi.Count);
                     Assert.False(theme.IsLight);
+                    Assert.Null(theme.Metrics);
+                    Assert.Null(theme.Chrome);
+                }),
+            // The theme format's version 2: a density preset says so in the list, and brings its sizes and chrome.
+            ($$$"""{"id":"{{{Id}}}","type":"themes","themes":[{"id":"commander-compact","name":"Commander Compact","author":"CabinetOS","version":"1.0.0","kind":"system","accent":null,"mica":null,"has_metrics":true},{"id":"default","name":"Default","author":"CabinetOS","version":"1.1.0","kind":"system","accent":null,"mica":null,"has_metrics":false}]}""",
+                b =>
+                {
+                    var themes = Assert.IsType<ThemesReply>(b).Themes;
+                    Assert.Equal((true, false), (themes[0].HasMetrics, themes[1].HasMetrics));
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"theme","theme":{{{NordTheme[..^1]}}},"metrics":{"rowHeight":20,"lineHeight":1.3},"chrome":{"fkeyBar":true,"hairlines":false} } }""",
+                b =>
+                {
+                    var theme = Assert.IsType<ThemeReply>(b).Theme;
+                    Assert.Equal((20.0, 1.3), (theme.Metrics!["rowHeight"], theme.Metrics["lineHeight"]));
+                    Assert.Equal(new ThemeChrome(FkeyBar: true, Hairlines: false), theme.Chrome);
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"marketplace_index","source":"C:\\market\\index.json","fetched_at_ms":1790000000000,"items":[{{{HelloItem}}},{{{NordItem}}}]}""",
                 b =>

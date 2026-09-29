@@ -109,6 +109,17 @@ public static class ThemeMapper
             ["CbRunningBrush"] = levels.Low,
             // The design's rating star is its medium level's yellow.
             ["CbRatingStarBrush"] = levels.Medium,
+            // The chrome's shades (docs/ui.md, "Metrics and chrome"): the Commander Compact
+            // handout's white at .08, .10, .03, .06, .025 and .12, and the function keys' .05, .12, .8.
+            ["CbHairlineBrush"] = Text(0x14),
+            ["CbHairlineStrongBrush"] = Text(0x1A),
+            ["CbBarFillBrush"] = Text(0x08),
+            ["CbHeaderActiveFillBrush"] = Text(0x0F),
+            ["CbRowStripeBrush"] = Text(0x06),
+            ["CbStripedSelectedFillBrush"] = Text(0x1F),
+            ["CbFkeyFillBrush"] = Text(0x0D),
+            ["CbFkeyHoverFillBrush"] = Text(0x1F),
+            ["CbFkeyLabelBrush"] = Text(0xCC),
         };
 
         // The palette's Acrylic alpha is how much luminosity it lays over the blur (0xB8, the design's .72);
@@ -138,6 +149,7 @@ public static class ThemeMapper
             fileTypes[extension.TrimStart('.')] = Parse(value, $"palette.fileTypeColors.{extension}");
         }
 
+        var metrics = MetricsMapper.Map(theme.Metrics);
         return new ThemeLook
         {
             Id = theme.Id,
@@ -147,14 +159,38 @@ public static class ThemeMapper
             FollowsSystemAccent = followsSystem,
             Accent = accent,
             AccentShades = shades,
-            Mica = theme.Mica is { } mica ? new MicaLook(Parse(mica.Tint, "mica.tint").WithAlpha(0xFF), Math.Clamp(mica.Opacity, 0, 1)) : null,
+            Mica = theme.Mica is { } mica
+                ? new MicaLook(Parse(mica.Tint, "mica.tint").WithAlpha(0xFF), Math.Clamp(mica.Opacity, 0, 1))
+                : DenserMica(metrics.BackdropOpacity, isLight),
             Brushes = brushes,
             Acrylics = acrylics,
             Gradients = gradients,
             FileTypes = fileTypes,
             Levels = levels,
             Terminal = Terminal(terminal, accent),
+            Metrics = metrics,
+            Chrome = ChromeLook.From(theme.Chrome),
         };
+    }
+
+    /// <summary>
+    /// Plain Mica for a theme without a tint of its own, covering the desktop
+    /// as <c>backdropOpacity</c> asks: at the default look's 0.86 (the
+    /// design's <c>rgba(32,32,32,.86)</c> stands for plain Mica) and below,
+    /// plain Mica (null); above it, Mica's own base colour laid over it,
+    /// from the controller's own tint opacity (0.8 dark, 0.5 light) at 0.86
+    /// up to opaque at 1. Commander Compact's 0.94 gives 0.91 in dark mode.
+    /// </summary>
+    public static MicaLook? DenserMica(double backdropOpacity, bool light)
+    {
+        const double plain = 0.86;
+        if (backdropOpacity <= plain)
+        {
+            return null;
+        }
+        var (color, micaOwn) = light ? (new Argb(0xFF, 0xF3, 0xF3, 0xF3), 0.5) : (new Argb(0xFF, 0x20, 0x20, 0x20), 0.8);
+        var share = (Math.Min(backdropOpacity, 1) - plain) / (1 - plain);
+        return new MicaLook(color, Math.Round(micaOwn + ((1 - micaOwn) * share), 3));
     }
 
     /// <summary>
