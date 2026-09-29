@@ -15,6 +15,7 @@ use crate::market::Marketplace;
 use crate::search::IndexerLink;
 use crate::settings::Settings;
 use crate::themes::Themes;
+use crate::window::WindowStates;
 
 /// Events a connection may fall behind by before it misses some: about ten
 /// seconds of progress from four jobs at once.
@@ -61,4 +62,6 @@ pub(crate) struct Services {
     pub(crate) themes: Arc<Themes>,
     /// The marketplace: the index, installs and uninstalls.
     pub(crate) market: Arc<Marketplace>,
+    /// What each window shows, as it last said (`window_state`).
+    pub(crate) windows: WindowStates,
 }

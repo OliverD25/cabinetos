@@ -1,0 +1,184 @@
+//! The CLI's Phase 14 commands against a real core: `state` prints what a
+//! window told the core.
+//!
+//! Needs `cabinetos-core.exe` next to `cabinetos-cli.exe`; `cargo test
+//! --workspace` builds both. A test that plays the window talks to the
+//! core through `cabinetos-ipc`, as the window does.
+
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Output, Stdio};
+use std::time::{Duration, Instant};
+
+use cabinetos_ipc::{PipeClient, PipeName};
+use cabinetos_protocol::{Pane, PaneState, Request, Response, WindowPanes, WindowState, WindowTab};
+use tempfile::TempDir;
+
+const CLI_EXE: &str = env!("CARGO_BIN_EXE_cabinetos-cli");
+const STARTUP_DEADLINE: Duration = Duration::from_secs(10);
+
+struct Core {
+    child: Child,
+    pipe: PipeName,
+    dir: TempDir,
+}
+
+impl Drop for Core {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl Core {
+    #[allow(dead_code)]
+    fn files(&self) -> PathBuf {
+        let files = self.dir.path().join("files");
+        std::fs::create_dir_all(&files).unwrap();
+        files
+    }
+}
+
+fn core_exe() -> PathBuf {
+    let path = Path::new(CLI_EXE).with_file_name("cabinetos-core.exe");
+    assert!(
+        path.exists(),
+        "{} is missing; build it with `cargo build -p cabinetos-core` (`cargo test --workspace` does)",
+        path.display()
+    );
+    path
+}
+
+fn start_core() -> Core {
+    let root = std::env::temp_dir().join("cabinetos-core-test");
+    std::fs::create_dir_all(&root).unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("cli14")
+        .tempdir_in(root)
+        .unwrap();
+    let pipe = PipeName::random();
+    let child = Command::new(core_exe())
+        .args(["--pipe", pipe.token()])
+        .arg("--config")
+        .arg(dir.path().join("config").join("cabinetos.json"))
+        .env("CABINETOS_LOG_DIR", dir.path().join("logs"))
+        .env("CABINETOS_PLUGINS_DIR", dir.path().join("plugins"))
+        .env(
+            "CABINETOS_PLUGINS_DATA_DIR",
+            dir.path().join("plugins-data"),
+        )
+        .env("CABINETOS_THEMES_DIR", dir.path().join("themes"))
+        .env_remove("CABINETOS_CONFIG")
+        .env_remove("CABINETOS_LOG")
+        .env_remove("CABINETOS_LOG_STDERR")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let core = Core { child, pipe, dir };
+    let deadline = Instant::now() + STARTUP_DEADLINE;
+    while !cli(&core, &["ping"]).status.success() {
+        assert!(
+            Instant::now() < deadline,
+            "the core did not answer within {STARTUP_DEADLINE:?}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    core
+}
+
+fn cli(core: &Core, args: &[&str]) -> Output {
+    Command::new(CLI_EXE)
+        .args(["--pipe", core.pipe.token()])
+        .args(args)
+        .env_remove("CABINETOS_LOG")
+        .env_remove("CABINETOS_CONFIG")
+        .output()
+        .unwrap()
+}
+
+fn stdout(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+fn runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+}
+
+#[test]
+fn state_prints_what_the_window_said() {
+    let core = start_core();
+    let output = cli(&core, &["state"]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("no_window"), "{}", stderr(&output));
+
+    let runtime = runtime();
+    let state = WindowState {
+        active_pane: Pane::Left,
+        panes: WindowPanes {
+            left: PaneState {
+                tabs: vec![
+                    WindowTab {
+                        path: r"C:\Users\me".to_owned(),
+                        locked: false,
+                        tool: None,
+                    },
+                    WindowTab {
+                        path: r"E:\Звіт 2026".to_owned(),
+                        locked: true,
+                        tool: None,
+                    },
+                ],
+                active: 1,
+                cursor: Some(r"E:\Звіт 2026\a.txt".to_owned()),
+                marked: vec![r"E:\Звіт 2026\a.txt".to_owned()],
+            },
+            right: PaneState::default(),
+        },
+    };
+    // The window stays connected while the CLI asks: its state goes with it.
+    let window = runtime.block_on(async {
+        let mut window = PipeClient::connect(&core.pipe, Duration::from_secs(5))
+            .await
+            .unwrap();
+        window.hello("CabinetOS").await.unwrap();
+        let reply = window
+            .request(Request::WindowState(state.clone()))
+            .await
+            .unwrap();
+        assert_eq!(reply.body, Response::Ok);
+        window
+    });
+
+    let output = cli(&core, &["state"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.starts_with("window CabinetOS#"), "{text}");
+    for wanted in [
+        "left pane (has the keyboard)",
+        "\n   1   C:\\Users\\me\n",
+        "\n  *2   E:\\Звіт 2026  [locked]\n",
+        r"  cursor: E:\Звіт 2026\a.txt",
+        "  marked: 1",
+        "right pane\n  no tabs\n  cursor: none\n  marked: 0",
+    ] {
+        assert!(text.contains(wanted), "{wanted:?} in\n{text}");
+    }
+
+    let output = cli(&core, &["state", "--json"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let printed: WindowState = serde_json::from_str(&stdout(&output)).unwrap();
+    assert_eq!(printed, state);
+
+    let output = cli(&core, &["state", "--client", "nobody#9"]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("nobody#9"), "{}", stderr(&output));
+    drop(window);
+}

@@ -8,6 +8,7 @@ use crate::market::{ExtensionKind, MarketItem, ToolInfo};
 use crate::plugin::{PluginInfo, PluginState};
 use crate::terminal::TerminalSession;
 use crate::theme::{Theme, ThemeInfo};
+use crate::window::WindowState;
 
 /// One message on the control channel: a request ID, the trace of the user
 /// action it belongs to, and the message body.
@@ -434,6 +435,21 @@ pub enum Request {
         /// The extension's ID.
         extension_id: String,
     },
+    /// Tells the core what a window shows: the pane that has the keyboard,
+    /// each pane's tabs, its cursor row and its marked rows. The core keeps
+    /// the last state of each client (the connection) until the client
+    /// disconnects, and only stores it; a window may send it at every
+    /// change. Needs `hello`. The core answers `ok`.
+    WindowState(WindowState),
+    /// Asks what a window shows. The core answers `window_state` with the
+    /// state of the client that sent one last, or of the named client;
+    /// `no_window` when there is none.
+    GetWindowState {
+        /// A client, as a `window_state` reply names it (`CabinetOS#2`);
+        /// without it, the client that sent its state last.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        client: Option<String>,
+    },
 }
 
 fn default_search_limit() -> u32 {
@@ -494,6 +510,8 @@ impl Request {
         "marketplace_search",
         "install_extension",
         "uninstall_extension",
+        "window_state",
+        "get_window_state",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -550,6 +568,8 @@ impl Request {
             Self::MarketplaceSearch { .. } => "marketplace_search",
             Self::InstallExtension { .. } => "install_extension",
             Self::UninstallExtension { .. } => "uninstall_extension",
+            Self::WindowState(_) => "window_state",
+            Self::GetWindowState { .. } => "get_window_state",
         }
     }
 }
@@ -790,6 +810,17 @@ pub enum Response {
         /// since 1970-01-01 UTC.
         fetched_at_ms: u64,
     },
+    /// Reply to `get_window_state`.
+    WindowState {
+        /// The client that sent the state: its `hello` name and a number
+        /// the core gives each connection, such as `CabinetOS#2`.
+        client: String,
+        /// When the core received the state, in milliseconds since
+        /// 1970-01-01 UTC.
+        sent_at_ms: u64,
+        /// The state, as the client sent it.
+        state: WindowState,
+    },
 }
 
 impl Response {
@@ -824,6 +855,7 @@ impl Response {
         "theme",
         "tools",
         "marketplace_index",
+        "window_state",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -859,6 +891,7 @@ impl Response {
             Self::Theme { .. } => "theme",
             Self::Tools { .. } => "tools",
             Self::MarketplaceIndex { .. } => "marketplace_index",
+            Self::WindowState { .. } => "window_state",
         }
     }
 }
@@ -1362,6 +1395,9 @@ pub enum ErrorCode {
     HashMismatch,
     /// The extension needs a newer CabinetOS (`minCoreVersion`).
     Incompatible,
+    /// No window told the core what it shows (`window_state`), or not the
+    /// client named.
+    NoWindow,
 }
 
 #[cfg(test)]
@@ -1654,7 +1690,47 @@ mod tests {
             Request::UninstallExtension {
                 extension_id: "hello".to_owned(),
             },
+            Request::WindowState(window_state()),
+            Request::GetWindowState {
+                client: Some("CabinetOS#2".to_owned()),
+            },
         ]
+    }
+
+    fn window_state() -> WindowState {
+        use crate::window::{Pane, PaneState, WindowPanes, WindowTab};
+        WindowState {
+            active_pane: Pane::Right,
+            panes: WindowPanes {
+                left: PaneState {
+                    tabs: vec![WindowTab {
+                        path: r"C:\Users\me".to_owned(),
+                        locked: false,
+                        tool: None,
+                    }],
+                    active: 0,
+                    cursor: Some(r"C:\Users\me\notes.txt".to_owned()),
+                    marked: Vec::new(),
+                },
+                right: PaneState {
+                    tabs: vec![
+                        WindowTab {
+                            path: r"D:\work".to_owned(),
+                            locked: true,
+                            tool: None,
+                        },
+                        WindowTab {
+                            path: r"D:\work\README.md".to_owned(),
+                            locked: false,
+                            tool: Some("md-preview".to_owned()),
+                        },
+                    ],
+                    active: 1,
+                    cursor: None,
+                    marked: vec![r"D:\work\a.txt".to_owned()],
+                },
+            },
+        }
     }
 
     fn progress() -> JobProgress {
@@ -1870,6 +1946,11 @@ mod tests {
                 items: vec![market_item()],
                 source: r"C:\market\index.json".to_owned(),
                 fetched_at_ms: 1_790_000_000_000,
+            },
+            Response::WindowState {
+                client: "CabinetOS#2".to_owned(),
+                sent_at_ms: 1_790_000_000_000,
+                state: window_state(),
             },
         ]
     }
@@ -2217,6 +2298,7 @@ mod tests {
             (ErrorCode::MarketplaceError, "marketplace_error"),
             (ErrorCode::HashMismatch, "hash_mismatch"),
             (ErrorCode::Incompatible, "incompatible"),
+            (ErrorCode::NoWindow, "no_window"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));

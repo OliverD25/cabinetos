@@ -7,7 +7,8 @@
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
 //! search (`search`, `index status`), the terminal sessions (`term`), the
-//! colour themes (`themes`), and the marketplace (`market`).
+//! colour themes (`themes`), the marketplace (`market`), and what the
+//! window shows (`state`).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -28,6 +29,7 @@ mod patterns;
 mod plugins;
 mod search;
 mod settings;
+mod state;
 mod term;
 mod themes;
 
@@ -278,6 +280,17 @@ enum Command {
     Market {
         #[command(subcommand)]
         action: MarketAction,
+    },
+    /// Print what the window shows, as it last told the core: the two
+    /// panes, their tabs, the cursor row and how many rows are marked.
+    State {
+        /// Print the state as the window sent it, as JSON.
+        #[arg(long)]
+        json: bool,
+        /// Another window than the one that spoke last, by the name this
+        /// command prints (for example CabinetOS#2).
+        #[arg(long, value_name = "ID")]
+        client: Option<String>,
     },
 }
 
@@ -801,6 +814,12 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Term(arguments) => term_command(&mut client, arguments).await?,
         Command::Themes { .. } | Command::Market { .. } => {
             extension_command(&mut client, &cli.command).await?;
+        }
+        Command::State {
+            json,
+            client: named,
+        } => {
+            state::state(&mut client, *json, named.as_deref()).await?;
         }
     }
     Ok(())

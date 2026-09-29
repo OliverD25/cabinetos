@@ -35,6 +35,7 @@ mod settings;
 mod terminal;
 mod themes;
 mod volumes;
+mod window;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -247,6 +248,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         hydrator: Arc::new(cabinetos_fs::Hydrator::new()),
         themes,
         market,
+        windows: window::WindowStates::default(),
     });
     let mut result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     if result.is_ok() && panicked.load(Ordering::SeqCst) {

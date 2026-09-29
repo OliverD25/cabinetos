@@ -102,7 +102,10 @@ added the sort key `extension`, `create_file`, `edit_path`,
 `show_properties`, `measure_paths` with its reply `measure_started`, the
 events `measure_progress` and `measure_finished`, and `cancel_measure`;
 `match_entries` with its reply `entry_matches`; and
-`terminal_type_paths`.
+`terminal_type_paths`. Version 13 (sub-phase 14a, the foundations of
+Phase 14, each general and useful without AI) added `window_state` and
+`get_window_state`, with the reply `window_state` and the error code
+`no_window` ("What the window shows").
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -165,6 +168,8 @@ as absent from an older core.
 | `marketplace_search` | `query`; `kind` (`plugin`, `theme` or `tool`) | `marketplace_index` |
 | `install_extension` | `extension_id`; `version` (without it: the newest this core runs) | `ok`, once it is in place |
 | `uninstall_extension` | `extension_id` | `ok` |
+| `window_state` | `active_pane`, `panes` (after `hello`) | `ok` |
+| `get_window_state` | `client` (without it: the client that spoke last) | `window_state` (`client`, `sent_at_ms`, `state`) |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -199,6 +204,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `marketplace_error` | The index cannot be read or is refused (plain `http:` without `marketplace.allowInsecure`, another `schemaVersion`), a download failed or is not what its kind needs, the files cannot be put in place, or the theme to uninstall is in effect. |
 | `hash_mismatch` | The download's SHA-256 is not the one the index gives. It was deleted, and nothing was installed. |
 | `incompatible` | The extension needs a newer CabinetOS (`minCoreVersion`). |
+| `no_window` | No client told the core what its window shows (`window_state`), or not the client named. |
 
 Requests on one connection are independent: `list_directory`,
 `describe_entries`, `match_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
@@ -1250,6 +1256,52 @@ configuration says where it is; the core reads it only when a client asks.
   a tool install or uninstall. A client that fell behind on events gets a
   `tools_changed` with the tools as they are, after the other events sent
   again.
+
+## What the window shows
+
+The window owns its panes, their tabs, the cursor and the marks (Phase 12:
+tabs per pane). It tells the core on each change, so a program without a
+window of its own (the command line, a plugin) can ask what the user looks
+at. The core only stores it.
+
+```json
+{"id":"01M…","type":"window_state","active_pane":"left","panes":{
+ "left":{"tabs":[{"path":"C:\\Users\\me","locked":false,"tool":null},
+                 {"path":"E:\\work\\README.md","locked":false,"tool":"md-preview"}],
+         "active":0,"cursor":"C:\\Users\\me\\notes.txt","marked":["C:\\Users\\me\\notes.txt"]},
+ "right":{"tabs":[{"path":"D:\\","locked":true,"tool":null}],"active":0,"cursor":null,"marked":[]}}}
+{"id":"01M…","type":"ok"}
+```
+
+- `active_pane` is `left` or `right`: the pane that has the keyboard.
+- Each pane has its `tabs`, left to right (`path`; `locked`; `tool`, the
+  ID of the Tool Extension the tab shows, or `null` for a folder), the
+  index of the tab in front (`active`, from 0), the full path of the cursor
+  row (`cursor`, `null` when there is none) and the full paths of the
+  marked rows (`marked`, in the pane's order). `locked`, `tool`, `cursor`
+  and `marked` may be left out.
+- It needs `hello`: the core keeps the last state per client, named by
+  its `hello` name and a number the core gives the connection, such as
+  `CabinetOS#2`. When the connection ends, its state goes.
+- A window may send it at every change: the core only stores it. The log
+  has a debug line for it, not an info line.
+
+```json
+{"id":"01N…","type":"get_window_state"}
+{"id":"01N…","type":"window_state","client":"CabinetOS#2","sent_at_ms":1790000000000,
+ "state":{"active_pane":"left","panes":{…}}}
+```
+
+`get_window_state` answers the state of the client that sent one last, or
+of the client named in `client`; the state exactly as it was sent, and
+when the core received it (`sent_at_ms`, milliseconds since 1970-01-01
+UTC). With no state, or none from that client, it answers `no_window`.
+It needs no `hello`.
+
+`cabinetos-cli state` prints it as a table (who sent it and when, each
+pane with its tabs, the tab in front marked `*`, the cursor and the number
+of marked rows); `--json` prints the state as it was received, and
+`--client <id>` asks for another window than the newest.
 
 ## Trying it by hand
 

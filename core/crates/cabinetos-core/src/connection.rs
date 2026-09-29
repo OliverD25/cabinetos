@@ -61,6 +61,9 @@ static NEXT_LISTING_ID: AtomicU64 = AtomicU64::new(1);
 /// Measure IDs are unique across all connections, as listing IDs are.
 static NEXT_MEASURE_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Numbers the clients that said `hello`, for their IDs (`CabinetOS#2`).
+static NEXT_CLIENT: AtomicU64 = AtomicU64::new(1);
+
 /// Queues messages for the connection's writer task.
 #[derive(Clone, Debug)]
 pub(crate) struct Outbox(pub(crate) mpsc::UnboundedSender<Vec<u8>>);
@@ -85,6 +88,9 @@ impl Outbox {
 /// The client, after `hello`.
 struct Client {
     pid: u32,
+    /// Its name and the connection's number, such as `CabinetOS#2`: how
+    /// `get_window_state` names it.
+    id: String,
 }
 
 /// What the session keeps for each open listing.
@@ -205,6 +211,9 @@ pub(crate) async fn handle_connection(
 
     reader_task.abort();
     rethrow_panic(reader_task.await);
+    if let Some(client) = &session.client {
+        session.services.windows.remove(&client.id);
+    }
     // A measure counts on a pool thread, which aborting its task does not
     // stop.
     session.stop_measures();
@@ -259,6 +268,7 @@ struct Session {
 }
 
 impl Session {
+    #[expect(clippy::too_many_lines, reason = "one arm per group of requests")]
     fn handle_frame(&mut self, frame: &[u8]) {
         let started = Instant::now();
         let envelope = match decode_request(frame) {
@@ -350,6 +360,10 @@ impl Session {
                 | Request::UninstallExtension { .. }) => {
                     self.extension_request(&id, &span, kind, request)
                 }
+                Request::WindowState(state) => Some(self.window_state(state)),
+                Request::GetWindowState { client } => {
+                    Some(self.services.windows.get(client.as_deref()))
+                }
             }
         };
         // Requests handled right here are done; the others log when they end.
@@ -385,8 +399,15 @@ impl Session {
                 "client_pid {client_pid} is not the process on the other end of the pipe ({actual})"
             ));
         }
-        tracing::info!(client_pid, client_name, "client said hello");
-        self.client = Some(Client { pid: client_pid });
+        let named = format!(
+            "{client_name}#{}",
+            NEXT_CLIENT.fetch_add(1, Ordering::Relaxed)
+        );
+        tracing::info!(client_pid, client_name, client = %named, "client said hello");
+        self.client = Some(Client {
+            pid: client_pid,
+            id: named,
+        });
         self.events = Some(self.services.events.subscribe());
         // Conflicts raised before this client connected (a restarted UI)
         // still wait for a decision. One raised while this runs may arrive
@@ -401,6 +422,15 @@ impl Session {
             protocol_version: PROTOCOL_VERSION,
             core_version: CORE_VERSION.to_owned(),
         }
+    }
+
+    /// `window_state`: kept as this client's last state.
+    fn window_state(&self, state: cabinetos_protocol::WindowState) -> Response {
+        let Some(client) = &self.client else {
+            return protocol_error("hello required");
+        };
+        self.services.windows.store(&client.id, state);
+        Response::Ok
     }
 
     fn close_listing(&mut self, listing_id: u64) -> Response {
@@ -1609,10 +1639,14 @@ fn job_error(error: cabinetos_jobs::JobError) -> Response {
 }
 
 /// One line per request, inside its span, so its `request_id` is in the log.
+/// A window may send `window_state` at every change, so its success is a
+/// debug line only.
 fn log_handled(kind: &'static str, started: Instant, reply: &Response) {
     let elapsed_us = listing::micros(started.elapsed());
     if let Response::Error { code, message } = reply {
         tracing::info!(request = kind, elapsed_us, ?code, error = %message, "request failed");
+    } else if kind == "window_state" {
+        tracing::debug!(request = kind, elapsed_us, "request handled");
     } else {
         tracing::info!(request = kind, elapsed_us, "request handled");
     }

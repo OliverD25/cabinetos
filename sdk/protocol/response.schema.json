@@ -732,6 +732,36 @@
         "source",
         "fetched_at_ms"
       ]
+    },
+    {
+      "description": "Reply to `get_window_state`.",
+      "type": "object",
+      "properties": {
+        "client": {
+          "description": "The client that sent the state: its `hello` name and a number\nthe core gives each connection, such as `CabinetOS#2`.",
+          "type": "string"
+        },
+        "sent_at_ms": {
+          "description": "When the core received the state, in milliseconds since\n1970-01-01 UTC.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "The state, as the client sent it.",
+          "$ref": "#/$defs/WindowState"
+        },
+        "type": {
+          "type": "string",
+          "const": "window_state"
+        }
+      },
+      "required": [
+        "type",
+        "client",
+        "sent_at_ms",
+        "state"
+      ]
     }
   ],
   "required": [
@@ -1185,6 +1215,11 @@
           "description": "The extension needs a newer CabinetOS (`minCoreVersion`).",
           "type": "string",
           "const": "incompatible"
+        },
+        {
+          "description": "No window told the core what it shows (`window_state`), or not the\nclient named.",
+          "type": "string",
+          "const": "no_window"
         }
       ]
     },
@@ -2431,6 +2466,58 @@
         "permissionHigh"
       ]
     },
+    "Pane": {
+      "description": "A file pane of the window.",
+      "oneOf": [
+        {
+          "description": "The left pane (the only one in single-pane mode).",
+          "type": "string",
+          "const": "left"
+        },
+        {
+          "description": "The right pane.",
+          "type": "string",
+          "const": "right"
+        }
+      ]
+    },
+    "PaneState": {
+      "description": "One pane: its tabs, the tab in front, the cursor row and the marked rows.",
+      "type": "object",
+      "properties": {
+        "active": {
+          "description": "The index of the tab in front, from 0.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
+        },
+        "cursor": {
+          "description": "The full path of the row the cursor is on; `null` in an empty\nfolder or a tab that shows a tool.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "marked": {
+          "description": "The full paths of the marked rows, in the pane's order.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "tabs": {
+          "description": "The pane's tabs, left to right.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/WindowTab"
+          }
+        }
+      }
+    },
     "PluginInfo": {
       "description": "One installed plugin.",
       "type": "object",
@@ -3127,6 +3214,68 @@
         "letter",
         "state",
         "entries"
+      ]
+    },
+    "WindowPanes": {
+      "description": "The two panes of a window.",
+      "type": "object",
+      "properties": {
+        "left": {
+          "description": "The left pane.",
+          "$ref": "#/$defs/PaneState"
+        },
+        "right": {
+          "description": "The right pane.",
+          "$ref": "#/$defs/PaneState"
+        }
+      },
+      "required": [
+        "left",
+        "right"
+      ]
+    },
+    "WindowState": {
+      "description": "What a window shows, as its `window_state` request says it.",
+      "type": "object",
+      "properties": {
+        "active_pane": {
+          "description": "The pane that has the keyboard.",
+          "$ref": "#/$defs/Pane"
+        },
+        "panes": {
+          "description": "Both panes.",
+          "$ref": "#/$defs/WindowPanes"
+        }
+      },
+      "required": [
+        "active_pane",
+        "panes"
+      ]
+    },
+    "WindowTab": {
+      "description": "One tab of a pane.",
+      "type": "object",
+      "properties": {
+        "locked": {
+          "description": "A locked tab stays on its folder.",
+          "type": "boolean",
+          "default": false
+        },
+        "path": {
+          "description": "The folder the tab shows, or the file a tool shows.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "The Tool Extension the tab shows (its `tool.json` ID); `null` for a\nfolder.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "path"
       ]
     }
   }

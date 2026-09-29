@@ -26,6 +26,7 @@ mod plugin;
 pub mod shm;
 mod terminal;
 mod theme;
+mod window;
 
 #[cfg(feature = "schema")]
 pub mod schema;
@@ -54,6 +55,7 @@ pub use theme::{
     Chrome, Color, Decimal, FileTypeColors, METRICS, MetricSpec, MetricUnit, Metrics, MicaTint,
     Opacity, Palette, Rgb, THEME_FORMAT, TerminalColors, Theme, ThemeInfo, ThemeKind,
 };
+pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 
 /// Version of the control-channel protocol. The core reports it in
 /// [`Response::Pong`] and [`Response::Welcome`]. Raise it whenever a message
@@ -86,5 +88,7 @@ pub use theme::{
 /// `show_properties`, `measure_paths` with `measure_started`, the events
 /// `measure_progress` and `measure_finished`, and `cancel_measure`;
 /// `match_entries` with its reply `entry_matches`; and
-/// `terminal_type_paths`.
-pub const PROTOCOL_VERSION: u32 = 12;
+/// `terminal_type_paths`; version 13 the foundations of Phase 14:
+/// `window_state` and `get_window_state` (reply `window_state`, error
+/// code `no_window`).
+pub const PROTOCOL_VERSION: u32 = 13;
