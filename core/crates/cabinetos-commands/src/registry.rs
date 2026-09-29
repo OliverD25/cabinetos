@@ -38,8 +38,9 @@ struct Seed {
     id: &'static str,
     category: &'static str,
     title: &'static str,
-    /// Default keys; empty for none.
-    keys: &'static str,
+    /// Default keys, in the order the palette shows them; none for a
+    /// command without keys. All of them share the command's `when`.
+    keys: &'static [&'static str],
     target: CommandTarget,
     when: Option<&'static str>,
 }
@@ -48,7 +49,7 @@ const fn seed(
     id: &'static str,
     category: &'static str,
     title: &'static str,
-    keys: &'static str,
+    keys: &'static [&'static str],
     target: CommandTarget,
     when: Option<&'static str>,
 ) -> Seed {
@@ -79,16 +80,23 @@ const SEED: [Seed; 52] = [
         "palette.show",
         "View",
         "Show Command Palette",
-        "ctrl+shift+p",
+        &["ctrl+shift+p"],
         UI,
         None,
     ),
-    seed("overlay.close", "View", "Close Overlay", "escape", UI, None),
+    seed(
+        "overlay.close",
+        "View",
+        "Close Overlay",
+        &["escape"],
+        UI,
+        None,
+    ),
     seed(
         "keys.open",
         "Preferences",
         "Open Keyboard Shortcuts",
-        "ctrl+k ctrl+s",
+        &["ctrl+k ctrl+s"],
         UI,
         None,
     ),
@@ -97,7 +105,7 @@ const SEED: [Seed; 52] = [
         "keys.rebind",
         "Preferences",
         "Change Keys of Selected Command",
-        "f2",
+        &["f2"],
         UI,
         PALETTE,
     ),
@@ -105,7 +113,7 @@ const SEED: [Seed; 52] = [
         "view.toggleDualPane",
         "View",
         "Toggle Dual Pane",
-        "ctrl+shift+d",
+        &["ctrl+shift+d"],
         UI,
         None,
     ),
@@ -113,7 +121,7 @@ const SEED: [Seed; 52] = [
         "view.toggleTerminal",
         "View",
         "Toggle Integrated Terminal",
-        "ctrl+backquote",
+        &["ctrl+backquote"],
         UI,
         None,
     ),
@@ -121,7 +129,7 @@ const SEED: [Seed; 52] = [
         "view.focusOtherPane",
         "View",
         "Focus Other Pane",
-        "tab",
+        &["tab"],
         UI,
         FILES,
     ),
@@ -129,17 +137,17 @@ const SEED: [Seed; 52] = [
         "view.toggleSidebar",
         "View",
         "Toggle Sidebar",
-        "ctrl+b",
+        &["ctrl+b"],
         UI,
         None,
     ),
-    seed("sidebar.pin", "Sidebar", "Pin Folder", "", UI, None),
-    seed("sidebar.unpin", "Sidebar", "Unpin Folder", "", UI, None),
+    seed("sidebar.pin", "Sidebar", "Pin Folder", &[], UI, None),
+    seed("sidebar.unpin", "Sidebar", "Unpin Folder", &[], UI, None),
     seed(
         "pane.openSelected",
         "Pane",
         "Open Selected Item",
-        "enter",
+        &["enter"],
         UI,
         FILES,
     ),
@@ -147,7 +155,7 @@ const SEED: [Seed; 52] = [
         "file.copyToOtherPane",
         "File",
         "Copy to Other Pane",
-        "f5",
+        &["f5"],
         UI,
         FILES,
     ),
@@ -155,17 +163,17 @@ const SEED: [Seed; 52] = [
         "file.moveToOtherPane",
         "File",
         "Move to Other Pane",
-        "f6",
+        &["f6"],
         UI,
         FILES,
     ),
-    seed("file.newFolder", "File", "New Folder", "f7", UI, FILES),
-    seed("file.rename", "File", "Rename", "f2", UI, FILES),
+    seed("file.newFolder", "File", "New Folder", &["f7"], UI, FILES),
+    seed("file.rename", "File", "Rename", &["f2"], UI, FILES),
     seed(
         "file.delete",
         "File",
         "Delete to Recycle Bin",
-        "delete",
+        &["delete"],
         UI,
         FILES,
     ),
@@ -173,7 +181,7 @@ const SEED: [Seed; 52] = [
         "file.deletePermanently",
         "File",
         "Delete Permanently",
-        "shift+delete",
+        &["shift+delete"],
         UI,
         FILES,
     ),
@@ -181,7 +189,7 @@ const SEED: [Seed; 52] = [
         "file.openInOtherPane",
         "File",
         "Open in Other Pane",
-        "ctrl+enter",
+        &["ctrl+enter"],
         UI,
         FILES,
     ),
@@ -189,58 +197,72 @@ const SEED: [Seed; 52] = [
         "file.properties",
         "File",
         "Properties",
-        "alt+enter",
+        &["alt+enter"],
         UI,
         FILES,
     ),
-    seed("edit.cut", "Edit", "Cut", "ctrl+x", UI, FILES),
-    seed("edit.copy", "Edit", "Copy", "ctrl+c", UI, FILES),
-    seed("edit.paste", "Edit", "Paste", "ctrl+v", UI, FILES),
-    seed("edit.selectAll", "Edit", "Select All", "ctrl+a", UI, FILES),
+    seed("edit.cut", "Edit", "Cut", &["ctrl+x"], UI, FILES),
+    seed("edit.copy", "Edit", "Copy", &["ctrl+c"], UI, FILES),
+    seed("edit.paste", "Edit", "Paste", &["ctrl+v"], UI, FILES),
+    seed(
+        "edit.selectAll",
+        "Edit",
+        "Select All",
+        &["ctrl+a"],
+        UI,
+        FILES,
+    ),
     seed(
         "edit.toggleSelection",
         "Edit",
         "Toggle Selection",
-        "insert",
+        &["insert"],
         UI,
         FILES,
     ),
-    seed("go.back", "Go", "Back", "alt+left", UI, None),
-    seed("go.forward", "Go", "Forward", "alt+right", UI, None),
-    seed("go.up", "Go", "Up One Level", "alt+up", UI, None),
-    seed("go.toPath", "Go", "Go to Path…", "ctrl+l", UI, None),
-    seed("search.focus", "Search", "Find Files…", "ctrl+f", UI, None),
-    seed("search.scope", "Search", "Whole Volume", "", UI, None),
+    seed("go.back", "Go", "Back", &["alt+left"], UI, None),
+    seed("go.forward", "Go", "Forward", &["alt+right"], UI, None),
+    seed("go.up", "Go", "Up One Level", &["alt+up"], UI, None),
+    seed("go.toPath", "Go", "Go to Path…", &["ctrl+l"], UI, None),
+    seed(
+        "search.focus",
+        "Search",
+        "Find Files…",
+        &["ctrl+f"],
+        UI,
+        None,
+    ),
+    seed("search.scope", "Search", "Whole Volume", &[], UI, None),
     // The design's binding: the second key without Ctrl.
     seed(
         "editor.openMarkdownPreview",
         "Editor",
         "Open Markdown Preview",
-        "ctrl+k v",
+        &["ctrl+k v"],
         UI,
         FILES,
     ),
-    seed("editor.close", "Editor", "Close Editor", "", UI, None),
-    seed("editor.reload", "Editor", "Reload Editor", "", UI, None),
-    seed("transfer.pause", "Transfer", "Pause", "", UI, None),
-    seed("transfer.resume", "Transfer", "Resume", "", UI, None),
-    seed("transfer.cancel", "Transfer", "Cancel", "", UI, None),
+    seed("editor.close", "Editor", "Close Editor", &[], UI, None),
+    seed("editor.reload", "Editor", "Reload Editor", &[], UI, None),
+    seed("transfer.pause", "Transfer", "Pause", &[], UI, None),
+    seed("transfer.resume", "Transfer", "Resume", &[], UI, None),
+    seed("transfer.cancel", "Transfer", "Cancel", &[], UI, None),
     seed(
         "transfer.minimize",
         "Transfer",
         "Minimize Panel",
-        "",
+        &[],
         UI,
         None,
     ),
-    seed("transfer.restore", "Transfer", "Show Panel", "", UI, None),
-    seed("transfer.next", "Transfer", "Show Next Job", "", UI, None),
-    seed("transfer.close", "Transfer", "Close Panel", "", UI, None),
+    seed("transfer.restore", "Transfer", "Show Panel", &[], UI, None),
+    seed("transfer.next", "Transfer", "Show Next Job", &[], UI, None),
+    seed("transfer.close", "Transfer", "Close Panel", &[], UI, None),
     seed(
         "conflict.resolve",
         "Transfer",
         "Resolve Conflict",
-        "",
+        &[],
         UI,
         None,
     ),
@@ -248,16 +270,16 @@ const SEED: [Seed; 52] = [
         "marketplace.browse",
         "Marketplace",
         "Browse Plugins and Themes",
-        "ctrl+shift+x",
+        &["ctrl+shift+x"],
         UI,
         None,
     ),
-    seed("plugins.list", "Plugins", "Show Plugins", "", UI, None),
+    seed("plugins.list", "Plugins", "Show Plugins", &[], UI, None),
     seed(
         "workspace.switch",
         "Workspace",
         "Switch Workspace…",
-        "ctrl+k ctrl+w",
+        &["ctrl+k ctrl+w"],
         UI,
         None,
     ),
@@ -265,7 +287,7 @@ const SEED: [Seed; 52] = [
         "preferences.selectColorTheme",
         "Preferences",
         "Color Theme",
-        "ctrl+k ctrl+t",
+        &["ctrl+k ctrl+t"],
         UI,
         None,
     ),
@@ -273,25 +295,50 @@ const SEED: [Seed; 52] = [
         "terminal.runTask",
         "Terminal",
         "Run Task…",
-        "ctrl+shift+b",
+        &["ctrl+shift+b"],
         UI,
         None,
     ),
-    seed("terminal.new", "Terminal", "New Terminal", "", UI, None),
-    seed("terminal.show", "Terminal", "Show Terminal", "", UI, None),
-    seed("terminal.close", "Terminal", "Close Terminal", "", UI, None),
+    seed("terminal.new", "Terminal", "New Terminal", &[], UI, None),
+    seed("terminal.show", "Terminal", "Show Terminal", &[], UI, None),
+    seed(
+        "terminal.close",
+        "Terminal",
+        "Close Terminal",
+        &[],
+        UI,
+        None,
+    ),
     seed(
         "terminal.reload",
         "Terminal",
         "Reload Terminal",
-        "",
+        &[],
         UI,
         None,
     ),
     // Explorer's key for another window of the same folder.
-    seed("window.new", "Window", "New Window", "ctrl+n", UI, None),
-    seed("help.about", "Help", "About CabinetOS", "", UI, None),
+    seed("window.new", "Window", "New Window", &["ctrl+n"], UI, None),
+    seed("help.about", "Help", "About CabinetOS", &[], UI, None),
 ];
+
+/// The command a seed row describes.
+fn from_seed(seed: &Seed) -> Command {
+    Command {
+        id: seed.id.to_owned(),
+        category: seed.category.to_owned(),
+        title: seed.title.to_owned(),
+        default_keys: seed
+            .keys
+            .iter()
+            .map(|keys| keys.parse().expect("the seed keys follow the key grammar"))
+            .collect(),
+        source: CommandSource::Core,
+        target: seed.target,
+        when: seed.when.map(str::to_owned),
+        immutable: IMMUTABLE_TIER.contains(&seed.id),
+    }
+}
 
 /// Every command, in a stable order.
 #[derive(Clone, Debug, Default)]
@@ -313,28 +360,9 @@ impl CommandRegistry {
     /// command, `editor.openMarkdownPreview`, is the window's and is here.
     #[must_use]
     pub fn core() -> Self {
-        let commands = SEED
-            .iter()
-            .map(|seed| Command {
-                id: seed.id.to_owned(),
-                category: seed.category.to_owned(),
-                title: seed.title.to_owned(),
-                default_keys: if seed.keys.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![
-                        seed.keys
-                            .parse()
-                            .expect("the seed keys follow the key grammar"),
-                    ]
-                },
-                source: CommandSource::Core,
-                target: seed.target,
-                when: seed.when.map(str::to_owned),
-                immutable: IMMUTABLE_TIER.contains(&seed.id),
-            })
-            .collect();
-        Self { commands }
+        Self {
+            commands: SEED.iter().map(from_seed).collect(),
+        }
     }
 
     /// Adds a command, for example one a plugin provides (Phase 7).
@@ -375,6 +403,77 @@ impl CommandRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn texts(keys: &[KeySequence]) -> Vec<String> {
+        keys.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn a_command_may_have_several_default_keys() {
+        use crate::keymap::{Override, compile};
+
+        let command = from_seed(&seed(
+            "file.delete",
+            "File",
+            "Delete",
+            &["delete", "f8"],
+            UI,
+            FILES,
+        ));
+        assert_eq!(texts(&command.default_keys), ["delete", "f8"]);
+        let mut registry = CommandRegistry::default();
+        registry.register(command).unwrap();
+
+        // Both are bound, in the seed's order, in the command's context, and
+        // the keymap the UI receives carries both.
+        let wire = compile(&registry, &[]).unwrap().keymap.to_wire();
+        let bound: Vec<(&str, Option<&str>)> = wire
+            .bindings
+            .iter()
+            .map(|binding| (binding.keys.as_str(), binding.when.as_deref()))
+            .collect();
+        assert_eq!(
+            bound,
+            [("delete", Some("filesView")), ("f8", Some("filesView"))]
+        );
+
+        // The pencil (`keys.rebind`) writes one override for the command,
+        // which replaces every default key; a reset brings both back.
+        let rebound = compile(
+            &registry,
+            &[Override {
+                command: "file.delete".to_owned(),
+                keys: Some("ctrl+d".parse().unwrap()),
+                when: None,
+            }],
+        )
+        .unwrap();
+        let keys: Vec<String> = rebound
+            .keymap
+            .keys_of("file.delete")
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(keys, ["ctrl+d"]);
+    }
+
+    #[test]
+    fn the_immutable_tier_keeps_its_one_key_each() {
+        let registry = CommandRegistry::core();
+        for (id, key) in [
+            ("palette.show", "ctrl+shift+p"),
+            ("overlay.close", "escape"),
+            ("keys.open", "ctrl+k ctrl+s"),
+        ] {
+            let command = registry.get(id).unwrap();
+            assert!(command.immutable, "{id}");
+            assert_eq!(texts(&command.default_keys), [key], "{id}");
+        }
+        assert_eq!(
+            IMMUTABLE_TIER,
+            ["palette.show", "overlay.close", "keys.open"]
+        );
+    }
 
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {

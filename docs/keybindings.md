@@ -21,7 +21,7 @@ is started. A command has:
 |---|---|---|
 | `id` | `view.toggleDualPane` | `category.verbObject`, unique |
 | `category`, `title` | `View`, `Toggle Dual Pane` | What the palette shows: `View: Toggle Dual Pane` |
-| `default_keys` | `ctrl+shift+d` | Its keys before the user changes anything; may be empty |
+| `default_keys` | `delete`, `f8` | Its keys before the user changes anything, in the order the palette shows them; may be empty. Several keys share the command's `when` |
 | `source` | `core` | Who provides it: the core, or a plugin (`{"kind":"plugin","id":…}`) |
 | `target` | `ui` | Who runs it: the UI, or the core |
 | `when` | `filesView` | The context of its bindings; none means everywhere |
@@ -252,7 +252,11 @@ The same keys in different contexts are allowed (see "Contexts" above).
 **From the UI or the command line.** `set_keybinding` binds a command to new
 keys and `reset_keybinding` gives it its defaults back; both write the file
 and answer with the new keymap. `set_keybinding` replaces the user's earlier
-entries for that command with one entry without `when`. From a terminal:
+entries for that command with one entry without `when`. So for a command
+with several default keys (`file.delete` has `delete` and `f8`), the
+palette's pencil (`keys.rebind`) replaces all of them with the one new key,
+and `reset_keybinding` brings all of them back. A second key of the user's
+own is a second entry in the file. From a terminal:
 
 ```text
 cabinetos-cli keys list
