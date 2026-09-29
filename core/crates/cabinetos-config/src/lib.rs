@@ -32,9 +32,9 @@ mod watch;
 pub use diff::changed_paths;
 pub use model::{
     Config, DEFAULT_MARKETPLACE_INDEX, DockSize, EditorProgram, FORMAT_VERSION, FilesConfig,
-    KeybindingEntry, Keys, Layout, LogLevel, LoggingConfig, MarketplaceConfig, PanesConfig,
-    PluginSettings, SCHEMA_REFERENCE, SelectionMode, SortConfig, TerminalConfig, TerminalProfile,
-    UiConfig,
+    KeybindingEntry, Keys, Layout, LogLevel, LoggingConfig, MarketplaceConfig, PaneTabs,
+    PanesConfig, PluginSettings, SCHEMA_REFERENCE, SelectionMode, SortConfig, TabEntry, TabsConfig,
+    TerminalConfig, TerminalProfile, UiConfig,
 };
 pub use parse::{ConfigError, Rejection, file_text, parse, parse_checked};
 pub use store::{

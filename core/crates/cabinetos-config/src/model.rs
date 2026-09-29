@@ -105,6 +105,47 @@ pub struct UiConfig {
     /// The Tool Dock's size as the user last dragged it, so it survives a
     /// restart.
     pub dock_size: DockSize,
+    /// The tabs of each pane as the window last saved them, so the next
+    /// start opens them again. The window owns them; the core only checks
+    /// and stores them.
+    pub tabs: TabsConfig,
+}
+
+/// The tabs of both panes.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default)]
+pub struct TabsConfig {
+    /// The left pane's tabs.
+    pub left: PaneTabs,
+    /// The right pane's tabs.
+    pub right: PaneTabs,
+}
+
+/// One pane's tabs, left to right, and which one is in front.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default)]
+pub struct PaneTabs {
+    /// The tabs, left to right. Empty: the pane opens one tab, as
+    /// `ui.lastPaths` or the window decides.
+    pub items: Vec<TabEntry>,
+    /// The index of the tab in front, from 0; must name one of `items`
+    /// (0 when there are none).
+    pub active: u32,
+}
+
+/// One tab of a pane.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct TabEntry {
+    /// The folder the tab shows, as an absolute path.
+    pub path: String,
+    /// A locked tab stays on its folder: opening another folder in it opens
+    /// a new tab instead.
+    #[serde(default)]
+    pub locked: bool,
 }
 
 /// The Tool Dock's size, in pixels, for each place it can sit. `null`: the
@@ -129,6 +170,7 @@ impl Default for UiConfig {
             last_paths: Vec::new(),
             pinned: Vec::new(),
             dock_size: DockSize::default(),
+            tabs: TabsConfig::default(),
         }
     }
 }
@@ -425,6 +467,12 @@ mod tests {
             (config.ui.dock_size.bottom, config.ui.dock_size.right),
             (None, None)
         );
+        assert_eq!(config.ui.tabs, TabsConfig::default());
+        assert!(config.ui.tabs.left.items.is_empty() && config.ui.tabs.right.items.is_empty());
+        assert_eq!(
+            (config.ui.tabs.left.active, config.ui.tabs.right.active),
+            (0, 0)
+        );
         assert!(!config.panes.show_hidden);
         assert_eq!(SortSpec::from(config.panes.sort), SortSpec::default());
         // Article 4: the first run marks files as Windows does.
@@ -483,6 +531,46 @@ mod tests {
     }
 
     #[test]
+    fn tabs_are_read_with_their_defaults_and_unknown_keys_refused() {
+        let ui: UiConfig = serde_json::from_str(
+            r#"{"tabs": {"left": {"items": [{"path": "C:\\x", "locked": true}, {"path": "D:\\y"}], "active": 1}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            ui.tabs.left.items,
+            [
+                TabEntry {
+                    path: r"C:\x".to_owned(),
+                    locked: true
+                },
+                TabEntry {
+                    path: r"D:\y".to_owned(),
+                    locked: false
+                }
+            ]
+        );
+        assert_eq!(ui.tabs.left.active, 1);
+        assert_eq!(ui.tabs.right, PaneTabs::default());
+        for (bad, expected) in [
+            (r#"{"tabs": {"middle": {}}}"#, "unknown field `middle`"),
+            (
+                r#"{"tabs": {"left": {"items": [{"path": "C:\\", "pinned": true}]}}}"#,
+                "unknown field `pinned`",
+            ),
+            (
+                r#"{"tabs": {"left": {"items": [{}]}}}"#,
+                "missing field `path`",
+            ),
+            (r#"{"tabs": {"left": {"active": -1}}}"#, "invalid value"),
+        ] {
+            let error = serde_json::from_str::<UiConfig>(bad)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(expected), "{bad}: {error}");
+        }
+    }
+
+    #[test]
     fn keys_are_normalized_and_empty_means_none() {
         let entry: KeybindingEntry =
             serde_json::from_str(r#"{"command":"view.toggleSidebar","keys":"Ctrl+Alt+B"}"#)
@@ -515,6 +603,12 @@ mod tests {
         assert!(text.contains("\"dualPane\":true"));
         assert!(text.contains("\"lastPaths\":[],\"pinned\":[]"));
         assert!(text.contains("\"dockSize\":{\"bottom\":null,\"right\":null}"));
+        assert!(
+            text.contains(
+                "\"tabs\":{\"left\":{\"items\":[],\"active\":0},\"right\":{\"items\":[],\"active\":0}}"
+            ),
+            "{text}"
+        );
         let dragged: UiConfig = serde_json::from_str(r#"{"dockSize": {"bottom": 320}}"#).unwrap();
         assert_eq!(
             dragged.dock_size,

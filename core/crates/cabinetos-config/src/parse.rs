@@ -177,6 +177,28 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
                 .to_owned(),
         ));
     }
+    for (pane, tabs) in [
+        ("left", &config.ui.tabs.left),
+        ("right", &config.ui.tabs.right),
+    ] {
+        let count = tabs.items.len();
+        if usize::try_from(tabs.active).map_or(true, |active| active >= count.max(1)) {
+            return Err(ConfigError::at(
+                text,
+                &[
+                    Segment::Key("ui"),
+                    Segment::Key("tabs"),
+                    Segment::Key(pane),
+                    Segment::Key("active"),
+                ],
+                format!(
+                    "ui.tabs.{pane}.active is {}, but the {pane} pane has {count} tab{}; it counts from 0",
+                    tabs.active,
+                    if count == 1 { "" } else { "s" }
+                ),
+            ));
+        }
+    }
     let profiles = &config.terminal.profiles;
     for (index, profile) in profiles.iter().enumerate() {
         if profiles[..index]
@@ -322,6 +344,29 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.message.contains("two terminal profiles"), "{error}");
+    }
+
+    #[test]
+    fn a_tab_index_past_the_end_names_the_pane() {
+        let text = "{\n  \"ui\": {\n    \"tabs\": {\n      \"right\": {\"items\": [{\"path\": \"C:\\\\\"}], \"active\": 1}\n    }\n  }\n}";
+        let error = parse(text).unwrap_err();
+        assert!(
+            error.message.contains("ui.tabs.right.active is 1")
+                && error.message.contains("the right pane has 1 tab;"),
+            "{error}"
+        );
+        assert_eq!(error.line, Some(4), "{error}");
+        let error = parse(r#"{"ui": {"tabs": {"left": {"active": 2}}}}"#).unwrap_err();
+        assert!(
+            error.message.contains("ui.tabs.left.active is 2") && error.message.contains("0 tabs"),
+            "{error}"
+        );
+        // No tabs and 0 in front is the default; the last tab in front is fine.
+        assert!(parse(r#"{"ui": {"tabs": {"left": {"items": [], "active": 0}}}}"#).is_ok());
+        assert!(
+            parse(r#"{"ui": {"tabs": {"left": {"items": [{"path": "C:\\"}, {"path": "D:\\"}], "active": 1}}}}"#)
+                .is_ok()
+        );
     }
 
     #[test]

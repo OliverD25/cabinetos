@@ -39,6 +39,16 @@ file itself shows everything that can be set:
     "dockSize": {
       "bottom": null,
       "right": null
+    },
+    "tabs": {
+      "left": {
+        "items": [],
+        "active": 0
+      },
+      "right": {
+        "items": [],
+        "active": 0
+      }
     }
   },
   "panes": {
@@ -98,6 +108,8 @@ while you type.
 | `ui.pinned` | list of folder paths | empty | Folders the user pinned to the sidebar, in the sidebar's order |
 | `ui.dockSize.bottom` | pixels, or `null` | `null` | The Tool Dock's height under the panes, as the user last dragged it; `null` gives the design's size. The window keeps it within the design's limits. |
 | `ui.dockSize.right` | pixels, or `null` | `null` | The Tool Dock's width beside the panes, the same way |
+| `ui.tabs.left.items`, `ui.tabs.right.items` | list of `{ "path", "locked" }` | empty | Each pane's tabs, left to right, as the window last saved them; the next start opens them again. `path` is the folder the tab shows; `locked` (default `false`) keeps the tab on its folder, so opening another folder there opens a new tab. Empty: the pane opens one tab from `ui.lastPaths`, or as the window decides. |
+| `ui.tabs.left.active`, `ui.tabs.right.active` | a number from 0 | `0` | The tab in front, counting from 0. It must name one of the pane's tabs (with none, only `0`): a number past the end is an error that names the pane, for example `ui.tabs.right.active is 3, but the right pane has 2 tabs; it counts from 0`. |
 | `panes.showHidden` | `true`, `false` | `false` | Also list hidden and system entries |
 | `panes.sort.key` | `name`, `size`, `modified`, `kind`, `extension` | `name` | The order of a listing ([ipc.md](ipc.md), "Listing a directory"); directories always come first |
 | `panes.sort.descending` | `true`, `false` | `false` | Reverse the order |
@@ -111,6 +123,23 @@ while you type.
 | `plugins.<id>.granted` | list of capability names | empty | The capabilities the user granted it, such as `fs:read`. It runs only when it has every capability it asks for. Installing the plugin from the marketplace clears them. |
 | `marketplace.index` | an `https:` URL, a `file:` URL, or the path of an `index.json` or of its folder | `https://oliverd25.github.io/cabinetos-marketplace/index.json`, the public index ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)) | Where the marketplace index is ([marketplace.md](marketplace.md)). The core reads it only when a client asks. A file written before 2026-09-30 may still hold the old placeholder `https://marketplace.cabinetos.invalid/index.json`, which never resolves; remove the line and the public index is used. |
 | `marketplace.allowInsecure` | `true`, `false` | `false` | Also accept a plain `http:` index and downloads, which anyone on the network could change on the way. For testing only. |
+
+A pane with tabs, as the window saves it:
+
+```json
+"ui": {
+  "tabs": {
+    "left": {
+      "items": [
+        { "path": "C:\\Users\\me\\Documents", "locked": false },
+        { "path": "E:\\work", "locked": true }
+      ],
+      "active": 1
+    },
+    "right": { "items": [], "active": 0 }
+  }
+}
+```
 
 Who uses what:
 

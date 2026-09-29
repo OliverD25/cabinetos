@@ -872,6 +872,52 @@ mod tests {
     }
 
     #[test]
+    fn tabs_round_trip_through_the_file() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let paths = paths_beyond_ascii();
+        let tabs = serde_json::json!({
+            "left": {
+                "items": [
+                    {"path": r"C:\x", "locked": false},
+                    {"path": paths[0], "locked": true},
+                ],
+                "active": 1
+            },
+            "right": {"items": [{"path": paths[4], "locked": false}], "active": 0}
+        });
+        let changed = store.set_value("ui.tabs", tabs.clone(), accept).unwrap();
+        assert_eq!(
+            changed,
+            [
+                "ui.tabs.left.active",
+                "ui.tabs.left.items",
+                "ui.tabs.right.items"
+            ]
+        );
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["tabs"], tabs);
+        let (reopened, opened) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(opened, Opened::Loaded);
+        assert_eq!(reopened.config().ui.tabs, store.config().ui.tabs);
+        assert_eq!(reopened.config().ui.tabs.left.items[1].path, paths[0]);
+        assert!(reopened.config().ui.tabs.left.items[1].locked);
+        assert_eq!(reopened.config().ui.tabs.right.items[0].path, paths[4]);
+        // An index past the end is refused, and the file stays as it was.
+        let before = std::fs::read_to_string(&path).unwrap();
+        let result = store.set_value("ui.tabs.right.active", Value::from(1), accept);
+        let Err(UpdateError::Rejected(rejection)) = result else {
+            panic!("{result:?}")
+        };
+        assert!(
+            rejection.message.contains("ui.tabs.right.active is 1"),
+            "{}",
+            rejection.message
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+    }
+
+    #[test]
     fn set_value_takes_text_beyond_ascii() {
         let (_dir, path) = temp_config();
         let (mut store, _) = ConfigStore::open(path.clone(), accept);

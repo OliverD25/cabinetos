@@ -100,6 +100,16 @@
         "layout": "classic",
         "pinned": [],
         "sidebar": true,
+        "tabs": {
+          "left": {
+            "active": 0,
+            "items": []
+          },
+          "right": {
+            "active": 0,
+            "items": []
+          }
+        },
         "theme": "default"
       }
     },
@@ -290,6 +300,28 @@
       },
       "additionalProperties": false
     },
+    "PaneTabs": {
+      "description": "One pane's tabs, left to right, and which one is in front.",
+      "type": "object",
+      "properties": {
+        "active": {
+          "description": "The index of the tab in front, from 0; must name one of `items`\n(0 when there are none).",
+          "type": "integer",
+          "format": "uint32",
+          "default": 0,
+          "minimum": 0
+        },
+        "items": {
+          "description": "The tabs, left to right. Empty: the pane opens one tab, as\n`ui.lastPaths` or the window decides.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TabEntry"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "PanesConfig": {
       "description": "The file panes. These are the defaults for `list_directory` requests that\ndo not say otherwise.",
       "type": "object",
@@ -396,6 +428,48 @@
           "const": "extension"
         }
       ]
+    },
+    "TabEntry": {
+      "description": "One tab of a pane.",
+      "type": "object",
+      "properties": {
+        "locked": {
+          "description": "A locked tab stays on its folder: opening another folder in it opens\na new tab instead.",
+          "type": "boolean",
+          "default": false
+        },
+        "path": {
+          "description": "The folder the tab shows, as an absolute path.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "TabsConfig": {
+      "description": "The tabs of both panes.",
+      "type": "object",
+      "properties": {
+        "left": {
+          "description": "The left pane's tabs.",
+          "$ref": "#/$defs/PaneTabs",
+          "default": {
+            "active": 0,
+            "items": []
+          }
+        },
+        "right": {
+          "description": "The right pane's tabs.",
+          "$ref": "#/$defs/PaneTabs",
+          "default": {
+            "active": 0,
+            "items": []
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "TerminalConfig": {
       "description": "The integrated terminal (Phase 8).",
@@ -504,6 +578,20 @@
           "description": "Show the sidebar.",
           "type": "boolean",
           "default": true
+        },
+        "tabs": {
+          "description": "The tabs of each pane as the window last saved them, so the next\nstart opens them again. The window owns them; the core only checks\nand stores them.",
+          "$ref": "#/$defs/TabsConfig",
+          "default": {
+            "left": {
+              "active": 0,
+              "items": []
+            },
+            "right": {
+              "active": 0,
+              "items": []
+            }
+          }
         },
         "theme": {
           "description": "The color theme's ID.",
