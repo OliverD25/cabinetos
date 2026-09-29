@@ -8,8 +8,12 @@ using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
 using CabinetOS.Services;
 using CabinetOS.ViewModels;
+using CabinetOS.Views;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
+using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace CabinetOS;
 
@@ -19,6 +23,23 @@ namespace CabinetOS;
 public sealed partial class MainWindow
 {
     private readonly PatternHistory _patterns = new();
+    private readonly QuickSearch _quick = new(() => Environment.TickCount64);
+    private DispatcherQueueTimer _quickTimer = null!;
+    private bool _keyTakenByWindow;
+    private int _quickRequest;
+
+    private void SetUpQuickSearch()
+    {
+        // The status bar shows the typed letters until a second passes without one.
+        _quickTimer = DispatcherQueue.CreateTimer();
+        _quickTimer.IsRepeating = false;
+        _quickTimer.Interval = TimeSpan.FromMilliseconds(QuickSearch.QuietMs);
+        _quickTimer.Tick += (_, _) => EndQuickSearch();
+        foreach (var view in _paneViews)
+        {
+            view.CharacterReceived += OnPaneCharacter;
+        }
+    }
 
     private void RegisterCommanderCommands()
     {
@@ -64,6 +85,140 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("go.pinnedFolders", PinnedFoldersAsync);
         _router.RegisterUiHandler("go.chooseDriveLeft", invocation => ChooseDriveAsync(0, invocation));
         _router.RegisterUiHandler("go.chooseDriveRight", invocation => ChooseDriveAsync(1, invocation));
+        _router.RegisterUiHandler("terminal.insertPath", invocation => InsertPathsAsync(Active.Path.Length > 0 ? [Active.Path] : [], invocation));
+        _router.RegisterUiHandler("terminal.insertSelectedPaths", ListingOnly(invocation => InsertPathsAsync([.. Active.Targets().Select(t => t.Path)], invocation)));
+    }
+
+    // Ctrl+P, Ctrl+Shift+Enter: the terminal shows (its default shell starts when none runs), the core
+    // types the paths at the prompt, quoted for that shell and without Enter, and the terminal gets
+    // the keyboard to go on typing (the note's decision D11).
+    private async Task InsertPathsAsync(IReadOnlyList<string> paths, CommandInvocation invocation)
+    {
+        if (paths.Count == 0)
+        {
+            return;
+        }
+        if (_unavailable.Contains("terminal_type_paths"))
+        {
+            ShowNotice("Typing paths into the terminal needs a newer core.");
+            return;
+        }
+        await ShowDockAsync(invocation.RequestId);
+        CoreReply? reply;
+        try
+        {
+            reply = await _terminal.TypePathsAsync(paths, invocation.RequestId);
+        }
+        catch (IOException error)
+        {
+            ShowNotice(error.Message, isError: true);
+            return;
+        }
+        switch (reply)
+        {
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                Unavailable("terminal_type_paths", "Typing paths into the terminal needs a newer core.");
+                break;
+            case ErrorReply error:
+                ShowNotice($"The paths could not be typed: {error.Message}", isError: true);
+                break;
+        }
+        FocusTerminal();
+    }
+
+    // Quick search (Q1): a character typed in a pane that no key of the keymap took jumps to the first
+    // name starting with the letters typed so far; the core finds it (match_entries, first_from).
+    private void OnPaneCharacter(UIElement sender, CharacterReceivedRoutedEventArgs e)
+    {
+        if (_keyTakenByWindow || char.IsControl(e.Character) || e.OriginalSource is TextBox
+            || sender is not FilePane { IsRenaming: false, Model: { Search: null, ListingId: > 0 } pane } view)
+        {
+            return;
+        }
+        var ctrl = IsDown(Windows.System.VirtualKey.Control);
+        var alt = IsDown(Windows.System.VirtualKey.Menu);
+        if (ctrl != alt)
+        {
+            // Ctrl or Alt alone is a shortcut, not typing; both together are AltGr, which types.
+            return;
+        }
+        e.Handled = true;
+        TypeIntoQuickSearch(view, pane, e.Character);
+    }
+
+    private void TypeIntoQuickSearch(FilePane view, PaneModel pane, char character)
+    {
+        if (_unavailable.Contains("match_entries"))
+        {
+            ShowNotice("Quick search needs a newer core.");
+            return;
+        }
+        var text = _quick.Type(character);
+        ShowQuickText($"Quick search: {text}");
+        _ = JumpToNameAsync(pane, view, text, _quick.FirstFrom(pane.FocusIndex));
+    }
+
+    /// <summary>Types <paramref name="text"/> into the active pane's quick search, as its keys would (the snapshot aid).</summary>
+    private async Task QuickSearchForSnapshotAsync(string text)
+    {
+        foreach (var character in text)
+        {
+            if (Active is { Search: null, ListingId: > 0 } pane)
+            {
+                TypeIntoQuickSearch(_paneViews[_active], pane, character);
+            }
+            await Task.Delay(120);
+        }
+    }
+
+    private async Task JumpToNameAsync(PaneModel pane, FilePane view, string text, uint firstFrom)
+    {
+        var request = ++_quickRequest;
+        if (QuickSearch.PatternFor(text) is not { } pattern)
+        {
+            ShowQuickText($"Quick search: {text} · no name starts so");
+            return;
+        }
+        var reply = await RequestSafelyAsync(new MatchEntriesRequest(pane.ListingId, pattern) { FirstFrom = firstFrom });
+        if (request != _quickRequest)
+        {
+            // Another letter came meanwhile: its answer counts, not this one.
+            return;
+        }
+        switch (reply)
+        {
+            case EntryMatchesReply matches when pane.View is { } shown && matches.ListingId == pane.ListingId && matches.Generation == shown.Generation:
+                if (EntryRanges.Rows(matches.Ranges, shown.Count).FirstOrDefault(-1) is var row and >= 0)
+                {
+                    pane.Selection.MoveTo(row, pane.Selection.KeyMode(shift: false, ctrl: false));
+                    view.ScrollToFocus();
+                }
+                else
+                {
+                    ShowQuickText($"Quick search: {text} · no name starts so");
+                }
+                break;
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                EndQuickSearch();
+                Unavailable("match_entries", "Quick search needs a newer core.");
+                break;
+        }
+    }
+
+    private void ShowQuickText(string text)
+    {
+        QuickText.Text = text;
+        QuickText.Visibility = Visibility.Visible;
+        _quickTimer.Stop();
+        _quickTimer.Start();
+    }
+
+    // Esc, another folder, or a second without a letter: the next letter starts a new search.
+    private void EndQuickSearch()
+    {
+        _quick.Clear();
+        _quickTimer?.Stop();
+        QuickText.Visibility = Visibility.Collapsed;
     }
 
     // Alt+F1, Alt+F2: the drive list under that pane's header, the sidebar's list_volumes data;

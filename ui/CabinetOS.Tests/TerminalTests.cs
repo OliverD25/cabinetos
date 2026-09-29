@@ -116,6 +116,17 @@ public class TerminalTests
     }
 
     [Fact]
+    public void Paths_typed_by_ctrl_p_hold_the_line_until_the_user_presses_enter()
+    {
+        var typing = new TypingTracker();
+        typing.OnPathsTyped();
+        // The folder sync would type a cd behind the paths: it waits, as for a half-typed line.
+        Assert.Equal(CwdSyncDecision.SkipTyping, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing));
+        typing.OnInput(" && dir\r");
+        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing));
+    }
+
+    [Fact]
     public void The_debouncer_hands_out_the_last_value_once_the_user_stopped()
     {
         long now = 0;

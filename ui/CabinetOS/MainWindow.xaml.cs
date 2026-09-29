@@ -144,6 +144,7 @@ public sealed partial class MainWindow : Window
 
         SetUpThemes();
         SetUpTerminal();
+        SetUpQuickSearch();
         SetUpSearch();
         SetUpPlugins();
         SetUpTools();
@@ -414,6 +415,10 @@ public sealed partial class MainWindow : Window
                 case "drive" when step.Argument.Length == 1:
                     // A drive's letter in the open drive list (Alt+F1, Alt+F2).
                     PromptView.PressKey(step.Argument[0]);
+                    break;
+                case "quick":
+                    // Letters typed in the active pane: quick search.
+                    await QuickSearchForSnapshotAsync(step.Argument);
                     break;
                 case "terminal":
                     // Typed into the shown shell as keys; {enter} is Enter.
@@ -1391,6 +1396,10 @@ public sealed partial class MainWindow : Window
         {
             renaming.CancelRename();
         }
+        else if (QuickText.Visibility == Visibility.Visible)
+        {
+            EndQuickSearch();
+        }
         else if (AddressEdit.Visibility == Visibility.Visible)
         {
             // The pane takes the keyboard before the address box collapses (see the palette).
@@ -2097,6 +2106,7 @@ public sealed partial class MainWindow : Window
         switch (e.PropertyName)
         {
             case nameof(PaneModel.Path):
+                EndQuickSearch();
                 UpdateCrumbs();
                 _sidebar.SetActivePath(Active.Path);
                 UpdateNavigationButtons();
@@ -2294,6 +2304,14 @@ public sealed partial class MainWindow : Window
     // ----- Keyboard -----
 
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        HandleWindowKey(e);
+        // The character this key types, if any, arrives next (CharacterReceived): a key the window
+        // took (a binding, a chord) must not also go into a quick search.
+        _keyTakenByWindow = e.Handled;
+    }
+
+    private void HandleWindowKey(KeyRoutedEventArgs e)
     {
         if (_openDialog is { } dialog)
         {

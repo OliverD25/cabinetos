@@ -80,6 +80,7 @@ public class ProtocolTests
             new CancelMeasureRequest(5),
             new MatchEntriesRequest(7, "*.txt;*.md|draft*") { FilesOnly = true },
             new MatchEntriesRequest(7, "rep*") { FirstFrom = 42 },
+            new TerminalTypePathsRequest(3, [@"C:\data\a b.txt"]),
         ];
     }
 
@@ -99,7 +100,6 @@ public class ProtocolTests
         (new CreateDirectoryRequest(@"C:\data\New folder"), $$$"""{"id":"{{{Id}}}","type":"create_directory","path":"C:\\data\\New folder"}"""),
         (new RenameRequest(@"C:\data\a.txt", "b.txt"), $$$"""{"id":"{{{Id}}}","type":"rename","path":"C:\\data\\a.txt","new_name":"b.txt"}"""),
         // Protocol 12, as docs/research/total-commander.md, Part 3 (b), gives them, until the core's schema has them.
-        (new TerminalTypePathsRequest(3, [@"C:\data\a b.txt"]), $$$"""{"id":"{{{Id}}}","type":"terminal_type_paths","session_id":3,"paths":["C:\\data\\a b.txt"]}"""),
     ];
 
     /// <summary>
@@ -161,7 +161,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(46, checkedTypes.Count);
+        Assert.Equal(47, checkedTypes.Count);
     }
 
     [Fact]

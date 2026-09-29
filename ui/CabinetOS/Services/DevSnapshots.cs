@@ -26,6 +26,7 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>dismiss</c> closes an open dialog, <c>type:&lt;text&gt;</c> types into the palette (or into the
 /// prompt in its frame, the pattern box or the pinned folders, when one is shown), <c>accept</c> presses Enter in that prompt,
 /// <c>drive:&lt;letter&gt;</c> presses a drive's letter in the open drive list (Alt+F1, Alt+F2),
+/// <c>quick:&lt;text&gt;</c> types letters into the active pane's quick search,
 /// <c>search:&lt;text&gt;</c> types into the search field,
 /// <c>open:&lt;name&gt;</c> presses Enter on a row (a file may open in a Tool Extension),
 /// <c>terminal:&lt;text&gt;</c> types into the shown shell (<c>{enter}</c> is Enter),

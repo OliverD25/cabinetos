@@ -134,6 +134,10 @@ public class CommanderEndToEndTests
             Assert.StartsWith("report", reports[0]);
             Assert.Equal(["a.md"], await Match("a*", filesOnly: false, firstFrom: (uint)(view.Count - 1)));
             Assert.Empty(await Match("zzz*", filesOnly: false, firstFrom: 0));
+
+            // Ctrl+P into a shell that is gone: the core says so rather than typing anywhere.
+            Assert.Equal(ErrorCodes.NoSuchSession,
+                Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new TerminalTypePathsRequest(999, [folder]))).Code);
             await core.ShutdownAsync(TimeSpan.FromSeconds(5));
         }
         finally

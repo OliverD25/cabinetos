@@ -327,6 +327,25 @@ internal sealed class TerminalController
         }
     }
 
+    /// <summary>
+    /// Types <paramref name="paths"/> at the shown shell's prompt, quoted for
+    /// it by the core (<c>terminal_type_paths</c>), without Enter. Returns the
+    /// core's reply, or null when no shell runs.
+    /// </summary>
+    public async Task<CoreReply?> TypePathsAsync(IReadOnlyList<string> paths, string? requestId = null)
+    {
+        if (Shown is not { Running: true } tab)
+        {
+            return null;
+        }
+        // Before the request: a folder sync that falls due meanwhile must not type a cd into the line.
+        tab.Typing.OnPathsTyped();
+        var reply = await _core.RequestAsync(new TerminalTypePathsRequest(tab.SessionId, paths) { Id = requestId ?? "" });
+        Diag.Info(Target, "paths typed at the prompt", new LogField("session_id", tab.SessionId), new LogField("paths", paths.Count),
+            new LogField("reply", reply.GetType().Name));
+        return reply;
+    }
+
     /// <summary>Types <paramref name="text"/> into the shown shell as if typed (the snapshot aid).</summary>
     public Task TypeAsync(string text) =>
         Shown is { Running: true, Pipe: { } pipe } tab ? TypeInto(tab, pipe, text) : Task.CompletedTask;

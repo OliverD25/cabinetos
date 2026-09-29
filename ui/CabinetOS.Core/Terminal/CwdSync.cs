@@ -47,6 +47,13 @@ public sealed class TypingTracker
 
     /// <summary>A synced <c>cd</c> ended with Enter: the line is empty again.</summary>
     public void OnSynced() => LinePending = false;
+
+    /// <summary>
+    /// The window typed paths at the prompt (Ctrl+P, <c>terminal_type_paths</c>):
+    /// the line holds text now, for the user to go on typing, and a <c>cd</c>
+    /// must not land in the middle of it.
+    /// </summary>
+    public void OnPathsTyped() => LinePending = true;
 }
 
 /// <summary>The rule for following the active pane, on its own so it is tested without a shell.</summary>
