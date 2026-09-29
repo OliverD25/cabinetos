@@ -78,6 +78,8 @@ public class ProtocolTests
             new ShowPropertiesRequest([@"C:\data\a.txt", @"C:\data\photos"]),
             new MeasurePathsRequest([@"C:\data\photos", @"C:\data\src"]),
             new CancelMeasureRequest(5),
+            new MatchEntriesRequest(7, "*.txt;*.md|draft*") { FilesOnly = true },
+            new MatchEntriesRequest(7, "rep*") { FirstFrom = 42 },
         ];
     }
 
@@ -97,8 +99,6 @@ public class ProtocolTests
         (new CreateDirectoryRequest(@"C:\data\New folder"), $$$"""{"id":"{{{Id}}}","type":"create_directory","path":"C:\\data\\New folder"}"""),
         (new RenameRequest(@"C:\data\a.txt", "b.txt"), $$$"""{"id":"{{{Id}}}","type":"rename","path":"C:\\data\\a.txt","new_name":"b.txt"}"""),
         // Protocol 12, as docs/research/total-commander.md, Part 3 (b), gives them, until the core's schema has them.
-        (new MatchEntriesRequest(7, "*.txt;*.md|draft*") { FilesOnly = true }, $$$"""{"id":"{{{Id}}}","type":"match_entries","listing_id":7,"patterns":"*.txt;*.md|draft*","files_only":true}"""),
-        (new MatchEntriesRequest(7, "rep*") { FirstFrom = 42 }, $$$"""{"id":"{{{Id}}}","type":"match_entries","listing_id":7,"patterns":"rep*","files_only":false,"first_from":42}"""),
         (new TerminalTypePathsRequest(3, [@"C:\data\a b.txt"]), $$$"""{"id":"{{{Id}}}","type":"terminal_type_paths","session_id":3,"paths":["C:\\data\\a b.txt"]}"""),
     ];
 
@@ -161,7 +161,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(45, checkedTypes.Count);
+        Assert.Equal(46, checkedTypes.Count);
     }
 
     [Fact]

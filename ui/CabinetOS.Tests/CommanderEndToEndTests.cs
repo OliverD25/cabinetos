@@ -1,5 +1,6 @@
 using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Listing;
+using CabinetOS.Core.Prompts;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Tests.Support;
 
@@ -87,6 +88,52 @@ public class CommanderEndToEndTests
 
             // A cancel may cross the end of the measure: the answer is ok all the same.
             Assert.IsType<OkReply>(await core.Client.RequestAsync(new CancelMeasureRequest(started.MeasureId)));
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    [Fact]
+    public async Task The_pattern_box_the_same_extension_and_quick_search_ask_the_core_which_rows_match()
+    {
+        var coreExe = EndToEndTests.FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-match");
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root, "listing")).FullName;
+            Directory.CreateDirectory(Path.Combine(folder, "docs.md"));
+            foreach (var name in new[] { "a.md", "B.MD", "notes.md", "LICENSE", "report.txt", "report-2.txt" })
+            {
+                File.WriteAllBytes(Path.Combine(folder, name), []);
+            }
+            await using var core = await EndToEndTests.StartCoreAsync(coreExe, root);
+            await core.Client.HelloAsync();
+            var opened = await core.Client.RequestAsync<ListingOpenedReply>(new ListDirectoryRequest(folder));
+            using var view = ListingView.Open(opened.TakeSection()!, opened.SectionSize);
+
+            async Task<string[]> Match(string patterns, bool filesOnly, uint? firstFrom = null)
+            {
+                var matches = await core.Client.RequestAsync<EntryMatchesReply>(
+                    new MatchEntriesRequest(opened.ListingId, patterns) { FilesOnly = filesOnly, FirstFrom = firstFrom });
+                Assert.Equal(view.Generation, matches.Generation);
+                return [.. EntryRanges.Rows(matches.Ranges, view.Count).Select(view.Name)];
+            }
+
+            // Num +: the default "Include folders" off leaves the folder docs.md out; case is ignored; | leaves out.
+            Assert.Equal(["a.md", "B.MD"], await Match("*.md|notes*", filesOnly: true));
+            Assert.Equal(["docs.md", "a.md", "B.MD", "notes.md"], await Match("*.md", filesOnly: false));
+            // Alt+Num +: the same extension, and Total Commander's *. for a name without one.
+            Assert.Equal(["report-2.txt", "report.txt"], (await Match(PatternHistory.SameExtension("report.txt"), filesOnly: true)).Order(StringComparer.Ordinal));
+            Assert.Equal(["LICENSE"], await Match(PatternHistory.SameExtension("LICENSE"), filesOnly: true));
+            // Quick search: the first name that starts so, from the cursor on, round to the start.
+            var reports = await Match("rep*", filesOnly: false, firstFrom: 0);
+            Assert.Single(reports);
+            Assert.StartsWith("report", reports[0]);
+            Assert.Equal(["a.md"], await Match("a*", filesOnly: false, firstFrom: (uint)(view.Count - 1)));
+            Assert.Empty(await Match("zzz*", filesOnly: false, firstFrom: 0));
             await core.ShutdownAsync(TimeSpan.FromSeconds(5));
         }
         finally
