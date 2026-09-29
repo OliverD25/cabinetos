@@ -68,7 +68,7 @@ public static class Live {
 $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L = 0x4C; Esc = 0x1B; Tab = 0x09; Enter = 0x0D; Back = 0x08; Down = 0x28; PgDn = 0x22; F2 = 0x71;
   F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56;
   F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A;
-  T = 0x54; Up = 0x26 }
+  T = 0x54; Up = 0x26; End = 0x23 }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   if ($script:h -and [Live]::GetForegroundWindow() -ne $script:h) {
@@ -102,10 +102,25 @@ function Shot([IntPtr]$h, [string]$path) {
   Step "screenshot $path"
 }
 # What the status bar says about the selection ("3 selected, 1.4 MB"), as UI Automation reads it.
+# The status bar's selection text, by its automation id. A search of the whole tree can stop short
+# of the status bar once web pages (the terminal, a preview) are in the window, so this asks for the
+# one element, first among the window's own children, then anywhere, and tries three times.
 function SelectionText {
-  $all = [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-  foreach ($e in $all) { if ($e.Current.Name -match '^\d[\d,]* selected') { return $e.Current.Name } }
-  return "(nothing selected)"
+  $window = [System.Windows.Automation.AutomationElement]::FromHandle($script:h)
+  $byId = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'SelectionText')
+  foreach ($try in 1..3) {
+    foreach ($scope in [System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.TreeScope]::Descendants) {
+      $e = $window.FindFirst($scope, $byId)
+      if ($e) {
+        $name = $e.Current.Name
+        if ($name -match '^\d[\d,]* selected') { return $name }
+        if ($name -eq '') { return "(nothing selected)" }
+        return "(status bar says '$name')"
+      }
+    }
+    Start-Sleep -Milliseconds 300
+  }
+  return "(the status bar's selection text was not found)"
 }
 
 $root = "$env:TEMP\cabinetos-ui-test\$Run"
