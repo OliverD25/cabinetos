@@ -447,10 +447,15 @@ $toggles = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'vie
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
 $script:terminalHidden = $false
 if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
-  "after Ctrl+P the terminal did not pass Ctrl+Backquote to the window (its page did not have the keyboard); hiding it from the palette instead"
-  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
-  [Live]::Type("Toggle Terminal"); Start-Sleep -Milliseconds 700
-  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 700
+  "after Ctrl+P the terminal did not pass Ctrl+Backquote to the window (its page did not have the keyboard); the window is brought to the front by Win32 and the terminal hidden from the pane"
+  [void][Live]::SetForegroundWindow($h); Start-Sleep -Milliseconds 400
+  [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
+  if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
+    "still nothing: hiding the terminal from the palette"
+    [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+    [Live]::Type("Toggle Terminal"); Start-Sleep -Milliseconds 700
+    [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 700
+  }
   $script:terminalHidden = $true
 }
 
@@ -507,6 +512,8 @@ Step "compact: the source folder in the active pane, the destination in the othe
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 
 Step "compact: Ctrl+K Ctrl+T, the theme picker; Home, Down to Commander Compact, Enter"
+# The mouse goes to the corner first: a pointer left over the list would pull the highlight to its row.
+[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 [Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 2000
 Shot $h "$ShotDir\compact-picker-live.png"
@@ -541,6 +548,7 @@ Shot $h "$ShotDir\compact-f5-live.png"
 "the bar ran file.copyToOtherPane: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' -and $_ -match 'file\.copyToOtherPane' -and $_ -match '"trigger":"fkeyBar"' }))"
 
 Step "compact: Ctrl+K Ctrl+T, Home, Down, Down to Default, Enter"
+[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 [Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 2000
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
@@ -575,7 +583,12 @@ Shot $h "$ShotDir\edge-both-panes-live.png"
 # The core's order in names\: case, the Ukrainian folder, the emoji folder, the Chinese folder,
 # the 255-unit name, the two cafe.txt, then the Ukrainian report: seven rows down from the first.
 Step "edge: F2 on the Ukrainian report, typed Cyrillic, Enter (only the stem is selected)"
-[Live]::Press($VK.Home); foreach ($i in 1..7) { [Live]::Press($VK.Down) }; Start-Sleep -Milliseconds 300
+# In one run the Tabs of the setup left the long path's pane active, and F2 renamed deep notes.md
+# (a Tab right after Enter in the address box did not change the pane): the names pane is checked
+# by its first row before the keys go there.
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+if ((SelectionText) -notmatch 'case') { "the names pane was not active after the setup (status: $(SelectionText)); Tab once more"; [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400; [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300 }
+foreach ($i in 1..7) { [Live]::Press($VK.Down) }; Start-Sleep -Milliseconds 300
 PressForNameBox { [Live]::Press($VK.F2) }
 [Live]::Type("$zvit 2027"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\edge-renamed-live.png"
@@ -594,7 +607,9 @@ Step "edge: Enter into the long path"
 Shot $h "$ShotDir\edge-long-live.png"
 # Not Enter on deep file.txt: Windows may open it with its program (Notepad did, 2026-09-29).
 Step "edge: Enter on deep notes.md: the status bar says why the preview cannot show it"
-[Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+if ((SelectionText) -notmatch 'deep') { "the long path's pane was not active (status: $(SelectionText)); Tab once more"; [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400; [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300 }
+[Live]::Press($VK.Down); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\edge-preview-refused-live.png"
 $notice = Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"notice shown"' -and $_ -match 'deep notes.md' }
 "the status bar said why: $([bool]$notice)"
