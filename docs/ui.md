@@ -128,6 +128,17 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   events and with Unicode key events, and Ctrl+K V twice on the open
   preview.
 
+`run-livecheck.ps1` runs `livecheck.ps1 -Strict`, keeps the output in
+`_io\live-check\run-<time>.txt` next to the repository, and at the end writes
+`DONE.md` there and opens it in Notepad: the sign, on a PC where someone is
+waiting, that the keyboard and mouse are free again. The script types into a
+name box only after the window's "rename box shown" line, reads the
+selection from its "selection shown" line, stops when a window of another
+process comes to the front (a flyout of the window's own process is fine),
+and, where a global hotkey of another program takes Alt+F1 (the Claude
+desktop app on the development PC), says so and opens the drive list from
+the palette.
+
 Run one only on an unlocked screen you are watching. It stops when the
 screen is locked, and the moment another window comes to the front, so no
 key reaches another program. Each run has its own configuration, logs and

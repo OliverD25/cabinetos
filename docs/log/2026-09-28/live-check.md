@@ -132,9 +132,70 @@ worst frame 114 ms, four to six frames over 33 ms per second. Both coder
 agents were compiling on this PC at the time; the scroll's own cost is
 measured on a quiet machine in a later step.
 
+## Run 4: the whole script, 2026-09-29, 21:26 to 22:53
+
+Thirteen runs with the creator at the PC and the screen unlocked, each on
+the window rebuilt in release from main after the fix before it; the output
+of the last, complete run is [live-check-run4.txt](live-check-run4.txt).
+The first three runs used a window built the evening before (the release
+build in the checkout was a day old, while the coder agents had built only
+in their worktrees) and count for nothing. Every check of the last run
+passed: the palette, single and dual pane, the rebinding through the
+pencil; F7, F2, Delete, F5 with Skip through UI Automation, the context
+menu, Properties with Esc and a key that did not run under it; the terminal
+with the palette chord from inside it, search, Markdown Preview with Enter
+and Ctrl+K V; sub-phase 11a (Num *, Ctrl+Num −, Num + with a pattern, Space
+on a folder with its size measured, Shift+Alt+Enter, F3 refused for a
+program, F4 and Shift+F4 into the stand-in editor and never Notepad, F8 to
+the Recycle Bin, Shift+F8 for good, Ctrl+P with the path typed at the
+prompt, Ctrl+\ to the root, Ctrl+U); Commander Compact chosen in the picker
+with 20 px rows, the function-key bar, stripes and hairlines, Tab never on
+a function key, F5 through the bar's button, and back to 30 px rows; the
+edge cases (a Cyrillic rename, a Cyrillic search, the long path, the notice
+for a file the preview cannot show, Shift+Delete on a junction).
+
+The scroll goal was not met in any run: 59 to 61 frames a second held,
+28.7 to 29.9 % of the gaps over 20 ms, 2 to 6 gaps over 33 ms in 5 s,
+the worst gap 43 to 53 ms, the machine at 9 to 19 % CPU and the window
+at 1.4 to 1.8 %. The UI thread's own work stayed at 440 to 550 ms per
+second of scrolling, so the gaps are in the composition, not in the rows.
+
+Fixed on the way, in the window:
+
+- 2e2fb01: the name box asks for the keyboard again after the next layout
+  pass when the first request is refused, and logs "rename box shown";
+  the status bar's selection text is logged when it changes.
+- 1fa6db0: the theme picker's highlight follows a moving pointer only.
+- c1f5502: closing the editor lays the pane's list out before giving
+  it the keyboard, and asks again when refused.
+
+And in the script: the log's timestamps read in Windows PowerShell 5.1; the
+End key; the name-box wait; the selection text read from the log; the
+foreground guard by process, naming the window that took the front; the
+Alt+F1 fallback through the palette; the preview closed and the terminal
+hidden before the later sections; the theme picker walked from Home with
+the mouse parked away; the panes swapped back after Ctrl+U; a click into
+the left pane at each section's start; two pass lines that read as False.
+
+Findings:
+
+- On this PC Alt+F1 never reaches the window: the Claude desktop app's
+  global hotkey takes it and brings its own window to the front. The key
+  is bound right; it cannot be checked with real keys here.
+- With the Markdown Preview open in the other pane, the keyboard after
+  Ctrl+P was lost to a web page in three runs: neither Ctrl+` nor the
+  palette chord reached the window until a mouse click. With the preview
+  closed the same step passed. For the shell.
+- After Num * the status bar says "7 selected, 29 B" for six marked files:
+  the folder under the cursor is counted with the marks. For the shell.
+- Shift+Delete on the junction asked no question (the notice says only
+  the link goes), so the "Delete permanently" button the script looked
+  for did not exist; the junction went and the files behind it stayed.
+
 ## Leftovers
 
 - One test file in the Recycle Bin, `cabinetos-live-check-delete-me.txt`
-  (3 bytes), from run 1, and one more from run 3.
+  (3 bytes), from run 1, and one more from run 3; run 4's thirteen runs
+  added two tiny files each (the Delete and F8 checks).
 - The runs' folders `%TEMP%\cabinetos-ui-test\live` and `live2`
   (configuration, logs, test files, full-size screenshots).
