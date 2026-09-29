@@ -447,6 +447,18 @@ Step "11a: Ctrl+\: the drive's root"
 [Live]::Press($VK.Ctrl, $VK.Backslash); Start-Sleep -Milliseconds 1200
 Step "11a: Alt+F1: the drive list under the left pane"
 [Live]::Press($VK.Alt, $VK.F1); Start-Sleep -Milliseconds 700
+if ([Live]::ForegroundPid() -ne [uint32]$p.Id) {
+  # On this PC another program takes Alt+F1 before the window sees it (the Claude desktop app's
+  # global hotkey brought its window to the front). The key is right; the list is opened from the
+  # palette instead, and the output says so.
+  $taker = Get-Process -Id ([Live]::ForegroundPid()) -ErrorAction SilentlyContinue
+  "Alt+F1 is taken by another program on this PC ($($taker.ProcessName), '$($taker.MainWindowTitle)'): it never reached the window; the drive list is opened from the palette instead"
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+  [void][Live]::SetForegroundWindow($h); Start-Sleep -Milliseconds 400
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  [Live]::Type("Choose Drive for Left"); Start-Sleep -Milliseconds 700
+  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 700
+}
 Shot $h "$ShotDir\11a-drive-list-live.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 400
 Step "11a: Ctrl+U: the panes change places"
