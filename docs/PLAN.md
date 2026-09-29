@@ -664,6 +664,26 @@ wait without losing a line, a never-wait thread that drops and counts,
 the parts and the cap with tiny limits, and the switch on and off while
 the core runs. Guide: [diagnostics.md](diagnostics.md), "Heavy mode".
 
+**Log bundles, the core's part, built 2026-09-30 (840b22a).**
+`save_log_bundle { minutes }` (1 to 1440, 10 by default) answers
+`log_bundle { path }`: `bundle-<time>.zip` in the log folder with the last
+minutes of every log file of every process, normal and heavy (each read
+from its end, so a large file costs little), the crash traces of the last
+24 hours, and `bundle.json` with the versions, the Windows build (read
+from the registry by `cabinetos-fs`, since the diagnostics crate allows no
+unsafe code), the `CABINETOS_*` variables and the config in effect, with
+secrets masked. In heavy mode the crash hook writes the same as
+`crash-<time>.zip` after the trace, on the panicking thread, without
+waiting for any lock. `cabinetos-cli log bundle [--minutes 10]` prints the
+path. Bundles are never deleted by CabinetOS. The heavy mode's timing
+tests now poll for their condition with generous limits instead of fixed
+sleeps, after one of them failed once under the load of four agents
+building at the same time. Tests +8, 679 core tests. Guide:
+[diagnostics.md](diagnostics.md), "Bundles"; [ipc.md](ipc.md), "Log
+bundles". Left for the window's half: the C# crash bundle, the notice
+"Open crash folder", the palette command, ADR 0013 and the window's own
+heavy file.
+
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
