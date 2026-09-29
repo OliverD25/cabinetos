@@ -544,6 +544,7 @@ fn add_plugin_command(
         target: CommandTarget::Core,
         when: None,
         immutable: false,
+        input: command.input.clone(),
     };
     if registry.register(entry.clone()).is_err() {
         tracing::warn!(

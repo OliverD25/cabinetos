@@ -782,3 +782,51 @@ async fn a_plugin_hears_about_changes_in_a_folder_it_watches() {
         watched.path().join("new.txt").display().to_string()
     );
 }
+
+#[tokio::test]
+async fn a_plugin_command_that_asks_for_text_says_so_in_the_list() {
+    let core = start_core(
+        &["fetcher", "hello"],
+        &grants(&[
+            ("fetcher", &["cmd:register", "net"]),
+            ("hello", &["cmd:register", "events:emit"]),
+        ]),
+    );
+    let (mut client, _events) = greeted(&core).await;
+    wait_state(&mut client, "fetcher", active).await;
+    wait_state(&mut client, "hello", active).await;
+
+    let commands = commands(&mut client).await;
+    let input_of = |id: &str| {
+        commands
+            .iter()
+            .find(|command| command.id == id)
+            .unwrap_or_else(|| panic!("no {id}"))
+            .input
+            .clone()
+    };
+    assert_eq!(
+        input_of("fetcher.get"),
+        Some(cabinetos_protocol::CommandInput {
+            title: Some("Fetch a URL".to_owned()),
+            placeholder: Some("http://localhost:8090/...".to_owned()),
+        })
+    );
+    assert_eq!(input_of("hello.say"), None);
+    assert_eq!(input_of("view.toggleDualPane"), None);
+
+    // The window sends the text as `input`: the fixture takes it as its
+    // URL, which the manifest's hosts then refuse, with no request made.
+    let (error_code, message) = error_of(
+        ask(
+            &mut client,
+            exec("fetcher.get", json!({ "input": "https://example.com/" })),
+        )
+        .await,
+    );
+    assert_eq!(error_code, ErrorCode::PluginError);
+    assert!(
+        message.contains("example.com:443 is not among the hosts"),
+        "{message}"
+    );
+}

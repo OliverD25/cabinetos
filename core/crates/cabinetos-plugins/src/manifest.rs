@@ -82,6 +82,10 @@ pub struct CommandDeclaration {
     /// already uses is dropped with a warning.
     #[serde(default)]
     pub default_keys: Vec<String>,
+    /// When it wants a line of text first: the window's prompt, with an
+    /// optional `title` and `placeholder`.
+    #[serde(default)]
+    pub input: Option<cabinetos_protocol::CommandInput>,
 }
 
 /// The capabilities there are.
@@ -409,6 +413,19 @@ fn check_commands(manifest: &Manifest) -> Result<(), String> {
             keys.parse::<KeySequence>()
                 .map_err(|error| format!("command `{}`: {error}", command.id))?;
         }
+        if let Some(input) = &command.input {
+            for (key, text) in [("title", &input.title), ("placeholder", &input.placeholder)] {
+                if text
+                    .as_ref()
+                    .is_some_and(|text| text.trim().is_empty() || text.chars().count() > 200)
+                {
+                    return Err(format!(
+                        "command `{}`: input.{key} must be 1 to 200 characters",
+                        command.id
+                    ));
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -485,6 +502,44 @@ mod tests {
     #[test]
     fn a_good_manifest_passes() {
         check(&manifest(), Some("hello"), "0.1.0").unwrap();
+    }
+
+    #[test]
+    fn a_command_may_ask_for_a_line_of_text() {
+        let with_input = |input: &str| {
+            let text = format!(
+                r#"{{"id": "hello.ask", "title": "Ask", "category": "Hello", "input": {input}}}"#
+            );
+            serde_json::from_str::<CommandDeclaration>(&text).map_err(|error| error.to_string())
+        };
+        let asked = with_input(r#"{"title": "Ask Hello", "placeholder": "A question"}"#).unwrap();
+        assert_eq!(
+            asked.input,
+            Some(cabinetos_protocol::CommandInput {
+                title: Some("Ask Hello".to_owned()),
+                placeholder: Some("A question".to_owned()),
+            })
+        );
+        assert_eq!(
+            with_input("{}").unwrap().input,
+            Some(cabinetos_protocol::CommandInput::default())
+        );
+        assert!(
+            with_input(r#"{"label": "x"}"#)
+                .unwrap_err()
+                .contains("label")
+        );
+        let mut empty = manifest();
+        empty.commands[0].input = Some(cabinetos_protocol::CommandInput {
+            title: Some(" ".to_owned()),
+            placeholder: None,
+        });
+        assert!(
+            check(&empty, Some("hello"), "0.1.0")
+                .unwrap_err()
+                .contains("input.title must be 1 to 200 characters")
+        );
+        assert!(manifest().commands[0].input.is_none());
     }
 
     #[test]

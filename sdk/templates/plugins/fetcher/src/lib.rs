@@ -1,7 +1,9 @@
-//! A test fixture for `net`. `fetcher.get {"url", "method", "body",
-//! "secret", "header", "timeout_ms"}` makes one request through the core's
-//! `http-request` and answers `{"status", "body", "headers"}`, the body as
-//! text; an error comes back as the command's error. Its manifest names
+//! A test fixture for `net` and for a command that asks for text.
+//! `fetcher.get {"url", "method", "body", "secret", "header", "timeout_ms"}`
+//! makes one request through the core's `http-request` and answers
+//! `{"status", "body", "headers"}`, the body as text; an error comes back as
+//! the command's error. Its plugin.json gives the command an `input`
+//! prompt: run from the window, the URL arrives as `{"input": ...}`. Its manifest names
 //! one host, `localhost:8090`, and one secret, `fetcher-test`, whose value
 //! the core puts into the header and this plugin never sees.
 
@@ -40,7 +42,9 @@ impl Guest for Fetcher {
         let text = |key: &str| args[key].as_str().map(str::to_owned);
         let request = WebRequest {
             method: text("method").unwrap_or_else(|| "GET".to_owned()),
-            url: text("url").ok_or("args need a \"url\"")?,
+            url: text("url")
+                .or_else(|| text("input"))
+                .ok_or("args need a \"url\" or an \"input\"")?,
             headers: vec![("accept".to_owned(), "application/json".to_owned())],
             body: text("body").map(String::into_bytes),
             secret: text("secret"),

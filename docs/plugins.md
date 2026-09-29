@@ -73,7 +73,7 @@ start, or at once with `reload_plugin`.
 | `apiVersion` | The WIT version the plugin was built against. Its major and minor must match this core's (`0.2`). A `0.1` plugin is refused: 0.2 changed the interface (see "The WIT versions"). |
 | `minCoreVersion` | The oldest core it runs on, `major.minor.patch`. |
 | `capabilities` | Each known, listed once, with a `reason` the review dialog shows. `fs:read`, `fs:write` and `fs:watch` need `roots`. `net` needs `hosts` and may list `secrets` (see "The network"). The others take none of these. |
-| `commands` | Each ID starts with `<id>.`, then letters, digits, `.`, `_` or `-`; each has a `title` and a `category`; `defaultKeys` follow the key grammar ([keybindings.md](keybindings.md)). Declaring commands needs `cmd:register`. |
+| `commands` | Each ID starts with `<id>.`, then letters, digits, `.`, `_` or `-`; each has a `title` and a `category`; `defaultKeys` follow the key grammar ([keybindings.md](keybindings.md)). An optional `input` asks for a line of text first (see "Commands that ask for text"). Declaring commands needs `cmd:register`. |
 
 The core reads the manifest strictly. An unknown key, a missing key or a
 bad value stops the plugin in state `failed`, with a message that names the
@@ -272,6 +272,33 @@ the files it concerns as `args`:
 The paths reach the plugin as text; reading the files still needs
 `fs:read` for their folder.
 
+### Commands that ask for text
+
+A command that needs a line of text from the user, such as a question or
+a URL, says so in `plugin.json`:
+
+```json
+{
+  "id": "fetcher.get",
+  "title": "Fetch",
+  "category": "Fetcher",
+  "defaultKeys": [],
+  "input": { "title": "Fetch a URL", "placeholder": "http://localhost:8090/..." }
+}
+```
+
+- `title` is the prompt's heading (the command's `title` when absent);
+  `placeholder` is the grey text in the empty box. Both are optional, and
+  1 to 200 characters when given; any other key fails the manifest.
+- `list_commands` shows the prompt as the command's `input`
+  ([ipc.md](ipc.md), "Configuration, commands and keybindings"), and `cabinetos-cli commands list` marks
+  the command `(asks for text)`.
+- The window asks, then runs the command with the text as `input`, next to
+  `path` and `paths`: `{"input": "https://…", "path": "…", "paths": […]}`.
+  Nothing runs when the user cancels. Another client may send `input`
+  itself, or leave it out: a plugin must handle a missing `input` as it
+  handles a missing `path`.
+
 ## Jobs: `before-job`
 
 A plugin with `jobs:intercept` sees every job after the scan has counted
@@ -453,7 +480,7 @@ Without `net`, `http-request` answers `err` and makes no request.
 | Version | What changed |
 |---|---|
 | `0.1.0` | The first interface: commands, `log`, `config-get`, `emit`, `before-job`, `on-listing-opened` |
-| `0.2.0` | `http-request` and its records; `watch-folder`, `unwatch-folder`, `watch-roots` in `activation`, and the export `on-event`, which every plugin now implements (an empty body is fine). A `0.1` plugin is refused with `apiVersion 0.1.0 does not match this core's plugin interface 0.2.0`; rebuild it against `sdk/wit` and set `apiVersion` to `0.2.0`. |
+| `0.2.0` | The manifest's `input` for commands (no WIT change). `http-request` and its records; `watch-folder`, `unwatch-folder`, `watch-roots` in `activation`, and the export `on-event`, which every plugin now implements (an empty body is fine). A `0.1` plugin is refused with `apiVersion 0.1.0 does not match this core's plugin interface 0.2.0`; rebuild it against `sdk/wit` and set `apiVersion` to `0.2.0`. |
 
 ## The protocol
 

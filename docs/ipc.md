@@ -902,6 +902,21 @@ the chord state machine with `chord_window_ms` (keybindings.md, "Chords").
 ranking is in keybindings.md, "Palette search". `score` only orders the
 hits.
 
+A plugin's command may want a line of text first. It then has `input`
+(protocol 13), with an optional `title` and `placeholder`; the field is
+absent for every other command:
+
+```json
+{"id":"fetcher.get","category":"Fetcher","title":"Fetch","keys":[],"default_keys":[],
+ "source":{"kind":"plugin","id":"fetcher","name":"Fetcher"},"target":"core","immutable":false,
+ "input":{"title":"Fetch a URL","placeholder":"http://localhost:8090/..."}}
+```
+
+The window shows a prompt box with them (the command's `title` when
+`input` has none), and runs the command with the text as `input` next to
+the usual `path` and `paths`: `{"input":"<text>","path":"…","paths":[…]}`.
+Cancelling the prompt runs nothing.
+
 ```json
 {"id":"01M…","type":"execute_command","command":"hello.say"}
 {"id":"01M…","type":"command_result","result":{"message":"hello from Hello"}}

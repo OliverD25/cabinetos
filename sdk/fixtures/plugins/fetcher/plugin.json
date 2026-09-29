@@ -27,7 +27,11 @@
       "id": "fetcher.get",
       "title": "Fetch",
       "category": "Fetcher",
-      "defaultKeys": []
+      "defaultKeys": [],
+      "input": {
+        "title": "Fetch a URL",
+        "placeholder": "http://localhost:8090/..."
+      }
     }
   ]
 }

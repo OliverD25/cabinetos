@@ -185,8 +185,13 @@ fn command_line(command: &CommandInfo) -> String {
         CommandSource::Plugin { name, .. } => format!("  [{name}]"),
         CommandSource::Core => String::new(),
     };
+    let asks = if command.input.is_some() {
+        "  (asks for text)"
+    } else {
+        ""
+    };
     format!(
-        "{:<30} {keys:<16} {}: {}{immutable}{badge}",
+        "{:<30} {keys:<16} {}: {}{immutable}{asks}{badge}",
         command.id, command.category, command.title
     )
 }
@@ -357,6 +362,32 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn a_command_that_asks_for_text_says_so() {
+        let mut command = CommandInfo {
+            id: "fetcher.get".to_owned(),
+            category: "Fetcher".to_owned(),
+            title: "Fetch".to_owned(),
+            keys: Vec::new(),
+            default_keys: Vec::new(),
+            source: CommandSource::Plugin {
+                id: "fetcher".to_owned(),
+                name: "Fetcher".to_owned(),
+            },
+            target: cabinetos_protocol::CommandTarget::Core,
+            when: None,
+            immutable: false,
+            input: None,
+        };
+        assert!(!command_line(&command).contains("asks for text"));
+        command.input = Some(cabinetos_protocol::CommandInput::default());
+        assert!(
+            command_line(&command).ends_with("Fetcher: Fetch  (asks for text)  [Fetcher]"),
+            "{}",
+            command_line(&command)
+        );
+    }
 
     #[test]
     fn values_are_json_or_else_text() {

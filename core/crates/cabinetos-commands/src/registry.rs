@@ -1,6 +1,6 @@
 //! The registry of every command the system knows.
 
-use cabinetos_protocol::{CommandSource, CommandTarget};
+use cabinetos_protocol::{CommandInput, CommandSource, CommandTarget};
 
 use crate::keys::KeySequence;
 
@@ -26,6 +26,8 @@ pub struct Command {
     /// Whether it belongs to the Immutable System Tier (Article 7): its
     /// bindings cannot be changed, and no other command may use its keys.
     pub immutable: bool,
+    /// The prompt for a line of text it wants first; plugins' commands only.
+    pub input: Option<CommandInput>,
 }
 
 /// The commands of the Immutable System Tier: the palette, the way out of
@@ -601,6 +603,7 @@ fn from_seed(seed: &Seed) -> Command {
         target: seed.target,
         when: seed.when.map(str::to_owned),
         immutable: IMMUTABLE_TIER.contains(&seed.id),
+        input: None,
     }
 }
 

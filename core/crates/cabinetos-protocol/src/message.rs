@@ -1149,6 +1149,24 @@ pub struct CommandInfo {
     pub when: Option<String>,
     /// Whether it belongs to the Immutable System Tier.
     pub immutable: bool,
+    /// When the command wants a line of text first: the window asks for it
+    /// and runs the command with `{"input": <text>, "path", "paths"}`.
+    /// Only plugins' commands have it (`plugin.json`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<CommandInput>,
+}
+
+/// The prompt a command that wants a line of text shows.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CommandInput {
+    /// The prompt's heading; absent means the command's title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The grey text in the empty box, such as `Ask the agent…`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
 }
 
 /// Who provides a command.
@@ -2045,6 +2063,7 @@ mod tests {
                     target: CommandTarget::Ui,
                     when: None,
                     immutable: false,
+                    input: None,
                 }],
             },
             Response::SearchResults {

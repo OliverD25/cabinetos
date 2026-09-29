@@ -45,5 +45,6 @@ pub fn command_info(command: &Command, keymap: &Keymap) -> cabinetos_protocol::C
         target: command.target,
         when: command.when.clone(),
         immutable: command.immutable,
+        input: command.input.clone(),
     }
 }

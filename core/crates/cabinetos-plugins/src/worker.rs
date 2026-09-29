@@ -229,14 +229,15 @@ impl host::Host for State {
         if !plugin.granted.contains(&Capability::CmdRegister) {
             wasmtime::bail!("register-command needs the cmd:register capability");
         }
-        if !plugin
+        let Some(declared) = plugin
             .manifest
             .commands
             .iter()
-            .any(|declared| declared.id == id)
-        {
+            .find(|declared| declared.id == id)
+        else {
             wasmtime::bail!("{id} is not declared in plugin.json, so it cannot be registered");
-        }
+        };
+        let input = declared.input.clone();
         for keys in &default_keys {
             if let Err(error) = keys.parse::<cabinetos_commands::KeySequence>() {
                 wasmtime::bail!("{id}: {error}");
@@ -248,6 +249,7 @@ impl host::Host for State {
                 title,
                 category,
                 default_keys,
+                input,
             });
         }
         Ok(())

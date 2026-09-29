@@ -152,6 +152,8 @@ pub struct PluginCommand {
     pub category: String,
     /// Its default keys (the core drops those that clash).
     pub default_keys: Vec<String>,
+    /// The prompt, when it wants a line of text first (`plugin.json`).
+    pub input: Option<cabinetos_protocol::CommandInput>,
 }
 
 /// How the host runs plugins.

@@ -1026,6 +1026,17 @@
           "description": "Whether it belongs to the Immutable System Tier.",
           "type": "boolean"
         },
+        "input": {
+          "description": "When the command wants a line of text first: the window asks for it\nand runs the command with `{\"input\": <text>, \"path\", \"paths\"}`.\nOnly plugins' commands have it (`plugin.json`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommandInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "keys": {
           "description": "The keys bound now (after the user's changes).",
           "type": "array",
@@ -1063,6 +1074,27 @@
         "target",
         "immutable"
       ]
+    },
+    "CommandInput": {
+      "description": "The prompt a command that wants a line of text shows.",
+      "type": "object",
+      "properties": {
+        "placeholder": {
+          "description": "The grey text in the empty box, such as `Ask the agent…`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "The prompt's heading; absent means the command's title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "CommandSource": {
       "description": "Who provides a command.",

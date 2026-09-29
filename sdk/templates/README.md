@@ -30,7 +30,7 @@ Dock in Phase 5; there is no template for them yet.
 | `hog` | `hog.eat` | `cmd:register` | Asking for 1 GiB of memory hits the 256 MiB limit |
 | `reader` | `reader.size`, `reader.write` | `cmd:register`, `fs:read` | Files are reachable only under granted folders, and only as granted |
 | `vetoer` | none | `jobs:intercept` | `before-job` stops a job whose destination contains `forbidden` |
-| `fetcher` | `fetcher.get` | `cmd:register`, `net` | `http-request` reaches only the named host, and the core adds the secret to the header without the plugin seeing it |
+| `fetcher` | `fetcher.get` | `cmd:register`, `net` | `http-request` reaches only the named host, and the core adds the secret to the header without the plugin seeing it; the command asks for text (`input`), which it takes as the URL |
 | `watcher` | `watcher.watch`, `watcher.unwatch` | `cmd:register`, `events:emit`, `fs:watch` | `watch-folder` works only under its roots; each `on-event` goes on through `emit`, so a test sees the changes as `plugin_event` |
 
 The `reader` fixture reads `%TEMP%\cabinetos-plugins-test\reader`; the tests
