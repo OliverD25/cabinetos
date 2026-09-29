@@ -38,8 +38,8 @@ const SECRET_ENV_WORDS: &[&str] = &["KEY", "TOKEN", "SECRET", "PASSWORD"];
 
 /// Masks the secrets in `value`, in place:
 ///
-/// - `value` and `secret` of a message whose `type` starts with `secret_`
-///   (such as `secret_set`);
+/// - `value` and `secret` of a message whose `type` is `secret` or starts
+///   with `secret_` (the request `secret_set`, the reply `secret`);
 /// - every field named like a secret (`secret`, `password`, `token`,
 ///   `api_key`, `authorization`, …), at any depth;
 /// - the values of the headers `authorization`, `proxy-authorization`,
@@ -51,7 +51,7 @@ pub fn mask_secrets(value: &mut Value) {
             let secret_message = object
                 .get("type")
                 .and_then(Value::as_str)
-                .is_some_and(|kind| kind.starts_with("secret_"));
+                .is_some_and(|kind| kind == "secret" || kind.starts_with("secret_"));
             let secret_header = object
                 .get("name")
                 .and_then(Value::as_str)
@@ -172,6 +172,11 @@ mod tests {
         assert_eq!(
             masked(json!({"id": "01M", "type": "secret_set", "name": "openai", "value": "sk-123"})),
             json!({"id": "01M", "type": "secret_set", "name": "openai", "value": "***"})
+        );
+        assert_eq!(
+            masked(json!({"id": "01M", "type": "secret", "value": "sk-123"})),
+            json!({"id": "01M", "type": "secret", "value": "***"}),
+            "the reply to secret_get"
         );
         assert_eq!(
             masked(json!({"type": "set_value", "path": "ui.theme", "value": "nord"})),

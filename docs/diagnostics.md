@@ -118,7 +118,8 @@ A payload is at most 64 KB; the rest is cut and the line gets
 
 **Masking.** Before a payload or a host call's arguments are written, the
 secrets in them become `"***"`: the `value` and `secret` of any message
-whose `type` starts with `secret_`; every field named `secret`, `password`,
+whose `type` is `secret` or starts with `secret_` (`secret_set` and the
+reply `secret` to `secret_get`); every field named `secret`, `password`,
 `passphrase`, `token`, `access_token`, `refresh_token`, `client_secret`,
 `api_key`, `apikey`, `authorization` or `x-api-key`, at any depth; and the
 values of the headers `Authorization`, `Proxy-Authorization`, `X-Api-Key`
