@@ -268,6 +268,18 @@ impl host::Host for State {
         &mut self,
         request: host::WebRequest,
     ) -> wasmtime::Result<Result<host::WebResponse, String>> {
+        // Header names only: a plugin may put its own token into a value.
+        let _call = HostCall::start("http-request", || {
+            serde_json::json!({
+                "method": request.method,
+                "url": request.url,
+                "headers": request.headers.iter().map(|(name, _)| name).collect::<Vec<_>>(),
+                "body_bytes": request.body.as_ref().map(Vec::len),
+                "secret": request.secret,
+                "secret_header": request.secret_header,
+                "timeout_ms": request.timeout_ms,
+            })
+        });
         if !self.plugin.granted.contains(&Capability::Net) {
             return Ok(Err("http-request needs the net capability".to_owned()));
         }
