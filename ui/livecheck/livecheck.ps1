@@ -60,6 +60,16 @@ public static class Live {
     var up = new INPUT { type = 0 }; up.u.mi.dwFlags = 0x0004;
     Send(down); Thread.Sleep(40); Send(up);
   }
+  // Presses at (x1,y1), moves to (x2,y2) in ten steps, and lets go: a drag the way a hand makes one.
+  public static void Drag(int x1, int y1, int x2, int y2) {
+    SetCursorPos(x1, y1); Thread.Sleep(150);
+    var down = new INPUT { type = 0 }; down.u.mi.dwFlags = 0x0002;
+    var up = new INPUT { type = 0 }; up.u.mi.dwFlags = 0x0004;
+    Send(down); Thread.Sleep(120);
+    for (int i = 1; i <= 10; i++) { SetCursorPos(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10); Thread.Sleep(40); }
+    Thread.Sleep(250);
+    Send(up);
+  }
   public static void Front(IntPtr h) { Send(Key(0x12, false), Key(0x12, true)); ShowWindow(h, 9); SetForegroundWindow(h); }
   [DllImport("kernel32.dll")] static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
   // Busy and all processor time of the machine so far, over all logical processors (kernel time includes idle).
@@ -70,7 +80,7 @@ public static class Live {
 $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L = 0x4C; Esc = 0x1B; Tab = 0x09; Enter = 0x0D; Back = 0x08; Down = 0x28; PgDn = 0x22; F2 = 0x71;
   F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56;
   F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A;
-  T = 0x54; Up = 0x26; End = 0x23; W = 0x57 }
+  T = 0x54; Up = 0x26; End = 0x23; W = 0x57; X = 0x58; A = 0x41 }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   # A flyout (the drive list) is a window of its own, so the test is the process, not the window.
@@ -659,6 +669,99 @@ if (@($saved.left.items)[0].locked) {
   [Live]::Type("toggle tab lock"); Start-Sleep -Milliseconds 900
   [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 900
   "tabs: unlocked again: $((NoticeCount 'is unlocked') -eq 1)"
+}
+
+# ----- 14: what plugins ask of the window (docs/ui.md, "What plugins ask of the window") -----
+# Two parts. The drag of a pane's row onto a tool's page needs only the Markdown Preview. "ask" needs the
+# agent extension (Phase 14) with its fake provider, which did not exist when this was written (2026-09-30):
+# it is written against the protocol and waits until sdk\extensions\agent and build-index.ps1 -Extensions exist.
+function PluginLog([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match $pattern }) }
+$drag = "$files\drag14"
+New-Item -ItemType Directory -Force $drag | Out-Null
+Set-Content -LiteralPath "$drag\a.txt" -Value "dragged" -NoNewline
+Set-Content -LiteralPath "$drag\readme.md" -Value "# The tool's page" -NoNewline
+
+Step "14: drag: tabs12's pane goes to the drag folder; the cursor on readme.md; Ctrl+K V opens it in the preview"
+ClickLeftPane
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type($drag); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 200
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 200
+[Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+[Live]::Press($VK.V); Start-Sleep -Milliseconds 2500
+"14: the preview page is ready in the other pane: $([bool](PluginLog '"tool ready"' | Where-Object { $_ -match 'readme.md' }))"
+Shot $h "$ShotDir\drag14-page-live.png"
+
+Step "14: drag: the first row of the left pane (a.txt) over the right pane's page, and let go"
+# Rows start about 15 % down the window and the row's name about 17 % across it; the page fills the right half.
+$rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$rect, 16)
+$w = $rect.Right - $rect.Left; $ht = $rect.Bottom - $rect.Top
+$before = (PluginLog '"paths dropped on a tool"').Count
+[Live]::Drag([int]($rect.Left + $w * 0.17), [int]($rect.Top + $ht * 0.149), [int]($rect.Left + $w * 0.72), [int]($rect.Top + $ht * 0.5))
+Start-Sleep -Milliseconds 1200
+$dropped = @(PluginLog '"paths dropped on a tool"')
+"14: the drop reached the tool's page as paths-dropped: $($dropped.Count -eq $before + 1)"
+if ($dropped.Count -gt 0) { "14: it carried one path: $((($dropped | Select-Object -Last 1) | ConvertFrom-Json).fields.paths -eq 1)" }
+Shot $h "$ShotDir\drag14-dropped-live.png"
+
+Step "14: drag: Ctrl+W closes the page's tab, the keyboard is in the left pane again"
+[Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 1000
+ClickLeftPane
+
+$agentDir = "$PSScriptRoot\..\..\sdk\extensions\agent"
+$indexScript = "$PSScriptRoot\..\..\sdk\marketplace\build-index.ps1"
+$hasExtensions = (Test-Path -LiteralPath $indexScript) -and ((Get-Content -LiteralPath $indexScript -Raw) -match '\[switch\]\s*\$Extensions')
+if (-not ((Test-Path -LiteralPath $agentDir) -and $hasExtensions)) {
+  "14: ask: WAITING: sdk\extensions\agent or build-index.ps1 -Extensions is not in the repository yet; the steps below did not run"
+} else {
+  # Written against the protocol (docs/ipc.md, "Previews"; docs/plugins.md, "Commands that ask for text") and not
+  # run yet. What it assumes, to check on the first run: the agent's command is agent.ask with Ctrl+K Ctrl+A, its
+  # fake provider is chosen with plugins.agent.provider = "fake", and the marketplace card is named "CabinetOS Agent".
+  $index = "$root\index-agent"
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $indexScript -OutDir $index -Extensions | ForEach-Object { "14: index: $_" }
+  $cfgPath = "$root\config\cabinetos.json"
+  $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
+  $cfg.marketplace.index = $index
+  if (-not $cfg.plugins) { $cfg | Add-Member -NotePropertyName plugins -NotePropertyValue ([pscustomobject]@{}) -Force }
+  $cfg.plugins | Add-Member -NotePropertyName agent -NotePropertyValue ([pscustomobject]@{ provider = 'fake' }) -Force
+  [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
+  Start-Sleep -Milliseconds 1500
+
+  Step "14: ask: the marketplace, Install on the agent's card, Allow and install through UI Automation"
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.X); Start-Sleep -Milliseconds 2500
+  $uia = [System.Windows.Automation.AutomationElement]::FromHandle($h)
+  $card = $uia.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "CabinetOS Agent, Extension, by CabinetOS")))
+  $install = if ($card) { $card.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Install"))) }
+  if ($install) { ([System.Windows.Automation.InvokePattern]$install.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke(); Start-Sleep -Milliseconds 1500 } else { "14: ask: no Install button found for the agent's card" }
+  $allow = $uia.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Allow and install")))
+  if ($allow) {
+    Shot $h "$ShotDir\ask14-review-live.png"
+    ([System.Windows.Automation.InvokePattern]$allow.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke(); Start-Sleep -Milliseconds 6000
+  } else { "14: ask: no Allow and install button found" }
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 800
+  "14: ask: the agent plugin is active: $([bool](PluginLog '"notice shown"' | Where-Object { $_ -match 'is active' }))"
+
+  Step "14: ask: three files in the left pane, Ctrl+K Ctrl+A, 'rename these to vacation_*', Enter"
+  $ask = "$files\ask14"
+  New-Item -ItemType Directory -Force $ask | Out-Null
+  foreach ($n in 1..3) { Set-Content -LiteralPath "$ask\photo$n.jpg" -Value "x" -NoNewline }
+  ClickLeftPane
+  [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+  [Live]::Type($ask); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+  [Live]::Press($VK.Ctrl, $VK.A); Start-Sleep -Milliseconds 300
+  [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+  [Live]::Press($VK.Ctrl, $VK.A); Start-Sleep -Milliseconds 900
+  "14: ask: the prompt box opened: $([bool](PluginLog '"prompt shown"' | Select-Object -Last 1))"
+  Shot $h "$ShotDir\ask14-prompt-live.png"
+  [Live]::Type("rename these to vacation_*"); Start-Sleep -Milliseconds 300
+  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 5000
+  $shown = @(PluginLog '"preview shown"') | Select-Object -Last 1
+  "14: ask: the preview shows in the other pane: $([bool]$shown)"
+  if ($shown) { "14: ask: it has three rename rows: $((($shown | ConvertFrom-Json).fields.rows) -eq 3)" }
+  Shot $h "$ShotDir\ask14-preview-live.png"
+  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 4000
+  "14: ask: Enter renamed the files on disk: $(@(Get-ChildItem -LiteralPath $ask | Where-Object { $_.Name -like 'vacation_*' }).Count -eq 3)"
+  "14: ask: the preview closed: $([bool](PluginLog '"preview applied"'))"
 }
 
 # ----- Edge cases (docs/ui.md, "Edge cases"): the shared fixture, with real keys -----

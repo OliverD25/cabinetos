@@ -162,6 +162,15 @@ The core's commands, in palette order:
   pane. A tab that has a tool (Markdown Preview) in it is a tab like the
   others. Tab and Alt+Left / Alt+Right keep their old jobs: the pane switch,
   Back and Forward.
+- While a preview of proposed changes shows in a pane (a plugin proposed
+  it; [ui.md](ui.md), "What plugins ask of the window"), **Enter applies it
+  and Esc cancels it**, before the keymap: the window takes these two keys
+  when the keyboard is in the preview or in a list, so `pane.openSelected`
+  (Enter) and `overlay.close` (Esc) do not run then. They are not commands
+  and cannot be rebound; the preview says "Enter applies · Esc cancels" in
+  its bar. Every other key works as always. A plugin's command that asks
+  for text (an `input` in its manifest) shows a prompt box when a key or the
+  palette runs it; Enter runs it and Esc cancels.
 - The second keys of `file.rename` (`shift+f6`), `file.delete` (`f8`),
   `file.deletePermanently` (`shift+f8`), `edit.selectAll`
   (`ctrl+numpadadd`) and `search.focus` (`alt+f7`) are Total Commander's

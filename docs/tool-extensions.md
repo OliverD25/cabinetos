@@ -152,6 +152,33 @@ and in the log:
 | `terminal.new` (`{"cwd": …}`) | A shell in a folder |
 | `editor.openMarkdownPreview` (`{"path": …}`) | Open another Markdown file (a link) |
 
+**Plugin events and dropped rows** (Phase 14). A page may follow a plugin:
+
+```json
+{"type":"subscribe","plugin":"agent"}
+{"type":"unsubscribe","plugin":"agent"}
+```
+
+The window then sends each event of that plugin, and nothing else:
+
+```json
+{"type":"plugin-event","plugin":"agent","name":"agent.notice","payload":{"text":"Renamed 3 files"}}
+```
+
+`payload` is what the plugin wrote: JSON when it is JSON (an object, a
+list, a number), else a string. A page follows at most 16 plugins, and
+asks again each time it says `ready`, since a page that loads again has
+forgotten. The window forwards only once the page is ready. When the user
+drags rows from a pane over the page and drops them, the page gets:
+
+```json
+{"type":"paths-dropped","paths":["C:\\photos\\a.jpg","C:\\photos\\b.jpg"]}
+```
+
+(at most 1,000 paths; `"truncated": true` when there were more). A drop
+reaches the window, not the page's browser, so a page needs no drag and
+drop code of its own.
+
 Anything else the page sends (other types, malformed JSON, a message over
 64 KiB) is dropped.
 
