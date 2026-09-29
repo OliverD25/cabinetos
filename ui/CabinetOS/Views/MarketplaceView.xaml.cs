@@ -49,6 +49,66 @@ public sealed partial class MarketplaceView : UserControl
     /// <summary>Runs a command through the window's router: (command, args, trigger).</summary>
     public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
 
+    /// <summary>
+    /// Lays the marketplace out with the window's sizes and chrome now
+    /// (docs/ui.md, "Metrics and chrome"): its corners as a pane's, the tabs
+    /// of its side list, and the cards' gap, padding and corners. Under
+    /// hairlines it has no frame of its own, as in the handout: the sidebar's
+    /// and the status bar's lines bound it.
+    /// </summary>
+    public void ApplyMetrics()
+    {
+        var m = WindowMetrics.Current;
+        MarketFrame.CornerRadius = WindowMetrics.Corners(m.RadiusSurface);
+        MarketFrame.BorderThickness = new Thickness(WindowMetrics.Chrome.Hairlines ? 0 : 1);
+        // Its controls take the control radius; the items' icon tiles keep theirs, as the handout's marketplace does.
+        var control = WindowMetrics.Corners(m.RadiusControl);
+        SearchField.CornerRadius = control;
+        foreach (var button in new[] { RefreshButton, CloseDetailButton, PrimaryButton, SourceButton, UninstallButton })
+        {
+            button.CornerRadius = control;
+        }
+        foreach (var row in _navRows)
+        {
+            SizeNavRow(row);
+        }
+        Cards.Spacing = m.MarketplaceCardGap;
+        foreach (var card in _cards.Values)
+        {
+            SizeCard(card.Root);
+            card.Tile.CornerRadius = WindowMetrics.Inner(8);
+        }
+        Cards.InvalidateMeasure();
+        DetailTile.CornerRadius = WindowMetrics.Inner(10);
+        foreach (var box in Facts.Children.OfType<Border>())
+        {
+            box.CornerRadius = WindowMetrics.Inner(6);
+        }
+        if (_detailItem is { } shown)
+        {
+            // Its capability rows are made with the sizes of the moment.
+            FillDetail(shown);
+        }
+    }
+
+    private static void SizeNavRow(NavRowView row)
+    {
+        var m = WindowMetrics.Current;
+        row.Button.MinHeight = m.MarketplaceTabHeight;
+        row.Button.CornerRadius = WindowMetrics.Corners(m.MarketplaceTabRadius);
+        if (row.Button.Content is Grid grid)
+        {
+            grid.Height = m.MarketplaceTabHeight;
+        }
+    }
+
+    private static void SizeCard(Button card)
+    {
+        var m = WindowMetrics.Current;
+        card.Padding = WindowMetrics.Pad(m.MarketplaceCardPaddingX, m.MarketplaceCardPaddingY);
+        card.CornerRadius = WindowMetrics.Corners(m.MarketplaceCardRadius);
+    }
+
     /// <summary>Whether the marketplace is shown.</summary>
     public bool IsOpen => Visibility == Visibility.Visible;
 
@@ -133,7 +193,9 @@ public sealed partial class MarketplaceView : UserControl
         {
             foreach (var (id, title) in MarketTabs.All)
             {
-                _navRows.Add(NavRow(id, title));
+                var row = NavRow(id, title);
+                SizeNavRow(row);
+                _navRows.Add(row);
             }
         }
         foreach (var row in _navRows)
@@ -198,6 +260,7 @@ public sealed partial class MarketplaceView : UserControl
                 var card = _cards.TryGetValue(item.Id, out var existing) && ReferenceEquals(existing.Item, item)
                     ? existing
                     : new Card(item, _cardStyle, id => _model?.Select(id));
+                SizeCard(card.Root);
                 cards[item.Id] = card;
                 Cards.Children.Add(card.Root);
             }
@@ -331,7 +394,7 @@ public sealed partial class MarketplaceView : UserControl
         return new Border
         {
             Padding = new Thickness(10, 8, 10, 8),
-            CornerRadius = new CornerRadius(6),
+            CornerRadius = WindowMetrics.Inner(6),
             Background = ThemeResources.Brush("CbCardFillBrush"),
             Child = line,
         };
@@ -368,7 +431,7 @@ public sealed partial class MarketplaceView : UserControl
             {
                 Width = 40,
                 Height = 40,
-                CornerRadius = new CornerRadius(8),
+                CornerRadius = WindowMetrics.Inner(8),
                 Background = new SolidColorBrush(ReviewDialog.Hex(tile.Color)),
                 Child = new TextBlock
                 {
@@ -473,11 +536,14 @@ public sealed partial class MarketplaceView : UserControl
             Root = new Button { Style = style, Content = content };
             AutomationProperties.SetName(Root, $"{item.Name}, {MarketText.KindLabel(item)}, by {item.Author.Name}");
             Root.Click += (_, _) => select(item.Id);
+            Tile = tileBox;
         }
 
         public MarketItem Item { get; }
 
         public Button Root { get; }
+
+        public Border Tile { get; }
 
         public void Update(bool selected, string state)
         {

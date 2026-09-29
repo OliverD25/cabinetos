@@ -41,6 +41,24 @@ public sealed record DriveItem(string Name, string Path, string FreeText, double
 public sealed class SidebarModel : ObservableObject
 {
     private bool _showDrives;
+    private bool _shortFreeLabels;
+    private IReadOnlyList<VolumeDetails>? _volumes;
+
+    /// <summary>
+    /// Whether a drive's free space reads "118 GB" rather than "118 GB free":
+    /// the Commander Compact handout's shorter label, part of chrome <c>hairlines</c>.
+    /// </summary>
+    public bool ShortFreeLabels
+    {
+        get => _shortFreeLabels;
+        set
+        {
+            if (SetProperty(ref _shortFreeLabels, value) && _volumes is not null)
+            {
+                SetDrives(_volumes);
+            }
+        }
+    }
 
     /// <summary>
     /// Desktop, Downloads, Documents and the profile folder, then the folders
@@ -94,6 +112,7 @@ public sealed class SidebarModel : ObservableObject
     /// <summary>Shows the drives of a <c>volumes</c> reply; null hides the section.</summary>
     public void SetDrives(IReadOnlyList<VolumeDetails>? volumes)
     {
+        _volumes = volumes;
         Drives.Clear();
         if (volumes is null)
         {
@@ -107,7 +126,7 @@ public sealed class SidebarModel : ObservableObject
             Drives.Add(new DriveItem(
                 DisplayFormat.DriveName(volume.DriveLetter, volume.Label),
                 $"{volume.DriveLetter}:\\",
-                $"{DisplayFormat.Bytes(volume.FreeBytes)} free",
+                ShortFreeLabels ? DisplayFormat.Bytes(volume.FreeBytes) : $"{DisplayFormat.Bytes(volume.FreeBytes)} free",
                 Math.Clamp(used, 0, 1)));
         }
         ShowDrives = Drives.Count > 0;

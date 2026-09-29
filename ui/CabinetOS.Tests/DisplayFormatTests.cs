@@ -33,6 +33,29 @@ public class DisplayFormatTests
         Assert.Equal("", DisplayFormat.Modified(DateTime.MinValue, now, Invariant));
     }
 
+    [Fact]
+    public void The_commander_look_writes_an_old_date_without_its_time()
+    {
+        var now = new DateTime(2026, 9, 28, 15, 0, 0, DateTimeKind.Local);
+        string Format(DateTime local) => DisplayFormat.ModifiedShort(local.ToUniversalTime(), now, Invariant);
+        Assert.Equal("Today 09:11", Format(new DateTime(2026, 9, 28, 9, 11, 0, DateTimeKind.Local)));
+        Assert.Equal("Thu 13:40", Format(new DateTime(2026, 9, 24, 13, 40, 0, DateTimeKind.Local)));
+        Assert.Equal("09/21/2026", Format(new DateTime(2026, 9, 21, 8, 0, 0, DateTimeKind.Local)));
+        Assert.Equal("", DisplayFormat.ModifiedShort(DateTime.MinValue, now, Invariant));
+    }
+
+    [Theory]
+    [InlineData("README.md", EntryKind.File, false, LinkKind.None, "MD")]
+    [InlineData("archive.tar.gz", EntryKind.File, false, LinkKind.None, "GZ")]
+    [InlineData("LICENSE", EntryKind.File, false, LinkKind.None, "File")]
+    [InlineData(".gitignore", EntryKind.File, false, LinkKind.None, "File")]
+    [InlineData("src", EntryKind.Directory, true, LinkKind.None, "Folder")]
+    [InlineData("junction to target", EntryKind.Directory, true, LinkKind.Junction, "Junction")]
+    [InlineData("repo", EntryKind.Link, true, LinkKind.SymbolicLink, "Symlink")]
+    [InlineData("tool.exe", EntryKind.Link, false, LinkKind.None, "Link")]
+    public void The_commander_look_names_types_short(string name, EntryKind kind, bool isFolder, LinkKind link, string text) =>
+        Assert.Equal(text, DisplayFormat.ShortType(name, kind, isFolder, link));
+
     [Theory]
     [InlineData("report.md", EntryKind.File, false, "MD File")]
     [InlineData("archive.tar.gz", EntryKind.File, false, "GZ File")]

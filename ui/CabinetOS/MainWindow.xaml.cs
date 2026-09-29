@@ -165,6 +165,7 @@ public sealed partial class MainWindow : Window
 
         FileMenu.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         FileMenu.Closed += FocusActivePane;
+        FkeyBar.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
 
         BackButton.Click += (_, _) => _ = _router.ExecuteAsync("go.back", trigger: "button");
         ForwardButton.Click += (_, _) => _ = _router.ExecuteAsync("go.forward", trigger: "button");
@@ -202,6 +203,8 @@ public sealed partial class MainWindow : Window
         ApplyDual(true);
         UpdateStatus();
         UpdateNavigationButtons();
+        // The default look's sizes until the core's theme arrives (the base text among them).
+        LayOutWithMetrics();
     }
 
     private PaneModel Active => _panes[_active];
@@ -272,8 +275,8 @@ public sealed partial class MainWindow : Window
 
     private void UpdateWidths(double windowWidth)
     {
-        // The design's clamp(180px, 20%, 224px) and clamp(120px, 22%, 240px).
-        SidebarView.Width = Math.Clamp(windowWidth * 0.2, 180, 224);
+        // The design's clamp(180px, 20%, 224px), or the theme's, and clamp(120px, 22%, 240px).
+        SidebarView.Width = WindowMetrics.Current.SidebarWidth(windowWidth);
         SearchBox.Width = Math.Clamp(windowWidth * 0.22, 120, 240);
     }
 
@@ -439,6 +442,18 @@ public sealed partial class MainWindow : Window
                 case "mode":
                     // Windows' light or dark mode as the window sees it, through the path a change there takes.
                     ForceSystemMode(step.Argument);
+                    break;
+                case "size":
+                    await SizeForSnapshotAsync(step.Argument);
+                    break;
+                case "fit" when double.TryParse(step.Argument, System.Globalization.CultureInfo.InvariantCulture, out var listHeight):
+                    await FitListForSnapshotAsync(listHeight);
+                    break;
+                case "theme":
+                    await SwitchThemeForSnapshotAsync(step.Argument);
+                    break;
+                case "layout":
+                    LogLayoutForSnapshot(step.Argument);
                     break;
                 case "click":
                     ClickForSnapshot(step.Argument);
@@ -750,6 +765,7 @@ public sealed partial class MainWindow : Window
         _keys.SetKeymap(keymap);
         _terminal.SetKeymap(keymap);
         ApplyToolKeys(keymap);
+        FkeyBar.SetKeymap(keymap);
     }
 
     private async Task ReadVolumesAsync()
@@ -796,12 +812,7 @@ public sealed partial class MainWindow : Window
             }
             ApplySidebar(settings.Sidebar);
         }
-        LayoutText.Text = settings.Layout switch
-        {
-            "right" => "Terminal: right",
-            "rail" => "Activity rail",
-            _ => "Terminal: bottom",
-        };
+        UpdateLayoutText();
         if (firstStart || settings.Layout != previous.Layout)
         {
             ApplyDockPlacement(DockLayout.PlacementFor(settings.Layout));
@@ -2039,8 +2050,7 @@ public sealed partial class MainWindow : Window
         }
         RightColumn.Width = dual ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         RightPane.Visibility = dual ? Visibility.Visible : Visibility.Collapsed;
-        LeftPane.Margin = dual ? new Thickness(0, 0, 4, 0) : new Thickness(0);
-        LeftEditor.Margin = LeftPane.Margin;
+        ApplyPaneGaps();
         DualLabel.Text = dual ? "Dual" : "Single";
         var brush = dual ? ThemeResources.Brush("CbAccentBrush") : ThemeResources.Brush("CbTextSecondaryBrush");
         DualIcon.Foreground = brush;
@@ -2156,6 +2166,8 @@ public sealed partial class MainWindow : Window
                 // A single name wider than the bar ends in "\u2026" (FitCrumbs caps the button).
                 Content = new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis },
                 Style = (Style)ThemeResources.Get("CbCrumbButtonStyle")!,
+                FontSize = WindowMetrics.Current.FontSize,
+                Height = CrumbHeight(),
                 Tag = path,
             };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, path);
@@ -2176,6 +2188,8 @@ public sealed partial class MainWindow : Window
                 {
                     Content = "\u2026",
                     Style = (Style)ThemeResources.Get("CbCrumbButtonStyle")!,
+                    FontSize = WindowMetrics.Current.FontSize,
+                    Height = CrumbHeight(),
                     Flyout = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft },
                 };
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_crumbMore, "Folders in between");
@@ -2195,6 +2209,9 @@ public sealed partial class MainWindow : Window
         _crumbMoreWidth = _crumbMore?.DesiredSize.Width ?? 0;
         FitCrumbs();
     }
+
+    // A crumb: the design's 24 px, lower in a lower address field so it stays inside the field's border.
+    private static double CrumbHeight() => Math.Min(24, WindowMetrics.Current.FieldHeight - 4);
 
     private static FontIcon CrumbSeparator() => new()
     {

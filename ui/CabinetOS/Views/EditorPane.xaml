@@ -5,19 +5,26 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     IsTabStop="False"
     Visibility="Collapsed">
-    <!-- A pane's editor (design view D): a 36 px tab strip over a Tool Extension's page. -->
+    <!--
+      A pane's editor (design view D): a 36 px tab strip over a Tool Extension's page. The
+      default look's sizes; the theme's metrics replace them (EditorPane.ApplyMetrics).
+    -->
     <Border
+        x:Name="Surface"
         Background="{ThemeResource CbLayerFillBrush}"
         BorderBrush="{ThemeResource CbLayerStrokeBrush}"
         BorderThickness="1"
         CornerRadius="8">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="36" />
+                <RowDefinition x:Name="TabStripRow" Height="36" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Border BorderBrush="{ThemeResource CbDividerBrush}" BorderThickness="0,0,0,1">
+            <Border
+                x:Name="TabStrip"
+                BorderBrush="{ThemeResource CbDividerBrush}"
+                BorderThickness="0,0,0,1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -27,6 +34,7 @@
 
                     <!-- The tab: a 2 px accent top edge, the file's glyph and name, and close. -->
                     <Grid
+                        x:Name="TabCell"
                         Background="{ThemeResource CbLayerFillBrush}"
                         BorderBrush="{ThemeResource CbDividerBrush}"
                         BorderThickness="0,0,1,0"

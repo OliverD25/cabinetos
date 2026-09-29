@@ -35,6 +35,39 @@ public sealed partial class ToolDock : UserControl
     /// <summary>Runs a command by ID through the window's router: (command, arguments, trigger).</summary>
     public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
 
+    /// <summary>
+    /// Lays the dock out with the window's sizes and chrome now (docs/ui.md,
+    /// "Metrics and chrome"): its corners, the header and its buttons. Under
+    /// hairlines only the edge that meets the panes has a line: the top of a
+    /// dock at the bottom (<paramref name="bottom"/>), the left of one beside
+    /// them. The window draws the tabs again with <see cref="SetTabs"/>.
+    /// </summary>
+    public void ApplyMetrics(bool bottom)
+    {
+        var m = WindowMetrics.Current;
+        Frame.CornerRadius = WindowMetrics.Corners(m.RadiusSurface);
+        if (WindowMetrics.Chrome.Hairlines)
+        {
+            Frame.BorderBrush = ThemeResources.Brush("CbHairlineStrongBrush");
+            Frame.BorderThickness = bottom ? new Thickness(0, 1, 0, 0) : new Thickness(1, 0, 0, 0);
+        }
+        else
+        {
+            Frame.BorderBrush = ThemeResources.Brush("CbTerminalStrokeBrush");
+            Frame.BorderThickness = new Thickness(1);
+        }
+        HeaderRow.Height = new GridLength(m.TerminalHeaderHeight);
+        HeaderGrid.Padding = new Thickness(m.TerminalPaddingX, 0, 6, 0);
+        foreach (var button in new[] { NewButton, ProfilesButton })
+        {
+            button.Height = m.TerminalTabHeight;
+            button.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
+        }
+        NewButton.MinWidth = m.TerminalTabHeight;
+        CloseButton.Width = CloseButton.Height = CloseButton.MinWidth = Math.Min(24, m.TerminalHeaderHeight);
+        CloseButton.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
+    }
+
     /// <summary>The terminal page's WebView2.</summary>
     internal WebViewHost TerminalPage { get; }
 
@@ -112,11 +145,14 @@ public sealed partial class ToolDock : UserControl
         });
         title.Children.Add(new TextBlock { Text = tab.Profile, VerticalAlignment = VerticalAlignment.Center, Foreground = textBrush });
 
+        var m = WindowMetrics.Current;
         var select = new Button
         {
             Content = title,
             Style = (Style)ThemeResources.Get("CbDockTabButtonStyle")!,
+            Height = m.TerminalTabHeight,
             Padding = new Thickness(10, 0, 4, 0),
+            CornerRadius = WindowMetrics.Corners(m.RadiusControl),
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(select, $"{tab.Profile}, session {tab.SessionId}");
@@ -137,13 +173,15 @@ public sealed partial class ToolDock : UserControl
         ToolTipService.SetToolTip(close, "Close this shell");
         close.Click += (_, _) => Run("terminal.close", CommandArgs.Object(("session", tab.SessionId)));
 
+        close.Width = close.Height = close.MinWidth = Math.Min(18, m.TerminalTabHeight - 2);
+        close.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(select);
         row.Children.Add(close);
         return new Border
         {
-            Height = 26,
-            CornerRadius = new CornerRadius(4),
+            Height = m.TerminalTabHeight,
+            CornerRadius = WindowMetrics.Corners(m.RadiusControl),
             Background = active ? ThemeResources.Brush("CbTabActiveFillBrush") : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             Child = row,
         };

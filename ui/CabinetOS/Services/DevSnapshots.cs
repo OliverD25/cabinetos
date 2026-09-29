@@ -34,6 +34,12 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>dock:&lt;pixels&gt;</c> drags the dock's splitter to that size (and saves it, as a drag does),
 /// <c>mode:light|dark|windows</c> makes the window take Windows as set to that mode (a theme of
 /// kind <c>system</c> follows) without changing the PC's setting,
+/// <c>size:&lt;width&gt;x&lt;height&gt;</c> sizes the window's content in device-independent pixels,
+/// <c>fit:&lt;pixels&gt;</c> makes the window as high as gives the active pane's list that height,
+/// <c>theme:&lt;id&gt;</c> sets <c>ui.theme</c> as the picker does and waits until the theme is applied,
+/// <c>layout:&lt;label&gt;</c> logs "layout measured": each pane's whole rows, their height and the texts cut
+/// short, the function keys, every corner radius over 3 px outside the overlays, the sizes the metrics set,
+/// and the keymap's fingerprint (docs/ui.md, "Metrics and chrome"),
 /// <c>click:&lt;name&gt;</c> presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it
 /// (the keyboard moves to it, then its automation peer invokes it), <c>focus:&lt;label&gt;</c> logs where the keyboard is,
 /// <c>scroll:&lt;pages&gt;</c> presses PageDown in the active pane 30 times a second (<c>scroll:&lt;pages&gt;/&lt;n&gt;</c>: once every n frames)

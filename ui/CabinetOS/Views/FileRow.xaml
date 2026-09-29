@@ -5,9 +5,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:CabinetOS.Views"
     IsTabStop="False">
+    <!-- The default look's sizes; the theme's metrics replace them (FileRow.ApplyMetrics). -->
     <Grid
         x:Name="Root"
-        Height="{StaticResource CbRowHeight}"
+        Height="30"
         Background="Transparent"
         CornerRadius="4">
         <VisualStateManager.VisualStateGroups>
@@ -21,6 +22,14 @@
                 <VisualState x:Name="Selected">
                     <VisualState.Setters>
                         <Setter Target="Root.Background" Value="{ThemeResource CbSelectedFillBrush}" />
+                        <Setter Target="Pill.Visibility" Value="Visible" />
+                        <Setter Target="NameText.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <!-- Over striped rows (chrome rowStripes) a selected row is filled stronger, as in the handout. -->
+                <VisualState x:Name="SelectedStriped">
+                    <VisualState.Setters>
+                        <Setter Target="Root.Background" Value="{ThemeResource CbStripedSelectedFillBrush}" />
                         <Setter Target="Pill.Visibility" Value="Visible" />
                         <Setter Target="NameText.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
                     </VisualState.Setters>
@@ -47,14 +56,17 @@
             RadiusY="1.5"
             Visibility="Collapsed" />
 
-        <Grid Margin="10,0">
+        <Grid x:Name="Columns" Margin="10,0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="120" />
-                <ColumnDefinition Width="0.55*" />
-                <ColumnDefinition Width="0.45*" />
-                <ColumnDefinition Width="64" />
+                <ColumnDefinition
+                    x:Name="NameColumn"
+                    Width="*"
+                    MinWidth="120" />
+                <ColumnDefinition x:Name="ModifiedColumn" Width="0.55*" />
+                <ColumnDefinition x:Name="TypeColumn" Width="0.45*" />
+                <ColumnDefinition x:Name="SizeColumn" Width="64" />
             </Grid.ColumnDefinitions>
-            <Grid ColumnSpacing="10">
+            <Grid x:Name="NameCell" ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />

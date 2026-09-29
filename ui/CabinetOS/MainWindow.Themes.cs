@@ -16,8 +16,10 @@ public sealed partial class MainWindow
     private void SetUpThemes()
     {
         _themes = new ThemeApplier(RootGrid, _backdrop);
-        _themes.Applied += _ =>
+        _themes.Applied += look =>
         {
+            // The sizes and chrome first (docs/ui.md, "Metrics and chrome"): the terminal page takes both.
+            ApplyMetrics(look);
             // What paints outside the brushes: the terminal page, the caption buttons, and
             // the level dots that open views drew with the colours of the theme before.
             SendTerminalTheme();

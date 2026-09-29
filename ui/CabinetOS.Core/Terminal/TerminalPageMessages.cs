@@ -1,7 +1,34 @@
 using System.Buffers;
 using System.Text.Json;
+using CabinetOS.Core.Themes;
 
 namespace CabinetOS.Core.Terminal;
+
+/// <summary>
+/// The terminal page's line height (xterm.js's, a multiple of its cell) and
+/// the space around its text, in pixels: top, right, bottom, left.
+/// </summary>
+public sealed record TerminalSpacing(double LineHeight, double Top, double Right, double Bottom, double Left)
+{
+    /// <summary>
+    /// From a theme's metrics. The page's default look is xterm.js's 1.25
+    /// and 8, 4, 4, 12 px around the text, which the design writes as a CSS
+    /// line height of 1.6 and a padding of 10 by 12; a theme's
+    /// <c>terminalLineHeight</c>, <c>terminalPaddingY</c> and
+    /// <c>terminalPaddingX</c> scale them by their share of those.
+    /// </summary>
+    public static TerminalSpacing From(ThemeMetrics metrics)
+    {
+        var y = metrics.TerminalPaddingY / 10;
+        var x = metrics.TerminalPaddingX / 12;
+        return new TerminalSpacing(
+            Math.Round(1.25 * metrics.TerminalLineHeight / 1.6, 3),
+            Math.Round(8 * y, 1),
+            Math.Round(4 * x, 1),
+            Math.Round(4 * y, 1),
+            Math.Round(12 * x, 1));
+    }
+}
 
 /// <summary>
 /// A message from the terminal page (xterm.js in WebView2) to the window:
@@ -97,10 +124,12 @@ public static class TerminalPageMessages
     /// <summary>
     /// Colours and font: the theme's terminal colours (docs/themes.md), and
     /// its 16 ANSI colours in order (black, red, green, yellow, blue, magenta,
-    /// cyan, white, then the bright ones) when it has them.
+    /// cyan, white, then the bright ones) when it has them; with
+    /// <paramref name="spacing"/>, the line height and the space around the
+    /// text (the theme's metrics).
     /// </summary>
     public static string Theme(string background, string foreground, string cursor, string selection, string fontFamily, int fontSize,
-        IReadOnlyList<string>? ansi = null) => Write(w =>
+        IReadOnlyList<string>? ansi = null, TerminalSpacing? spacing = null) => Write(w =>
     {
         w.WriteString("type", "theme");
         w.WriteString("background", background);
@@ -115,6 +144,16 @@ public static class TerminalPageMessages
             foreach (var color in ansi)
             {
                 w.WriteStringValue(color);
+            }
+            w.WriteEndArray();
+        }
+        if (spacing is { } s)
+        {
+            w.WriteNumber("lineHeight", s.LineHeight);
+            w.WriteStartArray("padding");
+            foreach (var side in (double[])[s.Top, s.Right, s.Bottom, s.Left])
+            {
+                w.WriteNumberValue(side);
             }
             w.WriteEndArray();
         }

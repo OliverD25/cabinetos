@@ -127,8 +127,6 @@
 
             <FontFamily x:Key="CbMonoFont">Cascadia Code, Cascadia Mono, Consolas</FontFamily>
 
-            <x:Double x:Key="CbRowHeight">30</x:Double>
-
             <!--
               Text in the window's reading order, left to right: a right-to-left name keeps
               its extension on the right, as Explorer shows it (docs/ui.md, "Edge cases").

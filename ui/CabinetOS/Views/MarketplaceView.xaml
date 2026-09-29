@@ -86,8 +86,9 @@
         </Style>
     </UserControl.Resources>
 
-    <!-- Design view C: a Layer surface in place of the main column. -->
+    <!-- Design view C: a Layer surface in place of the main column. The theme's metrics size it (MarketplaceView.ApplyMetrics). -->
     <Border
+        x:Name="MarketFrame"
         Background="{ThemeResource CbLayerFillBrush}"
         BorderBrush="{ThemeResource CbLayerStrokeBrush}"
         BorderThickness="1"
@@ -312,7 +313,7 @@
                                 Visibility="Collapsed" />
 
                             <!-- Three stat tiles: rating, installs, size. -->
-                            <Grid ColumnSpacing="8">
+                            <Grid x:Name="Facts" ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />

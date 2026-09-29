@@ -6,121 +6,130 @@
     xmlns:views="using:CabinetOS.Views"
     xmlns:vm="using:CabinetOS.ViewModels"
     IsTabStop="False">
-    <ScrollViewer
-        Padding="0,4"
-        HorizontalScrollMode="Disabled"
-        IsTabStop="False"
-        VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="2">
-            <!-- Workspaces and Tags appear here once those features exist (Article 4). -->
-            <TextBlock
-                Margin="12,6,12,4"
-                Style="{StaticResource CbSectionLabelStyle}"
-                Text="PINNED" />
-            <ItemsRepeater x:Name="PinnedList">
-                <ItemsRepeater.Layout>
-                    <StackLayout Spacing="2" />
-                </ItemsRepeater.Layout>
-                <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="vm:PinnedItem">
-                        <Button
-                            AutomationProperties.Name="{x:Bind Name}"
-                            Click="OnPinnedClick"
-                            RightTapped="OnPinnedRightTapped"
-                            Style="{StaticResource CbSidebarRowButtonStyle}"
-                            Tag="{x:Bind}"
-                            ToolTipService.ToolTip="{x:Bind Path}">
-                            <Grid Height="32">
-                                <Border
-                                    Background="{ThemeResource CbHoverFillBrush}"
-                                    CornerRadius="4"
-                                    Visibility="{x:Bind IsActive, Mode=OneWay}" />
-                                <Rectangle
-                                    Width="3"
-                                    Height="16"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Fill="{ThemeResource CbAccentBrush}"
-                                    RadiusX="1.5"
-                                    RadiusY="1.5"
-                                    Visibility="{x:Bind IsActive, Mode=OneWay}" />
-                                <StackPanel
-                                    Padding="10,0"
-                                    VerticalAlignment="Center"
-                                    Orientation="Horizontal"
-                                    Spacing="10">
-                                    <views:FolderGlyph VerticalAlignment="Center" />
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        Text="{x:Bind Name}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </Grid>
-                        </Button>
-                    </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-            </ItemsRepeater>
-
-            <StackPanel x:Name="DrivesSection" Visibility="Collapsed">
+    <!-- The default look's sizes; the theme's metrics replace them (Sidebar.ApplyMetrics). Under hairlines a 1 px line on the right. -->
+    <Border
+        x:Name="Frame"
+        BorderBrush="{ThemeResource CbHairlineBrush}"
+        BorderThickness="0">
+        <ScrollViewer
+            x:Name="Scroller"
+            Padding="0,4"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Sections" Spacing="2">
+                <!-- Workspaces and Tags appear here once those features exist (Article 4). -->
                 <TextBlock
-                    Margin="12,14,12,4"
+                    x:Name="PinnedLabel"
+                    Margin="12,6,12,4"
                     Style="{StaticResource CbSectionLabelStyle}"
-                    Text="DRIVES" />
-                <ItemsRepeater x:Name="DriveList">
+                    Text="PINNED" />
+                <ItemsRepeater x:Name="PinnedList">
                     <ItemsRepeater.Layout>
-                        <StackLayout Spacing="2" />
+                        <StackLayout x:Name="PinnedLayout" Spacing="2" />
                     </ItemsRepeater.Layout>
                     <ItemsRepeater.ItemTemplate>
-                        <DataTemplate x:DataType="vm:DriveItem">
+                        <DataTemplate x:DataType="vm:PinnedItem">
                             <Button
                                 AutomationProperties.Name="{x:Bind Name}"
-                                Click="OnDriveClick"
+                                Click="OnPinnedClick"
+                                RightTapped="OnPinnedRightTapped"
                                 Style="{StaticResource CbSidebarRowButtonStyle}"
-                                Tag="{x:Bind Path}">
-                                <Grid Padding="10,6" RowSpacing="5">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="3" />
-                                    </Grid.RowDefinitions>
-                                    <Grid ColumnSpacing="10">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <FontIcon
-                                            FontSize="16"
-                                            Foreground="{ThemeResource CbTextSecondaryBrush}"
-                                            Glyph="&#xEDA2;" />
+                                Tag="{x:Bind}"
+                                ToolTipService.ToolTip="{x:Bind Path}">
+                                <Grid Height="32">
+                                    <Border
+                                        Background="{ThemeResource CbHoverFillBrush}"
+                                        CornerRadius="4"
+                                        Visibility="{x:Bind IsActive, Mode=OneWay}" />
+                                    <Rectangle
+                                        Width="3"
+                                        Height="16"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Fill="{ThemeResource CbAccentBrush}"
+                                        RadiusX="1.5"
+                                        RadiusY="1.5"
+                                        Visibility="{x:Bind IsActive, Mode=OneWay}" />
+                                    <StackPanel
+                                        Padding="10,0"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal"
+                                        Spacing="10">
+                                        <views:FolderGlyph VerticalAlignment="Center" />
                                         <TextBlock
-                                            Grid.Column="1"
                                             VerticalAlignment="Center"
                                             Text="{x:Bind Name}"
                                             TextTrimming="CharacterEllipsis" />
-                                        <TextBlock
-                                            Grid.Column="2"
-                                            VerticalAlignment="Center"
-                                            FontSize="11"
-                                            Foreground="{ThemeResource CbTextTertiaryBrush}"
-                                            Text="{x:Bind FreeText}" />
-                                    </Grid>
-                                    <Grid
-                                        Grid.Row="1"
-                                        Margin="26,0,0,0"
-                                        Background="{ThemeResource CbUsageTrackBrush}"
-                                        CornerRadius="1.5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="{x:Bind UsedLength}" />
-                                            <ColumnDefinition Width="{x:Bind FreeLength}" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Background="{ThemeResource CbAccentBrush}" CornerRadius="1.5" />
-                                    </Grid>
+                                    </StackPanel>
                                 </Grid>
                             </Button>
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
+
+                <StackPanel x:Name="DrivesSection" Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="DrivesLabel"
+                        Margin="12,14,12,4"
+                        Style="{StaticResource CbSectionLabelStyle}"
+                        Text="DRIVES" />
+                    <ItemsRepeater x:Name="DriveList">
+                        <ItemsRepeater.Layout>
+                            <StackLayout x:Name="DriveLayout" Spacing="2" />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DriveItem">
+                                <Button
+                                    AutomationProperties.Name="{x:Bind Name}"
+                                    Click="OnDriveClick"
+                                    Style="{StaticResource CbSidebarRowButtonStyle}"
+                                    Tag="{x:Bind Path}">
+                                    <Grid Padding="10,6" RowSpacing="5">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="3" />
+                                        </Grid.RowDefinitions>
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon
+                                                FontSize="16"
+                                                Foreground="{ThemeResource CbTextSecondaryBrush}"
+                                                Glyph="&#xEDA2;" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Text="{x:Bind Name}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                Grid.Column="2"
+                                                VerticalAlignment="Center"
+                                                FontSize="11"
+                                                Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                                Text="{x:Bind FreeText}" />
+                                        </Grid>
+                                        <Grid
+                                            Grid.Row="1"
+                                            Margin="26,0,0,0"
+                                            Background="{ThemeResource CbUsageTrackBrush}"
+                                            CornerRadius="1.5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="{x:Bind UsedLength}" />
+                                                <ColumnDefinition Width="{x:Bind FreeLength}" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Background="{ThemeResource CbAccentBrush}" CornerRadius="1.5" />
+                                        </Grid>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+                </StackPanel>
             </StackPanel>
-        </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Border>
 </UserControl>

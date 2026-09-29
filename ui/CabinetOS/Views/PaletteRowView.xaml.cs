@@ -16,6 +16,7 @@ public sealed partial class PaletteRowView : UserControl
 {
     private readonly Storyboard _pulse;
     private PaletteRow? _row;
+    private int _metricsVersion = -1;
 
     /// <summary>Creates a row; the repeater recycles it.</summary>
     public PaletteRowView()
@@ -25,7 +26,14 @@ public sealed partial class PaletteRowView : UserControl
         // The palette closes under a resting mouse: these tooltips must not open after it.
         OpenToolTips.Set(PencilButton, "Change keybinding (F2)");
         OpenToolTips.Set(LockIcon, "Part of the Immutable System Tier");
-        DataContextChanged += (_, _) => Bind(DataContext as PaletteRow);
+        DataContextChanged += (_, _) =>
+        {
+            if (_metricsVersion != WindowMetrics.Version)
+            {
+                ApplyMetrics();
+            }
+            Bind(DataContext as PaletteRow);
+        };
         PointerEntered += (_, _) =>
         {
             if (_row is not null)
@@ -51,6 +59,20 @@ public sealed partial class PaletteRowView : UserControl
 
     /// <summary>The pencil was clicked: record new keys.</summary>
     public event Action<PaletteRow>? RebindRequested;
+
+    /// <summary>Sizes the row with the window's metrics now: <c>paletteRowHeight</c>, the controls' corners, the selection bar, the base text.</summary>
+    public void ApplyMetrics()
+    {
+        _metricsVersion = WindowMetrics.Version;
+        var m = WindowMetrics.Current;
+        Root.Height = m.PaletteRowHeight;
+        Root.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
+        Pill.Width = m.SelectionBarWidth;
+        Pill.RadiusX = Pill.RadiusY = m.SelectionBarWidth / 2;
+        Pill.Height = Math.Clamp(m.PaletteRowHeight - 4, 0, 16);
+        TitleText.FontSize = m.FontSize;
+        PencilButton.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
+    }
 
     private void Bind(PaletteRow? row)
     {

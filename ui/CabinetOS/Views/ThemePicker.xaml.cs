@@ -191,6 +191,20 @@ public sealed partial class ThemePicker : UserControl
                 VerticalAlignment = VerticalAlignment.Center,
             });
         }
+        if (choice.Info.HasMetrics)
+        {
+            // A density preset (list_themes' has_metrics): it changes sizes, not only colours.
+            var preset = new Border
+            {
+                Padding = new Thickness(6, 1, 6, 1),
+                CornerRadius = new CornerRadius(3),
+                Background = ThemeResources.Brush("CbBadgeFillBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock { Text = "density preset", FontSize = 10, Foreground = ThemeResources.Brush("CbTextSecondaryBrush") },
+            };
+            ToolTipService.SetToolTip(preset, "This theme changes the window's sizes and elements too, not only its colours");
+            name.Children.Add(preset);
+        }
 
         var check = new FontIcon
         {
@@ -202,12 +216,13 @@ public sealed partial class ThemePicker : UserControl
         };
         ToolTipService.SetToolTip(check, "The theme in effect");
 
+        var m = WindowMetrics.Current;
         var row = new Grid
         {
-            Height = 36,
+            Height = m.PaletteRowHeight,
             Padding = new Thickness(12, 0, 12, 0),
             ColumnSpacing = 12,
-            CornerRadius = new CornerRadius(4),
+            CornerRadius = WindowMetrics.Corners(m.RadiusControl),
             Background = highlighted ? ThemeResources.Brush("CbSelectedFillBrush") : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
         };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -222,10 +237,10 @@ public sealed partial class ThemePicker : UserControl
         {
             row.Children.Add(new Rectangle
             {
-                Width = 3,
-                Height = 16,
-                RadiusX = 1.5,
-                RadiusY = 1.5,
+                Width = m.SelectionBarWidth,
+                Height = Math.Clamp(m.PaletteRowHeight - 4, 0, 16),
+                RadiusX = m.SelectionBarWidth / 2,
+                RadiusY = m.SelectionBarWidth / 2,
                 Margin = new Thickness(-12, 0, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,

@@ -197,6 +197,8 @@ public sealed partial class MainWindow
         var bottom = placement == DockPlacement.Bottom;
         Grid.SetRow(Dock, bottom ? 2 : 0);
         Grid.SetColumn(Dock, bottom ? 0 : 2);
+        // Under hairlines the line is on the edge that meets the panes.
+        Dock.ApplyMetrics(bottom);
         SetDockVisible(_dockVisible);
         UpdateDockHeader();
     }
@@ -205,21 +207,26 @@ public sealed partial class MainWindow
     {
         var bottom = _dockPlacement == DockPlacement.Bottom;
         var size = _dockVisible ? CurrentDockSize() : 0;
-        BottomGapRow.Height = new GridLength(_dockVisible && bottom ? DockLayout.Gap : 0);
+        var gap = DockLayout.GapWith(WindowMetrics.Current);
+        BottomGapRow.Height = new GridLength(_dockVisible && bottom ? gap : 0);
         BottomDockRow.Height = new GridLength(_dockVisible && bottom ? size : 0);
-        RightGapColumn.Width = new GridLength(_dockVisible && !bottom ? DockLayout.Gap : 0);
+        RightGapColumn.Width = new GridLength(_dockVisible && !bottom ? gap : 0);
         RightDockColumn.Width = new GridLength(_dockVisible && !bottom ? size : 0);
+        // A gap too narrow to grab (a theme's gap 0) keeps a 6 px handle, laid over the edges it joins.
+        var reach = Math.Max(0, (6 - gap) / 2);
+        BottomSplitter.Margin = new Thickness(0, -reach, 0, -reach);
+        RightSplitter.Margin = new Thickness(-reach, 0, -reach, 0);
     }
 
     private double DockSpace() => _dockPlacement == DockPlacement.Bottom ? MainColumn.ActualHeight : MainColumn.ActualWidth;
 
     private double CurrentDockSize() => _dockUserSize is { } size
-        ? DockLayout.Clamp(_dockPlacement, size, DockSpace())
-        : DockLayout.DefaultSize(_dockPlacement, DockSpace());
+        ? DockLayout.Clamp(_dockPlacement, size, DockSpace(), WindowMetrics.Current)
+        : DockLayout.DefaultSize(_dockPlacement, DockSpace(), WindowMetrics.Current);
 
     private void ResizeDock(double size)
     {
-        _dockUserSize = DockLayout.Clamp(_dockPlacement, size, DockSpace());
+        _dockUserSize = DockLayout.Clamp(_dockPlacement, size, DockSpace(), WindowMetrics.Current);
         ApplyDockSize();
     }
 
@@ -279,7 +286,7 @@ public sealed partial class MainWindow
         if (_themes.Current is { Terminal: var terminal })
         {
             _terminal.SetTheme(TerminalPageMessages.Theme(terminal.Background, terminal.Foreground, terminal.Cursor, terminal.Selection,
-                font, 12, terminal.Ansi));
+                font, 12, terminal.Ansi, TerminalSpacing.From(WindowMetrics.Current)));
             return;
         }
         var dark = RootGrid.ActualTheme != ElementTheme.Light;

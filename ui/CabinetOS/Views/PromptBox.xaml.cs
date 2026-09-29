@@ -228,19 +228,25 @@ public sealed partial class PromptBox : UserControl
         MarkHighlight();
     }
 
-    // A row as the palette draws its own: 32 px, the accent pill and the fill when highlighted.
+    // A row as the palette draws its own, as high as a menu's (32 px by default), the accent pill and the fill when highlighted.
     private Grid RowView(PromptRow row, int index)
     {
-        var root = new Grid { Height = 32, CornerRadius = new CornerRadius(4), Background = new SolidColorBrush(Colors.Transparent) };
+        var m = WindowMetrics.Current;
+        var root = new Grid
+        {
+            Height = m.MenuRowHeight,
+            CornerRadius = WindowMetrics.Corners(m.RadiusControl),
+            Background = new SolidColorBrush(Colors.Transparent),
+        };
         root.Children.Add(new Rectangle
         {
-            Width = 3,
-            Height = 16,
+            Width = m.SelectionBarWidth,
+            Height = Math.Clamp(m.MenuRowHeight - 4, 0, 16),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
             Fill = ThemeResources.Brush("CbAccentBrush"),
-            RadiusX = 1.5,
-            RadiusY = 1.5,
+            RadiusX = m.SelectionBarWidth / 2,
+            RadiusY = m.SelectionBarWidth / 2,
             Visibility = Visibility.Collapsed,
         });
         var content = new Grid { Padding = new Thickness(10, 0, 10, 0), ColumnSpacing = 10 };
@@ -251,7 +257,7 @@ public sealed partial class PromptBox : UserControl
         {
             content.Children.Add(new FontIcon { Glyph = row.Glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center, Foreground = ThemeResources.Brush("CbTextSecondaryBrush") });
         }
-        var title = new TextBlock { Text = row.Title, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        var title = new TextBlock { Text = row.Title, FontSize = m.FontSize, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         Grid.SetColumn(title, 1);
         content.Children.Add(title);
         var detail = new TextBlock

@@ -134,7 +134,8 @@ public sealed partial class FileContextMenu : UserControl
             var button = new Button
             {
                 Width = 36,
-                Height = 32,
+                Height = WindowMetrics.Current.MenuRowHeight,
+                CornerRadius = WindowMetrics.Corners(WindowMetrics.Current.RadiusControl),
                 MinWidth = 0,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Style = (Style)ThemeResources.Get("CbSubtleButtonStyle")!,
@@ -221,11 +222,15 @@ public sealed partial class FileContextMenu : UserControl
             row.Children.Add(keys);
         }
 
+        var m = WindowMetrics.Current;
         var button = new Button
         {
             Content = row,
             IsEnabled = entry.IsEnabled,
             Style = (Style)Resources["MenuItemStyle"],
+            Height = m.MenuRowHeight,
+            CornerRadius = WindowMetrics.Corners(m.RadiusControl),
+            FontSize = m.FontSize,
         };
         AutomationProperties.SetName(button, entry.Title);
         if (entry.Tooltip is not null)

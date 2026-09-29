@@ -24,6 +24,26 @@ public sealed partial class EditorPane : UserControl
         CloseButton.Click += (_, _) => Run("editor.close", CommandArgs.Object(("pane", PaneIndex)));
         TerminalButton.Click += (_, _) => Run("terminal.new", CommandArgs.With("cwd", _folder));
         ReloadButton.Click += (_, _) => Run("editor.reload", CommandArgs.Object(("pane", PaneIndex)));
+        ApplyMetrics();
+    }
+
+    /// <summary>
+    /// Lays the editor out with the window's sizes and chrome now (docs/ui.md,
+    /// "Metrics and chrome"): its corners as a pane's, the tab strip's height,
+    /// and under hairlines the strip's line as a pane header's.
+    /// </summary>
+    public void ApplyMetrics()
+    {
+        var m = WindowMetrics.Current;
+        var radius = m.RadiusSurface;
+        Surface.CornerRadius = WindowMetrics.Corners(radius);
+        TabCell.CornerRadius = new CornerRadius(radius, 0, 0, 0);
+        ToolFrame.CornerRadius = new CornerRadius(0, 0, radius, radius);
+        TabStripRow.Height = new GridLength(m.EditorTabHeight);
+        TabStrip.BorderBrush = ThemeResources.Brush(WindowMetrics.Chrome.Hairlines ? "CbHairlineBrush" : "CbDividerBrush");
+        TerminalButton.Height = Math.Min(26, m.EditorTabHeight - 4);
+        TerminalButton.CornerRadius = CloseButton.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
+        CloseButton.Width = CloseButton.Height = CloseButton.MinWidth = Math.Min(20, m.EditorTabHeight - 6);
     }
 
     /// <summary>Which pane this editor covers: 0 left, 1 right.</summary>

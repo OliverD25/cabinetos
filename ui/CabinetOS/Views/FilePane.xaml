@@ -36,15 +36,19 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
+        <!-- The default look's sizes; the theme's metrics replace them (FilePane.ApplyMetrics). -->
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="36" />
+                <RowDefinition x:Name="HeaderRow" Height="36" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Border BorderBrush="{ThemeResource CbDividerBrush}" BorderThickness="0,0,0,1">
+            <Border
+                x:Name="HeaderBorder"
+                BorderBrush="{ThemeResource CbDividerBrush}"
+                BorderThickness="0,0,0,1">
                 <Grid
                     x:Name="Header"
                     Padding="14,0,14,0"
@@ -79,7 +83,10 @@
                 BorderBrush="{ThemeResource CbDividerBrush}"
                 BorderThickness="0,0,0,1"
                 Visibility="Collapsed">
-                <Grid Padding="14,4,14,6" ColumnSpacing="12">
+                <Grid
+                    x:Name="SearchBarGrid"
+                    Padding="14,4,14,6"
+                    ColumnSpacing="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -105,15 +112,19 @@
             </Border>
 
             <Border
+                x:Name="ColumnHeader"
                 Grid.Row="2"
                 BorderBrush="{ThemeResource CbDividerBrush}"
                 BorderThickness="0,0,0,1">
-                <Grid Padding="14,4">
+                <Grid x:Name="ColumnGrid" Padding="14,4">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" MinWidth="120" />
-                        <ColumnDefinition Width="0.55*" />
-                        <ColumnDefinition Width="0.45*" />
-                        <ColumnDefinition Width="64" />
+                        <ColumnDefinition
+                            x:Name="HeadNameColumn"
+                            Width="*"
+                            MinWidth="120" />
+                        <ColumnDefinition x:Name="HeadModifiedColumn" Width="0.55*" />
+                        <ColumnDefinition x:Name="HeadTypeColumn" Width="0.45*" />
+                        <ColumnDefinition x:Name="HeadSizeColumn" Width="64" />
                     </Grid.ColumnDefinitions>
                     <!-- The column the listing is sorted by carries a chevron (the pane's own order, Ctrl+F3 to Ctrl+F6). -->
                     <StackPanel Orientation="Horizontal" Spacing="4">
@@ -209,7 +220,7 @@
                 <!-- New Text File (Shift+F4): a row the listing does not have yet, the name box over it. -->
                 <Border
                     x:Name="NewRow"
-                    Height="{StaticResource CbRowHeight}"
+                    Height="30"
                     Background="{ThemeResource CbDialogFillBrush}"
                     BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
                     BorderThickness="1"

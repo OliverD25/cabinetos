@@ -23,8 +23,12 @@ public sealed partial class FileRow : UserControl
     // Segoe Fluent Icons: Document (folders draw FolderGlyph; a link adds LinkBadge).
     private const string FileGlyph = "\uE8A5";
 
+    private static readonly Brush Clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
     private readonly Brush _plainIconBrush;
     private readonly Brush _plainSizeBrush;
+    private int _metricsVersion = -1;
+    private Shown<bool> _striped;
     private Shown<bool> _sizeCounting;
     private Shown<string> _name;
     private Shown<string> _second;
@@ -49,9 +53,15 @@ public sealed partial class FileRow : UserControl
         _plainIconBrush = Icon.Foreground;
         _plainSizeBrush = SizeText.Foreground;
         Icon.Glyph = FileGlyph;
+        ApplyMetrics();
         DataContextChanged += (_, _) =>
         {
             var started = FrameParts.Start();
+            // A recycled row built with the sizes of the theme before.
+            if (_metricsVersion != WindowMetrics.Version)
+            {
+                ApplyMetrics();
+            }
             if (DataContext is SearchRowItem hit)
             {
                 BindHit(hit);
@@ -114,6 +124,76 @@ public sealed partial class FileRow : UserControl
     /// <summary>The name's text, where inline rename puts its text box.</summary>
     public FrameworkElement NameElement => NameText;
 
+    /// <summary>
+    /// Lays the row out with the window's sizes now (docs/ui.md, "Metrics and
+    /// chrome"): its height, padding, corners, selection bar, columns, text
+    /// sizes, the Size column's figures and the stripes. With
+    /// <paramref name="rebind"/> it shows its entry again, as the Commander
+    /// look writes dates and types another way.
+    /// </summary>
+    public void ApplyMetrics(bool rebind = false)
+    {
+        _metricsVersion = WindowMetrics.Version;
+        var m = WindowMetrics.Current;
+        Root.Height = m.RowHeight;
+        Root.CornerRadius = WindowMetrics.Corners(m.RowRadius);
+        CursorOutline.CornerRadius = Root.CornerRadius;
+        Pill.Width = m.SelectionBarWidth;
+        Pill.RadiusX = Pill.RadiusY = m.SelectionBarWidth / 2;
+        Pill.Height = Math.Clamp(m.RowHeight - 4, 0, 16);
+        Columns.Margin = WindowMetrics.Pad(m.RowPaddingX);
+        Columns.ColumnSpacing = m.ColumnGap;
+        WindowMetrics.SetColumns(NameColumn, ModifiedColumn, TypeColumn, SizeColumn);
+        ModifiedText.Margin = TypeText.Margin = WindowMetrics.TextGap;
+        NameCell.ColumnSpacing = m.RowIconGap;
+        NameText.FontSize = m.FontSize;
+        ModifiedText.FontSize = TypeText.FontSize = SizeText.FontSize = m.SecondaryFontSize;
+        if (WindowMetrics.FiguresFont is { } figures)
+        {
+            SizeText.FontFamily = figures;
+        }
+        else
+        {
+            SizeText.ClearValue(TextBlock.FontFamilyProperty);
+        }
+        _striped.Forget();
+        UpdateStripe();
+        _state.Forget();
+        UpdateState();
+        if (rebind && _item is { } item)
+        {
+            Bind(item);
+        }
+        else if (rebind && _hit is { } hit)
+        {
+            BindHit(hit);
+        }
+    }
+
+    /// <summary>The row's name, date, type and size texts that are cut short with "…" now (the snapshot aid's check).</summary>
+    public IEnumerable<string> TrimmedTexts()
+    {
+        foreach (var (column, text) in new[] { ("name", NameText), ("modified", ModifiedText), ("type", TypeText), ("size", SizeText) })
+        {
+            // The size has no ellipsis: a size wider than its column would be cut off at its left edge.
+            var cut = text.IsTextTrimmed || (text == SizeText && text.ActualWidth > SizeColumn.ActualWidth + 0.5);
+            if (cut)
+            {
+                yield return $"{column}: {text.Text}";
+            }
+        }
+    }
+
+    // Every other row a shade lighter when the theme turns the stripes on (chrome rowStripes).
+    private void UpdateStripe()
+    {
+        var striped = WindowMetrics.Chrome.RowStripes && Index % 2 == 1;
+        if (_striped.Take(striped))
+        {
+            Root.Background = striped ? ThemeResources.Brush("CbRowStripeBrush") : Clear;
+        }
+    }
+
     /// <summary>Shows the type name and icon again: they arrived after the row was bound.</summary>
     public void RefreshDetails()
     {
@@ -142,6 +222,7 @@ public sealed partial class FileRow : UserControl
         _item = null;
         _hit = hit;
         Index = hit.Index;
+        UpdateStripe();
         SetText(NameText, ref _name, hit.Name);
         SetText(ModifiedText, ref _second, hit.FolderText);
         SetText(SizeText, ref _size, "");
@@ -163,9 +244,12 @@ public sealed partial class FileRow : UserControl
         var view = item.View;
         var index = item.Index;
         Index = index;
+        UpdateStripe();
         var isFolder = view.IsFolder(index);
         SetText(NameText, ref _name, view.Name(index));
-        SetText(ModifiedText, ref _second, DisplayFormat.Modified(view.Modified(index), DateTime.Now));
+        SetText(ModifiedText, ref _second, WindowMetrics.Chrome.Hairlines
+            ? DisplayFormat.ModifiedShort(view.Modified(index), DateTime.Now)
+            : DisplayFormat.Modified(view.Modified(index), DateTime.Now));
         BindSize(item, isFolder);
         BindDetails(item);
         _pointerOver = false;
@@ -208,7 +292,10 @@ public sealed partial class FileRow : UserControl
         LinkKind link = LinkKind.None, uint attributes = 0)
     {
         var detail = details?.Detail(index, name, isFolder);
-        SetText(TypeText, ref _type, DisplayFormat.RowType(name, kind, isFolder, link, detail));
+        // The Commander look (hairlines) names types short enough for its narrow column.
+        SetText(TypeText, ref _type, WindowMetrics.Chrome.Hairlines
+            ? DisplayFormat.ShortType(name, kind, isFolder, link)
+            : DisplayFormat.RowType(name, kind, isFolder, link, detail));
         if (_link.Take(link != LinkKind.None))
         {
             LinkBadge.Visibility = link != LinkKind.None ? Visibility.Visible : Visibility.Collapsed;
@@ -273,7 +360,7 @@ public sealed partial class FileRow : UserControl
 
     private void UpdateState()
     {
-        var state = _selected ? "Selected" : _pointerOver ? "PointerOver" : "Normal";
+        var state = _selected ? (WindowMetrics.Chrome.RowStripes ? "SelectedStriped" : "Selected") : _pointerOver ? "PointerOver" : "Normal";
         if (_state.Take(state))
         {
             VisualStateManager.GoToState(this, state, false);

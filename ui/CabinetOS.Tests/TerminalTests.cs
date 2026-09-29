@@ -179,6 +179,29 @@ public class TerminalTests
     }
 
     [Fact]
+    public void The_page_takes_the_theme_s_line_height_and_padding_and_the_default_look_keeps_its_own()
+    {
+        // The page's own look (terminal.js, terminal.css) is the default theme's metrics.
+        Assert.Equal(new TerminalSpacing(1.25, 8, 4, 4, 12), TerminalSpacing.From(Core.Themes.MetricsMapper.Default));
+
+        var compact = Core.Themes.MetricsMapper.Map(new Dictionary<string, double>
+        {
+            ["terminalLineHeight"] = 1.45,
+            ["terminalPaddingY"] = 6,
+            ["terminalPaddingX"] = 8,
+        });
+        var spacing = TerminalSpacing.From(compact);
+        Assert.Equal(new TerminalSpacing(1.133, 4.8, 2.7, 2.4, 8), spacing);
+
+        using var theme = JsonDocument.Parse(TerminalPageMessages.Theme("#00000000", "#CCCCCC", "#FFFFFF", "#60CDFF4D", "Cascadia Code", 12, null, spacing));
+        Assert.Equal(1.133, theme.RootElement.GetProperty("lineHeight").GetDouble());
+        Assert.Equal([4.8, 2.7, 2.4, 8], theme.RootElement.GetProperty("padding").EnumerateArray().Select(e => e.GetDouble()));
+        // Without metrics the message is as before: the page keeps its own.
+        using var plain = JsonDocument.Parse(TerminalPageMessages.Theme("#00000000", "#CCCCCC", "#FFFFFF", "#60CDFF4D", "Cascadia Code", 12));
+        Assert.False(plain.RootElement.TryGetProperty("lineHeight", out _));
+    }
+
+    [Fact]
     public void The_profiles_come_from_the_config_with_the_documented_defaults()
     {
         using var config = JsonDocument.Parse("""{"terminal":{"defaultProfile":"cmd","profiles":[{"name":"pwsh"},{"name":"cmd"},{"command":"x"}]}}""");

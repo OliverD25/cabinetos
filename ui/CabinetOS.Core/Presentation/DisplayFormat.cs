@@ -54,6 +54,50 @@ public static class DisplayFormat
     }
 
     /// <summary>
+    /// The Modified column in the Commander look (chrome <c>hairlines</c>):
+    /// as <see cref="Modified"/>, but a date older than a week has no time,
+    /// as the Commander Compact handout shows it (its <c>2 Sep 2026</c>, in
+    /// the culture's short date here), so it fits the look's narrow column.
+    /// </summary>
+    public static string ModifiedShort(DateTime utc, DateTime nowLocal, CultureInfo? culture = null)
+    {
+        if (utc == DateTime.MinValue)
+        {
+            return "";
+        }
+        culture ??= CultureInfo.CurrentCulture;
+        var local = utc.ToLocalTime();
+        return (nowLocal.Date - local.Date).Days >= 7 ? local.ToString("d", culture) : Modified(utc, nowLocal, culture);
+    }
+
+    /// <summary>
+    /// The Type column in the Commander look (chrome <c>hairlines</c>):
+    /// <c>Folder</c>, a link's kind in a word, or the extension in capitals as
+    /// Total Commander's own column shows it (<c>MD</c>, <c>EXE</c>; <c>File</c>
+    /// without one). The shell's names (<c>Markdown Source File</c>) are cut
+    /// short in the look's narrow column; the handout's own types are this short.
+    /// </summary>
+    public static string ShortType(ReadOnlySpan<char> name, EntryKind kind, bool isFolder, LinkKind link)
+    {
+        if (link != LinkKind.None || kind == EntryKind.Link)
+        {
+            return link switch
+            {
+                LinkKind.Junction => "Junction",
+                LinkKind.MountPoint => "Mount point",
+                LinkKind.SymbolicLink => "Symlink",
+                _ => "Link",
+            };
+        }
+        if (isFolder)
+        {
+            return "Folder";
+        }
+        var dot = name.LastIndexOf('.');
+        return dot <= 0 || dot == name.Length - 1 ? "File" : name[(dot + 1)..].ToString().ToUpperInvariant();
+    }
+
+    /// <summary>
     /// The built-in Type column, until the core's type names come (or from a
     /// core before protocol 9): <c>Folder</c>, a link's words, or the
     /// extension in capitals with <c>File</c>.

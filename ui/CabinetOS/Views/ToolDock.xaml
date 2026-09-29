@@ -3,21 +3,28 @@
     x:Class="CabinetOS.Views.ToolDock"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- The Tool Dock (design view A, "Integrated terminal"): rgba(0,0,0,.35), 8 px radius. -->
+    <!--
+      The Tool Dock (design view A, "Integrated terminal"): rgba(0,0,0,.35), 8 px radius. The
+      default look's sizes; the theme's metrics replace them (ToolDock.ApplyMetrics).
+    -->
     <Border
+        x:Name="Frame"
         Background="{ThemeResource CbTerminalFillBrush}"
         BorderBrush="{ThemeResource CbTerminalStrokeBrush}"
         BorderThickness="1"
         CornerRadius="8">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="34" />
+                <RowDefinition x:Name="HeaderRow" Height="34" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
             <!-- Header, 34 px: a tab per session, "+", the other profiles, the sync caption, close. -->
             <Border BorderBrush="{ThemeResource CbDividerBrush}" BorderThickness="0,0,0,1">
-                <Grid Padding="12,0,6,0" ColumnSpacing="2">
+                <Grid
+                    x:Name="HeaderGrid"
+                    Padding="12,0,6,0"
+                    ColumnSpacing="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />

@@ -20,6 +20,7 @@
   let look = {
     fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace",
     fontSize: 12,
+    lineHeight: 1.25,
     theme: {
       background: '#00000000',
       foreground: '#FFFFFFE6',
@@ -134,7 +135,7 @@
     const term = new Terminal({
       fontFamily: look.fontFamily,
       fontSize: look.fontSize,
-      lineHeight: 1.25,
+      lineHeight: look.lineHeight,
       theme: look.theme,
       allowTransparency: true,
       cursorBlink: true,
@@ -187,6 +188,7 @@
     look = {
       fontFamily: message.fontFamily || look.fontFamily,
       fontSize: message.fontSize || look.fontSize,
+      lineHeight: message.lineHeight || look.lineHeight,
       theme: {
         ...look.theme,
         ...ansi,
@@ -196,9 +198,14 @@
         selectionBackground: message.selection || look.theme.selectionBackground,
       },
     };
+    // The theme's space around the text (top, right, bottom, left); terminal.css has the default look's.
+    if (Array.isArray(message.padding) && message.padding.length === 4) {
+      container.style.inset = message.padding.map((side) => `${Number(side) || 0}px`).join(' ');
+    }
     for (const [id, session] of sessions) {
       session.term.options.fontFamily = look.fontFamily;
       session.term.options.fontSize = look.fontSize;
+      session.term.options.lineHeight = look.lineHeight;
       session.term.options.theme = look.theme;
       if (id === shown) {
         reportSize(id, session);
