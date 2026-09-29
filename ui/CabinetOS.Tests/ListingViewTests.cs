@@ -29,12 +29,13 @@ public class ListingViewTests
             new[] { "Id", "NameOffset", "NameLen", "Kind", "Flags" }.Select(f => (int)Marshal.OffsetOf<ListingEntry>(f)));
         Assert.Equal(
             [0, 8, 16, 24, 32, 36],
-            new[] { "Size", "Modified", "Created", "Accessed", "Attributes", "Reserved" }.Select(f => (int)Marshal.OffsetOf<ListingMeta>(f)));
+            new[] { "Size", "Modified", "Created", "Accessed", "Attributes", "ReparseTag" }.Select(f => (int)Marshal.OffsetOf<ListingMeta>(f)));
 
         Assert.Equal(0x534C4243u, ListingLayout.Magic);
         Assert.Equal("CBLS"u8.ToArray(), BitConverter.GetBytes(ListingLayout.Magic));
         Assert.Equal(2u, ListingLayout.Version);
         Assert.Equal(1, ListingLayout.FlagIdIsNameHash);
+        Assert.Equal((2, 4, 8, 16), (ListingLayout.FlagJunction, ListingLayout.FlagSymbolicLink, ListingLayout.FlagMountPoint, ListingLayout.FlagNotOnDisk));
         Assert.Equal(
             [EntryKind.Unknown, EntryKind.File, EntryKind.Directory, EntryKind.Link, EntryKind.Unknown],
             new byte[] { 0, 1, 2, 3, 200 }.Select(ListingLayout.KindFromRaw));

@@ -8,7 +8,7 @@ namespace CabinetOS.Tests.Support;
 
 /// <summary>One entry of a synthetic listing.</summary>
 internal sealed record SyntheticEntry(ulong Id, string Name, byte Kind, byte Flags = 0, ulong Size = 0,
-    long Modified = 0, long Created = 0, long Accessed = 0, uint Attributes = 0);
+    long Modified = 0, long Created = 0, long Accessed = 0, uint Attributes = 0, uint ReparseTag = 0);
 
 /// <summary>
 /// Builds listing sections byte by byte from the diagram in docs/ipc.md,
@@ -53,6 +53,7 @@ internal static class TestSections
             BinaryPrimitives.WriteInt64LittleEndian(span[(meta + 16)..], e.Created);
             BinaryPrimitives.WriteInt64LittleEndian(span[(meta + 24)..], e.Accessed);
             BinaryPrimitives.WriteUInt32LittleEndian(span[(meta + 32)..], e.Attributes);
+            BinaryPrimitives.WriteUInt32LittleEndian(span[(meta + 36)..], e.ReparseTag);
 
             names[i].CopyTo(span[(arenaOffset + nameOffset)..]);
             nameOffset += names[i].Length;

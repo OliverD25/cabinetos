@@ -179,6 +179,9 @@ public sealed class ListingView : IDisposable
     /// <summary>Entry <paramref name="index"/>'s <c>FILE_ATTRIBUTE_*</c> bits.</summary>
     public uint Attributes(int index) => Meta(index).Attributes;
 
+    /// <summary>Entry <paramref name="index"/>'s <c>IO_REPARSE_TAG_*</c>, or 0 when it is not a reparse point.</summary>
+    public uint ReparseTag(int index) => Meta(index).ReparseTag;
+
     /// <summary>Whether entry <paramref name="index"/> can be opened as a folder (a directory, or a link to one).</summary>
     public bool IsFolder(int index) =>
         Kind(index) == EntryKind.Directory || (Attributes(index) & ListingLayout.AttributeDirectory) != 0;

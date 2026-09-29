@@ -33,7 +33,11 @@ public struct ListingEntry
     public byte Flags;
 }
 
-/// <summary>An entry's metadata: 40 bytes, 8-byte aligned; times are FILETIME ticks.</summary>
+/// <summary>
+/// An entry's metadata: 40 bytes, 8-byte aligned; times are FILETIME ticks.
+/// <see cref="ReparseTag"/> is the entry's <c>IO_REPARSE_TAG_*</c>, 0 when it
+/// is not a reparse point (it was a reserved field, always 0).
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct ListingMeta
 {
@@ -42,7 +46,7 @@ public struct ListingMeta
     public long Created;
     public long Accessed;
     public uint Attributes;
-    public uint Reserved;
+    public uint ReparseTag;
 }
 
 /// <summary>What an entry is; unknown byte values read as <see cref="Unknown"/>.</summary>
@@ -69,6 +73,18 @@ public static class ListingLayout
 
     /// <summary><see cref="ListingEntry.Flags"/> bit: the ID is a hash of the upper-cased name.</summary>
     public const byte FlagIdIsNameHash = 1;
+
+    /// <summary><see cref="ListingEntry.Flags"/> bit: the link is a junction.</summary>
+    public const byte FlagJunction = 2;
+
+    /// <summary><see cref="ListingEntry.Flags"/> bit: the link is a symbolic link (to a folder when the attributes say directory).</summary>
+    public const byte FlagSymbolicLink = 4;
+
+    /// <summary><see cref="ListingEntry.Flags"/> bit: the link is a mount point (a junction to a volume).</summary>
+    public const byte FlagMountPoint = 8;
+
+    /// <summary><see cref="ListingEntry.Flags"/> bit: the entry's data is not on this disk (a cloud or offline file).</summary>
+    public const byte FlagNotOnDisk = 16;
 
     /// <summary><c>FILE_ATTRIBUTE_DIRECTORY</c>.</summary>
     public const uint AttributeDirectory = 0x10;

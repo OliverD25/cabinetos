@@ -8,8 +8,9 @@ namespace CabinetOS.Tests;
 
 /// <summary>
 /// Edge cases, class C: links and cloud files (docs/ui.md, "Links and cloud
-/// files"), on fake listings. The listing marks a link (kind 3) but does not
-/// name its kind yet, and a cloud placeholder by its attributes.
+/// files"), on fake listings. The listing marks a link (kind 3) and names
+/// its kind in the entry's flags, and a cloud placeholder by a flag and its
+/// attributes (docs/ipc.md, "The listing section").
 /// </summary>
 [Collection(HandleTests.Name)]
 public class LinksAndCloudFilesTests
@@ -29,17 +30,29 @@ public class LinksAndCloudFilesTests
     }
 
     [Fact]
-    public void A_link_in_the_listing_is_a_link_of_a_kind_the_listing_does_not_name_yet()
+    public void A_link_in_the_listing_is_of_the_kind_its_flags_name()
     {
         using var view = Open(
-            new SyntheticEntry(1, "junction", 3, Attributes: Directory | ReparsePoint),
-            new SyntheticEntry(2, "notes.md", 3, Attributes: ReparsePoint),
-            new SyntheticEntry(3, "folder", 2, Attributes: Directory),
-            // A OneDrive file carries the reparse attribute too, but it is a file to the user.
-            new SyntheticEntry(4, "report.docx", 1, Attributes: ReparsePoint | RecallOnDataAccess));
+            new SyntheticEntry(1, "junction", 3, Flags: 2, Attributes: Directory | ReparsePoint, ReparseTag: 0xA0000003),
+            new SyntheticEntry(2, "symlink to a folder", 3, Flags: 4, Attributes: Directory | ReparsePoint, ReparseTag: 0xA000000C),
+            new SyntheticEntry(3, "notes.md", 3, Flags: 4, Attributes: ReparsePoint, ReparseTag: 0xA000000C),
+            new SyntheticEntry(4, "volume", 3, Flags: 8, Attributes: Directory | ReparsePoint, ReparseTag: 0xA0000003),
+            // A WSL link: kind 3, no kind flag, its tag in the meta.
+            new SyntheticEntry(5, "wsl link", 3, Attributes: ReparsePoint, ReparseTag: 0xA000001D),
+            new SyntheticEntry(6, "folder", 2, Attributes: Directory),
+            // A OneDrive file carries the reparse attribute and a tag too, but it is a file to the user.
+            new SyntheticEntry(7, "report.docx", 1, Flags: 16, Attributes: ReparsePoint | RecallOnDataAccess, ReparseTag: 0x9000001A),
+            // A name hash with a link flag: the hash bit does not hide the kind.
+            new SyntheticEntry(8, "junction on fat", 3, Flags: 1 | 2, Attributes: Directory | ReparsePoint));
 
-        Assert.Equal([LinkKind.Unknown, LinkKind.Unknown, LinkKind.None, LinkKind.None],
+        Assert.Equal(
+            [LinkKind.Junction, LinkKind.SymbolicLink, LinkKind.SymbolicLink, LinkKind.MountPoint, LinkKind.Unknown, LinkKind.None, LinkKind.None, LinkKind.Junction],
             Enumerable.Range(0, view.Count).Select(i => EntryFacts.LinkOf(view, i)));
+        Assert.Equal(0xA000001Du, view.ReparseTag(4));
+        Assert.Equal(0u, view.ReparseTag(5));
+        Assert.Equal(("Symbolic link to a folder", "Symbolic link to a file", "Junction", "Mount point"),
+            (DisplayFormat.LinkTypeName(EntryFacts.LinkOf(view, 1), view.IsFolder(1)), DisplayFormat.LinkTypeName(EntryFacts.LinkOf(view, 2), view.IsFolder(2)),
+             DisplayFormat.LinkTypeName(EntryFacts.LinkOf(view, 0), true), DisplayFormat.LinkTypeName(EntryFacts.LinkOf(view, 3), true)));
     }
 
     [Theory]

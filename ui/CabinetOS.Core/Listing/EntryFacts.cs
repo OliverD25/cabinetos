@@ -37,18 +37,28 @@ public static class EntryFacts
     /// <summary>
     /// Whether the entry's data is not on this disk (a cloud placeholder not
     /// downloaded, or an offline file): showing its row must not read it.
-    /// The listing carries the attributes already; the core's "not on this
-    /// disk" mark, when it comes, says the same.
+    /// The core's entry flag (<see cref="ListingLayout.FlagNotOnDisk"/>) is
+    /// set from these same attributes, so the attributes alone decide.
     /// </summary>
     public static bool IsNotOnDisk(uint attributes) =>
         (attributes & (AttributeOffline | AttributeRecallOnOpen | AttributeRecallOnDataAccess)) != 0;
 
     /// <summary>
-    /// The link kind of entry <paramref name="index"/>. The listing marks a
-    /// link (kind 3: a junction, a symbolic link or a mount point) but does
-    /// not say which yet; the core's part of the edge cases adds that, and
-    /// this is the one place that will read it.
+    /// The link kind of entry <paramref name="index"/>: kind 3 is a link, and
+    /// its flags say which (docs/ipc.md, "The listing section"). A link of a
+    /// kind no flag names (a WSL link) is <see cref="LinkKind.Unknown"/>.
     /// </summary>
-    public static LinkKind LinkOf(ListingView view, int index) =>
-        view.Kind(index) == EntryKind.Link ? LinkKind.Unknown : LinkKind.None;
+    public static LinkKind LinkOf(ListingView view, int index)
+    {
+        if (view.Kind(index) != EntryKind.Link)
+        {
+            return LinkKind.None;
+        }
+        var flags = view.Flags(index);
+        // A mount point is a junction to a volume: its own flag comes first.
+        return (flags & ListingLayout.FlagMountPoint) != 0 ? LinkKind.MountPoint
+            : (flags & ListingLayout.FlagJunction) != 0 ? LinkKind.Junction
+            : (flags & ListingLayout.FlagSymbolicLink) != 0 ? LinkKind.SymbolicLink
+            : LinkKind.Unknown;
+    }
 }

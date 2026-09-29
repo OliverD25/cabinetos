@@ -1481,24 +1481,27 @@ long-path conflict.
 ### Links and cloud files
 
 The fixture's `links\` folder holds `junction to target`, a junction to
-`link-target\` and its files `kept 1.txt` to `kept 3.txt`, and symbolic
-links when Windows lets the user make them (an administrator or Developer
-Mode; not on this PC). A mount point needs an administrator, so the
-fixture has none. Their words are tested on fake listings; so are cloud
-placeholders, which need a sync provider such as OneDrive. `loop\` holds
-a junction back to its own folder, for the core's walks.
+`link-target\` and its files `kept 1.txt` to `kept 3.txt`, and two
+symbolic links, `symlink to target` and `symlink to kept 1.txt`, when
+Windows lets the user make them (an administrator or Developer Mode). A
+mount point needs an administrator, so the fixture has none. Their words
+are tested on fake listings; so are cloud placeholders, which need a sync
+provider such as OneDrive. `loop\` holds a junction back to its own
+folder, for the core's walks.
 
 - **A link says so.** Its icon carries a small chain badge on the lower
   left, where Explorer draws its arrow, and it stays when the shell's icon
   arrives. The Type column and Properties name the link, not its target:
   the core names a type by the folder attribute, so a junction was "File
   folder" once its details came (after "Folder link" before them). Now it
-  is "Junction", "Mount point", "Symbolic link to a folder", "Symbolic link
-  to a file", or, while the listing does not name the kind, "Link to a
-  folder" or "Link to a file" (`DisplayFormat.RowType`, `EntryFacts.LinkOf`).
-  The listing marks a link (kind 3) but not yet which kind; the core's part
-  of the edge cases adds it, and `EntryFacts.LinkOf` is the one place that
-  will read it.
+  is "Junction", "Mount point", "Symbolic link to a folder" or "Symbolic
+  link to a file", from the flags the listing gives a link (kind 3):
+  junction 2, symbolic link 4, mount point 8 (docs/ipc.md, "The listing
+  section"). `EntryFacts.LinkOf` is the one place that reads them. A link
+  whose kind no flag names, such as a WSL link, is "Link to a folder" or
+  "Link to a file" (`DisplayFormat.RowType`). The entry's reparse tag (the
+  `IO_REPARSE_TAG_*` value, `ListingView.ReparseTag`) is read but shown
+  nowhere yet.
 - **Shift+Delete on a link names it**: "Delete the link permanently?" and
   "“junction to target” is a link. Only the link is deleted; the folder it
   points to keeps its files." Several rows with links among them end with
@@ -1509,7 +1512,9 @@ a junction back to its own folder, for the core's walks.
   `link-target\` on disk afterwards.
 - **A row not on this disk** (the attributes `RECALL_ON_DATA_ACCESS`,
   `RECALL_ON_OPEN` or `OFFLINE`: OneDrive's "online only", a folder whose
-  list is still in the cloud, an offline file) shows a cloud after its
+  list is still in the cloud, an offline file; the core sets the entry's
+  flag 16 from the same attributes, so the shell reads the attributes)
+  shows a cloud after its
   name, "Not on this disk: opening it downloads it". Its Size is the
   listing's, which is the file's logical size, not the space it takes.
   "Always keep on this device" and a file downloaded once carry none of
