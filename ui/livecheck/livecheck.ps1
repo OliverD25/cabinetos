@@ -60,14 +60,25 @@ public static class Live {
     var up = new INPUT { type = 0 }; up.u.mi.dwFlags = 0x0004;
     Send(down); Thread.Sleep(40); Send(up);
   }
+  [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+  // A real mouse move (an absolute move over the whole desktop, as a mouse's own report would be): SetCursorPos alone
+  // moves the pointer without the pointer messages a drag needs to start.
+  public static void MoveTo(int x, int y) {
+    int vx = GetSystemMetrics(76), vy = GetSystemMetrics(77), vw = GetSystemMetrics(78), vh = GetSystemMetrics(79);
+    var move = new INPUT { type = 0 };
+    move.u.mi.dx = (int)((long)(x - vx) * 65535 / (vw - 1));
+    move.u.mi.dy = (int)((long)(y - vy) * 65535 / (vh - 1));
+    move.u.mi.dwFlags = 0x0001 | 0x8000 | 0x4000;
+    Send(move);
+  }
   // Presses at (x1,y1), moves to (x2,y2) in ten steps, and lets go: a drag the way a hand makes one.
   public static void Drag(int x1, int y1, int x2, int y2) {
-    SetCursorPos(x1, y1); Thread.Sleep(150);
+    MoveTo(x1, y1); Thread.Sleep(200);
     var down = new INPUT { type = 0 }; down.u.mi.dwFlags = 0x0002;
     var up = new INPUT { type = 0 }; up.u.mi.dwFlags = 0x0004;
-    Send(down); Thread.Sleep(120);
-    for (int i = 1; i <= 10; i++) { SetCursorPos(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10); Thread.Sleep(40); }
-    Thread.Sleep(250);
+    Send(down); Thread.Sleep(150);
+    for (int i = 1; i <= 10; i++) { MoveTo(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10); Thread.Sleep(60); }
+    Thread.Sleep(300);
     Send(up);
   }
   public static void Front(IntPtr h) { Send(Key(0x12, false), Key(0x12, true)); ShowWindow(h, 9); SetForegroundWindow(h); }
@@ -698,15 +709,20 @@ Step "14: drag: the first row of the left pane (a.txt) over the right pane's pag
 $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$rect, 16)
 $w = $rect.Right - $rect.Left; $ht = $rect.Bottom - $rect.Top
 $before = (PluginLog '"paths dropped on a tool"').Count
+$startedBefore = (PluginLog '"row drag started"').Count
 [Live]::Drag([int]($rect.Left + $w * 0.17), [int]($rect.Top + $ht * 0.149), [int]($rect.Left + $w * 0.72), [int]($rect.Top + $ht * 0.5))
 Start-Sleep -Milliseconds 1200
+"14: the row drag started in the pane: $((PluginLog '"row drag started"').Count -eq $startedBefore + 1)"
 $dropped = @(PluginLog '"paths dropped on a tool"')
 "14: the drop reached the tool's page as paths-dropped: $($dropped.Count -eq $before + 1)"
 if ($dropped.Count -gt 0) { "14: it carried one path: $((($dropped | Select-Object -Last 1) | ConvertFrom-Json).fields.paths -eq 1)" }
 Shot $h "$ShotDir\drag14-dropped-live.png"
 
-Step "14: drag: Ctrl+W closes the page's tab, the keyboard is in the left pane again"
-[Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 1000
+# Ctrl+W would close a tab of the left pane (the keyboard is there); the page's tab closes through the palette.
+Step "14: drag: the palette's Close Editor closes the page's tab, the keyboard is in the left pane again"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+[Live]::Type("close editor"); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 ClickLeftPane
 
 $agentDir = "$PSScriptRoot\..\..\sdk\extensions\agent"

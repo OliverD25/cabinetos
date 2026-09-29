@@ -810,10 +810,15 @@ public sealed partial class FilePane : UserControl
             : [entry.Path];
         e.Data.SetText(string.Join("\r\n", paths));
         e.Data.RequestedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+        Diag.Info(Target, "row drag started", new LogField("rows", paths.Count));
         DragChanged?.Invoke(true);
     }
 
-    private void OnRowDropCompleted(FileRow row) => DragChanged?.Invoke(false);
+    private void OnRowDropCompleted(FileRow row, Windows.ApplicationModel.DataTransfer.DataPackageOperation result)
+    {
+        Diag.Info(Target, "row drag ended", new LogField("result", result.ToString()));
+        DragChanged?.Invoke(false);
+    }
 
     private void OnRowTapped(object sender, TappedRoutedEventArgs e)
     {

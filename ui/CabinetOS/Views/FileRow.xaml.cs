@@ -77,14 +77,14 @@ public sealed partial class FileRow : UserControl
         // A row can be dragged out (to a tool's page); the pane decides what goes with it.
         CanDrag = true;
         DragStarting += (_, e) => DragStartingRow?.Invoke(this, e);
-        DropCompleted += (_, _) => DropCompletedRow?.Invoke(this);
+        DropCompleted += (_, e) => DropCompletedRow?.Invoke(this, e.DropResult);
     }
 
     /// <summary>A drag of this row starts; the pane fills the data or cancels it.</summary>
     public event Action<FileRow, DragStartingEventArgs>? DragStartingRow;
 
     /// <summary>The drag that started from this row ended, dropped or not.</summary>
-    public event Action<FileRow>? DropCompletedRow;
+    public event Action<FileRow, Windows.ApplicationModel.DataTransfer.DataPackageOperation>? DropCompletedRow;
 
     // Which of the three icon elements shows.
     private enum IconShown
