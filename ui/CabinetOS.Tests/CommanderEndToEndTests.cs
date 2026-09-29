@@ -76,6 +76,11 @@ public class CommanderEndToEndTests
             // so with this setting both say spawn_failed rather than invalid_path and not_found.)
             Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new EditPathRequest(Path.Combine(folder, "notes"))));
             Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new EditPathRequest(Path.Combine(folder, "gone.txt"))));
+
+            // Windows' own sheet only for paths that are there (a sheet itself would open a window here).
+            Assert.Equal(ErrorCodes.NotFound, Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new ShowPropertiesRequest([path, Path.Combine(folder, "gone.txt")]))).Code);
+            Assert.Equal(ErrorCodes.InvalidPath, Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new ShowPropertiesRequest(["relative.txt"]))).Code);
+            Assert.Equal(ErrorCodes.ProtocolError, Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new ShowPropertiesRequest([]))).Code);
             await core.ShutdownAsync(TimeSpan.FromSeconds(5));
         }
         finally
