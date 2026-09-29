@@ -21,8 +21,9 @@ const MODIFIERS: [(u8, &str); 4] = [(1, "ctrl"), (2, "shift"), (4, "alt"), (8, "
 /// Other spellings accepted for modifiers.
 const MODIFIER_ALIASES: [(&str, u8); 2] = [("control", 1), ("meta", 8)];
 
-/// Named keys, besides letters, digits and F1–F24.
-const NAMED_KEYS: [&str; 26] = [
+/// Named keys, besides letters, digits and F1–F24. The keypad's operators
+/// have names of their own; its digits are the plain digits.
+const NAMED_KEYS: [&str; 31] = [
     "escape",
     "enter",
     "tab",
@@ -49,12 +50,19 @@ const NAMED_KEYS: [&str; 26] = [
     "backslash",
     "semicolon",
     "quote",
+    "numpadadd",
+    "numpadsubtract",
+    "numpadmultiply",
+    "numpaddivide",
+    "numpaddecimal",
 ];
 
-/// Other spellings accepted for keys: short names and the punctuation
-/// characters themselves (`ctrl+`` ` is `ctrl+backquote`). `+` cannot be
-/// written this way, because it separates modifiers; use `shift+equal`.
-const KEY_ALIASES: [(&str, &str); 17] = [
+/// Other spellings accepted for keys: short names, the punctuation
+/// characters themselves (`ctrl+`` ` is `ctrl+backquote`), and VS Code's
+/// names of the keypad's operators (`numpad_add`). `+` cannot be written
+/// as a character, because it separates modifiers; use `shift+equal`, or
+/// `numpadadd` for the keypad's.
+const KEY_ALIASES: [(&str, &str); 22] = [
     ("esc", "escape"),
     ("return", "enter"),
     ("del", "delete"),
@@ -72,6 +80,11 @@ const KEY_ALIASES: [(&str, &str); 17] = [
     ("\\", "backslash"),
     (";", "semicolon"),
     ("'", "quote"),
+    ("numpad_add", "numpadadd"),
+    ("numpad_subtract", "numpadsubtract"),
+    ("numpad_multiply", "numpadmultiply"),
+    ("numpad_divide", "numpaddivide"),
+    ("numpad_decimal", "numpaddecimal"),
 ];
 
 /// A key that is not a modifier.
@@ -315,6 +328,33 @@ mod tests {
         assert_eq!(normalized("ctrl+\\"), "ctrl+backslash");
         assert_eq!(normalized("ctrl+]"), "ctrl+bracketright");
         assert_eq!(normalized("pgdn"), "pagedown");
+    }
+
+    #[test]
+    fn accepts_the_keypad_operators_and_their_vs_code_names() {
+        for name in [
+            "numpadadd",
+            "numpadsubtract",
+            "numpadmultiply",
+            "numpaddivide",
+            "numpaddecimal",
+        ] {
+            assert_eq!(normalized(name), name);
+            assert_eq!(normalized(&format!("Ctrl+{name}")), format!("ctrl+{name}"));
+        }
+        for (vs_code, name) in [
+            ("numpad_add", "numpadadd"),
+            ("numpad_subtract", "numpadsubtract"),
+            ("NumPad_Multiply", "numpadmultiply"),
+            ("numpad_divide", "numpaddivide"),
+            ("numpad_decimal", "numpaddecimal"),
+        ] {
+            assert_eq!(normalized(vs_code), name);
+            assert_eq!(normalized(&format!("alt+{vs_code}")), format!("alt+{name}"));
+        }
+        // The keypad's digits are the plain digits.
+        assert!(rejects("numpad0").contains("not a key name"));
+        assert!(rejects("numpad_0").contains("not a key name"));
     }
 
     #[test]

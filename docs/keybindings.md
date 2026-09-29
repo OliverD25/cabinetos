@@ -130,10 +130,16 @@ number of modifiers and exactly one key, joined with `+`.
   `end`, `pageup`, `pagedown`, `up`, `down`, `left`, `right`, `backquote`,
   `comma`, `period`, `slash`, `minus`, `equal`, `bracketleft`,
   `bracketright`, `backslash`, `semicolon`, `quote`.
+- **The keypad's operators:** `numpadadd` (Num +), `numpadsubtract` (Num -),
+  `numpadmultiply` (Num *), `numpaddivide` (Num /) and `numpaddecimal`
+  (Num .), keys of their own. The keypad's digits are the plain digits
+  `0`–`9`, as they are on Windows with Num Lock on: there is no `numpad0`.
 - **Also accepted for keys:** `esc`, `return`, `del`, `ins`, `pgup`, `pgdn`,
+  VS Code's names of the keypad's operators (`numpad_add`,
+  `numpad_subtract`, `numpad_multiply`, `numpad_divide`, `numpad_decimal`),
   and the characters themselves: `` ` `` `,` `.` `/` `-` `=` `[` `]` `\` `;`
   `'`. The `+` key cannot be written as `+`, because `+` joins the parts;
-  write `shift+equal`.
+  write `shift+equal`, or `numpadadd` for the keypad's.
 - **At most two combinations.** Two already multiply the number of free
   shortcuts, and a longer chord would make the UI's state machine harder to
   follow.
