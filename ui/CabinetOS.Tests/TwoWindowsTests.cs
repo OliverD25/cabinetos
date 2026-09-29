@@ -69,6 +69,7 @@ public class TwoWindowsTests
                 start.Environment["CABINETOS_PLUGINS_DIR"] = Path.Combine(root, "plugins");
                 start.Environment["CABINETOS_PLUGINS_DATA_DIR"] = Path.Combine(root, "plugins-data");
                 start.Environment["CABINETOS_MARKETPLACE_DIR"] = Path.Combine(root, "marketplace");
+                start.Environment["CABINETOS_WEBVIEW2_DIR"] = Path.Combine(root, "webview2");
                 start.Environment["CABINETOS_UI_SNAPSHOT"] = Path.Combine(root, name);
                 start.Environment["CABINETOS_UI_SNAPSHOT_STEPS"] = steps;
                 var process = Process.Start(start)!;

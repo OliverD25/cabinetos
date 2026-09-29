@@ -291,4 +291,16 @@ public class TerminalTests
         // A size the window cannot fit is kept within the design's limits when it is used.
         Assert.Equal(632, DockLayout.Clamp(DockPlacement.Bottom, 5000, 800));
     }
+
+    [Fact]
+    public void The_WebView2_data_folder_moves_with_CABINETOS_WEBVIEW2_DIR()
+    {
+        var real = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CabinetOS", "WebView2");
+        Assert.Equal(real, CabinetOS.Core.Presentation.WebViewData.Root(_ => null));
+        Assert.Equal(real, CabinetOS.Core.Presentation.WebViewData.Root(_ => "  "));
+        Assert.Equal(@"D:\scratch\webview2", CabinetOS.Core.Presentation.WebViewData.Root(name => name == CabinetOS.Core.Presentation.WebViewData.DirEnv ? @" D:\scratch\webview2 " : null));
+        var relative = CabinetOS.Core.Presentation.WebViewData.Root(_ => "webview2");
+        Assert.True(Path.IsPathRooted(relative), relative);
+        Assert.EndsWith(Path.DirectorySeparatorChar + "webview2", relative);
+    }
 }

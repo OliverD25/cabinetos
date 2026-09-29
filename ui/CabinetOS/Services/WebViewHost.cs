@@ -56,9 +56,12 @@ internal sealed class WebViewHost
     /// <summary>The browser process of this host, or 0; the crash-isolation check ends it.</summary>
     public int BrowserProcessId => _core is { } core ? (int)core.BrowserProcessId : 0;
 
-    /// <summary>The user-data folder: <c>%LOCALAPPDATA%\CabinetOS\WebView2\&lt;name&gt;</c>.</summary>
-    public string DataFolder => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CabinetOS", "WebView2", _name);
+    /// <summary>
+    /// The user-data folder: <c>%LOCALAPPDATA%\CabinetOS\WebView2\&lt;name&gt;</c>, or
+    /// <c>&lt;CABINETOS_WEBVIEW2_DIR&gt;\&lt;name&gt;</c> when that variable is set, so
+    /// tests and live checks leave the real folder alone.
+    /// </summary>
+    public string DataFolder => Path.Combine(CabinetOS.Core.Presentation.WebViewData.Root(), _name);
 
     /// <summary>
     /// Whether the page is drawn dark or light (<c>prefers-color-scheme</c>);
