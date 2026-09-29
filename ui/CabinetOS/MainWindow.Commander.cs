@@ -1,9 +1,11 @@
 using CabinetOS.Core.Commands;
+using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Listing;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Settings;
 using CabinetOS.ViewModels;
 using Microsoft.UI.Xaml;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace CabinetOS;
 
@@ -31,6 +33,32 @@ public sealed partial class MainWindow
             Active.Selection.Clear();
         }));
         _router.RegisterUiHandler("edit.restoreSelection", ListingOnly(_ => RestoreSelection()));
+        _router.RegisterUiHandler("edit.copyFullPath", ListingOnly(_ => CopyLines([.. Active.Targets().Select(t => t.Path)], "path", "paths")));
+        _router.RegisterUiHandler("edit.copyName", ListingOnly(_ => CopyLines([.. Active.Targets().Select(t => t.Name)], "name", "names")));
+        _router.RegisterUiHandler("edit.copyFolderPath", _ => CopyLines(Active.Path.Length > 0 ? [Active.Path] : [], "folder path", "folder paths"));
+    }
+
+    // Ctrl+Shift+C, Ctrl+K Ctrl+N, Ctrl+K Ctrl+P: text on Windows' clipboard, one per line and
+    // without quotes (the note's decision D10). CabinetOS's own file clipboard is not touched.
+    private void CopyLines(IReadOnlyList<string> lines, string one, string many)
+    {
+        if (lines.Count == 0)
+        {
+            return;
+        }
+        try
+        {
+            var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
+            package.SetText(string.Join("\r\n", lines));
+            Clipboard.SetContent(package);
+        }
+        catch (Exception error) when (error is System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
+        {
+            Diag.Info(Target, "the Windows clipboard refused the text", new LogField("error", error.Message), new LogField("hresult", error.HResult));
+            ShowNotice($"The Windows clipboard is busy: the {(lines.Count == 1 ? one : many)} could not be copied.", isError: true);
+            return;
+        }
+        ShowNotice(lines.Count == 1 ? $"Copied the {one}: {lines[0]}" : $"Copied {lines.Count:N0} {many}.");
     }
 
     // Num *: the files' marks turn around; the folders keep theirs (Total Commander's rule).
