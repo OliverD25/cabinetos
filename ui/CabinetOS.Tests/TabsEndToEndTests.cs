@@ -15,7 +15,7 @@ public class TabsEndToEndTests
     private const string OptIn = "CABINETOS_UI_E2E";
 
     [Fact]
-    public async Task Three_tabs_of_a_pane_are_found_again_when_the_window_starts_a_second_time()
+    public async Task Tabs_and_locks_of_both_panes_are_found_again_when_the_window_starts_a_second_time()
     {
         if (Environment.GetEnvironmentVariable(OptIn) != "1")
         {
@@ -55,7 +55,8 @@ public class TabsEndToEndTests
             }
             string Shot(string run, string name) => Path.Combine(root, "shots-" + run, name + ".png");
 
-            // First run: the left pane opens three folders in three tabs, the last one in front; then the window closes.
+            // First run: the left pane opens three folders in three tabs, the last one in front and locked; the right
+            // pane opens two; then the window closes.
             var first = Start("first", string.Join(';',
                 "pane:0",
                 $"path:{folders[0]}",
@@ -63,6 +64,12 @@ public class TabsEndToEndTests
                 $"path:{folders[1]}",
                 "tab:new",
                 $"path:{folders[2]}",
+                "tab:lock",
+                "pane:1",
+                $"path:{folders[0]}",
+                "tab:new",
+                $"path:{folders[1]}",
+                "pane:0",
                 "tabs:opened",
                 "wait:1500",
                 "shot:opened"));
@@ -72,9 +79,14 @@ public class TabsEndToEndTests
 
             using (var config = JsonDocument.Parse(File.ReadAllText(configPath)))
             {
-                var left = config.RootElement.GetProperty("ui").GetProperty("tabs").GetProperty("left");
+                var tabs = config.RootElement.GetProperty("ui").GetProperty("tabs");
+                var left = tabs.GetProperty("left");
                 Assert.Equal(folders, left.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("path").GetString()).ToArray());
+                Assert.Equal([false, false, true], left.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("locked").GetBoolean()).ToArray());
                 Assert.Equal(2, left.GetProperty("active").GetInt32());
+                var right = tabs.GetProperty("right");
+                Assert.Equal(folders[..2], right.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("path").GetString()).ToArray());
+                Assert.Equal(1, right.GetProperty("active").GetInt32());
             }
 
             // Second run: the same configuration; the row shows the three tabs again, the last in front, without a step to open them.
@@ -85,11 +97,9 @@ public class TabsEndToEndTests
 
             var logs = Lines(Directory.GetFiles(Path.Combine(root, "logs-second"), "ui.*.jsonl").Single());
             var shown = Assert.Single(logs, l => Message(l) == "tabs shown" && Field(l, "label").GetString() == "restored");
-            var titles = Field(shown, "left").GetString()!;
-            Assert.Contains("one", titles);
-            Assert.Contains("two", titles);
-            Assert.Contains("three", titles);
-            Assert.Equal(3, titles.Split('|').Length);
+            // The row as the window shows it: the tab in front marked with *, the lock in brackets.
+            Assert.Equal("one | two | *three (locked)", Field(shown, "left").GetString());
+            Assert.Equal("one | *two", Field(shown, "right").GetString());
             Assert.DoesNotContain(logs, l => Message(l) is "a tab could not show its folder");
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-second"), "crash-*.json"));
         }

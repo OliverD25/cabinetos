@@ -967,8 +967,9 @@ repeats the third row.
 Tests: `TabTests` (the model in `CabinetOS.Core`: strip, lock rule,
 `ui.tabs`, `window_state`), the snapshot steps `tab:new`, `tab:close` and
 the others in the list of the snapshot aid, and `TabsEndToEndTests`, which
-opens three tabs in a real window, closes it, starts it again and finds
-the three tabs, the last in front (with `CABINETOS_UI_E2E=1`). The live
+opens three tabs in the left pane (the last one locked) and two in the
+right pane of a real window, closes it, starts it again and finds them all,
+the locks and the tabs in front too (with `CABINETOS_UI_E2E=1`). The live
 check has a section "12: tabs" with real keys.
 
 ## Search
