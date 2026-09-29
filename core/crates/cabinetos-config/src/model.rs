@@ -109,6 +109,21 @@ pub struct UiConfig {
     /// start opens them again. The window owns them; the core only checks
     /// and stores them.
     pub tabs: TabsConfig,
+    /// The buttons of the activity rail (`layout: rail`) in the order the
+    /// user put them, by the ID each button has: `explorer`, `search`,
+    /// `marketplace`, `terminal`, or the ID of a tool with a sidebar view.
+    /// Empty: the default order. The window owns it; the core only stores
+    /// it.
+    pub rail: Vec<String>,
+    /// The sidebar's width in pixels as the user last dragged it. `null`:
+    /// the design's width.
+    pub sidebar_width: Option<u32>,
+    /// The view the sidebar showed last: `explorer`, `search`, or the ID of
+    /// a tool with a sidebar view. The window falls back to `explorer` for
+    /// one it does not know.
+    pub sidebar_view: String,
+    /// The Explorer view follows the active pane's folder.
+    pub sidebar_auto_reveal: bool,
 }
 
 /// The tabs of both panes.
@@ -171,6 +186,10 @@ impl Default for UiConfig {
             pinned: Vec::new(),
             dock_size: DockSize::default(),
             tabs: TabsConfig::default(),
+            rail: Vec::new(),
+            sidebar_width: None,
+            sidebar_view: "explorer".to_owned(),
+            sidebar_auto_reveal: true,
         }
     }
 }

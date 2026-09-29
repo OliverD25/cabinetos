@@ -109,6 +109,10 @@ while you type.
 | `ui.pinned` | list of folder paths | empty | Folders the user pinned to the sidebar, in the sidebar's order |
 | `ui.dockSize.bottom` | pixels, or `null` | `null` | The Tool Dock's height under the panes, as the user last dragged it; `null` gives the design's size. The window keeps it within the design's limits. |
 | `ui.dockSize.right` | pixels, or `null` | `null` | The Tool Dock's width beside the panes, the same way |
+| `ui.rail` | list of button IDs | empty | The buttons of the activity rail (`ui.layout: rail`), in the order the user put them: `explorer`, `search`, `marketplace`, `terminal`, or the ID of a tool with a sidebar view. Empty: the default order. The window owns it. |
+| `ui.sidebarWidth` | pixels, or `null` | `null` | The sidebar's width as the user last dragged it; `null` gives the design's width |
+| `ui.sidebarView` | `explorer`, `search`, or a tool's ID | `explorer` | The view the sidebar showed last; the window falls back to `explorer` for one it does not know |
+| `ui.sidebarAutoReveal` | `true`, `false` | `true` | The Explorer view follows the active pane's folder |
 | `ui.tabs.left.items`, `ui.tabs.right.items` | list of `{ "path", "locked" }` | empty | Each pane's tabs, left to right, as the window last saved them; the next start opens them again. `path` is the folder the tab shows; `locked` (default `false`) keeps the tab on its folder, so opening another folder there opens a new tab. Empty: the pane opens one tab from `ui.lastPaths`, or as the window decides. |
 | `ui.tabs.left.active`, `ui.tabs.right.active` | a number from 0 | `0` | The tab in front, counting from 0. It must name one of the pane's tabs (with none, only `0`): a number past the end is an error that names the pane, for example `ui.tabs.right.active is 3, but the right pane has 2 tabs; it counts from 0`. |
 | `panes.showHidden` | `true`, `false` | `false` | Also list hidden and system entries |

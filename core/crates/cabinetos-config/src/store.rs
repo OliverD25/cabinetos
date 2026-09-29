@@ -918,6 +918,76 @@ mod tests {
     }
 
     #[test]
+    fn the_rail_and_the_sidebar_round_trip_through_the_file() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let defaults = &store.config().ui;
+        assert!(defaults.rail.is_empty(), "empty: the default order");
+        assert_eq!(defaults.sidebar_width, None);
+        assert_eq!(defaults.sidebar_view, "explorer");
+        assert!(defaults.sidebar_auto_reveal);
+
+        let rail = serde_json::json!(["search", "explorer", "agent-chat", "terminal"]);
+        assert_eq!(
+            store.set_value("ui.rail", rail.clone(), accept).unwrap(),
+            ["ui.rail"]
+        );
+        assert_eq!(
+            store
+                .set_value("ui.sidebarWidth", Value::from(312), accept)
+                .unwrap(),
+            ["ui.sidebarWidth"]
+        );
+        assert_eq!(
+            store
+                .set_value("ui.sidebarView", Value::from("agent-chat"), accept)
+                .unwrap(),
+            ["ui.sidebarView"]
+        );
+        assert_eq!(
+            store
+                .set_value("ui.sidebarAutoReveal", Value::from(false), accept)
+                .unwrap(),
+            ["ui.sidebarAutoReveal"]
+        );
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["rail"], rail);
+        assert_eq!(file["ui"]["sidebarWidth"], 312);
+        assert_eq!(file["ui"]["sidebarView"], "agent-chat");
+        assert_eq!(file["ui"]["sidebarAutoReveal"], false);
+
+        let (reopened, opened) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(opened, Opened::Loaded);
+        assert_eq!(reopened.config().ui, store.config().ui);
+        assert_eq!(reopened.config().ui.sidebar_width, Some(312));
+
+        // The width goes back to the design's with `null`; a wrong kind of
+        // value, and a key nobody knows, are refused.
+        store
+            .set_value("ui.sidebarWidth", Value::Null, accept)
+            .unwrap();
+        assert_eq!(store.config().ui.sidebar_width, None);
+        for (setting, value) in [
+            ("ui.rail", Value::from("search")),
+            ("ui.sidebarWidth", Value::from("wide")),
+            ("ui.sidebarWidth", Value::from(-4)),
+            ("ui.sidebarView", Value::from(3)),
+            ("ui.sidebarAutoReveal", Value::from("yes")),
+            ("ui.sidebarColour", Value::from(1)),
+        ] {
+            assert!(
+                matches!(
+                    store.set_value(setting, value, accept),
+                    Err(UpdateError::Rejected(_))
+                ),
+                "{setting}"
+            );
+        }
+        assert!(parse(r#"{"ui": {"rail": ["explorer"], "sidebarView": "search"}}"#).is_ok());
+        assert!(parse(r#"{"ui": {"sidebarOpen": true}}"#).is_err());
+    }
+
+    #[test]
     fn set_value_takes_text_beyond_ascii() {
         let (_dir, path) = temp_config();
         let (mut store, _) = ConfigStore::open(path.clone(), accept);

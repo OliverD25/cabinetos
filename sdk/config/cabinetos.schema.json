@@ -100,7 +100,11 @@
         "lastPaths": [],
         "layout": "classic",
         "pinned": [],
+        "rail": [],
         "sidebar": true,
+        "sidebarAutoReveal": true,
+        "sidebarView": "explorer",
+        "sidebarWidth": null,
         "tabs": {
           "left": {
             "active": 0,
@@ -580,10 +584,38 @@
             "type": "string"
           }
         },
+        "rail": {
+          "description": "The buttons of the activity rail (`layout: rail`) in the order the\nuser put them, by the ID each button has: `explorer`, `search`,\n`marketplace`, `terminal`, or the ID of a tool with a sidebar view.\nEmpty: the default order. The window owns it; the core only stores\nit.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "sidebar": {
           "description": "Show the sidebar.",
           "type": "boolean",
           "default": true
+        },
+        "sidebarAutoReveal": {
+          "description": "The Explorer view follows the active pane's folder.",
+          "type": "boolean",
+          "default": true
+        },
+        "sidebarView": {
+          "description": "The view the sidebar showed last: `explorer`, `search`, or the ID of\na tool with a sidebar view. The window falls back to `explorer` for\none it does not know.",
+          "type": "string",
+          "default": "explorer"
+        },
+        "sidebarWidth": {
+          "description": "The sidebar's width in pixels as the user last dragged it. `null`:\nthe design's width.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
         },
         "tabs": {
           "description": "The tabs of each pane as the window last saved them, so the next\nstart opens them again. The window owns them; the core only checks\nand stores them.",
