@@ -126,3 +126,12 @@ public sealed record InstallFinishedEvent(string ExtensionId, bool Ok, string Me
 
 /// <summary>A Tool Extension was installed or removed; the list is what <c>list_tools</c> would answer now.</summary>
 public sealed record ToolsChangedEvent(IReadOnlyList<ToolInfo> Tools) : CoreEvent;
+
+/// <summary>How far a measure of one path has come (version 12): at most 30 a second.</summary>
+public sealed record MeasureProgressEvent(ulong MeasureId, string Path, ulong Files, ulong Folders, ulong Bytes) : CoreEvent;
+
+/// <summary>One path's total: <see cref="Unreadable"/> folders could not be read and are not in it.</summary>
+public sealed record MeasureResult(string Path, ulong Files, ulong Folders, ulong Bytes, ulong Unreadable);
+
+/// <summary>A measure ended (version 12): every path's total, or what it had when it was cancelled.</summary>
+public sealed record MeasureFinishedEvent(ulong MeasureId, IReadOnlyList<MeasureResult> Results, bool Cancelled) : CoreEvent;

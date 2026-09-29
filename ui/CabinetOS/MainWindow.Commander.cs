@@ -3,6 +3,7 @@ using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Listing;
 using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
+using CabinetOS.Core.Prompts;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
 using CabinetOS.Services;
@@ -17,6 +18,8 @@ namespace CabinetOS;
 // window does the work.
 public sealed partial class MainWindow
 {
+    private readonly PatternHistory _patterns = new();
+
     private void RegisterCommanderCommands()
     {
         _router.RegisterUiHandler("go.root", invocation => GoRootAsync(invocation));
@@ -45,6 +48,111 @@ public sealed partial class MainWindow
         // The Properties dialog's button passes its paths; from a key or the palette, the targets.
         _router.RegisterUiHandler("file.windowsProperties", invocation =>
             CommandArgs.Texts(invocation.Args, "paths") is not null ? WindowsPropertiesAsync(invocation) : ListingOnly(WindowsPropertiesAsync)(invocation));
+        _router.RegisterUiHandler("edit.selectByPattern", ListingOnly(invocation => MarkByPatternAsync(mark: true, invocation)));
+        _router.RegisterUiHandler("edit.unselectByPattern", ListingOnly(invocation => MarkByPatternAsync(mark: false, invocation)));
+        _router.RegisterUiHandler("edit.selectSameExtension", ListingOnly(invocation => MarkSameExtensionAsync(mark: true, invocation)));
+        _router.RegisterUiHandler("edit.unselectSameExtension", ListingOnly(invocation => MarkSameExtensionAsync(mark: false, invocation)));
+        _router.RegisterUiHandler("go.pinnedFolders", PinnedFoldersAsync);
+    }
+
+    // Num +, Num -: the pattern box in the palette's frame. It offers the last pattern, lists ten,
+    // and marks files only unless "Include folders" is on (the note's decision D9). The core matches.
+    private async Task MarkByPatternAsync(bool mark, CommandInvocation invocation)
+    {
+        var pane = Active;
+        if (pane.View is null || pane.ListingId == 0)
+        {
+            return;
+        }
+        if (_unavailable.Contains("match_entries"))
+        {
+            ShowNotice("Marking by pattern needs a newer core.");
+            return;
+        }
+        var answer = await PromptView.ShowAsync(new PromptRequest(
+            mark ? "Select" : "Unselect",
+            PromptKind.Text,
+            [.. _patterns.Items.Select(pattern => new PromptRow(pattern, Glyph: ""))],
+            Text: _patterns.Last,
+            Placeholder: "*.txt;*.md",
+            Option: "Include folders",
+            Hint: "* and ? stand for any text and one character; ; separates patterns; | leaves out the ones after it"));
+        if (answer is null || answer.Text.Trim().Length == 0)
+        {
+            return;
+        }
+        _patterns.Add(answer.Text);
+        await MarkMatchesAsync(pane, answer.Text.Trim(), filesOnly: !answer.OptionChecked, mark, invocation.RequestId);
+    }
+
+    // Alt+Num +, Alt+Num -: every file with the cursor file's extension.
+    private Task MarkSameExtensionAsync(bool mark, CommandInvocation invocation)
+    {
+        var pane = Active;
+        if (pane.EntryAt(pane.FocusIndex) is not { IsFolder: false } entry)
+        {
+            ShowNotice("Put the cursor on a file: its extension picks the files.");
+            return Task.CompletedTask;
+        }
+        if (_unavailable.Contains("match_entries"))
+        {
+            ShowNotice("Marking by pattern needs a newer core.");
+            return Task.CompletedTask;
+        }
+        return MarkMatchesAsync(pane, PatternHistory.SameExtension(entry.Name), filesOnly: true, mark, invocation.RequestId);
+    }
+
+    // match_entries answers ranges of the section it read; if the listing changed meanwhile, it is
+    // asked once more about the new one, so no mark lands on the wrong row.
+    private async Task MarkMatchesAsync(PaneModel pane, string patterns, bool filesOnly, bool mark, string requestId)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var reply = await RequestSafelyAsync(new MatchEntriesRequest(pane.ListingId, patterns) { FilesOnly = filesOnly, Id = attempt == 0 ? requestId : "" });
+            switch (reply)
+            {
+                case EntryMatchesReply matches when pane.View is { } view && matches.ListingId == pane.ListingId && matches.Generation == view.Generation:
+                    if (!mark)
+                    {
+                        pane.RememberMarks();
+                    }
+                    pane.Selection.SetMarks(EntryRanges.Rows(matches.Ranges, view.Count), mark);
+                    var count = EntryRanges.Count(matches.Ranges);
+                    var what = count == 1 ? (filesOnly ? "1 file" : "1 entry") : $"{count:N0} {(filesOnly ? "files" : "entries")}";
+                    ShowNotice(count == 0 ? $"Nothing matches {patterns}." : $"{(mark ? "Marked" : "Unmarked")} {what} matching {patterns}.");
+                    return;
+                case EntryMatchesReply:
+                    continue;
+                case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                    Unavailable("match_entries", "Marking by pattern needs a newer core.");
+                    return;
+                case ErrorReply error:
+                    ShowNotice($"{patterns}: {error.Message}", isError: true);
+                    return;
+                default:
+                    return;
+            }
+        }
+    }
+
+    // Ctrl+D: the sidebar's folders in the palette's frame; Enter goes there in the active pane. The
+    // last row pins the folder this pane shows, when it is not pinned yet.
+    private async Task PinnedFoldersAsync(CommandInvocation invocation)
+    {
+        var folder = Active.Path;
+        var rows = _sidebar.Pinned.Select(item => new PromptRow(item.Name, item.Path, "")).ToList();
+        if (folder.Length > 0 && !_sidebar.IsPinned(folder))
+        {
+            rows.Add(new PromptRow($"Pin {DisplayFormat.FolderName(folder)}", folder, "", Sticky: true));
+        }
+        var answer = await PromptView.ShowAsync(new PromptRequest("Go to", PromptKind.Pick, rows,
+            Placeholder: "Type to narrow the list",
+            Hint: "Enter goes to the folder; the last row pins the folder this pane shows."));
+        if (answer?.Row is not { } row)
+        {
+            return;
+        }
+        await _router.ExecuteAsync(row.Sticky ? "sidebar.pin" : "go.toPath", CommandArgs.With("path", row.Detail), "palette");
     }
 
     // F3: the cursor file in the first installed tool that shows it. Never its default

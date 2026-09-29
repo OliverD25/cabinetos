@@ -23,7 +23,8 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>select:&lt;name&gt;</c> selects a row, <c>selectall</c> selects every row,
 /// <c>menu:&lt;name&gt;</c> opens the context menu on a row (<c>menu:*</c> on the empty space),
 /// <c>rename:&lt;text&gt;</c> types a name into the rename box and presses Enter,
-/// <c>dismiss</c> closes an open dialog, <c>type:&lt;text&gt;</c> types into the palette,
+/// <c>dismiss</c> closes an open dialog, <c>type:&lt;text&gt;</c> types into the palette (or into the
+/// prompt in its frame, the pattern box or the pinned folders, when one is shown), <c>accept</c> presses Enter in that prompt,
 /// <c>search:&lt;text&gt;</c> types into the search field,
 /// <c>open:&lt;name&gt;</c> presses Enter on a row (a file may open in a Tool Extension),
 /// <c>terminal:&lt;text&gt;</c> types into the shown shell (<c>{enter}</c> is Enter),

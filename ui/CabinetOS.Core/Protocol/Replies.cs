@@ -107,6 +107,15 @@ public sealed record EntryDetailsReply(ulong ListingId, uint Generation, uint Fr
 /// <summary>Reply to <c>get_icon</c>: a PNG of <see cref="Size"/> pixels square, with alpha.</summary>
 public sealed record IconReply(string Key, uint Size, string PngBase64) : CoreReply;
 
+/// <summary>
+/// Reply to <c>match_entries</c> (version 12): the matching rows of the
+/// section of <see cref="Generation"/>, as <c>[start, count]</c> pairs.
+/// </summary>
+public sealed record EntryMatchesReply(ulong ListingId, uint Generation, IReadOnlyList<IReadOnlyList<ulong>> Ranges) : CoreReply;
+
+/// <summary>Reply to <c>measure_paths</c> (version 12): the measure's ID; its progress comes as events.</summary>
+public sealed record MeasureStartedReply(ulong MeasureId) : CoreReply;
+
 /// <summary>Reply to <c>start_job</c>: the paths were checked and the job is queued.</summary>
 public sealed record JobStartedReply(ulong JobId) : CoreReply;
 

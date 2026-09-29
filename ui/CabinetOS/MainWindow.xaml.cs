@@ -152,6 +152,7 @@ public sealed partial class MainWindow : Window
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         Palette.ReturnFocus = ReturnFocusAfterPalette;
+        PromptView.ReturnFocus = FocusActivePane;
         _palette.KeymapUpdated += keymap => ApplyKeymap(Keymap.From(keymap));
 
         TransferView.Center = _transfers;
@@ -396,7 +397,18 @@ public sealed partial class MainWindow : Window
                     OnContextMenuRequested(_paneViews[_active], row, null);
                     break;
                 case "type":
-                    Palette.TypeQuery(step.Argument);
+                    // Into the prompt in the palette's frame when one is shown, else the palette.
+                    if (PromptView.IsOpen)
+                    {
+                        PromptView.Type(step.Argument);
+                    }
+                    else
+                    {
+                        Palette.TypeQuery(step.Argument);
+                    }
+                    break;
+                case "accept":
+                    PromptView.Accept();
                     break;
                 case "terminal":
                     // Typed into the shown shell as keys; {enter} is Enter.
@@ -1306,6 +1318,7 @@ public sealed partial class MainWindow : Window
         {
             EndAddressEdit();
             FileMenu.Close();
+            PromptView.Cancel();
             // Ctrl+Shift+P from a shell: the keyboard goes back there when the palette closes.
             _paletteFromTerminal = Dock.HasTerminalFocus;
             _palette.Open();
@@ -1339,6 +1352,10 @@ public sealed partial class MainWindow : Window
         if (_palette.IsOpen)
         {
             _palette.Close();
+        }
+        else if (PromptView.IsOpen)
+        {
+            PromptView.Cancel();
         }
         else if (ThemesView.IsOpen)
         {

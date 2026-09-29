@@ -302,6 +302,60 @@ public sealed class ShowPropertiesRequest(IReadOnlyList<string> paths) : CoreReq
     public IReadOnlyList<string> Paths { get; } = paths;
 }
 
+/// <summary>
+/// Finds the rows of a listing whose names match patterns (version 12: the
+/// pattern box, the same extension, quick search); the reply is <c>entry_matches</c>.
+/// The core reads the names from its own section, as for <c>describe_entries</c>.
+/// </summary>
+public sealed class MatchEntriesRequest(ulong listingId, string patterns) : CoreRequest("match_entries")
+{
+    /// <summary>The listing, from <c>listing_opened</c>.</summary>
+    public ulong ListingId { get; } = listingId;
+
+    /// <summary>
+    /// Total Commander's syntax: <c>*</c> and <c>?</c>, patterns separated by
+    /// <c>;</c>, and a <c>|</c> before the ones to leave out; case is ignored.
+    /// </summary>
+    public string Patterns { get; } = patterns;
+
+    /// <summary>Files only, no folders (the pattern box's "Include folders" off).</summary>
+    public bool FilesOnly { get; init; }
+
+    /// <summary>Only the first match at or after this row, wrapping to the start (quick search).</summary>
+    public uint? FirstFrom { get; init; }
+}
+
+/// <summary>
+/// Measures the files, folders and bytes under folders (version 12: the
+/// Size column's measured folders); the reply is <c>measure_started</c>,
+/// then <c>measure_progress</c> and <c>measure_finished</c> come as events.
+/// </summary>
+public sealed class MeasurePathsRequest(IReadOnlyList<string> paths) : CoreRequest("measure_paths")
+{
+    /// <summary>Absolute paths of folders (a file counts as itself).</summary>
+    public IReadOnlyList<string> Paths { get; } = paths;
+}
+
+/// <summary>Stops a measure; the reply is <c>ok</c>, and <c>measure_finished</c> says it was cancelled.</summary>
+public sealed class CancelMeasureRequest(ulong measureId) : CoreRequest("cancel_measure")
+{
+    /// <summary>The measure, from <c>measure_started</c>.</summary>
+    public ulong MeasureId { get; } = measureId;
+}
+
+/// <summary>
+/// Types paths at a shell's prompt, quoted for that shell, separated by
+/// spaces and without Enter (version 12: Ctrl+P, Ctrl+Shift+Enter); the reply is <c>ok</c>.
+/// </summary>
+public sealed class TerminalTypePathsRequest(ulong sessionId, IReadOnlyList<string> paths) : CoreRequest("terminal_type_paths")
+{
+    /// <summary>The session.</summary>
+    public ulong SessionId { get; } = sessionId;
+
+    /// <summary>Absolute paths.</summary>
+    public IReadOnlyList<string> Paths { get; } = paths;
+}
+
 /// <summary>Opens a shell in a pseudo-console (docs/terminal.md); the reply is <c>terminal_opened</c>.</summary>
 public sealed class TerminalOpenRequest(ushort cols, ushort rows) : CoreRequest("terminal_open")
 {

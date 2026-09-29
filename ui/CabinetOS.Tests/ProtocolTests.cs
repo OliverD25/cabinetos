@@ -95,7 +95,52 @@ public class ProtocolTests
         (new RenameRequest(@"C:\data\a.txt", "b.txt"), $$$"""{"id":"{{{Id}}}","type":"rename","path":"C:\\data\\a.txt","new_name":"b.txt"}"""),
         // Protocol 12, as docs/research/total-commander.md, Part 3 (b), gives them, until the core's schema has them.
         (new ShowPropertiesRequest([@"C:\data\a.txt", @"C:\data\photos"]), $$$"""{"id":"{{{Id}}}","type":"show_properties","paths":["C:\\data\\a.txt","C:\\data\\photos"]}"""),
+        (new MatchEntriesRequest(7, "*.txt;*.md|draft*") { FilesOnly = true }, $$$"""{"id":"{{{Id}}}","type":"match_entries","listing_id":7,"patterns":"*.txt;*.md|draft*","files_only":true}"""),
+        (new MatchEntriesRequest(7, "rep*") { FirstFrom = 42 }, $$$"""{"id":"{{{Id}}}","type":"match_entries","listing_id":7,"patterns":"rep*","files_only":false,"first_from":42}"""),
+        (new MeasurePathsRequest([@"C:\data\photos", @"C:\data\src"]), $$$"""{"id":"{{{Id}}}","type":"measure_paths","paths":["C:\\data\\photos","C:\\data\\src"]}"""),
+        (new CancelMeasureRequest(5), $$$"""{"id":"{{{Id}}}","type":"cancel_measure","measure_id":5}"""),
+        (new TerminalTypePathsRequest(3, [@"C:\data\a b.txt"]), $$$"""{"id":"{{{Id}}}","type":"terminal_type_paths","session_id":3,"paths":["C:\\data\\a b.txt"]}"""),
     ];
+
+    /// <summary>
+    /// Replies and events of protocol version 12 built against the research
+    /// note's shapes: (JSON, is an event, check). Checked against the core's
+    /// schemas once they have the type.
+    /// </summary>
+    private static IReadOnlyList<(string Json, bool IsEvent, Action<object> Check)> AgreedIncoming() =>
+    [
+        ($$$"""{"id":"{{{Id}}}","type":"entry_matches","listing_id":7,"generation":2,"ranges":[[0,3],[10,1]]}""", false,
+            b => Assert.Equal((7UL, 2U, 4UL), (((EntryMatchesReply)b).ListingId, ((EntryMatchesReply)b).Generation, Core.Listing.EntryRanges.Count(((EntryMatchesReply)b).Ranges)))),
+        ($$$"""{"id":"{{{Id}}}","type":"measure_started","measure_id":5}""", false,
+            b => Assert.Equal(new MeasureStartedReply(5), b)),
+        ($$$"""{"id":"{{{Id}}}","type":"measure_progress","measure_id":5,"path":"C:\\data\\photos","files":120,"folders":4,"bytes":9000000}""", true,
+            b => Assert.Equal(new MeasureProgressEvent(5, @"C:\data\photos", 120, 4, 9000000), b)),
+        ($$$"""{"id":"{{{Id}}}","type":"measure_finished","measure_id":5,"results":[{"path":"C:\\data\\photos","files":130,"folders":4,"bytes":9500000,"unreadable":1}],"cancelled":false}""", true,
+            b =>
+            {
+                var finished = Assert.IsType<MeasureFinishedEvent>(b);
+                Assert.False(finished.Cancelled);
+                Assert.Equal(new MeasureResult(@"C:\data\photos", 130, 4, 9500000, 1), finished.Results.Single());
+            }),
+    ];
+
+    [Fact]
+    public void The_agreed_version_12_replies_and_events_decode_and_follow_the_schemas_once_they_have_them()
+    {
+        var replies = SchemaVariants(Repo.ProtocolSchema("response.schema.json"));
+        var events = SchemaVariants(Repo.ProtocolSchema("event.schema.json"));
+        foreach (var (json, isEvent, check) in AgreedIncoming())
+        {
+            var message = MessageCodec.Decode(Encoding.UTF8.GetBytes(json));
+            Assert.Equal(isEvent, message.IsEvent);
+            Assert.NotNull(message.Body);
+            check(message.Body);
+            if ((isEvent ? events : replies).ContainsKey(message.Type!))
+            {
+                AssertValid(isEvent ? Schemas.Event : Schemas.Response, json);
+            }
+        }
+    }
 
     [Fact]
     public void Every_request_matches_the_request_schema_and_uses_only_declared_fields()
@@ -424,7 +469,9 @@ public class ProtocolTests
     {
         var eventTypes = SchemaVariants(Repo.ProtocolSchema("event.schema.json")).Keys.ToHashSet();
         var replyTypes = SchemaVariants(Repo.ProtocolSchema("response.schema.json")).Keys.ToHashSet();
-        Assert.Equal(eventTypes.Order(), MessageCodec.EventTypes.Order());
+        // The version 12 events the window was built against before the core's schema had them.
+        string[] agreed = ["measure_progress", "measure_finished"];
+        Assert.Equal(eventTypes.Union(agreed).Order(), MessageCodec.EventTypes.Order());
         Assert.Empty(replyTypes.Intersect(MessageCodec.EventTypes));
     }
 

@@ -397,6 +397,9 @@
 
         <views:CommandPalette x:Name="Palette" Visibility="Collapsed" />
 
+        <!-- The pattern box and the pinned folders list, in the palette's frame. -->
+        <views:PromptBox x:Name="PromptView" Visibility="Collapsed" />
+
         <views:ThemePicker x:Name="ThemesView" />
 
         <views:PluginsPanel x:Name="PluginsView" />
