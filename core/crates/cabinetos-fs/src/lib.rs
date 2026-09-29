@@ -25,7 +25,9 @@
 //! user makes to a folder without a job; [`open_path`] opens a file or
 //! folder with its default application, [`edit_path`] opens a file for
 //! editing, and [`show_properties`] shows Windows' property sheet.
-//! [`measure_tree`] counts the files, folders and bytes under a path.
+//! [`measure_tree`] counts the files, folders and bytes under a path, and
+//! [`match_entries`] finds the entries of a listing whose names match
+//! [`NamePatterns`].
 //! [`Hydrator`] gives the shell's type names and icons of listed entries;
 //! size, times and attributes need no such step, as they arrive with the
 //! listing itself.
@@ -52,6 +54,7 @@ mod open;
 #[allow(unsafe_code)]
 mod ops;
 mod path;
+mod pattern;
 mod pipeline;
 mod section;
 mod sort;
@@ -73,6 +76,7 @@ pub use measure::{MeasureError, Tree, measure_tree};
 pub use open::{Editor, edit_path, open_path, show_properties};
 pub use ops::{create_directory, create_file, rename};
 pub use path::verbatim_wide;
+pub use pattern::{NamePatterns, match_entries};
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter};
 pub use watch::{DirectoryChanged, DirectoryWatcher};
 

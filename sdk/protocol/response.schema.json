@@ -194,6 +194,48 @@
       ]
     },
     {
+      "description": "Reply to `match_entries`.",
+      "type": "object",
+      "properties": {
+        "generation": {
+          "description": "The generation of the section the names were read from.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "listing_id": {
+          "description": "The listing.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "ranges": {
+          "description": "The matching indexes as `[start, count]` pairs, in order; with\n`first_from`, at most one `[index, 1]`.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "entry_matches"
+        }
+      },
+      "required": [
+        "type",
+        "listing_id",
+        "generation",
+        "ranges"
+      ]
+    },
+    {
       "description": "Reply to `get_icon`.",
       "type": "object",
       "properties": {

@@ -82,7 +82,7 @@ pub(crate) async fn describe(
 }
 
 /// Every name in the listing's section, in order.
-fn names(client: &PipeClient, section_handle: u64) -> anyhow::Result<Vec<String>> {
+pub(crate) fn names(client: &PipeClient, section_handle: u64) -> anyhow::Result<Vec<String>> {
     let section = client.take_section(section_handle)?;
     let view = section.map_readonly()?;
     let reader = ListingReader::new(view.as_slice())?;

@@ -99,9 +99,9 @@ listing's link and "not on this disk" flags and its `reparse_tag`; and a
 theme's optional `metrics` and `chrome`, with `has_metrics` in `themes`.
 Version 12 (sub-phase 11a, Total Commander's keys and small commands)
 added the sort key `extension`, `create_file`, `edit_path`,
-`show_properties`, and `measure_paths` with its reply `measure_started`,
-the events `measure_progress` and `measure_finished`, and
-`cancel_measure`.
+`show_properties`, `measure_paths` with its reply `measure_started`, the
+events `measure_progress` and `measure_finished`, and `cancel_measure`;
+and `match_entries` with its reply `entry_matches`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -120,6 +120,7 @@ as absent from an older core.
 | `list_directory` | `path`; `include_hidden` and `sort` (when left out, the `panes` settings of [config.md](config.md) decide: by default `false` and `{"key":"name","descending":false}`); `watch` (default `false`) | `listing_opened` |
 | `close_listing` | `listing_id` | `ok` |
 | `describe_entries` | `listing_id`, `from`, `count` (at most 512) | `entry_details` (`listing_id`, `generation`, `from`, `details`) |
+| `match_entries` | `listing_id`, `patterns`; `files_only` (default `false`); `first_from` | `entry_matches` (`listing_id`, `generation`, `ranges`) |
 | `get_icon` | `key`, `size` (16, 24, 32 or 48) | `icon` (`key`, `size`, `png_base64`) |
 | `volume_info` | `path` (need not exist) | `volume_info` |
 | `list_volumes` | — | `volumes` (`volumes`) |
@@ -198,7 +199,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `incompatible` | The extension needs a newer CabinetOS (`minCoreVersion`). |
 
 Requests on one connection are independent: `list_directory`,
-`describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
+`describe_entries`, `match_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
 `show_properties`, `create_directory`, `create_file`, `rename`, `measure_paths`,
 `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
@@ -430,6 +431,43 @@ UI asks for those for the rows it shows, a screenful at a time.
   a second, measured in a debug build); icons are drawn one at a time.
 - An unknown key is `not_found`; a failure of the shell is `io` with its
   message.
+
+## Matching names
+
+The window's pattern box (Num + and Num −, marking and unmarking rows by
+pattern) and its quick search (letters typed in a pane) ask the core which
+entries match: the names are in the core's own copy of the section, as
+for `describe_entries`, so the window never scans them.
+
+```json
+{"id":"01M…","type":"match_entries","listing_id":7,"patterns":"*.txt;*.md|readme*","files_only":true}
+{"id":"01M…","type":"entry_matches","listing_id":7,"generation":1,"ranges":[[1,2],[4,1]]}
+{"id":"01M…","type":"match_entries","listing_id":7,"patterns":"rep*","first_from":12}
+{"id":"01M…","type":"entry_matches","listing_id":7,"generation":1,"ranges":[[40,1]]}
+```
+
+- `patterns` is Total Commander's syntax: `*` stands for any run of
+  characters and `?` for one; `;` separates patterns, and the patterns
+  after a `|` leave names out; case is ignored (each character with a
+  single upper-case form is compared in it, as Windows compares names).
+  Spaces around a pattern are dropped. With no pattern before the `|`,
+  every name is in, so `|*.bak` is everything but backups, and an empty
+  `patterns` matches every name. Two endings keep DOS's meaning, as in
+  Total Commander and cmd: `.*` also matches a name without an extension,
+  so `*.*` matches every name (it is what the pattern box offers first),
+  and a lone `.` matches only names without a dot (`*.`). A name that
+  contains `;` cannot be matched as such.
+- `ranges` lists the matching indexes of the current section as
+  `[start, count]` pairs in order, which keeps "all 100,000 rows" short.
+  `generation` is the section's, as in `entry_details`; after a refresh
+  the window asks again.
+- `files_only: true` leaves folders out (links to folders too): the
+  pattern box's "Include folders" check box is off by default (decision
+  D9 of [research/total-commander.md](research/total-commander.md)).
+- With `first_from`, only the first match at or after that index is
+  sent, going round to the start, as `[index, 1]`, or no range: quick
+  search. An index past the end starts at 0.
+- An unknown `listing_id` is `no_such_listing`.
 
 ## Watched listings and events
 

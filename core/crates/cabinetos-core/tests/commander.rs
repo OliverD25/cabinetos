@@ -333,3 +333,102 @@ async fn measures_run_at_once_and_refuse_what_is_not_there() {
             .is_err()
     );
 }
+
+/// A client that said hello, as listing needs.
+async fn greeted(core: &Core) -> (PipeClient, UnboundedReceiver<Envelope<Event>>) {
+    let mut client = connect(&core.pipe).await;
+    let events = client.events().unwrap();
+    let welcome = client.hello("commander-test").await.unwrap();
+    assert!(
+        matches!(welcome.body, Response::Welcome { .. }),
+        "{welcome:?}"
+    );
+    (client, events)
+}
+
+async fn matches(
+    client: &mut PipeClient,
+    listing_id: u64,
+    patterns: &str,
+    files_only: bool,
+    first_from: Option<u32>,
+) -> (u32, Vec<[u32; 2]>) {
+    let reply = ask(
+        client,
+        Request::MatchEntries {
+            listing_id,
+            patterns: patterns.to_owned(),
+            files_only,
+            first_from,
+        },
+    )
+    .await;
+    match reply {
+        Response::EntryMatches {
+            listing_id: id,
+            generation,
+            ranges,
+        } if id == listing_id => (generation, ranges),
+        other => panic!("expected entry_matches, got {other:?}"),
+    }
+}
+
+/// The names are read from the listing's current section: after a
+/// refresh, from the new one.
+#[tokio::test]
+async fn entries_match_patterns_in_the_current_section() {
+    let core = start_core();
+    let folder = core.files().join("folder");
+    std::fs::create_dir_all(folder.join("folder.txt")).unwrap();
+    for name in ["a.txt", "b.md", "c.txt", "d.jpg", "e.txt", "README"] {
+        std::fs::write(folder.join(name), name).unwrap();
+    }
+    let (mut client, mut events) = greeted(&core).await;
+    let reply = ask(
+        &mut client,
+        Request::ListDirectory {
+            path: text(&folder),
+            include_hidden: None,
+            sort: None,
+            watch: true,
+        },
+    )
+    .await;
+    let Response::ListingOpened { listing_id, .. } = reply else {
+        panic!("expected listing_opened, got {reply:?}");
+    };
+    // 0 folder.txt, 1 a.txt, 2 b.md, 3 c.txt, 4 d.jpg, 5 e.txt, 6 README
+    assert_eq!(
+        matches(&mut client, listing_id, "*.txt", false, None).await,
+        (1, vec![[0, 2], [3, 1], [5, 1]])
+    );
+    assert_eq!(
+        matches(&mut client, listing_id, "*.txt;*.md|c*", true, None).await,
+        (1, vec![[1, 2], [5, 1]])
+    );
+    assert_eq!(
+        matches(&mut client, listing_id, "*.txt", true, Some(6)).await,
+        (1, vec![[1, 1]])
+    );
+    let unknown = ask(
+        &mut client,
+        Request::MatchEntries {
+            listing_id: listing_id + 1000,
+            patterns: "*".to_owned(),
+            files_only: false,
+            first_from: None,
+        },
+    )
+    .await;
+    assert_eq!(error_code(&unknown), Some(ErrorCode::NoSuchListing));
+
+    std::fs::write(folder.join("f.txt"), "f").unwrap();
+    loop {
+        if let Event::ListingRefreshed { entry_count: 8, .. } = next(&mut events).await {
+            break;
+        }
+    }
+    let (generation, ranges) = matches(&mut client, listing_id, "*.txt", true, None).await;
+    assert!(generation >= 2, "{generation}");
+    assert_eq!(ranges, [[1, 1], [3, 1], [5, 2]]);
+}

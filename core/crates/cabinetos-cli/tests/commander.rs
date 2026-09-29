@@ -290,3 +290,46 @@ fn measure_prints_the_files_folders_and_bytes_under_each_path() {
     let missing = stderr(&cli(&core, &["measure", &shown(&root), &shown(&gone)]));
     assert!(missing.contains("not_found"), "{missing}");
 }
+
+/// `match` lists the folder and prints the matching entries as ranges of
+/// the listing's order: folders first, then by name.
+#[test]
+fn match_prints_the_ranges_of_the_matching_names() {
+    let core = start_core();
+    let dir = scratch("match");
+    std::fs::create_dir(dir.path().join("sub")).unwrap();
+    for name in [
+        "a.txt",
+        "b.md",
+        "c.jpg",
+        "notes.TXT",
+        "readme.md",
+        "README.txt",
+    ] {
+        std::fs::write(dir.path().join(name), name).unwrap();
+    }
+    // 0 sub, 1 a.txt, 2 b.md, 3 c.jpg, 4 notes.TXT, 5 readme.md, 6 README.txt
+    let folder = shown(dir.path());
+    assert_eq!(
+        stdout(&cli(&core, &["match", &folder, "*.txt;*.md|readme*"])),
+        "3 of 7 entries match, in 2 ranges (generation 1)\n\
+         [1, 2] a.txt .. b.md\n\
+         [4, 1] notes.TXT\n"
+    );
+    assert_eq!(
+        stdout(&cli(
+            &core,
+            &["match", &folder, "*.TXT", "--first-from", "5"]
+        )),
+        "6: README.txt\n"
+    );
+    assert_eq!(
+        stdout(&cli(&core, &["match", &folder, "s*", "--files-only"])),
+        "0 of 7 entries match, in 0 ranges (generation 1)\n"
+    );
+    let missing = stderr(&cli(
+        &core,
+        &["match", &shown(&dir.path().join("gone")), "*"],
+    ));
+    assert!(missing.contains("not_found"), "{missing}");
+}

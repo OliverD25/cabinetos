@@ -91,6 +91,23 @@ pub enum Request {
         /// the end of the listing.
         count: u32,
     },
+    /// Finds the entries of a listing whose names match patterns, in the
+    /// order of its current section: marking by pattern and quick search.
+    /// The core answers `entry_matches`.
+    MatchEntries {
+        /// The listing, from `listing_opened`.
+        listing_id: u64,
+        /// Total Commander's patterns: `*` and `?`; several separated by
+        /// `;`; the ones after a `|` leave names out. Case is ignored.
+        patterns: String,
+        /// Folders (links to folders too) never match.
+        #[serde(default)]
+        files_only: bool,
+        /// Only the first match at or after this index, going round to the
+        /// start: quick search.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        first_from: Option<u32>,
+    },
     /// Asks for the icon of an icon key, as a PNG. The core answers `icon`.
     GetIcon {
         /// The key, from `entry_details`: `folder`, `generic`, `ext:.txt` or
@@ -398,6 +415,7 @@ impl Request {
         "list_directory",
         "close_listing",
         "describe_entries",
+        "match_entries",
         "get_icon",
         "volume_info",
         "list_volumes",
@@ -452,6 +470,7 @@ impl Request {
             Self::ListDirectory { .. } => "list_directory",
             Self::CloseListing { .. } => "close_listing",
             Self::DescribeEntries { .. } => "describe_entries",
+            Self::MatchEntries { .. } => "match_entries",
             Self::GetIcon { .. } => "get_icon",
             Self::VolumeInfo { .. } => "volume_info",
             Self::ListVolumes => "list_volumes",
@@ -587,6 +606,16 @@ pub enum Response {
         from: u32,
         /// The entries' details, in section order.
         details: Vec<EntryDetail>,
+    },
+    /// Reply to `match_entries`.
+    EntryMatches {
+        /// The listing.
+        listing_id: u64,
+        /// The generation of the section the names were read from.
+        generation: u32,
+        /// The matching indexes as `[start, count]` pairs, in order; with
+        /// `first_from`, at most one `[index, 1]`.
+        ranges: Vec<[u32; 2]>,
     },
     /// Reply to `get_icon`.
     Icon {
@@ -735,6 +764,7 @@ impl Response {
         "welcome",
         "listing_opened",
         "entry_details",
+        "entry_matches",
         "icon",
         "measure_started",
         "volume_info",
@@ -769,6 +799,7 @@ impl Response {
             Self::Welcome { .. } => "welcome",
             Self::ListingOpened { .. } => "listing_opened",
             Self::EntryDetails { .. } => "entry_details",
+            Self::EntryMatches { .. } => "entry_matches",
             Self::Icon { .. } => "icon",
             Self::MeasureStarted { .. } => "measure_started",
             Self::VolumeInfo(_) => "volume_info",
@@ -1441,6 +1472,12 @@ mod tests {
                 from: 0,
                 count: 128,
             },
+            Request::MatchEntries {
+                listing_id: 7,
+                patterns: "*.txt;*.md|readme*".to_owned(),
+                files_only: true,
+                first_from: Some(12),
+            },
             Request::GetIcon {
                 key: "ext:.txt".to_owned(),
                 size: 32,
@@ -1653,6 +1690,11 @@ mod tests {
                         icon_key: "ext:.txt".to_owned(),
                     },
                 ],
+            },
+            Response::EntryMatches {
+                listing_id: 7,
+                generation: 2,
+                ranges: vec![[0, 5], [10, 2]],
             },
             Response::Icon {
                 key: "ext:.txt".to_owned(),

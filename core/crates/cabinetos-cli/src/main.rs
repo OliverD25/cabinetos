@@ -2,7 +2,7 @@
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
 //! UI will), `describe` and `icon` (the shell's type names and icons),
 //! `volume` and `volumes`, `open`, `edit`, `props`, `mkdir`, `mkfile` and `rename`,
-//! folder sizes (`measure`), `shutdown`, the
+//! folder sizes (`measure`), names by pattern (`match`), `shutdown`, the
 //! configuration (`config`), the command registry (`commands`), the keymap
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
@@ -24,6 +24,7 @@ mod jobs;
 mod ls;
 mod market;
 mod measure;
+mod patterns;
 mod plugins;
 mod search;
 mod settings;
@@ -110,6 +111,23 @@ enum Command {
         /// How many entries, at most 512.
         #[arg(long, default_value_t = 50)]
         count: u32,
+    },
+    /// List a folder and find the entries whose names match patterns, as
+    /// the pattern box and quick search do.
+    Match {
+        /// The folder.
+        path: String,
+        /// Total Commander's patterns: * and ?, ; between patterns, | before
+        /// the ones to leave out; case is ignored. For example
+        /// "*.txt;*.md|readme*".
+        patterns: String,
+        /// Folders never match.
+        #[arg(long)]
+        files_only: bool,
+        /// Only the first match at or after this entry, going round to the
+        /// start, as quick search asks.
+        #[arg(long, value_name = "INDEX")]
+        first_from: Option<u32>,
     },
     /// Write the icon of an icon key (as `describe` prints them) to a PNG
     /// file, for example: icon ext:.txt --size 32 --out txt.png.
@@ -738,13 +756,8 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Volume { .. } | Command::Volumes => {
             volume_command(&mut client, &cli.command).await?;
         }
-        Command::Props { paths } => props(&mut client, paths).await?,
-        Command::Measure { paths } => {
-            let paths = paths
-                .iter()
-                .map(|path| absolute(path))
-                .collect::<anyhow::Result<_>>()?;
-            measure::measure(&mut client, paths).await?;
+        Command::Props { .. } | Command::Measure { .. } | Command::Match { .. } => {
+            commander_command(&mut client, &cli.command).await?;
         }
         Command::Open { .. }
         | Command::Edit { .. }
@@ -872,6 +885,35 @@ async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Res
         _ => true,
     };
     Ok(())
+}
+
+/// Total Commander's commands of sub-phase 11a that are more than one
+/// request: `props`, `measure`, `match`.
+async fn commander_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
+    match command {
+        Command::Props { paths } => props(client, paths).await,
+        Command::Measure { paths } => {
+            let paths = paths
+                .iter()
+                .map(|path| absolute(path))
+                .collect::<anyhow::Result<_>>()?;
+            measure::measure(client, paths).await
+        }
+        Command::Match {
+            path,
+            patterns,
+            files_only,
+            first_from,
+        } => {
+            let search = patterns::Search {
+                patterns: patterns.clone(),
+                files_only: *files_only,
+                first_from: *first_from,
+            };
+            patterns::run(client, &absolute(path)?, &search).await
+        }
+        _ => unreachable!("only the commands of sub-phase 11a come here"),
+    }
 }
 
 /// `props`: Windows' property sheet of `paths`, shown by the core.
@@ -1400,6 +1442,26 @@ mod tests {
             }
         );
         assert!(Cli::try_parse_from(["cabinetos-cli", "measure"]).is_err());
+        let cli = Cli::try_parse_from([
+            "cabinetos-cli",
+            "match",
+            ".",
+            "*.txt;*.md|readme*",
+            "--files-only",
+            "--first-from",
+            "12",
+        ])
+        .unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Match {
+                path: ".".to_owned(),
+                patterns: "*.txt;*.md|readme*".to_owned(),
+                files_only: true,
+                first_from: Some(12)
+            }
+        );
+        assert!(Cli::try_parse_from(["cabinetos-cli", "match", "."]).is_err());
         let cli = Cli::try_parse_from(["cabinetos-cli", "mkdir", r"E:\new"]).unwrap();
         assert_eq!(
             cli.command,

@@ -157,6 +157,45 @@
       ]
     },
     {
+      "description": "Finds the entries of a listing whose names match patterns, in the\norder of its current section: marking by pattern and quick search.\nThe core answers `entry_matches`.",
+      "type": "object",
+      "properties": {
+        "files_only": {
+          "description": "Folders (links to folders too) never match.",
+          "type": "boolean",
+          "default": false
+        },
+        "first_from": {
+          "description": "Only the first match at or after this index, going round to the\nstart: quick search.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "listing_id": {
+          "description": "The listing, from `listing_opened`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "patterns": {
+          "description": "Total Commander's patterns: `*` and `?`; several separated by\n`;`; the ones after a `|` leave names out. Case is ignored.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "match_entries"
+        }
+      },
+      "required": [
+        "type",
+        "listing_id",
+        "patterns"
+      ]
+    },
+    {
       "description": "Asks for the icon of an icon key, as a PNG. The core answers `icon`.",
       "type": "object",
       "properties": {

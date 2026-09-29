@@ -8,7 +8,7 @@
 //!   queued, so a `listing_opened` always goes out before the events of that
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
-//!   (`list_directory`, `describe_entries`, `get_icon`, `volume_info`,
+//!   (`list_directory`, `describe_entries`, `match_entries`, `get_icon`, `volume_info`,
 //!   `list_volumes`, `open_path`, `edit_path`, `show_properties`, `create_directory`,
 //!   `create_file`, `rename`, `measure_paths`,
 //!   `set_value`,
@@ -288,12 +288,9 @@ impl Session {
                     client_name,
                 } => Some(self.hello(client_pid, &client_name)),
                 Request::CloseListing { listing_id } => Some(self.close_listing(listing_id)),
-                Request::DescribeEntries {
-                    listing_id,
-                    from,
-                    count,
-                } => self.describe_entries(&id, &span, kind, (listing_id, from, count)),
-                Request::GetIcon { key, size } => self.get_icon(&id, &span, kind, key, size),
+                request @ (Request::DescribeEntries { .. }
+                | Request::MatchEntries { .. }
+                | Request::GetIcon { .. }) => self.entry_request(&id, &span, kind, request),
                 Request::ListDirectory {
                     path,
                     include_hidden,
@@ -308,8 +305,9 @@ impl Session {
                 | Request::CreateDirectory { .. }
                 | Request::CreateFile { .. }
                 | Request::Rename { .. }) => self.file_request(&id, &span, kind, request),
-                Request::MeasurePaths { paths } => self.measure_paths(&id, &span, kind, paths),
-                Request::CancelMeasure { measure_id } => Some(self.cancel_measure(measure_id)),
+                request @ (Request::MeasurePaths { .. } | Request::CancelMeasure { .. }) => {
+                    self.measure_request(&id, &span, kind, request)
+                }
                 request @ (Request::GetConfig
                 | Request::GetValue { .. }
                 | Request::SetValue { .. }
@@ -415,6 +413,42 @@ impl Session {
         Response::Ok
     }
 
+    /// The requests about the entries of a listing: `describe_entries`,
+    /// `match_entries`, and `get_icon` for the icon keys they give.
+    fn entry_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        match request {
+            Request::DescribeEntries {
+                listing_id,
+                from,
+                count,
+            } => self.describe_entries(id, span, kind, (listing_id, from, count)),
+            request @ Request::MatchEntries { .. } => self.match_entries(id, span, kind, request),
+            Request::GetIcon { key, size } => self.get_icon(id, span, kind, key, size),
+            _ => None,
+        }
+    }
+
+    /// `measure_paths` and `cancel_measure`.
+    fn measure_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        match request {
+            Request::MeasurePaths { paths } => self.measure_paths(id, span, kind, paths),
+            Request::CancelMeasure { measure_id } => Some(self.cancel_measure(measure_id)),
+            _ => None,
+        }
+    }
+
     /// `describe_entries`, on the blocking pool: the shell may be asked.
     fn describe_entries(
         &mut self,
@@ -445,6 +479,46 @@ impl Session {
                     generation,
                     from,
                     details,
+                },
+                Err(error) => failure_reply((ErrorCode::Internal, error.to_string())),
+            }
+        });
+        None
+    }
+
+    /// `match_entries`, on the blocking pool: it reads every name of the
+    /// listing's current section.
+    fn match_entries(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        let Request::MatchEntries {
+            listing_id,
+            patterns,
+            files_only,
+            first_from,
+        } = request
+        else {
+            return None;
+        };
+        let Some(slot) = self.listings.get(&listing_id) else {
+            return Some(no_such_listing(listing_id));
+        };
+        let (_, section) = slot.current.get();
+        self.spawn_reply(id, span, kind, move || {
+            let view = match section.map_readonly() {
+                Ok(view) => view,
+                Err(error) => return failure_reply((ErrorCode::Internal, error.to_string())),
+            };
+            let patterns = cabinetos_fs::NamePatterns::parse(&patterns);
+            match cabinetos_fs::match_entries(view.as_slice(), &patterns, files_only, first_from) {
+                Ok((generation, ranges)) => Response::EntryMatches {
+                    listing_id,
+                    generation,
+                    ranges,
                 },
                 Err(error) => failure_reply((ErrorCode::Internal, error.to_string())),
             }

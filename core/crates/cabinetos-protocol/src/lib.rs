@@ -83,6 +83,7 @@ pub use theme::{
 /// `themes`; the theme kind `system`; `tools_changed` sent again to a client
 /// that fell behind; version 12 Total Commander's keys and small commands
 /// (sub-phase 11a): the sort key `extension`, `create_file`, `edit_path`,
-/// `show_properties`, and `measure_paths` with `measure_started`, the events
-/// `measure_progress` and `measure_finished`, and `cancel_measure`.
+/// `show_properties`, `measure_paths` with `measure_started`, the events
+/// `measure_progress` and `measure_finished`, and `cancel_measure`; and
+/// `match_entries` with its reply `entry_matches`.
 pub const PROTOCOL_VERSION: u32 = 12;
