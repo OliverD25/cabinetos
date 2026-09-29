@@ -116,6 +116,7 @@ public sealed partial class FilePane : UserControl
             UpdateHeader();
             UpdateActivity();
             ApplyRows();
+            UpdateSortGlyphs();
         }
     }
 
@@ -233,7 +234,33 @@ public sealed partial class FilePane : UserControl
                 break;
             case nameof(PaneModel.Search):
                 ApplySearch();
+                UpdateSortGlyphs();
                 break;
+            case nameof(PaneModel.EffectiveSort):
+                UpdateSortGlyphs();
+                break;
+        }
+    }
+
+    // A chevron on the column the listing is sorted by: up from A to Z (smallest, oldest), down the
+    // other way. The design's plain headings stay for its default, name from A to Z, and for search hits.
+    private void UpdateSortGlyphs()
+    {
+        var sort = _model is { Search: null } model ? model.EffectiveSort : null;
+        if (sort is { Key: PaneSort.Name, Descending: false })
+        {
+            sort = null;
+        }
+        Show(NameSortGlyph, sort?.Key == PaneSort.Name);
+        Show(ModifiedSortGlyph, sort?.Key == PaneSort.Modified);
+        Show(TypeSortGlyph, sort?.Key is PaneSort.Extension or PaneSort.Kind);
+        Show(SizeSortGlyph, sort?.Key == PaneSort.Size);
+        ToolTipService.SetToolTip(TypeSortGlyph, sort?.Key == PaneSort.Extension ? "Sorted by extension" : "Sorted by kind");
+
+        void Show(FontIcon glyph, bool shown)
+        {
+            glyph.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+            glyph.Glyph = sort?.Descending == true ? "" : "";
         }
     }
 

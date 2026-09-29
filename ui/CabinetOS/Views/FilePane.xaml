@@ -115,27 +115,66 @@
                         <ColumnDefinition Width="0.45*" />
                         <ColumnDefinition Width="64" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock
-                        FontSize="11"
-                        Foreground="{ThemeResource CbTextTertiaryBrush}"
-                        Text="Name" />
-                    <TextBlock
-                        x:Name="SecondHeading"
+                    <!-- The column the listing is sorted by carries a chevron (the pane's own order, Ctrl+F3 to Ctrl+F6). -->
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource CbTextTertiaryBrush}"
+                            Text="Name" />
+                        <FontIcon
+                            x:Name="NameSortGlyph"
+                            VerticalAlignment="Center"
+                            FontSize="8"
+                            Foreground="{ThemeResource CbTextTertiaryBrush}"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+                    <StackPanel
                         Grid.Column="1"
-                        FontSize="11"
-                        Foreground="{ThemeResource CbTextTertiaryBrush}"
-                        Text="Modified" />
-                    <TextBlock
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <TextBlock
+                            x:Name="SecondHeading"
+                            FontSize="11"
+                            Foreground="{ThemeResource CbTextTertiaryBrush}"
+                            Text="Modified" />
+                        <FontIcon
+                            x:Name="ModifiedSortGlyph"
+                            VerticalAlignment="Center"
+                            FontSize="8"
+                            Foreground="{ThemeResource CbTextTertiaryBrush}"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+                    <StackPanel
                         Grid.Column="2"
-                        FontSize="11"
-                        Foreground="{ThemeResource CbTextTertiaryBrush}"
-                        Text="Type" />
-                    <TextBlock
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource CbTextTertiaryBrush}"
+                            Text="Type" />
+                        <FontIcon
+                            x:Name="TypeSortGlyph"
+                            VerticalAlignment="Center"
+                            FontSize="8"
+                            Foreground="{ThemeResource CbTextTertiaryBrush}"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+                    <StackPanel
                         Grid.Column="3"
                         HorizontalAlignment="Right"
-                        FontSize="11"
-                        Foreground="{ThemeResource CbTextTertiaryBrush}"
-                        Text="Size" />
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <FontIcon
+                            x:Name="SizeSortGlyph"
+                            VerticalAlignment="Center"
+                            FontSize="8"
+                            Foreground="{ThemeResource CbTextTertiaryBrush}"
+                            Visibility="Collapsed" />
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource CbTextTertiaryBrush}"
+                            Text="Size" />
+                    </StackPanel>
                 </Grid>
             </Border>
 

@@ -795,6 +795,11 @@ public sealed partial class MainWindow : Window
                 pane.Selection.SetStyle(settings.Selection);
             }
         }
+        foreach (var pane in _panes)
+        {
+            // What a pane without its own order (Ctrl+F3 to Ctrl+F6) is sorted by.
+            pane.DefaultSort = new SortSpec(settings.SortKey, settings.SortDescending);
+        }
         if (!firstStart && (settings.ShowHidden != previous.ShowHidden
             || settings.SortKey != previous.SortKey
             || settings.SortDescending != previous.SortDescending))

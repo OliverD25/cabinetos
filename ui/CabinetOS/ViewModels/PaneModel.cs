@@ -48,6 +48,8 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     private string? _expectedName;
     private TaskCompletionSource<int>? _expectedListed;
     private PaneSearch? _search;
+    private SortSpec? _sort;
+    private SortSpec _defaultSort = new(PaneSort.Name, false);
 
     /// <summary>
     /// Creates pane <paramref name="index"/>, asking <paramref name="core"/> for
@@ -289,6 +291,43 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// <summary>The last navigation's timing, until the view logs its first paint.</summary>
     public NavigationTiming? PendingTiming { get; set; }
 
+    /// <summary>
+    /// The pane's own order (Ctrl+F3 to Ctrl+F6), sent with every listing of
+    /// this pane; null leaves it to <c>panes.sort</c>.
+    /// </summary>
+    public SortSpec? Sort => _sort;
+
+    /// <summary><c>panes.sort</c>, the order of a pane without its own.</summary>
+    public SortSpec DefaultSort
+    {
+        get => _defaultSort;
+        set
+        {
+            if (SetProperty(ref _defaultSort, value))
+            {
+                OnPropertyChanged(nameof(EffectiveSort));
+            }
+        }
+    }
+
+    /// <summary>The order the listing is in: the pane's own, else <c>panes.sort</c>.</summary>
+    public SortSpec EffectiveSort => _sort ?? _defaultSort;
+
+    /// <summary>Lists the folder again in <paramref name="sort"/>, keeping the focused and the marked entries.</summary>
+    public async Task<bool> SortAsync(SortSpec sort, string? requestId = null)
+    {
+        var previous = _sort;
+        _sort = sort;
+        OnPropertyChanged(nameof(EffectiveSort));
+        if (await RefreshAsync(requestId))
+        {
+            return true;
+        }
+        _sort = previous;
+        OnPropertyChanged(nameof(EffectiveSort));
+        return false;
+    }
+
     /// <summary>Entry <paramref name="index"/> of the listing, or null.</summary>
     public PaneEntry? EntryAt(int index)
     {
@@ -403,7 +442,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     {
         var navigation = ++_navigation;
         var started = Stopwatch.GetTimestamp();
-        var request = new ListDirectoryRequest(path) { Watch = true, Id = requestId ?? "" };
+        var request = new ListDirectoryRequest(path) { Watch = true, Id = requestId ?? "", Sort = _sort };
         CoreReply reply;
         try
         {

@@ -1,4 +1,5 @@
 using CabinetOS.Core.Commands;
+using CabinetOS.Core.Listing;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Settings;
 using CabinetOS.ViewModels;
@@ -18,6 +19,31 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("go.showInRightPane", ListingOnly(invocation => ShowInPaneAsync(1, invocation)));
         _router.RegisterUiHandler("view.swapPanes", _ => SwapPanes());
         _router.RegisterUiHandler("view.refresh", RefreshAsync);
+        _router.RegisterUiHandler("view.sortByName", ListingOnly(invocation => SortActiveAsync(PaneSort.Name, invocation)));
+        _router.RegisterUiHandler("view.sortByExtension", ListingOnly(invocation => SortActiveAsync(PaneSort.Extension, invocation)));
+        _router.RegisterUiHandler("view.sortByModified", ListingOnly(invocation => SortActiveAsync(PaneSort.Modified, invocation)));
+        _router.RegisterUiHandler("view.sortBySize", ListingOnly(invocation => SortActiveAsync(PaneSort.Size, invocation)));
+    }
+
+    // Ctrl+F3 to Ctrl+F6: the active pane's own order, sent with its listings; the same key again
+    // reverses it. The other pane and panes.sort stay as they are.
+    private async Task SortActiveAsync(string key, CommandInvocation invocation)
+    {
+        var pane = Active;
+        if (pane.Path.Length == 0)
+        {
+            return;
+        }
+        if (_session.ProtocolVersion < PaneSort.ProtocolFor(key))
+        {
+            ShowNotice($"Sorting by {key} needs a newer core.");
+            return;
+        }
+        var sort = PaneSort.Next(pane.EffectiveSort, key);
+        if (await pane.SortAsync(sort, invocation.RequestId))
+        {
+            ShowNotice($"Sorted by {PaneSort.Describe(sort)}.");
+        }
     }
 
     // Ctrl+\: the drive's root, C:\, or the share's, \\server\share\.

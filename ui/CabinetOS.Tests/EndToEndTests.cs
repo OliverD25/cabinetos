@@ -466,7 +466,7 @@ public class EndToEndTests
     private static bool IsProgramIdentifier(string name) =>
         !name.Any(char.IsWhiteSpace) && (!name.Any(char.IsUpper) || name.EndsWith("file", StringComparison.OrdinalIgnoreCase));
 
-    private static string FindCoreOrSkip()
+    internal static string FindCoreOrSkip()
     {
         var coreExe = CoreLauncher.Find(Path.Combine(Repo.Root, "ui"), Environment.GetEnvironmentVariable, File.Exists);
         if (coreExe is null)
@@ -476,7 +476,7 @@ public class EndToEndTests
         return coreExe;
     }
 
-    private static Task<CoreConnection> StartCoreAsync(string coreExe, string root)
+    internal static Task<CoreConnection> StartCoreAsync(string coreExe, string root)
     {
         Directory.CreateDirectory(Path.Combine(root, "config"));
         var environment = new Dictionary<string, string>
