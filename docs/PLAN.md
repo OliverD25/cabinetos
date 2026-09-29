@@ -608,6 +608,27 @@ the 100,000-entry listing is unchanged.
 
 Articles: 6, 12 (with the exception of ADR 0013).
 
+**Trace ids, built 2026-09-30 (054a1fa, 687abd3, d60d82f).** Every
+envelope on the pipe may carry `trace`, the ULID of the user action, next
+to `id`; a bad value rejects the frame like a bad `id`, and the protocol
+version stays, since an older peer ignores the field. The window makes one
+trace per command run (`Diag.BeginTrace`; `CoreClient` fills every request
+sent while the handler runs), the CLI one per run. The core logs every
+line with `trace_id` and `request_id`, answers with the request's trace,
+and gives it to everything the request starts: the job and its events,
+the measures, the plugin calls and the events they emit, a
+`config_changed` from `set_value`. A watcher's lines carry no trace, and
+a request without one is its own action. The id spans are kept whatever
+`logging.level` says, so the trace on the pipe does not depend on the log
+level. `cabinetos-cli log trace <id>` reads every log file in the folder
+and prints one action from every process in time order, once per event
+even when the heavy file repeats the normal one; `log tail` prints a
+process's newest lines. Tests: core +12 (the end-to-end ones in
+`cabinetos-core/tests/traces.rs`), UI +4 (`TraceTests`), 654 UI tests.
+Guide: [diagnostics.md](diagnostics.md), "How an action's trace id
+travels".
+
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 This is the first coding task. The creator will give the exact instruction; this
