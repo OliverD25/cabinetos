@@ -230,10 +230,18 @@ public sealed partial class MainWindow
         host.Close();
         _toolHosts[pane] = null;
         _editorViews[pane].Hide();
-        _paneViews[pane].Visibility = Visibility.Visible;
+        var view = _paneViews[pane];
+        view.Visibility = Visibility.Visible;
         if (focusPane || hadFocus)
         {
-            _paneViews[pane].Focus(FocusState.Programmatic);
+            // The list was collapsed until this call, and focus is refused before it is laid out:
+            // in a real-key run the keyboard was left on the collapsed palette and every pane key
+            // was lost. Lay the list out first, and ask again after the next pass if refused.
+            view.UpdateLayout();
+            if (!view.Focus(FocusState.Programmatic))
+            {
+                DispatcherQueue.TryEnqueue(() => view.Focus(FocusState.Programmatic));
+            }
         }
         Diag.Info(ToolsTarget, "tool closed", new LogField("tool", host.Tool.Manifest.Id), new LogField("pane", pane));
     }
