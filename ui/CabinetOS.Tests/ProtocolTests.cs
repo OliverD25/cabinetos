@@ -81,6 +81,9 @@ public class ProtocolTests
             new MatchEntriesRequest(7, "*.txt;*.md|draft*") { FilesOnly = true },
             new MatchEntriesRequest(7, "rep*") { FirstFrom = 42 },
             new TerminalTypePathsRequest(3, [@"C:\data\a b.txt"]),
+            new WindowStateRequest("left", new WindowPanesState(
+                new WindowPaneState([new WindowTabState(@"C:\Users\me", false, null), new WindowTabState(@"E:\work\README.md", true, "md-preview")], 1, @"C:\Users\me\a.txt", [@"C:\Users\me\a.txt"]),
+                new WindowPaneState([new WindowTabState(@"D:\", false, null)], 0, null, []))),
         ];
     }
 
@@ -161,7 +164,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(47, checkedTypes.Count);
+        Assert.Equal(48, checkedTypes.Count);
     }
 
     [Fact]

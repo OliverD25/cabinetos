@@ -38,6 +38,7 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(MeasurePathsRequest))]
 [JsonSerializable(typeof(CancelMeasureRequest))]
 [JsonSerializable(typeof(TerminalTypePathsRequest))]
+[JsonSerializable(typeof(WindowStateRequest))]
 [JsonSerializable(typeof(EntryMatchesReply))]
 [JsonSerializable(typeof(MeasureStartedReply))]
 [JsonSerializable(typeof(MeasureProgressEvent))]

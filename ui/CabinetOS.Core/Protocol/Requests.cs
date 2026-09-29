@@ -519,3 +519,27 @@ public sealed class UninstallExtensionRequest(string extensionId) : CoreRequest(
     /// <summary>The extension's ID.</summary>
     public string ExtensionId { get; } = extensionId;
 }
+
+/// <summary>One tab of a pane in <c>window_state</c>: the folder, or the file a tool shows.</summary>
+public sealed record WindowTabState(string Path, bool Locked, string? Tool);
+
+/// <summary>One pane in <c>window_state</c>: its tabs, the tab in front, the cursor row and the marked rows (full paths).</summary>
+public sealed record WindowPaneState(IReadOnlyList<WindowTabState> Tabs, uint Active, string? Cursor, IReadOnlyList<string> Marked);
+
+/// <summary>Both panes in <c>window_state</c>.</summary>
+public sealed record WindowPanesState(WindowPaneState Left, WindowPaneState Right);
+
+/// <summary>
+/// Tells the core what the window shows (protocol version 13, Phase 12): the
+/// pane that has the keyboard, and each pane's tabs, cursor and marks. The
+/// core only stores it, so a program without a window can ask; the reply is <c>ok</c>.
+/// </summary>
+public sealed class WindowStateRequest(string activePane, WindowPanesState panes) : CoreRequest("window_state")
+{
+    /// <summary><c>left</c> or <c>right</c>.</summary>
+    public string ActivePane { get; } = activePane;
+
+    /// <summary>Both panes.</summary>
+    public WindowPanesState Panes { get; } = panes;
+}
+
