@@ -65,6 +65,18 @@ public class DisplayFormatTests
     }
 
     [Theory]
+    [InlineData(@"C:\Users\me\docs", @"C:\")]
+    [InlineData(@"C:\", @"C:\")]
+    [InlineData(@"d:\work", @"d:\")]
+    [InlineData(@"\\nas\media\films\2026", @"\\nas\media\")]
+    [InlineData(@"\\nas\media", @"\\nas\media\")]
+    [InlineData(@"\\?\C:\very\long\path", @"C:\")]
+    [InlineData(@"\\?\UNC\nas\media\films", @"\\nas\media\")]
+    [InlineData("", "")]
+    public void The_root_of_a_folder_is_its_drive_or_its_share(string path, string root) =>
+        Assert.Equal(root, DisplayFormat.Root(path));
+
+    [Theory]
     [InlineData(@"C:\repo\docs\log\2026", @"C:\repo\docs", @"docs\log\2026")]
     [InlineData(@"C:\repo\docs", @"C:\repo\docs", "docs")]
     [InlineData(@"C:\repo\docs", @"C:\repo\docs\", "docs")]

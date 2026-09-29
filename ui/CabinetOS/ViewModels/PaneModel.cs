@@ -185,8 +185,8 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         }
     }
 
-    /// <summary>0 for the left pane, 1 for the right.</summary>
-    public int Index { get; }
+    /// <summary>0 for the left pane, 1 for the right; the two change places when the panes are swapped.</summary>
+    public int Index { get; internal set; }
 
     /// <summary>The folder shown.</summary>
     public string Path
@@ -486,6 +486,28 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// <summary>Lists the same folder again, keeping the focused entry.</summary>
     public Task<bool> ReloadAsync(string? requestId = null) =>
         NavigateAsync(Path, requestId, NavigationKind.Reload, FocusName);
+
+    /// <summary>
+    /// Lists the same folder again (<c>view.refresh</c>, Ctrl+R), keeping the
+    /// focused entry and the marked ones, found again by name.
+    /// </summary>
+    public async Task<bool> RefreshAsync(string? requestId = null)
+    {
+        var marked = SelectedNames();
+        if (!await ReloadAsync(requestId))
+        {
+            return false;
+        }
+        if (marked.Count > 0 && _view is { } view)
+        {
+            Selection.Restore(view.Count, view.IndexesOfNames(marked), Selection.Focus, Selection.Anchor);
+        }
+        return true;
+    }
+
+    /// <summary>The names of the selected entries, in listing order.</summary>
+    public IReadOnlyList<string> SelectedNames() =>
+        _view is { } view ? Selection.Selected.Select(view.Name).ToList() : [];
 
     /// <summary>Goes to the parent folder and selects the folder it came from.</summary>
     public Task GoUpAsync(string requestId) =>

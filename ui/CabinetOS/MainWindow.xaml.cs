@@ -1191,6 +1191,7 @@ public sealed partial class MainWindow : Window
         _router.RegisterUiHandler("conflict.resolve", ResolveConflictAsync);
         _router.RegisterUiHandler("sidebar.pin", PinAsync);
         _router.RegisterUiHandler("sidebar.unpin", UnpinAsync);
+        RegisterCommanderCommands();
         RegisterTerminalCommands();
         RegisterSearchCommands();
         RegisterPluginCommands();

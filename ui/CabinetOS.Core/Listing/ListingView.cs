@@ -222,6 +222,29 @@ public sealed class ListingView : IDisposable
         return anyCase;
     }
 
+    /// <summary>
+    /// The indexes of the entries named exactly as one of <paramref name="names"/>,
+    /// in listing order, in one pass: a refresh or Restore Selection marks the
+    /// rows that had those names. A name the listing does not have is skipped.
+    /// </summary>
+    public List<int> IndexesOfNames(IReadOnlyCollection<string> names)
+    {
+        var found = new List<int>();
+        if (names.Count == 0)
+        {
+            return found;
+        }
+        var wanted = new HashSet<string>(names, StringComparer.Ordinal).GetAlternateLookup<ReadOnlySpan<char>>();
+        for (var i = 0; i < Count && found.Count < wanted.Set.Count; i++)
+        {
+            if (wanted.Contains(NameSpan(i)))
+            {
+                found.Add(i);
+            }
+        }
+        return found;
+    }
+
     /// <summary>Unmaps the view and closes the section handle.</summary>
     public void Dispose()
     {

@@ -90,6 +90,25 @@ public class ListingViewTests
     }
 
     [Fact]
+    public void Names_are_found_again_in_one_pass_exactly_as_written()
+    {
+        var bytes = TestSections.Build(
+        [
+            new SyntheticEntry(1, "Report.txt", 1),
+            new SyntheticEntry(2, "report.txt", 1),
+            new SyntheticEntry(3, "Звіт 2026.txt", 1),
+            new SyntheticEntry(4, "notes", 2),
+        ]);
+        var handle = TestSections.CreateSection(bytes);
+        using var view = ListingView.Open(new SectionHandle(handle), (ulong)bytes.Length);
+
+        // Restore selection and refresh mark rows by the names they had: case tells them apart, a gone name is skipped.
+        Assert.Equal([1, 2, 3], view.IndexesOfNames(["notes", "report.txt", "Звіт 2026.txt", "gone.txt"]));
+        Assert.Empty(view.IndexesOfNames([]));
+        Assert.Empty(view.IndexesOfNames(["REPORT.TXT"]));
+    }
+
+    [Fact]
     public void An_empty_folder_is_a_valid_listing()
     {
         var bytes = TestSections.Build([]);

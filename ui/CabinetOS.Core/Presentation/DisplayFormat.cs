@@ -216,6 +216,24 @@ public static class DisplayFormat
         return shown.Length < path.Length ? shown : path;
     }
 
+    /// <summary>
+    /// The root of a path (<c>go.root</c>, Ctrl+\): its drive, <c>C:\</c>, or
+    /// its share, <c>\\server\share\</c>; empty for an empty path.
+    /// </summary>
+    public static string Root(string path)
+    {
+        var crumbs = Crumbs(path);
+        if (crumbs.Count == 0)
+        {
+            return "";
+        }
+        if (!crumbs[0].Path.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return crumbs[0].Path;
+        }
+        return crumbs.Count > 1 ? crumbs[1].Path + '\\' : crumbs[0].Path;
+    }
+
     /// <summary>The parent folder of a path, or null at a drive or share root.</summary>
     public static string? Parent(string path)
     {
