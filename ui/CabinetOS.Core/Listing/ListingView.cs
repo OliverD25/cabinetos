@@ -23,6 +23,8 @@ public sealed class ListingView : IDisposable
     private readonly uint _metaOffset;
     private readonly uint _namesOffset;
     private readonly uint _namesLength;
+    private readonly uint _flags;
+    private readonly uint _previewOffset;
     private nint _base;
 
     private ListingView(SafeHandle section, nint address, ulong size, in ListingHeader header)
@@ -36,6 +38,8 @@ public sealed class ListingView : IDisposable
         _metaOffset = header.MetaOffset;
         _namesOffset = header.NameArenaOffset;
         _namesLength = header.NameArenaLen;
+        _flags = header.Flags;
+        _previewOffset = header.PreviewOffset;
     }
 
     /// <summary>Entries in the listing.</summary>
@@ -46,6 +50,12 @@ public sealed class ListingView : IDisposable
 
     /// <summary>The bytes that hold the listing.</summary>
     public ulong SectionSize => _size;
+
+    /// <summary>
+    /// Whether this is a preview of proposed changes, not a folder: each entry
+    /// is a row with a change and a target (<see cref="Change"/>, <see cref="Target"/>).
+    /// </summary>
+    public bool IsPreview => (_flags & ListingLayout.FlagPreview) != 0;
 
     /// <summary>Whether <see cref="Dispose"/> has run.</summary>
     public bool IsDisposed => _base == 0;
@@ -113,6 +123,10 @@ public sealed class ListingView : IDisposable
         CheckPart("entries", header.EntriesOffset, count * ListingLayout.EntrySize, 8, sectionSize);
         CheckPart("metadata", header.MetaOffset, count * ListingLayout.MetaSize, 8, sectionSize);
         CheckPart("names", header.NameArenaOffset, header.NameArenaLen, 2, sectionSize);
+        if ((header.Flags & ListingLayout.FlagPreview) != 0)
+        {
+            CheckPart("preview rows", header.PreviewOffset, count * ListingLayout.PreviewRowSize, 4, sectionSize);
+        }
     }
 
     /// <summary>Entry <paramref name="index"/>'s ID: its file reference number, or a name hash.</summary>
@@ -148,6 +162,32 @@ public sealed class ListingView : IDisposable
 
     /// <summary>Entry <paramref name="index"/>'s name as a new string.</summary>
     public string Name(int index) => new(NameSpan(index));
+
+    /// <summary>What applying row <paramref name="index"/> of a preview does; <see cref="PreviewChange.Unknown"/> in a folder's listing.</summary>
+    public PreviewChange Change(int index) => ListingLayout.ChangeFromRaw(PreviewRowAt(index).Change);
+
+    /// <summary>
+    /// Row <paramref name="index"/>'s target: the new path of a rename, the
+    /// folder of a move or a copy. Empty when the row has none or is malformed.
+    /// </summary>
+    public ReadOnlySpan<char> TargetSpan(int index)
+    {
+        var row = PreviewRowAt(index);
+        var start = (ulong)row.ToOffset;
+        var end = start + ((ulong)row.ToLen * 2);
+        if (_base == 0 || row.ToLen == 0 || (start & 1) != 0 || end > _namesLength)
+        {
+            return [];
+        }
+        unsafe
+        {
+            // start and end lie inside the name arena (checked just above), as for a name.
+            return new ReadOnlySpan<char>((void*)(_base + (nint)_namesOffset + (nint)start), (int)row.ToLen);
+        }
+    }
+
+    /// <summary>Row <paramref name="index"/>'s target as a new string.</summary>
+    public string Target(int index) => new(TargetSpan(index));
 
     /// <summary>Entry <paramref name="index"/>'s size, times and attributes.</summary>
     public ListingMeta Meta(int index)
@@ -256,6 +296,19 @@ public sealed class ListingView : IDisposable
         _base = 0;
         Unmap(address);
         _section.Dispose();
+    }
+
+    private PreviewRow PreviewRowAt(int index)
+    {
+        if (_base == 0 || !IsPreview || (uint)index >= (uint)Count)
+        {
+            return default;
+        }
+        unsafe
+        {
+            // index < Count, and Validate proved Count preview rows fit in the view at a 4-byte-aligned offset.
+            return ((PreviewRow*)(_base + (nint)_previewOffset))[index];
+        }
     }
 
     private ListingEntry Entry(int index)

@@ -24,7 +24,7 @@ public static class CapabilityLevels
 }
 
 /// <summary>One capability as the list and the review dialog show it.</summary>
-public sealed record CapabilityRow(string Name, string Level, string Reason, string? Roots, bool Granted)
+public sealed record CapabilityRow(string Name, string Level, string Reason, string? Roots, bool Granted, string? Hosts = null)
 {
     /// <summary>"LOW", "MEDIUM", "HIGH".</summary>
     public string LevelText => Level.ToUpperInvariant();
@@ -35,10 +35,21 @@ public sealed record CapabilityRow(string Name, string Level, string Reason, str
     /// <summary>The reason, and for file access the folders it covers.</summary>
     public string Detail => Roots is { Length: > 0 } roots ? $"{Reason} ({roots})" : Reason;
 
+    /// <summary>
+    /// For <c>net</c>, the hosts it may reach, in a line under the reason
+    /// ("Can reach: api.anthropic.com, localhost:11434"); null for the rest.
+    /// The user reads it before allowing a plugin to talk to the network (Article 8).
+    /// </summary>
+    public string? HostsText => Hosts is { Length: > 0 } hosts ? $"Can reach: {hosts}" : null;
+
+    /// <summary>The reason with the hosts, for a tooltip.</summary>
+    public string DetailWithHosts => HostsText is { } text ? $"{Detail} {text}" : Detail;
+
     /// <summary>The row of a capability of the core's list.</summary>
     public static CapabilityRow From(CapabilityInfo capability) =>
         new(capability.Name, capability.Level, capability.Reason,
-            capability.Roots is { Count: > 0 } roots ? string.Join("; ", roots) : null, capability.Granted);
+            capability.Roots is { Count: > 0 } roots ? string.Join("; ", roots) : null, capability.Granted,
+            capability.Hosts is { Count: > 0 } hosts ? string.Join(", ", hosts) : null);
 }
 
 /// <summary>
@@ -144,7 +155,7 @@ public sealed class PermissionReview(PluginInfo plugin)
     public static PermissionReview ForInstall(MarketItem item)
     {
         var capabilities = (item.Capabilities ?? [])
-            .Select(c => new CapabilityInfo(c.Name, c.Level ?? "unknown", false, c.Reason, c.Roots))
+            .Select(c => new CapabilityInfo(c.Name, c.Level ?? "unknown", false, c.Reason, c.Roots, c.Hosts))
             .ToList();
         var plugin = new PluginInfo(item.Id, item.Name, item.Version, item.Author.Name, item.Description,
             new PluginState(PluginState.NeedsReview, capabilities.Select(c => c.Name).ToList()), capabilities, []);

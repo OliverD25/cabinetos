@@ -8,9 +8,10 @@ namespace CabinetOS.Core.Tools;
 /// A message from a tool's page to the window: <c>ready</c> (its listener is
 /// set: send <c>context</c> and <c>open</c>), <c>command</c> (run a command
 /// through the router), or <c>key</c> (a shortcut of the window, from the
-/// script the host puts into every tool page).
+/// script the host puts into every tool page), <c>subscribe</c> and
+/// <c>unsubscribe</c> (hear one plugin's events).
 /// </summary>
-public sealed record ToolMessage(string Type, string? CommandId, JsonElement? Args, string? Keys);
+public sealed record ToolMessage(string Type, string? CommandId, JsonElement? Args, string? Keys, string? Plugin = null);
 
 /// <summary>
 /// The web-message protocol between the window and a Tool Extension
@@ -73,6 +74,8 @@ public static class ToolMessages
                     return new ToolMessage(type, id, args, null);
                 case "key" when Text(root, "keys") is { Length: > 0 and < 64 } keys:
                     return new ToolMessage(type, null, null, keys);
+                case "subscribe" or "unsubscribe" when Text(root, "plugin") is { Length: > 0 and <= 128 } plugin:
+                    return new ToolMessage(type, null, null, null, plugin);
                 default:
                     return null;
             }
@@ -116,6 +119,46 @@ public static class ToolMessages
         w.WriteString("type", "open");
         w.WriteString("path", path);
         w.WriteString("url", url);
+    });
+
+    /// <summary>
+    /// An event of a plugin the page subscribed to. The plugin's payload is
+    /// text; when it is JSON the page gets it as JSON (an object, a list, a
+    /// number), and any other text as a string.
+    /// </summary>
+    public static string PluginEvent(string plugin, string name, string payload) => Write(w =>
+    {
+        w.WriteString("type", "plugin-event");
+        w.WriteString("plugin", plugin);
+        w.WriteString("name", name);
+        w.WritePropertyName("payload");
+        if (PluginEvents.Parse(payload) is { } json)
+        {
+            json.WriteTo(w);
+        }
+        else
+        {
+            w.WriteStringValue(payload);
+        }
+    });
+
+    /// <summary>The most paths one <c>paths-dropped</c> message carries; a longer drop is cut and says so.</summary>
+    public const int MaxDropped = 1000;
+
+    /// <summary>Rows of a pane were dropped on the page: their paths.</summary>
+    public static string PathsDropped(IReadOnlyList<string> paths) => Write(w =>
+    {
+        w.WriteString("type", "paths-dropped");
+        w.WriteStartArray("paths");
+        foreach (var path in paths.Take(MaxDropped))
+        {
+            w.WriteStringValue(path);
+        }
+        w.WriteEndArray();
+        if (paths.Count > MaxDropped)
+        {
+            w.WriteBoolean("truncated", true);
+        }
     });
 
     /// <summary>The window's shortcuts the host's key script passes on.</summary>

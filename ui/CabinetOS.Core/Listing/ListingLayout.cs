@@ -19,7 +19,36 @@ public struct ListingHeader
     public uint MetaOffset;
     public uint EntriesOffset;
     public uint Flags;
-    public uint Reserved;
+
+    /// <summary>In a preview: where its rows start (<see cref="PreviewRow"/>); 0 in a folder's listing.</summary>
+    public uint PreviewOffset;
+}
+
+/// <summary>One row of a preview: 12 bytes, 4-byte aligned, one per entry, in the entries' order.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct PreviewRow
+{
+    /// <summary>Bytes from the start of the name arena to the target.</summary>
+    public uint ToOffset;
+
+    /// <summary>The target's UTF-16 code units; 0 when the row has none.</summary>
+    public uint ToLen;
+
+    public byte Change;
+    public byte Reserved0;
+    public byte Reserved1;
+    public byte Reserved2;
+}
+
+/// <summary>What applying a preview's row does; unknown bytes read as <see cref="Unknown"/>.</summary>
+public enum PreviewChange : byte
+{
+    Unknown = 0,
+    Rename = 1,
+    Move = 2,
+    Copy = 3,
+    Delete = 4,
+    Create = 5,
 }
 
 /// <summary>One entry: 16 bytes, 8-byte aligned.</summary>
@@ -70,6 +99,10 @@ public static class ListingLayout
     public const int HeaderSize = 40;
     public const int EntrySize = 16;
     public const int MetaSize = 40;
+    public const int PreviewRowSize = 12;
+
+    /// <summary><see cref="ListingHeader.Flags"/> bit 0: the listing is a preview of proposed changes.</summary>
+    public const uint FlagPreview = 1;
 
     /// <summary><see cref="ListingEntry.Flags"/> bit: the ID is a hash of the upper-cased name.</summary>
     public const byte FlagIdIsNameHash = 1;
@@ -94,4 +127,7 @@ public static class ListingLayout
 
     /// <summary>Reads a raw kind byte; unknown values become <see cref="EntryKind.Unknown"/>.</summary>
     public static EntryKind KindFromRaw(byte raw) => raw is >= 1 and <= 3 ? (EntryKind)raw : EntryKind.Unknown;
+
+    /// <summary>Reads a raw change byte; unknown values become <see cref="PreviewChange.Unknown"/>.</summary>
+    public static PreviewChange ChangeFromRaw(byte raw) => raw is >= 1 and <= 5 ? (PreviewChange)raw : PreviewChange.Unknown;
 }

@@ -32,6 +32,9 @@ public enum CommandOutcomeKind
 
     /// <summary>It did not run: a dialog of the window was open and does not take it (<see cref="CommandRouter.SetModal"/>).</summary>
     Refused,
+
+    /// <summary>It did not run: the user closed the prompt the command asks for (<see cref="CommandRouter.AskInput"/>).</summary>
+    Cancelled,
 }
 
 /// <summary>The end of one run, for the status bar and the logs.</summary>
@@ -108,6 +111,14 @@ public sealed class CommandRouter(ICoreChannel core)
     /// the arguments out.
     /// </summary>
     public Func<CommandInfo, JsonElement?>? PluginArgs { get; set; }
+
+    /// <summary>
+    /// Asks the user for the text of a plugin command that has an <c>input</c>
+    /// (<see cref="PluginInput"/>): the window's prompt box. Null when the user
+    /// cancelled, and the command then does not run. A router without it runs
+    /// such a command with no <c>input</c>.
+    /// </summary>
+    public Func<CommandInfo, Task<string?>>? AskInput { get; set; }
 
     /// <summary>The dialog of the window that is open, as <see cref="SetModal"/> named it, or null.</summary>
     public string? Modal { get; private set; }
@@ -193,6 +204,19 @@ public sealed class CommandRouter(ICoreChannel core)
         }
         var invocation = new CommandInvocation(commandId, args, requestId, trigger);
         Executing?.Invoke(invocation);
+        if (info is not null && AskInput is { } ask && PluginInput.Asks(info, args))
+        {
+            // After Executing: the palette that ran the command has made room for the prompt.
+            var text = await ask(info);
+            if (text is null)
+            {
+                Diag.Request(LogLevel.Info, requestId, Target, "command cancelled: its prompt was closed", new LogField("command", commandId));
+                var cancelled = new CommandOutcome(commandId, requestId, trigger, CommandOutcomeKind.Cancelled);
+                Completed?.Invoke(cancelled);
+                return cancelled;
+            }
+            invocation = invocation with { Args = PluginInput.With(args, text) };
+        }
         CommandOutcome outcome;
         // A window command the registry does not list (yet: before list_commands answers, or
         // from an older core) still runs its handler here instead of failing in the core.

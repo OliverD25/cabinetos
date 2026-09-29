@@ -22,8 +22,12 @@ public class ListingViewTests
 
         Assert.Equal(
             [0, 4, 8, 12, 16, 20, 24, 28, 32, 36],
-            new[] { "Magic", "Version", "EntryCount", "NameArenaOffset", "NameArenaLen", "Generation", "MetaOffset", "EntriesOffset", "Flags", "Reserved" }
+            new[] { "Magic", "Version", "EntryCount", "NameArenaOffset", "NameArenaLen", "Generation", "MetaOffset", "EntriesOffset", "Flags", "PreviewOffset" }
                 .Select(f => (int)Marshal.OffsetOf<ListingHeader>(f)));
+        Assert.Equal(12, Unsafe.SizeOf<PreviewRow>());
+        Assert.Equal(
+            [0, 4, 8],
+            new[] { "ToOffset", "ToLen", "Change" }.Select(f => (int)Marshal.OffsetOf<PreviewRow>(f)));
         Assert.Equal(
             [0, 8, 12, 14, 15],
             new[] { "Id", "NameOffset", "NameLen", "Kind", "Flags" }.Select(f => (int)Marshal.OffsetOf<ListingEntry>(f)));
@@ -39,6 +43,70 @@ public class ListingViewTests
         Assert.Equal(
             [EntryKind.Unknown, EntryKind.File, EntryKind.Directory, EntryKind.Link, EntryKind.Unknown],
             new byte[] { 0, 1, 2, 3, 200 }.Select(ListingLayout.KindFromRaw));
+    }
+
+    [Fact]
+    public void A_preview_section_gives_each_row_its_change_and_target()
+    {
+        var bytes = TestSections.BuildPreview(
+        [
+            new SyntheticPreviewRow(@"C:\photos\IMG_1.jpg", 1, "2026-09-30 beach.jpg", EntryKind.File),
+            new SyntheticPreviewRow(@"C:\photos\IMG_2.jpg", 2, @"C:\photos\Beach", EntryKind.File),
+            new SyntheticPreviewRow(@"C:\photos\old.tmp", 4, null, EntryKind.File),
+            new SyntheticPreviewRow(@"C:\photos\Beach\", 5, null, EntryKind.Directory),
+            new SyntheticPreviewRow(@"C:\photos\Звіт 😀.txt", 3, @"D:\backup", EntryKind.File),
+            new SyntheticPreviewRow(@"C:\photos\odd", 77, null, EntryKind.Unknown),
+        ]);
+        var handle = TestSections.CreateSection(bytes);
+        using var view = ListingView.Open(new SectionHandle(handle), (ulong)bytes.Length);
+
+        Assert.True(view.IsPreview);
+        Assert.Equal(6, view.Count);
+        Assert.Equal(@"C:\photos\IMG_1.jpg", view.Name(0));
+        Assert.Equal(
+            [PreviewChange.Rename, PreviewChange.Move, PreviewChange.Delete, PreviewChange.Create, PreviewChange.Copy, PreviewChange.Unknown],
+            Enumerable.Range(0, 6).Select(view.Change));
+        Assert.Equal(["2026-09-30 beach.jpg", @"C:\photos\Beach", "", "", @"D:\backup", ""], Enumerable.Range(0, 6).Select(view.Target));
+        // The names stay whole and in order: the targets sit after them in the arena.
+        Assert.Equal(@"C:\photos\Звіт 😀.txt", view.Name(4));
+        Assert.Equal(EntryKind.Directory, view.Kind(3));
+    }
+
+    [Fact]
+    public void A_folders_listing_is_not_a_preview_and_has_no_changes()
+    {
+        var bytes = TestSections.Build([new SyntheticEntry(1, "a.txt", 1)]);
+        var handle = TestSections.CreateSection(bytes);
+        using var view = ListingView.Open(new SectionHandle(handle), (ulong)bytes.Length);
+
+        Assert.False(view.IsPreview);
+        Assert.Equal(PreviewChange.Unknown, view.Change(0));
+        Assert.Equal("", view.Target(0));
+    }
+
+    [Fact]
+    public void A_preview_whose_rows_lie_outside_the_section_is_refused()
+    {
+        var bytes = TestSections.BuildPreview([new SyntheticPreviewRow(@"C:\a.txt", 4, null, EntryKind.File)]);
+        // The header says the rows start past the end.
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(36), (uint)bytes.Length);
+        var handle = TestSections.CreateSection(bytes);
+
+        Assert.Throws<InvalidDataException>(() => ListingView.Open(new SectionHandle(handle), (ulong)bytes.Length));
+        Assert.False(TestSections.IsOpen(handle));
+    }
+
+    [Fact]
+    public void A_targets_offset_outside_the_arena_reads_as_no_target()
+    {
+        var bytes = TestSections.BuildPreview([new SyntheticPreviewRow(@"C:\a.txt", 1, "b.txt", EntryKind.File)]);
+        var rowsAt = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(36));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan((int)rowsAt), 100_000);
+        var handle = TestSections.CreateSection(bytes);
+        using var view = ListingView.Open(new SectionHandle(handle), (ulong)bytes.Length);
+
+        Assert.Equal(PreviewChange.Rename, view.Change(0));
+        Assert.Equal("", view.Target(0));
     }
 
     [Fact]

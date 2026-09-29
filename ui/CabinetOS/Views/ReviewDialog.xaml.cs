@@ -143,6 +143,18 @@ public sealed partial class ReviewDialog : UserControl
             Foreground = ThemeResources.Brush("CbStatusTextBrush"),
             TextWrapping = TextWrapping.Wrap,
         });
+        if (row.HostsText is { } hosts)
+        {
+            // Under the reason, in the normal text colour: the user reads where the plugin may connect before allowing it.
+            text.Children.Add(new TextBlock
+            {
+                Text = hosts,
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 2, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
         var line = new Grid { ColumnSpacing = 12 };
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
