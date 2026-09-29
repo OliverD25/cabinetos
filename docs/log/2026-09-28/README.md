@@ -43,6 +43,9 @@ with the reason and the way to undo it.
 | core, last items | [core-last-items-report.md](core-last-items-report.md) | The theme-collection test, and a console window for console programs opened from a pane. 607 tests. |
 | themes | [theme-collection-report.md](theme-collection-report.md) | 36 themes ported under their MIT licenses into the marketplace collection, with notices, contrast checks and snapshots; City Lights and Dainty left out. |
 | research | [research-total-commander-report.md](research-total-commander-report.md) | The Total Commander gap analysis and the proposed Phase 11 (`docs/research/total-commander.md`), with ten questions for the creator. |
+| 11a, UI | [phase-11a-ui-report.md](phase-11a-ui-report.md) | The 31 window commands of the Total Commander note, quick search, the keypad keys and Commander marking, on protocol 12; seven snapshots. 614 UI tests. |
+| core, `edit_path` | [core-edit-path-report.md](core-edit-path-report.md) | The path is checked before the editor is looked for: a folder is `invalid_path` and a missing file `not_found`, whatever `files.editor` names. 610 tests. |
+| Compact, UI | [compact-ui-report.md](compact-ui-report.md) | The window takes a theme's 76 sizes and three chrome elements live, with the function-key bar; the acceptance measured with the snapshot aid; seven snapshots. Written by the planning session from the agent's commits, notes and documentation, since its session ended before its report. 631 UI tests. |
 
 Phase 5 (the WinUI 3 shell) waited for the .NET SDK, which was installed in
 the morning. The core phases were run in the order 0, 1, 2, 3, 4, 7, 6, 8.
@@ -58,7 +61,13 @@ research and its first sub-phase, the Commander Compact theme); a third
 coder agent and a research agent worked in worktrees of their own for the
 theme collection and the research note, and their reports here are the
 copies the planning session received, since those agents left no
-transcript file.
+transcript file. The shell agent's session ended on the account's model
+limit on the morning of 2026-09-29, right after its last push and before its
+own test run and report; the planning session ran that verification and
+wrote the Commander Compact report from the agent's commits, notes and
+documentation. The two small items left on that agent's queue (text on
+accent fills following the accent's lightness; a movable WebView2 data
+folder) were done by the planning session itself, as the plan records.
 
 How to read a report: "Decided" lists choices made without the creator, each
 as *what — because why — undo: how*. "Needs the user" lists what only the
