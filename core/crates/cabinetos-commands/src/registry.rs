@@ -72,10 +72,10 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// the shell's own navigation, file, edit and search commands, the window's
 /// own commands (the sidebar's pins, the editor tabs, the transfer panel,
 /// the plugin list, the terminal tabs), Total Commander's small commands
-/// (sub-phase 11a), then the palette, overlays, a new window and About. Every one of them runs in the UI: the shell starts the file jobs
+/// (sub-phase 11a), the tab commands (Phase 12), then the palette, overlays, a new window and About. Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 83] = [
+const SEED: [Seed; 90] = [
     seed(
         "palette.show",
         "View",
@@ -550,6 +550,37 @@ const SEED: [Seed; 83] = [
         UI,
         FILES,
     ),
+    // Phase 12: tabs per pane. The window owns the tab state; these are its
+    // commands, in the pane's context like the other pane commands.
+    seed("tab.new", "Tab", "New Tab", &["ctrl+t"], UI, FILES),
+    seed("tab.close", "Tab", "Close Tab", &["ctrl+w"], UI, FILES),
+    seed("tab.next", "Tab", "Next Tab", &["ctrl+tab"], UI, FILES),
+    seed(
+        "tab.previous",
+        "Tab",
+        "Previous Tab",
+        &["ctrl+shift+tab"],
+        UI,
+        FILES,
+    ),
+    seed("tab.toggleLock", "Tab", "Toggle Tab Lock", &[], UI, FILES),
+    seed(
+        "tab.openFolderInNewTab",
+        "Tab",
+        "Open Folder in New Tab",
+        &["ctrl+up"],
+        UI,
+        FILES,
+    ),
+    // One command, two keys: the key says which pane the tab goes to.
+    seed(
+        "tab.moveToOtherPane",
+        "Tab",
+        "Move Tab to Other Pane",
+        &["ctrl+k ctrl+right", "ctrl+k ctrl+left"],
+        UI,
+        FILES,
+    ),
     // Explorer's key for another window of the same folder.
     seed("window.new", "Window", "New Window", &["ctrl+n"], UI, None),
     seed("help.about", "Help", "About CabinetOS", &[], UI, None),
@@ -711,7 +742,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 83);
+        assert_eq!(registry.commands().len(), 90);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1074,6 +1105,58 @@ mod tests {
             .map(|command| command.id.as_str())
             .collect();
         assert!(core.is_empty(), "{core:?}");
+    }
+
+    /// Phase 12: the tab commands, with the keys the creator chose. Every
+    /// one runs in the window and applies in a file pane.
+    #[test]
+    fn the_tab_commands_are_seeded_with_their_keys() {
+        let registry = CommandRegistry::core();
+        for (id, title, keys) in [
+            ("tab.new", "New Tab", &["ctrl+t"][..]),
+            ("tab.close", "Close Tab", &["ctrl+w"][..]),
+            ("tab.next", "Next Tab", &["ctrl+tab"][..]),
+            ("tab.previous", "Previous Tab", &["ctrl+shift+tab"][..]),
+            ("tab.toggleLock", "Toggle Tab Lock", &[][..]),
+            (
+                "tab.openFolderInNewTab",
+                "Open Folder in New Tab",
+                &["ctrl+up"][..],
+            ),
+            (
+                "tab.moveToOtherPane",
+                "Move Tab to Other Pane",
+                &["ctrl+k ctrl+right", "ctrl+k ctrl+left"][..],
+            ),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                ("Tab", title),
+                "{id}"
+            );
+            assert_eq!(texts(&command.default_keys), keys, "{id}");
+            assert_eq!(command.when.as_deref(), Some("filesView"), "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert!(!command.immutable, "{id}");
+        }
+        // The keymap accepts them beside every other key: no key is used
+        // twice in the pane, and none is the first half of a chord and a
+        // key of its own.
+        let compiled = crate::keymap::compile(&registry, &[]).unwrap();
+        let keys_of = |id: &str| -> Vec<String> {
+            compiled
+                .keymap
+                .keys_of(id)
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        };
+        assert_eq!(
+            keys_of("tab.moveToOtherPane"),
+            ["ctrl+k ctrl+right", "ctrl+k ctrl+left"]
+        );
+        assert_eq!(keys_of("go.showInRightPane"), ["ctrl+right"]);
     }
 
     #[test]

@@ -112,6 +112,13 @@ The core's commands, in palette order:
 | `file.calculateAllFolderSizes` | File: Calculate All Folder Sizes | `shift+alt+enter` | `filesView` | UI |
 | `terminal.insertPath` | Terminal: Insert Folder Path | `ctrl+p` | `filesView` | UI |
 | `terminal.insertSelectedPaths` | Terminal: Insert Selected Paths | `ctrl+shift+enter` | `filesView` | UI |
+| `tab.new` | Tab: New Tab | `ctrl+t` | `filesView` | UI |
+| `tab.close` | Tab: Close Tab | `ctrl+w` | `filesView` | UI |
+| `tab.next` | Tab: Next Tab | `ctrl+tab` | `filesView` | UI |
+| `tab.previous` | Tab: Previous Tab | `ctrl+shift+tab` | `filesView` | UI |
+| `tab.toggleLock` | Tab: Toggle Tab Lock | | `filesView` | UI |
+| `tab.openFolderInNewTab` | Tab: Open Folder in New Tab | `ctrl+up` | `filesView` | UI |
+| `tab.moveToOtherPane` | Tab: Move Tab to Other Pane | `ctrl+k ctrl+right`, `ctrl+k ctrl+left` | `filesView` | UI |
 | `window.new` | Window: New Window | `ctrl+n` | | UI |
 | `help.about` | Help: About CabinetOS | | | UI |
 
@@ -135,6 +142,18 @@ The core's commands, in palette order:
   their keys is used by another command in any context, and none starts a
   chord; `ctrl+k ctrl+n` and `ctrl+k ctrl+p` are chords under `ctrl+k`,
   like `ctrl+k ctrl+s`.
+- The rows from `tab.new` to `tab.moveToOtherPane` are Phase 12's: tabs per
+  pane ([ui.md](ui.md), "Tabs"). The window owns the tab state, so every one
+  runs in the window. `ctrl+up` moves the cursor without selecting in a
+  file list, as every Windows list does; as `tab.openFolderInNewTab` it now
+  opens the folder under the cursor in a new tab, as Total Commander's does,
+  and the plain cursor key goes (Home, End and the other arrows stay).
+  `tab.moveToOtherPane` has two keys and one command: the key says which
+  pane the tab goes to (`ctrl+k ctrl+right`: the right pane,
+  `ctrl+k ctrl+left`: the left one); from the palette it goes to the other
+  pane. A tab that has a tool (Markdown Preview) in it is a tab like the
+  others. Tab and Alt+Left / Alt+Right keep their old jobs: the pane switch,
+  Back and Forward.
 - The second keys of `file.rename` (`shift+f6`), `file.delete` (`f8`),
   `file.deletePermanently` (`shift+f8`), `edit.selectAll`
   (`ctrl+numpadadd`) and `search.focus` (`alt+f7`) are Total Commander's
