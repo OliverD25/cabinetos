@@ -253,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn volumes_coming_and_going_call_back_and_nothing_else_does() {
+    fn volumes_coming_and_going_call_back() {
         let (changed_tx, changed_rx) = mpsc::channel();
         let watcher = DriveWatcher::start(move || {
             let _ = changed_tx.send(());
@@ -265,16 +265,32 @@ mod tests {
         changed_rx.recv_timeout(wait).unwrap();
         announce(&watcher, DBT_DEVICEREMOVECOMPLETE, &volume('Z'));
         changed_rx.recv_timeout(wait).unwrap();
+    }
 
-        // A serial port is not a drive, and a query is not a change.
+    /// A serial port is not a drive, and a query is not a change. The
+    /// filter is asked directly: the watcher's window also hears Windows'
+    /// real announcements of any letter that comes or goes meanwhile, such
+    /// as the `subst` letter of `volume`'s test, about half a second after
+    /// it.
+    #[test]
+    fn only_a_volume_that_arrived_or_left_is_a_change() {
         let port = DEV_BROADCAST_HDR {
             dbch_size: u32::try_from(size_of::<DEV_BROADCAST_HDR>()).unwrap(),
             dbch_devicetype: DBT_DEVTYP_PORT,
             dbch_reserved: 0,
         };
-        announce(&watcher, DBT_DEVICEARRIVAL, &port);
-        announce(&watcher, 0x8001, &volume('Z'));
-        assert!(changed_rx.recv_timeout(Duration::from_millis(200)).is_err());
+        let z = volume('Z');
+        let data = |data: *const ()| LPARAM(data.expose_provenance().cast_signed());
+        let event = |event: u32| WPARAM(event as usize);
+        let volume = data(std::ptr::from_ref(&z).cast());
+        assert!(is_volume_change(event(DBT_DEVICEARRIVAL), volume));
+        assert!(is_volume_change(event(DBT_DEVICEREMOVECOMPLETE), volume));
+        assert!(!is_volume_change(
+            event(DBT_DEVICEARRIVAL),
+            data(std::ptr::from_ref(&port).cast())
+        ));
+        assert!(!is_volume_change(event(0x8001), volume));
+        assert!(!is_volume_change(event(DBT_DEVICEARRIVAL), LPARAM(0)));
     }
 
     #[test]
