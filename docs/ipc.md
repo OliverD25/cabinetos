@@ -1480,7 +1480,11 @@ there (every process's, normal and heavy), the crash traces of the last 24
 hours and a `bundle.json` ([diagnostics.md](diagnostics.md), "Bundles").
 `minutes` outside 1 to 1,440 gets `protocol_error`; a zip that cannot be
 written gets `internal`. `cabinetos-cli log bundle [--minutes 10]` sends it
-and prints the path.
+and prints the path. The window sends it, with 10 minutes, from "Diagnostics:
+Save Log Bundle" (`diagnostics.saveBundle`), tells the name in its notice line,
+and asks the core to open the folder with `open_path`; a core without the
+request answers `unknown_request`, and the window says the command needs a
+newer core.
 
 ## What the window shows
 

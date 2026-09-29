@@ -23,6 +23,8 @@ public static class Diag
     private static LogWriter? _writer;
     private static int _crashed;
     private static bool _heavyFromEnvironment;
+    private static System.Text.Json.Nodes.JsonNode? _bundleConfig;
+    private static uint _bundleProtocol;
 
     /// <summary>Whether heavy mode is on: every event is written, and the heavy-only lines too.</summary>
     public static bool HeavyEnabled => Writer?.HeavyEnabled ?? false;
@@ -229,8 +231,9 @@ public static class Diag
         Log(level, target, message, requestId, "request", fields, traceId);
 
     /// <summary>
-    /// Writes the crash trace and flushes the log. Called from the unhandled
-    /// exception hooks; returns the trace's path, if it was written.
+    /// Writes the crash trace and flushes the log; while heavy mode is on it then writes the crash bundle
+    /// as well (<see cref="LogWriter.WriteCrashBundle"/>). Called from the unhandled exception hooks;
+    /// returns the trace's path, if it was written. The bundle comes second: if it fails, the trace is there.
     /// </summary>
     public static string? Crash(Exception? exception, string message)
     {
@@ -246,7 +249,61 @@ public static class Diag
             writer.Flush(TimeSpan.FromSeconds(2));
             return null;
         }
-        return writer.WriteCrashReport(exception, message);
+        var trace = writer.WriteCrashReport(exception, message);
+        if (writer.HeavyEnabled)
+        {
+            writer.WriteCrashBundle(trace, BundleFactsNow(writer));
+        }
+        return trace;
+    }
+
+    /// <summary>
+    /// Tells a crash bundle the configuration the core last sent (<c>config</c> reply): its secrets are
+    /// masked here, so a bundle never holds them.
+    /// </summary>
+    public static void SetBundleConfig(System.Text.Json.JsonElement config)
+    {
+        try
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(config.GetRawText());
+            LogMask.MaskSecrets(node);
+            Volatile.Write(ref _bundleConfig, node);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // A configuration that does not parse is left out of the bundle.
+        }
+    }
+
+    /// <summary>Lets <see cref="Crash"/> write a trace again: the tests crash the process's log more than once.</summary>
+    internal static void ForgetCrashForTests() => Volatile.Write(ref _crashed, 0);
+
+    /// <summary>Tells a crash bundle which protocol version the core spoke.</summary>
+    public static void SetBundleProtocol(uint protocol) => Volatile.Write(ref _bundleProtocol, protocol);
+
+    private static BundleFacts BundleFactsNow(LogWriter writer)
+    {
+        var protocol = Volatile.Read(ref _bundleProtocol);
+        return new BundleFacts(writer.Process, writer.Version, protocol == 0 ? null : protocol, WindowsBuild(), Volatile.Read(ref _bundleConfig));
+    }
+
+    // 10.0.26200.6899 (25H2), as the core writes it; the version the runtime reports when the registry says nothing.
+    private static string WindowsBuild()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            if (key?.GetValue("CurrentBuildNumber") is string build)
+            {
+                var revision = key.GetValue("UBR");
+                var name = key.GetValue("DisplayVersion") as string;
+                return $"10.0.{build}" + (revision is null ? "" : $".{revision}") + (string.IsNullOrEmpty(name) ? "" : $" ({name})");
+            }
+        }
+        catch (Exception error) when (error is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+        }
+        return Environment.OSVersion.Version.ToString();
     }
 
     private sealed class TraceScope(string? previous) : IDisposable

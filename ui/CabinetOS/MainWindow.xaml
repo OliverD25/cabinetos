@@ -366,6 +366,24 @@
                             FontSize="11"
                             Foreground="{ThemeResource CbAccentBrush}"
                             Visibility="Collapsed" />
+                        <!-- The last run crashed while heavy logging was on: the zip with the logs around the crash is in the log folder (docs/ui.md, "Heavy logging"). -->
+                        <Button
+                            x:Name="CrashFolderLink"
+                            Height="20"
+                            MinWidth="0"
+                            Padding="8,0"
+                            AllowFocusOnInteraction="False"
+                            AutomationProperties.Name="Open crash folder"
+                            Background="{ThemeResource CbPillFillBrush}"
+                            CornerRadius="10"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            Visibility="Collapsed">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Foreground="{ThemeResource CbErrorTextBrush}"
+                                Text="Open crash folder" />
+                        </Button>
                         <!-- Heavy logging is on (docs/ui.md, "Heavy logging"): the pill says so, and a click turns it off. -->
                         <Button
                             x:Name="HeavyPill"

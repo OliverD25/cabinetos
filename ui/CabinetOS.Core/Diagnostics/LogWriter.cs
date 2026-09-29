@@ -278,6 +278,46 @@ public sealed class LogWriter : IDisposable
         return path;
     }
 
+    /// <summary>
+    /// Writes <c>crash-&lt;timestamp&gt;.zip</c>, the log bundle of a crash (docs/diagnostics.md, "Bundles"): the
+    /// last 10 minutes of every log in the folder, the recent crash traces and <c>bundle.json</c>. It is named
+    /// like the crash trace <paramref name="crashTracePath"/> it belongs to. It reads the files on disk, after
+    /// <see cref="WriteCrashReport"/> flushed the log, and needs no lock of the threads that log. Returns the
+    /// zip's path, or null when it could not be written: the crash trace is on disk either way.
+    /// </summary>
+    public string? WriteCrashBundle(string? crashTracePath, BundleFacts facts)
+    {
+        string? path = null;
+        var madeHere = false;
+        try
+        {
+            var now = _clock();
+            var name = crashTracePath is not null && Path.GetFileNameWithoutExtension(crashTracePath) is { Length: > 0 } stem
+                ? stem + ".zip"
+                : LogBundle.NameFor("crash", now);
+            path = Path.Combine(Directory, name);
+            madeHere = !File.Exists(path);
+            LogBundle.Write(Directory, path, now, LogBundle.DefaultMinutes, "crash", facts);
+            return path;
+        }
+        catch (Exception)
+        {
+            // The process is going down; a failed bundle must not hide the crash, and half a zip must not
+            // stay to be offered at the next start.
+            try
+            {
+                if (path is not null && madeHere)
+                {
+                    File.Delete(path);
+                }
+            }
+            catch (Exception)
+            {
+            }
+            return null;
+        }
+    }
+
     /// <summary>The crash trace's JSON text (docs/diagnostics.md, "Crash traces").</summary>
     public string CrashReportJson(Exception? exception, string message, string thread, IReadOnlyList<string> recent)
     {

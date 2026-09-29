@@ -55,6 +55,7 @@ public sealed class CoreSession : ICoreChannel
         {
             var welcome = await connection.Client.HelloAsync();
             ProtocolVersion = welcome.ProtocolVersion;
+            Diag.SetBundleProtocol(welcome.ProtocolVersion);
             Diag.Info(Target, "core ready", new LogField("protocol_version", welcome.ProtocolVersion),
                 new LogField("core_version", welcome.CoreVersion), new LogField("pid", connection.Process.Id));
         }

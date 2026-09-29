@@ -35,6 +35,10 @@ public sealed partial class MainWindow
         _heavyPillTimer = DispatcherQueue.CreateTimer();
         _heavyPillTimer.Interval = TimeSpan.FromSeconds(1);
         _heavyPillTimer.Tick += (_, _) => UpdateHeavyPill();
+        // A button of the status bar goes through the router like every other (brief section 5).
+        _router.RegisterLocal("diagnostics.openCrashFolder", OpenCrashFolderAsync);
+        CrashFolderLink.Click += (_, _) => _ = _router.ExecuteAsync("diagnostics.openCrashFolder", trigger: "button");
+        _ = OfferCrashBundleAsync();
     }
 
     // ----- The switch -----
@@ -104,6 +108,32 @@ public sealed partial class MainWindow
     }
 
     // ----- The log folder and the bundle -----
+
+    private string? _crashBundle;
+
+    // The last run crashed while heavy mode was on if a crash-*.zip is newer than the last start
+    // (CrashNotice). The folder is read off the UI thread (brief section 1); the offer stays in the
+    // status bar until it is used, since a notice would be gone in five seconds.
+    private async Task OfferCrashBundleAsync()
+    {
+        var directory = Diag.Writer?.Directory ?? Diag.DefaultDirectory();
+        var bundle = await Task.Run(() => CrashNotice.CheckAtStart(directory, DateTime.UtcNow));
+        if (bundle is null)
+        {
+            return;
+        }
+        _crashBundle = bundle;
+        CrashFolderLink.Visibility = Visibility.Visible;
+        ToolTipService.SetToolTip(CrashFolderLink, $"The last run crashed while heavy logging was on. The logs around the crash are in {Path.GetFileName(bundle)}.");
+        Diag.Info(Target, "a crash bundle from the last run is offered", new LogField("path", bundle));
+        ShowNotice("The last run crashed while heavy logging was on: the logs around the crash are in a zip in the log folder.");
+    }
+
+    private async Task OpenCrashFolderAsync(CommandInvocation invocation)
+    {
+        CrashFolderLink.Visibility = Visibility.Collapsed;
+        await OpenFolderAsync(Path.GetDirectoryName(_crashBundle) ?? Diag.Writer?.Directory ?? Diag.DefaultDirectory());
+    }
 
     // The core opens it (open_path): the window makes no shell call of its own (brief section 1).
     private async Task OpenFolderAsync(string folder)

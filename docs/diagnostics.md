@@ -14,7 +14,8 @@ The Rust processes (core, indexer, CLI) get all of this from the
 | Directory | `%LOCALAPPDATA%\CabinetOS\logs\` |
 | Log files | One per process and UTC day: `core.2026-09-28.jsonl`, `indexer.<date>.jsonl`, `ui.<date>.jsonl` (Phase 5). The CLI writes `cli.<date>.jsonl` only when it is given `--log-dir`. The indexer running as a service writes to `%ProgramData%\CabinetOS\logs` instead ([indexer.md](indexer.md)). |
 | Crash traces | `crash-<YYYYMMDDTHHMMSSmmmZ>.json` in the same directory, for example `crash-20260928T010203004Z.json` |
-| Bundles | `bundle-<YYYYMMDDTHHMMSSmmmZ>.zip`, made on request, and `crash-<YYYYMMDDTHHMMSSmmmZ>.zip`, made by the panic hook while heavy mode is on ("Bundles", below). Never deleted by CabinetOS. |
+| Bundles | `bundle-<YYYYMMDDTHHMMSSmmmZ>.zip`, made on request, and `crash-<YYYYMMDDTHHMMSSmmmZ>.zip`, made by the panic hook (the window's crash hook too) while heavy mode is on ("Bundles", below). Never deleted by CabinetOS. |
+| Last start | `ui.last-start`: the UTC time of the window's last start, one line, so the next start can tell whether a crash bundle is new ("Bundles", below). |
 | Heavy log files | Only while heavy mode is on ("Heavy mode", below): `heavy-<process>.<date>.jsonl`, for example `heavy-core.2026-09-29.jsonl`, and `heavy-core.2026-09-29.1.jsonl` for the next part of the same day. At most 2 GiB for all of them together. |
 
 - **Other directory.** `--log-dir <path>` on `cabinetos-core` and
@@ -296,6 +297,25 @@ waits for no lock: if another thread holds the configuration the bundle
 leaves it out. If the zip fails, the crash trace is there anyway; stderr
 says which was written. `CABINETOS_LOG_HEAVY=1 cabinetos-core
 --self-test-panic --log-dir <folder>` shows one.
+
+**Made by a crash of the window in heavy mode.** The window does the same
+in C# (`LogBundle` and `LogWriter.WriteCrashBundle` in
+`ui/CabinetOS.Core/Diagnostics`, with `System.IO.Compression`). After
+`Diag.Crash` has written the crash trace and flushed the log, and while heavy
+mode is on, the crashing thread writes `crash-<stamp of the trace>.zip` from
+the files on disk, so the trace and the zip belong together by name. Its
+`bundle.json` says `process: "ui"`, and has the versions (the window's, and
+the protocol version the core spoke at `welcome`), the Windows build, the
+`CABINETOS_*` variables and the configuration the core last sent, secrets
+masked as in heavy mode. If anything fails, the trace is there anyway, and
+half a zip is deleted so that it is not offered later.
+
+**The offer at the next start.** At every start the window reads the time of
+its last start from `ui.last-start`, a small file in the log folder, and
+writes the new time. If a `crash-*.zip` there is newer than the last start
+(the core's zips count too), the status bar shows "Open crash folder" until it
+is used, and the notice line says why; the core opens the folder with
+`open_path`. When no last start is recorded, a zip of the last 24 hours counts.
 
 **What is in it.**
 

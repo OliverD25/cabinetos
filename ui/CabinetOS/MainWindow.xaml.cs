@@ -772,6 +772,7 @@ public sealed partial class MainWindow : Window
         if (reply is ConfigReply config)
         {
             _shell = ShellState.FromConfig(config.Config);
+            Diag.SetBundleConfig(config.Config);
             if (firstStart)
             {
                 _savedTabs = TabsConfig.FromConfig(config.Config);

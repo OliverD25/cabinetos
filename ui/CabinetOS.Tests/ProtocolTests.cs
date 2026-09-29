@@ -87,6 +87,7 @@ public class ProtocolTests
             new OpenPreviewRequest("preview-3"),
             new PreviewApplyRequest("preview-3"),
             new PreviewCancelRequest("preview-3"),
+            new SaveLogBundleRequest(10),
         ];
     }
 
@@ -106,8 +107,6 @@ public class ProtocolTests
         (new CreateDirectoryRequest(@"C:\data\New folder"), $$$"""{"id":"{{{Id}}}","type":"create_directory","path":"C:\\data\\New folder"}"""),
         (new RenameRequest(@"C:\data\a.txt", "b.txt"), $$$"""{"id":"{{{Id}}}","type":"rename","path":"C:\\data\\a.txt","new_name":"b.txt"}"""),
         // Protocol 12, as docs/research/total-commander.md, Part 3 (b), gives them, until the core's schema has them.
-        // Phase 15's log bundle, as the core's agent shaped it.
-        (new SaveLogBundleRequest(10), $$$"""{"id":"{{{Id}}}","type":"save_log_bundle","minutes":10}"""),
     ];
 
     /// <summary>
@@ -130,8 +129,6 @@ public class ProtocolTests
                 Assert.False(finished.Cancelled);
                 Assert.Equal(new MeasureResult(@"C:\data\photos", 130, 4, 9500000, 1), finished.Results.Single());
             }),
-        ($$$"""{"id":"{{{Id}}}","type":"log_bundle","path":"C:\\logs\\bundle-20260930T010203004Z.zip"}""", false,
-            b => Assert.Equal(new LogBundleReply(@"C:\logs\bundle-20260930T010203004Z.zip"), b)),
     ];
 
     [Fact]
@@ -171,7 +168,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(51, checkedTypes.Count);
+        Assert.Equal(52, checkedTypes.Count);
     }
 
     [Fact]
@@ -375,6 +372,8 @@ public class ProtocolTests
                     Assert.Equal((20.0, 1.3), (theme.Metrics!["rowHeight"], theme.Metrics["lineHeight"]));
                     Assert.Equal(new ThemeChrome(FkeyBar: true, Hairlines: false), theme.Chrome);
                 }),
+            ($$$"""{"id":"{{{Id}}}","type":"log_bundle","path":"C:\\logs\\bundle-20260930T010203004Z.zip"}""",
+                b => Assert.Equal(new LogBundleReply(@"C:\logs\bundle-20260930T010203004Z.zip"), b)),
             ($$$"""{"id":"{{{Id}}}","type":"marketplace_index","source":"C:\\market\\index.json","fetched_at_ms":1790000000000,"items":[{{{HelloItem}}},{{{NordItem}}}]}""",
                 b =>
                 {

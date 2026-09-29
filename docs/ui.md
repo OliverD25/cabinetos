@@ -275,6 +275,19 @@ it as the run's ULID (`traceId`), so `cabinetos-cli log trace <id>` prints the
 key, the command, its requests and what the core did for them in time
 order. A key that becomes no command is a chain of one line.
 
+**Crashes and bundles.** A crash of the window while heavy mode is on writes
+the crash trace as always, then `crash-<stamp>.zip` next to it: the last 10
+minutes of every log in the folder, the recent crash traces and a
+`bundle.json` ([diagnostics.md](diagnostics.md), "Bundles"). The window keeps
+what the bundle says about it (the protocol version at `welcome`, the
+configuration of the last `config` reply, secrets masked) in `Diag`. At the
+next start the window looks for a `crash-*.zip` newer than its last start
+(`CrashNotice`, off the UI thread; the time of each start is in
+`ui.last-start` in the log folder) and, if there is one, shows an "Open crash
+folder" button in the status bar, in front of the pill, until it is clicked
+(the button runs `diagnostics.openCrashFolder`, a command of the window's own
+that the palette does not list, and the core opens the folder).
+
 ## Starting the core
 
 The launcher looks for `cabinetos-core.exe` in this order:
