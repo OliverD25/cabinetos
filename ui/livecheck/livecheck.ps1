@@ -2,8 +2,10 @@
 # with a configuration, logs and themes of its own, sends real key presses and mouse clicks
 # with SendInput, and takes screenshots. Run it only on an unlocked screen you are watching:
 # it stops the moment another window comes to the front, so no key reaches another program.
-# Leaves one file in the Recycle Bin (cabinetos-live-check-delete-me.txt, the Delete check),
-# and the edge-case fixture in %TEMP%\cabinetos-edge-live (sdk\fixtures\edge-fixture.ps1).
+# Leaves two files in the Recycle Bin (cabinetos-live-check-delete-me.txt, the Delete check, and
+# cabinetos-live-check-f8.txt, the F8 check), and the edge-case fixture in
+# %TEMP%\cabinetos-edge-live (sdk\fixtures\edge-fixture.ps1). F4 edits with a stand-in editor the
+# run writes itself (files.editor: wscript.exe and a script that notes the file): never Notepad.
 # Needs the release builds of the window and the core, and the 100,000-entry folder that
 # `cargo bench -p cabinetos-fs --bench list_directory` makes in %TEMP%\cabinetos-bench.
 # It prints the frame table of the 5 s PageDown in that folder and the line "scroll goal (no frame
@@ -64,7 +66,8 @@ public static class Live {
 "@
 [void][Live]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
 $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L = 0x4C; Esc = 0x1B; Tab = 0x09; Enter = 0x0D; Back = 0x08; Down = 0x28; PgDn = 0x22; F2 = 0x71;
-  F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56 }
+  F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56;
+  F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   if ($script:h -and [Live]::GetForegroundWindow() -ne $script:h) {
@@ -92,12 +95,30 @@ function Shot([IntPtr]$h, [string]$path) {
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
   Step "screenshot $path"
 }
+# What the status bar says about the selection ("3 selected, 1.4 MB"), as UI Automation reads it.
+function SelectionText {
+  $all = [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+  foreach ($e in $all) { if ($e.Current.Name -match '^\d[\d,]* selected') { return $e.Current.Name } }
+  return "(nothing selected)"
+}
 
 $root = "$env:TEMP\cabinetos-ui-test\$Run"
 # A fresh configuration every run: saved last folders must not change where Enter lands.
 if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
 New-Item -ItemType Directory -Force "$root\config", "$root\logs", $ShotDir | Out-Null
 $env:CABINETOS_CONFIG = "$root\config\cabinetos.json"
+# F4 (file.edit) opens files.editor: a stand-in that notes each file in stub-editor.js.log and
+# shows no window. The core adds the file's path as the last argument.
+$stub = "$root\stub-editor.js"
+Set-Content -LiteralPath $stub -Encoding ASCII -Value @'
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+var log = fso.OpenTextFile(WScript.ScriptFullName + ".log", 8, true, -1);
+log.WriteLine(WScript.Arguments.length > 0 ? WScript.Arguments(0) : "(no file)");
+log.Close();
+'@
+# Without a byte order mark (Windows PowerShell's UTF8 writes one): the core reads plain JSON.
+$editorJson = @{ version = 1; files = @{ editor = @{ command = "wscript.exe"; args = [string[]]@("//B", "//Nologo", $stub) } } } | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText($env:CABINETOS_CONFIG, $editorJson, (New-Object System.Text.UTF8Encoding $false))
 $env:CABINETOS_LOG_DIR = "$root\logs"
 $env:CABINETOS_UI_FRAMESTATS = "1"
 $env:CABINETOS_CORE_EXE = $Core
@@ -315,6 +336,100 @@ Step "Ctrl+K V on readme.md: the same file, in the open preview"
 Shot $h "$ShotDir\phase-5c-markdown-chord.png"
 $ready = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool ready"' }).Count
 "the preview said ready for each open (2 expected): $ready"
+
+# ----- Sub-phase 11a: Total Commander's keys (docs/ui.md, "Total Commander's keys") -----
+$tc = "$files\tc"
+New-Item -ItemType Directory -Force "$tc\docs", "$tc\photos\2026" | Out-Null
+[System.IO.File]::WriteAllBytes("$tc\photos\a.jpg", (New-Object byte[] 3000))
+[System.IO.File]::WriteAllBytes("$tc\photos\2026\b.jpg", (New-Object byte[] 5000))
+foreach ($name in "a.txt", "b.txt", "notes.md", "run.cmd", "cabinetos-live-check-f8.txt", "cabinetos-live-check-shift-f8.txt") { Set-Content -LiteralPath "$tc\$name" -Value "x" -NoNewline }
+Set-Content -LiteralPath "$tc\run.cmd" -Value "echo this must never run" -NoNewline
+# Rows: docs, photos, a.txt, b.txt, cabinetos-live-check-f8.txt, cabinetos-live-check-shift-f8.txt, notes.md, run.cmd.
+
+Step "11a: the check folder"
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type($tc); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+
+Step "11a: Num *: every file marked, the folders not"
+[Live]::Press($VK.Home); [Live]::Press($VK.NumMultiply); Start-Sleep -Milliseconds 500
+"after Num *: $(SelectionText) (the 6 files expected, docs and photos not)"
+Step "11a: Ctrl+Num -: nothing marked"
+[Live]::Press($VK.Ctrl, $VK.NumSubtract); Start-Sleep -Milliseconds 500
+"after Ctrl+Num -: $(SelectionText)"
+
+Step "11a: Num +: the pattern box, *.txt, Enter"
+[Live]::Press($VK.NumAdd); Start-Sleep -Milliseconds 600
+Shot $h "$ShotDir\11a-pattern-box-live.png"
+[Live]::Type("*.txt"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 800
+"after Num + *.txt: $(SelectionText) (the four .txt files expected)"
+[Live]::Press($VK.Ctrl, $VK.NumSubtract); Start-Sleep -Milliseconds 300
+
+Step "11a: Space on photos: marked in place and measured"
+[Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Space); Start-Sleep -Milliseconds 1200
+"after Space on photos: $(SelectionText) (8 KB expected: its two files)"
+Step "11a: Alt+Shift+Enter: every folder measured"
+[Live]::Press($VK.Alt, $VK.Shift, $VK.Enter); Start-Sleep -Milliseconds 1200
+Shot $h "$ShotDir\11a-folder-sizes-live.png"
+$measures = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"request sent"' -and $_ -match '"measure_paths"' }).Count
+"measure_paths sent (2 expected): $measures"
+
+Step "11a: F3 on run.cmd: the status bar says no tool shows it; nothing runs it"
+[Live]::Press($VK.End); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.F3); Start-Sleep -Milliseconds 800
+"F3 said so: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"notice shown"' -and $_ -match 'No installed tool shows run.cmd' }))"
+
+Step "11a: F4 on a.txt: the stand-in editor gets it, not Notepad"
+[Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.F4); Start-Sleep -Milliseconds 1500
+Step "11a: Shift+F4: a new row, 'todo' over the selected stem, Enter"
+[Live]::Press($VK.Shift, $VK.F4); Start-Sleep -Milliseconds 700
+Shot $h "$ShotDir\11a-new-text-file-live.png"
+[Live]::Type("todo"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2000
+"Shift+F4 made todo.txt: $(Test-Path -LiteralPath "$tc\todo.txt")"
+$edited = if (Test-Path -LiteralPath "$stub.log") { @(Get-Content -LiteralPath "$stub.log" -Encoding Unicode) } else { @() }
+"the stand-in editor got (a.txt, then todo.txt, expected): $($edited -join ' | ')"
+"Notepad opened: $([bool](Get-Process notepad -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $p.StartTime }))"
+
+Step "11a: quick search 'cabinetos-live-check-f', then F8: to the Recycle Bin"
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 1200
+[Live]::Type("cabinetos-live-check-f"); Start-Sleep -Milliseconds 500
+Shot $h "$ShotDir\11a-quick-search-live.png"
+[Live]::Press($VK.F8); Start-Sleep -Milliseconds 2500
+"F8 removed it: $(-not (Test-Path -LiteralPath "$tc\cabinetos-live-check-f8.txt"))"
+Step "11a: Shift+F8 on the other one: the question, Delete permanently through UI Automation"
+Start-Sleep -Milliseconds 1200
+[Live]::Type("cabinetos-live-check-s"); Start-Sleep -Milliseconds 500
+[Live]::Press($VK.Shift, $VK.F8); Start-Sleep -Milliseconds 1200
+$byName = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Delete permanently")
+$confirm = [System.Windows.Automation.AutomationElement]::FromHandle($h).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $byName)
+if ($confirm) { ([System.Windows.Automation.InvokePattern]$confirm.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke(); Step "Delete permanently pressed through UI Automation" } else { Step "no Delete permanently button found"; [Live]::Press($VK.Esc) }
+Start-Sleep -Milliseconds 2500
+"Shift+F8 removed it for good: $(-not (Test-Path -LiteralPath "$tc\cabinetos-live-check-shift-f8.txt"))"
+
+Step "11a: Ctrl+P: the terminal shows with the folder typed at the prompt"
+[Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Seconds 3
+Shot $h "$ShotDir\11a-terminal-path-live.png"
+"the path was typed: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"paths typed at the prompt"' -and $_ -match 'OkReply' }))"
+# Esc clears the typed line in pwsh; Ctrl+Backquote gives the keyboard back to the pane.
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
+
+Step "11a: Ctrl+\: the drive's root"
+[Live]::Press($VK.Ctrl, $VK.Backslash); Start-Sleep -Milliseconds 1200
+Step "11a: Alt+F1: the drive list under the left pane"
+[Live]::Press($VK.Alt, $VK.F1); Start-Sleep -Milliseconds 700
+Shot $h "$ShotDir\11a-drive-list-live.png"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 400
+Step "11a: Ctrl+U: the panes change places"
+[Live]::Press($VK.Ctrl, $VK.U); Start-Sleep -Milliseconds 800
+Shot $h "$ShotDir\11a-swapped-live.png"
+# The keyboard is in the pane: Ctrl+Backquote hides the terminal Ctrl+P showed.
+[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
+$ran = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields.command }
+foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPattern", "edit.invertSelection", "edit.unselectAll", "edit.toggleSelectionInPlace",
+  "file.calculateAllFolderSizes", "go.root", "go.chooseDriveLeft", "view.swapPanes", "file.view", "file.edit", "file.newTextFile", "terminal.insertPath") {
+  "  ran $command from a key: $($ran -contains $command)"
+}
 
 # ----- Edge cases (docs/ui.md, "Edge cases"): the shared fixture, with real keys -----
 # The fixture has links, so it lives outside $root: only its own script removes it (rmdir, which
