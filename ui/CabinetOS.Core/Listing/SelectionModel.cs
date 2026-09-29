@@ -11,6 +11,30 @@ public enum SelectMode
 
     /// <summary>The focus moves and the selection stays (Ctrl).</summary>
     FocusOnly,
+
+    /// <summary>
+    /// Total Commander's Shift: the rows the focus leaves on its way are
+    /// marked, not the one it lands on; when it cannot move (the end of the
+    /// list), the row it stays on. If the row it leaves was marked, they are
+    /// unmarked instead.
+    /// </summary>
+    MarkPassed,
+
+    /// <summary>Total Commander's Shift with Home or End: <see cref="MarkPassed"/> with the row it lands on.</summary>
+    MarkThrough,
+}
+
+/// <summary>How the keyboard marks rows (<c>panes.selection</c>, docs/config.md).</summary>
+public enum SelectionStyle
+{
+    /// <summary>As in Explorer: a key that moves the focus selects the row it moves to.</summary>
+    Windows,
+
+    /// <summary>
+    /// As in Total Commander: keys that move the focus keep the marks, Shift
+    /// with them marks the rows passed over, and a new listing starts unmarked.
+    /// </summary>
+    Commander,
 }
 
 /// <summary>
@@ -18,6 +42,8 @@ public enum SelectMode
 /// keyboard is on), the anchor where a Shift range starts, and the selected
 /// rows. It follows the Windows list rules, plus Total Commander's Insert,
 /// which toggles the focused row and moves down without touching the others.
+/// In <see cref="SelectionStyle.Commander"/> style the keys mark as Total
+/// Commander's do (<see cref="KeyMode"/>); the mouse keeps the Windows rules.
 /// </summary>
 public sealed class SelectionModel
 {
@@ -25,6 +51,9 @@ public sealed class SelectionModel
 
     /// <summary>Raised after every change.</summary>
     public event Action? Changed;
+
+    /// <summary>How the keyboard marks rows.</summary>
+    public SelectionStyle Style { get; private set; }
 
     /// <summary>Rows in the listing.</summary>
     public int Count { get; private set; }
@@ -53,14 +82,48 @@ public sealed class SelectionModel
     /// </summary>
     public IReadOnlyList<int> Targets() => _selected.Count > 0 ? Selected : Focus >= 0 ? [Focus] : [];
 
-    /// <summary>A new listing: the focus goes to <paramref name="focus"/>, and only it is selected.</summary>
+    /// <summary>
+    /// Changes how the keyboard marks. The marks stay; the Windows style
+    /// selects the focused row when nothing is selected, as it always has one.
+    /// </summary>
+    public void SetStyle(SelectionStyle style)
+    {
+        if (style == Style)
+        {
+            return;
+        }
+        Style = style;
+        if (style == SelectionStyle.Windows && _selected.Count == 0 && Focus >= 0)
+        {
+            _selected.Add(Focus);
+        }
+        Raise();
+    }
+
+    /// <summary>
+    /// How a key that moves the focus selects, in this style: Shift and Ctrl
+    /// as they are held, and whether the key goes to the list's first or last
+    /// row (Home, End).
+    /// </summary>
+    public SelectMode KeyMode(bool shift, bool ctrl, bool toListEnd = false) => Style switch
+    {
+        SelectionStyle.Commander when shift => toListEnd ? SelectMode.MarkThrough : SelectMode.MarkPassed,
+        SelectionStyle.Commander => SelectMode.FocusOnly,
+        _ when shift => SelectMode.Extend,
+        _ => ctrl ? SelectMode.FocusOnly : SelectMode.Single,
+    };
+
+    /// <summary>
+    /// A new listing: the focus goes to <paramref name="focus"/>, and only it
+    /// is selected; in the Commander style nothing is.
+    /// </summary>
     public void Reset(int count, int focus)
     {
         Count = Math.Max(0, count);
         _selected.Clear();
         Focus = Count == 0 ? -1 : Math.Clamp(focus, 0, Count - 1);
         Anchor = Focus;
-        if (Focus >= 0)
+        if (Focus >= 0 && Style == SelectionStyle.Windows)
         {
             _selected.Add(Focus);
         }
@@ -70,7 +133,8 @@ public sealed class SelectionModel
     /// <summary>
     /// The same entries in a refreshed listing, at the indexes the caller
     /// found for them. When none of the selected entries is left, the focused
-    /// row is selected, so the keyboard still has something to act on.
+    /// row is selected (Windows style), so the keyboard still has something
+    /// to act on; in the Commander style the focused row is that already.
     /// </summary>
     public void Restore(int count, IEnumerable<int> selected, int focus, int anchor)
     {
@@ -85,7 +149,7 @@ public sealed class SelectionModel
         }
         Focus = Count == 0 ? -1 : Math.Clamp(focus, 0, Count - 1);
         Anchor = (uint)anchor < (uint)Count ? anchor : Focus;
-        if (_selected.Count == 0 && Focus >= 0)
+        if (_selected.Count == 0 && Focus >= 0 && Style == SelectionStyle.Windows)
         {
             _selected.Add(Focus);
         }
@@ -109,6 +173,9 @@ public sealed class SelectionModel
                 break;
             case SelectMode.Extend:
                 SelectRange(Anchor < 0 ? index : Anchor, index);
+                break;
+            case SelectMode.MarkPassed or SelectMode.MarkThrough when Focus >= 0:
+                MarkOnTheWay(Focus, index, through: mode == SelectMode.MarkThrough);
                 break;
         }
         Focus = index;
@@ -164,6 +231,30 @@ public sealed class SelectionModel
         for (var i = low; i <= high; i++)
         {
             _selected.Add(i);
+        }
+    }
+
+    // The rows from `from` towards `to`: without `to`, unless the move goes through it or cannot
+    // move at all. The row it leaves decides: unmarked, they are marked; marked, they are unmarked.
+    private void MarkOnTheWay(int from, int to, bool through)
+    {
+        var mark = !_selected.Contains(from);
+        var step = to >= from ? 1 : -1;
+        var last = through || to == from ? to : to - step;
+        for (var i = from; ; i += step)
+        {
+            if (mark)
+            {
+                _selected.Add(i);
+            }
+            else
+            {
+                _selected.Remove(i);
+            }
+            if (i == last)
+            {
+                break;
+            }
         }
     }
 

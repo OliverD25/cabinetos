@@ -787,6 +787,14 @@ public sealed partial class MainWindow : Window
         {
             Diag.Info(Target, "the rail layout arrives in a later phase; showing the sidebar");
         }
+        if (firstStart || settings.Selection != previous.Selection)
+        {
+            // panes.selection applies at once: the marks stay, only the keys mark differently.
+            foreach (var pane in _panes)
+            {
+                pane.Selection.SetStyle(settings.Selection);
+            }
+        }
         if (!firstStart && (settings.ShowHidden != previous.ShowHidden
             || settings.SortKey != previous.SortKey
             || settings.SortDescending != previous.SortDescending))

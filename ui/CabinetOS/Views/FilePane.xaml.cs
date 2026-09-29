@@ -23,8 +23,9 @@ namespace CabinetOS.Views;
 /// virtualizing <c>ItemsRepeater</c>. Only the rows on screen exist. Keys the
 /// window's keymap does not claim arrive here: the arrows move the focus and
 /// the selection like in any Windows list (Shift extends, Ctrl moves the focus
-/// alone), Insert toggles a row as in Total Commander, and the file keys run
-/// commands through the router.
+/// alone), or keep the marks as in Total Commander (<c>panes.selection:
+/// commander</c>, <see cref="SelectionModel.KeyMode"/>); Insert toggles a row
+/// as in Total Commander, and the file keys run commands through the router.
 /// </summary>
 public sealed partial class FilePane : UserControl
 {
@@ -524,11 +525,13 @@ public sealed partial class FilePane : UserControl
         }
         // The file keys (Enter, F2, Delete, Ctrl+C, Insert, …) are bindings in the
         // core's keymap and run before this handler; what arrives here moves
-        // through the list, as in any Windows list.
+        // through the list, as in any Windows list, or marks as Total Commander
+        // does (panes.selection: commander).
         var ctrl = IsDown(VirtualKey.Control);
         var shift = IsDown(VirtualKey.Shift);
-        var mode = shift ? SelectMode.Extend : ctrl ? SelectMode.FocusOnly : SelectMode.Single;
-        var focus = _model.CurrentSelection.Focus;
+        var selection = _model.CurrentSelection;
+        var mode = selection.KeyMode(shift, ctrl);
+        var focus = selection.Focus;
         var handled = true;
         switch (e.Key)
         {
@@ -539,10 +542,10 @@ public sealed partial class FilePane : UserControl
                 MoveFocus(focus + 1, mode);
                 break;
             case VirtualKey.Home:
-                MoveFocus(0, mode);
+                MoveFocus(0, selection.KeyMode(shift, ctrl, toListEnd: true));
                 break;
             case VirtualKey.End:
-                MoveFocus(_model.ShownCount - 1, mode);
+                MoveFocus(_model.ShownCount - 1, selection.KeyMode(shift, ctrl, toListEnd: true));
                 break;
             case VirtualKey.PageUp:
                 MoveFocus(focus - RowsPerPage(), mode);

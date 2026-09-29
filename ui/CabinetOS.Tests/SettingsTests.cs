@@ -32,6 +32,23 @@ public class SettingsTests
     }
 
     [Fact]
+    public void Panes_selection_commander_is_total_commanders_marking_and_anything_else_is_windows()
+    {
+        using var commander = JsonDocument.Parse("""{"version":1,"panes":{"selection":"commander"}}""");
+        Assert.True(Schemas.Config.Evaluate(commander.RootElement).IsValid);
+        Assert.Equal(Core.Listing.SelectionStyle.Commander, UiSettings.FromConfig(commander.RootElement).Selection);
+
+        using var windows = JsonDocument.Parse("""{"version":1,"panes":{"selection":"windows"}}""");
+        Assert.True(Schemas.Config.Evaluate(windows.RootElement).IsValid);
+        Assert.Equal(Core.Listing.SelectionStyle.Windows, UiSettings.FromConfig(windows.RootElement).Selection);
+
+        using var odd = JsonDocument.Parse("""{"panes":{"selection":"vim"}}""");
+        Assert.False(Schemas.Config.Evaluate(odd.RootElement).IsValid);
+        Assert.Equal(Core.Listing.SelectionStyle.Windows, UiSettings.FromConfig(odd.RootElement).Selection);
+        Assert.Equal(Core.Listing.SelectionStyle.Windows, UiSettings.Defaults.Selection);
+    }
+
+    [Fact]
     public async Task A_setting_is_written_through_the_core_as_json()
     {
         var core = new FakeChannel(_ => new OkReply());
