@@ -439,9 +439,20 @@ Step "11a: Ctrl+P: the terminal shows with the folder typed at the prompt"
 [Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Seconds 3
 Shot $h "$ShotDir\11a-terminal-path-live.png"
 "the path was typed: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"paths typed at the prompt"' -and $_ -match 'OkReply' }))"
-# Esc clears the typed line in pwsh; Ctrl+Backquote gives the keyboard back to the pane.
+# Esc clears the typed line in pwsh; Ctrl+Backquote gives the keyboard back to the pane (the page
+# passes it to the window, which logs view.toggleTerminal). If nothing was logged, the page did not
+# have the keyboard: the terminal is hidden from the palette instead, which also focuses the pane.
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 300
+$toggles = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
+$script:terminalHidden = $false
+if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
+  "after Ctrl+P the terminal did not pass Ctrl+Backquote to the window (its page did not have the keyboard); hiding it from the palette instead"
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  [Live]::Type("Toggle Terminal"); Start-Sleep -Milliseconds 700
+  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 700
+  $script:terminalHidden = $true
+}
 
 Step "11a: Ctrl+\: the drive's root"
 [Live]::Press($VK.Ctrl, $VK.Backslash); Start-Sleep -Milliseconds 1200
@@ -464,8 +475,10 @@ Shot $h "$ShotDir\11a-drive-list-live.png"
 Step "11a: Ctrl+U: the panes change places"
 [Live]::Press($VK.Ctrl, $VK.U); Start-Sleep -Milliseconds 800
 Shot $h "$ShotDir\11a-swapped-live.png"
-# The keyboard is in the pane: Ctrl+Backquote hides the terminal Ctrl+P showed.
-[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
+# And back, so the sections after this one find the panes where they expect them.
+[Live]::Press($VK.Ctrl, $VK.U); Start-Sleep -Milliseconds 800
+# The keyboard is in the pane: Ctrl+Backquote hides the terminal Ctrl+P showed (unless the palette did).
+if (-not $script:terminalHidden) { [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600 }
 $ran = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields.command }
 foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPattern", "edit.invertSelection", "edit.unselectAll", "edit.toggleSelectionInPlace",
   "file.calculateAllFolderSizes", "go.root", "go.chooseDriveLeft", "view.swapPanes", "file.view", "file.edit", "file.newTextFile", "terminal.insertPath") {
@@ -476,6 +489,10 @@ foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPatt
 # The picker lists the run's shipped themes by ID: catppuccin-mocha, commander-compact, default, nord,
 # rose-pine-moon; its highlight starts on the theme in effect. The last "metrics applied" line of the
 # window's log says what the window laid itself out with.
+function LastChosenTheme {
+  $line = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"theme chosen"' } | Select-Object -Last 1
+  if ($line) { ($line | ConvertFrom-Json).fields.theme } else { "(nothing chosen)" }
+}
 function LastMetrics { Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"metrics applied"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields } | Select-Object -Last 1 }
 $cc = "$files\compact"
 New-Item -ItemType Directory -Force "$cc\src", "$cc\dst" | Out-Null
@@ -489,12 +506,17 @@ Step "compact: the source folder in the active pane, the destination in the othe
 [Live]::Type("$cc\dst"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 
-Step "compact: Ctrl+K Ctrl+T, the theme picker; Up to Commander Compact, Enter"
+Step "compact: Ctrl+K Ctrl+T, the theme picker; Home, Down to Commander Compact, Enter"
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
-[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 2000
 Shot $h "$ShotDir\compact-picker-live.png"
-[Live]::Press($VK.Up); Start-Sleep -Milliseconds 200
+# The picker lists the themes by id (catppuccin-mocha, commander-compact, default, nord, rose-pine-moon)
+# and highlights the current one; Home makes the walk independent of where it started. In the first
+# real-key run a single Up from default chose catppuccin-mocha, and a Down from there chose it again.
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2000
+"picker chose: $(LastChosenTheme) (commander-compact expected)"
 Shot $h "$ShotDir\compact-live.png"
 $metrics = LastMetrics
 "compact: the window laid itself out with $($metrics.theme): rows $($metrics.row_height) px (20 expected), function keys $($metrics.fkey_bar), stripes $($metrics.row_stripes), hairlines $($metrics.hairlines)"
@@ -507,7 +529,7 @@ foreach ($i in 1..2) {
   $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
   if ($focused -and $barNames -contains $focused.Current.Name) { $onBar++ }
 }
-"Tab reached a function key: $($onBar -gt 0)"
+"Tab never reached a function key: $($onBar -eq 0)"
 
 Step "compact: F5 Copy pressed through the bar's button by its accessible name"
 $byName = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "F5 Copy")
@@ -518,11 +540,14 @@ Shot $h "$ShotDir\compact-f5-live.png"
 "the bar's F5 copied the file: $(Test-Path -LiteralPath "$cc\dst\cabinetos-live-check-f5.txt")"
 "the bar ran file.copyToOtherPane: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' -and $_ -match 'file\.copyToOtherPane' -and $_ -match '"trigger":"fkeyBar"' }))"
 
-Step "compact: Ctrl+K Ctrl+T, Down to Default, Enter"
+Step "compact: Ctrl+K Ctrl+T, Home, Down, Down to Default, Enter"
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
-[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 900
-[Live]::Press($VK.Down); Start-Sleep -Milliseconds 200
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 2000
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2000
+"picker chose: $(LastChosenTheme) (default expected)"
 Shot $h "$ShotDir\compact-back-live.png"
 $metrics = LastMetrics
 "compact: switched back to $($metrics.theme): rows $($metrics.row_height) px (30 expected), function keys $($metrics.fkey_bar)"
@@ -594,7 +619,7 @@ $script:h = $null
 Start-Sleep -Milliseconds 500
 $corePids = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"core started"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields.pid }
 "app exited: $($p.HasExited), code $($p.ExitCode); cores this app started: $($corePids -join ',')"
-foreach ($c in $corePids) { "core $c still running: $([bool](Get-Process -Id $c -ErrorAction SilentlyContinue))" }
+foreach ($c in $corePids) { "core $c exited with the window: $(-not [bool](Get-Process -Id $c -ErrorAction SilentlyContinue))" }
 "all cabinetos-core processes now (other agents may run their own): '$((Get-Process cabinetos-core -ErrorAction SilentlyContinue).Id -join ',')'"
 $config = Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json
 "config keybindings:"; $config.keybindings | ConvertTo-Json -Compress
