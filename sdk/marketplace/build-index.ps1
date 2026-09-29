@@ -14,20 +14,27 @@
 # shipped themes, five since commander-compact (the UI's end-to-end test
 # counted four until the shell adopts the fifth).
 #
+# With -ThemesOnly, the fixture plugins are left out: the public index
+# (ADR 0012) offers themes only until a real plugin exists, and the test
+# plugins Hello and friends are not for the public.
+#
 # Point the core at it with marketplace.index (the folder, or its
 # index.json). Nothing is uploaded or published: the folder stays on this
 # machine. The format: sdk/marketplace/index.schema.json and
 # docs/marketplace.md.
 #
 # Run from anywhere, in Windows PowerShell or PowerShell 7:
-#   powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection]
+#   powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-ThemesOnly]
 
 param(
     [Parameter(Mandatory = $true)]
     [string] $OutDir,
 
     # Also pack the theme collection of sdk/themes/collection.
-    [switch] $Collection
+    [switch] $Collection,
+
+    # Leave the fixture plugins out (the public index).
+    [switch] $ThemesOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,39 +91,41 @@ function Add-ThemeItem($File, $Theme, [string] $Description, [string] $License, 
     })
 }
 
-Get-ChildItem -Path (Join-Path $sdk 'fixtures\plugins') -Directory | ForEach-Object {
-    $manifestPath = Join-Path $_.FullName 'plugin.json'
-    $component = Join-Path $_.FullName 'plugin.wasm'
-    if (-not (Test-Path $manifestPath) -or -not (Test-Path $component)) { return }
-    $manifest = Read-Json $manifestPath
-    $name = "$($manifest.id)-$($manifest.version).zip"
-    $package = Join-Path $files $name
-    if (Test-Path $package) { Remove-Item $package }
-    $zip = [System.IO.Compression.ZipFile]::Open($package, 'Create')
-    try {
-        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $manifestPath, 'plugin.json')
-        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $component, 'plugin.wasm')
+if (-not $ThemesOnly) {
+    Get-ChildItem -Path (Join-Path $sdk 'fixtures\plugins') -Directory | ForEach-Object {
+        $manifestPath = Join-Path $_.FullName 'plugin.json'
+        $component = Join-Path $_.FullName 'plugin.wasm'
+        if (-not (Test-Path $manifestPath) -or -not (Test-Path $component)) { return }
+        $manifest = Read-Json $manifestPath
+        $name = "$($manifest.id)-$($manifest.version).zip"
+        $package = Join-Path $files $name
+        if (Test-Path $package) { Remove-Item $package }
+        $zip = [System.IO.Compression.ZipFile]::Open($package, 'Create')
+        try {
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $manifestPath, 'plugin.json')
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $component, 'plugin.wasm')
+        }
+        finally {
+            $zip.Dispose()
+        }
+        $capabilities = @()
+        if ($manifest.capabilities) { $capabilities = @($manifest.capabilities) }
+        [void]$items.Add([ordered]@{
+            id             = $manifest.id
+            kind           = 'plugin'
+            name           = $manifest.name
+            author         = [ordered]@{ name = $manifest.author; verified = $false }
+            version        = $manifest.version
+            description    = $manifest.description
+            long           = $manifest.description
+            size           = (Get-Item $package).Length
+            download       = [ordered]@{ url = "files/$name"; sha256 = (Get-Sha256 $package) }
+            manifest       = $manifest
+            capabilities   = $capabilities
+            minCoreVersion = $manifest.minCoreVersion
+            license        = 'MIT'
+        })
     }
-    finally {
-        $zip.Dispose()
-    }
-    $capabilities = @()
-    if ($manifest.capabilities) { $capabilities = @($manifest.capabilities) }
-    [void]$items.Add([ordered]@{
-        id             = $manifest.id
-        kind           = 'plugin'
-        name           = $manifest.name
-        author         = [ordered]@{ name = $manifest.author; verified = $false }
-        version        = $manifest.version
-        description    = $manifest.description
-        long           = $manifest.description
-        size           = (Get-Item $package).Length
-        download       = [ordered]@{ url = "files/$name"; sha256 = (Get-Sha256 $package) }
-        manifest       = $manifest
-        capabilities   = $capabilities
-        minCoreVersion = $manifest.minCoreVersion
-        license        = 'MIT'
-    })
 }
 
 $shipped = @{}
