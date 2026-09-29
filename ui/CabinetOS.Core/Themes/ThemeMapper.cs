@@ -104,6 +104,8 @@ public static class ThemeMapper
             ["CbDialogFooterFillBrush"] = surfaceDark,
             ["CbDialogTextBrush"] = Text(0xCC),
             ["CbAccentBrush"] = accent,
+            // Text on accent fills: the design's near-black on its light blue, white on a dark accent.
+            ["CbOnAccentBrush"] = OnAccent(accent),
             ["CbFolderBrush"] = folder,
             ["CbFolderFrontBrush"] = folderFront,
             ["CbRunningBrush"] = levels.Low,
@@ -191,6 +193,18 @@ public static class ThemeMapper
         var (color, micaOwn) = light ? (new Argb(0xFF, 0xF3, 0xF3, 0xF3), 0.5) : (new Argb(0xFF, 0x20, 0x20, 0x20), 0.8);
         var share = (Math.Min(backdropOpacity, 1) - plain) / (1 - plain);
         return new MicaLook(color, Math.Round(micaOwn + ((1 - micaOwn) * share), 3));
+    }
+
+    /// <summary>
+    /// The text colour on an accent fill: the design's near-black
+    /// (<c>#111111</c>) on a light accent such as its <c>#60CDFF</c>, white on
+    /// a dark one such as GitHub Light's, whichever contrasts more. A fixed
+    /// near-black fell below 4.5:1 on the dark accents of light themes.
+    /// </summary>
+    public static Argb OnAccent(Argb accent)
+    {
+        var dark = new Argb(0xFF, 0x11, 0x11, 0x11);
+        return accent.ContrastWith(dark) >= accent.ContrastWith(Argb.White) ? dark : Argb.White;
     }
 
     /// <summary>

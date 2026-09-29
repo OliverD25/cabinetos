@@ -28,7 +28,7 @@ public class ThemeTests
             .Descendants()
             .Where(e => ((string?)e.Attribute(X + "Key"))?.StartsWith("Cb", StringComparison.Ordinal) == true)
             .ToDictionary(e => (string)e.Attribute(X + "Key")!);
-        var unthemed = new HashSet<string> { "CbOnAccentBrush", "CbGraphFillBrush", "CbDangerHoverFillBrush", "CbScrimBrush" };
+        var unthemed = new HashSet<string> { "CbGraphFillBrush", "CbDangerHoverFillBrush", "CbScrimBrush" };
 
         foreach (var (key, color) in look.Brushes)
         {
@@ -244,4 +244,27 @@ public class ThemeTests
             .Concat(look.FileTypes.OrderBy(f => f.Key).Select(f => $"{f.Key}={f.Value}"))
             .Append($"levels={look.Levels}")
             .Append($"terminal={look.Terminal.Foreground},{look.Terminal.Background},{string.Join(',', look.Terminal.Ansi)}"));
+
+    [Fact]
+    public void Text_on_an_accent_fill_follows_the_accents_lightness()
+    {
+        // The design's light blue keeps the design's near-black.
+        var nearBlack = new Argb(0xFF, 0x11, 0x11, 0x11);
+        Assert.Equal(nearBlack, ThemeMapper.Map(Shipped("default"), DesignAccent).Brushes["CbOnAccentBrush"]);
+        Assert.Equal(nearBlack, ThemeMapper.OnAccent(new Argb(0xFF, 0x60, 0xCD, 0xFF)));
+
+        // The dark accents of light themes get white: near-black falls below 4.5:1 on them.
+        Assert.Equal(Argb.White, ThemeMapper.OnAccent(new Argb(0xFF, 0x09, 0x69, 0xDA)));
+        foreach (var id in new[] { "github-light", "catppuccin-latte" })
+        {
+            var look = ThemeMapper.Map(Collection(id), DesignAccent);
+            var onAccent = look.Brushes["CbOnAccentBrush"];
+            Assert.Equal((id, Argb.White), (id, onAccent));
+            Assert.True(look.Accent.ContrastWith(onAccent) >= 4.5, $"{id}: {look.Accent.ContrastWith(onAccent):F2}:1");
+            Assert.True(look.Accent.ContrastWith(nearBlack) < 4.5, $"{id}: near-black would have passed");
+        }
+    }
+
+    private static ColorTheme Collection(string id) =>
+        JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(Repo.Root, "sdk", "themes", "collection", id + ".json")), ProtocolJson.Default.ColorTheme)!;
 }

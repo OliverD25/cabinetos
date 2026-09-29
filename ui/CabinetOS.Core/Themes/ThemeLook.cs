@@ -42,6 +42,24 @@ public readonly record struct Argb(byte A, byte R, byte G, byte B)
     /// <summary>The red, green and blue parts multiplied by <paramref name="factor"/> (darker below 1); the alpha stays.</summary>
     public Argb ScaleRgb(double factor) => new(A, Clamp(R * factor), Clamp(G * factor), Clamp(B * factor));
 
+    /// <summary>The relative luminance (WCAG 2): 0 for black, 1 for white; the alpha is ignored.</summary>
+    public double Luminance()
+    {
+        static double Channel(byte value)
+        {
+            var c = value / 255.0;
+            return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        }
+        return (0.2126 * Channel(R)) + (0.7152 * Channel(G)) + (0.0722 * Channel(B));
+    }
+
+    /// <summary>The contrast ratio (WCAG 2) between this colour and <paramref name="other"/>: 1 to 21.</summary>
+    public double ContrastWith(Argb other)
+    {
+        var (a, b) = (Luminance(), other.Luminance());
+        return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05);
+    }
+
     /// <summary>CSS order, for web pages: <c>#RRGGBBAA</c>.</summary>
     public string ToCss() => string.Create(CultureInfo.InvariantCulture, $"#{R:X2}{G:X2}{B:X2}{A:X2}");
 
