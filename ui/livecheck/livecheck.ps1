@@ -78,6 +78,11 @@ function Step($text) {
   }
   "{0:HH:mm:ss.fff} {1}" -f (Get-Date), $text
 }
+# A log line's timestamp as UTC. PowerShell 7 reads it from JSON as a date; Windows PowerShell 5.1 leaves the string.
+function TsUtc($ts) {
+  if ($ts -is [datetime]) { return $ts.ToUniversalTime() }
+  return [datetime]::Parse([string]$ts, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]'AdjustToUniversal, AssumeUniversal')
+}
 # A key a dialog holds reaches no command: no "command executed" line of the window's log lies
 # between a "dialog shown" and its "dialog closed" (the dialog takes the key; nothing logs it there).
 function NothingRanUnderDialog($lines) {
@@ -215,10 +220,10 @@ Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\scrolled.png"
 # The frame table of the hold: the window's per-second lines that ended while the key was held.
 $seconds = @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | ForEach-Object { $_ | ConvertFrom-Json } |
-  Where-Object { $_.message -eq 'frame stats' -and $_.ts.ToUniversalTime() -gt $holdStart.AddSeconds(1) -and $_.ts.ToUniversalTime() -le $holdEnd.AddSeconds(1) })
+  Where-Object { $_.message -eq 'frame stats' -and (TsUtc $_.ts) -gt $holdStart.AddSeconds(1) -and (TsUtc $_.ts) -le $holdEnd.AddSeconds(1) })
 "| second (UTC) | frames | worst | over 20 ms | over 33 ms | UI work over 16.7 ms | UI work | rows' measure |"
 "|---|---|---|---|---|---|---|---|"
-foreach ($s in $seconds) { "| {0:HH:mm:ss} | {1} | {2} ms | {3} | {4} | {5} | {6} ms | {7} ms |" -f $s.ts.ToUniversalTime(), $s.fields.frames, $s.fields.worst_ms, $s.fields.gaps_over_20ms, $s.fields.gaps_over_33ms, $s.fields.busy_over_16ms, $s.fields.busy_ms, $s.fields.measure_ms }
+foreach ($s in $seconds) { "| {0:HH:mm:ss} | {1} | {2} ms | {3} | {4} | {5} | {6} ms | {7} ms |" -f (TsUtc $s.ts), $s.fields.frames, $s.fields.worst_ms, $s.fields.gaps_over_20ms, $s.fields.gaps_over_33ms, $s.fields.busy_over_16ms, $s.fields.busy_ms, $s.fields.measure_ms }
 $frames = ($seconds | ForEach-Object { $_.fields.frames } | Measure-Object -Sum).Sum
 $over20 = ($seconds | ForEach-Object { $_.fields.gaps_over_20ms } | Measure-Object -Sum).Sum
 $over33 = ($seconds | ForEach-Object { $_.fields.gaps_over_33ms } | Measure-Object -Sum).Sum
