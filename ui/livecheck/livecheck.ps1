@@ -366,6 +366,26 @@ Shot $h "$ShotDir\phase-5c-markdown-chord.png"
 $ready = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool ready"' }).Count
 "the preview said ready for each open (2 expected): $ready"
 
+# The sections from here on assume two file panes with the keyboard in a pane. In the first complete
+# real-key run the preview (a web page in the other pane) and the terminal stayed open, the long path
+# landed in the wrong pane, and keys pressed while a page had the keyboard were lost.
+Step "close the preview and hide the terminal, so the later sections find two file panes"
+$closed = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+[Live]::Type("Close Editor"); Start-Sleep -Milliseconds 700
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 800
+"the preview closed: $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count -gt $closed)"
+$toggles = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count
+[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
+if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
+  "Ctrl+Backquote did not reach the window; hiding the terminal from the palette"
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  [Live]::Type("Toggle Terminal"); Start-Sleep -Milliseconds 700
+  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 700
+}
+"the terminal is hidden: $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -gt $toggles)"
+Shot $h "$ShotDir\phase-5c-two-panes-again.png"
+
 # ----- Sub-phase 11a: Total Commander's keys (docs/ui.md, "Total Commander's keys") -----
 $tc = "$files\tc"
 New-Item -ItemType Directory -Force "$tc\docs", "$tc\photos\2026" | Out-Null
