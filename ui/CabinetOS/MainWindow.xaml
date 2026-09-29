@@ -269,6 +269,7 @@
                             <views:PaneTabs x:Name="LeftTabs" />
                             <views:FilePane x:Name="LeftPane" Grid.Row="1" />
                             <views:EditorPane x:Name="LeftEditor" Grid.Row="1" />
+                            <views:PreviewPane x:Name="LeftPreview" Grid.Row="1" />
                         </Grid>
                         <Grid
                             x:Name="RightSide"
@@ -281,6 +282,7 @@
                             <views:PaneTabs x:Name="RightTabs" />
                             <views:FilePane x:Name="RightPane" Grid.Row="1" />
                             <views:EditorPane x:Name="RightEditor" Grid.Row="1" />
+                            <views:PreviewPane x:Name="RightPreview" Grid.Row="1" />
                         </Grid>
                     </Grid>
                     <!-- Above the panes and the dock: with no gap the handle lies over their edges. -->

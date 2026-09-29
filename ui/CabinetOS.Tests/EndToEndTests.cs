@@ -8,6 +8,7 @@ using CabinetOS.Core.Jobs;
 using CabinetOS.Core.Keys;
 using CabinetOS.Core.Market;
 using CabinetOS.Core.Plugins;
+using CabinetOS.Core.Preview;
 using CabinetOS.Core.Terminal;
 using CabinetOS.Core.Themes;
 using CabinetOS.Core.Listing;
@@ -454,6 +455,104 @@ public class EndToEndTests
             // The core was never asked to run it.
             var coreLog = Directory.GetFiles(Path.Combine(root, "logs"), "core.*.jsonl").Single();
             Assert.DoesNotContain(requestId, File.ReadAllText(coreLog));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
+    /// The window's part of a preview against the real core: the rows of a proposed set of changes come
+    /// through the section (change and target of each), open again by ID as a plugin's would, apply as jobs,
+    /// and the events say so; a preview that is cancelled changes nothing.
+    /// </summary>
+    [Fact]
+    public async Task The_real_core_hands_over_a_previews_rows_and_applies_or_drops_them()
+    {
+        var coreExe = FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-preview");
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root, "photos")).FullName;
+            foreach (var name in new[] { "IMG_1.jpg", "IMG_2.jpg", "IMG_3.jpg", "old.tmp" })
+            {
+                File.WriteAllText(Path.Combine(folder, name), name);
+            }
+            var beach = Path.Combine(folder, "Beach");
+
+            await using var core = await StartCoreAsync(coreExe, root);
+            var client = core.Client;
+            await client.HelloAsync();
+
+            // One preview of every kind, read as the window reads it, then dropped.
+            var everything = await client.RequestAsync(new PreviewListingRequest("Sort the photos",
+            [
+                new PreviewRowRequest(beach + @"\", "create"),
+                new PreviewRowRequest(Path.Combine(folder, "IMG_1.jpg"), "rename", "vacation_1.jpg"),
+                new PreviewRowRequest(Path.Combine(folder, "IMG_2.jpg"), "move", beach),
+                new PreviewRowRequest(Path.Combine(folder, "IMG_3.jpg"), "copy", beach),
+                new PreviewRowRequest(Path.Combine(folder, "old.tmp"), "delete"),
+            ]));
+            if (everything is ErrorReply { Code: ErrorCodes.UnknownRequest })
+            {
+                Assert.Skip("This core does not answer preview_listing: build the core again.");
+            }
+            var opened = Assert.IsType<PreviewOpenedReply>(everything);
+            PreviewSession session;
+            using (var view = ListingView.Open(opened.TakeSection()!, opened.SectionSize))
+            {
+                Assert.True(view.IsPreview);
+                session = PreviewSession.From(opened.Preview, opened.Title, view);
+            }
+            Assert.Equal("Sort the photos", session.Title);
+            Assert.Equal(
+                [("Create", @"Beach\", ""), ("Rename", "IMG_1.jpg", "vacation_1.jpg"), ("Move", "IMG_2.jpg", @"Beach\"), ("Copy", "IMG_3.jpg", @"Beach\"), ("Delete", "old.tmp", "")],
+                session.Lines.Select(l => (l.Verb, l.Name, l.Target)));
+            Assert.All(session.Lines, l => Assert.Equal(folder + @"\", l.Folder));
+            Assert.Equal([false, false, false, false, true], session.Lines.Select(l => l.IsDelete));
+            Assert.IsType<OkReply>(await client.RequestAsync(new CloseListingRequest(opened.Listing.ListingId)));
+
+            // A plugin's preview is opened by ID: the same rows come again.
+            var again = Assert.IsType<PreviewOpenedReply>(await client.RequestAsync(new OpenPreviewRequest(opened.Preview)));
+            using (var view = ListingView.Open(again.TakeSection()!, again.SectionSize))
+            {
+                Assert.Equal(5, PreviewSession.From(again.Preview, again.Title, view).Lines.Count);
+            }
+
+            Assert.IsType<OkReply>(await client.RequestAsync(new PreviewCancelRequest(opened.Preview)));
+            var gone = Assert.IsType<ErrorReply>(await client.RequestAsync(new PreviewApplyRequest(opened.Preview)));
+            Assert.Equal(ErrorCodes.NoSuchPreview, gone.Code);
+            Assert.False(Directory.Exists(beach));
+            Assert.True(File.Exists(Path.Combine(folder, "IMG_1.jpg")));
+
+            // Another preview, with no delete (nothing goes to the Recycle Bin from a test), applied.
+            var second = Assert.IsType<PreviewOpenedReply>(await client.RequestAsync(new PreviewListingRequest("Sort the photos",
+            [
+                new PreviewRowRequest(beach + @"\", "create"),
+                new PreviewRowRequest(Path.Combine(folder, "IMG_1.jpg"), "rename", "vacation_1.jpg"),
+                new PreviewRowRequest(Path.Combine(folder, "IMG_2.jpg"), "move", beach),
+            ])));
+            using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
+            {
+                var started = Assert.IsType<JobsStartedReply>(await client.RequestAsync(new PreviewApplyRequest(second.Preview)));
+                Assert.NotEmpty(started.Jobs);
+                CoreEvent? seen;
+                do
+                {
+                    seen = await client.Events.ReadAsync(timeout.Token);
+                }
+                while (seen is not PreviewAppliedEvent);
+                var applied = (PreviewAppliedEvent)seen;
+                Assert.Equal(second.Preview, applied.Preview);
+                Assert.Equal(started.Jobs, applied.Jobs);
+            }
+            await WaitUntilAsync(() => File.Exists(Path.Combine(beach, "IMG_2.jpg")), "the last job of the preview");
+            Assert.True(File.Exists(Path.Combine(folder, "vacation_1.jpg")));
+            Assert.False(File.Exists(Path.Combine(folder, "IMG_1.jpg")));
+            Assert.False(File.Exists(Path.Combine(folder, "IMG_2.jpg")));
+            Assert.True(File.Exists(Path.Combine(folder, "old.tmp")));
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
         }
         finally
         {

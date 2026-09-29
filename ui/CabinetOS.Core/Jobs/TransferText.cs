@@ -15,6 +15,8 @@ public static class TransferText
     {
         "move" => ("Move", "Moving"),
         "delete" => ("Delete", "Deleting"),
+        // A preview's renames and creates run as one job of steps (docs/jobs.md, "Chains and steps").
+        "steps" => ("Change", "Changing"),
         _ => ("Copy", "Copying"),
     };
 

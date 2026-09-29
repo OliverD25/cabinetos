@@ -24,7 +24,59 @@ public sealed partial class EditorPane : UserControl
         CloseButton.Click += (_, _) => Run("editor.close", CommandArgs.Object(("pane", PaneIndex)));
         TerminalButton.Click += (_, _) => Run("terminal.new", CommandArgs.With("cwd", _folder));
         ReloadButton.Click += (_, _) => Run("editor.reload", CommandArgs.Object(("pane", PaneIndex)));
+        DropCatcher.DragEnter += OnDragOver;
+        DropCatcher.DragOver += OnDragOver;
+        DropCatcher.DragLeave += (_, _) => DropCatcher.BorderThickness = new Thickness(0);
+        DropCatcher.Drop += OnDrop;
         ApplyMetrics();
+    }
+
+    /// <summary>Rows of a pane were dropped on the tool's page: their paths, one per line in the drag's text.</summary>
+    public Action<IReadOnlyList<string>>? PathsDropped { get; set; }
+
+    /// <summary>
+    /// Covers the tool's page while rows of a pane are dragged (<paramref name="dragging"/>), so a drop
+    /// reaches the window and not the page's browser. Only an open editor takes it.
+    /// </summary>
+    public void SetDragging(bool dragging)
+    {
+        DropCatcher.Visibility = dragging && IsOpen ? Visibility.Visible : Visibility.Collapsed;
+        DropCatcher.BorderThickness = new Thickness(0);
+    }
+
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+        {
+            return;
+        }
+        e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+        e.DragUIOverride.Caption = $"Send to {ProviderText.Text}";
+        DropCatcher.BorderThickness = new Thickness(2);
+        e.Handled = true;
+    }
+
+    private async void OnDrop(object sender, DragEventArgs e)
+    {
+        DropCatcher.BorderThickness = new Thickness(0);
+        if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+        {
+            return;
+        }
+        var deferral = e.GetDeferral();
+        try
+        {
+            var text = await e.DataView.GetTextAsync();
+            var paths = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (paths.Length > 0)
+            {
+                PathsDropped?.Invoke(paths);
+            }
+        }
+        finally
+        {
+            deferral.Complete();
+        }
     }
 
     /// <summary>

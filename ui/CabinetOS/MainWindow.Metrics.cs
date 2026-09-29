@@ -101,6 +101,10 @@ public sealed partial class MainWindow
         {
             tabs.ApplyMetrics();
         }
+        foreach (var preview in _previewViews)
+        {
+            preview.ApplyMetrics();
+        }
         SidebarView.ApplyMetrics();
         Dock.ApplyMetrics(_dockPlacement == DockPlacement.Bottom);
         MarketView.ApplyMetrics();

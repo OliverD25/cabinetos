@@ -84,6 +84,12 @@ public class ProtocolTests
             new WindowStateRequest("left", new WindowPanesState(
                 new WindowPaneState([new WindowTabState(@"C:\Users\me", false, null), new WindowTabState(@"E:\work\README.md", true, "md-preview")], 1, @"C:\Users\me\a.txt", [@"C:\Users\me\a.txt"]),
                 new WindowPaneState([new WindowTabState(@"D:\", false, null)], 0, null, []))),
+            new PreviewListingRequest("Sort the photos",
+            [
+                new PreviewRowRequest(@"C:\photos\Beach\", "create"),
+                new PreviewRowRequest(@"C:\photos\IMG_1.jpg", "rename", "2026-09-30 beach.jpg"),
+                new PreviewRowRequest(@"C:\photos\old.tmp", "delete"),
+            ]),
             new OpenPreviewRequest("preview-3"),
             new PreviewApplyRequest("preview-3"),
             new PreviewCancelRequest("preview-3"),

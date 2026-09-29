@@ -337,6 +337,9 @@ public static class ErrorCodes
     public const string MarketplaceError = "marketplace_error";
     public const string HashMismatch = "hash_mismatch";
     public const string Incompatible = "incompatible";
+    public const string NoSuchPreview = "no_such_preview";
+    public const string TooManyPreviews = "too_many_previews";
+    public const string NoWindow = "no_window";
 }
 
 /// <summary>A tint laid over the Mica backdrop: a <c>#RRGGBB</c> colour and how much of it covers the backdrop.</summary>

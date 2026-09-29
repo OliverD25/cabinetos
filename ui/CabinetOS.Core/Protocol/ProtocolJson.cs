@@ -55,6 +55,7 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(ReloadPluginRequest))]
 [JsonSerializable(typeof(SetPluginEnabledRequest))]
 [JsonSerializable(typeof(GrantCapabilitiesRequest))]
+[JsonSerializable(typeof(PreviewListingRequest))]
 [JsonSerializable(typeof(OpenPreviewRequest))]
 [JsonSerializable(typeof(PreviewApplyRequest))]
 [JsonSerializable(typeof(PreviewCancelRequest))]

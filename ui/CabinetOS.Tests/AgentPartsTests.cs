@@ -169,8 +169,8 @@ public class AgentPartsTests
             Assert.Equal("Enter applies \u00B7 Esc cancels", PreviewSession.Hint);
             Assert.Equal(
                 [("Rename", @"C:\photos\", "IMG_1.jpg", "vacation_1.jpg"),
-                 ("Move", @"C:\photos\", "IMG_2.jpg", @"D:\backup"),
-                 ("Copy", @"C:\photos\", "IMG_3.jpg", @"D:\backup"),
+                 ("Move", @"C:\photos\", "IMG_2.jpg", @"backup\"),
+                 ("Copy", @"C:\photos\", "IMG_3.jpg", @"backup\"),
                  ("Delete", @"C:\photos\", "old.tmp", ""),
                  ("Create", @"C:\photos\", @"Beach\", ""),
                  ("Change", @"C:\photos\", "odd", "")],
@@ -178,7 +178,10 @@ public class AgentPartsTests
             // Only a delete is red, and only a row with a target has an accent part.
             Assert.Equal([false, false, false, true, false, false], session.Lines.Select(l => l.IsDelete));
             Assert.Equal([true, true, true, false, false, false], session.Lines.Select(l => l.HasTarget));
-            Assert.Equal(@"Rename C:\photos\IMG_1.jpg to vacation_1.jpg", session.Lines[0].Description);
+            Assert.Equal(@"Rename C:\photos\IMG_1.jpg to C:\photos\vacation_1.jpg", session.Lines[0].Description);
+            // The row shows the folder's name; its tooltip and the screen reader get the whole path.
+            Assert.Equal(@"D:\backup", session.Lines[1].TargetPath);
+            Assert.Equal(@"Move C:\photos\IMG_2.jpg to D:\backup", session.Lines[1].Description);
             Assert.Equal(@"Delete C:\photos\old.tmp", session.Lines[3].Description);
         }
     }

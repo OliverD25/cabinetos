@@ -112,6 +112,18 @@
 
             <Grid Grid.Row="1">
                 <Border x:Name="ToolFrame" CornerRadius="0,0,8,8" />
+                <!--
+                  While rows of a pane are dragged, this lies over the page: a WebView2 takes drops for itself,
+                  so the window catches them here and tells the page (paths-dropped, docs/tool-extensions.md).
+                -->
+                <Border
+                    x:Name="DropCatcher"
+                    AllowDrop="True"
+                    Background="Transparent"
+                    BorderBrush="{ThemeResource CbAccentBrush}"
+                    BorderThickness="0"
+                    CornerRadius="0,0,8,8"
+                    Visibility="Collapsed" />
                 <!-- When the tool's process ends: the window goes on, and Reload brings the page back. -->
                 <StackPanel
                     x:Name="StoppedPanel"

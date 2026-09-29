@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.PreviewPane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <!--
+      A preview of proposed changes (docs/ui.md, "The preview pane"): a bar with the title, the number
+      of changes and the two keys, over one row per change. It covers the other pane's list; the pane
+      goes back to its folder when the preview is applied or cancelled. The sizes are the editor's.
+    -->
+    <Border
+        x:Name="Surface"
+        Background="{ThemeResource CbLayerFillBrush}"
+        BorderBrush="{ThemeResource CbLayerStrokeBrush}"
+        BorderThickness="1"
+        CornerRadius="8">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition x:Name="BarRow" Height="36" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border
+                x:Name="Bar"
+                BorderBrush="{ThemeResource CbDividerBrush}"
+                BorderThickness="0,0,0,1">
+                <Grid>
+                    <Rectangle
+                        Height="2"
+                        VerticalAlignment="Top"
+                        Fill="{ThemeResource CbAccentBrush}" />
+                    <Grid Padding="14,0,10,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <FontIcon
+                                FontSize="14"
+                                Foreground="{ThemeResource CbAccentBrush}"
+                                Glyph="&#xE7B3;" />
+                            <TextBlock
+                                x:Name="TitleText"
+                                MaxWidth="360"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource CbTextPrimaryBrush}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                x:Name="CountText"
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Foreground="{ThemeResource CbHintTextBrush}" />
+                        </StackPanel>
+                        <TextBlock
+                            x:Name="HintText"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Foreground="{ThemeResource CbHintTextBrush}" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <ScrollViewer
+                x:Name="Scroller"
+                Grid.Row="1"
+                IsTabStop="True"
+                UseSystemFocusVisuals="False"
+                VerticalScrollBarVisibility="Auto"
+                HorizontalScrollBarVisibility="Disabled">
+                <ItemsRepeater x:Name="Rows" />
+            </ScrollViewer>
+
+            <!-- The core refused to apply (the first job could not start): the preview stays, and this says why. -->
+            <Border
+                x:Name="ErrorBar"
+                Grid.Row="1"
+                Padding="14,8"
+                VerticalAlignment="Bottom"
+                Background="{ThemeResource CbNoteFillBrush}"
+                Visibility="Collapsed">
+                <TextBlock
+                    x:Name="ErrorText"
+                    FontSize="12"
+                    Foreground="{ThemeResource CbErrorTextBrush}"
+                    TextWrapping="Wrap" />
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

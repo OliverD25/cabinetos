@@ -450,6 +450,27 @@ public sealed class SetPluginEnabledRequest(string pluginId, bool enabled) : Cor
     public bool Enabled { get; } = enabled;
 }
 
+/// <summary>
+/// One proposed change of <see cref="PreviewListingRequest"/>: <c>kind</c> is
+/// <c>rename</c>, <c>move</c>, <c>copy</c>, <c>delete</c> or <c>create</c>, and
+/// <c>to</c> the target (null for a delete or a create).
+/// </summary>
+public sealed record PreviewRowRequest(string Path, string Kind, string? To = null);
+
+/// <summary>
+/// Proposes changes as a preview (protocol 13); the reply is <c>preview_opened</c>. The window
+/// shows the previews plugins propose (<c>open_preview</c>) and makes none of its own; this
+/// request is for the snapshot aid and the tests.
+/// </summary>
+public sealed class PreviewListingRequest(string title, IReadOnlyList<PreviewRowRequest> rows) : CoreRequest("preview_listing")
+{
+    /// <summary>What the preview is about.</summary>
+    public string Title { get; } = title;
+
+    /// <summary>The changes, in the order applying them runs.</summary>
+    public IReadOnlyList<PreviewRowRequest> Rows { get; } = rows;
+}
+
 /// <summary>Opens the listing of a preview that exists (protocol 13); the reply is <c>preview_opened</c>.</summary>
 public sealed class OpenPreviewRequest(string preview) : CoreRequest("open_preview")
 {

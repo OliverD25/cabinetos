@@ -538,6 +538,10 @@ public sealed partial class FilePane : UserControl
         {
             _realized.Add(row);
             Mark(row, args.Index);
+            row.DragStartingRow -= OnRowDragStarting;
+            row.DragStartingRow += OnRowDragStarting;
+            row.DropCompletedRow -= OnRowDropCompleted;
+            row.DropCompletedRow += OnRowDropCompleted;
         }
         if (_timing is not null && _firstRowTicks == 0)
         {
@@ -788,6 +792,28 @@ public sealed partial class FilePane : UserControl
             Scroller.ChangeView(null, bottom + _listPadding - viewport, null, disableAnimation: true);
         }
     }
+
+    /// <summary>Rows of this pane are being dragged (true) or the drag ended (false): the window then shows where they may be dropped.</summary>
+    public event Action<bool>? DragChanged;
+
+    // The rows that go with a drag: the selection when the dragged row is part of it, else that row alone.
+    // Their paths travel as text, one per line, so a drop needs nothing but the drag's own data.
+    private void OnRowDragStarting(FileRow row, DragStartingEventArgs e)
+    {
+        if (_model is not { Search: null } model || row.Index < 0 || model.EntryAt(row.Index) is not { } entry)
+        {
+            e.Cancel = true;
+            return;
+        }
+        var paths = model.CurrentSelection.IsSelected(row.Index)
+            ? model.Targets().Select(t => t.Path).ToList()
+            : [entry.Path];
+        e.Data.SetText(string.Join("\r\n", paths));
+        e.Data.RequestedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+        DragChanged?.Invoke(true);
+    }
+
+    private void OnRowDropCompleted(FileRow row) => DragChanged?.Invoke(false);
 
     private void OnRowTapped(object sender, TappedRoutedEventArgs e)
     {

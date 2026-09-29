@@ -6,9 +6,11 @@ namespace CabinetOS.Core.Preview;
 /// One row of a preview as the pane shows it (docs/ui.md, "The preview pane"):
 /// what applying it does, the item, and where it goes. The item keeps its
 /// folder apart from its name, since the rows of one preview may come from
-/// several folders.
+/// several folders. <see cref="Target"/> is the short form the row shows (the
+/// new name of a rename, the folder's name for a move or a copy);
+/// <see cref="TargetPath"/> is the whole target, for the tooltip.
 /// </summary>
-public sealed record PreviewLine(PreviewChange Change, string Folder, string Name, string Target)
+public sealed record PreviewLine(PreviewChange Change, string Folder, string Name, string Target, string TargetPath = "")
 {
     /// <summary>The verb in front of the row: "Rename", "Move", "Copy", "Delete", "Create".</summary>
     public string Verb => Change switch
@@ -28,28 +30,39 @@ public sealed record PreviewLine(PreviewChange Change, string Folder, string Nam
     public bool HasTarget => Target.Length > 0;
 
     /// <summary>The row as one line of text, for the screen reader and the log.</summary>
-    public string Description => HasTarget ? $"{Verb} {Folder}{Name} to {Target}" : $"{Verb} {Folder}{Name}";
+    public string Description => HasTarget ? $"{Verb} {Folder}{Name} to {(TargetPath.Length > 0 ? TargetPath : Target)}" : $"{Verb} {Folder}{Name}";
 
     /// <summary>
     /// The line for row <paramref name="index"/> of a preview listing. A
     /// rename's target shows as the new name only, since its row already
-    /// shows the folder; a move or a copy shows the folder it goes into.
+    /// shows the folder; a move or a copy shows the name of the folder it
+    /// goes into, with a closing backslash (the whole path is in the tooltip).
     /// </summary>
     public static PreviewLine From(ListingView view, int index)
     {
         var path = view.Name(index);
-        var (folder, name) = Split(path);
         var change = view.Change(index);
-        var target = view.Target(index);
+        // The core gives a folder that a create makes its own kind, and may leave the closing backslash off its path.
+        if (change == PreviewChange.Create && view.Kind(index) == EntryKind.Directory && !path.EndsWith('\\'))
+        {
+            path += "\\";
+        }
+        var (folder, name) = Split(path);
+        var full = view.Target(index);
+        var target = full;
         if (change == PreviewChange.Rename)
         {
-            target = Split(target).Name;
+            target = Split(full).Name;
+        }
+        else if (change is PreviewChange.Move or PreviewChange.Copy)
+        {
+            target = full.Length == 0 ? "" : Split(full.TrimEnd('\\') + "\\").Name;
         }
         else if (change is PreviewChange.Delete or PreviewChange.Create)
         {
-            target = "";
+            target = full = "";
         }
-        return new PreviewLine(change, folder, name, target);
+        return new PreviewLine(change, folder, name, target, full);
     }
 
     /// <summary>

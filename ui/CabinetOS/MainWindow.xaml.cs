@@ -150,6 +150,7 @@ public sealed partial class MainWindow : Window
         SetUpPlugins();
         SetUpTools();
         SetUpTabs();
+        SetUpPreview();
         SetUpMarket();
 
         Palette.Model = _palette;
@@ -474,6 +475,9 @@ public sealed partial class MainWindow : Window
                     break;
                 case "tabs":
                     LogTabsForSnapshot(step.Argument);
+                    break;
+                case "preview" or "preview-key" or "agent-event" or "drop" or "fake-command":
+                    await RunPreviewStepAsync(step.Kind, step.Argument);
                     break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
@@ -971,6 +975,12 @@ public sealed partial class MainWindow : Window
                 _market.OnEvent(coreEvent);
                 _ = RefreshPluginsAsync();
                 break;
+            case PluginEventEvent pluginEvent:
+                OnPluginEvent(pluginEvent);
+                return;
+            case PreviewAppliedEvent or PreviewCancelledEvent:
+                OnPreviewEvent(coreEvent);
+                return;
             case InstallProgressEvent or InstallFinishedEvent:
                 _market.OnEvent(coreEvent);
                 return;
@@ -1205,6 +1215,8 @@ public sealed partial class MainWindow : Window
         _router.RegisterUiHandler("keys.open", _ => _palette.Open());
         _router.RegisterUiHandler("view.toggleDualPane", invocation =>
         {
+            // The user chose a layout: it stays when a preview closes.
+            _previewMadeDual = false;
             ApplyDual(!_dual);
             _ = PersistAsync(ShellState.DualPaneKey, _dual);
         });
@@ -1323,6 +1335,8 @@ public sealed partial class MainWindow : Window
             case CommandOutcomeKind.CoreResult when outcome.CommandId == "help.about":
                 // A core that still runs help.about itself: the window's About view shows instead of its raw result.
                 _ = ShowAboutAsync();
+                break;
+            case CommandOutcomeKind.CoreResult when OpensPreview(outcome):
                 break;
             case CommandOutcomeKind.CoreResult when outcome.Result is { } result:
                 _ = ShowResultAsync(name, result);
@@ -2084,6 +2098,13 @@ public sealed partial class MainWindow : Window
         {
             // The right pane goes away, and its tool tabs with it (the tool's process ends).
             CloseToolTabs(1, focusPane: false);
+            if (_previewViews?[1].IsShown == true)
+            {
+                // A preview in the pane that goes away is dropped, not left waiting for a key nobody can press.
+                var dropped = _previewViews[1].Session?.Id ?? "";
+                EndPreviewView(_previewViews[1]);
+                _ = RequestSafelyAsync(new PreviewCancelRequest(dropped));
+            }
         }
         RightColumn.Width = dual ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         RightSide.Visibility = dual ? Visibility.Visible : Visibility.Collapsed;
@@ -2407,6 +2428,10 @@ public sealed partial class MainWindow : Window
             // window's back as messages (TerminalKeys); a key that also arrives
             // here must not run twice, unless the page never got it (PageKeyboard).
             HandleKeyForPage(page, e);
+            return;
+        }
+        if (HandlePreviewKey(e))
+        {
             return;
         }
         var virtualKey = (int)e.Key;

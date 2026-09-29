@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CabinetOS.Core.Diagnostics;
+using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Tools;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
@@ -66,6 +67,34 @@ internal sealed class ToolHost : IToolPage
     /// <summary>What the page gets as <c>context</c> when it is ready.</summary>
     public Func<string>? Context { get; set; }
 
+    /// <summary>The plugins whose events the page asked for (<c>subscribe</c>); a page that loads again asks once more.</summary>
+    public ToolSubscriptions Subscriptions { get; } = new();
+
+    /// <summary>
+    /// Forwards a plugin's event to the page as <c>plugin-event</c>, when the
+    /// page follows that plugin and is ready. True when it was sent.
+    /// </summary>
+    public bool Deliver(PluginEventEvent pluginEvent)
+    {
+        if (!Subscriptions.Wants(pluginEvent.PluginId) || !_files.IsReady)
+        {
+            return false;
+        }
+        _page.Post(ToolMessages.PluginEvent(pluginEvent.PluginId, pluginEvent.Name, pluginEvent.Payload));
+        return true;
+    }
+
+    /// <summary>Tells the page that rows of a pane were dropped on it (<c>paths-dropped</c>). False when the page is not ready.</summary>
+    public bool SendPathsDropped(IReadOnlyList<string> paths)
+    {
+        if (!_files.IsReady)
+        {
+            return false;
+        }
+        _page.Post(ToolMessages.PathsDropped(paths));
+        return true;
+    }
+
     /// <summary>
     /// Shows <paramref name="path"/>: its folder is served on a new host, the
     /// page loads (again), and it gets <c>open</c> when it says <c>ready</c>.
@@ -118,6 +147,8 @@ internal sealed class ToolHost : IToolPage
         switch (message.Type)
         {
             case "ready":
+                // A page that says ready has loaded (again): what it asked for before is gone with the old page.
+                Subscriptions.Clear();
                 _files.OnReady(Context?.Invoke());
                 Diag.Info(Target, "tool ready", new LogField("tool", Tool.Manifest.Id), new LogField("path", FilePath));
                 break;
@@ -126,6 +157,19 @@ internal sealed class ToolHost : IToolPage
                 break;
             case "key":
                 KeyPressed?.Invoke(message.Keys!);
+                break;
+            case "subscribe":
+                if (Subscriptions.Subscribe(message.Plugin!))
+                {
+                    Diag.Info(Target, "a tool follows a plugin", new LogField("tool", Tool.Manifest.Id), new LogField("plugin", message.Plugin!));
+                }
+                else
+                {
+                    Diag.Warn(Target, "a tool follows too many plugins; refused", new LogField("tool", Tool.Manifest.Id), new LogField("plugin", message.Plugin!));
+                }
+                break;
+            case "unsubscribe":
+                Subscriptions.Unsubscribe(message.Plugin!);
                 break;
         }
     }
