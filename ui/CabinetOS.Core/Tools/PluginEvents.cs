@@ -3,17 +3,15 @@ using System.Text.Json;
 namespace CabinetOS.Core.Tools;
 
 /// <summary>
-/// The plugin events the window itself understands, whichever plugin sends
-/// them (Article 10: the window knows these names as general events, not as
-/// any one extension's). A plugin sends an event with <c>emit</c>; the core
-/// forwards it as <c>plugin_event</c> with the plugin's ID
-/// (docs/plugins.md, "Host functions").
+/// What the window understands in a plugin's events, whichever plugin sends
+/// them (Article 10: general rules, not any one extension's names). A plugin
+/// sends an event with <c>emit</c>; the core forwards it as
+/// <c>plugin_event</c> with the plugin's ID (docs/plugins.md, "Host
+/// functions"). Two rules go by a string field of the payload and ignore the
+/// event's name (<c>notice</c>, <c>preview</c>); the third is the badge event.
 /// </summary>
 public static class PluginEvents
 {
-    /// <summary><c>{ "text": … }</c>: a notice for the status bar, like the window's own.</summary>
-    public const string Notice = "agent.notice";
-
     /// <summary><c>{ "view": …, "kind": "dot"|"spinner"|null }</c>: a badge on a view's button in the activity rail.</summary>
     public const string Badge = "badge";
 
@@ -38,10 +36,14 @@ public static class PluginEvents
         }
     }
 
-    /// <summary>The text of a notice event, or null when the event is not one or has no text.</summary>
-    public static string? NoticeText(string name, string payload)
+    /// <summary>
+    /// The notice a plugin's event carries (rule 3 of the window's general
+    /// rules): any event, whatever its name, whose payload has a string field
+    /// <c>notice</c>. The status bar shows it like the window's own notices.
+    /// </summary>
+    public static string? NoticeText(string payload)
     {
-        if (name != Notice || Parse(payload) is not { } json || Text(json, "text") is not { Length: > 0 } text)
+        if (Parse(payload) is not { } json || Text(json, "notice") is not { Length: > 0 } text)
         {
             return null;
         }

@@ -239,24 +239,26 @@ public class AgentPartsTests
     public void A_plugin_event_carries_the_plugins_id_and_any_payload()
     {
         // The core forwards the payload as the text the plugin wrote (event.schema.json).
-        var message = MessageCodec.Decode("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"plugin_event","plugin_id":"agent","name":"agent.notice","payload":"{\"text\":\"Renamed 3 files\"}"}"""u8);
+        var message = MessageCodec.Decode("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"plugin_event","plugin_id":"agent","name":"agent.notice","payload":"{\"notice\":\"Renamed 3 files\"}"}"""u8);
 
         Assert.True(message.IsEvent);
         var received = Assert.IsType<PluginEventEvent>(message.Body);
         Assert.Equal(("agent", "agent.notice"), (received.PluginId, received.Name));
-        Assert.Equal("Renamed 3 files", PluginEvents.NoticeText(received.Name, received.Payload));
+        Assert.Equal("Renamed 3 files", PluginEvents.NoticeText(received.Payload));
     }
 
     [Fact]
-    public void Only_an_agent_notice_with_text_is_a_notice_and_a_long_one_is_cut()
+    public void Any_event_with_a_string_notice_is_a_notice_whatever_its_name_and_a_long_one_is_cut()
     {
-        Assert.Equal("Done", PluginEvents.NoticeText("agent.notice", """{"text":"Done"}"""));
-        Assert.Null(PluginEvents.NoticeText("hello.said", """{"text":"Done"}"""));
-        Assert.Null(PluginEvents.NoticeText("agent.notice", """{"other":1}"""));
-        Assert.Null(PluginEvents.NoticeText("agent.notice", """{"text":""}"""));
-        Assert.Null(PluginEvents.NoticeText("agent.notice", "\"Done\""));
-        Assert.Null(PluginEvents.NoticeText("agent.notice", "Done, but not JSON"));
-        var cut = PluginEvents.NoticeText("agent.notice", $$"""{"text":"{{new string('x', 1000)}}"}""")!;
+        // Rule 3: only the field counts, as with the preview rule; the event's name is not looked at.
+        Assert.Equal("Done", PluginEvents.NoticeText("""{"notice":"Done"}"""));
+        Assert.Null(PluginEvents.NoticeText("""{"text":"Done"}"""));
+        Assert.Null(PluginEvents.NoticeText("""{"other":1}"""));
+        Assert.Null(PluginEvents.NoticeText("""{"notice":""}"""));
+        Assert.Null(PluginEvents.NoticeText("""{"notice":7}"""));
+        Assert.Null(PluginEvents.NoticeText("\"Done\""));
+        Assert.Null(PluginEvents.NoticeText("Done, but not JSON"));
+        var cut = PluginEvents.NoticeText($$"""{"notice":"{{new string('x', 1000)}}"}""")!;
         Assert.Equal(PluginEvents.MaxNoticeLength, cut.Length);
         Assert.EndsWith("\u2026", cut);
     }
@@ -283,7 +285,7 @@ public class AgentPartsTests
         Assert.Null(ToolMessages.Parse("""{"type":"subscribe","plugin":""}"""));
         Assert.Null(ToolMessages.Parse("""{"type":"subscribe","plugin":7}"""));
 
-        using var sent = JsonDocument.Parse(ToolMessages.PluginEvent("agent", "agent.notice", """{"text":"Renamed 3 files","count":3}"""));
+        using var sent = JsonDocument.Parse(ToolMessages.PluginEvent("agent", "agent.notice", """{"notice":"Renamed 3 files","count":3}"""));
         Assert.Equal("plugin-event", sent.RootElement.GetProperty("type").GetString());
         Assert.Equal("agent", sent.RootElement.GetProperty("plugin").GetString());
         Assert.Equal("agent.notice", sent.RootElement.GetProperty("name").GetString());

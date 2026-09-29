@@ -162,7 +162,7 @@ and in the log:
 The window then sends each event of that plugin, and nothing else:
 
 ```json
-{"type":"plugin-event","plugin":"agent","name":"agent.notice","payload":{"text":"Renamed 3 files"}}
+{"type":"plugin-event","plugin":"agent","name":"agent.notice","payload":{"notice":"Renamed 3 files"}}
 ```
 
 `payload` is what the plugin wrote: JSON when it is JSON (an object, a

@@ -298,11 +298,11 @@ public sealed partial class MainWindow
 
     // ----- What plugins say -----
 
-    // A plugin's event: a notice (agent.notice) for the status bar, a preview its payload names (any event, whatever
-    // its name), and the tool pages that follow that plugin.
+    // A plugin's event: a notice its payload carries for the status bar, a preview its payload names (any event,
+    // whatever its name, for both), and the tool pages that follow that plugin.
     private void OnPluginEvent(PluginEventEvent pluginEvent)
     {
-        if (PluginEvents.NoticeText(pluginEvent.Name, pluginEvent.Payload) is { } notice)
+        if (PluginEvents.NoticeText(pluginEvent.Payload) is { } notice)
         {
             ShowNotice(notice);
         }
@@ -356,7 +356,7 @@ public sealed partial class MainWindow
     // come from list_commands; cmd-nowait:demo.ask then shows its prompt box.
     // preview:rename shows a preview of the active folder's files (built here, proposed to the core with
     // preview_listing, opened as a plugin's would be); preview:make makes one and does not show it;
-    // preview-key:enter|escape press the two keys; agent-event:<name>|<payload> is a plugin's event
+    // preview-key:enter|escape press the two keys; plugin-event:<name>|<payload> is a plugin's event
     // ($PREVIEW stands for the made preview); drop:<pane> drops the active pane's cursor row on that pane's tool.
     private async Task RunPreviewStepAsync(string kind, string argument)
     {
@@ -396,7 +396,7 @@ public sealed partial class MainWindow
                     await CancelPreviewAsync();
                 }
                 break;
-            case "agent-event":
+            case "plugin-event":
                 var parts = argument.Replace("$PREVIEW", _madePreview ?? "", StringComparison.Ordinal).Split('|', 2);
                 OnPluginEvent(new PluginEventEvent("snapshot", parts[0], parts.Length > 1 ? parts[1] : ""));
                 break;
