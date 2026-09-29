@@ -163,6 +163,13 @@ close (back to the folder), the tool's name beside a green dot, and "Open
 in Terminal" (a shell in the file's folder). One tool is open per pane; a
 tool that is open shows the next file where it is.
 
+Since Phase 12 the open file is also a tab in the pane's tab row
+([ui.md](ui.md), "Tabs"): the folder's own tab stays beside it, and
+Ctrl+Tab or a click goes back to the folder while the tool keeps its file.
+Closing the tool's tab (Ctrl+W, or the close button) is what
+`editor.close` did. The tab cannot move to the other pane, and it is not
+saved in `ui.tabs`.
+
 ## Markdown Preview
 
 The first tool ([sdk/tools/markdown-preview](../sdk/tools/markdown-preview/README.md))
