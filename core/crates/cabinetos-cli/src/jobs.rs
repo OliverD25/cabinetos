@@ -104,7 +104,18 @@ pub(crate) async fn run(client: &mut PipeClient, job: JobRun) -> anyhow::Result<
     }
 }
 
-fn outcome(state: &JobState) -> anyhow::Result<()> {
+/// The end of a job in one word or two.
+pub(crate) fn state_word(state: &JobState) -> &'static str {
+    match state {
+        JobState::Completed => "completed",
+        JobState::CompletedWithErrors => "completed with errors",
+        JobState::Cancelled => "cancelled",
+        JobState::Failed { .. } => "failed",
+        _ => "running",
+    }
+}
+
+pub(crate) fn outcome(state: &JobState) -> anyhow::Result<()> {
     match state {
         JobState::Completed => Ok(()),
         JobState::CompletedWithErrors => Err(anyhow!("the job ended with errors")),

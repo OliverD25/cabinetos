@@ -19,6 +19,9 @@
 //!   cancelled when that one did not (a preview's rows, `docs/jobs.md`).
 //! - A `steps` job runs simple steps in order: renames, new folders and
 //!   files, the Recycle Bin, restores of saved copies.
+//! - With an undo folder ([`EngineConfig::undo_dir`]), every job writes
+//!   what it did to the undo journal when it ends, and a file it replaces
+//!   is saved there first; [`JobQueueManager::undo`] reverses a job.
 //!
 //! Jobs belong to the manager, not to the client that started them. Events
 //! reach the caller through the [`EventSink`] given to
@@ -33,6 +36,7 @@
 #[allow(unsafe_code)]
 mod bin;
 mod job;
+mod journal;
 mod plan;
 pub mod progress;
 #[allow(unsafe_code)]
@@ -43,15 +47,15 @@ mod scheduler;
 mod win;
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use cabinetos_protocol::{
-    Conflict, ErrorCode, Event, JobAction, JobInfo, JobKind, JobRequest, JobState, JobStep,
-    Resolution,
+    Conflict, ErrorCode, Event, JobAction, JobInfo, JobKind, JobOptions, JobRequest, JobState,
+    JobStep, Resolution, UndoLeft,
 };
 
 use crate::job::{Counters, Job, Target, as_policy, kind_tag, lock};
@@ -107,6 +111,9 @@ pub struct EngineConfig {
     /// The size of every volume's Recycle Bin, instead of what Windows
     /// says. For tests; the core leaves it `None`.
     pub recycle_bin_capacity: Option<u64>,
+    /// The undo folder: its `journal.jsonl` records every job, and files a
+    /// job replaces are saved in it first. `None`: no journal, no undo.
+    pub undo_dir: Option<PathBuf>,
 }
 
 impl Default for EngineConfig {
@@ -118,6 +125,7 @@ impl Default for EngineConfig {
             progress_gap: progress::MIN_PROGRESS_GAP,
             finished_jobs_kept: 100,
             recycle_bin_capacity: None,
+            undo_dir: None,
         }
     }
 }
@@ -144,6 +152,23 @@ impl JobError {
 /// Job and conflict IDs are unique for the life of the process.
 static NEXT_JOB_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_CONFLICT_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Makes new job IDs larger than `id`, so that an ID the undo journal
+/// kept names one job even after the core restarted.
+pub fn continue_job_ids_after(id: u64) {
+    NEXT_JOB_ID.fetch_max(id.saturating_add(1), Ordering::Relaxed);
+}
+
+/// A job that `undo` started: what it reverses and what it cannot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UndoStarted {
+    /// The new `steps` job.
+    pub job_id: u64,
+    /// The job it reverses.
+    pub undoes: u64,
+    /// What it cannot bring back.
+    pub left: Vec<UndoLeft>,
+}
 
 pub(crate) fn next_conflict_id() -> u64 {
     NEXT_CONFLICT_ID.fetch_add(1, Ordering::Relaxed)
@@ -176,6 +201,10 @@ pub(crate) struct Engine {
     /// is in `jobs` as it was requested, and joins the scheduler only when
     /// the one before it has completed.
     pending: Mutex<HashMap<u64, u64>>,
+    /// The undo journal, when the engine has an undo folder.
+    pub(crate) journal: Option<journal::Journal>,
+    /// Undo jobs: the job each one reverses, for its journal line.
+    undo_of: Mutex<HashMap<u64, u64>>,
 }
 
 #[derive(Default)]
@@ -188,6 +217,30 @@ impl Engine {
     /// Sends an event of `job`, inside the span that started it.
     pub(crate) fn emit(&self, job: &Job, event: Event) {
         job.cause.in_scope(|| (self.sink)(event));
+    }
+
+    /// Notes something `job` did, for the undo journal. Nothing without a
+    /// journal.
+    pub(crate) fn record(&self, job: &Job, entry: journal::UndoEntry) {
+        if self.journal.is_none() {
+            return;
+        }
+        let mut log = lock(&job.undo);
+        if log.entries.len() >= journal::MAX_ENTRIES {
+            log.truncated = true;
+            log.entries.clear();
+        }
+        if !log.truncated {
+            log.entries.push(entry);
+        }
+    }
+
+    /// Writes the journal line of a job that ended.
+    pub(crate) fn journal_ended(&self, job: &Job, state: &JobState) {
+        let undoes = lock(&self.undo_of).remove(&job.id);
+        if let Some(journal) = &self.journal {
+            journal.write(job, state, undoes);
+        }
     }
 
     /// Sends `job_state_changed` if the state clients see has changed.
@@ -423,6 +476,7 @@ impl JobQueueManager {
     /// A manager whose events go to `sink`.
     #[must_use]
     pub fn new(config: EngineConfig, sink: EventSink) -> Self {
+        let journal = config.undo_dir.clone().map(journal::Journal::open);
         let engine = Arc::new(Engine {
             scheduler: Mutex::new(Scheduler::new(config.solid_state_jobs)),
             config,
@@ -433,6 +487,8 @@ impl JobQueueManager {
             stopping: AtomicBool::new(false),
             gate: OnceLock::new(),
             pending: Mutex::new(HashMap::new()),
+            journal,
+            undo_of: Mutex::new(HashMap::new()),
         });
         let weak = Arc::downgrade(&engine);
         if let Err(error) = std::thread::Builder::new()
@@ -458,6 +514,56 @@ impl JobQueueManager {
         let id = NEXT_JOB_ID.fetch_add(1, Ordering::Relaxed);
         self.engine.enqueue(id, prepared, false);
         Ok(id)
+    }
+
+    /// Reverses a finished job, or the newest one that was not undone yet,
+    /// as a new `steps` job built from the undo journal. Blocking: it reads
+    /// the journal and looks at the file system.
+    pub fn undo(&self, job: Option<u64>) -> Result<UndoStarted, JobError> {
+        self.refuse_when_stopping()?;
+        let not_undoable = |message: String| JobError::new(ErrorCode::NotUndoable, message);
+        let Some(journal) = &self.engine.journal else {
+            return Err(not_undoable("this core keeps no undo journal".to_owned()));
+        };
+        if let Some(id) = job
+            && self.engine.job(id).is_ok_and(|running| !running.is_done())
+        {
+            return Err(not_undoable(format!(
+                "job {id} is still running; undo it when it has ended"
+            )));
+        }
+        let (record, undone_by) = journal.find(job)?;
+        if let Some(by) = undone_by {
+            return Err(not_undoable(format!(
+                "job {} was undone already, by job {by}",
+                record.job
+            )));
+        }
+        let plan = journal::plan_undo(&record);
+        if let Some(message) = journal::refusal(&record, &plan) {
+            return Err(not_undoable(message));
+        }
+        let request = JobRequest {
+            kind: JobKind::Steps { steps: plan.steps },
+            sources: Vec::new(),
+            destination: None,
+            options: JobOptions::default(),
+        };
+        let prepared = prepare(request)?;
+        let id = NEXT_JOB_ID.fetch_add(1, Ordering::Relaxed);
+        lock(&self.engine.undo_of).insert(id, record.job);
+        tracing::info!(
+            job_id = id,
+            undoes = record.job,
+            left = plan.left.len(),
+            "undo started"
+        );
+        self.engine.enqueue(id, prepared, false);
+        Ok(UndoStarted {
+            job_id: id,
+            undoes: record.job,
+            left: plan.left,
+        })
     }
 
     /// Starts jobs that run one after another, in order: the first is

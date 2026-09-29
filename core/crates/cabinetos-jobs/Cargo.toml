@@ -11,6 +11,9 @@ publish.workspace = true
 [dependencies]
 cabinetos-fs.workspace = true
 cabinetos-protocol.workspace = true
+# The undo journal's lines.
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 windows = { workspace = true, features = [

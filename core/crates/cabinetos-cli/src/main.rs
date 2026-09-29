@@ -36,6 +36,7 @@ mod settings;
 mod state;
 mod term;
 mod themes;
+mod undo;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -309,6 +310,18 @@ enum Command {
     Secret {
         #[command(subcommand)]
         action: SecretAction,
+    },
+    /// Reverse a finished job as a new job, from the undo journal: renames
+    /// and moves go back, copies go to the Recycle Bin, replaced files come
+    /// back from their saved copies. A delete cannot be undone: restore
+    /// from the Recycle Bin.
+    Undo {
+        /// The job to undo, as `jobs` lists it.
+        #[arg(required_unless_present = "last", conflicts_with = "last")]
+        job: Option<u64>,
+        /// Undo the newest job that is not an undo and was not undone yet.
+        #[arg(long)]
+        last: bool,
     },
 }
 
@@ -939,6 +952,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             state::state(&mut client, *json, named.as_deref()).await?;
         }
         Command::Secret { action } => secret_command(&mut client, action).await?,
+        Command::Undo { job, .. } => undo::undo(&mut client, *job).await?,
     }
     Ok(())
 }

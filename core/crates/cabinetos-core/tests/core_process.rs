@@ -44,6 +44,7 @@ fn core_command(pipe: &PipeName, log_dir: &Path) -> Command {
         .env("CABINETOS_PLUGINS_DIR", log_dir.join("plugins"))
         .env("CABINETOS_PLUGINS_DATA_DIR", log_dir.join("plugins-data"))
         .env("CABINETOS_THEMES_DIR", log_dir.join("themes"))
+        .env("CABINETOS_UNDO_DIR", log_dir.join("undo"))
         .env(
             "CABINETOS_CONFIG",
             log_dir.join("config").join("cabinetos.json"),

@@ -93,6 +93,75 @@ are older than steps, so the plugin sees the weightiest thing the steps
 do: `delete` when any step goes to the Recycle Bin, else `move` when any
 renames or restores, else `copy`.
 
+## Undo
+
+Every job that changed something writes one line to the **undo journal**
+when it ends, and `undo_job` ([ipc.md](ipc.md), "Undo") reverses a job
+from it as a new steps job. The journal is
+`%LOCALAPPDATA%\CabinetOS\undo\journal.jsonl`; the environment variable
+`CABINETOS_UNDO_DIR` sets another folder (the tests use their own).
+
+```json
+{"job":12,"kind":"copy","state":"completed","ended_ms":1759190400000,
+ "entries":[{"op":"created","path":"D:\\backup\\photos"},
+            {"op":"overwritten","path":"D:\\backup\\a.txt","saved":"C:\\Users\\me\\AppData\\Local\\CabinetOS\\undo\\12\\0"}]}
+```
+
+One line per job, written before any client hears that the job ended, so
+an undo asked for at once finds it. A job that changed nothing writes no
+line. `undoes` names the job an undo reversed. The entries, in the order
+they happened:
+
+| `op` | Written when | An undo |
+|---|---|---|
+| `created` (`path`) | A copy made a file or folder; a copy or move made a folder, or its destination folder; a step made a folder or file | Puts it into the Recycle Bin: only the outermost, since a folder takes what it holds along |
+| `moved` (`from`, `to`) | A rename or move of a file or folder, on one volume or across volumes | Renames or moves it back, never replacing anything |
+| `overwritten` (`path`, `saved`) | A copy or move replaced a file (conflict answered with overwrite) | Puts the saved copy back in its place |
+| `removed_folder` (`path`) | A move removed a source folder once it was empty | Creates it again, before anything moves back into it |
+| `recycled` (`path`) | A delete or a step put it into the Recycle Bin | Nothing: restore it from the Recycle Bin |
+| `deleted` (`path`) | A delete for good (the sources, not each file) | Nothing |
+| `restored` (`path`) | An undo put a saved copy back | Nothing |
+
+**Saved copies.** Before a job replaces a file, it moves the old file to
+`<undo folder>\<job>\<n>` (a rename on the same volume; a copy and a
+delete across volumes) and records `overwritten` with that path. When the
+replace fails, the old file goes back. A file larger than 256 MiB is
+replaced without a saved copy (`saved` is `null`), and so is one that
+cannot be moved (open in another program). The saved copies of all jobs
+take at most 256 MiB: after each job, the oldest jobs' copies are removed
+until the rest fit.
+
+**Limits.** The journal keeps the last 200 jobs; an older line goes with
+its saved copies. A job that records more than 100,000 entries keeps none
+and cannot be undone. Job IDs follow the journal: at start the core makes
+new IDs larger than the newest in it, so `undo 12` means the same job
+after a restart.
+
+**What an undo does.** It reads the job's line and builds steps, newest
+entry first: removed folders come back first, then moves go back and
+saved copies are restored, then what the job made goes to the Recycle
+Bin. The reply `undo_started` names the new job and what it cannot bring
+back (`left`, with `in_recycle_bin`, `deleted_for_good`, `not_saved`,
+`saved_copy_removed` or `put_back`). Each step can fail on its own: a
+file the user moved away since then fails its step, and the undo ends
+`completed_with_errors`.
+
+**What cannot be undone** (`not_undoable`, with the reason):
+
+- a delete to the Recycle Bin: the answer says to restore from the
+  Recycle Bin, which Windows keeps;
+- a delete for good;
+- a job that was undone already (the journal has a line whose `undoes`
+  names it);
+- a job still running;
+- a job whose every entry is one of the above.
+
+`undo_job` without `job` undoes the newest job that is not an undo and was
+not undone yet, so asking again walks back through the history. An undo
+can itself be undone (a redo), except the files it put back from saved
+copies. A preview's rows run as several chained jobs; each is undone on
+its own.
+
 ## The scheduler
 
 Brief §3 asks for drive-aware queuing: copies on one spinning disk take
@@ -373,8 +442,9 @@ E: copied at about 3 GB/s with `COPY_FILE_NO_BUFFERING`.
   each job's kind, sources and destination.
 - Job events go to every connection that said `hello`, like the
   configuration events.
-- Job IDs and conflict IDs are unique for the life of the core. The core
-  keeps the last 100 finished jobs for `list_jobs`.
+- Job IDs and conflict IDs are unique for the life of the core, and job
+  IDs also across restarts when the undo journal has jobs (see "Undo").
+  The core keeps the last 100 finished jobs for `list_jobs`.
 - Pausing, resuming or cancelling a job that has ended does nothing and
   answers `ok`.
 - When the core shuts down, it cancels every job and gives the running
@@ -390,6 +460,8 @@ cabinetos-cli delete C:\old-folder --permanent
 cabinetos-cli jobs
 cabinetos-cli job pause 3
 cabinetos-cli job resolve 3 9 overwrite
+cabinetos-cli undo 3
+cabinetos-cli undo --last
 ```
 
 `copy` and `move` take the sources, then the folder they go into. The
@@ -401,3 +473,9 @@ pipe it prints one line per second.
 Conflicts appear on their own lines, with the command that answers them;
 `--resolve overwrite|skip|rename` answers them all automatically. Ctrl+C
 stops following, not the job.
+
+`undo <job>` and `undo --last` ask for the undo, print `job 14 undoes job
+3` and a `stays:` line for each thing it cannot bring back, and wait for
+the undo job to end. A job that cannot be undone fails with the reason
+(`not_undoable: job 3 put its files into the Recycle Bin; restore them
+from there …`).

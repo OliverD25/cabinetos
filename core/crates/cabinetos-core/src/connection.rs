@@ -410,6 +410,18 @@ impl Session {
                 Request::SaveLogBundle { minutes } => {
                     self.save_log_bundle(&id, &span, kind, minutes)
                 }
+                Request::UndoJob { job } => {
+                    let services = Arc::clone(&self.services);
+                    self.spawn_reply(&id, &span, kind, move || match services.jobs.undo(job) {
+                        Ok(started) => Response::UndoStarted {
+                            job_id: started.job_id,
+                            undoes: started.undoes,
+                            left: started.left,
+                        },
+                        Err(error) => job_error(error),
+                    });
+                    None
+                }
                 Request::WindowState(state) => Some(self.window_state(state)),
                 Request::GetWindowState { client } => {
                     Some(self.services.windows.get(client.as_deref()))

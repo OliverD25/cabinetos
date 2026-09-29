@@ -3,7 +3,9 @@ use serde_json::Value;
 
 use crate::RequestId;
 use crate::index::{FileHit, SearchSource, VolumeStatus, default_file_search_limit};
-use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution};
+use crate::job::{
+    Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution, UndoLeft,
+};
 use crate::market::{ExtensionKind, MarketItem, ToolInfo};
 use crate::plugin::{PluginInfo, PluginState};
 use crate::preview::{OpenedListing, PreviewRow};
@@ -512,6 +514,17 @@ pub enum Request {
         #[serde(default = "default_bundle_minutes")]
         minutes: u32,
     },
+    /// Reverses a finished job as a new `steps` job, from the undo journal
+    /// (docs/jobs.md, "Undo"): renames and moves go back, copies go to the
+    /// Recycle Bin, replaced files come back from their saved copies. The
+    /// core answers `undo_started`; `not_undoable` when nothing can be
+    /// reversed (a delete, a job already undone, one still running).
+    UndoJob {
+        /// The job to undo; absent means the newest job that is not an
+        /// undo itself and was not undone yet.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        job: Option<u64>,
+    },
 }
 
 fn default_bundle_minutes() -> u32 {
@@ -587,6 +600,7 @@ impl Request {
         "secret_delete",
         "secret_list",
         "save_log_bundle",
+        "undo_job",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -654,6 +668,7 @@ impl Request {
             Self::SecretDelete { .. } => "secret_delete",
             Self::SecretList => "secret_list",
             Self::SaveLogBundle { .. } => "save_log_bundle",
+            Self::UndoJob { .. } => "undo_job",
         }
     }
 }
@@ -938,6 +953,16 @@ pub enum Response {
         /// The zip's full path, in the log folder.
         path: String,
     },
+    /// Reply to `undo_job`: the job that reverses it runs now.
+    UndoStarted {
+        /// The new job, a `steps` job, as `job_started` gives one.
+        job_id: u64,
+        /// The job it reverses.
+        undoes: u64,
+        /// What it cannot bring back, and why; empty when it reverses
+        /// everything.
+        left: Vec<UndoLeft>,
+    },
 }
 
 impl Response {
@@ -978,6 +1003,7 @@ impl Response {
         "secret",
         "secret_names",
         "log_bundle",
+        "undo_started",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -1019,6 +1045,7 @@ impl Response {
             Self::Secret { .. } => "secret",
             Self::SecretNames { .. } => "secret_names",
             Self::LogBundle { .. } => "log_bundle",
+            Self::UndoStarted { .. } => "undo_started",
         }
     }
 }
@@ -1571,6 +1598,10 @@ pub enum ErrorCode {
     /// The secret's name or value is not one the Credential Manager keeps
     /// (see `secret_set`), or it refused.
     SecretError,
+    /// The job cannot be undone: it deleted (to the Recycle Bin or for
+    /// good), it was undone already, it still runs, or nothing it did can
+    /// be reversed. The message says which, and what to do instead.
+    NotUndoable,
 }
 
 #[cfg(test)]
@@ -1905,6 +1936,7 @@ mod tests {
             },
             Request::SecretList,
             Request::SaveLogBundle { minutes: 5 },
+            Request::UndoJob { job: Some(12) },
         ]
     }
 
@@ -2188,6 +2220,14 @@ mod tests {
             Response::LogBundle {
                 path: r"C:\Users\me\AppData\Local\CabinetOS\logs\bundle-20260930T010203004Z.zip"
                     .to_owned(),
+            },
+            Response::UndoStarted {
+                job_id: 13,
+                undoes: 12,
+                left: vec![UndoLeft {
+                    path: r"C:\Users\me\old.txt".to_owned(),
+                    reason: crate::job::UndoLeftReason::InRecycleBin,
+                }],
             },
         ]
     }
@@ -2605,6 +2645,7 @@ mod tests {
             (ErrorCode::TooManyPreviews, "too_many_previews"),
             (ErrorCode::NoSuchSecret, "no_such_secret"),
             (ErrorCode::SecretError, "secret_error"),
+            (ErrorCode::NotUndoable, "not_undoable"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));

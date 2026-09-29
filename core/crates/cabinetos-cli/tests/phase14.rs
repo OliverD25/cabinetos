@@ -1,5 +1,6 @@
 //! The CLI's Phase 14 commands against a real core: `state` prints what a
-//! window told the core; `secret` stores, reads, lists and removes secrets.
+//! window told the core; `secret` stores, reads, lists and removes secrets;
+//! `undo` reverses a job.
 //!
 //! Needs `cabinetos-core.exe` next to `cabinetos-cli.exe`; `cargo test
 //! --workspace` builds both. A test that plays the window talks to the
@@ -72,6 +73,7 @@ fn start_core_with(env: &[(&str, &str)]) -> Core {
             dir.path().join("plugins-data"),
         )
         .env("CABINETOS_THEMES_DIR", dir.path().join("themes"))
+        .env("CABINETOS_UNDO_DIR", dir.path().join("undo"))
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
@@ -231,4 +233,70 @@ fn secret_stores_reads_lists_and_removes() {
         stderr(&output)
     );
     assert_eq!(stdout(&cli(&core, &["secret", "list"])), "no secrets\n");
+}
+
+#[test]
+fn undo_reverses_the_last_job_or_a_named_one_and_refuses_a_delete() {
+    let core = start_core();
+    let files = core.files();
+    let from = files.join("from");
+    let to = files.join("to");
+    std::fs::create_dir_all(&from).unwrap();
+    std::fs::create_dir_all(&to).unwrap();
+    std::fs::write(from.join("a.txt"), "a").unwrap();
+    std::fs::write(from.join("b.txt"), "b").unwrap();
+    let path = |path: &Path| path.display().to_string();
+
+    let copied = cli(&core, &["copy", &path(&from.join("a.txt")), &path(&to)]);
+    assert!(copied.status.success(), "{}", stderr(&copied));
+    let moved = cli(&core, &["move", &path(&from.join("b.txt")), &path(&to)]);
+    assert!(moved.status.success(), "{}", stderr(&moved));
+    let copy_job: u64 = stdout(&copied)
+        .split_whitespace()
+        .nth(1)
+        .and_then(|id| id.parse().ok())
+        .unwrap_or_else(|| panic!("no job id in {}", stdout(&copied)));
+
+    let output = cli(&core, &["undo", "--last"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("undoes job"),
+        "{}",
+        stdout(&output)
+    );
+    assert!(
+        stdout(&output).contains(": completed"),
+        "{}",
+        stdout(&output)
+    );
+    assert!(from.join("b.txt").exists(), "the move went back");
+
+    let output = cli(&core, &["undo", &copy_job.to_string()]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains(&format!("undoes job {copy_job}")),
+        "{}",
+        stdout(&output)
+    );
+    assert!(
+        !to.join("a.txt").exists(),
+        "the copy went to the Recycle Bin"
+    );
+
+    let deleted = cli(&core, &["delete", &path(&from.join("a.txt"))]);
+    assert!(deleted.status.success(), "{}", stderr(&deleted));
+    let output = cli(&core, &["undo", "--last"]);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("not_undoable"),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        stderr(&output).contains("Recycle Bin"),
+        "{}",
+        stderr(&output)
+    );
+    let output = cli(&core, &["undo"]);
+    assert!(!output.status.success(), "a job or --last is needed");
 }

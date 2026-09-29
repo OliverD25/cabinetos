@@ -40,7 +40,7 @@ pub use index::{
 };
 pub use job::{
     Conflict, ConflictKind, ConflictPolicy, JobAction, JobInfo, JobKind, JobOptions, JobProgress,
-    JobRequest, JobState, JobStep, LinkPolicy, Rate, Resolution,
+    JobRequest, JobState, JobStep, LinkPolicy, Rate, Resolution, UndoLeft, UndoLeftReason,
 };
 pub use market::{
     Author, Download, ExtensionKind, INDEX_SCHEMA_VERSION, MarketCapability, MarketIndex,

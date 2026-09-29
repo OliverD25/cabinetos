@@ -70,6 +70,34 @@ pub enum JobStep {
     },
 }
 
+/// Something an undo cannot bring back (`undo_started`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct UndoLeft {
+    /// The file or folder.
+    pub path: String,
+    /// Why it stays as it is.
+    pub reason: UndoLeftReason,
+}
+
+/// Why an undo leaves something as it is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum UndoLeftReason {
+    /// The job put it into the Recycle Bin; restore it from there.
+    InRecycleBin,
+    /// The job deleted it for good.
+    DeletedForGood,
+    /// The job replaced it without saving it first: it was larger than the
+    /// undo folder may hold, or it could not be moved there.
+    NotSaved,
+    /// Its saved copy was removed to keep the undo folder under 256 MiB.
+    SavedCopyRemoved,
+    /// The job (an undo) put a saved copy back; that cannot be reversed.
+    PutBack,
+}
+
 impl JobStep {
     /// The path the step works on: its source, or what it creates.
     #[must_use]

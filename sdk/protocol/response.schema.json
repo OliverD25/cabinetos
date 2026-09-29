@@ -870,6 +870,41 @@
         "type",
         "path"
       ]
+    },
+    {
+      "description": "Reply to `undo_job`: the job that reverses it runs now.",
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "description": "The new job, a `steps` job, as `job_started` gives one.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "left": {
+          "description": "What it cannot bring back, and why; empty when it reverses\neverything.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UndoLeft"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "undo_started"
+        },
+        "undoes": {
+          "description": "The job it reverses.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "type",
+        "job_id",
+        "undoes",
+        "left"
+      ]
     }
   ],
   "required": [
@@ -1394,6 +1429,11 @@
           "description": "The secret's name or value is not one the Credential Manager keeps\n(see `secret_set`), or it refused.",
           "type": "string",
           "const": "secret_error"
+        },
+        {
+          "description": "The job cannot be undone: it deleted (to the Recycle Bin or for\ngood), it was undone already, it still runs, or nothing it did can\nbe reversed. The message says which, and what to do instead.",
+          "type": "string",
+          "const": "not_undoable"
         }
       ]
     },
@@ -3484,6 +3524,54 @@
         "author",
         "description",
         "dir"
+      ]
+    },
+    "UndoLeft": {
+      "description": "Something an undo cannot bring back (`undo_started`).",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The file or folder.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it stays as it is.",
+          "$ref": "#/$defs/UndoLeftReason"
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ]
+    },
+    "UndoLeftReason": {
+      "description": "Why an undo leaves something as it is.",
+      "oneOf": [
+        {
+          "description": "The job put it into the Recycle Bin; restore it from there.",
+          "type": "string",
+          "const": "in_recycle_bin"
+        },
+        {
+          "description": "The job deleted it for good.",
+          "type": "string",
+          "const": "deleted_for_good"
+        },
+        {
+          "description": "The job replaced it without saving it first: it was larger than the\nundo folder may hold, or it could not be moved there.",
+          "type": "string",
+          "const": "not_saved"
+        },
+        {
+          "description": "Its saved copy was removed to keep the undo folder under 256 MiB.",
+          "type": "string",
+          "const": "saved_copy_removed"
+        },
+        {
+          "description": "The job (an undo) put a saved copy back; that cannot be reversed.",
+          "type": "string",
+          "const": "put_back"
+        }
       ]
     },
     "VolumeDetails": {

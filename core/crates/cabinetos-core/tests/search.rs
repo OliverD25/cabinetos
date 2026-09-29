@@ -66,6 +66,7 @@ fn start_core(indexer_pipe: &PipeName) -> Core {
             dir.path().join("plugins-data"),
         )
         .env("CABINETOS_THEMES_DIR", dir.path().join("themes"))
+        .env("CABINETOS_UNDO_DIR", dir.path().join("undo"))
         .env("CABINETOS_INDEXER_PIPE", indexer_pipe.as_str())
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")

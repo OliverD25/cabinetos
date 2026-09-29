@@ -26,6 +26,7 @@ use cabinetos_protocol::{
 
 use crate::bin;
 use crate::job::{Counters, DirState, DirStatus, Job, Parked, Phase, Target, Work, lock};
+use crate::journal::UndoEntry;
 use crate::plan::{
     self, FileItem, FileKind, Plan, PlanError, RemoveKind, RenameItem, Transfer, file_name, join,
 };
@@ -132,16 +133,8 @@ pub(crate) fn run(engine: &Engine, job: &Job) {
         finish(engine, job, &JobState::Failed { message });
         return;
     }
-    if let Some(destination) = &job.request.destination
-        && let Err(error) = std::fs::create_dir_all(destination)
-    {
-        finish(
-            engine,
-            job,
-            &JobState::Failed {
-                message: format!("cannot create {destination}: {error}"),
-            },
-        );
+    if let Err(message) = make_destination(engine, job) {
+        finish(engine, job, &JobState::Failed { message });
         return;
     }
     let counters = &job.counters;
@@ -191,6 +184,7 @@ pub(crate) fn run(engine: &Engine, job: &Job) {
         deferred: Mutex::new(Vec::new()),
     };
     run.execute(apartment.as_ref());
+    record_deleted(engine, job);
     let cancelled = job.control.is_cancelled();
     if !cancelled {
         run.finish_folders();
@@ -205,6 +199,43 @@ pub(crate) fn run(engine: &Engine, job: &Job) {
         JobState::Completed
     };
     finish(engine, job, &state);
+}
+
+/// Creates the destination folder of a copy or move. A new one goes into
+/// the undo journal: an undo takes it away with everything in it.
+fn make_destination(engine: &Engine, job: &Job) -> Result<(), String> {
+    let Some(destination) = &job.request.destination else {
+        return Ok(());
+    };
+    let new = !win::exists(destination);
+    std::fs::create_dir_all(destination)
+        .map_err(|error| format!("cannot create {destination}: {error}"))?;
+    if new {
+        engine.record(
+            job,
+            UndoEntry::Created {
+                path: destination.clone(),
+            },
+        );
+    }
+    Ok(())
+}
+
+/// A permanent delete that removed anything names its sources in the undo
+/// journal, so an undo can say they are gone for good.
+fn record_deleted(engine: &Engine, job: &Job) {
+    if matches!(job.request.kind, JobKind::Delete { permanent: true })
+        && Counters::get(&job.counters.files_done) > Counters::get(&job.counters.files_failed)
+    {
+        for source in &job.request.sources {
+            engine.record(
+                job,
+                UndoEntry::Deleted {
+                    path: source.clone(),
+                },
+            );
+        }
+    }
 }
 
 /// A `steps` job: each step in order, on this thread. A step that fails
@@ -237,9 +268,12 @@ fn run_steps(engine: &Engine, job: &Job, steps: &[JobStep]) {
             break;
         }
         *lock(&job.current_path) = Some(step.path().to_owned());
-        if let Err(error) = run_step(step, apartment.as_ref()) {
-            tracing::warn!(job_id = job.id, step = ?step, %error, "a step of the job failed");
-            Counters::add(&job.counters.files_failed, 1);
+        match run_step(step, apartment.as_ref()) {
+            Ok(()) => engine.record(job, step_entry(step)),
+            Err(error) => {
+                tracing::warn!(job_id = job.id, step = ?step, %error, "a step of the job failed");
+                Counters::add(&job.counters.files_failed, 1);
+            }
         }
         Counters::add(&job.counters.files_done, 1);
     }
@@ -252,6 +286,21 @@ fn run_steps(engine: &Engine, job: &Job, steps: &[JobStep]) {
         JobState::Completed
     };
     finish(engine, job, &state);
+}
+
+/// What a step that worked did, for the undo journal.
+fn step_entry(step: &JobStep) -> UndoEntry {
+    match step {
+        JobStep::Rename { from, to } => UndoEntry::Moved {
+            from: from.clone(),
+            to: to.clone(),
+        },
+        JobStep::CreateFolder { path } | JobStep::CreateFile { path } => {
+            UndoEntry::Created { path: path.clone() }
+        }
+        JobStep::Recycle { path } => UndoEntry::Recycled { path: path.clone() },
+        JobStep::Restore { to, .. } => UndoEntry::Restored { path: to.clone() },
+    }
 }
 
 /// One step of a `steps` job.
@@ -343,6 +392,9 @@ pub(crate) fn finish(engine: &Engine, job: &Job, state: &JobState) {
         job.counters.conflicts_open.store(0, Ordering::Relaxed);
     }
     *lock(&job.current_path) = None;
+    // Before any client hears that the job ended: an undo it asks for at
+    // once finds the job's line.
+    engine.journal_ended(job, state);
     *lock(&job.phase) = Phase::Done(state.clone());
     crate::progress::publish(job, &engine.sink, engine.config.progress_gap, true);
     engine.announce(job);
@@ -357,6 +409,13 @@ pub(crate) fn finish(engine: &Engine, job: &Job, state: &JobState) {
         elapsed_ms = job.elapsed_ms(),
         "job ended"
     );
+}
+
+/// A file moved into the undo folder before a replace.
+struct Saving {
+    path: String,
+    /// Where it went; `None` when it could not be saved.
+    saved: Option<String>,
 }
 
 struct Run<'a> {
@@ -733,12 +792,26 @@ impl Run<'_> {
             if work.may_clear_read_only() {
                 let _ = win::clear_read_only(&destination);
             }
-            if let Err(error) = win::delete_file(&destination) {
+            let saving = self.save_before_replacing(&destination);
+            let gone = if win::exists(&destination) {
+                win::delete_file(&destination)
+            } else {
+                Ok(())
+            };
+            if let Err(error) = gone {
+                self.after_replacing(saving, false);
                 return conflict_for(error, &item.source, Some(destination));
             }
+            self.after_replacing(saving, true);
         }
         match win::create_directory(&destination) {
             Ok(()) => {
+                self.engine.record(
+                    self.job,
+                    UndoEntry::Created {
+                        path: destination.clone(),
+                    },
+                );
                 self.dir_ready(index, DirState::Created, destination);
                 Outcome::Done
             }
@@ -781,6 +854,12 @@ impl Run<'_> {
             let _ = win::clear_read_only(&destination);
         }
         *lock(&self.job.current_path) = Some(item.source.clone());
+        let saving = if overwrite && item.kind != FileKind::DirLink {
+            self.save_before_replacing(&destination)
+        } else {
+            None
+        };
+        let replaced = saving.is_some();
         let outcome = match (item.transfer, item.kind) {
             (Transfer::Rename, _) => rename(
                 &item.source,
@@ -793,10 +872,80 @@ impl Run<'_> {
             (_, FileKind::FileLink) => self.copy_file_link(&item, &destination, overwrite),
             (_, FileKind::File) => self.copy_file(&item, &destination, overwrite),
         };
-        if matches!(outcome, Outcome::Done) && item.transfer == Transfer::CopyAndDelete {
-            return delete_moved_source(&item);
+        self.after_replacing(saving, matches!(outcome, Outcome::Done));
+        if !matches!(outcome, Outcome::Done) {
+            return outcome;
         }
+        if item.transfer == Transfer::Copy {
+            // A copy over a saved file comes back with the saved file.
+            if !replaced {
+                self.engine
+                    .record(self.job, UndoEntry::Created { path: destination });
+            }
+            return outcome;
+        }
+        let outcome = if item.transfer == Transfer::CopyAndDelete {
+            delete_moved_source(&item)
+        } else {
+            outcome
+        };
+        let entry = if matches!(outcome, Outcome::Done) {
+            UndoEntry::Moved {
+                from: item.source.clone(),
+                to: destination,
+            }
+        } else {
+            // The source could not go: what the job leaves is a copy.
+            UndoEntry::Created { path: destination }
+        };
+        self.engine.record(self.job, entry);
         outcome
+    }
+
+    /// Before `destination` is replaced: moves the file there into the
+    /// undo folder, when the engine has one and the file fits. `None` when
+    /// nothing stands there to be replaced, or when there is no journal.
+    fn save_before_replacing(&self, destination: &str) -> Option<Saving> {
+        let journal = self.engine.journal.as_ref()?;
+        let info = win::info(destination).ok()?;
+        if info.is_directory() {
+            return None;
+        }
+        let saved = if info.size > crate::journal::SAVED_CAP {
+            None
+        } else {
+            journal.save_path(self.job).and_then(|saved| {
+                match win::move_anywhere(destination, &saved, false) {
+                    Ok(()) => Some(saved),
+                    Err(error) => {
+                        tracing::warn!(path = %destination, error = %win::message(error), "cannot save the file this job replaces; it cannot be brought back");
+                        None
+                    }
+                }
+            })
+        };
+        Some(Saving {
+            path: destination.to_owned(),
+            saved,
+        })
+    }
+
+    /// After the replace: records the saved file when it worked, and puts
+    /// it back when it did not.
+    fn after_replacing(&self, saving: Option<Saving>, replaced: bool) {
+        let Some(Saving { path, saved }) = saving else {
+            return;
+        };
+        if replaced {
+            self.engine
+                .record(self.job, UndoEntry::Overwritten { path, saved });
+            return;
+        }
+        if let Some(saved) = saved
+            && let Err(error) = win::move_anywhere(&saved, &path, false)
+        {
+            tracing::error!(path = %path, saved = %saved, error = %win::message(error), "cannot put a saved file back after a failed replace; it stays in the undo folder");
+        }
     }
 
     fn copy_file(&self, item: &FileItem, destination: &str, overwrite: bool) -> Outcome {
@@ -908,13 +1057,30 @@ impl Run<'_> {
         if work.may_clear_read_only() {
             let _ = win::clear_read_only(&destination);
         }
-        rename(
+        let saving = if overwrite && !item.is_dir {
+            self.save_before_replacing(&destination)
+        } else {
+            None
+        };
+        let outcome = rename(
             &item.source,
             &destination,
             overwrite && !item.is_dir,
             item.size,
             item.times.modified,
-        )
+        );
+        let done = matches!(outcome, Outcome::Done);
+        self.after_replacing(saving, done);
+        if done {
+            self.engine.record(
+                self.job,
+                UndoEntry::Moved {
+                    from: item.source,
+                    to: destination,
+                },
+            );
+        }
+        outcome
     }
 
     /// Turns the rename of a folder into renames of its contents, merged
@@ -1009,6 +1175,8 @@ impl Run<'_> {
         let path = lock(&self.plan).recycles[index].clone();
         *lock(&self.job.current_path) = Some(path.clone());
         if matches!(work.resolution, Some(Resolution::DeletePermanently)) {
+            self.engine
+                .record(self.job, UndoEntry::Deleted { path: path.clone() });
             return self.expand_permanent(&path);
         }
         // The shell would delete for good, silently, what its bin cannot
@@ -1042,11 +1210,15 @@ impl Run<'_> {
             tracing::error!("a Recycle Bin delete ran without COM");
             return Outcome::Failed;
         };
-        match recycle::recycle(apartment, &path) {
+        let outcome = match recycle::recycle(apartment, &path) {
             Ok(()) => Outcome::Done,
             Err(error) if !win::exists(&path) && error != code::REQUEST_ABORTED => Outcome::Done,
             Err(error) => conflict_for(error, &path, None),
+        };
+        if matches!(outcome, Outcome::Done) {
+            self.engine.record(self.job, UndoEntry::Recycled { path });
         }
+        outcome
     }
 
     fn source_of(&self, work: &Work) -> String {
@@ -1138,9 +1310,17 @@ impl Run<'_> {
             {
                 tracing::warn!(path = %status.destination, error = %win::message(error), "cannot set the times of a folder");
             }
-            if dir.remove_source && matches!(status.state, DirState::Created | DirState::Existed) {
+            if dir.remove_source
+                && matches!(status.state, DirState::Created | DirState::Existed)
                 // Fails, and stays, if something in it was skipped.
-                let _ = win::remove_directory(&dir.source);
+                && win::remove_directory(&dir.source).is_ok()
+            {
+                self.engine.record(
+                    self.job,
+                    UndoEntry::RemovedFolder {
+                        path: dir.source.clone(),
+                    },
+                );
             }
         }
     }

@@ -336,6 +336,8 @@ dependencies = [
  "cabinetos-fs",
  "cabinetos-protocol",
  "criterion",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tracing",

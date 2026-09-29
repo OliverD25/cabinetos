@@ -72,6 +72,7 @@ fn start_core() -> Core {
         .arg("--plugins-data-dir")
         .arg(dir.path().join("plugins-data"))
         .env("CABINETOS_THEMES_DIR", dir.path().join("themes"))
+        .env("CABINETOS_UNDO_DIR", dir.path().join("undo"))
         .env("CABINETOS_LOG_DIR", dir.path().join("logs"))
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")

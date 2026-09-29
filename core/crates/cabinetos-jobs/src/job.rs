@@ -242,6 +242,8 @@ pub(crate) struct Job {
     /// the user action. The job's threads enter it and its events are sent
     /// inside it, so its log lines and events carry that trace.
     pub(crate) cause: tracing::Span,
+    /// What it did, for the undo journal.
+    pub(crate) undo: Mutex<crate::journal::UndoLog>,
 }
 
 impl Job {
@@ -269,6 +271,7 @@ impl Job {
             emitter: Mutex::new(Emitter::default()),
             announced: Mutex::new(None),
             cause: tracing::Span::current(),
+            undo: Mutex::new(crate::journal::UndoLog::default()),
         }
     }
 

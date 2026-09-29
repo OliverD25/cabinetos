@@ -51,6 +51,7 @@ fn start_core(dir: &Path) -> Core {
         .env("CABINETOS_PLUGINS_DIR", dir.join("plugins"))
         .env("CABINETOS_PLUGINS_DATA_DIR", dir.join("plugins-data"))
         .env("CABINETOS_THEMES_DIR", dir.join("themes"))
+        .env("CABINETOS_UNDO_DIR", dir.join("undo"))
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .stdin(Stdio::null())

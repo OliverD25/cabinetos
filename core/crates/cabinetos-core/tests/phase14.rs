@@ -70,6 +70,7 @@ fn start_core_with(env: &[(&str, &str)]) -> Core {
             dir.path().join("plugins-data"),
         )
         .env("CABINETOS_THEMES_DIR", dir.path().join("themes"))
+        .env("CABINETOS_UNDO_DIR", dir.path().join("undo"))
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
@@ -657,4 +658,67 @@ async fn secrets_are_kept_by_windows_and_never_logged() {
         assert!(Instant::now() < deadline, "the log lines did not come");
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_job_is_undone_over_the_pipe_and_its_journal_line_stays() {
+    let core = start_core();
+    let files = core.files();
+    let (mut client, mut events) = greeted(&core, "undo-test").await;
+    let from = files.join("from");
+    let to = files.join("to");
+    std::fs::create_dir_all(&from).unwrap();
+    std::fs::create_dir_all(&to).unwrap();
+    std::fs::write(from.join("m.txt"), "m").unwrap();
+
+    let reply = ask(
+        &mut client,
+        Request::StartJob(cabinetos_protocol::JobRequest {
+            kind: cabinetos_protocol::JobKind::Move,
+            sources: vec![from.join("m.txt").display().to_string()],
+            destination: Some(to.display().to_string()),
+            options: cabinetos_protocol::JobOptions::default(),
+        }),
+    )
+    .await;
+    let Response::JobStarted { job_id: moved } = reply else {
+        panic!("{reply:?}")
+    };
+    let ended = |job: u64| {
+        move |event: &Event| {
+            matches!(event, Event::JobStateChanged { job_id, state } if *job_id == job && state.is_terminal())
+                .then_some(())
+        }
+    };
+    next_event(&mut events, ended(moved)).await;
+    assert!(to.join("m.txt").exists());
+
+    let reply = ask(&mut client, Request::UndoJob { job: None }).await;
+    let Response::UndoStarted {
+        job_id: undo,
+        undoes,
+        left,
+    } = reply
+    else {
+        panic!("{reply:?}")
+    };
+    assert_eq!((undoes, left), (moved, Vec::new()));
+    next_event(&mut events, ended(undo)).await;
+    assert!(from.join("m.txt").exists(), "moved back");
+
+    let reply = ask(&mut client, Request::UndoJob { job: Some(moved) }).await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::NotUndoable),
+        "{reply:?}"
+    );
+    let journal =
+        std::fs::read_to_string(core.dir.path().join("undo").join("journal.jsonl")).unwrap();
+    let lines: Vec<serde_json::Value> = journal
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 2, "{journal}");
+    assert_eq!(lines[0]["job"], moved);
+    assert_eq!(lines[1]["undoes"], moved);
 }

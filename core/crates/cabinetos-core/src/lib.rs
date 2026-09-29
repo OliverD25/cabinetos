@@ -62,6 +62,11 @@ pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Environment variable that sets the number of async worker threads.
 pub const WORKERS_ENV: &str = "CABINETOS_WORKERS";
 
+/// Environment variable that sets the undo folder (the journal and the
+/// saved copies, docs/jobs.md "Undo"); tests point it at a folder of their
+/// own. Default: `%LOCALAPPDATA%\CabinetOS\undo`.
+pub const UNDO_DIR_ENV: &str = "CABINETOS_UNDO_DIR";
+
 /// Async worker threads when `CABINETOS_WORKERS` is not set. The workers only
 /// route messages and wait for events; disk work runs on blocking threads
 /// (`spawn_blocking`) or on dedicated threads (directory watchers), never on
@@ -210,7 +215,10 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
     let (themes, _theme_watcher) = themes::start(dirs.themes.clone(), &settings, &events).await;
     let job_events = Arc::clone(&events);
     let jobs = JobQueueManager::new(
-        EngineConfig::default(),
+        EngineConfig {
+            undo_dir: undo_dir(),
+            ..EngineConfig::default()
+        },
         Arc::new(move |event| job_events.publish(event)),
     );
     let secrets = secrets::from_env();
@@ -271,6 +279,21 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
     }
     drop(diag);
     result
+}
+
+/// The undo folder: `CABINETOS_UNDO_DIR`, else
+/// `%LOCALAPPDATA%\CabinetOS\undo`; none outside a normal Windows session.
+fn undo_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os(UNDO_DIR_ENV)
+        .filter(|dir| !dir.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("LOCALAPPDATA").map(|local| {
+                std::path::PathBuf::from(local)
+                    .join("CabinetOS")
+                    .join("undo")
+            })
+        })
 }
 
 /// Logs a `CABINETOS_WORKERS` value that `worker_threads` refused.

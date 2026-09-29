@@ -1301,6 +1301,28 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Reverses a finished job as a new `steps` job, from the undo journal\n(docs/jobs.md, \"Undo\"): renames and moves go back, copies go to the\nRecycle Bin, replaced files come back from their saved copies. The\ncore answers `undo_started`; `not_undoable` when nothing can be\nreversed (a delete, a job already undone, one still running).",
+      "type": "object",
+      "properties": {
+        "job": {
+          "description": "The job to undo; absent means the newest job that is not an\nundo itself and was not undone yet.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "undo_job"
+        }
+      },
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [

@@ -230,6 +230,7 @@ fn log_bundle_asks_the_core_and_prints_the_zip_s_path() {
         .env("CABINETOS_LOG_DIR", &logs)
         .env("CABINETOS_PLUGINS_DIR", dir.path().join("plugins"))
         .env("CABINETOS_THEMES_DIR", dir.path().join("themes"))
+        .env("CABINETOS_UNDO_DIR", dir.path().join("undo"))
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_HEAVY")
         .stdin(std::process::Stdio::null())

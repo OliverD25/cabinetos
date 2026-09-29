@@ -132,7 +132,9 @@ reply `jobs_started`, `preview_cancel`, the events `preview_applied` and
 rows ("Previews"); the job kind `steps` ("Jobs"); and secrets:
 `secret_set`, `secret_get` with the reply `secret`, `secret_delete`,
 `secret_list` with the reply `secret_names`, and the error codes
-`no_such_secret` and `secret_error` ("Secrets"). Phase 15 added to it
+`no_such_secret` and `secret_error` ("Secrets"); `undo_job` with the reply
+`undo_started` and the error code `not_undoable` ("Undo"); a plugin
+command's optional `input` in `list_commands`. Phase 15 added to it
 `save_log_bundle` with the reply `log_bundle` ("Log bundles"), and the
 optional `trace` of every message ("The pipe"), which older peers
 ignore.
@@ -209,6 +211,7 @@ as absent from an older core.
 | `secret_delete` | `name` | `ok` |
 | `secret_list` | — | `secret_names` (`names`) |
 | `save_log_bundle` | `minutes` (1 to 1,440; default 10) | `log_bundle` (`path`), once the zip is written ([diagnostics.md](diagnostics.md), "Bundles") |
+| `undo_job` | `job` (optional: the newest job not undone yet) | `undo_started` (`job_id`, `undoes`, `left`) |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -248,6 +251,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `too_many_previews` | The client (or plugin) has 20 previews alive; apply or cancel one first. |
 | `no_such_secret` | No secret has that name. |
 | `secret_error` | The secret's name is not 1 to 128 letters, digits, `-`, `_` and `.`; its value is empty or longer than 2,560 bytes; or the Credential Manager refused. |
+| `not_undoable` | `undo_job`: the job deleted (to the Recycle Bin or for good), was undone already, still runs, or did nothing that can be reversed; the message says which and what to do instead. |
 
 Requests on one connection are independent: `list_directory`,
 `describe_entries`, `match_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
@@ -988,6 +992,30 @@ disconnects, and `list_jobs` from any connection shows it.
   each of its fields may be left out; the defaults are shown above.
 - `job_started` means the paths were checked and the job is queued. The
   work itself is reported by events.
+
+### Undo
+
+Protocol 13. Every job that changed something leaves a line in the undo
+journal when it ends ([jobs.md](jobs.md), "Undo"); `undo_job` reverses one
+as a new steps job.
+
+```json
+{"id":"01M…","type":"undo_job","job":7}
+{"id":"01M…","type":"undo_started","job_id":8,"undoes":7,
+ "left":[{"path":"C:\\photos\\old.jpg","reason":"in_recycle_bin"}]}
+```
+
+- Without `job`, the core undoes the newest job that is not an undo
+  itself and was not undone yet.
+- `undo_started` comes when the undo job is queued; its progress and end
+  are the usual job events. `left` lists what it cannot bring back:
+  `in_recycle_bin`, `deleted_for_good`, `not_saved` (replaced without a
+  saved copy), `saved_copy_removed` (the undo folder keeps 256 MiB) or
+  `put_back` (a saved copy an earlier undo put back).
+- `not_undoable` when nothing can be reversed: a delete (the message says
+  to restore from the Recycle Bin), a job undone already, a job still
+  running. `no_such_job` when the journal has no line for the job: it
+  changed nothing, or it is older than the last 200 jobs.
 
 ```json
 {"id":"01M…","type":"job_state_changed","job_id":7,"state":{"type":"running"}}
