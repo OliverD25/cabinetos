@@ -28,6 +28,7 @@ mod connection;
 mod events;
 mod listing;
 mod market;
+mod measure;
 mod plugins;
 mod search;
 mod settings;

@@ -246,3 +246,47 @@ fn props_shows_the_sheet_and_refuses_what_is_not_there() {
         "showing the properties of 3 items\n"
     );
 }
+
+/// `measure` prints each path's total, in the order given; a path that is
+/// not there is refused before anything is counted.
+#[test]
+fn measure_prints_the_files_folders_and_bytes_under_each_path() {
+    let core = start_core();
+    let dir = scratch("measure");
+    let root = dir.path().join("photos 2026");
+    std::fs::create_dir_all(root.join("a")).unwrap();
+    std::fs::create_dir_all(root.join("b").join("deep")).unwrap();
+    std::fs::write(root.join("a").join("one.jpg"), [0u8; 1000]).unwrap();
+    std::fs::write(root.join("b").join("deep").join("Звіт.txt"), [1u8; 24]).unwrap();
+    let file = root.join("a").join("one.jpg");
+
+    let output = stdout(&cli(&core, &["measure", &shown(&root), &shown(&file)]));
+    let lines: Vec<&str> = output
+        .lines()
+        .filter(|line| !line.starts_with("  counting "))
+        .collect();
+    assert_eq!(lines.len(), 4, "{output}");
+    assert!(
+        lines[0].starts_with("measure ") && lines[0].ends_with(" started"),
+        "{output}"
+    );
+    assert_eq!(
+        lines[1],
+        format!(
+            "{}: 2 files, 3 folders, 1024 bytes (1.00 KiB)",
+            shown(&root)
+        )
+    );
+    assert_eq!(
+        lines[2],
+        format!(
+            "{}: 1 files, 0 folders, 1000 bytes (1000.00 B)",
+            shown(&file)
+        )
+    );
+    assert!(lines[3].ends_with(" finished"), "{output}");
+
+    let gone = dir.path().join("gone");
+    let missing = stderr(&cli(&core, &["measure", &shown(&root), &shown(&gone)]));
+    assert!(missing.contains("not_found"), "{missing}");
+}

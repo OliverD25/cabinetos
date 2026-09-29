@@ -98,8 +98,10 @@ command of the UI (its About view), so the core answers it with
 listing's link and "not on this disk" flags and its `reparse_tag`; and a
 theme's optional `metrics` and `chrome`, with `has_metrics` in `themes`.
 Version 12 (sub-phase 11a, Total Commander's keys and small commands)
-added the sort key `extension`, `create_file`, `edit_path` and
-`show_properties`.
+added the sort key `extension`, `create_file`, `edit_path`,
+`show_properties`, and `measure_paths` with its reply `measure_started`,
+the events `measure_progress` and `measure_finished`, and
+`cancel_measure`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -127,6 +129,8 @@ as absent from an older core.
 | `create_directory` | `path` (absolute; the parent must exist) | `ok` |
 | `create_file` | `path` (absolute; the folder must exist) | `ok` |
 | `rename` | `path` (absolute), `new_name` (a name, without a folder) | `ok` |
+| `measure_paths` | `paths` (absolute) | `measure_started` (`measure_id`) |
+| `cancel_measure` | `measure_id` | `ok` |
 | `get_config` | — | `config` (`path`, `config`) |
 | `get_value` | `path` (a dotted path, such as `ui.dualPane`) | `value` (`value`) |
 | `set_value` | `path`, `value` | `ok` |
@@ -195,7 +199,7 @@ Any request can instead get `error` with a `code` and a `message`:
 
 Requests on one connection are independent: `list_directory`,
 `describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
-`show_properties`, `create_directory`, `create_file`, `rename`,
+`show_properties`, `create_directory`, `create_file`, `rename`, `measure_paths`,
 `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
@@ -664,6 +668,51 @@ application's window behind the current one, flashing in the taskbar. The
 usual cure is for the UI, the foreground process, to call
 `AllowSetForegroundWindow` with the core's process ID before `open_path`,
 `edit_path` or `show_properties`; the core does not depend on it.
+
+## Folder sizes
+
+```json
+{"id":"01M…","type":"measure_paths","paths":["C:\\Users\\me\\Pictures","C:\\Users\\me\\notes.txt"]}
+{"id":"01M…","type":"measure_started","measure_id":4}
+{"id":"01N…","type":"measure_progress","measure_id":4,"path":"C:\\Users\\me\\Pictures",
+ "files":1200,"folders":31,"bytes":4500000000}
+{"id":"01N…","type":"measure_finished","measure_id":4,"results":[
+ {"path":"C:\\Users\\me\\Pictures","files":5310,"folders":120,"bytes":18400000000,"unreadable":1},
+ {"path":"C:\\Users\\me\\notes.txt","files":1,"folders":0,"bytes":1200,"unreadable":0}],
+ "cancelled":false}
+{"id":"01M…","type":"cancel_measure","measure_id":4}
+{"id":"01M…","type":"ok"}
+```
+
+`measure_paths` counts what is under each path, for the Size column (the
+window's Space, Calculate Folder Size and Calculate All Folder Sizes).
+The walk is the one the job engine's Recycle Bin check uses
+(`measure_tree` in `cabinetos-fs`): each folder read with the NT
+enumeration and not sorted; hidden and system entries counted; a link
+counted as the file or folder it looks like, never entered, and adding
+no bytes; a folder that cannot be read counted in `unreadable`, without
+what is in it.
+
+- Every path must be absolute (`invalid_path`) and exist (`not_found`).
+  Both are checked before `measure_started`, and a refused measure sends
+  nothing more. An empty `paths` starts and ends at once.
+- The paths are counted one after another on a thread of the core, so
+  several measures run at once, and none holds up another request. The
+  events go only to the connection that asked, and need no `hello`;
+  `measure_started` always comes before them.
+- `measure_progress` carries the totals so far of the path being
+  counted, after each folder: at most 30 per second per measure, and none
+  for a measure that ends sooner. A single folder of 100,000 files is one
+  read, so its progress comes only at its end.
+- `measure_finished` ends every measure that started. `results` has one
+  entry per path counted to the end, in the order of `paths`. A file has
+  `files: 1` and its size, and `folders` never counts the path itself. A
+  path that went away after the check has zeros and `unreadable: 1`.
+- `cancel_measure` stops a measure of this connection before its next
+  folder; `measure_finished` then has `cancelled: true` and the results
+  of the paths counted before. The answer is `ok` also for a measure that
+  has ended (a cancel may cross the end) or is not this connection's.
+  Closing the connection stops its measures.
 
 ## Configuration, commands and keybindings
 

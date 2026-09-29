@@ -227,7 +227,9 @@ units, as Windows counts them). For a longer one Explorer asks whether to
 delete it permanently; with the silent flags the core passes, the shell
 would answer that question itself, and a delete the user meant to undo
 would be final. So before an item goes to the bin, the walk that sums its
-size also measures its longest path. If that path has 260 characters or
+size also measures its longest path (`measure_tree` in `cabinetos-fs`, the
+walk the Size column's `measure_paths` uses too: ipc.md, "Folder sizes").
+If that path has 260 characters or
 more, the item waits on a `path_too_long` conflict and nothing is deleted:
 `delete_permanently` deletes it for good (with `DeleteFileW`, which takes
 any length), `skip` keeps it, `retry` measures again (after a folder on the

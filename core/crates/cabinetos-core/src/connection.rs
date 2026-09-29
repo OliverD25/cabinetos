@@ -10,7 +10,7 @@
 //! - the session loop, which answers quick requests itself and runs slow ones
 //!   (`list_directory`, `describe_entries`, `get_icon`, `volume_info`,
 //!   `list_volumes`, `open_path`, `edit_path`, `show_properties`, `create_directory`,
-//!   `create_file`, `rename`,
+//!   `create_file`, `rename`, `measure_paths`,
 //!   `set_value`,
 //!   the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`,
@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use base64::Engine;
@@ -46,9 +46,9 @@ use tracing::Instrument;
 use crate::events::Services;
 use crate::listing::{self, CurrentSection, Failure, Published, WatchedListing};
 use crate::plugins::check_grants;
-use crate::search;
 use crate::settings::{Settings, every_section};
 use crate::{CORE_VERSION, Rejection, decode_request, terminal, volumes};
+use crate::{measure, search};
 
 /// How long the writer may take to send what is still queued when the
 /// connection ends.
@@ -57,6 +57,9 @@ const FINAL_WRITE_GRACE: Duration = Duration::from_secs(1);
 /// Listing IDs are unique across all connections, so a listing ID in the log
 /// names one listing.
 static NEXT_LISTING_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Measure IDs are unique across all connections, as listing IDs are.
+static NEXT_MEASURE_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Queues messages for the connection's writer task.
 #[derive(Clone, Debug)]
@@ -74,7 +77,7 @@ impl Outbox {
         }
     }
 
-    fn reply(&self, id: RequestId, response: Response) {
+    pub(crate) fn reply(&self, id: RequestId, response: Response) {
         self.send(&Envelope::new(id, response));
     }
 }
@@ -107,6 +110,8 @@ enum TaskDone {
     },
     /// A watched listing was lost and its refresh task ended.
     RefreshEnded { listing_id: u64 },
+    /// A measure sent its last event, or was refused.
+    MeasureEnded { measure_id: u64 },
     /// The task sent what it had to: its reply, or events sent again.
     Replied,
 }
@@ -163,6 +168,7 @@ pub(crate) async fn handle_connection(
         services,
         events: None,
         last_listed: None,
+        measures: HashMap::new(),
     };
     loop {
         tokio::select! {
@@ -199,6 +205,9 @@ pub(crate) async fn handle_connection(
 
     reader_task.abort();
     rethrow_panic(reader_task.await);
+    // A measure counts on a pool thread, which aborting its task does not
+    // stop.
+    session.stop_measures();
     // Aborting the tasks drops every watcher and section of this connection.
     session.tasks.shutdown().await;
     drop(session);
@@ -244,6 +253,9 @@ struct Session {
     /// The folder this connection listed last: where a search without a
     /// root walks, when no indexer answers.
     last_listed: Option<String>,
+    /// The running measures of this connection, each with the flag that
+    /// stops it.
+    measures: HashMap<u64, Arc<AtomicBool>>,
 }
 
 impl Session {
@@ -296,6 +308,8 @@ impl Session {
                 | Request::CreateDirectory { .. }
                 | Request::CreateFile { .. }
                 | Request::Rename { .. }) => self.file_request(&id, &span, kind, request),
+                Request::MeasurePaths { paths } => self.measure_paths(&id, &span, kind, paths),
+                Request::CancelMeasure { measure_id } => Some(self.cancel_measure(measure_id)),
                 request @ (Request::GetConfig
                 | Request::GetValue { .. }
                 | Request::SetValue { .. }
@@ -587,6 +601,67 @@ impl Session {
             _ => {}
         }
         None
+    }
+
+    /// `measure_paths`: checks the paths and counts them on the blocking
+    /// pool. The reply goes out there, before the first event of the
+    /// measure; only a path that is not absolute is refused here.
+    fn measure_paths(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        paths: Vec<String>,
+    ) -> Option<Response> {
+        if let Some(refusal) = paths.iter().find_map(|path| not_absolute(path)) {
+            return Some(refusal);
+        }
+        let measure_id = NEXT_MEASURE_ID.fetch_add(1, Ordering::Relaxed);
+        let stop = Arc::new(AtomicBool::new(false));
+        self.measures.insert(measure_id, Arc::clone(&stop));
+        let out = self.out.clone();
+        let request_id = id.clone();
+        let started = Instant::now();
+        self.tasks.spawn(
+            async move {
+                let counted = blocking_in_span(move || {
+                    let reply = match measure::check(&paths) {
+                        Ok(()) => Response::MeasureStarted { measure_id },
+                        Err(refusal) => failure_reply(refusal),
+                    };
+                    log_handled(kind, started, &reply);
+                    let counting = matches!(reply, Response::MeasureStarted { .. });
+                    out.reply(request_id, reply);
+                    if counting {
+                        measure::count(measure_id, paths, &stop, &out);
+                    }
+                })
+                .await;
+                if let Err(error) = counted {
+                    rethrow_panic(Err(error));
+                }
+                TaskDone::MeasureEnded { measure_id }
+            }
+            .instrument(span.clone()),
+        );
+        None
+    }
+
+    /// `cancel_measure`: `ok` whether or not the measure still runs, as a
+    /// cancel may cross the measure's end.
+    fn cancel_measure(&self, measure_id: u64) -> Response {
+        if let Some(stop) = self.measures.get(&measure_id) {
+            stop.store(true, Ordering::Relaxed);
+            tracing::info!(measure_id, "measure cancel asked");
+        }
+        Response::Ok
+    }
+
+    /// Stops every measure of this connection.
+    fn stop_measures(&self) {
+        for stop in self.measures.values() {
+            stop.store(true, Ordering::Relaxed);
+        }
     }
 
     /// The configuration, command and keymap requests. The reads answer at
@@ -1202,6 +1277,9 @@ impl Session {
                 if let Some(slot) = self.listings.get_mut(&listing_id) {
                     slot.refresh = None;
                 }
+            }
+            TaskDone::MeasureEnded { measure_id } => {
+                self.measures.remove(&measure_id);
             }
             TaskDone::Replied => {}
         }

@@ -25,9 +25,10 @@
 //! user makes to a folder without a job; [`open_path`] opens a file or
 //! folder with its default application, [`edit_path`] opens a file for
 //! editing, and [`show_properties`] shows Windows' property sheet.
-//! [`Hydrator`] gives the shell's type
-//! names and icons of listed entries; size, times and attributes need no
-//! such step, as they arrive with the listing itself.
+//! [`measure_tree`] counts the files, folders and bytes under a path.
+//! [`Hydrator`] gives the shell's type names and icons of listed entries;
+//! size, times and attributes need no such step, as they arrive with the
+//! listing itself.
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
 //! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `com`,
@@ -45,6 +46,7 @@ mod error;
 mod hydrate;
 #[allow(unsafe_code)]
 mod link;
+mod measure;
 #[allow(unsafe_code)]
 mod open;
 #[allow(unsafe_code)]
@@ -67,6 +69,7 @@ use cabinetos_protocol::shm::{EntryKind, ListingMeta};
 pub use drives::DriveWatcher;
 pub use error::FsError;
 pub use hydrate::{Hydrator, ICON_SIZES, ICONS_KEPT};
+pub use measure::{MeasureError, Tree, measure_tree};
 pub use open::{Editor, edit_path, open_path, show_properties};
 pub use ops::{create_directory, create_file, rename};
 pub use path::verbatim_wide;

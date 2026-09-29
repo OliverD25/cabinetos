@@ -412,51 +412,6 @@ pub(crate) fn add_rename_root(plan: &mut Plan, source: &str) -> Result<(), PlanE
     Ok(())
 }
 
-/// What a walk of a tree found.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Tree {
-    /// Its size for a file or a link, the sum of every file in it for a
-    /// folder.
-    pub(crate) bytes: u64,
-    /// The length of the longest path in it (its own included), in UTF-16
-    /// units, the way Windows counts a path against `MAX_PATH`.
-    pub(crate) longest_path: usize,
-}
-
-/// Walks the tree under `path`. Links are not followed.
-pub(crate) fn measure_tree(path: &str, stop: &dyn Stop) -> Result<Tree, PlanError> {
-    let info = root(path)?;
-    let mut tree = Tree {
-        bytes: 0,
-        longest_path: path.encode_utf16().count(),
-    };
-    if info.link.is_some() || !info.is_dir {
-        tree.bytes = info.size;
-        return Ok(tree);
-    }
-    let mut pending = vec![path.to_owned()];
-    while let Some(dir) = pending.pop() {
-        if stop.stop() {
-            return Err(PlanError::Cancelled);
-        }
-        let Ok(listing) = list_directory(&dir, &listing_options()) else {
-            continue;
-        };
-        let dir_units = dir.trim_end_matches('\\').encode_utf16().count();
-        for entry in listing.entries() {
-            tree.longest_path = tree
-                .longest_path
-                .max(dir_units + 1 + listing.name(entry).len());
-            match entry.kind {
-                EntryKind::Directory => pending.push(join(&dir, &listing.name_string(entry))),
-                EntryKind::ReparsePoint => {}
-                EntryKind::File | EntryKind::Unknown => tree.bytes += entry.meta.size,
-            }
-        }
-    }
-    Ok(tree)
-}
-
 /// Adds `source` and everything under it to a permanent delete, contents
 /// before their folder. Links are removed, never followed.
 pub(crate) fn add_removal_root(

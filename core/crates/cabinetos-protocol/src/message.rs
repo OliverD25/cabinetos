@@ -148,6 +148,21 @@ pub enum Request {
         /// Its new name: one name, without a folder.
         new_name: String,
     },
+    /// Counts the files, folders and bytes under each path, for the Size
+    /// column. The core answers `measure_started`; `measure_progress`
+    /// events follow while it counts, then one `measure_finished`, all on
+    /// this connection.
+    MeasurePaths {
+        /// The files and folders, as absolute paths.
+        paths: Vec<String>,
+    },
+    /// Stops a measure of this connection. The core answers `ok`, also for
+    /// a measure that has ended already; a running one ends with
+    /// `measure_finished` and `cancelled`.
+    CancelMeasure {
+        /// The measure, from `measure_started`.
+        measure_id: u64,
+    },
     /// Asks for the configuration in effect and the path of its file. The
     /// core answers `config`.
     GetConfig,
@@ -392,6 +407,8 @@ impl Request {
         "create_directory",
         "create_file",
         "rename",
+        "measure_paths",
+        "cancel_measure",
         "get_config",
         "get_value",
         "set_value",
@@ -444,6 +461,8 @@ impl Request {
             Self::CreateDirectory { .. } => "create_directory",
             Self::CreateFile { .. } => "create_file",
             Self::Rename { .. } => "rename",
+            Self::MeasurePaths { .. } => "measure_paths",
+            Self::CancelMeasure { .. } => "cancel_measure",
             Self::GetConfig => "get_config",
             Self::GetValue { .. } => "get_value",
             Self::SetValue { .. } => "set_value",
@@ -578,6 +597,13 @@ pub enum Response {
         /// The icon as a PNG with an alpha channel, in base64.
         png_base64: String,
     },
+    /// Reply to `measure_paths`: every path is there, and the count has
+    /// begun.
+    MeasureStarted {
+        /// Names the measure in `cancel_measure` and in its events; unique
+        /// for the life of the core.
+        measure_id: u64,
+    },
     /// Reply to `volume_info`.
     VolumeInfo(VolumeDetails),
     /// Reply to `list_volumes`: the volumes that answered, by drive letter.
@@ -710,6 +736,7 @@ impl Response {
         "listing_opened",
         "entry_details",
         "icon",
+        "measure_started",
         "volume_info",
         "volumes",
         "config",
@@ -743,6 +770,7 @@ impl Response {
             Self::ListingOpened { .. } => "listing_opened",
             Self::EntryDetails { .. } => "entry_details",
             Self::Icon { .. } => "icon",
+            Self::MeasureStarted { .. } => "measure_started",
             Self::VolumeInfo(_) => "volume_info",
             Self::Volumes { .. } => "volumes",
             Self::Config { .. } => "config",
@@ -782,6 +810,23 @@ pub struct EntryDetail {
     /// extension, `generic` for a file without one, and `path:<16 hex
     /// digits>` for an `.exe`, `.ico` or `.lnk` file, whose icon is its own.
     pub icon_key: String,
+}
+
+/// What a measure found under one path.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct MeasureResult {
+    /// The path, as the request gave it.
+    pub path: String,
+    /// Files, links to files included; 1 for a file.
+    pub files: u64,
+    /// Folders under it (not itself), links to folders included; a link
+    /// is never entered.
+    pub folders: u64,
+    /// The sizes of the files together.
+    pub bytes: u64,
+    /// Folders that could not be read; what is in them is not counted.
+    pub unreadable: u64,
 }
 
 /// The volume a path lives on, and the physical disk under it.
@@ -1017,6 +1062,31 @@ pub enum Event {
         /// The shell's exit code.
         exit_code: u32,
     },
+    /// How far a measure has come: the totals so far of the path it counts
+    /// now. At most 30 per second per measure, and none for a measure that
+    /// ends sooner. Sent on the connection that asked.
+    MeasureProgress {
+        /// The measure, from `measure_started`.
+        measure_id: u64,
+        /// The path it counts now, as the request gave it.
+        path: String,
+        /// Files so far.
+        files: u64,
+        /// Folders so far.
+        folders: u64,
+        /// Bytes so far.
+        bytes: u64,
+    },
+    /// A measure ended. Sent on the connection that asked.
+    MeasureFinished {
+        /// The measure, from `measure_started`.
+        measure_id: u64,
+        /// One result per path counted to the end, in the request's order;
+        /// after a cancel, the paths not finished are left out.
+        results: Vec<MeasureResult>,
+        /// Whether `cancel_measure` stopped it.
+        cancelled: bool,
+    },
     /// A drive letter appeared or went away: a USB stick, a card in a
     /// reader, a mapped network share. Sent to every connection that said
     /// `hello`, with the list `list_volumes` would answer now.
@@ -1082,6 +1152,8 @@ impl Event {
         "plugin_crashed",
         "plugin_event",
         "terminal_exited",
+        "measure_progress",
+        "measure_finished",
         "volumes_changed",
         "theme_changed",
         "install_progress",
@@ -1105,6 +1177,8 @@ impl Event {
             Self::PluginCrashed { .. } => "plugin_crashed",
             Self::PluginEvent { .. } => "plugin_event",
             Self::TerminalExited { .. } => "terminal_exited",
+            Self::MeasureProgress { .. } => "measure_progress",
+            Self::MeasureFinished { .. } => "measure_finished",
             Self::VolumesChanged { .. } => "volumes_changed",
             Self::ThemeChanged { .. } => "theme_changed",
             Self::InstallProgress { .. } => "install_progress",
@@ -1397,6 +1471,10 @@ mod tests {
                 path: r"C:\Users\me\notes.txt".to_owned(),
                 new_name: "notes 2026.txt".to_owned(),
             },
+            Request::MeasurePaths {
+                paths: vec![r"C:\Users\me\photos".to_owned()],
+            },
+            Request::CancelMeasure { measure_id: 4 },
             Request::GetConfig,
             Request::GetValue {
                 path: "ui.dualPane".to_owned(),
@@ -1581,6 +1659,7 @@ mod tests {
                 size: 32,
                 png_base64: "iVBORw0KGgo=".to_owned(),
             },
+            Response::MeasureStarted { measure_id: 4 },
             Response::VolumeInfo(volume()),
             Response::Volumes {
                 volumes: vec![
@@ -1773,6 +1852,24 @@ mod tests {
             Event::TerminalExited {
                 session_id: 3,
                 exit_code: 0,
+            },
+            Event::MeasureProgress {
+                measure_id: 4,
+                path: r"C:\Users\me\photos".to_owned(),
+                files: 1200,
+                folders: 31,
+                bytes: 4_500_000_000,
+            },
+            Event::MeasureFinished {
+                measure_id: 4,
+                results: vec![MeasureResult {
+                    path: r"C:\Users\me\photos".to_owned(),
+                    files: 5310,
+                    folders: 120,
+                    bytes: 18_400_000_000,
+                    unreadable: 1,
+                }],
+                cancelled: false,
             },
             Event::VolumesChanged {
                 volumes: vec![volume()],

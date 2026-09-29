@@ -224,6 +224,26 @@
       ]
     },
     {
+      "description": "Reply to `measure_paths`: every path is there, and the count has\nbegun.",
+      "type": "object",
+      "properties": {
+        "measure_id": {
+          "description": "Names the measure in `cancel_measure` and in its events; unique\nfor the life of the core.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "measure_started"
+        }
+      },
+      "required": [
+        "type",
+        "measure_id"
+      ]
+    },
+    {
       "description": "Reply to `volume_info`.",
       "type": "object",
       "properties": {

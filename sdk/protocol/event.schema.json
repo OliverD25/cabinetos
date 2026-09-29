@@ -318,6 +318,85 @@
       ]
     },
     {
+      "description": "How far a measure has come: the totals so far of the path it counts\nnow. At most 30 per second per measure, and none for a measure that\nends sooner. Sent on the connection that asked.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "description": "Bytes so far.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files": {
+          "description": "Files so far.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "folders": {
+          "description": "Folders so far.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "measure_id": {
+          "description": "The measure, from `measure_started`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "path": {
+          "description": "The path it counts now, as the request gave it.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "measure_progress"
+        }
+      },
+      "required": [
+        "type",
+        "measure_id",
+        "path",
+        "files",
+        "folders",
+        "bytes"
+      ]
+    },
+    {
+      "description": "A measure ended. Sent on the connection that asked.",
+      "type": "object",
+      "properties": {
+        "cancelled": {
+          "description": "Whether `cancel_measure` stopped it.",
+          "type": "boolean"
+        },
+        "measure_id": {
+          "description": "The measure, from `measure_started`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "results": {
+          "description": "One result per path counted to the end, in the request's order;\nafter a cancel, the paths not finished are left out.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MeasureResult"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "measure_finished"
+        }
+      },
+      "required": [
+        "type",
+        "measure_id",
+        "results",
+        "cancelled"
+      ]
+    },
+    {
       "description": "A drive letter appeared or went away: a USB stick, a card in a\nreader, a mapped network share. Sent to every connection that said\n`hello`, with the list `list_volumes` would answer now.",
       "type": "object",
       "properties": {
@@ -1036,6 +1115,47 @@
       "required": [
         "keys",
         "command"
+      ]
+    },
+    "MeasureResult": {
+      "description": "What a measure found under one path.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "description": "The sizes of the files together.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files": {
+          "description": "Files, links to files included; 1 for a file.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "folders": {
+          "description": "Folders under it (not itself), links to folders included; a link\nis never entered.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "path": {
+          "description": "The path, as the request gave it.",
+          "type": "string"
+        },
+        "unreadable": {
+          "description": "Folders that could not be read; what is in them is not counted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "path",
+        "files",
+        "folders",
+        "bytes",
+        "unreadable"
       ]
     },
     "Metrics": {

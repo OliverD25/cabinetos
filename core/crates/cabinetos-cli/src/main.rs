@@ -2,7 +2,7 @@
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
 //! UI will), `describe` and `icon` (the shell's type names and icons),
 //! `volume` and `volumes`, `open`, `edit`, `props`, `mkdir`, `mkfile` and `rename`,
-//! `shutdown`, the
+//! folder sizes (`measure`), `shutdown`, the
 //! configuration (`config`), the command registry (`commands`), the keymap
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
@@ -23,6 +23,7 @@ mod describe;
 mod jobs;
 mod ls;
 mod market;
+mod measure;
 mod plugins;
 mod search;
 mod settings;
@@ -166,6 +167,13 @@ enum Command {
         path: String,
         /// Its new name, without a folder.
         new_name: String,
+    },
+    /// Count the files, folders and bytes under paths, with the core's
+    /// progress as it comes. Ctrl+C stops the count.
+    Measure {
+        /// The files and folders.
+        #[arg(required = true, value_name = "PATH")]
+        paths: Vec<String>,
     },
     /// Show or check the configuration file (cabinetos.json).
     Config {
@@ -731,6 +739,13 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             volume_command(&mut client, &cli.command).await?;
         }
         Command::Props { paths } => props(&mut client, paths).await?,
+        Command::Measure { paths } => {
+            let paths = paths
+                .iter()
+                .map(|path| absolute(path))
+                .collect::<anyhow::Result<_>>()?;
+            measure::measure(&mut client, paths).await?;
+        }
         Command::Open { .. }
         | Command::Edit { .. }
         | Command::Mkdir { .. }
@@ -1377,6 +1392,14 @@ mod tests {
             }
         );
         assert!(Cli::try_parse_from(["cabinetos-cli", "props"]).is_err());
+        let cli = Cli::try_parse_from(["cabinetos-cli", "measure", "photos", "a.txt"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Measure {
+                paths: vec!["photos".to_owned(), "a.txt".to_owned()]
+            }
+        );
+        assert!(Cli::try_parse_from(["cabinetos-cli", "measure"]).is_err());
         let cli = Cli::try_parse_from(["cabinetos-cli", "mkdir", r"E:\new"]).unwrap();
         assert_eq!(
             cli.command,

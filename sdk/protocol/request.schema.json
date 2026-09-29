@@ -329,6 +329,47 @@
       ]
     },
     {
+      "description": "Counts the files, folders and bytes under each path, for the Size\ncolumn. The core answers `measure_started`; `measure_progress`\nevents follow while it counts, then one `measure_finished`, all on\nthis connection.",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "description": "The files and folders, as absolute paths.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "measure_paths"
+        }
+      },
+      "required": [
+        "type",
+        "paths"
+      ]
+    },
+    {
+      "description": "Stops a measure of this connection. The core answers `ok`, also for\na measure that has ended already; a running one ends with\n`measure_finished` and `cancelled`.",
+      "type": "object",
+      "properties": {
+        "measure_id": {
+          "description": "The measure, from `measure_started`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "cancel_measure"
+        }
+      },
+      "required": [
+        "type",
+        "measure_id"
+      ]
+    },
+    {
       "description": "Asks for the configuration in effect and the path of its file. The\ncore answers `config`.",
       "type": "object",
       "properties": {

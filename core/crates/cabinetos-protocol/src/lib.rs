@@ -45,8 +45,8 @@ pub use market::{
 };
 pub use message::{
     CommandInfo, CommandSource, CommandTarget, DiskIdentity, EntryDetail, Envelope, ErrorCode,
-    Event, Incoming, Keymap, KeymapBinding, MAX_DESCRIBED, RefreshReason, Request, Response,
-    SearchHit, SortKey, SortSpec, VolumeDetails,
+    Event, Incoming, Keymap, KeymapBinding, MAX_DESCRIBED, MeasureResult, RefreshReason, Request,
+    Response, SearchHit, SortKey, SortSpec, VolumeDetails,
 };
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 pub use terminal::{TerminalSession, TerminalState};
@@ -82,6 +82,7 @@ pub use theme::{
 /// item per extension, with `installedVersion`; each theme's `mica` in
 /// `themes`; the theme kind `system`; `tools_changed` sent again to a client
 /// that fell behind; version 12 Total Commander's keys and small commands
-/// (sub-phase 11a): the sort key `extension`, `create_file`, `edit_path`
-/// and `show_properties`.
+/// (sub-phase 11a): the sort key `extension`, `create_file`, `edit_path`,
+/// `show_properties`, and `measure_paths` with `measure_started`, the events
+/// `measure_progress` and `measure_finished`, and `cancel_measure`.
 pub const PROTOCOL_VERSION: u32 = 12;

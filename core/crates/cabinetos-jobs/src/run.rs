@@ -18,6 +18,7 @@ use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
+use cabinetos_fs::MeasureError;
 use cabinetos_protocol::{
     Conflict, ConflictKind, ConflictPolicy, Event, JobKind, JobState, LinkPolicy, Resolution,
 };
@@ -908,10 +909,10 @@ impl Run<'_> {
         // (Explorer asks to delete such an item permanently; the silent
         // flags would answer yes), nor more than the bin holds.
         let stop = || self.job.control.is_cancelled();
-        let tree = match plan::measure_tree(&path, &stop) {
+        let tree = match cabinetos_fs::measure_tree(&path, &stop, &mut |_| {}) {
             Ok(tree) => tree,
-            Err(PlanError::Cancelled) => return Outcome::Cancelled,
-            Err(PlanError::Source(_)) => return Outcome::Done,
+            Err(MeasureError::Stopped) => return Outcome::Cancelled,
+            Err(MeasureError::Root(_)) => return Outcome::Done,
         };
         if tree.longest_path >= MAX_PATH {
             return Outcome::Conflict {
