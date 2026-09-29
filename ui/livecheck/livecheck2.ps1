@@ -106,6 +106,7 @@ $env:CABINETOS_CONFIG = "$root\config\cabinetos.json"
 $env:CABINETOS_LOG_DIR = "$root\logs"
 $env:CABINETOS_CORE_EXE = $Core
 $env:CABINETOS_THEMES_DIR = "$root\themes"
+$env:CABINETOS_UNDO_DIR = "$root\undo"
 $env:CABINETOS_TOOLS_DIR = [System.IO.Path]::GetFullPath($Tools)
 Remove-Item Env:CABINETOS_UI_SNAPSHOT -ErrorAction SilentlyContinue
 Remove-Item Env:CABINETOS_UI_SNAPSHOT_STEPS -ErrorAction SilentlyContinue

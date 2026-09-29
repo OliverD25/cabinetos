@@ -66,6 +66,7 @@ public class TwoWindowsTests
                 start.Environment["CABINETOS_CONFIG"] = Path.Combine(root, "config", "cabinetos.json");
                 start.Environment["CABINETOS_LOG_DIR"] = Path.Combine(root, "logs");
                 start.Environment["CABINETOS_THEMES_DIR"] = Path.Combine(root, "themes");
+                start.Environment["CABINETOS_UNDO_DIR"] = Path.Combine(root, "undo");
                 start.Environment["CABINETOS_PLUGINS_DIR"] = Path.Combine(root, "plugins");
                 start.Environment["CABINETOS_PLUGINS_DATA_DIR"] = Path.Combine(root, "plugins-data");
                 start.Environment["CABINETOS_MARKETPLACE_DIR"] = Path.Combine(root, "marketplace");

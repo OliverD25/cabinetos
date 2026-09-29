@@ -43,6 +43,7 @@ public class TabsEndToEndTests
                 start.Environment["CABINETOS_CONFIG"] = configPath;
                 start.Environment["CABINETOS_LOG_DIR"] = Path.Combine(root, "logs-" + run);
                 start.Environment["CABINETOS_THEMES_DIR"] = Path.Combine(root, "themes");
+                start.Environment["CABINETOS_UNDO_DIR"] = Path.Combine(root, "undo");
                 start.Environment["CABINETOS_PLUGINS_DIR"] = Path.Combine(root, "plugins");
                 start.Environment["CABINETOS_PLUGINS_DATA_DIR"] = Path.Combine(root, "plugins-data");
                 start.Environment["CABINETOS_MARKETPLACE_DIR"] = Path.Combine(root, "marketplace");

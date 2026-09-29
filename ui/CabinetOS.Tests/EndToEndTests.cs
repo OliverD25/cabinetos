@@ -54,6 +54,7 @@ public class EndToEndTests
                 ["CABINETOS_PLUGINS_DIR"] = Path.Combine(root, "plugins"),
                 ["CABINETOS_PLUGINS_DATA_DIR"] = Path.Combine(root, "plugins-data"),
                 ["CABINETOS_THEMES_DIR"] = Path.Combine(root, "themes"),
+            ["CABINETOS_UNDO_DIR"] = Path.Combine(root, "undo"),
             };
 
             await using var core = await CoreLauncher.StartAsync(coreExe, TimeSpan.FromSeconds(10), environment);
@@ -585,6 +586,7 @@ public class EndToEndTests
             ["CABINETOS_PLUGINS_DIR"] = Path.Combine(root, "plugins"),
             ["CABINETOS_PLUGINS_DATA_DIR"] = Path.Combine(root, "plugins-data"),
             ["CABINETOS_THEMES_DIR"] = Path.Combine(root, "themes"),
+            ["CABINETOS_UNDO_DIR"] = Path.Combine(root, "undo"),
             ["CABINETOS_MARKETPLACE_DIR"] = Path.Combine(root, "marketplace"),
         };
         return CoreLauncher.StartAsync(coreExe, TimeSpan.FromSeconds(10), environment);

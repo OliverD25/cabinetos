@@ -42,6 +42,7 @@ $env:CABINETOS_CORE_EXE = $Core
 $env:CABINETOS_CONFIG = "$root\config\cabinetos.json"
 $env:CABINETOS_LOG_DIR = "$root\logs"
 $env:CABINETOS_THEMES_DIR = "$root\themes"
+$env:CABINETOS_UNDO_DIR = "$root\undo"
 $env:CABINETOS_PLUGINS_DIR = "$root\plugins"
 $env:CABINETOS_PLUGINS_DATA_DIR = "$root\plugins-data"
 $env:CABINETOS_MARKETPLACE_DIR = "$root\marketplace"

@@ -169,6 +169,7 @@ $env:CABINETOS_UI_FRAMESTATS = "1"
 $env:CABINETOS_CORE_EXE = $Core
 # The core writes its themes when missing: into this run's folder, not the real app data.
 $env:CABINETOS_THEMES_DIR = "$root\themes"
+$env:CABINETOS_UNDO_DIR = "$root\undo"
 # WebView2's user data (the terminal, the tools) into this run's folder too, not the real app data.
 $env:CABINETOS_WEBVIEW2_DIR = "$root\webview2"
 # Tool Extensions from the repository (Markdown Preview), as --tools-dir would give them.
