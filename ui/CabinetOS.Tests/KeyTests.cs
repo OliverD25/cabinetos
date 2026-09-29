@@ -16,6 +16,12 @@ public class KeyTests
     [InlineData("ctrl+=", "ctrl+equal")]
     [InlineData("F24", "f24")]
     [InlineData("tab", "tab")]
+    [InlineData("numpadadd", "numpadadd")]
+    [InlineData("Ctrl+NumPad_Subtract", "ctrl+numpadsubtract")]
+    [InlineData("alt+numpad_add", "alt+numpadadd")]
+    [InlineData("numpad_multiply", "numpadmultiply")]
+    [InlineData("numpad_divide", "numpaddivide")]
+    [InlineData("numpad_decimal", "numpaddecimal")]
     public void Keys_are_read_in_any_case_and_order_and_normalized(string text, string normal)
     {
         Assert.True(KeySequence.TryParse(text, out var keys));
@@ -32,6 +38,8 @@ public class KeyTests
     [InlineData("f0")]
     [InlineData("f25")]
     [InlineData("ctrl+k ctrl+s ctrl+x")]
+    [InlineData("numpad0")]
+    [InlineData("numpad_0")]
     public void Keys_outside_the_grammar_are_refused(string text) => Assert.False(KeySequence.TryParse(text, out _));
 
     [Theory]
@@ -41,6 +49,11 @@ public class KeyTests
     [InlineData("ctrl+k ctrl+s", new[] { "Ctrl+K", "Ctrl+S" })]
     [InlineData("shift+pageup", new[] { "Shift+PageUp" })]
     [InlineData("escape", new[] { "Esc" })]
+    [InlineData("numpadadd", new[] { "Num +" })]
+    [InlineData("ctrl+numpadsubtract", new[] { "Ctrl+Num -" })]
+    [InlineData("numpadmultiply", new[] { "Num *" })]
+    [InlineData("numpaddivide", new[] { "Num /" })]
+    [InlineData("alt+numpaddecimal", new[] { "Alt+Num ." })]
     public void Keycaps_show_one_part_per_combination(string text, string[] parts)
     {
         Assert.True(KeySequence.TryParse(text, out var keys));
@@ -60,7 +73,23 @@ public class KeyTests
     [InlineData(0x1B, "escape")]
     [InlineData(0xBB, "equal")]
     [InlineData(0xDE, "quote")]
+    [InlineData(0x6B, "numpadadd")]
+    [InlineData(0x6D, "numpadsubtract")]
+    [InlineData(0x6A, "numpadmultiply")]
+    [InlineData(0x6F, "numpaddivide")]
+    [InlineData(0x6E, "numpaddecimal")]
+    // The keypad's digits are the plain digits (Num Lock on).
+    [InlineData(0x60, "0")]
+    [InlineData(0x65, "5")]
     public void Virtual_keys_map_to_grammar_names(int virtualKey, string name) => Assert.Equal(name, KeyNames.FromVirtualKey(virtualKey));
+
+    [Fact]
+    public void A_keypad_key_makes_a_combination_the_keymap_can_hold()
+    {
+        Assert.Equal("ctrl+numpadadd", KeyNames.ComboFor(0x6B, KeyModifiers.Ctrl).ToString());
+        Assert.Equal("Alt+Num -", KeyNames.ComboFor(0x6D, KeyModifiers.Alt)!.Value.ToDisplay());
+        Assert.Equal("numpaddivide", KeyNames.VirtualKeyNames[0x6F]);
+    }
 
     [Theory]
     [InlineData(0x10)]

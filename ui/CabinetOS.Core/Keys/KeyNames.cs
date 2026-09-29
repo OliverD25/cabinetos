@@ -14,6 +14,7 @@ public static class KeyNames
         "escape", "enter", "tab", "space", "backspace", "delete", "insert", "home", "end",
         "pageup", "pagedown", "up", "down", "left", "right", "backquote", "comma", "period",
         "slash", "minus", "equal", "bracketleft", "bracketright", "backslash", "semicolon", "quote",
+        "numpadadd", "numpadsubtract", "numpadmultiply", "numpaddivide", "numpaddecimal",
     ]);
 
     private static readonly FrozenDictionary<string, string> Aliases = new Dictionary<string, string>
@@ -35,6 +36,12 @@ public static class KeyNames
         ["\\"] = "backslash",
         [";"] = "semicolon",
         ["'"] = "quote",
+        // VS Code's names of the keypad's operators.
+        ["numpad_add"] = "numpadadd",
+        ["numpad_subtract"] = "numpadsubtract",
+        ["numpad_multiply"] = "numpadmultiply",
+        ["numpad_divide"] = "numpaddivide",
+        ["numpad_decimal"] = "numpaddecimal",
     }.ToFrozenDictionary();
 
     private static readonly FrozenDictionary<string, string> DisplayNames = new Dictionary<string, string>
@@ -65,6 +72,11 @@ public static class KeyNames
         ["backslash"] = "\\",
         ["semicolon"] = ";",
         ["quote"] = "'",
+        ["numpadadd"] = "Num +",
+        ["numpadsubtract"] = "Num -",
+        ["numpadmultiply"] = "Num *",
+        ["numpaddivide"] = "Num /",
+        ["numpaddecimal"] = "Num .",
     }.ToFrozenDictionary();
 
     private static readonly FrozenDictionary<int, string> VirtualKeys = BuildVirtualKeys();
@@ -136,6 +148,12 @@ public static class KeyNames
             [0x28] = "down",
             [0x2D] = "insert",
             [0x2E] = "delete",
+            // The keypad's operators (the same codes with Num Lock on or off).
+            [0x6A] = "numpadmultiply",
+            [0x6B] = "numpadadd",
+            [0x6D] = "numpadsubtract",
+            [0x6E] = "numpaddecimal",
+            [0x6F] = "numpaddivide",
             [0xBA] = "semicolon",
             [0xBB] = "equal",
             [0xBC] = "comma",
