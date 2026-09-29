@@ -9,7 +9,8 @@ namespace CabinetOS.Core.Settings;
 /// (docs/config.md). The core owns the file; the UI only reads what it sends.
 /// <see cref="DockBottom"/> and <see cref="DockRight"/> are
 /// <c>ui.dockSize</c>: the Tool Dock's dragged size, or null for the design's.
-/// <see cref="Selection"/> is <c>panes.selection</c>.
+/// <see cref="Selection"/> is <c>panes.selection</c>. <see cref="HeavyLogging"/> is
+/// <c>logging.heavy</c>, which the window's own log follows as the core's does.
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -21,7 +22,8 @@ public sealed record UiSettings(
     bool SortDescending,
     double? DockBottom = null,
     double? DockRight = null,
-    SelectionStyle Selection = SelectionStyle.Windows)
+    SelectionStyle Selection = SelectionStyle.Windows,
+    bool HeavyLogging = false)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -46,7 +48,8 @@ public sealed record UiSettings(
             Bool(sort, "descending") ?? Defaults.SortDescending,
             Pixels(dock, "bottom"),
             Pixels(dock, "right"),
-            String(panes, "selection") == "commander" ? SelectionStyle.Commander : SelectionStyle.Windows);
+            String(panes, "selection") == "commander" ? SelectionStyle.Commander : SelectionStyle.Windows,
+            Bool(Section(config, "logging"), "heavy") ?? Defaults.HeavyLogging);
     }
 
     private static double? Pixels(JsonElement? parent, string name) =>

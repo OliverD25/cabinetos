@@ -13,9 +13,25 @@ public static class Diag
     /// <summary>Environment variable with the level filter, as for the core.</summary>
     public const string LogFilterEnv = "CABINETOS_LOG";
 
+    /// <summary>
+    /// Environment variable that turns heavy mode on (<c>1</c>) or off (<c>0</c>) for this process,
+    /// whatever <c>logging.heavy</c> says; the core reads the same variable.
+    /// </summary>
+    public const string LogHeavyEnv = "CABINETOS_LOG_HEAVY";
+
     private static readonly AsyncLocal<string?> TraceSlot = new();
     private static LogWriter? _writer;
     private static int _crashed;
+    private static bool _heavyFromEnvironment;
+
+    /// <summary>Whether heavy mode is on: every event is written, and the heavy-only lines too.</summary>
+    public static bool HeavyEnabled => Writer?.HeavyEnabled ?? false;
+
+    /// <summary>Whether <c>CABINETOS_LOG_HEAVY</c> decided heavy mode: the configuration cannot change it.</summary>
+    public static bool HeavyFromEnvironment => Volatile.Read(ref _heavyFromEnvironment);
+
+    /// <summary>Heavy lines the window dropped since heavy mode came on, for the status bar's pill.</summary>
+    public static long HeavyLostLines => Writer?.HeavyLostLines ?? 0;
 
     /// <summary>
     /// The trace of the user action the calling code works for (docs/diagnostics.md,
@@ -66,8 +82,103 @@ public static class Diag
             version);
         var previous = Interlocked.Exchange(ref _writer, writer);
         previous?.Dispose();
+        var heavy = ParseHeavy(Environment.GetEnvironmentVariable(LogHeavyEnv), out var badHeavy);
+        Volatile.Write(ref _heavyFromEnvironment, heavy is not null);
+        if (heavy is { } on)
+        {
+            writer.SetHeavy(on);
+        }
+        if (badHeavy is not null)
+        {
+            writer.Write(LogLevel.Warn, "cabinetos_ui::diag", $"ignoring {LogHeavyEnv}: expected 1 or 0; the configuration decides",
+                fields: [new LogField("value", badHeavy)]);
+        }
         return writer;
     }
+
+    /// <summary>
+    /// <c>CABINETOS_LOG_HEAVY</c>: <c>1</c> or <c>true</c> on, <c>0</c> or <c>false</c> off, unset or
+    /// empty for the configuration to decide (null). Anything else is null too, and
+    /// <paramref name="invalid"/> holds it, to be warned about.
+    /// </summary>
+    public static bool? ParseHeavy(string? text, out string? invalid)
+    {
+        invalid = null;
+        var trimmed = text?.Trim();
+        switch (trimmed)
+        {
+            case null or "":
+                return null;
+            case "1" or "true":
+                return true;
+            case "0" or "false":
+                return false;
+            default:
+                invalid = trimmed;
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Logs a line only heavy mode writes, with the target <c>heavy::&lt;area&gt;</c> (the normal file
+    /// leaves such targets out at every level). Call it under <c>if (Diag.HeavyEnabled)</c>, so
+    /// nothing is built while heavy mode is off.
+    /// </summary>
+    public static void Heavy(string area, string message, params LogField[] fields) =>
+        Log(LogLevel.Debug, HeavyTarget(area), message, fields: fields);
+
+    /// <summary>
+    /// Logs the JSON of a request or a reply as a heavy line: secrets masked, at most 64 KB, the
+    /// rest cut and marked <c>truncated</c> (<see cref="LogMask"/>). The line belongs to the request
+    /// <paramref name="requestId"/> and the action <paramref name="traceId"/> (null: the current one).
+    /// </summary>
+    public static void HeavyPayload(string message, string requestId, string? traceId, ReadOnlySpan<byte> json)
+    {
+        if (HeavyEnabled)
+        {
+            Log(LogLevel.Debug, HeavyTarget("pipe"), message, requestId, "request", PayloadFields(json), traceId);
+        }
+    }
+
+    /// <summary>The fields of a payload line: <c>payload</c>, masked and cut at 64 KB, and <c>truncated</c> when it was cut.</summary>
+    public static LogField[] PayloadFields(ReadOnlySpan<byte> json)
+    {
+        var (payload, truncated) = LogMask.MaskedJson(json);
+        return truncated ? [new("payload", payload), new("truncated", true)] : [new("payload", payload)];
+    }
+
+    /// <summary>
+    /// Logs a message between the window and a web page (the terminal, a tool) as a heavy line: the
+    /// message's <c>type</c> and its size, never its content, which can hold what the user typed
+    /// or what a file says. <paramref name="direction"/> is <c>to_page</c> or <c>from_page</c>.
+    /// </summary>
+    public static void HeavyPageMessage(string host, string direction, string json)
+    {
+        if (HeavyEnabled)
+        {
+            Heavy("pages", "page message", new LogField("host", host), new LogField("direction", direction),
+                new LogField("name", PageMessageName(json)), new LogField("bytes", System.Text.Encoding.UTF8.GetByteCount(json)));
+        }
+    }
+
+    /// <summary>The <c>type</c> of a page's message, or <c>?</c> when it has none.</summary>
+    public static string PageMessageName(string json)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            return document.RootElement is { ValueKind: System.Text.Json.JsonValueKind.Object } root
+                && root.TryGetProperty("type", out var type) && type.ValueKind == System.Text.Json.JsonValueKind.String
+                ? type.GetString() ?? "?"
+                : "?";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return "?";
+        }
+    }
+
+    private static string HeavyTarget(string area) => $"{HeavyFiles.TargetPrefix}{area}";
 
     /// <summary>Whether an event would be written.</summary>
     public static bool IsEnabled(LogLevel level, string target) => Writer?.IsEnabled(level, target) ?? false;

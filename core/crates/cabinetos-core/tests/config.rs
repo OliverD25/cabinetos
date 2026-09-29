@@ -464,7 +464,7 @@ async fn commands_are_listed_searched_and_run() {
     let Response::Commands { commands } = ask(&mut client, Request::ListCommands).await else {
         panic!("expected commands")
     };
-    assert_eq!(commands.len(), 90);
+    assert_eq!(commands.len(), 93);
     let sidebar = commands
         .iter()
         .find(|command| command.id == "view.toggleSidebar")

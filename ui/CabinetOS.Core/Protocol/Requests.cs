@@ -564,3 +564,14 @@ public sealed class WindowStateRequest(string activePane, WindowPanesState panes
     public WindowPanesState Panes { get; } = panes;
 }
 
+/// <summary>
+/// Asks the core for a log bundle (docs/diagnostics.md, "Bundles"): a zip in the log folder with
+/// the last <see cref="Minutes"/> of every process's log files, the recent crash traces and a
+/// <c>bundle.json</c> about the machine. The reply is <c>log_bundle</c>. Built against the shape
+/// the core's Phase 15 agreed on; an older core answers <c>unknown_request</c>.
+/// </summary>
+public sealed class SaveLogBundleRequest(uint minutes) : CoreRequest("save_log_bundle")
+{
+    /// <summary>How many minutes back, 1 to 1,440; the core takes 10 when the field is left out.</summary>
+    public uint Minutes { get; } = minutes;
+}

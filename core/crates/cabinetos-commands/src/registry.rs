@@ -77,7 +77,7 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// (sub-phase 11a), the tab commands (Phase 12), then the palette, overlays, a new window and About. Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 90] = [
+const SEED: [Seed; 93] = [
     seed(
         "palette.show",
         "View",
@@ -586,6 +586,31 @@ const SEED: [Seed; 90] = [
     // Explorer's key for another window of the same folder.
     seed("window.new", "Window", "New Window", &["ctrl+n"], UI, None),
     seed("help.about", "Help", "About CabinetOS", &[], UI, None),
+    // Heavy logging and the log bundle (Phase 15); no keys, the palette is their place.
+    seed(
+        "diagnostics.toggleHeavy",
+        "Diagnostics",
+        "Toggle Heavy Logging",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "diagnostics.openLogFolder",
+        "Diagnostics",
+        "Open Log Folder",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "diagnostics.saveBundle",
+        "Diagnostics",
+        "Save Log Bundle",
+        &[],
+        UI,
+        None,
+    ),
 ];
 
 /// The command a seed row describes.
@@ -745,7 +770,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 90);
+        assert_eq!(registry.commands().len(), 93);
         let keys = |id: &str| {
             registry
                 .get(id)

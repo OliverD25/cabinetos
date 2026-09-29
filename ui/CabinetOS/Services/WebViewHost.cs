@@ -176,6 +176,7 @@ internal sealed class WebViewHost
         {
             return;
         }
+        Diag.HeavyPageMessage(_name, "to_page", json);
         try
         {
             core.PostWebMessageAsString(json);
@@ -305,6 +306,7 @@ internal sealed class WebViewHost
                 // Only strings are part of the protocol.
                 return;
             }
+            Diag.HeavyPageMessage(_name, "from_page", text);
             MessageReceived?.Invoke(text);
         };
         core.ProcessFailed += (_, e) => OnProcessFailed(e);

@@ -121,6 +121,9 @@ The core's commands, in palette order:
 | `tab.moveToOtherPane` | Tab: Move Tab to Other Pane | `ctrl+k ctrl+right`, `ctrl+k ctrl+left` | `filesView` | UI |
 | `window.new` | Window: New Window | `ctrl+n` | | UI |
 | `help.about` | Help: About CabinetOS | | | UI |
+| `diagnostics.toggleHeavy` | Diagnostics: Toggle Heavy Logging | | | UI |
+| `diagnostics.openLogFolder` | Diagnostics: Open Log Folder | | | UI |
+| `diagnostics.saveBundle` | Diagnostics: Save Log Bundle | | | UI |
 
 - The list is the design's `COMMANDS` array without its plugin commands
   (hex view, Git, compression), and the shell's own commands: moving
@@ -134,6 +137,11 @@ The core's commands, in palette order:
   palette and can be rebound like any other (Article 7); the window's
   buttons run the same commands, with arguments (a session, a path) that
   the palette leaves out.
+- The three `diagnostics.*` commands (Phase 15) have no default keys: the
+  palette is their place, and the status bar's "HEAVY LOG" pill runs
+  `diagnostics.toggleHeavy` too. What they do is in
+  [diagnostics.md](diagnostics.md) ("Heavy mode", "Bundles") and
+  [ui.md](ui.md) ("Heavy logging").
 - The rows from `go.root` to `terminal.insertSelectedPaths` are Total
   Commander's small commands (sub-phase 11a): their titles, keys and
   contexts are the research note's

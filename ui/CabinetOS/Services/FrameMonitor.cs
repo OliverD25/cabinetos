@@ -12,7 +12,9 @@ namespace CabinetOS.Services;
 /// time for each frame). A run (the snapshot aid's <c>scroll:</c> step) adds
 /// a <c>scroll run</c> line with its whole frame table and the machine's CPU
 /// load. Off unless <c>CABINETOS_UI_FRAMESTATS=1</c>, because listening to
-/// every frame keeps the window drawing even when nothing changes.
+/// every frame keeps the window drawing even when nothing changes. Heavy
+/// mode turns it on too (<c>heavyOnly</c>): its lines then have the target
+/// <c>heavy::frames</c>, so the normal log stays as it was.
 /// </summary>
 public sealed class FrameMonitor
 {
@@ -25,6 +27,8 @@ public sealed class FrameMonitor
     private static readonly string[] PartNames = ["measure", "arrange", "bind", "details", "icons", "selection", "status", "requests", "row_measure"];
 
     private readonly Func<int?> _corePid;
+    private readonly bool _heavyOnly;
+    private bool _started;
     private long _last;
     private long _secondStart;
     private double _workMs;
@@ -37,7 +41,11 @@ public sealed class FrameMonitor
     private long[] _runCalls = [];
 
     /// <summary>A monitor; <paramref name="corePid"/> names the core's process for the CPU load of a run.</summary>
-    public FrameMonitor(Func<int?> corePid) => _corePid = corePid;
+    public FrameMonitor(Func<int?> corePid, bool heavyOnly = false)
+    {
+        _corePid = corePid;
+        _heavyOnly = heavyOnly;
+    }
 
     /// <summary>Whether the variable asks for frame statistics.</summary>
     public static bool Enabled => Environment.GetEnvironmentVariable(EnableEnv) == "1";
@@ -45,11 +53,32 @@ public sealed class FrameMonitor
     /// <summary>Starts listening to frames.</summary>
     public void Start()
     {
+        if (_started)
+        {
+            return;
+        }
+        _started = true;
         FrameParts.Enabled = true;
         _secondStart = Stopwatch.GetTimestamp();
+        _last = 0;
+        _second = new FrameTable();
         CompositionTarget.Rendering += OnRendering;
         CompositionTarget.Rendered += OnRendered;
-        Diag.Info(Target, "frame monitor on");
+        Log("frame monitor on");
+    }
+
+    /// <summary>Stops listening to frames (heavy mode went off), so the window draws only when it has something to draw.</summary>
+    public void Stop()
+    {
+        if (!_started)
+        {
+            return;
+        }
+        _started = false;
+        CompositionTarget.Rendering -= OnRendering;
+        CompositionTarget.Rendered -= OnRendered;
+        FrameParts.Enabled = false;
+        Log("frame monitor off");
     }
 
     /// <summary>Starts collecting a run's frames.</summary>
@@ -176,6 +205,18 @@ public sealed class FrameMonitor
         {
             fields.Add(new($"{PartNames[i]}_ms", Math.Round(all.PartMs[i] * all.Frames, 1)));
         }
-        Diag.Info(Target, "frame stats", [.. fields]);
+        Log("frame stats", [.. fields]);
+    }
+
+    private void Log(string message, params LogField[] fields)
+    {
+        if (_heavyOnly)
+        {
+            Diag.Heavy("frames", message, fields);
+        }
+        else
+        {
+            Diag.Info(Target, message, fields);
+        }
     }
 }

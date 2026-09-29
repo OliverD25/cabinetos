@@ -106,6 +106,8 @@ public class ProtocolTests
         (new CreateDirectoryRequest(@"C:\data\New folder"), $$$"""{"id":"{{{Id}}}","type":"create_directory","path":"C:\\data\\New folder"}"""),
         (new RenameRequest(@"C:\data\a.txt", "b.txt"), $$$"""{"id":"{{{Id}}}","type":"rename","path":"C:\\data\\a.txt","new_name":"b.txt"}"""),
         // Protocol 12, as docs/research/total-commander.md, Part 3 (b), gives them, until the core's schema has them.
+        // Phase 15's log bundle, as the core's agent shaped it.
+        (new SaveLogBundleRequest(10), $$$"""{"id":"{{{Id}}}","type":"save_log_bundle","minutes":10}"""),
     ];
 
     /// <summary>
@@ -128,6 +130,8 @@ public class ProtocolTests
                 Assert.False(finished.Cancelled);
                 Assert.Equal(new MeasureResult(@"C:\data\photos", 130, 4, 9500000, 1), finished.Results.Single());
             }),
+        ($$$"""{"id":"{{{Id}}}","type":"log_bundle","path":"C:\\logs\\bundle-20260930T010203004Z.zip"}""", false,
+            b => Assert.Equal(new LogBundleReply(@"C:\logs\bundle-20260930T010203004Z.zip"), b)),
     ];
 
     [Fact]
@@ -561,6 +565,8 @@ public class ProtocolTests
         """;
         AssertValid(Schemas.Config, firstRun);
         AssertValid(Schemas.Config, """{"ui":{"dockSize":{"bottom":212,"right":340}}}""");
+        AssertValid(Schemas.Config, """{"logging":{"heavy":true}}""");
+        AssertInvalid(Schemas.Config, """{"logging":{"heavy":"yes"}}""");
         AssertInvalid(Schemas.Config, """{"ui":{"dualPan":true}}""");
         using var document = JsonDocument.Parse(firstRun);
         Assert.Equal(UiSettings.Defaults, UiSettings.FromConfig(document.RootElement));

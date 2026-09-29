@@ -113,7 +113,7 @@ public sealed partial class MainWindow
         if (command is not null)
         {
             e.Handled = true;
-            _ = _router.ExecuteAsync(command, trigger: "key");
+            _ = _router.ExecuteAsync(command, trigger: "key", traceId: TakeKeyTrace());
             return;
         }
         if (terminal)

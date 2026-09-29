@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -17,6 +18,11 @@ namespace CabinetOS.Core.Diagnostics;
 /// takes no lock (the queue and the ring of recent lines are lock-free). When
 /// the writer falls more than <see cref="QueueCapacity"/> lines behind, new
 /// lines are dropped and counted instead of stalling the caller.
+/// While heavy mode is on (<see cref="SetHeavy"/>) every event also goes into
+/// <c>heavy-&lt;process&gt;.&lt;date&gt;.jsonl</c>, through a queue counted in bytes: a thread
+/// that logs waits for the writer once the queue is full, except the UI thread and
+/// the pipe's reader (<see cref="NeverWait"/>), whose lines are dropped and counted
+/// instead. That wait is the exception to Article 12 that ADR 0013 records.
 /// </remarks>
 public sealed class LogWriter : IDisposable
 {
@@ -29,9 +35,22 @@ public sealed class LogWriter : IDisposable
     /// <summary>Daily files kept, today's included, as in the core.</summary>
     public const int KeptLogFiles = 14;
 
+    /// <summary>The most a heavy batch holds, in characters, before it is written.</summary>
+    private const int HeavyBatchChars = 1024 * 1024;
+
+    /// <summary>How long a waiting thread sleeps before it looks again, in case a wake-up crossed its wait.</summary>
+    private static readonly TimeSpan WaitSlice = TimeSpan.FromMilliseconds(50);
+
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
+    [ThreadStatic]
+    private static bool s_neverWait;
+
     private readonly ConcurrentQueue<string> _queue = new();
+    private readonly ConcurrentQueue<(string Line, int Bytes)> _heavyQueue = new();
+    private readonly object _room = new();
+    private readonly HeavyFiles _heavyFiles;
+    private readonly StringBuilder _heavyBatch = new();
     private readonly string?[] _ring = new string?[RingCapacity];
     private readonly AutoResetEvent _signal = new(false);
     private readonly Thread _thread;
@@ -41,6 +60,12 @@ public sealed class LogWriter : IDisposable
     private int _queued;
     private long _dropped;
     private long _droppedReported;
+    private long _heavyQueued;
+    private long _heavyDropped;
+    private long _heavyDroppedReported;
+    private long _heavyLostBaseline;
+    private int _heavyClosePending;
+    private volatile bool _heavyOn;
     private int _sleeping;
     private int _busy;
     private volatile bool _stopping;
@@ -48,13 +73,17 @@ public sealed class LogWriter : IDisposable
     private DateOnly _fileDate;
 
     /// <summary>Starts the writer thread for <paramref name="directory"/>.</summary>
-    public LogWriter(string directory, LogFilter filter, string process = "ui", string version = "0.1.0", Func<DateTime>? clock = null)
+    public LogWriter(string directory, LogFilter filter, string process = "ui", string version = "0.1.0", Func<DateTime>? clock = null,
+        HeavyLimits? heavyLimits = null)
     {
         Directory = directory;
         Filter = filter;
         Process = process;
         Version = version;
+        HeavyLimits = heavyLimits ?? HeavyLimits.Default;
         _clock = clock ?? (() => DateTime.UtcNow);
+        _heavyFiles = new HeavyFiles(directory, process, HeavyLimits, _clock,
+            (message, fields) => Write(LogLevel.Info, "cabinetos_ui::diag", message, fields: fields));
         System.IO.Directory.CreateDirectory(directory);
         _thread = new Thread(Run) { IsBackground = true, Name = "diag-writer" };
         _thread.Start();
@@ -72,16 +101,50 @@ public sealed class LogWriter : IDisposable
     /// <summary>The program version written into crash traces.</summary>
     public string Version { get; }
 
+    /// <summary>The sizes heavy mode keeps to.</summary>
+    public HeavyLimits HeavyLimits { get; }
+
     /// <summary>Lines dropped because the writer fell behind.</summary>
     public long DroppedLines => Interlocked.Read(ref _dropped);
+
+    /// <summary>Whether heavy mode is on: every event goes into the heavy file as well.</summary>
+    public bool HeavyEnabled => _heavyOn;
+
+    /// <summary>
+    /// Lines a full heavy queue dropped since heavy mode was last switched on: the lines of the
+    /// threads that never wait. The status bar's pill shows the count.
+    /// </summary>
+    public long HeavyLostLines => Interlocked.Read(ref _heavyDropped) - Interlocked.Read(ref _heavyLostBaseline);
+
+    /// <summary>A pause before each heavy write (a slow disk, in tests); it gets the batch's byte count.</summary>
+    internal Action<int>? BeforeHeavyWrite { get; set; }
 
     /// <summary>The file today's lines go to.</summary>
     public string CurrentFilePath => FilePathFor(DateOnly.FromDateTime(_clock()));
 
-    /// <summary>Whether an event would be written.</summary>
-    public bool IsEnabled(LogLevel level, string target) => Filter.IsEnabled(level, target);
+    /// <summary>The heavy file being written now, or null while none is open.</summary>
+    public string? HeavyFilePath => _heavyFiles.OpenPath;
 
-    /// <summary>Formats and queues one event, if the filter lets it through.</summary>
+    /// <summary>
+    /// Whether an event would be written: to the normal file when the filter lets it through
+    /// (the lines only heavy mode writes never go there), to the heavy file while heavy mode is on.
+    /// </summary>
+    public bool IsEnabled(LogLevel level, string target) => _heavyOn || IsNormal(level, target);
+
+    /// <summary>
+    /// Marks the calling thread as one that never waits for the heavy writer, as the core marks
+    /// its async workers: the UI thread, which must stay responsive. Its heavy lines are dropped
+    /// and counted instead once the queue is full.
+    /// </summary>
+    public static void NeverWaitForHeavyLog() => s_neverWait = true;
+
+    /// <summary>
+    /// Like <see cref="NeverWaitForHeavyLog"/> for the code inside a <c>using</c> block, on a
+    /// thread that does other work too (the pipe's reader runs on the thread pool).
+    /// </summary>
+    public static NeverWaitScope NeverWait() => new();
+
+    /// <summary>Formats and queues one event, if the filter lets it through, or while heavy mode is on.</summary>
     public void Write(
         LogLevel level,
         string target,
@@ -91,15 +154,57 @@ public sealed class LogWriter : IDisposable
         IReadOnlyList<LogField>? fields = null,
         string? traceId = null)
     {
-        if (!Filter.IsEnabled(level, target))
+        var heavy = _heavyOn;
+        var normal = IsNormal(level, target);
+        if (!normal && !heavy)
         {
             return;
         }
         var line = LogLine.Format(_clock(), level, target, message, traceId, requestId, span, fields, LogLine.CurrentThreadLabel());
-        Enqueue(line);
+        if (normal)
+        {
+            Enqueue(line);
+        }
+        if (heavy)
+        {
+            EnqueueHeavy(line, traceId, requestId, span);
+        }
     }
 
-    /// <summary>Queues an already formatted line.</summary>
+    /// <summary>
+    /// Turns heavy mode on or off (<c>logging.heavy</c>). Both files say so, and going off writes
+    /// what is queued and closes the heavy file. Returns whether the mode changed.
+    /// </summary>
+    public bool SetHeavy(bool on)
+    {
+        if (on == _heavyOn)
+        {
+            return false;
+        }
+        if (on)
+        {
+            Volatile.Write(ref _heavyLostBaseline, Interlocked.Read(ref _heavyDropped));
+            Volatile.Write(ref _heavyClosePending, 0);
+            _heavyOn = true;
+            Write(LogLevel.Info, "cabinetos_ui::diag", "heavy logging is on", fields:
+            [
+                new LogField("dir", Directory),
+                new LogField("queue_cap_bytes", HeavyLimits.QueueBytes),
+                new LogField("disk_cap_bytes", HeavyLimits.DiskBytes),
+            ]);
+        }
+        else
+        {
+            // Written first, so it is the heavy file's last line too.
+            Write(LogLevel.Info, "cabinetos_ui::diag", "heavy logging is off");
+            _heavyOn = false;
+            Volatile.Write(ref _heavyClosePending, 1);
+            Flush(TimeSpan.FromSeconds(2));
+        }
+        return true;
+    }
+
+    /// <summary>Queues an already formatted line for the normal file.</summary>
     public void Enqueue(string line)
     {
         var slot = Interlocked.Increment(ref _ringNext) - 1;
@@ -112,10 +217,7 @@ public sealed class LogWriter : IDisposable
             return;
         }
         _queue.Enqueue(line);
-        if (Volatile.Read(ref _sleeping) == 1 && Interlocked.CompareExchange(ref _sleeping, 0, 1) == 1)
-        {
-            _signal.Set();
-        }
+        WakeWriter();
     }
 
     /// <summary>The last lines logged (at most <see cref="RingCapacity"/>), oldest first.</summary>
@@ -142,7 +244,8 @@ public sealed class LogWriter : IDisposable
     public bool Flush(TimeSpan timeout)
     {
         var deadline = Stopwatch.GetTimestamp() + (long)(timeout.TotalSeconds * Stopwatch.Frequency);
-        while (Volatile.Read(ref _queued) > 0 || Volatile.Read(ref _busy) == 1)
+        while (Volatile.Read(ref _queued) > 0 || Interlocked.Read(ref _heavyQueued) > 0
+            || Volatile.Read(ref _heavyClosePending) == 1 || Volatile.Read(ref _busy) == 1)
         {
             if (!_thread.IsAlive || Stopwatch.GetTimestamp() > deadline)
             {
@@ -239,6 +342,68 @@ public sealed class LogWriter : IDisposable
         _signal.Dispose();
     }
 
+    private bool IsNormal(LogLevel level, string target) =>
+        Filter.IsEnabled(level, target) && !target.StartsWith(HeavyFiles.TargetPrefix, StringComparison.Ordinal);
+
+    private void WakeWriter()
+    {
+        if (Volatile.Read(ref _sleeping) == 1 && Interlocked.CompareExchange(ref _sleeping, 0, 1) == 1)
+        {
+            _signal.Set();
+        }
+    }
+
+    // The heavy queue is counted in bytes. Up to the cap a thread hands its line over and goes on;
+    // above it, it waits until the writer has written enough, so no operation goes unrecorded, and
+    // says afterwards how long it waited. A thread that never waits drops the line instead.
+    private void EnqueueHeavy(string line, string? traceId, string? requestId, string? span)
+    {
+        var length = Utf8.GetByteCount(line) + 1;
+        TimeSpan? waited = null;
+        if (s_neverWait)
+        {
+            if (Interlocked.Read(ref _heavyQueued) + length > HeavyLimits.QueueBytes + HeavyLimits.NeverWaitExtraBytes)
+            {
+                Interlocked.Increment(ref _heavyDropped);
+                return;
+            }
+        }
+        else if (HeavyOver(length))
+        {
+            var started = Stopwatch.GetTimestamp();
+            lock (_room)
+            {
+                while (HeavyOver(length))
+                {
+                    Monitor.Wait(_room, WaitSlice);
+                }
+            }
+            waited = Stopwatch.GetElapsedTime(started);
+        }
+        PushHeavy(line, length);
+        if (waited is { } wait)
+        {
+            var note = LogLine.Format(_clock(), LogLevel.Warn, "cabinetos_ui::diag", "heavy log waited", traceId, requestId, span,
+                [new LogField("waited_ms", (long)wait.TotalMilliseconds)], LogLine.CurrentThreadLabel());
+            PushHeavy(note, Utf8.GetByteCount(note) + 1);
+        }
+    }
+
+    private void PushHeavy(string line, int length)
+    {
+        Interlocked.Add(ref _heavyQueued, length);
+        _heavyQueue.Enqueue((line, length));
+        WakeWriter();
+    }
+
+    // The queue holds lines and would go over its cap. A line larger than the cap alone never waits
+    // for an empty queue, and nothing waits for a writer that has ended.
+    private bool HeavyOver(int length)
+    {
+        var queued = Interlocked.Read(ref _heavyQueued);
+        return queued > 0 && queued + length > HeavyLimits.QueueBytes && !_stopping && _thread.IsAlive;
+    }
+
     private string FilePathFor(DateOnly date) =>
         Path.Combine(Directory, $"{Process}.{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.jsonl");
 
@@ -266,15 +431,17 @@ public sealed class LogWriter : IDisposable
 
     private void Run()
     {
+        // What the writer logs itself (files deleted for the cap) must not wait for itself.
+        s_neverWait = true;
         while (true)
         {
             Drain();
-            if (_stopping && _queue.IsEmpty)
+            if (_stopping && _queue.IsEmpty && _heavyQueue.IsEmpty)
             {
                 break;
             }
             Interlocked.Exchange(ref _sleeping, 1);
-            if (!_queue.IsEmpty || _stopping)
+            if (!_queue.IsEmpty || !_heavyQueue.IsEmpty || _stopping)
             {
                 Interlocked.Exchange(ref _sleeping, 0);
                 continue;
@@ -284,11 +451,25 @@ public sealed class LogWriter : IDisposable
         }
         _file?.Dispose();
         _file = null;
+        _heavyFiles.Close();
     }
 
     private void Drain()
     {
         Volatile.Write(ref _busy, 1);
+        try
+        {
+            DrainNormal();
+            DrainHeavy();
+        }
+        finally
+        {
+            Volatile.Write(ref _busy, 0);
+        }
+    }
+
+    private void DrainNormal()
+    {
         try
         {
             _batch.Clear();
@@ -321,9 +502,76 @@ public sealed class LogWriter : IDisposable
             _file?.Dispose();
             _file = null;
         }
+    }
+
+    // One batch of the heavy queue per call, at most about a megabyte; the writer's loop comes back
+    // at once while lines wait. The bytes leave the count only after they are written, so a thread
+    // that waits for room waits for the disk.
+    private void DrainHeavy()
+    {
+        long taken = 0;
+        try
+        {
+            _heavyBatch.Clear();
+            while (_heavyBatch.Length < HeavyBatchChars && _heavyQueue.TryDequeue(out var item))
+            {
+                taken += item.Bytes;
+                _heavyBatch.Append(item.Line).Append('\n');
+            }
+            var dropped = Interlocked.Read(ref _heavyDropped);
+            if (dropped != _heavyDroppedReported)
+            {
+                var fields = new[] { new LogField("dropped", dropped - _heavyDroppedReported) };
+                _heavyDroppedReported = dropped;
+                _heavyBatch.Append(LogLine.Format(_clock(), LogLevel.Warn, "cabinetos_ui::diag", "heavy log dropped lines of threads that never wait", null, null, fields, LogLine.CurrentThreadLabel()))
+                    .Append('\n');
+            }
+            if (_heavyBatch.Length > 0)
+            {
+                WriteToHeavyFile(_heavyBatch);
+            }
+        }
+        catch (IOException)
+        {
+            _heavyFiles.Close();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _heavyFiles.Close();
+        }
         finally
         {
-            Volatile.Write(ref _busy, 0);
+            if (taken > 0)
+            {
+                Interlocked.Add(ref _heavyQueued, -taken);
+            }
+            lock (_room)
+            {
+                Monitor.PulseAll(_room);
+            }
+        }
+        // A line that got past the switch just before heavy mode went off opened the file again: it
+        // must not stay open.
+        if (!_heavyOn && _heavyQueue.IsEmpty)
+        {
+            _heavyFiles.Close();
+            Volatile.Write(ref _heavyClosePending, 0);
+        }
+    }
+
+    private void WriteToHeavyFile(StringBuilder batch)
+    {
+        var text = batch.ToString();
+        var buffer = ArrayPool<byte>.Shared.Rent(Utf8.GetMaxByteCount(text.Length));
+        try
+        {
+            var count = Utf8.GetBytes(text, 0, text.Length, buffer, 0);
+            BeforeHeavyWrite?.Invoke(count);
+            _heavyFiles.Write(buffer, count);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
@@ -368,5 +616,21 @@ public sealed class LogWriter : IDisposable
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    /// <summary>The thread's "never waits" mark, put back when the scope ends.</summary>
+    public readonly struct NeverWaitScope : IDisposable
+    {
+        private readonly bool _previous;
+
+        /// <summary>Marks the calling thread; <see cref="Dispose"/> puts its earlier mark back.</summary>
+        public NeverWaitScope()
+        {
+            _previous = s_neverWait;
+            s_neverWait = true;
+        }
+
+        /// <inheritdoc/>
+        public void Dispose() => s_neverWait = _previous;
     }
 }

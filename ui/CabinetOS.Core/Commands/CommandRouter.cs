@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Ipc;
@@ -61,6 +63,10 @@ public sealed record CommandOutcome(
 public sealed class CommandRouter(ICoreChannel core)
 {
     private const string Target = "cabinetos_ui::commands";
+    private const string HeavyTarget = "heavy::commands";
+
+    /// <summary>The most bytes of a command's arguments a heavy line holds.</summary>
+    private const int ArgsCap = 4096;
 
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _handlers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<CommandInvocation, Task>> _local = new(StringComparer.Ordinal);
@@ -181,11 +187,12 @@ public sealed class CommandRouter(ICoreChannel core)
 
     /// <summary>
     /// Runs a command. Never throws: the outcome says how it ended and is
-    /// also raised as <see cref="Completed"/>.
+    /// also raised as <see cref="Completed"/>. <paramref name="traceId"/> is the ULID the run is
+    /// to have when its cause already has one (a key press logged in heavy mode); else a new one.
     /// </summary>
-    public async Task<CommandOutcome> ExecuteAsync(string commandId, JsonElement? args = null, string trigger = "api")
+    public async Task<CommandOutcome> ExecuteAsync(string commandId, JsonElement? args = null, string trigger = "api", string? traceId = null)
     {
-        var requestId = Ulid.NewId();
+        var requestId = traceId ?? Ulid.NewId();
         // One run is one user action: its requests and its lines carry its ULID as their trace.
         using var trace = Diag.BeginTrace(requestId);
         if (Modal is { } dialog && !_modalAllows.Contains(commandId))
@@ -217,26 +224,64 @@ public sealed class CommandRouter(ICoreChannel core)
             }
             invocation = invocation with { Args = PluginInput.With(args, text) };
         }
+        // The time of the run itself: what the user took to type into a prompt is not in it.
+        var started = Stopwatch.GetTimestamp();
         CommandOutcome outcome;
         // A window command the registry does not list (yet: before list_commands answers, or
         // from an older core) still runs its handler here instead of failing in the core.
         if (info is null && (_local.TryGetValue(commandId, out var local) || _handlers.TryGetValue(commandId, out local)))
         {
             Log(requestId, commandId, "ui", trigger);
+            LogHeavyRun(invocation, info, "ui");
             outcome = await RunHandler(local, invocation);
         }
         else if (info is { Target: "ui" })
         {
             Log(requestId, commandId, "ui", trigger);
+            LogHeavyRun(invocation, info, "ui");
             outcome = await RunUi(invocation);
         }
         else
         {
             Log(requestId, commandId, "core", trigger);
+            LogHeavyRun(invocation, info, "core");
             outcome = await RunInCore(invocation);
+        }
+        if (Diag.HeavyEnabled)
+        {
+            Diag.Request(LogLevel.Debug, requestId, HeavyTarget, "command done", new LogField("command", commandId),
+                new LogField("outcome", outcome.Kind.ToString()), new LogField("elapsed_ms", (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds));
         }
         Completed?.Invoke(outcome);
         return outcome;
+    }
+
+    // Heavy mode: every command with where it came from (the registry's source, and what started
+    // it) and the arguments it got, secrets masked and at most 4 KB of them.
+    private static void LogHeavyRun(CommandInvocation invocation, CommandInfo? info, string target)
+    {
+        if (!Diag.HeavyEnabled)
+        {
+            return;
+        }
+        var source = info is null ? "unlisted" : info.Source.Id is { } id ? $"{info.Source.Kind}:{id}" : info.Source.Kind;
+        var fields = new List<LogField>
+        {
+            new("command", invocation.CommandId),
+            new("source", source),
+            new("target", target),
+            new("trigger", invocation.Trigger),
+        };
+        if (invocation.Args is { } args)
+        {
+            var (text, truncated) = LogMask.MaskedJson(Encoding.UTF8.GetBytes(args.GetRawText()), ArgsCap);
+            fields.Add(new("args", text));
+            if (truncated)
+            {
+                fields.Add(new("truncated", true));
+            }
+        }
+        Diag.Request(LogLevel.Debug, invocation.RequestId, HeavyTarget, "command run", [.. fields]);
     }
 
     private async Task<CommandOutcome> RunUi(CommandInvocation invocation)

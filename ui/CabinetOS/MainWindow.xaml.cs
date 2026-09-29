@@ -181,6 +181,7 @@ public sealed partial class MainWindow : Window
         AddressEdit.LostFocus += (_, _) => EndAddressEdit();
 
         RegisterCommands();
+        SetUpDiagnostics();
         _keys.PendingChanged += UpdateChordIndicator;
         RootGrid.PreviewKeyDown += OnPreviewKeyDown;
         RootGrid.SizeChanged += (_, e) => UpdateWidths(e.NewSize.Width);
@@ -828,6 +829,7 @@ public sealed partial class MainWindow : Window
     {
         var previous = _settings;
         _settings = settings;
+        ApplyHeavyLogging(settings.HeavyLogging, firstStart);
         if ((firstStart || settings.DualPane != previous.DualPane) && !IsOwnWrite(ShellState.DualPaneKey, settings.DualPane))
         {
             if (!firstStart)
@@ -2372,6 +2374,7 @@ public sealed partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        LogHeavyKey(e);
         HandleWindowKey(e);
         // The character this key types, if any, arrives next (CharacterReceived): a key the window
         // took (a binding, a chord) must not also go into a quick search.
@@ -2428,7 +2431,7 @@ public sealed partial class MainWindow : Window
         {
             case KeyOutcome.Run run:
                 e.Handled = true;
-                _ = _router.ExecuteAsync(run.Command, KeyArguments(run.Command, run.Keys), "key");
+                _ = _router.ExecuteAsync(run.Command, KeyArguments(run.Command, run.Keys), "key", TakeKeyTrace());
                 break;
             case KeyOutcome.Pending:
                 e.Handled = true;

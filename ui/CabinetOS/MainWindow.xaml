@@ -366,6 +366,25 @@
                             FontSize="11"
                             Foreground="{ThemeResource CbAccentBrush}"
                             Visibility="Collapsed" />
+                        <!-- Heavy logging is on (docs/ui.md, "Heavy logging"): the pill says so, and a click turns it off. -->
+                        <Button
+                            x:Name="HeavyPill"
+                            Height="20"
+                            MinWidth="0"
+                            Padding="8,0"
+                            AllowFocusOnInteraction="False"
+                            Background="{ThemeResource CbPillFillBrush}"
+                            CornerRadius="10"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            Visibility="Collapsed">
+                            <TextBlock
+                                x:Name="HeavyPillText"
+                                VerticalAlignment="Center"
+                                CharacterSpacing="60"
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource CbAccentBrush}" />
+                        </Button>
                     </StackPanel>
                     <!-- The minimized transfer (design view E): an 80 x 4 px track and "Copying · 45%". -->
                     <Button

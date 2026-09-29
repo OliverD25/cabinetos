@@ -164,6 +164,7 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
 
         var payload = MessageCodec.Encode(request);
         Diag.Request(LogLevel.Info, id, Target, "request sent", new LogField("request", request.Type), new LogField("bytes", payload.Length));
+        Diag.HeavyPayload("request payload", id, request.Trace, payload);
         try
         {
             await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -275,6 +276,8 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
 
     private void Dispatch(byte[] frame)
     {
+        // The reader keeps the pipe alive: in heavy mode its lines are dropped, not waited for.
+        using var neverWait = LogWriter.NeverWait();
         IncomingMessage message;
         try
         {
@@ -311,6 +314,7 @@ public sealed class CoreClient : ICoreChannel, IAsyncDisposable
         if (message.Id is not null && _pending.TryRemove(message.Id, out var pending))
         {
             var elapsedUs = (long)Stopwatch.GetElapsedTime(pending.StartedTicks).TotalMicroseconds;
+            Diag.HeavyPayload("reply payload", message.Id, pending.Trace, frame);
             switch (message.Body)
             {
                 case ErrorReply error:

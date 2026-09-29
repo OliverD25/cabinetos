@@ -22,6 +22,8 @@ public static class Program
     private static int Main(string[] args)
     {
         Thread.CurrentThread.Name = "ui";
+        // In heavy mode a full log queue drops this thread's lines instead of stopping the window.
+        LogWriter.NeverWaitForHeavyLog();
         Diag.Init(Version);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             Diag.Crash(e.ExceptionObject as Exception, "unhandled exception");

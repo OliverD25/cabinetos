@@ -141,6 +141,9 @@ public sealed record EntryMatchesReply(ulong ListingId, uint Generation, IReadOn
 /// <summary>Reply to <c>measure_paths</c> (version 12): the measure's ID; its progress comes as events.</summary>
 public sealed record MeasureStartedReply(ulong MeasureId) : CoreReply;
 
+/// <summary>Reply to <c>save_log_bundle</c>: the zip's full path, in the log folder.</summary>
+public sealed record LogBundleReply(string Path) : CoreReply;
+
 /// <summary>Reply to <c>start_job</c>: the paths were checked and the job is queued.</summary>
 public sealed record JobStartedReply(ulong JobId) : CoreReply;
 
