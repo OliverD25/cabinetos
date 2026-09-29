@@ -554,6 +554,58 @@ unchanged.
 
 Articles: 1, 4, 7, 8, 10, 11, 12.
 
+### Phase 15 — Heavy logging mode and trace ids (the creator's idea, 2026-09-29 late evening; built in the sleep-mode run of 2026-09-29/30)
+
+Goal: a switch that makes CabinetOS record every operation, even at the
+cost of speed, so a fault the normal log does not show (a lost key, a job
+that did not do what was asked, a plugin or an AI agent's action) can be
+followed from the key press to the disk; and, in both modes, one id per
+user action that every log line of every process carries.
+
+Decided 2026-09-29 with the creator, on the planning session's six
+questions: (1) in heavy mode, when the writer cannot keep up, the queue
+grows in memory to 256 MiB and then the core's operation waits for the
+writer; the window's UI thread never waits (it drops and counts). This is
+an explicit exception to Article 12's "never blocks the main I/O
+pipeline", for heavy mode only, recorded as [ADR 0013](decisions/0013-heavy-logging-may-wait.md);
+normal mode stays as today. (2) Heavy mode records every core request and
+reply with full payloads (64 KB per line, secrets masked), every file a
+job touches with bytes and timings, every key press by name, command,
+focus change and the frame table every second in the window (never typed
+text), every plugin host call and every network request's host, status,
+size and time (never headers or bodies). (3) The switch is `logging.heavy`
+in `cabinetos.json` (the question named `diagnostics.level`; the `logging`
+section already exists), the palette command "Diagnostics: Toggle Heavy
+Logging", and `cabinetos-cli config set logging.heavy true` for an agent;
+on until turned off; a HEAVY LOG pill in the status bar and a notice at
+start. (4) Separate `heavy.<date>.jsonl` files per process, 2 GB in total,
+oldest deleted first; "Diagnostics: Open Log Folder". (5) Trace ids in
+both modes: the window's ULID per action travels as `trace` on every
+request, into the jobs and plugin calls the core starts for it, and onto
+every line; `cabinetos-cli log trace <id>` prints the chain in time order.
+(6) On a crash with heavy mode on, a zip with the crash trace and the last
+10 minutes of every process's logs; "Open crash folder" at the next
+start; the same bundle on demand, "Diagnostics: Save Log Bundle".
+
+Produces: in `cabinetos-diag`, the heavy sink with the byte-counted queue,
+the wait rule and the disk cap; the `trace` field of the protocol envelope
+and `trace_id` on every span; per-entry job lines, host-call lines and
+network lines at heavy level; `save_log_bundle` and the crash hook's zip;
+`logging.heavy` in the config; `cabinetos-cli log trace | tail | bundle`.
+In the shell, the heavy file with a 64 MiB never-wait queue, the trace on
+every request, the key, command, focus and frame lines, the three
+Diagnostics commands and the status-bar pill.
+
+Done when: with heavy mode on, a copy of 1,000 files writes one line per
+file and a slow writer makes the job wait rather than lose a line (test);
+`log trace` of one F5 press prints the window's key and command lines, the
+core's request and reply, the job's entries and its end, in time order; a
+crash with heavy mode on leaves a zip with the last 10 minutes of all
+logs; the folder never passes 2 GB of heavy files; normal mode's speed on
+the 100,000-entry listing is unchanged.
+
+Articles: 6, 12 (with the exception of ADR 0013).
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 This is the first coding task. The creator will give the exact instruction; this
