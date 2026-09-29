@@ -410,6 +410,10 @@ public sealed partial class MainWindow : Window
                 case "accept":
                     PromptView.Accept();
                     break;
+                case "drive" when step.Argument.Length == 1:
+                    // A drive's letter in the open drive list (Alt+F1, Alt+F2).
+                    PromptView.PressKey(step.Argument[0]);
+                    break;
                 case "terminal":
                     // Typed into the shown shell as keys; {enter} is Enter.
                     await _terminal.TypeAsync(step.Argument.Replace("{enter}", "\r", StringComparison.Ordinal));
@@ -456,8 +460,10 @@ public sealed partial class MainWindow : Window
                     break;
                 case "shot":
                     await Task.Delay(400);
+                    var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Select(p => p.Child).ToList();
+                    Diag.Debug("cabinetos_ui::snapshot", "open popups", new LogField("children", string.Join(",", popups.Select(c => c?.GetType().Name))));
                     await DevSnapshots.RenderAsync(RootGrid, step.Argument, WebPages(), SnapshotBackdrop(),
-                        VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Select(p => p.Child).Where(c => c is ContentDialog or MenuFlyoutPresenter).ToList());
+                        popups.Where(c => c is ContentDialog or MenuFlyoutPresenter or FlyoutPresenter).ToList());
                     break;
             }
         }

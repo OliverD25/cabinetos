@@ -173,6 +173,9 @@ public sealed partial class FilePane : UserControl
     /// <summary>Stops an edit without renaming (Esc).</summary>
     public void CancelRename() => EndRename(commit: false);
 
+    /// <summary>The pane's header, where the drive list (Alt+F1, Alt+F2) opens under.</summary>
+    public FrameworkElement HeaderElement => Header;
+
     // WinUI's text box shows a clear button (×) while it has the focus. A name edited in
     // place has none in the design, and a click on it would move the focus and end the edit.
     private void HideClearButton()

@@ -75,6 +75,20 @@ public class PromptTests
     }
 
     [Fact]
+    public void A_drive_s_letter_picks_its_row()
+    {
+        var drives = new PromptList(PromptKind.Pick,
+        [
+            new PromptRow("System Disk (C:)", "1.2 TB free", Key: 'C'),
+            new PromptRow("Data (D:)", "118 GB free", Key: 'D'),
+            new PromptRow("Pin this folder"),
+        ]);
+        Assert.Equal(1, drives.IndexOfKey('d'));
+        Assert.Equal(0, drives.IndexOfKey('C'));
+        Assert.Equal(-1, drives.IndexOfKey('E'));
+    }
+
+    [Fact]
     public void Ranges_of_matches_become_rows_inside_the_listing()
     {
         // A pair that is not a pair is skipped; rows past the listing's end are not rows.

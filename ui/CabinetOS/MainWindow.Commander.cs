@@ -53,6 +53,50 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("edit.selectSameExtension", ListingOnly(invocation => MarkSameExtensionAsync(mark: true, invocation)));
         _router.RegisterUiHandler("edit.unselectSameExtension", ListingOnly(invocation => MarkSameExtensionAsync(mark: false, invocation)));
         _router.RegisterUiHandler("go.pinnedFolders", PinnedFoldersAsync);
+        _router.RegisterUiHandler("go.chooseDriveLeft", invocation => ChooseDriveAsync(0, invocation));
+        _router.RegisterUiHandler("go.chooseDriveRight", invocation => ChooseDriveAsync(1, invocation));
+    }
+
+    // Alt+F1, Alt+F2: the drive list under that pane's header, the sidebar's list_volumes data;
+    // the pane becomes the active one, and the right one shows first when one pane was shown.
+    // A letter picks its drive at once. A drive goes to the folder this pane last showed there,
+    // else to its root.
+    private async Task ChooseDriveAsync(int paneIndex, CommandInvocation invocation)
+    {
+        if (_sidebar.Drives.Count == 0)
+        {
+            ShowNotice("No drives to choose from: this core does not list volumes.");
+            return;
+        }
+        if (paneIndex == 1 && !_dual)
+        {
+            ApplyDual(true);
+            _ = PersistAsync(ShellState.DualPaneKey, true);
+        }
+        var pane = _panes[paneIndex];
+        var view = _paneViews[paneIndex];
+        view.Focus(FocusState.Programmatic);
+        SetActive(paneIndex);
+        var drives = _sidebar.Drives.ToList();
+        var current = DriveMemory.LetterOf(pane.Path);
+        var rows = drives.Select(d => new PromptRow(d.Name, d.FreeText, "", Key: d.Path.Length > 0 ? d.Path[0] : null)).ToList();
+        var request = new PromptRequest("Drives", PromptKind.Pick, rows, ShowInput: false,
+            Hint: "A letter or Enter goes to the drive: to the folder this pane last showed there.");
+        view.UpdateLayout();
+        var answer = PromptView.ShowAsync(request, view.HeaderElement);
+        // The drive the pane is on starts highlighted.
+        var here = drives.FindIndex(d => d.Path.Length > 0 && char.ToUpperInvariant(d.Path[0]) == current);
+        PromptView.Highlight(Math.Max(0, here));
+        if (await answer is not { Row: { } row } || drives.FirstOrDefault(d => d.Name == row.Title) is not { } drive)
+        {
+            return;
+        }
+        var target = drive.Path.Length > 0 ? pane.Drives.FolderOn(drive.Path[0]) : drive.Path;
+        // The folder remembered there may be gone since: then the drive's root.
+        if (!await pane.NavigateAsync(target, invocation.RequestId) && !string.Equals(target, drive.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            await pane.NavigateAsync(drive.Path);
+        }
     }
 
     // Num +, Num -: the pattern box in the palette's frame. It offers the last pattern, lists ten,

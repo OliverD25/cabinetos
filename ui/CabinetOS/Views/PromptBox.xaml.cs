@@ -27,6 +27,7 @@ public sealed partial class PromptBox : UserControl
     private TaskCompletionSource<PromptResult?>? _pending;
     private PromptList _list = new(PromptKind.Text, []);
     private PromptKind _kind;
+    private bool _showsInput = true;
     private bool _settingText;
 
     /// <summary>Creates the prompt, hidden.</summary>
@@ -42,7 +43,8 @@ public sealed partial class PromptBox : UserControl
                 BuildRows();
             }
         };
-        Panel.PreviewKeyDown += OnPanelKeyDown;
+        // On the control, not the panel: a list without a box has the keyboard on the control itself.
+        PreviewKeyDown += OnKeyDown;
         Scrim.PointerPressed += (_, e) =>
         {
             if (ReferenceEquals(e.OriginalSource, Scrim))
@@ -61,13 +63,16 @@ public sealed partial class PromptBox : UserControl
     /// <summary>
     /// Shows <paramref name="request"/> and waits for the answer: the result,
     /// or null when the user cancelled. A prompt already shown is cancelled.
+    /// With an <paramref name="anchor"/> the panel opens under it, narrower
+    /// (the drive list under a pane's header); else under the title bar.
     /// </summary>
-    public Task<PromptResult?> ShowAsync(PromptRequest request)
+    public Task<PromptResult?> ShowAsync(PromptRequest request, FrameworkElement? anchor = null)
     {
         Cancel();
         var pending = new TaskCompletionSource<PromptResult?>();
         _pending = pending;
         _kind = request.Kind;
+        _showsInput = request.ShowInput;
         _list = new PromptList(request.Kind, request.Rows);
         LabelText.Text = request.Label;
         AutomationPropertiesName(request.Label);
@@ -75,18 +80,65 @@ public sealed partial class PromptBox : UserControl
         Input.Text = request.Text;
         _settingText = false;
         Input.PlaceholderText = request.Placeholder;
+        InputRow.Visibility = request.ShowInput ? Visibility.Visible : Visibility.Collapsed;
+        RowsScroller.Padding = new Thickness(6, request.ShowInput ? 0 : 6, 6, 8);
         Option.Visibility = request.Option is null ? Visibility.Collapsed : Visibility.Visible;
         Option.Content = request.Option;
         Option.IsChecked = request.OptionChecked;
         HintText.Text = request.Hint;
         HintBar.Visibility = request.Hint.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        Place(anchor);
         BuildRows();
         Visibility = Visibility.Visible;
         _entrance.Begin();
-        Input.Focus(FocusState.Programmatic);
-        Input.SelectAll();
+        if (request.ShowInput)
+        {
+            Input.Focus(FocusState.Programmatic);
+            Input.SelectAll();
+        }
+        else
+        {
+            // No box: the prompt itself takes the keys (a letter, the arrows, Enter).
+            IsTabStop = true;
+            Focus(FocusState.Programmatic);
+        }
         Diag.Info(Target, "prompt shown", new LogField("label", request.Label), new LogField("rows", request.Rows.Count));
         return pending.Task;
+    }
+
+    /// <summary>Presses <paramref name="key"/> in a list without a box, as a letter key would (the snapshot aid).</summary>
+    public void PressKey(char key) => PickByKey(key);
+
+    /// <summary>Puts the highlight on row <paramref name="index"/> (the drive the pane is on).</summary>
+    public void Highlight(int index)
+    {
+        _list.SetHighlight(index);
+        MarkHighlight();
+    }
+
+    private void Place(FrameworkElement? anchor)
+    {
+        if (anchor is null)
+        {
+            Panel.HorizontalAlignment = HorizontalAlignment.Center;
+            Panel.Margin = new Thickness(0, 64, 0, 0);
+            Panel.Width = 560;
+            return;
+        }
+        var at = anchor.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0));
+        Panel.HorizontalAlignment = HorizontalAlignment.Left;
+        Panel.Width = Math.Min(360, Math.Max(240, anchor.ActualWidth));
+        Panel.Margin = new Thickness(Math.Max(8, at.X), at.Y + anchor.ActualHeight + 4, 0, 0);
+    }
+
+    private void PickByKey(char key)
+    {
+        var index = _list.IndexOfKey(key);
+        if (index >= 0)
+        {
+            _list.SetHighlight(index);
+            Accept();
+        }
     }
 
     /// <summary>Closes the prompt without an answer (Esc, a click outside, another overlay).</summary>
@@ -121,13 +173,14 @@ public sealed partial class PromptBox : UserControl
         _pending = null;
         // The keyboard goes back before the panel collapses, as the palette's does.
         ReturnFocus?.Invoke();
+        IsTabStop = false;
         Visibility = Visibility.Collapsed;
         OpenToolTips.Close(XamlRoot);
         Diag.Info(Target, "prompt closed", new LogField("answered", result is not null));
         pending.TrySetResult(result);
     }
 
-    private void OnPanelKeyDown(object sender, KeyRoutedEventArgs e)
+    private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
         switch (e.Key)
         {
@@ -142,6 +195,10 @@ public sealed partial class PromptBox : UserControl
                 break;
             case VirtualKey.Tab:
                 // The prompt keeps the keyboard while it is open.
+                break;
+            case >= VirtualKey.A and <= VirtualKey.Z when !_showsInput:
+                // A list without a box: a letter picks its row at once (a drive, as in Total Commander).
+                PickByKey((char)('A' + (e.Key - VirtualKey.A)));
                 break;
             default:
                 return;

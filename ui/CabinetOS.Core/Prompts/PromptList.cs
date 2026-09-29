@@ -12,10 +12,12 @@ public enum PromptKind
 
 /// <summary>
 /// One row of a prompt: what it says, a second text in the tertiary colour
-/// (a folder's path), its Segoe Fluent Icons glyph, and a row that stays
-/// shown and last whatever is typed (<paramref name="Sticky"/>, "Pin this folder").
+/// (a folder's path), its Segoe Fluent Icons glyph, a row that stays shown
+/// and last whatever is typed (<paramref name="Sticky"/>, "Pin this folder"),
+/// and the key that picks it at once in a list without a box
+/// (<paramref name="Key"/>, a drive's letter).
 /// </summary>
-public sealed record PromptRow(string Title, string Detail = "", string Glyph = "", bool Sticky = false);
+public sealed record PromptRow(string Title, string Detail = "", string Glyph = "", bool Sticky = false, char? Key = null);
 
 /// <summary>
 /// The rows of a prompt and the highlighted one: the part of the palette's
@@ -76,6 +78,19 @@ public sealed class PromptList
         }
         Highlight = Math.Clamp((Highlight < 0 && delta > 0 ? -1 : Highlight) + delta, 0, Shown.Count - 1);
         return _kind == PromptKind.Text ? Shown[Highlight].Title : null;
+    }
+
+    /// <summary>The shown row that <paramref name="key"/> picks (a drive's letter, case ignored), or -1.</summary>
+    public int IndexOfKey(char key)
+    {
+        for (var i = 0; i < Shown.Count; i++)
+        {
+            if (Shown[i].Key is { } own && char.ToUpperInvariant(own) == char.ToUpperInvariant(key))
+            {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /// <summary>Puts the highlight on row <paramref name="index"/> of <see cref="Shown"/> (the pointer).</summary>

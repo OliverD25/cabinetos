@@ -25,6 +25,7 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>rename:&lt;text&gt;</c> types a name into the rename box and presses Enter,
 /// <c>dismiss</c> closes an open dialog, <c>type:&lt;text&gt;</c> types into the palette (or into the
 /// prompt in its frame, the pattern box or the pinned folders, when one is shown), <c>accept</c> presses Enter in that prompt,
+/// <c>drive:&lt;letter&gt;</c> presses a drive's letter in the open drive list (Alt+F1, Alt+F2),
 /// <c>search:&lt;text&gt;</c> types into the search field,
 /// <c>open:&lt;name&gt;</c> presses Enter on a row (a file may open in a Tool Extension),
 /// <c>terminal:&lt;text&gt;</c> types into the shown shell (<c>{enter}</c> is Enter),
@@ -175,13 +176,17 @@ internal static class DevSnapshots
         {
             await bitmap.RenderAsync(dialog);
         }
-        catch (ArgumentException)
+        catch (ArgumentException error)
         {
             // Not rendered yet (its first frame): the image has no dialog.
+            Diag.Debug("cabinetos_ui::snapshot", "popup not drawn", new LogField("popup", dialog.GetType().Name), new LogField("error", error.Message));
             return;
         }
         if (bitmap.PixelWidth == 0 || bitmap.PixelHeight == 0)
         {
+            Diag.Debug("cabinetos_ui::snapshot", "popup not drawn: no pixels", new LogField("popup", dialog.GetType().Name),
+                new LogField("actual", dialog is FrameworkElement shown ? $"{shown.ActualWidth}x{shown.ActualHeight}" : ""),
+                new LogField("same_root", ReferenceEquals(dialog.XamlRoot, root.XamlRoot)));
             return;
         }
         var source = (await bitmap.GetPixelsAsync()).ToArray();
@@ -189,6 +194,8 @@ internal static class DevSnapshots
         var at = dialog.TransformToVisual(null).TransformPoint(new Point(0, 0));
         var left = (int)Math.Round(at.X * scale);
         var top = (int)Math.Round(at.Y * scale);
+        Diag.Debug("cabinetos_ui::snapshot", "popup drawn", new LogField("popup", dialog.GetType().Name), new LogField("x", left), new LogField("y", top),
+            new LogField("width", bitmap.PixelWidth), new LogField("height", bitmap.PixelHeight));
         for (var y = 0; y < bitmap.PixelHeight; y++)
         {
             var targetY = top + y;

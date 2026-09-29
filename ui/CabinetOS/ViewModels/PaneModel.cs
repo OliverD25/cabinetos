@@ -509,6 +509,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         _details.Reset(opened.ListingId, view.Generation);
         PendingTiming = new NavigationTiming(request.Id, path, view.Count, opened.ElapsedUs, started, Stopwatch.GetTimestamp());
         Path = path;
+        Drives.Remember(path);
         Message = view.Count == 0 ? "This folder is empty." : null;
         Rows = new ListingRows(view, this);
         var select = selectName is null ? -1 : view.IndexOfName(selectName);
@@ -550,6 +551,9 @@ public sealed class PaneModel : ObservableObject, IRowDetails
 
     /// <summary>The marks a file command or an unmark cleared last, for Restore Selection (Num /).</summary>
     public MarkMemory SavedMarks { get; } = new();
+
+    /// <summary>The folder this pane last showed on each drive, where the drive list (Alt+F1, Alt+F2) goes.</summary>
+    public DriveMemory Drives { get; } = new();
 
     /// <summary>Remembers the marks before a file command or an unmark changes them.</summary>
     public void RememberMarks()
