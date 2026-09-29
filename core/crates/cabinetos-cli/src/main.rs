@@ -610,6 +610,7 @@ enum SortArg {
     Size,
     Modified,
     Kind,
+    Extension,
 }
 
 impl From<SortArg> for SortKey {
@@ -619,6 +620,7 @@ impl From<SortArg> for SortKey {
             SortArg::Size => Self::Size,
             SortArg::Modified => Self::Modified,
             SortArg::Kind => Self::Kind,
+            SortArg::Extension => Self::Extension,
         }
     }
 }

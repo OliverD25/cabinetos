@@ -15,6 +15,14 @@
 //! (possible in case-sensitive directories) falls back to the raw name.
 //! Known differences from `StrCmpLogicalW`, all rare in file names: numbers
 //! longer than 19 digits, and digits outside ASCII (such as ① or ٣).
+//!
+//! Sorting by extension puts the key of a file's extension in front of its
+//! name's key, so the one byte comparison orders by extension, then by
+//! name. Windows ends every key with its only 0 byte (keys are made to be
+//! compared like C strings), so no extension's key is the start of
+//! another's, and two files with different extensions never reach their
+//! names. Folders keep their names' keys: the Type column calls every
+//! folder a folder, whatever follows a dot in its name.
 
 use std::cmp::Ordering;
 use std::num::NonZero;
@@ -37,7 +45,7 @@ const MAX_KEY_THREADS: usize = 8;
 
 /// Sorts `listing` in place.
 pub(crate) fn sort(listing: &mut Listing, spec: SortSpec) {
-    let keys = NameKeys::build(listing);
+    let keys = NameKeys::build(listing, spec.key);
     let mut items: Vec<SortItem> = listing
         .entries
         .iter()
@@ -64,7 +72,8 @@ pub(crate) fn sort(listing: &mut Listing, spec: SortSpec) {
 /// never leave this array.
 struct SortItem {
     group: u8,
-    /// Size, modification time or kind rank; 0 when sorting by name.
+    /// Size, modification time or kind rank; 0 when sorting by name or
+    /// extension.
     primary: u64,
     /// The first 16 bytes of the name's sort key, big-endian, zero-padded.
     prefix: u128,
@@ -151,7 +160,8 @@ pub(crate) fn compare<I: Packed, T: Ties<I>>(ties: &T, descending: bool, a: &I, 
 /// shifted from `i64` to `u64` without changing their order.
 pub(crate) fn primary_value(entry: &Entry, key: SortKey) -> u64 {
     match key {
-        SortKey::Name => 0,
+        // The extension is in the name's key (see the module's notes).
+        SortKey::Name | SortKey::Extension => 0,
         SortKey::Size => entry.meta.size,
         SortKey::Modified => entry.meta.modified.cast_unsigned() ^ (1 << 63),
         SortKey::Kind => u64::from(kind_rank(entry.kind)),
@@ -175,7 +185,8 @@ fn kind_rank(kind: EntryKind) -> u8 {
     }
 }
 
-/// The sort key of every name, in one byte arena.
+/// The sort key of every name, in one byte arena. When sorting by
+/// extension, a file's key starts with its extension's key.
 pub(crate) struct NameKeys {
     bytes: Vec<u8>,
     /// `(start, len)` in `bytes`, by entry index.
@@ -183,9 +194,10 @@ pub(crate) struct NameKeys {
 }
 
 impl NameKeys {
-    /// Builds the keys, on several threads for large listings: one
-    /// `LCMapStringEx` call per name is the main cost of sorting.
-    fn build(listing: &Listing) -> Self {
+    /// Builds the keys for sorting by `key`, on several threads for large
+    /// listings: one `LCMapStringEx` call per name is the main cost of
+    /// sorting.
+    fn build(listing: &Listing, key: SortKey) -> Self {
         let count = listing.entries.len();
         let threads = if count >= PARALLEL_FROM {
             std::thread::available_parallelism()
@@ -195,7 +207,7 @@ impl NameKeys {
             1
         };
         if threads <= 1 {
-            return Self::build_range(listing, 0, count);
+            return Self::build_range(listing, 0, count, key);
         }
         let chunk = count.div_ceil(threads);
         let parts: Vec<Self> = std::thread::scope(|scope| {
@@ -203,7 +215,7 @@ impl NameKeys {
                 .map(|thread| {
                     let start = (thread * chunk).min(count);
                     let end = (start + chunk).min(count);
-                    scope.spawn(move || Self::build_range(listing, start, end))
+                    scope.spawn(move || Self::build_range(listing, start, end, key))
                 })
                 .collect();
             workers
@@ -232,13 +244,13 @@ impl NameKeys {
     }
 
     /// The keys of entries `start..end`, with ranges into its own arena.
-    fn build_range(listing: &Listing, start: usize, end: usize) -> Self {
+    fn build_range(listing: &Listing, start: usize, end: usize, key: SortKey) -> Self {
         let count = end - start;
         let mut keys = Self {
             bytes: Vec::with_capacity(count * 32),
             ranges: Vec::with_capacity(count),
         };
-        keys.extend(listing, start, end, &mut Self::scratch());
+        keys.extend(listing, start, end, key, &mut Self::scratch());
         keys
     }
 
@@ -258,18 +270,24 @@ impl NameKeys {
         vec![0; 1024]
     }
 
-    /// Appends the keys of entries `start..end` of `listing`; they get the
-    /// next indices.
+    /// Appends the keys of entries `start..end` of `listing` for sorting by
+    /// `key`; they get the next indices.
     pub(crate) fn extend(
         &mut self,
         listing: &Listing,
         start: usize,
         end: usize,
+        key: SortKey,
         scratch: &mut Vec<u16>,
     ) {
+        let by_extension = key == SortKey::Extension;
         for entry in &listing.entries[start..end] {
             let key_start = self.bytes.len();
-            append_sort_key(listing.name(entry), scratch, &mut self.bytes);
+            let name = listing.name(entry);
+            if by_extension && entry.meta.attributes & attributes::DIRECTORY == 0 {
+                append_extension_key(name, scratch, &mut self.bytes);
+            }
+            append_sort_key(name, scratch, &mut self.bytes);
             let len = self.bytes.len() - key_start;
             self.ranges.push((
                 u32::try_from(key_start).unwrap_or(u32::MAX),
@@ -291,6 +309,18 @@ impl NameKeys {
         let len = key.len().min(16);
         prefix[..len].copy_from_slice(&key[..len]);
         u128::from_be_bytes(prefix)
+    }
+}
+
+/// Appends the sort key of `name`'s extension to `out`: the part after the
+/// last dot, as the Type column reads it (`.gitignore` has one, `README`
+/// and `trailing.` have none). A name without one gets a lone 0 byte, which
+/// comes before every key Windows makes, so those files come first.
+fn append_extension_key(name: &[u16], scratch: &mut Vec<u16>, out: &mut Vec<u8>) {
+    let dot = name.iter().rposition(|&unit| unit == u16::from(b'.'));
+    match dot {
+        Some(dot) if dot + 1 < name.len() => append_sort_key(&name[dot + 1..], scratch, out),
+        _ => out.push(0),
     }
 }
 
@@ -554,5 +584,103 @@ mod tests {
         let reversed: Vec<_> = items.iter().rev().copied().collect();
         assert_eq!(first, sorted(listing(&reversed), SortKey::Name, false));
         assert_eq!(first[2], "B");
+    }
+
+    /// Files without an extension first, then by extension ignoring case
+    /// (`json` before `jsonc`, `.gitignore` has one), then by name; the
+    /// folders by name, whatever follows a dot.
+    #[test]
+    fn by_extension_then_name_with_folders_by_name() {
+        let items = [
+            ("b.TXT", FILE, 0, 0),
+            ("a.md", FILE, 0, 0),
+            ("README", FILE, 0, 0),
+            ("c.txt", FILE, 0, 0),
+            ("archive.tar.gz", FILE, 0, 0),
+            (".gitignore", FILE, 0, 0),
+            ("trailing.", FILE, 0, 0),
+            ("a.txt", FILE, 0, 0),
+            ("z.dir", DIR, 0, 0),
+            ("b", DIR, 0, 0),
+            ("a.zip", DIR, 0, 0),
+            ("m.json", FILE, 0, 0),
+            ("m.jsonc", FILE, 0, 0),
+            ("l.JSONC", FILE, 0, 0),
+            ("v10.mp3", FILE, 0, 0),
+            ("v9.MP3", FILE, 0, 0),
+        ];
+        let ascending = [
+            "a.zip",
+            "b",
+            "z.dir",
+            "README",
+            "trailing.",
+            ".gitignore",
+            "archive.tar.gz",
+            "m.json",
+            "l.JSONC",
+            "m.jsonc",
+            "a.md",
+            "v9.MP3",
+            "v10.mp3",
+            "a.txt",
+            "b.TXT",
+            "c.txt",
+        ];
+        assert_eq!(
+            sorted(listing(&items), SortKey::Extension, false),
+            ascending
+        );
+        let mut descending = ascending;
+        descending[..3].reverse();
+        descending[3..].reverse();
+        assert_eq!(
+            sorted(listing(&items), SortKey::Extension, true),
+            descending
+        );
+    }
+
+    /// What sorting by extension relies on: Windows ends every key with its
+    /// only 0 byte, so no key is the start of a different one.
+    #[test]
+    fn sort_keys_end_with_their_only_zero_byte() {
+        let mut scratch = NameKeys::scratch();
+        for name in [
+            "txt",
+            "TXT",
+            "json",
+            "jsonc",
+            "7z",
+            "001",
+            "mp3",
+            "a-b",
+            "it's",
+            "--x",
+            "-",
+            "'",
+            "a b",
+            "_",
+            "~",
+            "#",
+            "\u{200b}",
+            "e\u{301}",
+            "é",
+            "ß",
+            "ı",
+            "Привіт",
+            "漢字",
+            "かな",
+            "😀",
+            "x86",
+        ] {
+            let units: Vec<u16> = name.encode_utf16().collect();
+            let mut key = Vec::new();
+            append_sort_key(&units, &mut scratch, &mut key);
+            assert_eq!(
+                key.iter().position(|&byte| byte == 0),
+                Some(key.len() - 1),
+                "{name}: {key:x?}"
+            );
+        }
     }
 }

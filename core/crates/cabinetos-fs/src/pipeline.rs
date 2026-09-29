@@ -294,7 +294,8 @@ impl Sorter {
         end: usize,
     ) -> Result<(), FsError> {
         let descending = self.spec.descending;
-        self.keys.extend(listing, start, end, &mut self.scratch);
+        self.keys
+            .extend(listing, start, end, self.spec.key, &mut self.scratch);
         let arena = Arena {
             listing,
             keys: &self.keys,
@@ -514,6 +515,7 @@ mod tests {
             SortKey::Size,
             SortKey::Modified,
             SortKey::Kind,
+            SortKey::Extension,
         ]
         .into_iter()
         .flat_map(|key| {

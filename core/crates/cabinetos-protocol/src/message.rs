@@ -481,6 +481,9 @@ pub enum SortKey {
     Modified,
     /// Entry kind (directory, file, link), then name.
     Kind,
+    /// Files by extension (the part after the last dot), ignoring case, then
+    /// by name; files without one first. Directories by name.
+    Extension,
 }
 
 /// The core's reply to a [`Request`].

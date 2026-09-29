@@ -1240,6 +1240,11 @@
           "description": "Entry kind (directory, file, link), then name.",
           "type": "string",
           "const": "kind"
+        },
+        {
+          "description": "Files by extension (the part after the last dot), ignoring case, then\nby name; files without one first. Directories by name.",
+          "type": "string",
+          "const": "extension"
         }
       ]
     },

@@ -81,5 +81,6 @@ pub use theme::{
 /// requests: `items_per_second` in `job_progress`; one `marketplace_index`
 /// item per extension, with `installedVersion`; each theme's `mica` in
 /// `themes`; the theme kind `system`; `tools_changed` sent again to a client
-/// that fell behind.
-pub const PROTOCOL_VERSION: u32 = 11;
+/// that fell behind; version 12 Total Commander's keys and small commands
+/// (sub-phase 11a): the sort key `extension`.
+pub const PROTOCOL_VERSION: u32 = 12;

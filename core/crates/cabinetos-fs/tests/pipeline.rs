@@ -37,6 +37,7 @@ fn specs() -> Vec<SortSpec> {
         SortKey::Size,
         SortKey::Modified,
         SortKey::Kind,
+        SortKey::Extension,
     ]
     .into_iter()
     .flat_map(|key| {

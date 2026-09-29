@@ -97,6 +97,8 @@ command of the UI (its About view), so the core answers it with
 `command_routed` instead of a `command_result` with its versions; the
 listing's link and "not on this disk" flags and its `reparse_tag`; and a
 theme's optional `metrics` and `chrome`, with `has_metrics` in `themes`.
+Version 12 (sub-phase 11a, Total Commander's keys and small commands)
+added the sort key `extension`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -235,6 +237,7 @@ directory attribute, junctions included) always come first. Then, by `key`:
 | `size` | size, then name |
 | `modified` | last-write time, then name |
 | `kind` | directory, file, link, then name |
+| `extension` | files: the extension (after the last dot) ignoring case, then name, files without one first; directories: name |
 
 `descending: true` reverses the order within each group; directories stay
 first.
