@@ -24,7 +24,9 @@ param(
   [double]$MaxBusy = 30,
   [int]$Tries = 15,
   [int]$Rhythm = 0,
-  [string]$Run = "scroll-bench"
+  [string]$Run = "scroll-bench",
+  # Snapshot steps run before the folder opens, for example "tab:new;tab:new" to scroll with the pane's tab row shown.
+  [string]$Before = ""
 )
 $ErrorActionPreference = 'Stop'
 $Exe = [System.IO.Path]::GetFullPath($Exe)
@@ -122,7 +124,7 @@ for ($n = 1; $n -le $Runs; $n++) {
   $env:CABINETOS_UI_FRAMESTATS = "1"
   $env:CABINETOS_UI_SNAPSHOT = "$root\shots"
   $scroll = if ($Rhythm -gt 0) { "scroll:$Pages/$Rhythm" } else { "scroll:$Pages" }
-  $env:CABINETOS_UI_SNAPSHOT_STEPS = "path:$Folder;wait:3000;$scroll;wait:300;shot:done"
+  $env:CABINETOS_UI_SNAPSHOT_STEPS = "$(if ($Before) { $Before.TrimEnd(';') + ';' })path:$Folder;wait:3000;$scroll;wait:300;shot:done"
   $p = Start-Process -FilePath $Exe -PassThru
   $deadline = (Get-Date).AddSeconds(60 + $Pages / 30)
   while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath "$root\shots\done.png") -and -not $p.HasExited) { Start-Sleep -Milliseconds 250 }

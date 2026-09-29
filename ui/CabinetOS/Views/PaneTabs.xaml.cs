@@ -107,6 +107,8 @@ public sealed partial class PaneTabs : UserControl
         var m = WindowMetrics.Current;
         item.Height = item.MinHeight = m.TabRow;
         item.FontSize = m.TabFontSize;
+        // The same top corners as the workspace tab in the title bar (the theme's tabRadius).
+        item.CornerRadius = WindowMetrics.TopCorners(m.TabRadius);
     }
 
     /// <summary>Makes the row show the strip as it is now: the tabs, their titles, locks and close buttons, and the one in front.</summary>

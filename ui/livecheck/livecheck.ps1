@@ -70,7 +70,7 @@ public static class Live {
 $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L = 0x4C; Esc = 0x1B; Tab = 0x09; Enter = 0x0D; Back = 0x08; Down = 0x28; PgDn = 0x22; F2 = 0x71;
   F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56;
   F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A;
-  T = 0x54; Up = 0x26; End = 0x23 }
+  T = 0x54; Up = 0x26; End = 0x23; W = 0x57 }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   # A flyout (the drive list) is a window of its own, so the test is the process, not the window.
@@ -584,6 +584,82 @@ Step "compact: Ctrl+K Ctrl+T, Home, Down, Down to Default, Enter"
 Shot $h "$ShotDir\compact-back-live.png"
 $metrics = LastMetrics
 "compact: switched back to $($metrics.theme): rows $($metrics.row_height) px (30 expected), function keys $($metrics.fkey_bar)"
+
+# ----- 12: tabs (docs/ui.md, "Tabs"): the row above a pane's list, with real keys -----
+# The window's log says what the tabs did: "tab shown" (the folder, the tab's place, how many tabs,
+# whether it is locked), "tab row shown" and "tab row hidden", and the notices of the status bar.
+function TabLog { Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"target":"cabinetos_ui::tabs"' } | ForEach-Object { $_ | ConvertFrom-Json } }
+function LastTabShown { TabLog | Where-Object { $_.message -eq 'tab shown' -and $_.fields.pane -eq 0 } | Select-Object -Last 1 }
+function NoticeCount([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"notice shown"' -and $_ -match $pattern }).Count }
+$tb = "$files\tabs12"
+New-Item -ItemType Directory -Force "$tb\one\sub", "$tb\two" | Out-Null
+Set-Content -LiteralPath "$tb\one\note.txt" -Value "one" -NoNewline
+Set-Content -LiteralPath "$tb\one\sub\deep.txt" -Value "deep" -NoNewline
+Set-Content -LiteralPath "$tb\two\other.txt" -Value "two" -NoNewline
+
+Step "tabs: the left pane in tabs12\one, one tab, so no row"
+ClickLeftPane
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type("$tb\one"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+$rowShown = @(TabLog | Where-Object { $_.message -eq 'tab row shown' -and $_.fields.pane -eq 0 }).Count
+"tabs: the row was never shown with one tab: $($rowShown -eq 0)"
+
+Step "tabs: Ctrl+T twice, three tabs, the row shows"
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 900
+$shown = LastTabShown
+"tabs: three tabs after Ctrl+T twice, the last in front: $($shown.fields.tabs -eq 3 -and $shown.fields.index -eq 2)"
+"tabs: the row is shown: $(@(TabLog | Where-Object { $_.message -eq 'tab row shown' -and $_.fields.pane -eq 0 }).Count -eq 1)"
+Shot $h "$ShotDir\tabs-three-live.png"
+
+Step "tabs: Ctrl+Tab goes on to the first tab"
+[Live]::Press($VK.Ctrl, $VK.Tab); Start-Sleep -Milliseconds 900
+$shown = LastTabShown
+"tabs: Ctrl+Tab from the last tab came to the first: $($shown.fields.index -eq 0)"
+
+Step "tabs: the palette, Toggle Tab Lock, Enter"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+[Live]::Type("toggle tab lock"); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 900
+"tabs: the tab is locked, the status bar said so: $((NoticeCount 'is locked') -eq 1)"
+
+Step "tabs: Enter on the folder sub in the locked tab opens a fourth tab"
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+$shown = LastTabShown
+"tabs: a new tab shows sub, four tabs: $($shown.fields.tabs -eq 4 -and $shown.fields.path -eq "$tb\one\sub")"
+Shot $h "$ShotDir\tabs-locked-live.png"
+
+Step "tabs: Ctrl+W closes the new tab"
+[Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 1200
+$shown = LastTabShown
+"tabs: three tabs again, the front tab is not in sub: $($shown.fields.tabs -eq 3 -and $shown.fields.path -ne "$tb\one\sub")"
+
+Step "tabs: Ctrl+W twice more leaves one tab, and the row hides"
+[Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 1200
+$shown = LastTabShown
+"tabs: one tab left: $($shown.fields.tabs -eq 1)"
+"tabs: the row is hidden again: $(@(TabLog | Where-Object { $_.message -eq 'tab row hidden' -and $_.fields.pane -eq 0 }).Count -eq 1)"
+Shot $h "$ShotDir\tabs-hidden-live.png"
+
+Step "tabs: Ctrl+W on the last tab is refused"
+$before = NoticeCount 'keeps its last folder tab'
+[Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 900
+"tabs: the last tab stayed, the status bar said why: $((NoticeCount 'keeps its last folder tab') -eq $before + 1)"
+
+# ui.tabs is written a second after the last change. If the tab that is left is the locked one,
+# the palette unlocks it, so the later sections can go to other folders in this pane.
+Start-Sleep -Milliseconds 1500
+$saved = (Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json).ui.tabs
+"tabs: ui.tabs holds one tab in the left pane: $(@($saved.left.items).Count -eq 1)"
+if (@($saved.left.items)[0].locked) {
+  Step "tabs: the tab that is left is the locked one; the palette unlocks it"
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  [Live]::Type("toggle tab lock"); Start-Sleep -Milliseconds 900
+  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 900
+  "tabs: unlocked again: $((NoticeCount 'is unlocked') -eq 1)"
+}
 
 # ----- Edge cases (docs/ui.md, "Edge cases"): the shared fixture, with real keys -----
 # The fixture has links, so it lives outside $root: only its own script removes it (rmdir, which

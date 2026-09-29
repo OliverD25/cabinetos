@@ -178,7 +178,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_WEBVIEW2_DIR` | Where WebView2 keeps its user data (its cache and storage) for the terminal and the tool pages, one subfolder per host; by default `%LOCALAPPDATA%\CabinetOS\WebView2`. The two-window test and the live checks set it to their scratch folder, so they never write into the real one |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part ("Scrolling"). The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load, and a `slow frame` line for each frame of 33 ms or more |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -660,6 +660,7 @@ Like every setting, the window's own state lives in `cabinetos.json`
 |---|---|---|
 | `ui.dualPane`, `ui.sidebar` | The user toggles them | At start, and on every `config_changed` |
 | `ui.lastPaths` | The window closes (at most 1 s is spent on it) | At start: the left pane opens the first, the right pane the second; a folder that is gone falls back to the first-start folders |
+| `ui.tabs` | A tab is opened, closed, moved, locked or changes its folder (at most once a second), and when the window closes | At start: each pane opens its tabs; a folder that is gone falls back as `ui.lastPaths` does ("Tabs") |
 | `ui.pinned` | "Pin this folder to the sidebar", and "Unpin from sidebar" on a pinned row | At start and on `config_changed` |
 | `ui.dockSize.bottom`, `ui.dockSize.right` | A drag of the dock's splitter ends (once per drag) | At start and on `config_changed`, except during a drag ("The terminal") |
 
@@ -883,6 +884,92 @@ syntax reads them.
   program, F4 and Shift+F4 with its own stand-in editor, a quick search
   and F8, Shift+F8, Ctrl+P, Ctrl+\, Alt+F1, Ctrl+U; the planning session
   runs it.
+
+## Tabs
+
+Each pane can hold several tabs (Phase 12, Article 5: the dual pane stays
+the base, and a tab is a second folder in one of its panes). The row sits
+above the pane's list. It is hidden while the pane has one tab (Article
+4), so a new user sees no change. With two tabs or more the row is
+`tabRow` high (32 px; 26 px in Commander Compact). It is a WinUI
+`TabView` with the add button, drag and reorder turned off, so every
+change goes through a command.
+
+- **What a tab holds:** a folder with its own history, order, cursor and
+  marks, and a lock. Or a Tool Extension (a Markdown Preview, say). A
+  tool tab shows the tool in the pane and keeps no folder of its own.
+- **The pane's model stays the live state of the tab in front.** A tab
+  behind holds its own state (`PaneTab`) and gives it back when it comes
+  to the front. The window makes the pane match the front tab in one
+  queue per pane (`QueueShow`), so two fast changes cannot cross each other.
+- **The front tab of the active pane has a 2 px accent line.** The
+  inactive pane has none. Nothing is dimmed (the handout's decision: the
+  design has no Acrylic on the inactive pane).
+- **Tab is still the pane switch, and Alt+Left and Alt+Right are still
+  Back and Forward.** In a locked tab, Back and Forward stay on the
+  folder and say so in the status bar.
+- **A locked tab opens a new tab** when you go into another folder
+  (Enter on a folder, a crumb, a pinned folder, Backspace). A tab that
+  shows a tool has no lock.
+- **The last folder tab cannot be closed.** The window says so in the
+  status bar. A pane always has a folder to show.
+
+| Command | Key | What it does |
+|---|---|---|
+| `tab.new` | Ctrl+T | A new tab at the same folder, next to the front tab |
+| `tab.close` | Ctrl+W | Closes the front tab |
+| `tab.next`, `tab.previous` | Ctrl+Tab, Ctrl+Shift+Tab | The next tab, the one before it; both go around |
+| `tab.toggleLock` | (palette) | Locks or unlocks the front tab |
+| `tab.openFolderInNewTab` | Ctrl+Up | The folder under the cursor opens in a new tab (the current folder when the cursor is on a file) |
+| `tab.moveToOtherPane` | Ctrl+K Ctrl+Right, Ctrl+K Ctrl+Left | Sends the front tab to the right or to the left pane, with its history and marks |
+
+All of them are in the palette in the category "Tab" and work while a
+pane's list has the keyboard (`filesView`). The tab row's own clicks use
+`tab.select`, which is a window command and not in the registry. A tool tab
+cannot move to the other pane (its process belongs to its pane's page),
+and Ctrl+U (`view.swapPanes`) says "Close the tool tabs first" while one
+is open.
+
+**What is saved.** The window writes `ui.tabs` with `set_value`, at most
+once a second, and once more when it closes (this shares the one second
+that closing may use with `ui.lastPaths`). At start it reads `ui.tabs`;
+a folder that is gone falls back to its parent folders, then to the
+first-start folder, as `ui.lastPaths` does. `ui.lastPaths` is still
+written, so a core or a window of the older kind finds its folders. Tool
+tabs are not saved: a tool page needs a file and a process. With two
+windows open, the last write wins, as for `ui.lastPaths`.
+
+**What the core hears.** The window sends `window_state` (protocol 13)
+on every change of the tabs, the active pane, the cursor or the marks,
+joined into one message every 50 ms. It has `active_pane` and for each
+pane `tabs` (`path`, `locked`, `tool`), `active`, `cursor` and `marked`
+(at most 1,000 paths). The core only stores it (`get_window_state`); nothing
+in the window depends on the reply. A core that answers `unknown_request`
+makes the window stop sending, with one log line.
+
+**Cost of scrolling.** Checked on 2026-09-30 with
+`ui/livecheck/scroll-bench.ps1` on the 100,000-entry folder (release
+builds, display awake, other builds running on the PC, so the runs are
+noisy). UI-thread work per second of scrolling, lowest and middle value
+of all runs:
+
+| Window | Runs | Lowest | Middle |
+|---|---|---|---|
+| Before tabs | 11 | 396 ms | 406 ms |
+| With tabs, one tab (row hidden) | 14 | 402 ms | 418 ms |
+| With tabs, three tabs (row shown) | 11 | 388 ms | 402 ms |
+
+That is at most 3 % more, under the handout's 5 % limit, so the
+`TabView` stays. (The `ItemsRepeater` row the handout names as the
+fallback is not needed.) `scroll-bench.ps1 -Before "tab:new;tab:new"`
+repeats the third row.
+
+Tests: `TabTests` (the model in `CabinetOS.Core`: strip, lock rule,
+`ui.tabs`, `window_state`), the snapshot steps `tab:new`, `tab:close` and
+the others in the list of the snapshot aid, and `TabsEndToEndTests`, which
+opens three tabs in a real window, closes it, starts it again and finds
+the three tabs, the last in front (with `CABINETOS_UI_E2E=1`). The live
+check has a section "12: tabs" with real keys.
 
 ## Search
 
@@ -1384,7 +1471,8 @@ the Commander Compact handout
 | `radiusSurface` | The panes, the editor, the terminal and the marketplace. Icon tiles and info boxes (the app tile, the marketplace's tiles and stat boxes) keep the design's radius in proportion to it, and never less than `radiusControl`. |
 | `gap`, `bodyPadding` | The space between the sidebar and the panes, between the two panes, and between the panes and the terminal, which is also the splitter; with no gap, the splitter keeps a 6 px handle laid over the edges it joins. The space at the window's sides and bottom. |
 | `titleBarHeight` | The title bar, never lower than 32 px: Windows draws the minimize, maximize and close buttons that high. |
-| `tabHeight`, `tabPaddingX`, `tabMinWidth`, `tabFontSize`, `tabRadius` | The workspace tab in the title bar. |
+| `tabHeight`, `tabPaddingX`, `tabMinWidth`, `tabFontSize`, `tabRadius` | The workspace tab in the title bar. The tabs of a pane's row take `tabFontSize` and `tabRadius` too. |
+| `tabRow` | The height of a pane's tab row (32 px; 26 px in Commander Compact). The row is hidden while the pane has one tab ("Tabs"). |
 | `captionButtonWidth` | Nothing: Windows draws the caption buttons 46 px wide, and a window cannot change that. |
 | `commandBarHeight`, `iconButtonSize`, `fieldHeight`, `toggleHeight` | The command bar; its icon buttons; the address and search fields (the crumbs inside are at most 4 px lower than the field); the Dual/Single toggle. |
 | `sidebarMinWidth`, `sidebarWidthPercent`, `sidebarMaxWidth` | The sidebar's width. |
@@ -1978,7 +2066,7 @@ folder and WebView2's data folders.
   (`set_value`) reaches the other as `config_changed`; the other applies
   it and writes nothing back, and says so in its log ("dual pane follows
   the configuration", "the sidebar follows the configuration"). The last
-  window to close writes `ui.lastPaths`.
+  window to close writes `ui.lastPaths` and `ui.tabs`.
 - **Closing one leaves the other**: its core ends with it, and the other
   window, its core and its terminal go on.
 - **One log file, every line whole.** Each window's log writer holds
@@ -2038,6 +2126,7 @@ planning session's, on a screen someone watches.
 | Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |
 | Sorting by a click on a column heading | The headings are static; Ctrl+F3 to Ctrl+F6 sort a pane ("A pane's order"), and sub-phase 11c brings the headings |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
+| A "+" button in the tab row, dragging tabs to reorder them or to the other pane | The row hides with one tab, so a button there would have nothing to sit on; `tab.new` and `tab.moveToOtherPane` do the work, and the keyboard is complete (Article 7) |
 | The metrics `captionButtonWidth`, `tagRadius`, `tagFontSize`, `markdownPaddingY`, `markdownPaddingX`, `markdownLineHeight`, `hexRowHeight` and `hexColumnGap` | Windows draws the caption buttons; there are no tags yet, the tool messages carry no sizes, and there is no hex view ("Metrics and chrome") |
 
 ## Known gaps

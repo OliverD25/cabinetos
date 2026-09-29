@@ -25,6 +25,7 @@ public sealed partial class MainWindow
     private readonly TabStrip[] _strips = [new(new PaneTab("")), new(new PaneTab(""))];
     private readonly PaneTab?[] _held = new PaneTab?[2];
     private readonly Task[] _tabWork = [Task.CompletedTask, Task.CompletedTask];
+    private readonly bool[] _rowLogged = new bool[2];
     private PaneTabs[] _tabViews = null!;
     private TabsConfig _savedTabs = TabsConfig.Empty;
     private DispatcherQueueTimer _tabsSaveTimer = null!;
@@ -358,6 +359,15 @@ public sealed partial class MainWindow
 
     private void OnTabsChanged()
     {
+        for (var i = 0; i < _strips.Length; i++)
+        {
+            // A row shown or hidden is in the log for the live check, which cannot see the window's tree.
+            if (_strips[i].ShowsRow != _rowLogged[i])
+            {
+                _rowLogged[i] = _strips[i].ShowsRow;
+                Diag.Info(TabsTarget, _rowLogged[i] ? "tab row shown" : "tab row hidden", new LogField("pane", i), new LogField("tabs", _strips[i].Count));
+            }
+        }
         UpdateTabRows();
         SaveTabsSoon();
         ScheduleWindowState();
