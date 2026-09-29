@@ -121,6 +121,14 @@ function PressForNameBox([scriptblock]$press) {
 
 # The status bar's selection text, as the window logged it last ("selection shown", written when it
 # changes): a search of the automation tree came back empty once web pages were in the window.
+# Gives the keyboard to the left pane's list the way a user would, with a click into it (a third of
+# the window's width in, just under the middle): the ground truth when a focus hand-over went wrong.
+function ClickLeftPane {
+  $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$rect, 16)
+  [Live]::Click([int]($rect.Left + ($rect.Right - $rect.Left) * 0.33), [int]($rect.Top + ($rect.Bottom - $rect.Top) * 0.45))
+  Start-Sleep -Milliseconds 400
+}
+
 function SelectionText {
   $line = Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"selection shown"' } | Select-Object -Last 1
   if (-not $line) { return "(the window has not reported a selection yet)" }
@@ -396,6 +404,7 @@ Set-Content -LiteralPath "$tc\run.cmd" -Value "echo this must never run" -NoNewl
 # Rows: docs, photos, a.txt, b.txt, cabinetos-live-check-f8.txt, cabinetos-live-check-shift-f8.txt, notes.md, run.cmd.
 
 Step "11a: the check folder"
+ClickLeftPane
 [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
 [Live]::Type($tc); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 
@@ -467,8 +476,8 @@ $toggles = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'vie
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
 $script:terminalHidden = $false
 if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
-  "after Ctrl+P the terminal did not pass Ctrl+Backquote to the window (its page did not have the keyboard); the window is brought to the front by Win32 and the terminal hidden from the pane"
-  [void][Live]::SetForegroundWindow($h); Start-Sleep -Milliseconds 400
+  "after Ctrl+P the terminal did not pass Ctrl+Backquote to the window (its page did not have the keyboard); a click into the left pane takes the keyboard back, and Ctrl+Backquote from there hides the terminal"
+  ClickLeftPane
   [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
   if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
     "still nothing: hiding the terminal from the palette"
@@ -524,6 +533,7 @@ New-Item -ItemType Directory -Force "$cc\src", "$cc\dst" | Out-Null
 Set-Content -LiteralPath "$cc\src\cabinetos-live-check-f5.txt" -Value "copied by the function-key bar" -NoNewline
 
 Step "compact: the source folder in the active pane, the destination in the other"
+ClickLeftPane
 [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
 [Live]::Type("$cc\src"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
@@ -592,6 +602,7 @@ $zvit = -join ([char[]](0x0417, 0x0432, 0x0456, 0x0442))
 $zvitLower = -join ([char[]](0x0437, 0x0432, 0x0456, 0x0442))
 
 Step "edge: the fixture's names on the left, its long path on the right"
+ClickLeftPane
 [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
 [Live]::Type("$edge\names"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
