@@ -1,7 +1,7 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
 //! UI will), `describe` and `icon` (the shell's type names and icons),
-//! `volume` and `volumes`, `open`, `mkdir` and `rename`, `shutdown`, the
+//! `volume` and `volumes`, `open`, `mkdir`, `mkfile` and `rename`, `shutdown`, the
 //! configuration (`config`), the command registry (`commands`), the keymap
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
@@ -137,6 +137,12 @@ enum Command {
     /// Create a folder; its parent must exist.
     Mkdir {
         /// The new folder.
+        path: String,
+    },
+    /// Create an empty file; its folder must exist, and nothing is
+    /// replaced.
+    Mkfile {
+        /// The new file.
         path: String,
     },
     /// Rename a file or folder in the folder it is in; nothing is replaced.
@@ -709,7 +715,10 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Volume { .. } | Command::Volumes => {
             volume_command(&mut client, &cli.command).await?;
         }
-        Command::Open { .. } | Command::Mkdir { .. } | Command::Rename { .. } => {
+        Command::Open { .. }
+        | Command::Mkdir { .. }
+        | Command::Mkfile { .. }
+        | Command::Rename { .. } => {
             file_command(&mut client, &cli.command).await?;
         }
         Command::Describe { path, from, count } => {
@@ -790,7 +799,7 @@ async fn volume_command(client: &mut PipeClient, command: &Command) -> anyhow::R
     Ok(())
 }
 
-/// The file commands: `open`, `mkdir`, `rename`.
+/// The file commands: `open`, `mkdir`, `mkfile`, `rename`.
 async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
     let (path, request) = match command {
         Command::Open { path } => {
@@ -800,6 +809,10 @@ async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Res
         Command::Mkdir { path } => {
             let path = absolute(path)?;
             (path.clone(), Request::CreateDirectory { path })
+        }
+        Command::Mkfile { path } => {
+            let path = absolute(path)?;
+            (path.clone(), Request::CreateFile { path })
         }
         Command::Rename { path, new_name } => {
             let path = absolute(path)?;
@@ -817,7 +830,7 @@ async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Res
     }
     match command {
         Command::Open { .. } => say(format_args!("opened {path}")),
-        Command::Mkdir { .. } => say(format_args!("created {path}")),
+        Command::Mkdir { .. } | Command::Mkfile { .. } => say(format_args!("created {path}")),
         Command::Rename { new_name, .. } => say(format_args!("renamed {path} to {new_name}")),
         _ => true,
     };
@@ -1311,6 +1324,14 @@ mod tests {
                 path: r"E:\new".to_owned()
             }
         );
+        let cli = Cli::try_parse_from(["cabinetos-cli", "mkfile", r"E:\new.txt"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Mkfile {
+                path: r"E:\new.txt".to_owned()
+            }
+        );
+        assert!(Cli::try_parse_from(["cabinetos-cli", "mkfile"]).is_err());
         let cli = Cli::try_parse_from(["cabinetos-cli", "rename", "a.txt", "b 2.txt"]).unwrap();
         assert_eq!(
             cli.command,

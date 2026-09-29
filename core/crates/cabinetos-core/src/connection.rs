@@ -9,7 +9,7 @@
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
 //!   (`list_directory`, `describe_entries`, `get_icon`, `volume_info`,
-//!   `list_volumes`, `open_path`, `create_directory`, `rename`, `set_value`,
+//!   `list_volumes`, `open_path`, `create_directory`, `create_file`, `rename`, `set_value`,
 //!   the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`,
 //!   `list_themes`, `get_theme` of a named theme, `list_tools` and the
@@ -290,6 +290,7 @@ impl Session {
                 | Request::ListVolumes
                 | Request::OpenPath { .. }
                 | Request::CreateDirectory { .. }
+                | Request::CreateFile { .. }
                 | Request::Rename { .. }) => self.file_request(&id, &span, kind, request),
                 request @ (Request::GetConfig
                 | Request::GetValue { .. }
@@ -523,7 +524,7 @@ impl Session {
                     answer_fs(cabinetos_fs::open_path(&path))
                 });
             }
-            // Neither needs a job: one name, done at once. A watched listing
+            // None needs a job: one name, done at once. A watched listing
             // of the folder hears about it from its watcher.
             Request::CreateDirectory { path } => {
                 if let Some(refusal) = not_absolute(&path) {
@@ -531,6 +532,14 @@ impl Session {
                 }
                 self.spawn_reply(id, span, kind, move || {
                     answer_fs(cabinetos_fs::create_directory(&path))
+                });
+            }
+            Request::CreateFile { path } => {
+                if let Some(refusal) = not_absolute(&path) {
+                    return Some(refusal);
+                }
+                self.spawn_reply(id, span, kind, move || {
+                    answer_fs(cabinetos_fs::create_file(&path))
                 });
             }
             Request::Rename { path, new_name } => {

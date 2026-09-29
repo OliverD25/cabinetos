@@ -98,7 +98,7 @@ command of the UI (its About view), so the core answers it with
 listing's link and "not on this disk" flags and its `reparse_tag`; and a
 theme's optional `metrics` and `chrome`, with `has_metrics` in `themes`.
 Version 12 (sub-phase 11a, Total Commander's keys and small commands)
-added the sort key `extension`.
+added the sort key `extension` and `create_file`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -122,6 +122,7 @@ as absent from an older core.
 | `list_volumes` | — | `volumes` (`volumes`) |
 | `open_path` | `path` (absolute) | `ok` |
 | `create_directory` | `path` (absolute; the parent must exist) | `ok` |
+| `create_file` | `path` (absolute; the folder must exist) | `ok` |
 | `rename` | `path` (absolute), `new_name` (a name, without a folder) | `ok` |
 | `get_config` | — | `config` (`path`, `config`) |
 | `get_value` | `path` (a dotted path, such as `ui.dualPane`) | `value` (`value`) |
@@ -190,7 +191,8 @@ Any request can instead get `error` with a `code` and a `message`:
 | `incompatible` | The extension needs a newer CabinetOS (`minCoreVersion`). |
 
 Requests on one connection are independent: `list_directory`,
-`describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `create_directory`, `rename`,
+`describe_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `create_directory`,
+`create_file`, `rename`,
 `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
@@ -524,7 +526,8 @@ A path in a request is absolute, in the form the user knows (`C:\work\…`,
 before each Windows file call that takes a path, so no length limit
 applies and the machine's long-path policy (off by default) plays no part:
 listing, watching, type names and icons, copy, move, delete, a new folder,
-a rename and the search walk all work on paths of 300 characters and more.
+a new file, a rename and the search walk all work on paths of 300
+characters and more.
 Answers carry paths in the form the client used: the core never adds the
 prefix to a path it answers, and the index builds its hits' paths from
 their folders, without it.
@@ -546,11 +549,13 @@ characters:
 - A program's own icon (a `path:` key) is read by the shell from the plain
   path; that works at 300 characters and more (tested).
 
-A new folder and a rename touch one name and finish at once, so they need
-no job; copy, move and delete are jobs ("Jobs" below).
+A new folder, a new file and a rename touch one name and finish at once,
+so they need no job; copy, move and delete are jobs ("Jobs" below).
 
 ```json
 {"id":"01M…","type":"create_directory","path":"D:\\work\\New folder"}
+{"id":"01M…","type":"ok"}
+{"id":"01M…","type":"create_file","path":"D:\\work\\New Text Document.txt"}
 {"id":"01M…","type":"ok"}
 {"id":"01M…","type":"rename","path":"D:\\work\\draft.txt","new_name":"final.txt"}
 {"id":"01M…","type":"ok"}
@@ -559,15 +564,20 @@ no job; copy, move and delete are jobs ("Jobs" below).
 - `create_directory` creates one folder. Its parent must exist
   (`not_found` otherwise), and nothing may have its name yet
   (`already_exists`, also for a file of that name).
+- `create_file` creates one empty file, with the same rules: its folder
+  must exist, and a taken name, a folder's too, is `already_exists`. It
+  never opens or replaces a file, so the window's New Text File (Shift+F4)
+  opens the file that has the name instead, as Total Commander does.
 - `rename` gives a file or folder a new name in the folder it is in.
   `new_name` is one name: empty, `.`, `..` or a name with `\` or `/` is
   `invalid_path`. Nothing is replaced: a taken name is `already_exists`,
   and the message names it. Changing only the case of letters works.
-- Both take any length of path, and so refuse (`invalid_path`, with the
-  reason) a name that Windows could not open again later: one that ends
-  in a dot or a space, contains `<>:"|?*` or a control character, or is a
-  device name such as `CON`, `NUL` or `COM1` (with any extension).
-- Both paths must be absolute (`invalid_path`). Other failures are
+- All three take any length of path, and so refuse (`invalid_path`,
+  with the reason) a name that Windows could not open again later: one
+  that ends in a dot or a space, contains `<>:"|?*` or a control
+  character, or is a device name such as `CON`, `NUL` or `COM1` (with any
+  extension).
+- Their paths must be absolute (`invalid_path`). Other failures are
   `access_denied`, or `io` with the Windows error in the message (a file
   in use cannot be renamed, for example).
 - A watched listing of the folder refreshes through its watcher, as for

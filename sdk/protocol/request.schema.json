@@ -249,6 +249,24 @@
       ]
     },
     {
+      "description": "Creates an empty file; its folder must exist, and nothing is ever\nreplaced. The core answers `ok`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "The new file, as an absolute path.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "create_file"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
       "description": "Renames a file or folder in the folder it is in, never replacing\nanything. The core answers `ok`.",
       "type": "object",
       "properties": {

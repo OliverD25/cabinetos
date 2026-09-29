@@ -1,12 +1,15 @@
 //! The changes a user makes to a folder by hand, without a job: a new
-//! folder and a rename in place. Copies, moves and deletes are jobs
-//! (`cabinetos-jobs`); these two touch one name and finish at once.
+//! folder, a new empty file and a rename in place. Copies, moves and
+//! deletes are jobs (`cabinetos-jobs`); these touch one name and finish at
+//! once.
 //!
-//! Both take the verbatim (`\\?\`) path, so length is no limit. That form
+//! All take the verbatim (`\\?\`) path, so length is no limit. That form
 //! takes a name literally, so a name Windows could not open again later
 //! (one ending in a dot or a space, or a device name such as `CON`) is
 //! refused before the call, with the reason.
 
+use std::ffi::OsString;
+use std::os::windows::ffi::OsStringExt;
 use std::path::Path;
 
 use windows::Win32::Storage::FileSystem::{CreateDirectoryW, MOVE_FILE_FLAGS, MoveFileExW};
@@ -27,6 +30,38 @@ pub fn create_directory(path: &str) -> Result<(), FsError> {
     // attributes.
     unsafe { CreateDirectoryW(PCWSTR(wide.as_ptr()), None) }
         .map_err(|error| FsError::from_windows(path, &error))
+}
+
+/// Creates the empty file `path`. Its folder must exist; nothing may have
+/// its name yet, and nothing is ever opened or replaced.
+pub fn create_file(path: &str) -> Result<(), FsError> {
+    let name = Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| invalid(path, "the path names no file to create"))?;
+    check_name(name).map_err(|reason| invalid(path, &reason))?;
+    let wide = path::verbatim_wide(path)?;
+    let verbatim = OsString::from_wide(&wide[..wide.len() - 1]);
+    // `create_new` asks Windows for CREATE_NEW, which fails on any name
+    // that is taken.
+    std::fs::File::create_new(&verbatim)
+        .map(drop)
+        .map_err(|error| match error.raw_os_error() {
+            // A folder's name is refused as access denied; a folder that
+            // may not be written leaves nothing at the name.
+            Some(code) => match FsError::from_win32(path, code.cast_unsigned()) {
+                FsError::AccessDenied { .. } if std::fs::symlink_metadata(&verbatim).is_ok() => {
+                    FsError::AlreadyExists {
+                        path: path.to_owned(),
+                    }
+                }
+                other => other,
+            },
+            None => FsError::Io {
+                path: path.to_owned(),
+                source: error,
+            },
+        })
 }
 
 /// Renames the file or folder `path` to `new_name` in the same folder.
@@ -217,6 +252,56 @@ mod tests {
     }
 
     #[test]
+    fn a_file_is_created_empty_and_nothing_is_replaced() {
+        let dir = scratch();
+        let new = dir.path().join("New Text Document.txt");
+        create_file(&text(&new)).unwrap();
+        assert!(new.is_file());
+        assert_eq!(fs::metadata(&new).unwrap().len(), 0);
+        let again = create_file(&text(&new)).unwrap_err();
+        assert!(matches!(again, FsError::AlreadyExists { .. }), "{again:?}");
+        // A file with content keeps it.
+        fs::write(dir.path().join("kept.txt"), "kept").unwrap();
+        let kept = create_file(&text(&dir.path().join("kept.txt"))).unwrap_err();
+        assert!(matches!(kept, FsError::AlreadyExists { .. }), "{kept:?}");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("kept.txt")).unwrap(),
+            "kept"
+        );
+        // A folder of that name is in the way too.
+        fs::create_dir(dir.path().join("folder")).unwrap();
+        let folder = create_file(&text(&dir.path().join("folder"))).unwrap_err();
+        assert!(
+            matches!(folder, FsError::AlreadyExists { .. }),
+            "{folder:?}"
+        );
+        assert!(dir.path().join("folder").is_dir());
+    }
+
+    #[test]
+    fn a_file_needs_its_folder_and_a_good_name() {
+        let dir = scratch();
+        let orphan = create_file(&text(&dir.path().join("missing").join("a.txt"))).unwrap_err();
+        assert!(matches!(orphan, FsError::NotFound { .. }), "{orphan:?}");
+        for bad in ["trailing.", "space ", "CON", "nul.txt", "a?b.txt", "x|y"] {
+            let error = create_file(&text(&dir.path().join(bad))).unwrap_err();
+            assert!(
+                matches!(error, FsError::InvalidPath { .. }),
+                "{bad}: {error:?}"
+            );
+        }
+        let root = create_file(r"C:\").unwrap_err();
+        assert!(matches!(root, FsError::InvalidPath { .. }), "{root:?}");
+        for name in ["Звіт.txt", "📁 notes.md", "cafe\u{301}.txt", ".gitignore"] {
+            create_file(&text(&dir.path().join(name))).unwrap();
+        }
+        assert_eq!(
+            names(dir.path()),
+            [".gitignore", "cafe\u{301}.txt", "Звіт.txt", "📁 notes.md"]
+        );
+    }
+
+    #[test]
     fn a_long_path_is_no_limit() {
         let dir = scratch();
         let mut path = dir.path().to_path_buf();
@@ -229,6 +314,8 @@ mod tests {
         fs::write(&file, "x").unwrap();
         rename(&text(&file), "new.txt").unwrap();
         assert!(path.join("new.txt").is_file());
+        create_file(&text(&path.join("empty.txt"))).unwrap();
+        assert_eq!(fs::metadata(path.join("empty.txt")).unwrap().len(), 0);
     }
 
     #[test]

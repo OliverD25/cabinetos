@@ -120,6 +120,12 @@ pub enum Request {
         /// The new folder, as an absolute path.
         path: String,
     },
+    /// Creates an empty file; its folder must exist, and nothing is ever
+    /// replaced. The core answers `ok`.
+    CreateFile {
+        /// The new file, as an absolute path.
+        path: String,
+    },
     /// Renames a file or folder in the folder it is in, never replacing
     /// anything. The core answers `ok`.
     Rename {
@@ -368,6 +374,7 @@ impl Request {
         "list_volumes",
         "open_path",
         "create_directory",
+        "create_file",
         "rename",
         "get_config",
         "get_value",
@@ -417,6 +424,7 @@ impl Request {
             Self::ListVolumes => "list_volumes",
             Self::OpenPath { .. } => "open_path",
             Self::CreateDirectory { .. } => "create_directory",
+            Self::CreateFile { .. } => "create_file",
             Self::Rename { .. } => "rename",
             Self::GetConfig => "get_config",
             Self::GetValue { .. } => "get_value",
@@ -1353,6 +1361,9 @@ mod tests {
             },
             Request::CreateDirectory {
                 path: r"C:\Users\me\New folder".to_owned(),
+            },
+            Request::CreateFile {
+                path: r"C:\Users\me\New Text Document.txt".to_owned(),
             },
             Request::Rename {
                 path: r"C:\Users\me\notes.txt".to_owned(),

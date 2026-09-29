@@ -21,11 +21,11 @@
 //! when they change. [`DirectoryWatcher`] reports when a directory changes,
 //! so its listing can be read again.
 //!
-//! [`create_directory`] and [`rename`] are the changes a user makes to a
-//! folder without a job; [`open_path`] opens a file or folder with its
-//! default application. [`Hydrator`] gives the shell's type names and icons
-//! of listed entries; size, times and attributes need no such step, as
-//! they arrive with the listing itself.
+//! [`create_directory`], [`create_file`] and [`rename`] are the changes a
+//! user makes to a folder without a job; [`open_path`] opens a file or
+//! folder with its default application. [`Hydrator`] gives the shell's type
+//! names and icons of listed entries; size, times and attributes need no
+//! such step, as they arrive with the listing itself.
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
 //! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `com`,
@@ -66,7 +66,7 @@ pub use drives::DriveWatcher;
 pub use error::FsError;
 pub use hydrate::{Hydrator, ICON_SIZES, ICONS_KEPT};
 pub use open::open_path;
-pub use ops::{create_directory, rename};
+pub use ops::{create_directory, create_file, rename};
 pub use path::verbatim_wide;
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter};
 pub use watch::{DirectoryChanged, DirectoryWatcher};
