@@ -49,6 +49,53 @@ public class CommanderEndToEndTests
     }
 
     [Fact]
+    public async Task Space_and_shift_alt_enter_count_a_folder_in_the_core_and_the_size_column_gets_the_total()
+    {
+        var coreExe = EndToEndTests.FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-measure");
+        try
+        {
+            var photos = Directory.CreateDirectory(Path.Combine(root, "files", "photos")).FullName;
+            Directory.CreateDirectory(Path.Combine(photos, "2026"));
+            File.WriteAllBytes(Path.Combine(photos, "a.jpg"), new byte[1000]);
+            File.WriteAllBytes(Path.Combine(photos, "2026", "b.jpg"), new byte[2500]);
+            var empty = Directory.CreateDirectory(Path.Combine(root, "files", "empty")).FullName;
+            await using var core = await EndToEndTests.StartCoreAsync(coreExe, root);
+            await core.Client.HelloAsync();
+
+            var sizes = new FolderSizes();
+            var started = await core.Client.RequestAsync<MeasureStartedReply>(new MeasurePathsRequest([photos, empty]));
+            Assert.Equal([photos, empty], sizes.Start(started.MeasureId, [photos, empty]));
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (sizes.IsMeasuring)
+            {
+                var coreEvent = await core.Client.Events.ReadAsync(timeout.Token);
+                switch (coreEvent)
+                {
+                    case MeasureProgressEvent progress:
+                        Assert.True(sizes.Apply(progress));
+                        break;
+                    case MeasureFinishedEvent finished:
+                        Assert.False(finished.Cancelled);
+                        Assert.True(sizes.Apply(finished));
+                        break;
+                }
+            }
+            Assert.Equal(new FolderSize(3500, 2, 1, 0, Done: true), sizes.Get("photos"));
+            Assert.Equal(new FolderSize(0, 0, 0, 0, Done: true), sizes.Get("empty"));
+
+            // A cancel may cross the end of the measure: the answer is ok all the same.
+            Assert.IsType<OkReply>(await core.Client.RequestAsync(new CancelMeasureRequest(started.MeasureId)));
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    [Fact]
     public async Task Shift_f4_makes_an_empty_file_once_and_f4_never_falls_back_from_a_missing_editor()
     {
         var coreExe = EndToEndTests.FindCoreOrSkip();

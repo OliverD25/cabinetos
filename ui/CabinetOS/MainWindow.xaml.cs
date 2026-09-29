@@ -385,6 +385,7 @@ public sealed partial class MainWindow : Window
                     if (index >= 0)
                     {
                         Active.Selection.MoveTo(index, SelectMode.Single);
+                        _paneViews[_active].ScrollToFocus();
                     }
                     break;
                 case "menu":
@@ -928,6 +929,9 @@ public sealed partial class MainWindow : Window
             case JobProgressEvent or JobStateChangedEvent or JobConflictEvent:
                 _transfers.OnEvent(coreEvent);
                 OnJobEvent(coreEvent);
+                return;
+            case MeasureProgressEvent or MeasureFinishedEvent:
+                OnMeasureEvent(coreEvent);
                 return;
         }
         _ = RefreshCommandsAsync(coreEvent);
@@ -2106,6 +2110,10 @@ public sealed partial class MainWindow : Window
                 UpdateStatus();
                 ScheduleToolContext();
                 break;
+            case nameof(PaneModel.Sizes):
+                // A measured folder that is selected adds to the selected size.
+                UpdateStatus();
+                break;
         }
     }
 
@@ -2427,11 +2435,14 @@ public sealed partial class MainWindow : Window
         }
         ItemsText.Text = pane.Count == 1 ? "1 item" : $"{pane.Count:N0} items";
         var (count, bytes, anyFile) = pane.SelectionSize();
+        var only = count == 1 ? pane.EntryAt(pane.Selection.SelectedUnordered.First()) : null;
         SelectionText.Text = count switch
         {
             0 => "",
-            1 => $"1 selected · {pane.EntryAt(pane.Selection.SelectedUnordered.First())?.Name}",
-            // Folders have no size in the listing; only the files' bytes are added up.
+            // A measured folder says how big it is; a file's size is in its row.
+            1 when only is { IsFolder: true } && anyFile => $"1 selected · {only.Name}, {DisplayFormat.Bytes(bytes)}",
+            1 => $"1 selected · {only?.Name}",
+            // Folders have no size in the listing: the files' bytes are added up, and a folder's once measured.
             _ => anyFile ? $"{count:N0} selected, {DisplayFormat.Bytes(bytes)}" : $"{count:N0} selected",
         };
     }

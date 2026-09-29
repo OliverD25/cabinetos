@@ -24,6 +24,8 @@ public sealed partial class FileRow : UserControl
     private const string FileGlyph = "\uE8A5";
 
     private readonly Brush _plainIconBrush;
+    private readonly Brush _plainSizeBrush;
+    private Shown<bool> _sizeCounting;
     private Shown<string> _name;
     private Shown<string> _second;
     private Shown<string> _size;
@@ -45,6 +47,7 @@ public sealed partial class FileRow : UserControl
     {
         InitializeComponent();
         _plainIconBrush = Icon.Foreground;
+        _plainSizeBrush = SizeText.Foreground;
         Icon.Glyph = FileGlyph;
         DataContextChanged += (_, _) =>
         {
@@ -163,10 +166,32 @@ public sealed partial class FileRow : UserControl
         var isFolder = view.IsFolder(index);
         SetText(NameText, ref _name, view.Name(index));
         SetText(ModifiedText, ref _second, DisplayFormat.Modified(view.Modified(index), DateTime.Now));
-        SetText(SizeText, ref _size, DisplayFormat.Size(view.Size(index), isFolder));
+        BindSize(item, isFolder);
         BindDetails(item);
         _pointerOver = false;
         UpdateState();
+    }
+
+    /// <summary>Shows a measured folder's size again: the core's count moved on, or ended.</summary>
+    public void RefreshSize()
+    {
+        if (_item is { } item)
+        {
+            BindSize(item, item.View.IsFolder(item.Index));
+        }
+    }
+
+    // A file's size from the listing; a folder's once measured (Space, Shift+Alt+Enter), in the
+    // tertiary colour while the core still counts.
+    private void BindSize(RowItem item, bool isFolder)
+    {
+        var measured = isFolder ? item.Details?.MeasuredSize(item.View.NameSpan(item.Index)) : null;
+        SetText(SizeText, ref _size, measured is { } size ? DisplayFormat.Size(size.Bytes, false) : DisplayFormat.Size(item.View.Size(item.Index), isFolder));
+        var counting = measured is { Done: false };
+        if (_sizeCounting.Take(counting))
+        {
+            SizeText.Foreground = counting ? ThemeResources.Brush("CbTextTertiaryBrush") : _plainSizeBrush;
+        }
     }
 
     private void BindDetails(RowItem item)

@@ -344,27 +344,33 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         Selection.Targets().Select(EntryAt).OfType<PaneEntry>().ToList();
 
     /// <summary>
-    /// How many rows are selected, and the bytes of the selected files: the
-    /// status bar's "12 selected, 1.4 MB". Folders count as none; the listing
-    /// has no size for them. Nothing is read from the disk.
+    /// How many rows are selected, and the bytes of the selected files and
+    /// measured folders: the status bar's "12 selected, 1.4 MB". A folder
+    /// counts only once it was measured (Space, Shift+Alt+Enter); the listing
+    /// has no size for it. Nothing is read from the disk.
     /// </summary>
-    public (int Count, ulong FileBytes, bool AnyFile) SelectionSize()
+    public (int Count, ulong Bytes, bool AnySize) SelectionSize()
     {
         if (_view is not { } view)
         {
             return (0, 0, false);
         }
         ulong bytes = 0;
-        var anyFile = false;
+        var anySize = false;
         foreach (var index in Selection.SelectedUnordered)
         {
             if (!view.IsFolder(index))
             {
                 bytes += view.Size(index);
-                anyFile = true;
+                anySize = true;
+            }
+            else if (!Sizes.IsEmpty && Sizes.Get(view.NameSpan(index)) is { } measured)
+            {
+                bytes += measured.Bytes;
+                anySize = true;
             }
         }
-        return (Selection.SelectedCount, bytes, anyFile);
+        return (Selection.SelectedCount, bytes, anySize);
     }
 
     /// <summary>
@@ -504,6 +510,10 @@ public sealed class PaneModel : ObservableObject, IRowDetails
 
         var oldView = _view;
         var oldListing = _listingId;
+        if (!Sizes.IsEmpty && !string.Equals(previousPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            ForgetSizes();
+        }
         _view = view;
         _listingId = opened.ListingId;
         _details.Reset(opened.ListingId, view.Generation);
@@ -554,6 +564,73 @@ public sealed class PaneModel : ObservableObject, IRowDetails
 
     /// <summary>The folder this pane last showed on each drive, where the drive list (Alt+F1, Alt+F2) goes.</summary>
     public DriveMemory Drives { get; } = new();
+
+    /// <summary>The measured sizes of this folder's folders (Space, Shift+Alt+Enter), until the pane leaves it.</summary>
+    public FolderSizes Sizes { get; } = new();
+
+    /// <inheritdoc/>
+    public FolderSize? MeasuredSize(ReadOnlySpan<char> name) => Sizes.Get(name);
+
+    /// <summary>
+    /// Asks the core to count <paramref name="paths"/> (<c>measure_paths</c>);
+    /// the Size column shows the running totals the events bring. Returns the
+    /// core's reply (an error, or <c>measure_started</c>), or null when every
+    /// path is being counted already.
+    /// </summary>
+    public async Task<CoreReply?> MeasureAsync(IReadOnlyList<string> paths, string? requestId = null)
+    {
+        var wanted = Sizes.NotCounting(paths);
+        if (wanted.Count == 0)
+        {
+            return null;
+        }
+        var reply = await _core.RequestAsync(new MeasurePathsRequest(wanted) { Id = requestId ?? "" });
+        // Right after the reply, before any of its events: the client hands the UI a reply first.
+        if (reply is MeasureStartedReply started)
+        {
+            Sizes.Start(started.MeasureId, wanted);
+            OnPropertyChanged(nameof(Sizes));
+        }
+        return reply;
+    }
+
+    /// <summary>A measure's progress or end; false when the measure is not this pane's.</summary>
+    public bool ApplyMeasure(CoreEvent coreEvent)
+    {
+        var mine = coreEvent switch
+        {
+            MeasureProgressEvent progress => Sizes.Apply(progress),
+            MeasureFinishedEvent finished => Sizes.Apply(finished),
+            _ => false,
+        };
+        if (mine)
+        {
+            OnPropertyChanged(nameof(Sizes));
+        }
+        return mine;
+    }
+
+    // The folder changed: its sizes mean nothing here, and a count still running is stopped.
+    private void ForgetSizes()
+    {
+        foreach (var measureId in Sizes.Clear())
+        {
+            _ = CancelMeasureAsync(measureId);
+        }
+        OnPropertyChanged(nameof(Sizes));
+    }
+
+    private async Task CancelMeasureAsync(ulong measureId)
+    {
+        try
+        {
+            await _core.RequestAsync(new CancelMeasureRequest(measureId));
+        }
+        catch (IOException error)
+        {
+            Diag.Debug(Target, "cannot cancel a measure", new LogField("measure_id", measureId), new LogField("error", error.Message));
+        }
+    }
 
     /// <summary>Remembers the marks before a file command or an unmark changes them.</summary>
     public void RememberMarks()

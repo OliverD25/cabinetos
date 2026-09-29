@@ -31,7 +31,16 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("view.sortByExtension", ListingOnly(invocation => SortActiveAsync(PaneSort.Extension, invocation)));
         _router.RegisterUiHandler("view.sortByModified", ListingOnly(invocation => SortActiveAsync(PaneSort.Modified, invocation)));
         _router.RegisterUiHandler("view.sortBySize", ListingOnly(invocation => SortActiveAsync(PaneSort.Size, invocation)));
-        _router.RegisterUiHandler("edit.toggleSelectionInPlace", ListingOnly(_ => Active.Selection.ToggleFocus()));
+        // Space: a folder it marks is measured, as Total Commander's Space does (the note's decision D8).
+        _router.RegisterUiHandler("edit.toggleSelectionInPlace", ListingOnly(invocation =>
+            Active.Selection.ToggleFocus() && Active.EntryAt(Active.FocusIndex) is { IsFolder: true } folder
+                ? MeasureFoldersAsync([folder.Path], invocation)
+                : Task.CompletedTask));
+        _router.RegisterUiHandler("file.calculateFolderSize", ListingOnly(invocation =>
+            MeasureFoldersAsync([.. Active.Targets().Where(t => t.IsFolder).Select(t => t.Path)], invocation,
+                "Put the cursor on a folder, or mark folders: their sizes are counted.")));
+        _router.RegisterUiHandler("file.calculateAllFolderSizes", ListingOnly(invocation =>
+            MeasureFoldersAsync(AllFolders(Active), invocation, "This folder has no folders to measure.")));
         _router.RegisterUiHandler("edit.invertSelection", ListingOnly(_ => InvertSelection()));
         _router.RegisterUiHandler("edit.unselectAll", ListingOnly(_ =>
         {
@@ -209,7 +218,8 @@ public sealed partial class MainWindow
         }
         if (entry.IsFolder)
         {
-            ShowNotice($"F3 shows files; {entry.Name} is a folder: Enter opens it.");
+            // Total Commander's F3 on a folder shows how big it is.
+            await MeasureFoldersAsync([entry.Path], invocation);
             return;
         }
         if (await ToolForAsync(entry.Name) is { } tool)
@@ -361,6 +371,80 @@ public sealed partial class MainWindow
             return;
         }
         ShowNotice(lines.Count == 1 ? $"Copied the {one}: {lines[0]}" : $"Copied {lines.Count:N0} {many}.");
+    }
+
+    // The core counts (measure_paths); the Size column shows the running total in the tertiary
+    // colour, then the total. A folder counted already or being counted is not asked again.
+    private async Task MeasureFoldersAsync(IReadOnlyList<string> paths, CommandInvocation invocation, string? noneNotice = null)
+    {
+        if (paths.Count == 0)
+        {
+            if (noneNotice is not null)
+            {
+                ShowNotice(noneNotice);
+            }
+            return;
+        }
+        if (_unavailable.Contains("measure_paths"))
+        {
+            ShowNotice("Folder sizes need a newer core.");
+            return;
+        }
+        CoreReply? reply;
+        try
+        {
+            reply = await Active.MeasureAsync(paths, invocation.RequestId);
+        }
+        catch (IOException error)
+        {
+            ShowNotice(error.Message, isError: true);
+            return;
+        }
+        switch (reply)
+        {
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                Unavailable("measure_paths", "Folder sizes need a newer core.");
+                break;
+            case ErrorReply error:
+                ShowNotice($"Folder size: {error.Message}", isError: true);
+                break;
+        }
+    }
+
+    private static List<string> AllFolders(PaneModel pane)
+    {
+        var folders = new List<string>();
+        if (pane.View is { } view)
+        {
+            for (var i = 0; i < view.Count; i++)
+            {
+                if (view.IsFolder(i))
+                {
+                    folders.Add(DisplayFormat.Join(pane.Path, view.Name(i)));
+                }
+            }
+        }
+        return folders;
+    }
+
+    // measure_progress and measure_finished go to the pane that asked; folders that could not be
+    // read are not in the sizes, and the status bar says so.
+    private void OnMeasureEvent(CoreEvent coreEvent)
+    {
+        foreach (var pane in _panes)
+        {
+            if (!pane.ApplyMeasure(coreEvent))
+            {
+                continue;
+            }
+            if (coreEvent is MeasureFinishedEvent finished && finished.Results.Aggregate(0UL, (sum, r) => sum + r.Unreadable) is > 0 and var unreadable)
+            {
+                ShowNotice(unreadable == 1
+                    ? "1 folder could not be read; what is in it is not in the size."
+                    : $"{unreadable:N0} folders could not be read; what is in them is not in the sizes.");
+            }
+            return;
+        }
     }
 
     // Num *: the files' marks turn around; the folders keep theirs (Total Commander's rule).

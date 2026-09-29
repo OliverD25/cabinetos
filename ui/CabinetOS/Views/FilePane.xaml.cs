@@ -269,6 +269,12 @@ public sealed partial class FilePane : UserControl
             case nameof(PaneModel.EffectiveSort):
                 UpdateSortGlyphs();
                 break;
+            case nameof(PaneModel.Sizes):
+                foreach (var row in _realized)
+                {
+                    row.RefreshSize();
+                }
+                break;
         }
     }
 

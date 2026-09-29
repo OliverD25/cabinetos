@@ -13,6 +13,9 @@ public interface IRowDetails
 
     /// <summary>The icon for <paramref name="key"/>, or null while it is on its way.</summary>
     ImageSource? Icon(string key);
+
+    /// <summary>The measured size of the folder named <paramref name="name"/> (Space, Shift+Alt+Enter), or null.</summary>
+    FolderSize? MeasuredSize(ReadOnlySpan<char> name) => null;
 }
 
 /// <summary>
