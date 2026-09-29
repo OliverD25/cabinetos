@@ -231,6 +231,13 @@ README, and pushed it (167256f in that repository). Turning on GitHub Pages
 is the creator's switch; the default address changes in the sleep-mode run
 of 2026-09-29/30, the core agent's first item, and is checked against the
 live address after the switch.
+Done 2026-09-30 (349a59f): the creator turned Pages on at about 00:05,
+the address answered thirty seconds later (41 items, an ETag, a ten-minute
+cache rule), and the default changed to it. Checked in the planning
+worktree from a fresh core with an empty configuration: `market refresh`
+listed the 41 items, `market search github` found the two GitHub themes,
+`market install dracula` downloaded 1.55 KiB, checked its SHA-256 and
+wrote the theme, and `market uninstall dracula` removed exactly that file.
 
 **Commander Compact, the core's part, 2026-09-29.** The creator's Commander Compact handout, now in `docs/design/compact/`, is a density preset of the default look: 20 px rows, hairlines instead of cards, striped lists and an F-key bar, in the same colours. Its rule is the format's rule: a theme may change colours, sizes and the presence of chrome elements, never commands, keys or the layout. The theme format gains two optional objects: `metrics`, 76 named sizes (one for every value of the handout's Metrics section, with bounds: text 8 to 32 px, rows and bars 14 to 80 px, and so on), and `chrome` (`fkeyBar`, `rowStripes`, `hairlines`). Reading stays strict: an unknown name, a value outside its bounds or pixels with a fraction refuse the theme with the reason. `get_theme` and `theme_changed` carry both objects as the file has them, and `list_themes` says `has_metrics`. All of it is optional, so protocol 11 stays; the schema's `$id` names the format, `urn:cabinetos:theme:2`. `commander-compact` ships as the fifth theme: the default theme's colours, the handout's acrylic tint, every metric and all three chrome elements; `cabinetos-cli themes list` marks it `compact`. The shell applies the objects in its half. Two of its end-to-end tests pin four shipped themes and wait for that half. 564 core tests.
 
