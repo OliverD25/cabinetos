@@ -59,8 +59,8 @@ public class EndToEndTests
             var client = core.Client;
 
             var welcome = await client.HelloAsync();
-            // Version 12: sub-phase 11a (the sort key `extension` first, its requests after).
-            Assert.Equal(12u, welcome.ProtocolVersion);
+            // Version 13: window_state (Phases 12 to 14), after 12's sub-phase 11a requests.
+            Assert.Equal(13u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);
