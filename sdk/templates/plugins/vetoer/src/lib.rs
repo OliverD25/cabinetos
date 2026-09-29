@@ -16,7 +16,7 @@ impl Guest for Vetoer {
             id: "vetoer".to_owned(),
             name: "Vetoer".to_owned(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
-            api_version: "0.1.0".to_owned(),
+            api_version: "0.2.0".to_owned(),
         }
     }
 

@@ -56,13 +56,17 @@ fn describe(plugin: &PluginInfo) -> Vec<String> {
         } else {
             "NOT granted"
         };
-        let roots = if capability.roots.is_empty() {
-            String::new()
-        } else {
-            format!(" {}", capability.roots.join(", "))
-        };
+        let mut named = String::new();
+        for list in [&capability.roots, &capability.hosts] {
+            if !list.is_empty() {
+                named = format!("{named} {}", list.join(", "));
+            }
+        }
+        if !capability.secrets.is_empty() {
+            named = format!("{named} (secrets: {})", capability.secrets.join(", "));
+        }
         lines.push(format!(
-            "  {}{roots} [{level}, {granted}]: {}",
+            "  {}{named} [{level}, {granted}]: {}",
             capability.name, capability.reason
         ));
     }
@@ -208,6 +212,8 @@ mod tests {
                     granted: true,
                     reason: "Adds commands.".to_owned(),
                     roots: Vec::new(),
+                    hosts: Vec::new(),
+                    secrets: Vec::new(),
                 },
                 CapabilityInfo {
                     name: "fs:read".to_owned(),
@@ -215,6 +221,17 @@ mod tests {
                     granted: false,
                     reason: "Reads files.".to_owned(),
                     roots: vec![r"%TEMP%\x".to_owned()],
+                    hosts: Vec::new(),
+                    secrets: Vec::new(),
+                },
+                CapabilityInfo {
+                    name: "net".to_owned(),
+                    level: CapabilityLevel::High,
+                    granted: false,
+                    reason: "Asks a model.".to_owned(),
+                    roots: Vec::new(),
+                    hosts: vec!["api.anthropic.com".to_owned(), "localhost:11434".to_owned()],
+                    secrets: vec!["anthropic".to_owned()],
                 },
             ],
             commands: Vec::new(),
@@ -225,6 +242,7 @@ mod tests {
                 "reader 0.1.0 (Reader): needs_review (grant fs:read)",
                 "  cmd:register [low, granted]: Adds commands.",
                 r"  fs:read %TEMP%\x [medium, NOT granted]: Reads files.",
+                "  net api.anthropic.com, localhost:11434 (secrets: anthropic) [high, NOT granted]: Asks a model.",
             ]
         );
         assert_eq!(

@@ -1035,7 +1035,10 @@ components that do only what the user granted.
   (with `message` and `at_ms`, milliseconds since 1970-01-01 UTC).
 - `capabilities` lists what the plugin asks for, for the permissions
   review dialog: `level` is `low`, `medium` or `high`, and `roots` appears
-  only for `fs:read` and `fs:write`, as the manifest wrote them.
+  only for `fs:read` and `fs:write`, as the manifest wrote them. For
+  `net`, `hosts` lists the hosts the plugin may reach and `secrets` the
+  stored secrets the core may send for it; each appears only when not
+  empty ([plugins.md](plugins.md), "The network").
 - `commands` holds the IDs the plugin registered; it is empty unless the
   plugin is `active`.
 

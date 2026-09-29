@@ -17,7 +17,7 @@ plugin: [sdk/templates/README.md](../sdk/templates/README.md).
 - A plugin is a folder `<plugins folder>\<id>\` with two files:
   `plugin.json` (the manifest) and `plugin.wasm` (the component).
 - It implements the world `core-plugin` of the WIT package
-  `cabinetos:plugin@0.1.0`.
+  `cabinetos:plugin@0.2.0`.
 - It runs in `wasmtime`, in its own sandbox, on its own thread, with a time,
   fuel and memory budget for every call.
 - It starts only when it is turned on and the user granted every
@@ -49,7 +49,7 @@ start, or at once with `reload_plugin`.
   "version": "0.1.0",
   "author": "CabinetOS tests",
   "description": "Reads the size of files in one folder.",
-  "apiVersion": "0.1.0",
+  "apiVersion": "0.2.0",
   "minCoreVersion": "0.1.0",
   "capabilities": [
     { "name": "cmd:register", "reason": "Adds the Size command." },
@@ -70,9 +70,9 @@ start, or at once with `reload_plugin`.
 | `id` | 1 to 64 lower case letters, digits and `-`, starting with a letter. It must be the folder's name. |
 | `name`, `author`, `description` | Not empty. `name` is the badge on the plugin's commands. |
 | `version` | `major.minor.patch`, numbers only. |
-| `apiVersion` | The WIT version the plugin was built against. Its major and minor must match this core's (`0.1`). |
+| `apiVersion` | The WIT version the plugin was built against. Its major and minor must match this core's (`0.2`). A `0.1` plugin is refused: 0.2 changed the interface (see "The WIT versions"). |
 | `minCoreVersion` | The oldest core it runs on, `major.minor.patch`. |
-| `capabilities` | Each known, listed once, with a `reason` the review dialog shows. `fs:read` and `fs:write` need `roots`; the others take none. |
+| `capabilities` | Each known, listed once, with a `reason` the review dialog shows. `fs:read` and `fs:write` need `roots`. `net` needs `hosts` and may list `secrets` (see "The network"). The others take none of these. |
 | `commands` | Each ID starts with `<id>.`, then letters, digits, `.`, `_` or `-`; each has a `title` and a `category`; `defaultKeys` follow the key grammar ([keybindings.md](keybindings.md)). Declaring commands needs `cmd:register`. |
 
 The core reads the manifest strictly. An unknown key, a missing key or a
@@ -98,8 +98,8 @@ folder must exist when the plugin starts.
 | `fs:write` | medium | Read and write the files under its `roots` |
 | `jobs:intercept` | medium | See every job before it starts (`before-job`), and stop it |
 | `process:run` | medium | Start programs. **Never granted in this version.** |
-| `net` | high | Reach the network. **Never granted in this version.** |
-| `credentials` | high | Read stored credentials. **Never granted in this version.** |
+| `net` | high | Ask the core for web requests (`http-request`), only to the `hosts` its manifest names, with only the `secrets` it names |
+| `credentials` | high | Read stored credentials. **Never granted in this version.** A plugin never reads a secret; `net` lets the core use one for it. |
 
 The level is the color of the dot in the design's permissions review dialog
 (view C): low green, medium yellow, high red.
@@ -112,8 +112,8 @@ The level is the color of the dot in the design's permissions review dialog
   ([config.md](config.md)). `grant_capabilities` (the review dialog, or
   `cabinetos-cli plugins grant`) writes them there; an edit saved by hand
   works the same way. Either takes effect at once, without a restart.
-- **A plugin that asks for `process:run`, `net` or `credentials` fails**
-  with a message saying so. The sandbox has no safe way to allow them yet.
+- **A plugin that asks for `process:run` or `credentials` fails** with a
+  message saying so. The sandbox has no safe way to allow them yet.
 - Without a capability, a host function does nothing: `config-get` answers
   none, `emit` is dropped. `register-command` without `cmd:register` stops
   the start (see "Commands").
@@ -128,7 +128,7 @@ Each instance has its own WASI Preview 2 context:
 | What | The plugin gets |
 |---|---|
 | Clocks and random numbers | Yes |
-| Network (TCP, UDP, name lookup) | No |
+| Network (TCP, UDP, name lookup) | No. A plugin with `net` asks the core with `http-request` |
 | Environment variables | None |
 | Command-line arguments | None |
 | Standard input | Empty |
@@ -157,6 +157,11 @@ Every call into a plugin gets a fresh budget:
 | Linear memory | 256 MiB per instance | The call traps with the amount it asked for; the plugin crashes |
 | Instances, tables and memories | 32 of each per component | Instantiation fails |
 | Table elements | 100,000 per table | The table does not grow |
+
+Time a call spends waiting for the network in `http-request` does not
+count against its deadline: a command that waits 30 s for a model's answer
+is not stopped at 5 s. The request has its own timeout (see "The
+network"). Fuel is not used while the core makes the request.
 
 `deactivate` gets 1 s; the plugin stops either way. A trap while the
 plugin starts makes it `failed`, not `crashed`: it never ran, so it is not
@@ -303,6 +308,78 @@ roots, the plugin gets `on-listing-opened(path, entry-count)`, with the path
 as the plugin sees it. It is a notification: the listing does not wait for
 it. At most 64 notifications wait for one plugin; more are dropped.
 
+## The network: `net` and `http-request`
+
+A plugin's sandbox has no network. A plugin with `net` asks the core to
+make a web request for it. The core checks the request against the
+manifest, makes it, and hands back the answer. The manifest names every
+host the plugin may reach, and the review dialog shows them:
+
+```json
+{
+  "name": "net",
+  "hosts": ["api.anthropic.com", "localhost:11434"],
+  "secrets": ["anthropic"],
+  "reason": "Sends your question to the model you chose."
+}
+```
+
+| Key | Rule |
+|---|---|
+| `hosts` | At least one. A host name or an IPv4 address, with an optional `:port`; no scheme, path, user or wildcard. Without a port, only the scheme's own port matches (443 for `https`, 80 for `http`). `localhost` and `127.0.0.1` are different hosts. |
+| `secrets` | Optional. The names of the stored secrets the plugin may have the core send (letters, digits, `-`, `_`, `.`). |
+
+The function, in the WIT package:
+
+```wit
+record web-request {
+    method: string,                          // GET, POST, PUT, PATCH, DELETE or HEAD
+    url: string,
+    headers: list<tuple<string, string>>,
+    body: option<list<u8>>,
+    secret: option<string>,                  // a name from the manifest's `secrets`
+    secret-header: option<string>,           // the header that carries it
+    timeout-ms: u32,                         // 0: the longest, 120 s
+}
+record web-response {
+    status: u16,
+    headers: list<tuple<string, string>>,
+    body: list<u8>,
+}
+http-request: func(request: web-request) -> result<web-response, string>;
+```
+
+- **Only named hosts.** The URL's host and port must match a `hosts`
+  entry. Anything else is refused before any connection.
+- **`https:` only**, except plain `http:` to `localhost` and `127.0.0.1`
+  (a local model server). Certificates are checked against the Windows
+  certificate store, with the marketplace's HTTP stack (`ureq` over
+  `rustls`). A URL with a user name or password is refused.
+- **No redirects.** A `3xx` answer comes back to the plugin as it is: a
+  redirect could lead to a host the manifest does not name.
+- **Secrets stay in the core.** When `secret` is set, the core reads that
+  secret from the Windows Credential Manager ([ipc.md](ipc.md), "Secrets")
+  and puts it into the header `secret-header` names: as it is for a header
+  such as `x-api-key`, and as `Bearer <value>` for `Authorization`. The
+  plugin never sees the value. A secret the manifest does not list is
+  refused; a listed secret that is not stored is an error that says how to
+  store it (`cabinetos-cli secret set <name>`). A header the plugin sets
+  with the same name is dropped; so are `host` and `content-length`, which
+  the core sets.
+- **Limits.** The answer's body is at most 8 MiB; a longer one is an
+  error. `timeout-ms` is capped at 120 s, and connecting may take 15 s.
+  There is no streaming in this version: the plugin gets the whole answer
+  at once.
+- **Any status is an answer.** A `404` or a `500` comes back as
+  `ok(web-response)`; `err` means the request did not happen or did not
+  finish, with the reason as text.
+- **One log line per request**, at INFO, with the plugin's ID: the host,
+  the method, the status, the body's size in bytes and the time in
+  milliseconds (`message` `web request`). Never a header, a body or a
+  secret.
+
+Without `net`, `http-request` answers `err` and makes no request.
+
 ## Host functions
 
 | Function | Needs | What it does |
@@ -311,6 +388,14 @@ it. At most 64 notifications wait for one plugin; more are dropped.
 | `log(level, message)` | — | Writes a line to the core's log with the plugin's ID |
 | `config-get(path)` | `config:read` | A setting as JSON by dotted path, such as `ui.theme`; none for a path that does not exist, and for the `plugins` section |
 | `emit(name, payload)` | `events:emit` | Sends `plugin_event` with the plugin's ID to every client that said `hello` |
+| `http-request(request)` | `net` | Makes a web request to a host the manifest names, and answers with its status, headers and body (see "The network") |
+
+### The WIT versions
+
+| Version | What changed |
+|---|---|
+| `0.1.0` | The first interface: commands, `log`, `config-get`, `emit`, `before-job`, `on-listing-opened` |
+| `0.2.0` | `http-request` and its records. A `0.1` plugin is refused with `apiVersion 0.1.0 does not match this core's plugin interface 0.2.0`; rebuild it against `sdk/wit` and set `apiVersion` to `0.2.0`. |
 
 ## The protocol
 
@@ -341,6 +426,7 @@ JSON line until Ctrl+C.
   needs publisher identities (Phase 9) and is not built.
 - There is no way to revoke one capability except editing `granted` in the
   file.
-- `process:run`, `net` and `credentials` are never granted.
+- `process:run` and `credentials` are never granted.
+- `http-request` has no streaming: a model's answer arrives whole.
 - Plugins cannot open listings, start jobs or read the selection yet; the
   WIT grows with the features that need it, as a new minor version.

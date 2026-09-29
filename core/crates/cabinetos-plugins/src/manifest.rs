@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 /// The version of the plugin interface (`sdk/wit`) this core implements. A
 /// plugin built against another minor version is refused.
-pub const API_VERSION: &str = "0.1.0";
+pub const API_VERSION: &str = "0.2.0";
 
 /// The file name of the manifest in a plugin's folder.
 pub const MANIFEST_FILE: &str = "plugin.json";
@@ -51,10 +51,19 @@ pub struct Manifest {
 pub struct CapabilityRequest {
     /// For example `fs:read`.
     pub name: String,
-    /// For `fs:read` and `fs:write`: the folders. `%NAME%` is replaced by
-    /// the environment variable, as in `%USERPROFILE%\Documents`.
+    /// For `fs:read`, `fs:write` and `fs:watch`: the folders. `%NAME%` is
+    /// replaced by the environment variable, as in
+    /// `%USERPROFILE%\Documents`.
     #[serde(default)]
     pub roots: Vec<String>,
+    /// For `net`: the hosts it may reach, as `name` or `name:port`, such as
+    /// `api.anthropic.com` or `localhost:11434`.
+    #[serde(default)]
+    pub hosts: Vec<String>,
+    /// For `net`: the secrets (`cabinetos-cli secret set <name>`) the core
+    /// may put into its requests; the plugin never sees their values.
+    #[serde(default)]
+    pub secrets: Vec<String>,
     /// Why, in plain words; the review dialog shows it.
     pub reason: String,
 }
@@ -92,7 +101,8 @@ pub enum Capability {
     JobsIntercept,
     /// Start programs. Never granted in this version.
     ProcessRun,
-    /// Reach the network. Never granted in this version.
+    /// Reach the hosts its manifest names, through the core
+    /// (`http-request`).
     Net,
     /// Read stored credentials. Never granted in this version.
     Credentials,
@@ -154,11 +164,17 @@ impl Capability {
         matches!(self, Self::FsRead | Self::FsWrite)
     }
 
+    /// Whether it names hosts (`hosts`, and optionally `secrets`).
+    #[must_use]
+    pub const fn takes_hosts(self) -> bool {
+        matches!(self, Self::Net)
+    }
+
     /// Whether this version refuses it whatever the user grants: the
     /// sandbox has no way to allow it safely yet.
     #[must_use]
     pub const fn never_granted(self) -> bool {
-        matches!(self, Self::ProcessRun | Self::Net | Self::Credentials)
+        matches!(self, Self::ProcessRun | Self::Credentials)
     }
 }
 
@@ -272,11 +288,90 @@ fn check_capabilities(manifest: &Manifest) -> Result<(), String> {
             }
             _ => {}
         }
+        check_hosts(capability, request)?;
     }
     if !manifest.commands.is_empty() && !seen.contains(&Capability::CmdRegister) {
         return Err("it declares commands but does not ask for `cmd:register`".to_owned());
     }
     Ok(())
+}
+
+/// `hosts` and `secrets` belong to `net` alone; `net` needs at least one
+/// host, each a plain host name or address with an optional port.
+fn check_hosts(capability: Capability, request: &CapabilityRequest) -> Result<(), String> {
+    if !capability.takes_hosts() {
+        if !request.hosts.is_empty() || !request.secrets.is_empty() {
+            return Err(format!(
+                "capability `{}` takes no `hosts` or `secrets`",
+                request.name
+            ));
+        }
+        return Ok(());
+    }
+    if request.hosts.is_empty() {
+        return Err(format!("capability `{}` needs `hosts`", request.name));
+    }
+    for host in &request.hosts {
+        HostRule::parse(host)?;
+    }
+    for secret in &request.secrets {
+        let good = !secret.is_empty()
+            && secret.len() <= 128
+            && secret
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+        if !good {
+            return Err(format!(
+                "`{secret}` is not a secret name: use letters, digits, `-`, `_` and `.`"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A host a plugin may reach: a name or an address, and a port. Without a
+/// port it matches only the scheme's own port (443 for `https`, 80 for
+/// `http`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HostRule {
+    /// Lower case.
+    pub host: String,
+    /// `None`: the scheme's own port.
+    pub port: Option<u16>,
+}
+
+impl HostRule {
+    /// Reads `name` or `name:port`; no scheme, path, user or wildcard.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let bad = || {
+            format!(
+                "host `{text}` must be a host name or address, with an optional `:port`, such as `api.example.com` or `localhost:11434`"
+            )
+        };
+        let (host, port) = match text.rsplit_once(':') {
+            Some((host, port)) => (host, Some(port.parse::<u16>().map_err(|_| bad())?)),
+            None => (text, None),
+        };
+        let good = !host.is_empty()
+            && host.len() <= 253
+            && host
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.'));
+        if !good || port == Some(0) {
+            return Err(bad());
+        }
+        Ok(Self {
+            host: host.to_ascii_lowercase(),
+            port,
+        })
+    }
+
+    /// Whether a URL's host and port (the scheme's own when it names none)
+    /// fall under this rule.
+    #[must_use]
+    pub fn matches(&self, host: &str, port: u16, default_port: u16) -> bool {
+        self.host.eq_ignore_ascii_case(host) && self.port.unwrap_or(default_port) == port
+    }
 }
 
 fn check_commands(manifest: &Manifest) -> Result<(), String> {
@@ -361,7 +456,7 @@ mod tests {
                 "version": "1.2.3",
                 "author": "Someone",
                 "description": "Says hello.",
-                "apiVersion": "0.1.0",
+                "apiVersion": "0.2.0",
                 "minCoreVersion": "0.1.0",
                 "capabilities": [
                     {"name": "cmd:register", "reason": "Adds a command."},
@@ -389,7 +484,7 @@ mod tests {
     #[test]
     fn unknown_keys_and_missing_fields_are_refused() {
         let unknown = serde_json::from_str::<Manifest>(
-            r#"{"id":"a","name":"A","version":"1.0.0","author":"x","description":"d","apiVersion":"0.1.0","minCoreVersion":"0.1.0","colour":"red"}"#,
+            r#"{"id":"a","name":"A","version":"1.0.0","author":"x","description":"d","apiVersion":"0.2.0","minCoreVersion":"0.1.0","colour":"red"}"#,
         )
         .unwrap_err();
         assert!(unknown.to_string().contains("colour"), "{unknown}");
@@ -406,7 +501,7 @@ mod tests {
                 .contains("folder")
         );
         assert!(problem(|m| m.version = "1.2".to_owned()).contains("major.minor.patch"));
-        assert!(problem(|m| m.api_version = "0.2.0".to_owned()).contains("apiVersion"));
+        assert!(problem(|m| m.api_version = "0.1.0".to_owned()).contains("apiVersion"));
         assert!(problem(|m| m.min_core_version = "9.0.0".to_owned()).contains("9.0.0 or newer"));
         assert!(
             problem(|m| m.capabilities[0].name = "fs:everything".to_owned())
@@ -441,6 +536,52 @@ mod tests {
         assert_eq!(Capability::Net.level(), CapabilityLevel::High);
         assert!(Capability::ProcessRun.never_granted());
         assert!(!Capability::FsWrite.never_granted());
+        assert!(!Capability::Net.never_granted(), "net is granted since 0.2");
+    }
+
+    #[test]
+    fn net_names_its_hosts_and_its_secrets() {
+        let with_net = |hosts: &[&str], secrets: &[&str]| {
+            let mut manifest = manifest();
+            manifest.capabilities.push(CapabilityRequest {
+                name: "net".to_owned(),
+                roots: Vec::new(),
+                hosts: hosts.iter().map(|host| (*host).to_owned()).collect(),
+                secrets: secrets.iter().map(|secret| (*secret).to_owned()).collect(),
+                reason: "Asks a model.".to_owned(),
+            });
+            check(&manifest, Some("hello"), "0.1.0")
+        };
+        with_net(&["api.anthropic.com", "localhost:11434"], &["anthropic"]).unwrap();
+        assert!(with_net(&[], &[]).unwrap_err().contains("needs `hosts`"));
+        for bad in [
+            "https://api.anthropic.com",
+            "*.example.com",
+            "host:99999",
+            "host:0",
+            "a/b",
+        ] {
+            assert!(
+                with_net(&[bad], &[]).unwrap_err().contains("host `"),
+                "{bad}"
+            );
+        }
+        assert!(
+            with_net(&["localhost"], &["a/b"])
+                .unwrap_err()
+                .contains("secret name")
+        );
+        assert!(
+            problem(|m| m.capabilities[0].hosts = vec!["x.org".to_owned()])
+                .contains("takes no `hosts`")
+        );
+        let rule = HostRule::parse("LocalHost:11434").unwrap();
+        assert!(rule.matches("localhost", 11434, 80));
+        assert!(!rule.matches("localhost", 80, 80));
+        let rule = HostRule::parse("api.anthropic.com").unwrap();
+        assert!(rule.matches("API.anthropic.com", 443, 443));
+        assert!(!rule.matches("api.anthropic.com", 8443, 443));
+        assert!(!rule.matches("evil.anthropic.com", 443, 443));
     }
 
     #[test]

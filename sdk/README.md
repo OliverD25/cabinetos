@@ -13,7 +13,7 @@ What lives here, or will:
   types in `core/crates/cabinetos-config` (Phase 3). The core writes a copy
   next to the configuration file for editors ([../docs/config.md](../docs/config.md)).
 - `wit/` — the WebAssembly Component Model interface that Core Plugins
-  implement: the package `cabinetos:plugin@0.1.0` and its world
+  implement: the package `cabinetos:plugin@0.2.0` and its world
   `core-plugin` (Phase 7). The capabilities a plugin may ask for, the
   sandbox and the limits are in [../docs/plugins.md](../docs/plugins.md).
 - `templates/` — starter projects (Phase 7): Rust Core Plugins built with

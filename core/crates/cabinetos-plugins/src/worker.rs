@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
 use wasmtime::component::{Component, ResourceTable};
-use wasmtime::{Store, Trap};
+use wasmtime::{Store, Trap, UpdateDeadline};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::bindings::cabinetos::plugin::host::{self, LogLevel};
@@ -69,24 +69,54 @@ pub(crate) enum Reply<T> {
 pub(crate) struct Activity {
     /// Notifications waiting in the channel.
     pub(crate) queued: AtomicUsize,
-    /// When the call running now started; `None` between calls.
-    busy_since: Mutex<Option<Instant>>,
+    busy: Mutex<Busy>,
+}
+
+/// The call running now, if any.
+#[derive(Default)]
+struct Busy {
+    /// When it started; `None` between calls.
+    since: Option<Instant>,
+    /// How long it waited for the network in finished `http-request`s.
+    network: Duration,
+    /// When the `http-request` it waits for now started.
+    network_since: Option<Instant>,
 }
 
 impl Activity {
-    /// How long the call running now has been running.
+    /// How long the call running now has been running, less the time it
+    /// waited for the network: that counts against no deadline.
     pub(crate) fn busy_for(&self) -> Option<Duration> {
-        self.busy_since
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .map(|since| since.elapsed())
+        let busy = self.busy.lock().unwrap_or_else(PoisonError::into_inner);
+        let since = busy.since?;
+        let waiting = busy.network + busy.network_since.map_or(Duration::ZERO, |at| at.elapsed());
+        Some(since.elapsed().saturating_sub(waiting))
     }
 
     fn set(&self, since: Option<Instant>) {
-        *self
-            .busy_since
+        *self.busy.lock().unwrap_or_else(PoisonError::into_inner) = Busy {
+            since,
+            ..Busy::default()
+        };
+    }
+
+    /// An `http-request` starts waiting for the network.
+    fn network_started(&self) {
+        self.busy
             .lock()
-            .unwrap_or_else(PoisonError::into_inner) = since;
+            .unwrap_or_else(PoisonError::into_inner)
+            .network_since = Some(Instant::now());
+    }
+
+    /// The `http-request` has its answer. Returns how long it waited.
+    fn network_ended(&self) -> Duration {
+        let mut busy = self.busy.lock().unwrap_or_else(PoisonError::into_inner);
+        let waited = busy
+            .network_since
+            .take()
+            .map_or(Duration::ZERO, |at| at.elapsed());
+        busy.network += waited;
+        waited
     }
 }
 
@@ -149,6 +179,11 @@ pub(crate) struct State {
     /// `register-command` works only while this is set.
     activating: bool,
     registered: Vec<PluginCommand>,
+    /// The worker's activity, which `http-request` tells when it waits for
+    /// the network.
+    activity: Arc<Activity>,
+    /// Network time not yet added to the call's epoch deadline.
+    network_credit: Duration,
 }
 
 impl WasiView for State {
@@ -229,6 +264,36 @@ impl host::Host for State {
         Ok(self.plugin.services.config_value(&path))
     }
 
+    fn http_request(
+        &mut self,
+        request: host::WebRequest,
+    ) -> wasmtime::Result<Result<host::WebResponse, String>> {
+        if !self.plugin.granted.contains(&Capability::Net) {
+            return Ok(Err("http-request needs the net capability".to_owned()));
+        }
+        let ask = crate::net::Ask {
+            method: request.method,
+            url: request.url,
+            headers: request.headers,
+            body: request.body,
+            secret: request.secret,
+            secret_header: request.secret_header,
+            timeout_ms: request.timeout_ms,
+        };
+        let services = Arc::clone(&self.plugin.services);
+        self.activity.network_started();
+        let result = self
+            .plugin
+            .http
+            .request(&self.plugin.net, ask, &|name| services.secret(name));
+        self.network_credit += self.activity.network_ended();
+        Ok(result.map(|answer| host::WebResponse {
+            status: answer.status,
+            headers: answer.headers,
+            body: answer.body,
+        }))
+    }
+
     fn emit(&mut self, name: String, payload: String) -> wasmtime::Result<()> {
         let _call = HostCall::start(
             "emit",
@@ -289,6 +354,7 @@ pub(crate) fn run(
         }
     };
     let registered = std::mem::take(&mut instance.store.data_mut().registered);
+    instance.store.data_mut().activity = Arc::clone(activity);
     tracing::info!(commands = registered.len(), "the plugin is active");
     inner.report(&plugin.id, generation, Report::Active(registered));
     drop(inner);
@@ -413,10 +479,21 @@ fn start(inner: &HostInner, plugin: &Arc<Loaded>) -> Result<Instance, String> {
             plugin: Arc::clone(plugin),
             activating: false,
             registered: Vec::new(),
+            activity: Arc::new(Activity::default()),
+            network_credit: Duration::ZERO,
         },
     );
     store.limiter(|state| &mut state.limiter);
-    store.epoch_deadline_trap();
+    // At the deadline, time the call spent waiting for the network since
+    // the last check extends it; without any, the call traps (interrupt).
+    store.epoch_deadline_callback(|mut context| {
+        let credit = std::mem::take(&mut context.data_mut().network_credit);
+        if credit.is_zero() {
+            Ok(UpdateDeadline::Interrupt)
+        } else {
+            Ok(UpdateDeadline::Continue(ticks(credit)))
+        }
+    });
 
     let timeout = plugin.limits.call_timeout;
     let fail = |step: &str, error: &wasmtime::Error, last: &Arc<Mutex<Option<String>>>| {
@@ -476,9 +553,15 @@ fn start(inner: &HostInner, plugin: &Arc<Loaded>) -> Result<Instance, String> {
 /// Fresh fuel and a fresh deadline for the next call.
 fn prepare(store: &mut Store<State>, plugin: &Loaded, timeout: Duration) {
     let _ = store.set_fuel(plugin.limits.fuel);
-    let ticks = u64::try_from(timeout.as_millis().div_ceil(crate::EPOCH_TICK.as_millis()))
-        .unwrap_or(u64::MAX);
-    store.set_epoch_deadline(ticks.max(1));
+    store.data_mut().network_credit = Duration::ZERO;
+    store.set_epoch_deadline(ticks(timeout));
+}
+
+/// `time` in epoch ticks, at least one.
+fn ticks(time: Duration) -> u64 {
+    u64::try_from(time.as_millis().div_ceil(crate::EPOCH_TICK.as_millis()))
+        .unwrap_or(u64::MAX)
+        .max(1)
 }
 
 /// Logs the trap, tells the host, and returns the message for the caller.

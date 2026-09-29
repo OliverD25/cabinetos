@@ -1,0 +1,33 @@
+{
+  "id": "fetcher",
+  "name": "Fetcher",
+  "version": "0.1.0",
+  "author": "CabinetOS tests",
+  "description": "A test fixture that makes web requests through the core to a local test server.",
+  "apiVersion": "0.2.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "cmd:register",
+      "reason": "Adds the Fetch command."
+    },
+    {
+      "name": "net",
+      "hosts": [
+        "localhost:8090"
+      ],
+      "secrets": [
+        "fetcher-test"
+      ],
+      "reason": "Asks the tests' own server on this computer."
+    }
+  ],
+  "commands": [
+    {
+      "id": "fetcher.get",
+      "title": "Fetch",
+      "category": "Fetcher",
+      "defaultKeys": []
+    }
+  ]
+}

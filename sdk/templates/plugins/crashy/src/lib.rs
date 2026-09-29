@@ -16,7 +16,7 @@ impl Guest for Crashy {
             id: "crashy".to_owned(),
             name: "Crashy".to_owned(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
-            api_version: "0.1.0".to_owned(),
+            api_version: "0.2.0".to_owned(),
         }
     }
 

@@ -16,7 +16,7 @@ impl Guest for Hog {
             id: "hog".to_owned(),
             name: "Hog".to_owned(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
-            api_version: "0.1.0".to_owned(),
+            api_version: "0.2.0".to_owned(),
         }
     }
 

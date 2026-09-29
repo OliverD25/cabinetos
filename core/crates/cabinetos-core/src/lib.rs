@@ -188,12 +188,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
     // This thread runs the pipe server: it never waits for the heavy log.
     cabinetos_diag::never_wait_for_heavy_log();
     let panicked = stop_on_panic(&shutdown);
-    if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
-        tracing::warn!(
-            value = %rejected,
-            "ignoring {WORKERS_ENV}: expected a whole number from 1 to {MAX_WORKERS}; using {DEFAULT_WORKERS}"
-        );
-    }
+    warn_about_workers();
     let config_path = cabinetos_config::default_path(config_path);
     let config_path = std::path::absolute(&config_path).unwrap_or(config_path);
     let events = EventHub::new();
@@ -219,12 +214,14 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         EngineConfig::default(),
         Arc::new(move |event| job_events.publish(event)),
     );
+    let secrets = secrets::from_env();
     let plugins = plugins::start(
         dirs.plugins.clone(),
         cabinetos_plugins::plugins_data_dir(plugins_data_dir),
         &settings,
         &events,
         &jobs,
+        &secrets,
     );
     if let Some(host) = &plugins {
         tokio::spawn(plugins::follow_settings(
@@ -255,7 +252,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         market,
         windows: window::WindowStates::default(),
         previews,
-        secrets: secrets::from_env(),
+        secrets,
     });
     let mut result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     if result.is_ok() && panicked.load(Ordering::SeqCst) {
@@ -275,6 +272,16 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
     }
     drop(diag);
     result
+}
+
+/// Logs a `CABINETOS_WORKERS` value that `worker_threads` refused.
+fn warn_about_workers() {
+    if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
+        tracing::warn!(
+            value = %rejected,
+            "ignoring {WORKERS_ENV}: expected a whole number from 1 to {MAX_WORKERS}; using {DEFAULT_WORKERS}"
+        );
+    }
 }
 
 /// Makes a panic on any thread stop the core, as a panic in a connection

@@ -1,9 +1,12 @@
 //! The plugin host against the committed fixture plugins
 //! (`sdk/fixtures/plugins`, built by `sdk/templates/build-fixtures.ps1`):
-//! manifests, capability gating, crashes, deadlines, fuel, memory, and job
-//! judging. No WebAssembly toolchain is needed to run these.
+//! manifests, capability gating, crashes, deadlines, fuel, memory, job
+//! judging, and web requests to a test server on this computer. No
+//! WebAssembly toolchain is needed to run these.
 
 use std::collections::BTreeMap;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -25,6 +28,10 @@ impl HostServices for Recorder {
 
     fn publish(&self, event: Event) {
         self.events.lock().unwrap().push(event);
+    }
+
+    fn secret(&self, name: &str) -> Option<String> {
+        (name == "fetcher-test").then(|| SECRET.to_owned())
     }
 
     fn set_commands(&self, plugin_id: &str, _plugin_name: &str, commands: &[PluginCommand]) {
@@ -65,6 +72,9 @@ impl Recorder {
             .collect()
     }
 }
+
+/// The value of the one stored secret, `fetcher-test`.
+const SECRET: &str = "s3cr3t-for-the-tests";
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../sdk/fixtures/plugins")
@@ -248,13 +258,14 @@ fn manifest_problems_fail_the_plugin_with_a_reason() {
     };
     let unknown_key = failed(|manifest| manifest["colour"] = "red".into());
     assert!(unknown_key.contains("colour"), "{unknown_key}");
-    let api = failed(|manifest| manifest["apiVersion"] = "0.2.0".into());
-    assert!(api.contains("apiVersion 0.2.0"), "{api}");
+    // A 0.1 component lacks what 0.2 added: refused before it is compiled.
+    let api = failed(|manifest| manifest["apiVersion"] = "0.1.0".into());
+    assert!(api.contains("apiVersion 0.1.0"), "{api}");
     let never = failed(|manifest| {
         manifest["capabilities"]
             .as_array_mut()
             .unwrap()
-            .push(serde_json::json!({"name": "net", "reason": "Phones home."}));
+            .push(serde_json::json!({"name": "process:run", "reason": "Starts programs."}));
     });
     assert!(never.contains("never grants"), "{never}");
     // The component registers hello.say, which this manifest no longer
@@ -511,4 +522,205 @@ fn a_plugin_that_intercepts_jobs_can_stop_one() {
         10,
     )
     .unwrap();
+}
+
+/// A web server on a free port of 127.0.0.1, for the fetcher fixture. It
+/// keeps every request it gets, head and body; it answers `/big` with 9 MiB,
+/// `/slow` after 1.5 s, and anything else with a short text.
+struct TestServer {
+    port: u16,
+    seen: Arc<Mutex<Vec<String>>>,
+}
+
+impl TestServer {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = Arc::clone(&seen);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let log = Arc::clone(&log);
+                std::thread::spawn(move || serve(stream, &log));
+            }
+        });
+        Self { port, seen }
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("http://127.0.0.1:{}{path}", self.port)
+    }
+
+    fn seen(&self) -> Vec<String> {
+        self.seen.lock().unwrap().clone()
+    }
+}
+
+fn serve(mut stream: TcpStream, seen: &Mutex<Vec<String>>) {
+    let mut head = Vec::new();
+    let mut byte = [0_u8; 1];
+    while !head.ends_with(b"\r\n\r\n") {
+        if stream.read(&mut byte).unwrap_or(0) == 0 {
+            return;
+        }
+        head.push(byte[0]);
+    }
+    let head = String::from_utf8_lossy(&head).into_owned();
+    let length = head
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        .and_then(|(_, value)| value.trim().parse().ok())
+        .unwrap_or(0);
+    let mut body = vec![0; length];
+    if stream.read_exact(&mut body).is_err() {
+        return;
+    }
+    seen.lock()
+        .unwrap()
+        .push(format!("{head}{}", String::from_utf8_lossy(&body)));
+    let answer = match head.split_whitespace().nth(1).unwrap_or("/") {
+        "/big" => vec![b'x'; 9 * 1024 * 1024],
+        "/slow" => {
+            std::thread::sleep(Duration::from_millis(1500));
+            b"slow but here".to_vec()
+        }
+        _ => b"hello from the test server".to_vec(),
+    };
+    let _ = write!(
+        stream,
+        "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\nx-test: yes\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        answer.len()
+    );
+    let _ = stream.write_all(&answer);
+}
+
+/// The fetcher fixture, allowed to reach only `server`.
+fn fetcher(setup: &Setup, server: &TestServer, change: impl FnOnce(&mut HostConfig)) -> PluginHost {
+    let host_rule = format!("127.0.0.1:{}", server.port);
+    setup.edit_manifest("fetcher", |manifest| {
+        manifest["capabilities"][1]["hosts"] = serde_json::json!([host_rule]);
+    });
+    let host = setup.host(change);
+    host.load_all(&grants(&[("fetcher", &["cmd:register", "net"])]));
+    wait_until(&host, "fetcher", active);
+    host
+}
+
+fn fetch(host: &PluginHost, args: &serde_json::Value) -> Result<serde_json::Value, String> {
+    host.execute("fetcher", "fetcher.get", &args.to_string())
+        .map(|answer| serde_json::from_str(&answer).unwrap())
+        .map_err(|error| error.message)
+}
+
+#[test]
+fn net_puts_the_secret_into_the_header_and_never_into_the_plugin() {
+    let server = TestServer::start();
+    let setup = Setup::new(&["fetcher"]);
+    let host = fetcher(&setup, &server, |_| {});
+
+    let answer = fetch(
+        &host,
+        &serde_json::json!({
+            "url": server.url("/echo"),
+            "method": "POST",
+            "body": "ping",
+            "secret": "fetcher-test",
+            "header": "x-api-key",
+        }),
+    )
+    .unwrap();
+    assert_eq!(answer["status"], 200);
+    assert_eq!(answer["body"], "hello from the test server");
+    assert_eq!(answer["headers"]["x-test"], "yes");
+    assert!(!answer.to_string().contains(SECRET), "{answer}");
+    let bearer = fetch(
+        &host,
+        &serde_json::json!({
+            "url": server.url("/bearer"),
+            "secret": "fetcher-test",
+            "header": "Authorization",
+        }),
+    )
+    .unwrap();
+    assert!(!bearer.to_string().contains(SECRET), "{bearer}");
+
+    let seen = server.seen();
+    assert_eq!(seen.len(), 2, "{seen:?}");
+    assert!(
+        seen[0].starts_with("POST /echo HTTP/1.1\r\n"),
+        "{}",
+        seen[0]
+    );
+    assert!(
+        seen[0].contains(&format!("x-api-key: {SECRET}\r\n")),
+        "{}",
+        seen[0]
+    );
+    assert!(seen[0].ends_with("\r\n\r\nping"), "{}", seen[0]);
+    assert!(
+        seen[1].contains(&format!("authorization: Bearer {SECRET}\r\n")),
+        "{}",
+        seen[1]
+    );
+}
+
+#[test]
+fn net_refuses_other_hosts_unnamed_secrets_and_huge_answers() {
+    let server = TestServer::start();
+    let other = TestServer::start();
+    let setup = Setup::new(&["fetcher"]);
+    let host = fetcher(&setup, &server, |_| {});
+
+    let error = fetch(&host, &serde_json::json!({ "url": other.url("/") })).unwrap_err();
+    assert!(error.contains("not among the hosts"), "{error}");
+    let error = fetch(
+        &host,
+        &serde_json::json!({ "url": format!("https://example.com:{}/", server.port) }),
+    )
+    .unwrap_err();
+    assert!(error.contains("not among the hosts"), "{error}");
+    let error = fetch(
+        &host,
+        &serde_json::json!({
+            "url": server.url("/"),
+            "secret": "someone-else",
+            "header": "x-api-key",
+        }),
+    )
+    .unwrap_err();
+    assert!(error.contains("not among the secrets"), "{error}");
+    let error = fetch(&host, &serde_json::json!({ "url": server.url("/big") })).unwrap_err();
+    assert!(error.contains("larger than 8 MiB"), "{error}");
+    assert!(other.seen().is_empty());
+    assert_eq!(server.seen().len(), 1, "only /big reached the server");
+    assert!(active(&state(&host, "fetcher")), "a refusal is no crash");
+}
+
+#[test]
+fn net_needs_its_grant_and_waiting_for_the_network_counts_against_no_deadline() {
+    let server = TestServer::start();
+    let setup = Setup::new(&["fetcher"]);
+    let host = setup.host(|_| {});
+    host.load_all(&grants(&[("fetcher", &["cmd:register"])]));
+    assert_eq!(
+        state(&host, "fetcher"),
+        PluginState::NeedsReview {
+            missing: vec!["net".to_owned()]
+        }
+    );
+    drop(host);
+
+    let host = fetcher(&setup, &server, |config| {
+        config.call_timeout = Duration::from_secs(1);
+    });
+    let answer = fetch(&host, &serde_json::json!({ "url": server.url("/slow") })).unwrap();
+    assert_eq!(answer["body"], "slow but here");
+    let error = fetch(
+        &host,
+        &serde_json::json!({ "url": server.url("/slow"), "timeout_ms": 200 }),
+    )
+    .unwrap_err();
+    assert!(error.contains("failed"), "{error}");
+    assert!(active(&state(&host, "fetcher")));
 }

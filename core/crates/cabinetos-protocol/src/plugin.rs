@@ -72,6 +72,13 @@ pub struct CapabilityInfo {
     /// The folders it concerns, for `fs:read` and `fs:write`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roots: Vec<String>,
+    /// The hosts it may reach, for `net` (protocol 13).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hosts: Vec<String>,
+    /// The secrets the core may put into its requests, for `net`
+    /// (protocol 13).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<String>,
 }
 
 /// How much a capability lets a plugin do, as the review dialog colors it.

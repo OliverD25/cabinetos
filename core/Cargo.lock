@@ -373,6 +373,8 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "ureq",
+ "url",
  "wasmtime",
  "wasmtime-wasi",
 ]

@@ -91,6 +91,17 @@ impl Core {
 /// Starts a core with copies of the fixture `plugins` and `config` as its
 /// configuration file.
 fn start_core(plugins: &[&str], config: &Value) -> Core {
+    start_core_with(plugins, config, &[], |_| {})
+}
+
+/// `start_core` with extra environment variables, and `prepare` run on the
+/// plugins folder before the core starts.
+fn start_core_with(
+    plugins: &[&str],
+    config: &Value,
+    env: &[(&str, &str)],
+    prepare: impl FnOnce(&Path),
+) -> Core {
     let dir = scratch("plugins");
     for id in plugins {
         let to = dir.path().join("plugins").join(id);
@@ -99,6 +110,7 @@ fn start_core(plugins: &[&str], config: &Value) -> Core {
             fs::copy(fixtures().join(id).join(file), to.join(file)).unwrap();
         }
     }
+    prepare(&dir.path().join("plugins"));
     let config_path = dir.path().join("cabinetos.json");
     fs::write(&config_path, serde_json::to_string_pretty(config).unwrap()).unwrap();
     let pipe = PipeName::random();
@@ -118,6 +130,7 @@ fn start_core(plugins: &[&str], config: &Value) -> Core {
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
+        .envs(env.iter().copied())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -416,7 +429,7 @@ async fn grants_and_saved_settings_take_effect_without_a_restart() {
         plugin_id: plugin.to_owned(),
         capabilities: vec![capability.to_owned()],
     };
-    let (error_code, message) = error_of(ask(&mut client, refused("hello", "net")).await);
+    let (error_code, message) = error_of(ask(&mut client, refused("hello", "process:run")).await);
     assert_eq!(error_code, ErrorCode::PluginError);
     assert!(message.contains("never granted"), "{message}");
     let (error_code, _) = error_of(ask(&mut client, refused("nobody", "cmd:register")).await);
@@ -619,5 +632,106 @@ async fn a_reader_is_told_about_listings_of_its_folder() {
             .iter()
             .any(|line| line["message"] == told.as_str() && line["plugin_id"] == "reader"),
         "no `{told}` in the log"
+    );
+}
+
+/// Answers one web request on a free port of 127.0.0.1 with a short text,
+/// and hands back what it got, head and body.
+fn one_request_server() -> (u16, std::thread::JoinHandle<String>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut head = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            assert_eq!(
+                stream.read(&mut byte).unwrap(),
+                1,
+                "the request ended early"
+            );
+            head.push(byte[0]);
+        }
+        let answer = "hello from the test server";
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
+            answer.len()
+        )
+        .unwrap();
+        String::from_utf8(head).unwrap()
+    });
+    (port, server)
+}
+
+#[tokio::test]
+async fn a_plugin_reaches_its_host_with_a_secret_from_the_credential_manager() {
+    let (port, server) = one_request_server();
+    let prefix = format!("CabinetOS-test-{}-{}/", std::process::id(), line!());
+    let secret = "sk-test-NET-DO-NOT-LOG-41d8";
+    let mut core = start_core_with(
+        &["fetcher"],
+        &grants(&[("fetcher", &["cmd:register", "net"])]),
+        &[
+            ("CABINETOS_SECRETS_PREFIX", prefix.as_str()),
+            // The most detailed log: the value must not reach even a trace line.
+            ("CABINETOS_LOG", "trace"),
+        ],
+        |plugins| {
+            let path = plugins.join("fetcher").join("plugin.json");
+            let mut manifest: Value =
+                serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            manifest["capabilities"][1]["hosts"] = json!([format!("127.0.0.1:{port}")]);
+            fs::write(&path, manifest.to_string()).unwrap();
+        },
+    );
+    let (mut client, _events) = greeted(&core).await;
+    wait_state(&mut client, "fetcher", active).await;
+    let set = Request::SecretSet {
+        name: "fetcher-test".to_owned(),
+        value: cabinetos_protocol::SecretText(secret.to_owned()),
+    };
+    assert_eq!(ask(&mut client, set).await, Response::Ok);
+
+    let reply = ask(
+        &mut client,
+        exec(
+            "fetcher.get",
+            json!({
+                "url": format!("http://127.0.0.1:{port}/v1/models"),
+                "secret": "fetcher-test",
+                "header": "x-api-key",
+            }),
+        ),
+    )
+    .await;
+    let delete = Request::SecretDelete {
+        name: "fetcher-test".to_owned(),
+    };
+    assert_eq!(ask(&mut client, delete).await, Response::Ok);
+    core.stop(&mut client).await;
+
+    let Response::CommandResult { result } = reply else {
+        panic!("{reply:?}")
+    };
+    assert_eq!(result["status"], 200);
+    assert_eq!(result["body"], "hello from the test server");
+    assert!(!result.to_string().contains(secret), "{result}");
+    let head = server.join().unwrap();
+    assert!(head.starts_with("GET /v1/models HTTP/1.1\r\n"), "{head}");
+    assert!(head.contains(&format!("x-api-key: {secret}\r\n")), "{head}");
+    let lines = core.log_lines();
+    let request = lines
+        .iter()
+        .find(|line| line["message"] == "web request")
+        .expect("no `web request` line in the log");
+    assert_eq!(request["plugin_id"], "fetcher", "{request}");
+    assert_eq!(request["fields"]["host"], "127.0.0.1", "{request}");
+    assert_eq!(request["fields"]["status"], 200, "{request}");
+    assert_eq!(request["fields"]["bytes"], 26, "{request}");
+    assert!(
+        lines.iter().all(|line| !line.to_string().contains(secret)),
+        "the secret reached the log"
     );
 }

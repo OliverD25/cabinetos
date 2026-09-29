@@ -115,6 +115,13 @@
       "description": "A capability a plugin asks for, as the index lists it.",
       "type": "object",
       "properties": {
+        "hosts": {
+          "description": "The hosts it may reach, for `net`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "level": {
           "description": "How much it lets the plugin do. The core fills it in; an index\nleaves it out.",
           "anyOf": [
@@ -136,6 +143,13 @@
         },
         "roots": {
           "description": "The folders it concerns, for `fs:read` and `fs:write`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "secrets": {
+          "description": "The secrets the core may put into its requests, for `net`.",
           "type": "array",
           "items": {
             "type": "string"

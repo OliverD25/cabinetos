@@ -137,6 +137,12 @@ pub struct MarketCapability {
     /// The folders it concerns, for `fs:read` and `fs:write`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roots: Vec<String>,
+    /// The hosts it may reach, for `net`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hosts: Vec<String>,
+    /// The secrets the core may put into its requests, for `net`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<String>,
     /// How much it lets the plugin do. The core fills it in; an index
     /// leaves it out.
     #[serde(default, skip_serializing_if = "Option::is_none")]

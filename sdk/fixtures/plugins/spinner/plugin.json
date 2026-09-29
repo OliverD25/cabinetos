@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "author": "CabinetOS tests",
   "description": "A test fixture whose commands never end.",
-  "apiVersion": "0.1.0",
+  "apiVersion": "0.2.0",
   "minCoreVersion": "0.1.0",
   "capabilities": [
     {

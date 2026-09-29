@@ -20,6 +20,10 @@ thiserror.workspace = true
 # Only for the AsyncWrite trait WASI's output streams implement.
 tokio.workspace = true
 tracing.workspace = true
+# `http-request`: the marketplace's stack, rustls on ring with the Windows
+# certificate store (rustls-platform-verifier).
+ureq = { workspace = true, features = ["rustls-no-provider", "_ring", "platform-verifier"] }
+url.workspace = true
 # The component model, compiled with Cranelift; backtraces with symbol names
 # for the trap log. No wasmtime cache, no GC proposals, no profiling.
 wasmtime = { workspace = true, features = [

@@ -230,7 +230,7 @@ fn plugins_commands_and_events_through_the_cli() {
         stderr(&output)
     );
 
-    let output = cli(&core, &["plugins", "grant", "hello", "net"]);
+    let output = cli(&core, &["plugins", "grant", "hello", "process:run"]);
     assert!(!output.status.success());
     assert!(
         stderr(&output).contains("never granted"),

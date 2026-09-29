@@ -92,7 +92,7 @@ its own download and staging folder when it ends, whether it worked or not.
 | `items[].size` | The download's size in bytes, more than 0. A download that grows beyond it is stopped and deleted. |
 | `items[].download` | `url`: an absolute URL, or a path relative to the index; `sha256`: 64 hex digits. |
 | `items[].manifest` | The extension's own manifest: the plugin's `plugin.json`, the tool's `tool.json`, or the theme's header (`id`, `name`, `author`, `version`, `kind`, `accent`). |
-| `items[].capabilities` | For a plugin: the capabilities its `plugin.json` asks for (`name`, `reason`, `roots`). The core adds each one's `level` when it sends the item to a client. |
+| `items[].capabilities` | For a plugin: the capabilities its `plugin.json` asks for (`name`, `reason`, `roots`, and for `net` its `hosts` and `secrets`). The core adds each one's `level` when it sends the item to a client. |
 | `items[].minCoreVersion` | The oldest CabinetOS it runs on, `major.minor.patch`. |
 | `items[].license` | Its license, for example `MIT`. |
 | `items[].installedVersion` | Left out of an index. The core fills it in when it sends the item to a client: the version installed from the marketplace, if one is. |

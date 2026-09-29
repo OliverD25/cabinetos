@@ -30,6 +30,7 @@ mod bindings {
     });
 }
 pub mod manifest;
+mod net;
 mod sandbox;
 mod worker;
 
@@ -130,6 +131,13 @@ pub trait HostServices: Send + Sync {
     fn publish(&self, event: Event);
     /// Replaces the commands a plugin registered (empty: it has none now).
     fn set_commands(&self, plugin_id: &str, plugin_name: &str, commands: &[PluginCommand]);
+    /// The value of a stored secret, for a plugin's `http-request`; it goes
+    /// into a header and never to the plugin. None when there is none (and
+    /// in a core without secrets).
+    fn secret(&self, name: &str) -> Option<String> {
+        let _ = name;
+        None
+    }
 }
 
 /// A command a plugin registered.
@@ -223,6 +231,10 @@ pub(crate) struct Loaded {
     pub(crate) data_dir: PathBuf,
     pub(crate) limits: Limits,
     pub(crate) services: Arc<dyn HostServices>,
+    /// What `http-request` may reach (capability `net`).
+    pub(crate) net: net::NetRules,
+    /// The HTTP client every plugin shares.
+    pub(crate) http: Arc<net::Net>,
 }
 
 /// A running instance's thread, as the host sees it.
@@ -266,6 +278,8 @@ pub(crate) struct HostInner {
     pub(crate) engine: Engine,
     pub(crate) linker: Linker<State>,
     pub(crate) config: HostConfig,
+    /// The HTTP client of `http-request`, shared by every plugin.
+    net: Arc<net::Net>,
     services: Arc<dyn HostServices>,
     slots: Mutex<BTreeMap<String, Slot>>,
     settings: Mutex<BTreeMap<String, PluginSettings>>,
@@ -511,11 +525,18 @@ impl HostInner {
         let mut granted = HashSet::new();
         let mut read_roots = Vec::new();
         let mut write_roots = Vec::new();
+        let mut net_rules = net::NetRules::default();
         for request in &manifest.capabilities {
             let Some(capability) = Capability::parse(&request.name) else {
                 continue;
             };
             granted.insert(capability);
+            if capability == Capability::Net {
+                for host in &request.hosts {
+                    net_rules.hosts.push(manifest::HostRule::parse(host)?);
+                }
+                net_rules.secrets.clone_from(&request.secrets);
+            }
             let roots = match capability {
                 Capability::FsRead => &mut read_roots,
                 Capability::FsWrite => &mut write_roots,
@@ -544,6 +565,8 @@ impl HostInner {
                 memory_bytes: self.config.memory_bytes,
             },
             services: Arc::clone(&self.services),
+            net: net_rules,
+            http: Arc::clone(&self.net),
         })
     }
 }
@@ -606,6 +629,7 @@ impl PluginHost {
             engine,
             linker,
             config,
+            net: Arc::new(net::Net::default()),
             services,
             slots: Mutex::new(BTreeMap::new()),
             settings: Mutex::new(BTreeMap::new()),
@@ -721,6 +745,8 @@ impl PluginHost {
                                 granted: granted.contains(&request.name),
                                 reason: request.reason.clone(),
                                 roots: request.roots.clone(),
+                                hosts: request.hosts.clone(),
+                                secrets: request.secrets.clone(),
                             })
                             .collect(),
                     ),
@@ -882,6 +908,8 @@ impl PluginHost {
         activity: &Activity,
         answer: &mpsc::Receiver<Reply<T>>,
     ) -> Reply<T> {
+        // Time spent waiting for the network (`http-request`) is taken out
+        // of `busy_for`: it counts against no deadline.
         let limit = self.inner.config.call_timeout + STUCK_GRACE;
         loop {
             match answer.recv_timeout(Duration::from_millis(100)) {

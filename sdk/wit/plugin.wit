@@ -1,7 +1,7 @@
 /// The interface between the CabinetOS core and a Core Plugin: a headless
 /// WebAssembly component with no UI (Constitution Articles 8 and 11,
 /// brief §6). The guide is docs/plugins.md.
-package cabinetos:plugin@0.1.0;
+package cabinetos:plugin@0.2.0;
 
 /// The records the core and a plugin exchange.
 interface types {
@@ -80,6 +80,40 @@ interface host {
     /// Sends an event to every connected client as `plugin_event`
     /// (capability `events:emit`); dropped without it.
     emit: func(name: string, payload: string);
+
+    /// A web request the core makes for the plugin (capability `net`).
+    record web-request {
+        /// `GET`, `POST`, `PUT`, `PATCH`, `DELETE` or `HEAD`.
+        method: string,
+        /// `https://…` to a host the plugin's manifest names; plain
+        /// `http://` only to `localhost` and `127.0.0.1`.
+        url: string,
+        /// Header names and values.
+        headers: list<tuple<string, string>>,
+        /// The body to send, if any.
+        body: option<list<u8>>,
+        /// A secret (named in the manifest's `secrets`) the core puts into
+        /// the header `secret-header`; the plugin never sees its value.
+        secret: option<string>,
+        /// `x-api-key`, or `authorization` (the value then gets `Bearer `).
+        secret-header: option<string>,
+        /// The whole request's time limit; 0 or more than 120000 is 120 s.
+        timeout-ms: u32,
+    }
+
+    /// The server's answer.
+    record web-response {
+        status: u16,
+        headers: list<tuple<string, string>>,
+        /// At most 8 MiB; a longer body is an error.
+        body: list<u8>,
+    }
+
+    /// Makes one web request and waits for the whole answer (no streaming).
+    /// An error names what was refused or what failed; a server's error
+    /// status is an answer, not an error. The time it waits does not count
+    /// against the call's deadline.
+    http-request: func(request: web-request) -> result<web-response, string>;
 }
 
 /// A Core Plugin.

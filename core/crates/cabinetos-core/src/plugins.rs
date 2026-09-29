@@ -20,6 +20,7 @@ use crate::settings::{Settings, Snapshot};
 struct Bridge {
     settings: Arc<Settings>,
     events: Arc<EventHub>,
+    secrets: cabinetos_secrets::Secrets,
 }
 
 impl HostServices for Bridge {
@@ -43,6 +44,16 @@ impl HostServices for Bridge {
     fn set_commands(&self, plugin_id: &str, plugin_name: &str, commands: &[PluginCommand]) {
         self.settings
             .set_plugin_commands(plugin_id, plugin_name, commands);
+    }
+
+    fn secret(&self, name: &str) -> Option<String> {
+        match self.secrets.get(name) {
+            Ok(value) => Some(value.expose().to_owned()),
+            Err(error) => {
+                tracing::info!(secret = %name, %error, "a plugin's request names a secret that cannot be read");
+                None
+            }
+        }
     }
 }
 
@@ -71,10 +82,12 @@ pub(crate) fn start(
     settings: &Arc<Settings>,
     events: &Arc<EventHub>,
     jobs: &JobQueueManager,
+    secrets: &cabinetos_secrets::Secrets,
 ) -> Option<Arc<PluginHost>> {
     let bridge = Arc::new(Bridge {
         settings: Arc::clone(settings),
         events: Arc::clone(events),
+        secrets: secrets.clone(),
     });
     tracing::info!(
         plugins_dir = %plugins_dir.display(),
@@ -156,7 +169,7 @@ mod tests {
                 .contains("unknown capability")
         );
         assert!(
-            check_grants(&["net".to_owned()])
+            check_grants(&["process:run".to_owned()])
                 .unwrap_err()
                 .contains("never granted")
         );
