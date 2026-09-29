@@ -249,6 +249,27 @@
       ]
     },
     {
+      "description": "Shows Windows' own property sheet: for one path its sheet, for\nseveral the shell's combined one. The core answers `ok` once the\nshell has it; the sheet stays open until the user closes it.",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "description": "The files and folders, as absolute paths; at least one.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "show_properties"
+        }
+      },
+      "required": [
+        "type",
+        "paths"
+      ]
+    },
+    {
       "description": "Creates a folder; its parent must exist. The core answers `ok`.",
       "type": "object",
       "properties": {

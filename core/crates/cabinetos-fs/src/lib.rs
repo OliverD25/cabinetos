@@ -23,8 +23,9 @@
 //!
 //! [`create_directory`], [`create_file`] and [`rename`] are the changes a
 //! user makes to a folder without a job; [`open_path`] opens a file or
-//! folder with its default application, and [`edit_path`] opens a file for
-//! editing. [`Hydrator`] gives the shell's type
+//! folder with its default application, [`edit_path`] opens a file for
+//! editing, and [`show_properties`] shows Windows' property sheet.
+//! [`Hydrator`] gives the shell's type
 //! names and icons of listed entries; size, times and attributes need no
 //! such step, as they arrive with the listing itself.
 //!
@@ -66,7 +67,7 @@ use cabinetos_protocol::shm::{EntryKind, ListingMeta};
 pub use drives::DriveWatcher;
 pub use error::FsError;
 pub use hydrate::{Hydrator, ICON_SIZES, ICONS_KEPT};
-pub use open::{Editor, edit_path, open_path};
+pub use open::{Editor, edit_path, open_path, show_properties};
 pub use ops::{create_directory, create_file, rename};
 pub use path::verbatim_wide;
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter};

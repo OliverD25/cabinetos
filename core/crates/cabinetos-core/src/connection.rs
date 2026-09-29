@@ -9,7 +9,8 @@
 //!   listing;
 //! - the session loop, which answers quick requests itself and runs slow ones
 //!   (`list_directory`, `describe_entries`, `get_icon`, `volume_info`,
-//!   `list_volumes`, `open_path`, `edit_path`, `create_directory`, `create_file`, `rename`,
+//!   `list_volumes`, `open_path`, `edit_path`, `show_properties`, `create_directory`,
+//!   `create_file`, `rename`,
 //!   `set_value`,
 //!   the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`,
@@ -291,6 +292,7 @@ impl Session {
                 | Request::ListVolumes
                 | Request::OpenPath { .. }
                 | Request::EditPath { .. }
+                | Request::ShowProperties { .. }
                 | Request::CreateDirectory { .. }
                 | Request::CreateFile { .. }
                 | Request::Rename { .. }) => self.file_request(&id, &span, kind, request),
@@ -540,6 +542,21 @@ impl Session {
                     .editor
                     .clone();
                 self.spawn_reply(id, span, kind, move || edit_path(&path, editor));
+            }
+            // The sheet runs on a thread the shell makes in this process,
+            // so it outlives the pool thread that asked for it.
+            Request::ShowProperties { paths } => {
+                if paths.is_empty() {
+                    return Some(protocol_error(
+                        "paths is empty; name at least one file or folder",
+                    ));
+                }
+                if let Some(refusal) = paths.iter().find_map(|path| not_absolute(path)) {
+                    return Some(refusal);
+                }
+                self.spawn_reply(id, span, kind, move || {
+                    answer_fs(cabinetos_fs::show_properties(&paths))
+                });
             }
             // None needs a job: one name, done at once. A watched listing
             // of the folder hears about it from its watcher.

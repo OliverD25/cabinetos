@@ -1,7 +1,8 @@
 //! `cabinetos-cli.exe`: a command-line client for the core's pipe. It lets the
 //! core be tested with no UI: `ping`, `ls` (read from shared memory, as the
 //! UI will), `describe` and `icon` (the shell's type names and icons),
-//! `volume` and `volumes`, `open`, `edit`, `mkdir`, `mkfile` and `rename`, `shutdown`, the
+//! `volume` and `volumes`, `open`, `edit`, `props`, `mkdir`, `mkfile` and `rename`,
+//! `shutdown`, the
 //! configuration (`config`), the command registry (`commands`), the keymap
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
@@ -139,6 +140,14 @@ enum Command {
     Edit {
         /// The file.
         path: String,
+    },
+    /// Show Windows' own property sheet: for one path its sheet, for
+    /// several the combined one. The sheet belongs to the core and stays
+    /// open until you close it.
+    Props {
+        /// The files and folders.
+        #[arg(required = true, value_name = "PATH")]
+        paths: Vec<String>,
     },
     /// Create a folder; its parent must exist.
     Mkdir {
@@ -721,6 +730,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Volume { .. } | Command::Volumes => {
             volume_command(&mut client, &cli.command).await?;
         }
+        Command::Props { paths } => props(&mut client, paths).await?,
         Command::Open { .. }
         | Command::Edit { .. }
         | Command::Mkdir { .. }
@@ -846,6 +856,24 @@ async fn file_command(client: &mut PipeClient, command: &Command) -> anyhow::Res
         Command::Rename { new_name, .. } => say(format_args!("renamed {path} to {new_name}")),
         _ => true,
     };
+    Ok(())
+}
+
+/// `props`: Windows' property sheet of `paths`, shown by the core.
+async fn props(client: &mut PipeClient, paths: &[String]) -> anyhow::Result<()> {
+    let paths: Vec<String> = paths
+        .iter()
+        .map(|path| absolute(path))
+        .collect::<anyhow::Result<_>>()?;
+    let subject = match paths.as_slice() {
+        [path] => path.clone(),
+        _ => format!("{} items", paths.len()),
+    };
+    let reply = send(client, Request::ShowProperties { paths }).await?;
+    if reply.body != Response::Ok {
+        return Err(failure(&subject, &reply.body));
+    }
+    say(format_args!("showing the properties of {subject}"));
     Ok(())
 }
 
@@ -1341,6 +1369,14 @@ mod tests {
             }
         );
         assert!(Cli::try_parse_from(["cabinetos-cli", "edit"]).is_err());
+        let cli = Cli::try_parse_from(["cabinetos-cli", "props", "a.txt", "photos"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Props {
+                paths: vec!["a.txt".to_owned(), "photos".to_owned()]
+            }
+        );
+        assert!(Cli::try_parse_from(["cabinetos-cli", "props"]).is_err());
         let cli = Cli::try_parse_from(["cabinetos-cli", "mkdir", r"E:\new"]).unwrap();
         assert_eq!(
             cli.command,

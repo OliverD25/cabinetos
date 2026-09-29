@@ -31,6 +31,7 @@ windows = { workspace = true, features = [
   "Win32_System_Time",
   "Win32_UI_Controls",
   "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
   "Win32_UI_WindowsAndMessaging",
 ] }
 

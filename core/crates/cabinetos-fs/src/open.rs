@@ -1,8 +1,9 @@
 //! Handing a file or folder to the shell: opening it with its default
 //! application, as a double-click in Explorer does (the last step of
-//! navigation), and opening a file for editing (Total Commander's F4). What
-//! opens it (a viewer, an editor, Explorer for a folder, the program itself
-//! for an `.exe`) is the user's choice in Windows, not the core's.
+//! navigation), opening a file for editing (Total Commander's F4), and
+//! showing Windows' own property sheet. What opens it (a viewer, an editor,
+//! Explorer for a folder, the program itself for an `.exe`) is the user's
+//! choice in Windows, not the core's.
 
 use std::ffi::OsString;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
@@ -11,10 +12,14 @@ use std::path::PathBuf;
 use windows::Win32::Storage::FileSystem::{
     FILE_ATTRIBUTE_DIRECTORY, GetFileAttributesW, INVALID_FILE_ATTRIBUTES,
 };
+use windows::Win32::System::Com::IDataObject;
 use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
+use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    ASSOCF_INIT_IGNOREUNKNOWN, ASSOCSTR_COMMAND, AssocQueryStringW, SEE_MASK_FLAG_NO_UI,
-    SEE_MASK_NO_CONSOLE, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, ShellExecuteExW,
+    ASSOCF_INIT_IGNOREUNKNOWN, ASSOCSTR_COMMAND, AssocQueryStringW, BHID_DataObject, ILFree,
+    SEE_MASK_FLAG_NO_UI, SEE_MASK_INVOKEIDLIST, SEE_MASK_NO_CONSOLE, SEE_MASK_NOASYNC,
+    SHCreateShellItemArrayFromIDLists, SHELLEXECUTEINFOW, SHMultiFileProperties,
+    SHParseDisplayName, ShellExecuteExW,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use windows::core::{PCWSTR, w};
@@ -37,9 +42,70 @@ pub fn open_path(path: &str) -> Result<(), FsError> {
         verb: w!("open"),
         file: &plain,
         parameters: None,
-        own_console: false,
+        mask: 0,
     })
     .map_err(|error| refused(path, &plain, &error))
+}
+
+/// Shows Windows' own property sheet for `paths`, each of which must
+/// exist: for one, the `properties` verb of `ShellExecuteExW`; for several,
+/// the shell's combined sheet (`SHMultiFileProperties`), with what they
+/// have in common. The shell runs the sheet on a thread of its own in this
+/// process, so it stays open after this returns, for as long as the
+/// process lives.
+pub fn show_properties(paths: &[String]) -> Result<(), FsError> {
+    let Some(first) = paths.first() else {
+        return Err(FsError::InvalidPath {
+            path: String::new(),
+            reason: "no file or folder to show".to_owned(),
+        });
+    };
+    for path in paths {
+        existing(path)?;
+    }
+    let _apartment = Apartment::enter();
+    if let [path] = paths {
+        let plain = plain_wide(path)?;
+        return shell_execute(&Launch {
+            verb: w!("properties"),
+            file: &plain,
+            parameters: None,
+            mask: SEE_MASK_INVOKEIDLIST,
+        })
+        .map_err(|error| refused(path, &plain, &error));
+    }
+    let mut items = Items(Vec::with_capacity(paths.len()));
+    for path in paths {
+        let plain = plain_wide(path)?;
+        let mut item = std::ptr::null_mut();
+        // SAFETY: `plain` is NUL-terminated and outlives the call; `item`
+        // is a valid output, and `Items` frees what the shell allocates.
+        unsafe { SHParseDisplayName(PCWSTR(plain.as_ptr()), None, &raw mut item, 0, None) }
+            .map_err(|error| shell_error(path, &error))?;
+        items.0.push(item);
+    }
+    let list: Vec<*const ITEMIDLIST> = items.0.iter().map(|item| item.cast_const()).collect();
+    // SAFETY: every entry is an absolute item ID list from
+    // SHParseDisplayName, alive until `items` drops, after these calls.
+    let sheet = unsafe {
+        SHCreateShellItemArrayFromIDLists(&list)
+            .and_then(|array| array.BindToHandler::<_, IDataObject>(None, &BHID_DataObject))
+            .and_then(|data| SHMultiFileProperties(&data, 0))
+    };
+    sheet.map_err(|error| shell_error(first, &error))
+}
+
+/// Item ID lists the shell allocated, freed when dropped.
+struct Items(Vec<*mut ITEMIDLIST>);
+
+impl Drop for Items {
+    fn drop(&mut self) {
+        for &item in &self.0 {
+            // SAFETY: each came from SHParseDisplayName and is freed once;
+            // nothing uses it after.
+            unsafe { ILFree(Some(item.cast_const())) };
+        }
+    }
 }
 
 /// A program to edit files with: `files.editor`, its program found.
@@ -74,7 +140,7 @@ pub fn edit_path(path: &str, editor: Option<&Editor>) -> Result<(), FsError> {
                 verb: w!("edit"),
                 file: &plain,
                 parameters: None,
-                own_console: true,
+                mask: SEE_MASK_NO_CONSOLE,
             })
             .map_err(|error| refused(path, &plain, &error));
         }
@@ -98,7 +164,7 @@ pub fn edit_path(path: &str, editor: Option<&Editor>) -> Result<(), FsError> {
         verb: w!("open"),
         file: &file,
         parameters: Some(&parameters),
-        own_console: true,
+        mask: SEE_MASK_NO_CONSOLE,
     })
     .map_err(|error| shell_error(&program.program.display().to_string(), &error))
 }
@@ -151,21 +217,19 @@ struct Launch<'a> {
     file: &'a [u16],
     /// The program's arguments, NUL-terminated.
     parameters: Option<&'a [u16]>,
-    /// A console program gets a console of its own instead of sharing the
-    /// core's, which has no window.
-    own_console: bool,
+    /// More `SEE_MASK_` flags. `SEE_MASK_NO_CONSOLE`: a console program
+    /// gets a console of its own instead of sharing the core's, which has
+    /// no window. `SEE_MASK_INVOKEIDLIST`: the verb comes from the item's
+    /// own context menu, which is where `properties` is.
+    mask: u32,
 }
 
 /// Runs `launch` without error dialogs, returning once the shell is done
 /// with it. The caller is in a COM apartment.
 fn shell_execute(launch: &Launch<'_>) -> windows::core::Result<()> {
-    let mut mask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-    if launch.own_console {
-        mask |= SEE_MASK_NO_CONSOLE;
-    }
     let mut info = SHELLEXECUTEINFOW {
         cbSize: u32::try_from(size_of::<SHELLEXECUTEINFOW>()).unwrap_or(u32::MAX),
-        fMask: mask,
+        fMask: SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI | launch.mask,
         lpVerb: launch.verb,
         lpFile: PCWSTR(launch.file.as_ptr()),
         lpParameters: launch
@@ -449,6 +513,98 @@ mod tests {
         assert!(!has_edit_verb(r"C:\work\trailing."));
         assert_eq!(extension(r"C:\a.b\.gitignore"), Some(".gitignore"));
         assert_eq!(extension(r"C:\a.b\c.tar.gz"), Some(".gz"));
+    }
+
+    /// The dialogs (window class `#32770`, as a property sheet is) this
+    /// process shows now.
+    fn sheets() -> Vec<isize> {
+        use windows::Win32::Foundation::{HWND, LPARAM};
+        use windows::Win32::System::Threading::GetCurrentProcessId;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, GetClassNameW, GetWindowThreadProcessId, IsWindowVisible,
+        };
+        use windows::core::BOOL;
+
+        unsafe extern "system" fn collect(window: HWND, found: LPARAM) -> BOOL {
+            let mut process = 0;
+            let mut class = [0u16; 16];
+            // SAFETY: `window` came from EnumWindows; the outputs are valid
+            // and the binding passes the buffer's length.
+            let (length, visible) = unsafe {
+                GetWindowThreadProcessId(window, Some(&raw mut process));
+                (GetClassNameW(window, &mut class), IsWindowVisible(window))
+            };
+            let dialog = usize::try_from(length)
+                .is_ok_and(|length| String::from_utf16_lossy(&class[..length]) == "#32770");
+            // SAFETY: a plain call.
+            if dialog && visible.as_bool() && process == unsafe { GetCurrentProcessId() } {
+                // SAFETY: `found` is the vector `sheets` lent for this
+                // enumeration, which runs on this thread.
+                let found = unsafe { &mut *(found.0 as *mut Vec<isize>) };
+                found.push(window.0 as isize);
+            }
+            BOOL::from(true)
+        }
+
+        let mut found: Vec<isize> = Vec::new();
+        // SAFETY: `collect` only reads windows and writes into `found`,
+        // which outlives the enumeration.
+        let _ = unsafe { EnumWindows(Some(collect), LPARAM(&raw mut found as isize)) };
+        found
+    }
+
+    /// What `probe` finds within 10 s.
+    fn within_ten_seconds<T>(what: &str, mut probe: impl FnMut() -> Option<T>) -> T {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            if let Some(found) = probe() {
+                return found;
+            }
+            assert!(std::time::Instant::now() < deadline, "{what}");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
+    /// The sheet comes up for one file and for several, stays open after
+    /// the thread that asked for it ended (as a pool thread of the core
+    /// may), and the test closes it.
+    #[test]
+    fn the_property_sheet_shows_one_file_or_several_and_outlives_its_caller() {
+        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+
+        let dir = scratch("properties");
+        let a = dir.path().join("a.txt");
+        let b = dir.path().join("Звіт b.txt");
+        std::fs::write(&a, "a").unwrap();
+        std::fs::write(&b, "b").unwrap();
+        let text = |path: &std::path::Path| path.to_str().unwrap().to_owned();
+        let missing = [text(&a), text(&dir.path().join("gone.txt"))];
+        let error = show_properties(&missing).unwrap_err();
+        assert!(matches!(error, FsError::NotFound { .. }), "{error:?}");
+        let error = show_properties(&[]).unwrap_err();
+        assert!(matches!(error, FsError::InvalidPath { .. }), "{error:?}");
+        assert!(sheets().is_empty(), "a refusal showed a sheet");
+
+        for paths in [vec![text(&a)], vec![text(&a), text(&b), text(dir.path())]] {
+            let before = sheets();
+            std::thread::spawn(move || show_properties(&paths))
+                .join()
+                .unwrap()
+                .unwrap();
+            let sheet = within_ten_seconds("no sheet came up", || {
+                sheets().into_iter().find(|sheet| !before.contains(sheet))
+            });
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            assert!(sheets().contains(&sheet), "the sheet closed by itself");
+            // SAFETY: a plain call; the window may be gone already, which
+            // makes it fail and nothing else.
+            unsafe { PostMessageW(Some(HWND(sheet as _)), WM_CLOSE, WPARAM(0), LPARAM(0)) }
+                .unwrap();
+            within_ten_seconds("the sheet did not close", || {
+                (!sheets().contains(&sheet)).then_some(())
+            });
+        }
     }
 
     #[test]

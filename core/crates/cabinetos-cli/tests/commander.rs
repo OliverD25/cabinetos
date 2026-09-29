@@ -217,3 +217,32 @@ fn edit_starts_the_configured_editor_with_the_file_last() {
     );
     assert!(!marker.exists(), "the edited script ran");
 }
+
+/// `props` asks the core for Windows' property sheet, of one path or of
+/// several. The sheets belong to the core, so they close when the test
+/// ends the core, right after; the fs crate's test finds a sheet's window
+/// and closes it itself.
+#[test]
+fn props_shows_the_sheet_and_refuses_what_is_not_there() {
+    let core = start_core();
+    let dir = scratch("props");
+    let a = dir.path().join("a.txt");
+    let b = dir.path().join("Звіт b.txt");
+    std::fs::write(&a, "a").unwrap();
+    std::fs::write(&b, "b").unwrap();
+    let gone = dir.path().join("gone.txt");
+
+    let missing = stderr(&cli(&core, &["props", &shown(&a), &shown(&gone)]));
+    assert!(missing.contains("not_found"), "{missing}");
+    assert_eq!(
+        stdout(&cli(&core, &["props", &shown(&a)])),
+        format!("showing the properties of {}\n", shown(&a))
+    );
+    assert_eq!(
+        stdout(&cli(
+            &core,
+            &["props", &shown(&a), &shown(&b), &shown(dir.path())]
+        )),
+        "showing the properties of 3 items\n"
+    );
+}

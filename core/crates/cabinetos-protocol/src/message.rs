@@ -122,6 +122,13 @@ pub enum Request {
         /// The file, as an absolute path.
         path: String,
     },
+    /// Shows Windows' own property sheet: for one path its sheet, for
+    /// several the shell's combined one. The core answers `ok` once the
+    /// shell has it; the sheet stays open until the user closes it.
+    ShowProperties {
+        /// The files and folders, as absolute paths; at least one.
+        paths: Vec<String>,
+    },
     /// Creates a folder; its parent must exist. The core answers `ok`.
     CreateDirectory {
         /// The new folder, as an absolute path.
@@ -381,6 +388,7 @@ impl Request {
         "list_volumes",
         "open_path",
         "edit_path",
+        "show_properties",
         "create_directory",
         "create_file",
         "rename",
@@ -432,6 +440,7 @@ impl Request {
             Self::ListVolumes => "list_volumes",
             Self::OpenPath { .. } => "open_path",
             Self::EditPath { .. } => "edit_path",
+            Self::ShowProperties { .. } => "show_properties",
             Self::CreateDirectory { .. } => "create_directory",
             Self::CreateFile { .. } => "create_file",
             Self::Rename { .. } => "rename",
@@ -1371,6 +1380,12 @@ mod tests {
             },
             Request::EditPath {
                 path: r"C:\Users\me\build.cmd".to_owned(),
+            },
+            Request::ShowProperties {
+                paths: vec![
+                    r"C:\Users\me\notes.txt".to_owned(),
+                    r"C:\Users\me\photos".to_owned(),
+                ],
             },
             Request::CreateDirectory {
                 path: r"C:\Users\me\New folder".to_owned(),
