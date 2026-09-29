@@ -184,9 +184,31 @@ public sealed partial class FilePane : UserControl
         RenameBox.Visibility = Visibility.Visible;
         HideClearButton();
         PositionEditors();
-        RenameBox.Focus(FocusState.Programmatic);
+        FocusRenameBox(pending, name);
         RenameBox.Select(0, DisplayFormat.RenameStem(name, isFolder: !selectStem));
         return pending.Task;
+    }
+
+    /// <summary>
+    /// Gives the name box the keyboard. Focus can be refused while the box,
+    /// just shown, has not been laid out; then it is asked again after the
+    /// next layout pass. The log says which it was ("rename box shown"), and
+    /// the live check types only after that line.
+    /// </summary>
+    private void FocusRenameBox(TaskCompletionSource<string?> pending, string name)
+    {
+        var focused = RenameBox.Focus(FocusState.Programmatic);
+        if (!focused)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_rename == pending && RenameBox.Visibility == Visibility.Visible)
+                {
+                    RenameBox.Focus(FocusState.Programmatic);
+                }
+            });
+        }
+        Diag.Info(Target, "rename box shown", new LogField("name", name), new LogField("focused", focused));
     }
 
     /// <summary>
@@ -210,7 +232,7 @@ public sealed partial class FilePane : UserControl
         HideClearButton();
         UpdateLayout();
         PositionEditors();
-        RenameBox.Focus(FocusState.Programmatic);
+        FocusRenameBox(pending, name);
         RenameBox.Select(0, DisplayFormat.RenameStem(name, isFolder: false));
         return pending.Task;
     }

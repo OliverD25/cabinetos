@@ -2480,7 +2480,15 @@ public sealed partial class MainWindow : Window
             // Folders have no size in the listing: the files' bytes are added up, and a folder's once measured.
             _ => anyFile ? $"{count:N0} selected, {DisplayFormat.Bytes(bytes)}" : $"{count:N0} selected",
         };
+        if (SelectionText.Text != _selectionShown)
+        {
+            _selectionShown = SelectionText.Text;
+            // What the status bar says about the selection, for the live checks that read it.
+            Diag.Info(Target, "selection shown", new LogField("text", _selectionShown));
+        }
     }
+
+    private string _selectionShown = "";
 
     private void UpdateNavigationButtons()
     {
