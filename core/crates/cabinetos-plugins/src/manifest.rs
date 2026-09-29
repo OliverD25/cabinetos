@@ -97,6 +97,8 @@ pub enum Capability {
     ConfigRead,
     /// Send events to the connected clients.
     EventsEmit,
+    /// Watch folders under its `roots` for changes (`watch-folder`).
+    FsWatch,
     /// See every job before it starts, and stop it.
     JobsIntercept,
     /// Start programs. Never granted in this version.
@@ -110,12 +112,13 @@ pub enum Capability {
 
 impl Capability {
     /// Every capability, in the order the review dialog lists them.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::CmdRegister,
         Self::ConfigRead,
         Self::EventsEmit,
         Self::FsRead,
         Self::FsWrite,
+        Self::FsWatch,
         Self::JobsIntercept,
         Self::ProcessRun,
         Self::Net,
@@ -129,6 +132,7 @@ impl Capability {
             Self::CmdRegister => "cmd:register",
             Self::FsRead => "fs:read",
             Self::FsWrite => "fs:write",
+            Self::FsWatch => "fs:watch",
             Self::ConfigRead => "config:read",
             Self::EventsEmit => "events:emit",
             Self::JobsIntercept => "jobs:intercept",
@@ -151,9 +155,11 @@ impl Capability {
     pub const fn level(self) -> CapabilityLevel {
         match self {
             Self::CmdRegister | Self::ConfigRead | Self::EventsEmit => CapabilityLevel::Low,
-            Self::FsRead | Self::FsWrite | Self::JobsIntercept | Self::ProcessRun => {
-                CapabilityLevel::Medium
-            }
+            Self::FsRead
+            | Self::FsWrite
+            | Self::FsWatch
+            | Self::JobsIntercept
+            | Self::ProcessRun => CapabilityLevel::Medium,
             Self::Net | Self::Credentials => CapabilityLevel::High,
         }
     }
@@ -161,7 +167,7 @@ impl Capability {
     /// Whether it names folders (`roots`).
     #[must_use]
     pub const fn takes_roots(self) -> bool {
-        matches!(self, Self::FsRead | Self::FsWrite)
+        matches!(self, Self::FsRead | Self::FsWrite | Self::FsWatch)
     }
 
     /// Whether it names hosts (`hosts`, and optionally `secrets`).

@@ -83,7 +83,7 @@ pub use pattern::{NamePatterns, match_entries};
 pub use preview::{PreviewEntry, PreviewWriter};
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter, PreviewView};
 pub use system::windows_build;
-pub use watch::{DirectoryChanged, DirectoryWatcher};
+pub use watch::{DetailedChange, DirectoryChanged, DirectoryWatcher, EntryChange, EntryChangeKind};
 
 /// The default buffer for one `NtQueryDirectoryFile` call: 256 KiB. NTFS
 /// fills at most about 64 KiB of it per call (about 580 entries of typical

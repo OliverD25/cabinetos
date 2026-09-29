@@ -1,0 +1,40 @@
+{
+  "id": "watcher",
+  "name": "Watcher",
+  "version": "0.1.0",
+  "author": "CabinetOS tests",
+  "description": "A test fixture that watches folders and passes each change on as an event.",
+  "apiVersion": "0.2.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "cmd:register",
+      "reason": "Adds the Watch and Unwatch commands."
+    },
+    {
+      "name": "events:emit",
+      "reason": "Passes each change on to the window."
+    },
+    {
+      "name": "fs:watch",
+      "roots": [
+        "%TEMP%\\cabinetos-plugins-test\\watcher"
+      ],
+      "reason": "Watches its test folder for new and changed files."
+    }
+  ],
+  "commands": [
+    {
+      "id": "watcher.watch",
+      "title": "Watch a Folder",
+      "category": "Watcher",
+      "defaultKeys": []
+    },
+    {
+      "id": "watcher.unwatch",
+      "title": "Stop Watching a Folder",
+      "category": "Watcher",
+      "defaultKeys": []
+    }
+  ]
+}

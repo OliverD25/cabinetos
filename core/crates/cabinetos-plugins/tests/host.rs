@@ -1,8 +1,8 @@
 //! The plugin host against the committed fixture plugins
 //! (`sdk/fixtures/plugins`, built by `sdk/templates/build-fixtures.ps1`):
 //! manifests, capability gating, crashes, deadlines, fuel, memory, job
-//! judging, and web requests to a test server on this computer. No
-//! WebAssembly toolchain is needed to run these.
+//! judging, web requests to a test server on this computer, and folder
+//! watching. No WebAssembly toolchain is needed to run these.
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -723,4 +723,170 @@ fn net_needs_its_grant_and_waiting_for_the_network_counts_against_no_deadline() 
     .unwrap_err();
     assert!(error.contains("failed"), "{error}");
     assert!(active(&state(&host, "fetcher")));
+}
+
+/// The watcher fixture, allowed to watch `root` only.
+fn watcher(setup: &Setup, root: &Path) -> PluginHost {
+    let root = root.display().to_string();
+    setup.edit_manifest("watcher", |manifest| {
+        manifest["capabilities"][2]["roots"] = serde_json::json!([root]);
+    });
+    let host = setup.host(|_| {});
+    host.load_all(&grants(&[(
+        "watcher",
+        &["cmd:register", "events:emit", "fs:watch"],
+    )]));
+    wait_until(&host, "watcher", active);
+    host
+}
+
+/// The `folder-changed` payloads the watcher passed on so far.
+fn folder_changes(recorder: &Recorder) -> Vec<serde_json::Value> {
+    recorder
+        .events()
+        .into_iter()
+        .filter_map(|event| match event {
+            Event::PluginEvent { name, payload, .. } if name == "folder-changed" => {
+                Some(serde_json::from_str(&payload).unwrap())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every change in `messages`, as (kind, path, old path).
+fn changes_in(messages: &[serde_json::Value]) -> Vec<(String, String, Option<String>)> {
+    messages
+        .iter()
+        .flat_map(|message| message["changes"].as_array().unwrap().clone())
+        .map(|change| {
+            (
+                change["kind"].as_str().unwrap().to_owned(),
+                change["path"].as_str().unwrap().to_owned(),
+                change["old_path"].as_str().map(str::to_owned),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_watched_folder_s_changes_arrive_gathered_and_only_under_the_roots() {
+    let setup = Setup::new(&["watcher"]);
+    let root = setup.temp.path().join("watched");
+    std::fs::create_dir_all(root.join("sub")).unwrap();
+    let host = watcher(&setup, &root);
+    let watch = |path: &str| {
+        host.execute(
+            "watcher",
+            "watcher.watch",
+            &serde_json::json!({ "path": path }).to_string(),
+        )
+    };
+
+    let outside = watch(&setup.temp.path().display().to_string()).unwrap_err();
+    assert!(outside.message.contains("not under a folder"), "{outside}");
+    let dots = watch(&format!(r"{}\sub\..\..", root.display())).unwrap_err();
+    assert!(dots.message.contains("`..`"), "{dots}");
+    let answer: serde_json::Value =
+        serde_json::from_str(&watch(&root.display().to_string()).unwrap()).unwrap();
+    assert_eq!(
+        answer["roots"],
+        serde_json::json!([root.display().to_string()])
+    );
+    // The sandbox form names the same folder: still one watch.
+    let guest = format!("/{}", root.display().to_string().replace('\\', "/"));
+    watch(&guest).unwrap();
+
+    std::fs::write(root.join("a.txt"), "one").unwrap();
+    std::fs::rename(root.join("a.txt"), root.join("b.txt")).unwrap();
+    std::fs::remove_file(root.join("b.txt")).unwrap();
+    // A burst: many changes, a few messages.
+    let burst = Instant::now();
+    for n in 0..40 {
+        std::fs::write(root.join(format!("burst-{n}.txt")), "x").unwrap();
+    }
+    let burst = burst.elapsed();
+
+    let at = |name: &str| root.join(name).display().to_string();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let messages = loop {
+        let messages = folder_changes(&setup.recorder);
+        let changes = changes_in(&messages);
+        if changes
+            .iter()
+            .any(|(kind, path, _)| kind == "created" && *path == at("burst-39.txt"))
+        {
+            break messages;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the changes did not come: {changes:?}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let changes = changes_in(&messages);
+    let first_three: Vec<_> = changes
+        .iter()
+        .filter(|(kind, _, _)| kind != "modified")
+        .take(3)
+        .cloned()
+        .collect();
+    assert_eq!(
+        first_three,
+        [
+            ("created".to_owned(), at("a.txt"), None),
+            ("renamed".to_owned(), at("b.txt"), Some(at("a.txt"))),
+            ("removed".to_owned(), at("b.txt"), None),
+        ]
+    );
+    assert!(
+        messages
+            .iter()
+            .all(|message| message["path"] == root.display().to_string()
+                && message["overflow"] == false),
+        "{messages:?}"
+    );
+    // At most one message per 200 ms: the burst took `burst`, so it cannot
+    // have more messages than 200 ms windows, plus the first one's.
+    let allowed = usize::try_from(burst.as_millis() / 200).unwrap() + 2;
+    assert!(
+        messages.len() <= allowed,
+        "{} messages for a burst of {burst:?}",
+        messages.len()
+    );
+
+    host.execute(
+        "watcher",
+        "watcher.unwatch",
+        &serde_json::json!({ "path": root.display().to_string() }).to_string(),
+    )
+    .unwrap();
+    let before = folder_changes(&setup.recorder).len();
+    std::fs::write(root.join("after.txt"), "x").unwrap();
+    std::thread::sleep(Duration::from_millis(600));
+    assert_eq!(folder_changes(&setup.recorder).len(), before, "unwatched");
+}
+
+#[test]
+fn watches_end_with_the_plugin() {
+    let setup = Setup::new(&["watcher"]);
+    let root = setup.temp.path().join("watched");
+    std::fs::create_dir_all(&root).unwrap();
+    let host = watcher(&setup, &root);
+    host.execute(
+        "watcher",
+        "watcher.watch",
+        &serde_json::json!({ "path": root.display().to_string() }).to_string(),
+    )
+    .unwrap();
+    let mut off = grants(&[("watcher", &["cmd:register", "events:emit", "fs:watch"])]);
+    off.get_mut("watcher").unwrap().enabled = false;
+    host.apply_settings(&off);
+    assert_eq!(state(&host, "watcher"), PluginState::Disabled);
+    std::thread::sleep(Duration::from_millis(300));
+    std::fs::write(root.join("late.txt"), "x").unwrap();
+    std::thread::sleep(Duration::from_millis(600));
+    assert!(folder_changes(&setup.recorder).is_empty());
+    // The folder was never locked by the watch.
+    std::fs::remove_dir_all(&root).unwrap();
 }

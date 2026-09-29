@@ -735,3 +735,50 @@ async fn a_plugin_reaches_its_host_with_a_secret_from_the_credential_manager() {
         "the secret reached the log"
     );
 }
+
+#[tokio::test]
+async fn a_plugin_hears_about_changes_in_a_folder_it_watches() {
+    let watched = scratch("watched");
+    let root = watched.path().display().to_string();
+    let core = start_core_with(
+        &["watcher"],
+        &grants(&[("watcher", &["cmd:register", "events:emit", "fs:watch"])]),
+        &[],
+        |plugins| {
+            let path = plugins.join("watcher").join("plugin.json");
+            let mut manifest: Value =
+                serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            manifest["capabilities"][2]["roots"] = json!([root]);
+            fs::write(&path, manifest.to_string()).unwrap();
+        },
+    );
+    let (mut client, mut events) = greeted(&core).await;
+    wait_state(&mut client, "watcher", active).await;
+    let reply = ask(
+        &mut client,
+        exec("watcher.watch", json!({ "path": root.as_str() })),
+    )
+    .await;
+    assert!(matches!(reply, Response::CommandResult { .. }), "{reply:?}");
+    fs::write(watched.path().join("new.txt"), "x").unwrap();
+
+    let event = next_event(
+        &mut events,
+        |event| matches!(event, Event::PluginEvent { name, .. } if name == "folder-changed"),
+    )
+    .await;
+    let Event::PluginEvent {
+        plugin_id, payload, ..
+    } = event
+    else {
+        unreachable!()
+    };
+    assert_eq!(plugin_id, "watcher");
+    let payload: Value = serde_json::from_str(&payload).unwrap();
+    assert_eq!(payload["path"], root.as_str());
+    assert_eq!(payload["changes"][0]["kind"], "created", "{payload}");
+    assert_eq!(
+        payload["changes"][0]["path"],
+        watched.path().join("new.txt").display().to_string()
+    );
+}

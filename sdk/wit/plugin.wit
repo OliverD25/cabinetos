@@ -25,6 +25,9 @@ interface types {
         read-roots: list<string>,
         /// Folders the plugin may read and write (capability `fs:write`).
         write-roots: list<string>,
+        /// Folders the plugin may watch (capability `fs:watch`), as Windows
+        /// paths (`C:\a\b`): watching gives no right to read.
+        watch-roots: list<string>,
     }
 
     /// What a job does.
@@ -114,6 +117,17 @@ interface host {
     /// status is an answer, not an error. The time it waits does not count
     /// against the call's deadline.
     http-request: func(request: web-request) -> result<web-response, string>;
+
+    /// Starts watching a folder, not its subfolders, under one of the
+    /// plugin's `fs:watch` roots (capability `fs:watch`). `path` is a
+    /// Windows path (`C:\a\b`) or its sandbox form (`/C:/a/b`). Changes
+    /// arrive through `on-event` as `folder-changed`, at most one message
+    /// per 200 ms per folder. Watching a folder twice is one watch; at most
+    /// 16 folders at once. Every watch ends with the plugin's instance.
+    watch-folder: func(path: string) -> result<_, string>;
+
+    /// Stops watching the folder; nothing happens when it is not watched.
+    unwatch-folder: func(path: string);
 }
 
 /// A Core Plugin.
@@ -136,4 +150,9 @@ world core-plugin {
     /// pane. `path` is as the plugin sees it (`/C:/...`), ready for its own
     /// file calls. A notification: nothing is returned.
     export on-listing-opened: func(path: string, entry-count: u32);
+    /// Something the plugin asked to hear about happened: `name` says
+    /// what, `payload` is JSON. `folder-changed` for a folder it watches,
+    /// `folder-unwatched` when a watch ended by itself (docs/plugins.md,
+    /// "Watching folders"). A notification: nothing is returned.
+    export on-event: func(name: string, payload: string);
 }

@@ -110,7 +110,7 @@ level.
 | `request payload` | `heavy::core` | `payload`: the request as it came over the pipe; `truncated: true` when it was cut | the core, inside the request's span |
 | `reply payload` | `heavy::core` | `payload`: the reply as sent; `truncated` | the core, inside the request's span |
 | `entry done` | `heavy::jobs` | `job_id`, `kind` (`file`, `folder`, `rename`, `delete`, `recycle`), `from`, `to` (where the plan puts it; empty for deletes), `bytes`, `ms`, `outcome` (`done`, `skipped`, `failed`, `conflict`, `held`, …) | the job's threads, one line per piece of work, with the job's trace |
-| `host call` | `heavy::plugins` | `function` (`register-command`, `log`, `config-get`, `emit`, `http-request`), `args` (JSON, at most 4 KB; for `http-request` the header names only, never their values, and the body's size, never the body), `truncated`, `ms` | the plugin's thread, with the caller's trace |
+| `host call` | `heavy::plugins` | `function` (`register-command`, `log`, `config-get`, `emit`, `http-request`, `watch-folder`, `unwatch-folder`), `args` (JSON, at most 4 KB; for `http-request` the header names only, never their values, and the body's size, never the body), `truncated`, `ms` | the plugin's thread, with the caller's trace |
 | `http request` | `heavy::market` | `host`, `method`, `status` (0: no answer), `bytes`, `ms`; never headers or bodies | the marketplace's index and download requests |
 
 A payload is at most 64 KB; the rest is cut and the line gets

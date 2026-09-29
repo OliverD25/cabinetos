@@ -68,6 +68,8 @@ impl Guest for Reader {
     fn on_listing_opened(path: String, entry_count: u32) {
         host::log(LogLevel::Info, &format!("a pane opened {path} with {entry_count} entries"));
     }
+
+    fn on_event(_name: String, _payload: String) {}
 }
 
 export!(Reader);

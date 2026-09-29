@@ -17,6 +17,7 @@ use crate::bindings::cabinetos::plugin::types;
 use crate::bindings::{Activation, CorePlugin, JobSummary, JobVerdict};
 use crate::manifest::Capability;
 use crate::sandbox::{self, Limiter, LineLog, Mounts, Stream};
+use crate::watch::{Notifier, Watches};
 use crate::{HostInner, Loaded, PluginCommand};
 
 /// A call for the instance. `cause` is the caller's span: the call runs
@@ -42,6 +43,13 @@ pub(crate) enum Call {
         entries: u32,
         cause: tracing::Span,
     },
+    /// Something the plugin asked to hear about, such as a change in a
+    /// folder it watches (`on-event`, no reply).
+    Event {
+        name: String,
+        payload: String,
+        cause: tracing::Span,
+    },
     /// Say goodbye (`deactivate`) and end.
     Stop,
 }
@@ -51,7 +59,8 @@ impl Call {
         match self {
             Self::Command { cause, .. }
             | Self::BeforeJob { cause, .. }
-            | Self::Listing { cause, .. } => Some(cause),
+            | Self::Listing { cause, .. }
+            | Self::Event { cause, .. } => Some(cause),
             Self::Stop => None,
         }
     }
@@ -184,6 +193,10 @@ pub(crate) struct State {
     activity: Arc<Activity>,
     /// Network time not yet added to the call's epoch deadline.
     network_credit: Duration,
+    /// The folders it watches (`watch-folder`); they end with the store.
+    watches: Watches,
+    /// Hands the watches' changes to this instance.
+    notifier: Notifier,
 }
 
 impl WasiView for State {
@@ -306,6 +319,24 @@ impl host::Host for State {
         }))
     }
 
+    fn watch_folder(&mut self, path: String) -> wasmtime::Result<Result<(), String>> {
+        let _call = HostCall::start("watch-folder", || serde_json::json!({"path": path}));
+        if !self.plugin.granted.contains(&Capability::FsWatch) {
+            return Ok(Err("watch-folder needs the fs:watch capability".to_owned()));
+        }
+        Ok(self
+            .watches
+            .watch(&self.plugin.watch_roots, &path, &self.notifier))
+    }
+
+    fn unwatch_folder(&mut self, path: String) -> wasmtime::Result<()> {
+        let _call = HostCall::start("unwatch-folder", || serde_json::json!({"path": path}));
+        if self.watches.unwatch(&path) {
+            tracing::info!(folder = %path, "stopped watching a folder for the plugin");
+        }
+        Ok(())
+    }
+
     fn emit(&mut self, name: String, payload: String) -> wasmtime::Result<()> {
         let _call = HostCall::start(
             "emit",
@@ -357,7 +388,7 @@ pub(crate) fn run(
     let span = tracing::info_span!("plugin", plugin_id = %plugin.id);
     let _entered = span.enter();
     let Some(inner) = host.upgrade() else { return };
-    let mut instance = match start(&inner, plugin) {
+    let mut instance = match start(&inner, plugin, generation) {
         Ok(started) => started,
         Err(message) => {
             tracing::error!(error = %message, "the plugin could not start");
@@ -431,13 +462,21 @@ pub(crate) fn run(
                     }
                 }
             }
-            Call::Listing { path, entries, .. } => {
+            call @ (Call::Listing { .. } | Call::Event { .. }) => {
                 activity.queued.fetch_sub(1, Ordering::Relaxed);
                 let result = timed(&inner, activity, || {
                     prepare(&mut instance.store, plugin, plugin.limits.call_timeout);
-                    instance
-                        .bindings
-                        .call_on_listing_opened(&mut instance.store, &path, entries)
+                    match call {
+                        Call::Listing { path, entries, .. } => instance
+                            .bindings
+                            .call_on_listing_opened(&mut instance.store, &path, entries),
+                        Call::Event { name, payload, .. } => {
+                            instance
+                                .bindings
+                                .call_on_event(&mut instance.store, &name, &payload)
+                        }
+                        _ => Ok(()),
+                    }
                 });
                 if let Err(error) = result {
                     crash(
@@ -464,7 +503,7 @@ pub(crate) fn run(
 }
 
 /// Compiles, instantiates and activates the plugin.
-fn start(inner: &HostInner, plugin: &Arc<Loaded>) -> Result<Instance, String> {
+fn start(inner: &HostInner, plugin: &Arc<Loaded>, generation: u64) -> Result<Instance, String> {
     let component = Component::from_file(&inner.engine, &plugin.wasm)
         .map_err(|error| format!("cannot load {}: {error:#}", plugin.wasm.display()))?;
     std::fs::create_dir_all(&plugin.data_dir)
@@ -493,6 +532,8 @@ fn start(inner: &HostInner, plugin: &Arc<Loaded>) -> Result<Instance, String> {
             registered: Vec::new(),
             activity: Arc::new(Activity::default()),
             network_credit: Duration::ZERO,
+            watches: Watches::default(),
+            notifier: Notifier::new(inner.myself.clone(), plugin.id.clone(), generation),
         },
     );
     store.limiter(|state| &mut state.limiter);
@@ -544,6 +585,11 @@ fn start(inner: &HostInner, plugin: &Arc<Loaded>) -> Result<Instance, String> {
             .write_roots
             .iter()
             .map(|root| sandbox::guest_path(root))
+            .collect(),
+        watch_roots: plugin
+            .watch_roots
+            .iter()
+            .map(|root| root.display().to_string())
             .collect(),
     };
     store.data_mut().activating = true;

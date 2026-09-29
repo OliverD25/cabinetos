@@ -13,6 +13,8 @@ bytes.workspace = true
 cabinetos-commands.workspace = true
 cabinetos-config.workspace = true
 cabinetos-diag.workspace = true
+# `watch-folder`: the directory watcher that names each change.
+cabinetos-fs.workspace = true
 cabinetos-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -72,7 +72,7 @@ start, or at once with `reload_plugin`.
 | `version` | `major.minor.patch`, numbers only. |
 | `apiVersion` | The WIT version the plugin was built against. Its major and minor must match this core's (`0.2`). A `0.1` plugin is refused: 0.2 changed the interface (see "The WIT versions"). |
 | `minCoreVersion` | The oldest core it runs on, `major.minor.patch`. |
-| `capabilities` | Each known, listed once, with a `reason` the review dialog shows. `fs:read` and `fs:write` need `roots`. `net` needs `hosts` and may list `secrets` (see "The network"). The others take none of these. |
+| `capabilities` | Each known, listed once, with a `reason` the review dialog shows. `fs:read`, `fs:write` and `fs:watch` need `roots`. `net` needs `hosts` and may list `secrets` (see "The network"). The others take none of these. |
 | `commands` | Each ID starts with `<id>.`, then letters, digits, `.`, `_` or `-`; each has a `title` and a `category`; `defaultKeys` follow the key grammar ([keybindings.md](keybindings.md)). Declaring commands needs `cmd:register`. |
 
 The core reads the manifest strictly. An unknown key, a missing key or a
@@ -96,6 +96,7 @@ folder must exist when the plugin starts.
 | `events:emit` | low | Send events to the UI with `emit` |
 | `fs:read` | medium | Read the files under its `roots` |
 | `fs:write` | medium | Read and write the files under its `roots` |
+| `fs:watch` | medium | Hear about changes in folders under its `roots` (`watch-folder`); no right to read them |
 | `jobs:intercept` | medium | See every job before it starts (`before-job`), and stop it |
 | `process:run` | medium | Start programs. **Never granted in this version.** |
 | `net` | high | Ask the core for web requests (`http-request`), only to the `hosts` its manifest names, with only the `secrets` it names |
@@ -308,6 +309,61 @@ roots, the plugin gets `on-listing-opened(path, entry-count)`, with the path
 as the plugin sees it. It is a notification: the listing does not wait for
 it. At most 64 notifications wait for one plugin; more are dropped.
 
+## Watching folders: `fs:watch`
+
+A plugin with `fs:watch` may watch folders under its `roots` and hear
+about each change in them, for example to act on a new file in an inbox
+folder. Watching gives the names of what changed, not the files: reading
+them still needs `fs:read` for that folder.
+
+```wit
+watch-folder: func(path: string) -> result<_, string>;
+unwatch-folder: func(path: string);
+export on-event: func(name: string, payload: string);
+```
+
+- `watch-folder` takes a Windows path (`C:\Users\me\Inbox`) or its
+  sandbox form (`/C:/Users/me/Inbox`). It must be one of the roots or a
+  folder under one, with no `.` or `..` in it; anything else is an `err`
+  that says why. It watches that folder, not its subfolders.
+- Watching a folder twice is one watch. At most 16 folders at once per
+  plugin. `unwatch-folder` stops one; it does nothing for a folder that
+  is not watched.
+- Every watch ends with the plugin's instance: when it stops, crashes, is
+  turned off or reloaded. A plugin watches again in `activate`.
+- The folders stay free: a watched folder can still be renamed or deleted.
+- `activate` gets the expanded roots in `watch-roots`, as Windows paths.
+
+The changes arrive through the export `on-event`, on the plugin's thread,
+like `on-listing-opened`: a notification, with the same limits (5 s, and
+at most 64 waiting; more are dropped with a warning in the log). The core
+gathers the changes of one folder for 200 ms and sends them as one
+message, so a burst of changes is at most one message per 200 ms per
+folder:
+
+```json
+{"path": "C:\\Users\\me\\Inbox",
+ "changes": [
+   {"kind": "created", "path": "C:\\Users\\me\\Inbox\\a.txt", "old_path": null},
+   {"kind": "renamed", "path": "C:\\Users\\me\\Inbox\\b.txt", "old_path": "C:\\Users\\me\\Inbox\\a.txt"}
+ ],
+ "overflow": false}
+```
+
+| `on-event` name | Payload |
+|---|---|
+| `folder-changed` | `path` (the watched folder), `changes` in the order Windows reported them, and `overflow` |
+| `folder-unwatched` | `path` and `message`: the watch ended by itself, for example because the folder was deleted |
+
+- `kind` is `created`, `modified`, `removed` or `renamed`; `old_path` is
+  set only for `renamed`. A file moved in from another folder is
+  `created`; moved away, `removed`. The paths are Windows paths.
+- One write often makes Windows report several `modified` changes; the
+  same change twice in a row is sent once.
+- `overflow` is `true` when changes were lost: Windows had too many at
+  once, or the message reached 1,000 changes. The plugin should then read
+  the folder again instead of trusting `changes`.
+
 ## The network: `net` and `http-request`
 
 A plugin's sandbox has no network. A plugin with `net` asks the core to
@@ -389,13 +445,15 @@ Without `net`, `http-request` answers `err` and makes no request.
 | `config-get(path)` | `config:read` | A setting as JSON by dotted path, such as `ui.theme`; none for a path that does not exist, and for the `plugins` section |
 | `emit(name, payload)` | `events:emit` | Sends `plugin_event` with the plugin's ID to every client that said `hello` |
 | `http-request(request)` | `net` | Makes a web request to a host the manifest names, and answers with its status, headers and body (see "The network") |
+| `watch-folder(path)` | `fs:watch` | Starts watching a folder under the plugin's roots; changes come to `on-event` (see "Watching folders") |
+| `unwatch-folder(path)` | `fs:watch` | Stops watching a folder |
 
 ### The WIT versions
 
 | Version | What changed |
 |---|---|
 | `0.1.0` | The first interface: commands, `log`, `config-get`, `emit`, `before-job`, `on-listing-opened` |
-| `0.2.0` | `http-request` and its records. A `0.1` plugin is refused with `apiVersion 0.1.0 does not match this core's plugin interface 0.2.0`; rebuild it against `sdk/wit` and set `apiVersion` to `0.2.0`. |
+| `0.2.0` | `http-request` and its records; `watch-folder`, `unwatch-folder`, `watch-roots` in `activation`, and the export `on-event`, which every plugin now implements (an empty body is fine). A `0.1` plugin is refused with `apiVersion 0.1.0 does not match this core's plugin interface 0.2.0`; rebuild it against `sdk/wit` and set `apiVersion` to `0.2.0`. |
 
 ## The protocol
 

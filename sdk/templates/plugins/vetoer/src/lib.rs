@@ -41,6 +41,8 @@ impl Guest for Vetoer {
     }
 
     fn on_listing_opened(_path: String, _entry_count: u32) {}
+
+    fn on_event(_name: String, _payload: String) {}
 }
 
 export!(Vetoer);

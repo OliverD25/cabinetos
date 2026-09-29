@@ -32,6 +32,7 @@ mod bindings {
 pub mod manifest;
 mod net;
 mod sandbox;
+mod watch;
 mod worker;
 
 use std::collections::{BTreeMap, HashSet, VecDeque};
@@ -228,6 +229,8 @@ pub(crate) struct Loaded {
     pub(crate) granted: HashSet<Capability>,
     pub(crate) read_roots: Vec<PathBuf>,
     pub(crate) write_roots: Vec<PathBuf>,
+    /// What `watch-folder` may watch (capability `fs:watch`).
+    pub(crate) watch_roots: Vec<PathBuf>,
     pub(crate) data_dir: PathBuf,
     pub(crate) limits: Limits,
     pub(crate) services: Arc<dyn HostServices>,
@@ -327,6 +330,34 @@ impl HostInner {
             slot.commands.clear();
             self.services.set_commands(id, &slot.name(), &[]);
         }
+    }
+
+    /// Queues an event for the plugin's instance of `generation` (its
+    /// `on-event`). Dropped when that instance is gone, or when too many
+    /// notifications already wait for it.
+    pub(crate) fn notify(&self, id: &str, generation: u64, name: &str, payload: String) {
+        let slots = lock(&self.slots);
+        let Some(worker) = slots
+            .get(id)
+            .filter(|slot| slot.generation == generation)
+            .and_then(|slot| slot.worker.as_ref())
+        else {
+            return;
+        };
+        if worker.activity.queued.load(Ordering::Relaxed) >= MAX_QUEUED_NOTIFICATIONS {
+            tracing::warn!(
+                plugin_id = id,
+                event = name,
+                "{MAX_QUEUED_NOTIFICATIONS} notifications wait for the plugin; this one is dropped"
+            );
+            return;
+        }
+        worker.activity.queued.fetch_add(1, Ordering::Relaxed);
+        let _ = worker.calls.send(Call::Event {
+            name: name.to_owned(),
+            payload,
+            cause: tracing::Span::current(),
+        });
     }
 
     /// A worker's news about its instance.
@@ -525,6 +556,7 @@ impl HostInner {
         let mut granted = HashSet::new();
         let mut read_roots = Vec::new();
         let mut write_roots = Vec::new();
+        let mut watch_roots = Vec::new();
         let mut net_rules = net::NetRules::default();
         for request in &manifest.capabilities {
             let Some(capability) = Capability::parse(&request.name) else {
@@ -540,6 +572,7 @@ impl HostInner {
             let roots = match capability {
                 Capability::FsRead => &mut read_roots,
                 Capability::FsWrite => &mut write_roots,
+                Capability::FsWatch => &mut watch_roots,
                 _ => continue,
             };
             for root in &request.roots {
@@ -558,6 +591,7 @@ impl HostInner {
             granted,
             read_roots,
             write_roots,
+            watch_roots,
             limits: Limits {
                 call_timeout: self.config.call_timeout,
                 before_job_timeout: self.config.before_job_timeout,

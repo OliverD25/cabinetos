@@ -4,7 +4,9 @@ use std::fs;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use cabinetos_fs::{DirectoryChanged, DirectoryWatcher, FsError};
+use cabinetos_fs::{
+    DetailedChange, DirectoryChanged, DirectoryWatcher, EntryChange, EntryChangeKind, FsError,
+};
 
 const WAIT: Duration = Duration::from_secs(2);
 
@@ -165,4 +167,55 @@ fn a_file_coming_back_to_this_disk_is_a_change_and_the_watcher_goes_on() {
     fs::write(dir.path().join("after.txt"), b"still watching").unwrap();
     assert_eq!(changes.recv_timeout(WAIT), Ok(DirectoryChanged::Changed));
     watcher.stop();
+}
+
+#[test]
+fn detailed_watching_names_each_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let (sender, receiver) = mpsc::channel();
+    let watcher = DirectoryWatcher::start_detailed(
+        dir.path().to_str().unwrap(),
+        "watch-test".to_owned(),
+        move |change| {
+            let _ = sender.send(change);
+        },
+    )
+    .unwrap();
+    fs::write(dir.path().join("a.txt"), b"one").unwrap();
+    fs::rename(dir.path().join("a.txt"), dir.path().join("b.txt")).unwrap();
+    fs::remove_file(dir.path().join("b.txt")).unwrap();
+
+    let mut seen = Vec::new();
+    let deadline = Instant::now() + WAIT;
+    while !seen
+        .iter()
+        .any(|change: &EntryChange| change.kind == EntryChangeKind::Removed)
+    {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match receiver.recv_timeout(left) {
+            Ok(DetailedChange::Entries(entries)) => seen.extend(entries),
+            other => panic!("{other:?} after {seen:?}"),
+        }
+    }
+    watcher.stop();
+    let kinds: Vec<(EntryChangeKind, &str, Option<&str>)> = seen
+        .iter()
+        .filter(|change| change.kind != EntryChangeKind::Modified)
+        .map(|change| {
+            (
+                change.kind,
+                change.name.as_str(),
+                change.old_name.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            (EntryChangeKind::Created, "a.txt", None),
+            (EntryChangeKind::Renamed, "b.txt", Some("a.txt")),
+            (EntryChangeKind::Removed, "b.txt", None),
+        ],
+        "{seen:?}"
+    );
 }
