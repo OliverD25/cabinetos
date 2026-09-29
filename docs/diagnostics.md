@@ -58,7 +58,10 @@ Decided by the creator on 2026-09-29.
 **The switch.** `logging.heavy` in `cabinetos.json` ([config.md](config.md)),
 `false` by default. The core applies a change within a second, like
 `logging.level`: `cabinetos-cli config set logging.heavy true` turns it on
-for the core, and the window follows the core's `config_changed`. The
+for the core, and the window follows the core's `config_changed`. In the
+window, "Diagnostics: Toggle Heavy Logging" in the palette writes the value
+(`set_value`), and a `HEAVY LOG` pill in the status bar says it is on
+([ui.md](ui.md), "Heavy logging"). The
 environment variable `CABINETOS_LOG_HEAVY` (`1` or `0`) wins over the file
 for the process it is set for; the indexer, which does not read the user's
 `cabinetos.json`, is switched only by it. When heavy mode comes on, the
@@ -100,6 +103,12 @@ thread, which accepts connections; in the window the UI thread. Their lines
 may go 32 MiB over the cap; beyond that they are dropped, and the next
 batch carries `heavy log dropped lines of threads that never wait` with
 the count. Jobs, plugin calls and every other blocking thread may wait.
+The window's queue is 64 MiB, not 256 MiB (it has far less to log). Its UI
+thread and the reader of its pipe never wait, and may go 8 MiB over the
+cap before their lines are dropped. Every other thread of the window may
+wait, and says so with the same `heavy log waited` line. The window counts
+the lines it dropped since heavy mode came on and shows the count in the
+status bar's pill (`HEAVY LOG, 1,204 lines lost`).
 
 **What heavy mode records beyond the normal log.** Its own lines have
 targets starting with `heavy::`, which the normal file leaves out at every
@@ -112,6 +121,14 @@ level.
 | `entry done` | `heavy::jobs` | `job_id`, `kind` (`file`, `folder`, `rename`, `delete`, `recycle`), `from`, `to` (where the plan puts it; empty for deletes), `bytes`, `ms`, `outcome` (`done`, `skipped`, `failed`, `conflict`, `held`, …) | the job's threads, one line per piece of work, with the job's trace |
 | `host call` | `heavy::plugins` | `function` (`register-command`, `log`, `config-get`, `emit`, `http-request`, `watch-folder`, `unwatch-folder`), `args` (JSON, at most 4 KB; for `http-request` the header names only, never their values, and the body's size, never the body), `truncated`, `ms` | the plugin's thread, with the caller's trace |
 | `http request` | `heavy::market` | `host`, `method`, `status` (0: no answer), `bytes`, `ms`; never headers or bodies | the marketplace's index and download requests |
+| `request payload`, `reply payload` | `heavy::pipe` | `payload` (masked, at most 64 KB), `truncated` | the window's pipe client, for each request it sends and each reply it reads, under the request's ID and trace; the same request is also in the core's `heavy::core` lines |
+| `key pressed` | `heavy::keys` | `key` (the grammar's name: `f5`, `ctrl`, `vk_AD` for a key without one), `modifiers` (`ctrl+shift`), `element` (the type and name of what has the keyboard), `repeat` (a held key) | the window, for every key that reaches it. The line carries a ULID of its own as `trace_id`; a command the key starts takes that ULID as its trace |
+| `text input` | `heavy::keys` | `modifiers`, `element` | the window, for a key that types a character while a text box has the keyboard: no key name, and never the text |
+| `command run` | `heavy::commands` | `command`, `source` (`core`, `plugin:<id>`, `unlisted`), `target` (`ui` or `core`), `trigger` (`key`, `palette`, `button`, …), `args` (masked, at most 4 KB), `truncated` | the window's command router, for every run, under the run's trace |
+| `command done` | `heavy::commands` | `command`, `outcome` (`RanInUi`, `CoreResult`, `Failed`, …), `elapsed_ms` | the router, when the run ended |
+| `focus changed` | `heavy::focus` | `from`, `to` (each `Type name`), `keys_to` (`window`, `terminal`, `tool:<id>`, …: where Windows sends the keys) | the window, at each change of XAML's focus |
+| `frame stats` | `heavy::frames` | `frames`, `worst_ms`, `gaps_over_20ms`, `gaps_over_33ms`, `busy_over_16ms`, `work_ms`, `busy_ms` and the milliseconds of each timed part | the window, once a second while heavy mode is on (`CABINETOS_UI_FRAMESTATS=1` writes the same line into the normal log) |
+| `page message` | `heavy::pages` | `host` (`terminal`, a tool), `direction` (`to_page`, `from_page`), `name` (the message's `type`), `bytes` | the window's web page hosts; never the content, which can hold what the user typed |
 
 A payload is at most 64 KB; the rest is cut and the line gets
 `truncated: true`. A listing writes one line per listing (`listing opened`,
@@ -128,7 +145,11 @@ and `Cookie` in a `headers` object, in `[name, value]` pairs, or in
 `{"name", "value"}` objects. The `CABINETOS_*` environment variables whose
 names contain `KEY`, `TOKEN`, `SECRET` or `PASSWORD` are masked wherever
 the diagnostics write the environment. `cabinetos-diag` does all of it
-(`mask_secrets`, `masked_json`), and the window must mask the same way.
+(`mask_secrets`, `masked_json`). The window masks the same way with
+`LogMask` (`ui/CabinetOS.Core/Diagnostics/LogMask.cs`), which has the same
+field and header names and the same 64 KB cap, and is tested with the same
+cases. Bytes that are not JSON are not written at all: a secret in them
+could not be found. The window never writes the environment.
 
 ## Log line format
 
@@ -169,7 +190,12 @@ id, a ULID, that all of them carry. Both appear in every log line
    `await`): every line the window logs meanwhile carries it as
    `trace_id`, and every request the window sends meanwhile carries it as
    `trace` (`CoreClient` fills it in). A request sent outside a command
-   carries none. The CLI uses one trace per run.
+   carries none. The CLI uses one trace per run. In heavy mode a key press
+   gets a ULID of its own before anything handles it, and a command the
+   key starts takes that ULID as its trace (`ExecuteAsync`'s `traceId`), so
+   the key press, the command and the command's requests are one chain; a
+   key that becomes no command is a chain of one line. A key that types
+   into a text box has no trace: it is not an action.
 2. **The pipe carries it.** `{"id":"01M…","trace":"01M…","type":"start_job",…}`
    ([ipc.md](ipc.md), "The pipe"). Each request still has its own `id`.
 3. **The core logs under it.** The core handles each request inside a span

@@ -152,7 +152,9 @@ Who uses what:
 - `logging.level`: the core, at once. The environment variable
   `CABINETOS_LOG`, when set, wins over it ([diagnostics.md](diagnostics.md)).
 - `logging.heavy`: the core, within a second, and the window, which follows
-  the core's `config_changed`. The environment variable
+  the core's `config_changed`: its status bar shows a `HEAVY LOG` pill while
+  it is on, and the palette command "Diagnostics: Toggle Heavy Logging"
+  writes it ([ui.md](ui.md), "Heavy logging"). The environment variable
   `CABINETOS_LOG_HEAVY` (`1` or `0`), when set, wins over it. The chat that
   asked for heavy mode named the key `diagnostics.level`; it lives in the
   existing `logging` section instead.

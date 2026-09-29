@@ -172,6 +172,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_CORE_EXE` | The core to start, as a full path (first in the launcher's order, below) |
 | `CABINETOS_LOG_DIR` | Where `ui.<date>.jsonl` and crash traces go; the core it starts inherits it |
 | `CABINETOS_LOG` | The level filter, in the core's syntax: `debug`, or `info,cabinetos_ui::pipe=trace` |
+| `CABINETOS_LOG_HEAVY` | `1` or `0`: heavy logging on or off, whatever `logging.heavy` says ("Heavy logging"). The window reads it, and so does the core it starts, which inherits it |
 | `CABINETOS_CONFIG` | Not read by the UI; the core it starts inherits it and uses that `cabinetos.json` |
 | `CABINETOS_THEMES_DIR` | Not read by the UI; the core it starts inherits it and reads the themes there ([themes.md](themes.md)) |
 | `CABINETOS_PLUGINS_DIR`, `CABINETOS_MARKETPLACE_DIR` | Not read by the UI, except the plugins folder for the empty plugin list's hint; the core it starts inherits them and installs there ([marketplace.md](marketplace.md), "Folders"). Set both to a scratch folder to try installs without touching `%LOCALAPPDATA%\CabinetOS` |
@@ -188,7 +189,9 @@ a background thread with a bounded, lock-free queue; it keeps 14 daily
 files, as the core does. Targets are `cabinetos_ui::<area>`: `app`,
 `session`, `launcher`, `pipe`, `commands`, `keys`, `pane`, `palette`,
 `jobs`, `settings`, `shell`, `frames`, `xaml`, `icons`, `terminal`,
-`webview`, `theme`, `market`, `snapshot`. The UI thread is named `ui`.
+`webview`, `theme`, `market`, `snapshot`, `diag`. The UI thread is named `ui`.
+The lines only heavy mode writes have targets `heavy::<area>` and are not
+in this file ("Heavy logging").
 
 Every request the UI sends is logged under its request ID (`request sent`,
 then `reply received` or `request failed`). A command started by a key or a
@@ -206,6 +209,71 @@ flushes the log. The hooks: `Application.UnhandledException`,
 because a failure there ends the process without raising either event.
 `CabinetOS.exe --self-test-crash` throws on the UI thread after start-up,
 to see one.
+
+### Heavy logging
+
+Heavy mode records every operation, even at the cost of speed, for the times
+when a problem has to be found ([diagnostics.md](diagnostics.md), "Heavy
+mode"; the Article 12 exception it needs is
+[ADR 0013](decisions/0013-heavy-logging-may-wait.md)). The window follows
+`logging.heavy` as the core does, and adds what only the window sees.
+
+**The switch.** The window reads `logging.heavy` with the rest of the
+configuration at start and again on every `config_changed`, and turns its
+own heavy log on or off with it. "Diagnostics: Toggle Heavy Logging"
+(`diagnostics.toggleHeavy`, no default key) flips nothing itself: it writes
+the opposite value with `set_value logging.heavy`, and both processes
+follow the `config_changed` that comes back. The environment variable
+`CABINETOS_LOG_HEAVY` wins over the setting in both processes; when it is
+set, the command only says so in the notice line, and the pill cannot turn
+heavy mode off. The other two commands are "Diagnostics: Open Log Folder"
+(`diagnostics.openLogFolder`: the core opens the folder with `open_path`,
+as it opens any file, so the window makes no shell call of its own) and
+"Diagnostics: Save Log Bundle" (`diagnostics.saveBundle`: asks the core for
+a zip of the last 10 minutes of every log with `save_log_bundle`, tells its
+name in the notice line, and opens the folder; a core without the request
+answers `unknown_request`, and the notice says the command needs a newer
+core).
+
+**The indicator.** While heavy mode is on, the status bar shows a small
+accent-coloured `HEAVY LOG` pill in front of the transfer pill. A click on it
+runs the toggle. When the window has dropped lines because its heavy queue
+was full, the pill says how many: `HEAVY LOG, 1,204 lines lost` (the count
+is read once a second and starts again at each switch on). A window that
+starts with heavy mode on, and a switch on, show "Heavy logging is on; the
+log folder grows to 2 GB." in the notice line. The pill's states come from
+`HeavyLogSwitch` and `HeavyPillState` in `CabinetOS.Core`, which the tests
+drive from a `logging.heavy` value.
+
+**The file and the queue.** `heavy-ui.<date>.jsonl` (and `.1.`, `.2.`, … for
+the next 256 MiB), next to `ui.<date>.jsonl` and the core's files, with the
+core's cap of 2 GiB for all `heavy-*.jsonl` of all processes and the same
+rule that the file a process writes is never deleted. `LogWriter` keeps a
+second queue for it, counted in bytes: 64 MiB. Above that, a thread that logs
+waits for the writer; the UI thread (`Program.Main` marks it) and the
+reader of the pipe (`CoreClient.Dispatch`) never do, and drop their lines
+instead once the queue is 8 MiB over, counting them. The next batch says
+`heavy log dropped lines of threads that never wait`, with the count. The
+switch itself, going on and off, is one line in both files.
+
+**What the window records.** Lines with the target `heavy::<area>`, in the
+heavy file only (the table with every field is in
+[diagnostics.md](diagnostics.md)):
+
+| What | Area | Notes |
+|---|---|---|
+| Every request and reply of the pipe | `pipe` | The whole JSON, secrets masked (`LogMask`, the core's rules), at most 64 KB. Under the request's ID and its action's trace |
+| Every key that reaches the window | `keys` | By name and modifiers, with the type and name of the element that has the keyboard. A key that types a character into a text box (a name, the address, the palette's field, a search) is `text input` with no key and no character. Ctrl or Alt alone with a letter is a shortcut and is named; Ctrl and Alt together are AltGr and count as typing |
+| Every command | `commands` | `command run` (the registry's source, `target`, `trigger`, the arguments masked and cut at 4 KB) and `command done` (outcome, milliseconds) |
+| Every change of focus | `focus` | From and to, as element type and name, and where Windows sends the keys (`WindowsPlatform.KeyboardFocus`, the same probe as the "keyboard owner" lines) |
+| The frame table, every second | `frames` | `FrameMonitor` runs while heavy mode is on, as `CABINETOS_UI_FRAMESTATS=1` runs it (which the variable still does by itself). It keeps the window drawing while nothing changes: heavy mode's cost |
+| Every message to and from a web page | `pages` | The terminal's and the tools' pages: the message's `type` and its size, never the content |
+
+A key press that becomes a command shares one trace with it: the press gets
+a ULID before anything handles it, and `CommandRouter.ExecuteAsync` takes
+it as the run's ULID (`traceId`), so `cabinetos-cli log trace <id>` prints the
+key, the command, its requests and what the core did for them in time
+order. A key that becomes no command is a chain of one line.
 
 ## Starting the core
 

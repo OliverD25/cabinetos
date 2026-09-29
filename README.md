@@ -26,7 +26,7 @@ pseudo-consoles, applies JSON colour themes live, and installs plugins,
 themes and tools from a static marketplace index with each download's
 SHA-256 checked, all over a user-only named pipe, with the indexer behind a
 read-only pipe of its own and each shell's bytes on a pipe of their own
-(`core/`, 690 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 676
+(`core/`, 690 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 731
 tests): two panes over the core's shared-memory listings with the shell's
 type names and icons, breadcrumbs, a status bar, the command palette with
 chord keys and inline rebinding, copy, move, delete, rename, new folder and
@@ -54,7 +54,7 @@ instead of shipping with the core.
 | [docs/design/](docs/design/ABOUT.md) | The design handout and clickable prototype. |
 | [docs/dev-setup.md](docs/dev-setup.md) | What to install to build and test. |
 | [docs/ipc.md](docs/ipc.md) | The control-channel protocol and the shared-memory listing layout. |
-| [docs/diagnostics.md](docs/diagnostics.md) | The JSON Lines log format and crash traces. |
+| [docs/diagnostics.md](docs/diagnostics.md) | The JSON Lines log format, trace ids, heavy logging mode and crash traces. |
 | [docs/config.md](docs/config.md) | `cabinetos.json`: every key, its default, and how changes apply live. |
 | [docs/keybindings.md](docs/keybindings.md) | Key grammar, chords, the Immutable System Tier, conflict rules. |
 | [docs/jobs.md](docs/jobs.md) | Copy, move and delete jobs: scheduler, conflicts, progress. |
