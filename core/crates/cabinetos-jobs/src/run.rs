@@ -20,7 +20,8 @@ use std::time::Instant;
 
 use cabinetos_fs::MeasureError;
 use cabinetos_protocol::{
-    Conflict, ConflictKind, ConflictPolicy, Event, JobKind, JobState, LinkPolicy, Resolution,
+    Conflict, ConflictKind, ConflictPolicy, Event, JobKind, JobState, JobStep, LinkPolicy,
+    Resolution,
 };
 
 use crate::bin;
@@ -95,6 +96,10 @@ pub(crate) fn run(engine: &Engine, job: &Job) {
     set_phase(engine, job, Phase::Scanning);
     // The publisher only follows started jobs; this one just started.
     engine.wake_publisher();
+    if let JobKind::Steps { steps } = &job.request.kind {
+        run_steps(engine, job, steps);
+        return;
+    }
     let plan = match make_plan(job) {
         Ok(plan) => plan,
         Err(PlanError::Cancelled) => {
@@ -186,6 +191,85 @@ pub(crate) fn run(engine: &Engine, job: &Job) {
     finish(engine, job, &state);
 }
 
+/// A `steps` job: each step in order, on this thread. A step that fails
+/// is counted as failed, and the job goes on with the next.
+fn run_steps(engine: &Engine, job: &Job, steps: &[JobStep]) {
+    let total = steps.len() as u64;
+    if let Err(message) = ask_gate(engine, job, total, 0) {
+        finish(engine, job, &JobState::Failed { message });
+        return;
+    }
+    job.counters.files_total.store(total, Ordering::Relaxed);
+    set_phase(engine, job, Phase::Running);
+    let recycling = steps
+        .iter()
+        .any(|step| matches!(step, JobStep::Recycle { .. }));
+    let apartment = if recycling {
+        match Apartment::enter() {
+            Ok(apartment) => Some(apartment),
+            Err(error) => {
+                let message = format!("cannot start the shell: {}", win::message(error));
+                finish(engine, job, &JobState::Failed { message });
+                return;
+            }
+        }
+    } else {
+        None
+    };
+    for step in steps {
+        if !job.control.wait_while_paused() {
+            break;
+        }
+        *lock(&job.current_path) = Some(step.path().to_owned());
+        if let Err(error) = run_step(step, apartment.as_ref()) {
+            tracing::warn!(job_id = job.id, step = ?step, %error, "a step of the job failed");
+            Counters::add(&job.counters.files_failed, 1);
+        }
+        Counters::add(&job.counters.files_done, 1);
+    }
+    drop(apartment);
+    let state = if job.control.is_cancelled() {
+        JobState::Cancelled
+    } else if Counters::get(&job.counters.files_failed) > 0 {
+        JobState::CompletedWithErrors
+    } else {
+        JobState::Completed
+    };
+    finish(engine, job, &state);
+}
+
+/// One step of a `steps` job.
+fn run_step(step: &JobStep, apartment: Option<&Apartment>) -> Result<(), String> {
+    let failed = |path: &str, error: u32| format!("{path}: {}", win::message(error));
+    match step {
+        JobStep::Rename { from, to } => {
+            win::move_anywhere(from, to, false).map_err(|error| failed(from, error))
+        }
+        JobStep::CreateFolder { path } => {
+            win::create_directory(path).map_err(|error| failed(path, error))
+        }
+        JobStep::CreateFile { path } => std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map(drop)
+            .map_err(|error| format!("{path}: {error}")),
+        JobStep::Recycle { path } => {
+            let Some(apartment) = apartment else {
+                return Err("a Recycle Bin step ran without COM".to_owned());
+            };
+            match recycle::recycle(apartment, path) {
+                Ok(()) => Ok(()),
+                Err(error) if !win::exists(path) && error != code::REQUEST_ABORTED => Ok(()),
+                Err(error) => Err(failed(path, error)),
+            }
+        }
+        JobStep::Restore { saved, to } => {
+            win::move_anywhere(saved, to, true).map_err(|error| failed(to, error))
+        }
+    }
+}
+
 fn make_plan(job: &Job) -> Result<Plan, PlanError> {
     let stop = || job.control.is_cancelled();
     let mut plan = Plan::default();
@@ -213,6 +297,8 @@ fn make_plan(job: &Job) -> Result<Plan, PlanError> {
                 plan.recycles.push(source.clone());
                 Ok(())
             }
+            // Run step by step instead (`run_steps`).
+            JobKind::Steps { .. } => Ok(()),
         };
         match added {
             Ok(()) => {}

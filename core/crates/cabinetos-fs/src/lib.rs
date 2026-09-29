@@ -56,6 +56,7 @@ mod ops;
 mod path;
 mod pattern;
 mod pipeline;
+mod preview;
 mod section;
 mod sort;
 pub mod time;
@@ -77,7 +78,8 @@ pub use open::{Editor, check_editable, edit_path, open_path, show_properties};
 pub use ops::{create_directory, create_file, rename};
 pub use path::verbatim_wide;
 pub use pattern::{NamePatterns, match_entries};
-pub use section::{EntryView, LayoutError, ListingReader, ListingWriter};
+pub use preview::{PreviewEntry, PreviewWriter};
+pub use section::{EntryView, LayoutError, ListingReader, ListingWriter, PreviewView};
 pub use watch::{DirectoryChanged, DirectoryWatcher};
 
 /// The default buffer for one `NtQueryDirectoryFile` call: 256 KiB. NTFS

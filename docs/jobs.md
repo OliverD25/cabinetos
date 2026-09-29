@@ -15,7 +15,7 @@ A client starts a **job** with `start_job`:
 
 | Field | Meaning |
 |---|---|
-| `kind` | `{"type":"copy"}`, `{"type":"move"}`, or `{"type":"delete","permanent":false}`. A delete goes to the Recycle Bin unless `permanent` is `true`. |
+| `kind` | `{"type":"copy"}`, `{"type":"move"}`, or `{"type":"delete","permanent":false}`. A delete goes to the Recycle Bin unless `permanent` is `true`. Also `{"type":"steps","steps":[…]}` (see "Chains and steps"). |
 | `sources` | Absolute paths of the files and folders. |
 | `destination` | For a copy or a move: the absolute path of the folder they go into. The core creates it when it does not exist. A delete has none. |
 | `options.on_conflict` | What to do when a file already exists at the destination: `ask` (default), `overwrite`, `overwrite_if_newer`, `skip`, `rename`. |
@@ -57,6 +57,41 @@ queued ──► scanning ──► running ──► completed
 `eta_seconds` and `elapsed_ms`. A skipped or failed file leaves `bytes_total`, so the
 percentage still ends at 100. A delete and a move on one volume count
 items, not bytes: their `bytes_total` is 0.
+
+## Chains and steps
+
+A preview (`preview_apply`, [ipc.md](ipc.md), "Previews") runs its rows
+in order as a **chain**: several jobs, each checked and queued only when
+the one before it has completed. The first job is checked at once; a
+later job's sources may be what an earlier job made (a file renamed, then
+moved), so each is checked when its turn comes. Until then it is listed as
+`queued`. A job that does not complete (`failed`, `cancelled`,
+`completed_with_errors`) cancels the jobs after it, and so does cancelling
+a job that still waits. Pausing a waiting job keeps it paused once its
+turn comes. `JobQueueManager::start_chain` in the crate does this.
+
+A **steps** job runs simple steps one after another on its own thread:
+
+| Step | What it does |
+|---|---|
+| `{"op":"rename","from","to"}` | Gives `from` the full path `to`, never replacing anything: a rename in its folder, or a move (a file may cross volumes, which Windows does as a copy and a delete; a folder only on its volume) |
+| `{"op":"create_folder","path"}` | Creates the folder; its parent must exist |
+| `{"op":"create_file","path"}` | Creates an empty file, never replacing anything |
+| `{"op":"recycle","path"}` | Puts the file or folder into the Recycle Bin |
+| `{"op":"restore","saved","to"}` | Moves a saved copy back in place of `to`, replacing what is there (the undo journal) |
+
+Each step counts as one item in the progress. A step that fails is counted
+in `files_failed`, with a warning in the log, and the job goes on with the
+next; the job then ends `completed_with_errors`. A steps job has no
+conflicts to ask about and no destination; its `sources` are the steps'
+paths, and whether they exist is each step's business when it runs, so
+`start_job` checks only that every path is absolute and that there is at
+least one step. It is a quick job for the scheduler, like a delete.
+
+A plugin with `jobs:intercept` sees a steps job too. The WIT's job kinds
+are older than steps, so the plugin sees the weightiest thing the steps
+do: `delete` when any step goes to the Recycle Bin, else `move` when any
+renames or restores, else `copy`.
 
 ## The scheduler
 

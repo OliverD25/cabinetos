@@ -32,8 +32,8 @@ use cabinetos_diag::{current_trace, span_for_action, span_for_request};
 use cabinetos_fs::{DirectoryWatcher, ListOptions};
 use cabinetos_ipc::{IpcError, PipeConnection};
 use cabinetos_protocol::{
-    Envelope, ErrorCode, Event, JobRequest, MAX_DESCRIBED, PROTOCOL_VERSION, Request, RequestId,
-    Response, SortSpec, TerminalState,
+    Envelope, ErrorCode, Event, JobRequest, MAX_DESCRIBED, OpenedListing, PROTOCOL_VERSION,
+    Request, RequestId, Response, SortSpec, TerminalState,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -127,8 +127,21 @@ enum TaskDone {
     RefreshEnded { listing_id: u64 },
     /// A measure sent its last event, or was refused.
     MeasureEnded { measure_id: u64 },
+    /// A preview is written into a section, or could not be.
+    PreviewReady(PreviewReady),
     /// The task sent what it had to: its reply, or events sent again.
     Replied,
+}
+
+/// A preview's section, ready to be announced as `preview_opened`.
+struct PreviewReady {
+    request_id: RequestId,
+    kind: &'static str,
+    listing_id: u64,
+    preview: String,
+    title: String,
+    started: Instant,
+    result: Result<listing::Published, Failure>,
 }
 
 /// A listing that is ready to be announced.
@@ -370,6 +383,10 @@ impl Session {
                 | Request::UninstallExtension { .. }) => {
                     self.extension_request(&id, &span, kind, request)
                 }
+                request @ (Request::PreviewListing { .. }
+                | Request::OpenPreview { .. }
+                | Request::PreviewApply { .. }
+                | Request::PreviewCancel { .. }) => self.preview_request(&id, &span, kind, request),
                 Request::WindowState(state) => Some(self.window_state(state)),
                 Request::GetWindowState { client } => {
                     Some(self.services.windows.get(client.as_deref()))
@@ -433,6 +450,138 @@ impl Session {
             protocol_version: PROTOCOL_VERSION,
             core_version: CORE_VERSION.to_owned(),
         }
+    }
+
+    /// The preview requests. `preview_listing` checks the rows at once and,
+    /// like `open_preview`, writes the section on the blocking pool;
+    /// `preview_apply` checks the first job's paths there too;
+    /// `preview_cancel` answers at once.
+    fn preview_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        match request {
+            Request::PreviewListing { title, rows } => {
+                let Some(client) = &self.client else {
+                    return Some(protocol_error("hello required"));
+                };
+                match self.services.previews.create(&client.id, title, &rows) {
+                    Ok(preview) => self.open_preview(id, span, kind, preview),
+                    Err(failure) => Some(failure_reply(failure)),
+                }
+            }
+            Request::OpenPreview { preview } => {
+                if self.client.is_none() {
+                    return Some(protocol_error("hello required"));
+                }
+                self.open_preview(id, span, kind, preview)
+            }
+            Request::PreviewApply { preview } => {
+                let services = Arc::clone(&self.services);
+                self.spawn_reply(id, span, kind, move || {
+                    match services.previews.apply(&preview, &services.jobs) {
+                        Ok(jobs) => Response::JobsStarted { jobs },
+                        Err(failure) => failure_reply(failure),
+                    }
+                });
+                None
+            }
+            Request::PreviewCancel { preview } => {
+                Some(match self.services.previews.cancel(&preview) {
+                    Ok(()) => Response::Ok,
+                    Err(failure) => failure_reply(failure),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// Writes the preview into a section on the blocking pool (each row's
+    /// metadata is read there); the reply goes out with
+    /// [`TaskDone::PreviewReady`].
+    fn open_preview(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        preview: String,
+    ) -> Option<Response> {
+        let found = match self.services.previews.get(&preview) {
+            Ok(found) => found,
+            Err(failure) => return Some(failure_reply(failure)),
+        };
+        let listing_id = NEXT_LISTING_ID.fetch_add(1, Ordering::Relaxed);
+        let request_id = id.clone();
+        let started = Instant::now();
+        self.tasks.spawn(
+            async move {
+                let title = found.title.clone();
+                let result = run_blocking(move || listing::publish_preview(&found.entries())).await;
+                TaskDone::PreviewReady(PreviewReady {
+                    request_id,
+                    kind,
+                    listing_id,
+                    preview,
+                    title,
+                    started,
+                    result,
+                })
+            }
+            .instrument(span.clone()),
+        );
+        None
+    }
+
+    /// Hands a preview's section to the client and keeps it as a listing of
+    /// this connection, so `describe_entries`, `match_entries` and
+    /// `close_listing` work on it as on a folder.
+    fn preview_ready(&mut self, ready: PreviewReady) {
+        let PreviewReady {
+            request_id,
+            kind,
+            listing_id,
+            preview,
+            title,
+            started,
+            result,
+        } = ready;
+        let span = span_for_request(&request_id);
+        let _entered = span.enter();
+        let client_pid = self.client.as_ref().map_or(0, |client| client.pid);
+        let reply = match result.and_then(|published| {
+            let handle = published.hand_to(client_pid)?;
+            Ok((published, handle))
+        }) {
+            Ok((published, section_handle)) => {
+                let reply = Response::PreviewOpened {
+                    preview,
+                    title,
+                    listing: OpenedListing {
+                        listing_id,
+                        section_handle,
+                        section_size: published.size,
+                        entry_count: published.entry_count,
+                        generation: 1,
+                        elapsed_us: published.elapsed_us,
+                    },
+                };
+                self.listings.insert(
+                    listing_id,
+                    ListingSlot {
+                        path: String::new(),
+                        current: CurrentSection::new(1, published.section),
+                        refresh: None,
+                    },
+                );
+                reply
+            }
+            Err(failure) => failure_reply(failure),
+        };
+        log_handled(kind, started, &reply);
+        self.out.reply(request_id, reply);
     }
 
     /// `window_state`: kept as this client's last state.
@@ -1404,6 +1553,7 @@ impl Session {
             TaskDone::MeasureEnded { measure_id } => {
                 self.measures.remove(&measure_id);
             }
+            TaskDone::PreviewReady(ready) => self.preview_ready(ready),
             TaskDone::Replied => {}
         }
     }

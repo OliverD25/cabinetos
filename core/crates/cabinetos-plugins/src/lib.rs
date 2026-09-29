@@ -931,6 +931,26 @@ impl PluginHost {
             JobKind::Delete { permanent: true } => {
                 bindings::cabinetos::plugin::types::JobKind::DeletePermanently
             }
+            // The WIT's job kinds predate `steps`: a plugin sees the
+            // weightiest thing the steps do. Anything to the Recycle Bin
+            // is a delete; renames and restores are a move; creating
+            // folders and files alone is a copy.
+            JobKind::Steps { steps } => {
+                use cabinetos_protocol::JobStep;
+                if steps
+                    .iter()
+                    .any(|step| matches!(step, JobStep::Recycle { .. }))
+                {
+                    bindings::cabinetos::plugin::types::JobKind::Delete
+                } else if steps
+                    .iter()
+                    .any(|step| matches!(step, JobStep::Rename { .. } | JobStep::Restore { .. }))
+                {
+                    bindings::cabinetos::plugin::types::JobKind::Move
+                } else {
+                    bindings::cabinetos::plugin::types::JobKind::Copy
+                }
+            }
         };
         let summary = bindings::JobSummary {
             job_id,

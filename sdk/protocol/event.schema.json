@@ -533,6 +533,52 @@
         "type",
         "tools"
       ]
+    },
+    {
+      "description": "A preview was applied: its rows run as these jobs. Sent to every\nconnection that said `hello`.",
+      "type": "object",
+      "properties": {
+        "jobs": {
+          "description": "The jobs, in order.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "preview": {
+          "description": "The preview.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "preview_applied"
+        }
+      },
+      "required": [
+        "type",
+        "preview",
+        "jobs"
+      ]
+    },
+    {
+      "description": "A preview was dropped: cancelled, or not applied within 10 minutes.\nSent to every connection that said `hello`.",
+      "type": "object",
+      "properties": {
+        "preview": {
+          "description": "The preview.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "preview_cancelled"
+        }
+      },
+      "required": [
+        "type",
+        "preview"
+      ]
     }
   ],
   "required": [

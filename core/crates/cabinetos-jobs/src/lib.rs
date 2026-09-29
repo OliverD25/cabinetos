@@ -14,6 +14,11 @@
 //! - Progress goes out at most 30 times per second per job.
 //! - A [`JobGate`], when set, sees every job after its scan and may refuse
 //!   it before anything is written (the core asks its plugins).
+//! - [`JobQueueManager::start_chain`] runs jobs one after another: each is
+//!   checked and queued only when the one before it has completed, and
+//!   cancelled when that one did not (a preview's rows, `docs/jobs.md`).
+//! - A `steps` job runs simple steps in order: renames, new folders and
+//!   files, the Recycle Bin, restores of saved copies.
 //!
 //! Jobs belong to the manager, not to the client that started them. Events
 //! reach the caller through the [`EventSink`] given to
@@ -45,7 +50,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use cabinetos_protocol::{
-    Conflict, ErrorCode, Event, JobAction, JobInfo, JobKind, JobRequest, JobState, Resolution,
+    Conflict, ErrorCode, Event, JobAction, JobInfo, JobKind, JobRequest, JobState, JobStep,
+    Resolution,
 };
 
 use crate::job::{Counters, Job, Target, as_policy, kind_tag, lock};
@@ -166,6 +172,10 @@ pub(crate) struct Engine {
     publisher: (Mutex<PublisherState>, Condvar),
     stopping: AtomicBool,
     pub(crate) gate: OnceLock<Arc<dyn JobGate>>,
+    /// Chained jobs: the job that waits for each job to end. A waiting job
+    /// is in `jobs` as it was requested, and joins the scheduler only when
+    /// the one before it has completed.
+    pending: Mutex<HashMap<u64, u64>>,
 }
 
 #[derive(Default)]
@@ -258,8 +268,95 @@ impl Engine {
 
     fn job_ended(self: &Arc<Self>, job: &Job) {
         lock(&self.scheduler).release(&job.disks);
+        self.next_in_chain(job);
         self.forget_old_jobs();
         self.admit();
+    }
+
+    /// Queues a checked job: into `jobs` (replacing a chained job's
+    /// placeholder) and into the scheduler.
+    fn enqueue(self: &Arc<Self>, id: u64, prepared: Prepared, paused: bool) {
+        let Prepared {
+            request,
+            disks,
+            same_volume,
+            priority,
+        } = prepared;
+        tracing::info!(
+            job_id = id,
+            kind = ?request.kind,
+            sources = request.sources.len(),
+            destination = request.destination.as_deref().unwrap_or(""),
+            disks = ?disks,
+            "job queued"
+        );
+        let job = Arc::new(Job::new(id, request, disks.clone(), same_volume));
+        if paused {
+            job.control.pause();
+        }
+        lock(&self.jobs).insert(id, Arc::clone(&job));
+        self.announce(&job);
+        {
+            let mut scheduler = lock(&self.scheduler);
+            scheduler.submit(id, priority, disks);
+            if paused {
+                scheduler.hold(id, true);
+            }
+        }
+        self.admit();
+    }
+
+    /// Starts the job that waits for `ended`, if one does: checked and
+    /// queued when `ended` completed, cancelled otherwise, and so on down
+    /// the chain.
+    fn next_in_chain(self: &Arc<Self>, ended: &Job) {
+        let mut ended_id = ended.id;
+        let mut completed = ended.state() == JobState::Completed;
+        loop {
+            let Some(next_id) = lock(&self.pending).remove(&ended_id) else {
+                return;
+            };
+            let Ok(next) = self.job(next_id) else {
+                return;
+            };
+            if next.is_done() {
+                // Cancelled while it waited; its own successors went then.
+                return;
+            }
+            if !completed || next.control.is_cancelled() || self.stopping.load(Ordering::SeqCst) {
+                tracing::info!(
+                    job_id = next_id,
+                    after = ended_id,
+                    "a chained job is cancelled: the job before it did not complete"
+                );
+                run::finish(self, &next, &JobState::Cancelled);
+                ended_id = next_id;
+                completed = false;
+                continue;
+            }
+            match prepare(next.request.clone()) {
+                Ok(prepared) => {
+                    self.enqueue(next_id, prepared, next.control.is_paused());
+                    return;
+                }
+                Err(error) => {
+                    run::finish(
+                        self,
+                        &next,
+                        &JobState::Failed {
+                            message: error.message,
+                        },
+                    );
+                    ended_id = next_id;
+                    completed = false;
+                }
+            }
+        }
+    }
+
+    /// Whether `job_id` waits in a chain, not yet queued.
+    fn is_chained_placeholder(&self, job_id: u64) -> bool {
+        lock(&self.pending).values().any(|next| *next == job_id)
     }
 
     /// Keeps at most `finished_jobs_kept` finished jobs.
@@ -335,6 +432,7 @@ impl JobQueueManager {
             publisher: (Mutex::new(PublisherState::default()), Condvar::new()),
             stopping: AtomicBool::new(false),
             gate: OnceLock::new(),
+            pending: Mutex::new(HashMap::new()),
         });
         let weak = Arc::downgrade(&engine);
         if let Err(error) = std::thread::Builder::new()
@@ -355,58 +453,63 @@ impl JobQueueManager {
     /// Checks the paths of `request`, finds the disks it touches and queues
     /// it. Returns the job's ID. Blocking: it looks at the file system.
     pub fn start(&self, request: JobRequest) -> Result<u64, JobError> {
+        self.refuse_when_stopping()?;
+        let prepared = prepare(request)?;
+        let id = NEXT_JOB_ID.fetch_add(1, Ordering::Relaxed);
+        self.engine.enqueue(id, prepared, false);
+        Ok(id)
+    }
+
+    /// Starts jobs that run one after another, in order: the first is
+    /// checked and queued now; each later one waits (`queued`) until the one
+    /// before it has completed, is checked then (its sources may be what an
+    /// earlier job made), and is cancelled when that one did not complete.
+    /// Returns the jobs' IDs in order. Blocking: it looks at the file
+    /// system.
+    pub fn start_chain(&self, requests: Vec<JobRequest>) -> Result<Vec<u64>, JobError> {
+        self.refuse_when_stopping()?;
+        let mut requests = requests.into_iter();
+        let Some(first) = requests.next() else {
+            return Err(JobError::new(
+                ErrorCode::InvalidPath,
+                "a chain needs at least one job",
+            ));
+        };
+        let first = prepare(first)?;
+        let first_id = NEXT_JOB_ID.fetch_add(1, Ordering::Relaxed);
+        let mut ids = vec![first_id];
+        // The placeholders go in before the first job is queued, so a first
+        // job that ends at once still finds its successor.
+        let mut previous = first_id;
+        for mut request in requests {
+            if let JobKind::Steps { steps } = &request.kind {
+                request.sources = steps.iter().map(|step| step.path().to_owned()).collect();
+            }
+            let id = NEXT_JOB_ID.fetch_add(1, Ordering::Relaxed);
+            let placeholder = Arc::new(Job::new(id, request, Vec::new(), Vec::new()));
+            lock(&self.engine.jobs).insert(id, Arc::clone(&placeholder));
+            self.engine.announce(&placeholder);
+            lock(&self.engine.pending).insert(previous, id);
+            tracing::info!(
+                job_id = id,
+                after = previous,
+                "job waits for the one before it"
+            );
+            previous = id;
+            ids.push(id);
+        }
+        self.engine.enqueue(first_id, first, false);
+        Ok(ids)
+    }
+
+    fn refuse_when_stopping(&self) -> Result<(), JobError> {
         if self.engine.stopping.load(Ordering::SeqCst) {
             return Err(JobError::new(
                 ErrorCode::Internal,
                 "the core is shutting down",
             ));
         }
-        let request = validate(request)?;
-        let mut disks = Vec::new();
-        let mut volumes: HashMap<String, (Disk, Option<String>)> = HashMap::new();
-        let mut volume_of = |path: &str| -> (Disk, Option<String>) {
-            // Sources picked together share a folder; look each folder up once.
-            let folder = Path::new(path)
-                .parent()
-                .map_or_else(|| path.to_owned(), |parent| parent.display().to_string());
-            volumes
-                .entry(folder.to_lowercase())
-                .or_insert_with(|| disk_of(path))
-                .clone()
-        };
-        let destination = request.destination.as_deref().map(&mut volume_of);
-        let mut same_volume = Vec::new();
-        for source in &request.sources {
-            let (disk, volume) = volume_of(source);
-            same_volume.push(match (&volume, &destination) {
-                (Some(source), Some((_, Some(target)))) => source.eq_ignore_ascii_case(target),
-                _ => false,
-            });
-            disks.push(disk);
-        }
-        if let Some((disk, _)) = destination {
-            disks.push(disk);
-        }
-        let priority = match request.kind {
-            JobKind::Delete { .. } => Priority::Quick,
-            JobKind::Move if same_volume.iter().all(|same| *same) => Priority::Quick,
-            JobKind::Copy | JobKind::Move => Priority::Copy,
-        };
-        let id = NEXT_JOB_ID.fetch_add(1, Ordering::Relaxed);
-        tracing::info!(
-            job_id = id,
-            kind = ?request.kind,
-            sources = request.sources.len(),
-            destination = request.destination.as_deref().unwrap_or(""),
-            disks = ?disks,
-            "job queued"
-        );
-        let job = Arc::new(Job::new(id, request, disks.clone(), same_volume));
-        lock(&self.engine.jobs).insert(id, Arc::clone(&job));
-        self.engine.announce(&job);
-        lock(&self.engine.scheduler).submit(id, priority, disks);
-        self.engine.admit();
-        Ok(id)
+        Ok(())
     }
 
     /// Every job the manager knows, oldest first.
@@ -453,9 +556,12 @@ impl JobQueueManager {
     fn cancel(&self, job: &Arc<Job>) {
         job.control.cancel();
         job.work_ready.notify_all();
-        if lock(&self.engine.scheduler).withdraw(job.id) {
-            // It never started: nobody else will end it.
+        let chained = self.engine.is_chained_placeholder(job.id);
+        if lock(&self.engine.scheduler).withdraw(job.id) || chained {
+            // It never started: nobody else will end it, nor the jobs that
+            // wait for it.
             run::finish(&self.engine, job, &JobState::Cancelled);
+            self.engine.next_in_chain(job);
             self.engine.forget_old_jobs();
             self.engine.admit();
         }
@@ -604,9 +710,103 @@ fn is_within(path: &str, folder: &str) -> bool {
     path == folder || path.starts_with(&format!("{folder}\\"))
 }
 
+/// A checked job, with the disks it touches, ready for the scheduler.
+struct Prepared {
+    request: JobRequest,
+    disks: Vec<Disk>,
+    same_volume: Vec<bool>,
+    priority: Priority,
+}
+
+/// Checks the paths of `request` and finds the disks it touches. Blocking:
+/// it looks at the file system.
+fn prepare(request: JobRequest) -> Result<Prepared, JobError> {
+    let request = validate(request)?;
+    let mut disks = Vec::new();
+    let mut volumes: HashMap<String, (Disk, Option<String>)> = HashMap::new();
+    let mut volume_of = |path: &str| -> (Disk, Option<String>) {
+        // Sources picked together share a folder; look each folder up once.
+        let folder = Path::new(path)
+            .parent()
+            .map_or_else(|| path.to_owned(), |parent| parent.display().to_string());
+        volumes
+            .entry(folder.to_lowercase())
+            .or_insert_with(|| disk_of(path))
+            .clone()
+    };
+    let destination = request.destination.as_deref().map(&mut volume_of);
+    let mut same_volume = Vec::new();
+    for source in &request.sources {
+        let (disk, volume) = volume_of(source);
+        same_volume.push(match (&volume, &destination) {
+            (Some(source), Some((_, Some(target)))) => source.eq_ignore_ascii_case(target),
+            _ => false,
+        });
+        disks.push(disk);
+    }
+    if let JobKind::Steps { steps } = &request.kind {
+        for step in steps {
+            if let JobStep::Rename { to, .. } | JobStep::Restore { to, .. } = step {
+                disks.push(volume_of(to).0);
+            }
+        }
+    }
+    if let Some((disk, _)) = destination {
+        disks.push(disk);
+    }
+    let priority = match request.kind {
+        JobKind::Delete { .. } | JobKind::Steps { .. } => Priority::Quick,
+        JobKind::Move if same_volume.iter().all(|same| *same) => Priority::Quick,
+        JobKind::Copy | JobKind::Move => Priority::Copy,
+    };
+    Ok(Prepared {
+        request,
+        disks,
+        same_volume,
+        priority,
+    })
+}
+
+/// Checks a `steps` job: at least one step, every path absolute. Whether
+/// the paths exist is each step's own business when it runs. Its sources
+/// are the steps' paths.
+fn validate_steps(mut request: JobRequest) -> Result<JobRequest, JobError> {
+    let invalid = |message: String| JobError::new(ErrorCode::InvalidPath, message);
+    let JobKind::Steps { steps } = &request.kind else {
+        return Ok(request);
+    };
+    if steps.is_empty() {
+        return Err(invalid("a steps job needs at least one step".to_owned()));
+    }
+    if request.destination.is_some() {
+        return Err(invalid("a steps job has no destination".to_owned()));
+    }
+    for step in steps {
+        let paths: Vec<&str> = match step {
+            JobStep::Rename { from, to } => vec![from, to],
+            JobStep::CreateFolder { path }
+            | JobStep::CreateFile { path }
+            | JobStep::Recycle { path } => {
+                vec![path]
+            }
+            JobStep::Restore { saved, to } => vec![saved, to],
+        };
+        for path in paths {
+            if !Path::new(path).is_absolute() {
+                return Err(invalid(format!("{path}: the path must be absolute")));
+            }
+        }
+    }
+    request.sources = steps.iter().map(|step| step.path().to_owned()).collect();
+    Ok(request)
+}
+
 /// Checks and normalizes the paths of a request.
 fn validate(mut request: JobRequest) -> Result<JobRequest, JobError> {
     let invalid = |message: String| JobError::new(ErrorCode::InvalidPath, message);
+    if matches!(request.kind, JobKind::Steps { .. }) {
+        return validate_steps(request);
+    }
     if request.sources.is_empty() {
         return Err(invalid("a job needs at least one source".to_owned()));
     }
@@ -693,6 +893,7 @@ fn validate(mut request: JobRequest) -> Result<JobRequest, JobError> {
                 return Err(invalid("a delete has no destination".to_owned()));
             }
         }
+        JobKind::Steps { .. } => {}
     }
     request.sources = sources;
     Ok(request)

@@ -9,7 +9,10 @@
 //!    `entries_offset`;
 //! 3. `entry_count` [`ListingMeta`] records (40 bytes each) at `meta_offset`,
 //!    in the same order: entry `i` and metadata `i` describe the same item;
-//! 4. the name arena at `name_arena_offset`: file names as UTF-16 code units.
+//! 4. the name arena at `name_arena_offset`: file names as UTF-16 code units;
+//! 5. in a preview only ([`ListingHeader::FLAG_PREVIEW`]), `entry_count`
+//!    [`PreviewRow`] records (12 bytes each) at `preview_offset`, after the
+//!    name arena: each row's change and target.
 //!
 //! All numbers are little-endian. The entries are already sorted as the client
 //! asked. Byte diagram: `docs/ipc.md`.
@@ -41,11 +44,14 @@ pub struct ListingHeader {
     pub meta_offset: u32,
     /// Byte offset of the [`ListingEntry`] array from the start of the section.
     pub entries_offset: u32,
-    /// No flags are defined yet; writers put 0 and readers ignore unknown bits.
+    /// Bit flags, see the `FLAG_` constants; readers ignore unknown bits.
     pub flags: u32,
-    /// Padding to a multiple of 8 bytes, so the entry array that follows is
-    /// 8-byte aligned. Always 0.
-    pub reserved: u32,
+    /// In a preview ([`ListingHeader::FLAG_PREVIEW`]), the byte offset of
+    /// the [`PreviewRow`] array from the start of the section; 0 in any
+    /// other listing. These bytes were reserved and always 0 before, so the
+    /// layout version stays 2. Also keeps the header a multiple of 8 bytes,
+    /// so the entry array that follows is 8-byte aligned.
+    pub preview_offset: u32,
 }
 
 impl ListingHeader {
@@ -53,6 +59,27 @@ impl ListingHeader {
     pub const MAGIC: u32 = u32::from_le_bytes(*b"CBLS");
     /// Version of the layout defined in this module.
     pub const VERSION: u32 = 2;
+    /// The listing is a preview of proposed changes (`preview_listing`),
+    /// not a folder: its rows are paths anywhere, each entry's name is the
+    /// row's full path, `id` is the row's index, and `preview_offset`
+    /// points at one [`PreviewRow`] per entry.
+    pub const FLAG_PREVIEW: u32 = 1;
+}
+
+/// A preview row's change and target: 12 bytes, 4-byte aligned, in the
+/// order of the entries.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PreviewRow {
+    /// Byte offset of the target from the start of the name arena.
+    pub to_offset: u32,
+    /// Length of the target in UTF-16 code units; 0 when the row has none.
+    pub to_len: u32,
+    /// The change, a `ChangeKind` byte: 1 rename, 2 move, 3 copy, 4 delete,
+    /// 5 create; 0 or an unknown value reads as unknown.
+    pub change: u8,
+    /// Always 0.
+    pub reserved: [u8; 3],
 }
 
 /// One entry of a listing: 16 bytes, 8-byte aligned.
@@ -121,6 +148,7 @@ pub struct ListingMeta {
 const _: () = assert!(size_of::<ListingHeader>() == 40);
 const _: () = assert!(size_of::<ListingEntry>() == 16);
 const _: () = assert!(size_of::<ListingMeta>() == 40);
+const _: () = assert!(size_of::<PreviewRow>() == 12);
 
 /// What a [`ListingEntry`] is. The discriminants are the raw byte values
 /// stored in [`ListingEntry::kind`].
@@ -176,7 +204,18 @@ mod tests {
         assert_eq!(offset_of!(ListingHeader, meta_offset), 24);
         assert_eq!(offset_of!(ListingHeader, entries_offset), 28);
         assert_eq!(offset_of!(ListingHeader, flags), 32);
-        assert_eq!(offset_of!(ListingHeader, reserved), 36);
+        assert_eq!(offset_of!(ListingHeader, preview_offset), 36);
+    }
+
+    #[test]
+    fn preview_row_layout_is_pinned() {
+        assert_eq!(size_of::<PreviewRow>(), 12);
+        assert_eq!(align_of::<PreviewRow>(), 4);
+        assert_eq!(offset_of!(PreviewRow, to_offset), 0);
+        assert_eq!(offset_of!(PreviewRow, to_len), 4);
+        assert_eq!(offset_of!(PreviewRow, change), 8);
+        assert_eq!(offset_of!(PreviewRow, reserved), 9);
+        assert_eq!(ListingHeader::FLAG_PREVIEW, 1);
     }
 
     #[test]

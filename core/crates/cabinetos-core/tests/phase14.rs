@@ -7,16 +7,18 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use cabinetos_fs::ListingReader;
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
-    Envelope, ErrorCode, Event, Pane, PaneState, Request, Response, WindowPanes, WindowState,
-    WindowTab,
+    ChangeKind, Envelope, ErrorCode, Event, JobState, Pane, PaneState, PreviewRow, Request,
+    Response, WindowPanes, WindowState, WindowTab,
 };
 use tempfile::TempDir;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 const CORE_EXE: &str = env!("CARGO_BIN_EXE_cabinetos-core");
 const STARTUP_DEADLINE: Duration = Duration::from_secs(10);
+const EVENT_DEADLINE: Duration = Duration::from_secs(20);
 
 /// A running core, killed at the end of the test, with its own folder for
 /// the configuration, the logs and the test's files.
@@ -44,6 +46,11 @@ impl Core {
 }
 
 fn start_core() -> Core {
+    start_core_with(&[])
+}
+
+/// A core with extra environment variables, such as a short preview life.
+fn start_core_with(env: &[(&str, &str)]) -> Core {
     let root = std::env::temp_dir().join("cabinetos-core-test");
     std::fs::create_dir_all(&root).unwrap();
     let dir = tempfile::Builder::new()
@@ -52,6 +59,7 @@ fn start_core() -> Core {
         .unwrap();
     let pipe = PipeName::random();
     let child = Command::new(CORE_EXE)
+        .envs(env.iter().copied())
         .args(["--pipe", pipe.token()])
         .arg("--config")
         .arg(dir.path().join("config").join("cabinetos.json"))
@@ -219,4 +227,337 @@ async fn a_window_state_is_kept_per_client_until_it_leaves() {
     .await;
     assert_eq!(error_code(&reply), Some(ErrorCode::NoWindow), "{reply:?}");
     drop(first);
+}
+
+fn row(path: &std::path::Path, kind: ChangeKind, to: Option<String>) -> PreviewRow {
+    PreviewRow {
+        path: path.display().to_string(),
+        kind,
+        to,
+    }
+}
+
+/// The next event that `pick` accepts, skipping others.
+async fn next_event<T>(
+    events: &mut UnboundedReceiver<Envelope<Event>>,
+    mut pick: impl FnMut(&Event) -> Option<T>,
+) -> T {
+    let deadline = Instant::now() + EVENT_DEADLINE;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let event = tokio::time::timeout(left, events.recv())
+            .await
+            .expect("the event did not come in time")
+            .expect("the event stream ended")
+            .body;
+        if let Some(found) = pick(&event) {
+            return found;
+        }
+    }
+}
+
+/// The final state of each of `jobs`, from `job_state_changed`.
+async fn final_states(
+    events: &mut UnboundedReceiver<Envelope<Event>>,
+    jobs: &[u64],
+) -> Vec<JobState> {
+    let mut states = vec![None; jobs.len()];
+    while states.iter().any(Option::is_none) {
+        let (job, state) = next_event(events, |event| match event {
+            Event::JobStateChanged { job_id, state } if state.is_terminal() => {
+                Some((*job_id, state.clone()))
+            }
+            _ => None,
+        })
+        .await;
+        if let Some(index) = jobs.iter().position(|id| *id == job) {
+            states[index] = Some(state);
+        }
+    }
+    states.into_iter().map(Option::unwrap).collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[expect(clippy::too_many_lines, reason = "one preview from proposal to disk")]
+async fn a_preview_is_a_listing_and_applies_its_rows_in_order() {
+    let core = start_core();
+    let files = core.files();
+    std::fs::write(files.join("a.txt"), b"alpha").unwrap();
+    std::fs::write(files.join("b.txt"), b"bravo").unwrap();
+    let sorted = files.join("Sorted");
+    let (mut client, mut events) = greeted(&core, "preview-test").await;
+
+    // The move needs what the rename makes, and the rename's folder what
+    // the first row creates: only an ordered chain gets this right.
+    let rows = vec![
+        row(&files.join("Sorted\\"), ChangeKind::Create, None),
+        row(
+            &files.join("a.txt"),
+            ChangeKind::Rename,
+            Some("a2.txt".to_owned()),
+        ),
+        row(
+            &files.join("a2.txt"),
+            ChangeKind::Move,
+            Some(sorted.display().to_string()),
+        ),
+        row(
+            &files.join("b.txt"),
+            ChangeKind::Copy,
+            Some(sorted.display().to_string()),
+        ),
+        row(&sorted.join("note.txt"), ChangeKind::Create, None),
+    ];
+    let reply = ask(
+        &mut client,
+        Request::PreviewListing {
+            title: "Sort two files".to_owned(),
+            rows,
+        },
+    )
+    .await;
+    let Response::PreviewOpened {
+        preview,
+        title,
+        listing,
+    } = reply
+    else {
+        panic!("{reply:?}")
+    };
+    assert_eq!(title, "Sort two files");
+    assert_eq!((listing.entry_count, listing.generation), (5, 1));
+    // Nothing on disk changed.
+    assert!(!sorted.exists() && files.join("a.txt").exists());
+
+    let section = client.take_section(listing.section_handle).unwrap();
+    let view = section.map_readonly().unwrap();
+    let reader = ListingReader::new(view.as_slice()).unwrap();
+    assert!(reader.is_preview());
+    let names: Vec<String> = reader.entries().map(|entry| entry.unwrap().name).collect();
+    assert_eq!(names[0], sorted.display().to_string());
+    assert_eq!(names[1], files.join("a.txt").display().to_string());
+    assert_eq!(
+        reader.entry(1).unwrap().meta.size,
+        5,
+        "the file as it is now"
+    );
+    let rename = reader.preview_row(1).unwrap();
+    assert_eq!(rename.change, Some(ChangeKind::Rename));
+    assert_eq!(
+        rename.to.as_deref(),
+        Some(files.join("a2.txt").display().to_string().as_str())
+    );
+    assert_eq!(
+        reader.preview_row(3).unwrap().change,
+        Some(ChangeKind::Copy)
+    );
+    // A pane asks for type names as for any listing.
+    let reply = ask(
+        &mut client,
+        Request::DescribeEntries {
+            listing_id: listing.listing_id,
+            from: 0,
+            count: 5,
+        },
+    )
+    .await;
+    assert!(
+        matches!(reply, Response::EntryDetails { ref details, .. } if details.len() == 5),
+        "{reply:?}"
+    );
+
+    let reply = ask(
+        &mut client,
+        Request::PreviewApply {
+            preview: preview.clone(),
+        },
+    )
+    .await;
+    let Response::JobsStarted { jobs } = reply else {
+        panic!("{reply:?}")
+    };
+    // Create and rename share a steps job; the move, the copy and the last
+    // create follow, each after the one before.
+    assert_eq!(jobs.len(), 4, "{jobs:?}");
+    let applied = next_event(&mut events, |event| match event {
+        Event::PreviewApplied { preview: id, jobs } => Some((id.clone(), jobs.clone())),
+        _ => None,
+    })
+    .await;
+    assert_eq!(applied, (preview.clone(), jobs.clone()));
+    let states = final_states(&mut events, &jobs).await;
+    assert!(
+        states.iter().all(|state| *state == JobState::Completed),
+        "{states:?}"
+    );
+    assert_eq!(std::fs::read(sorted.join("a2.txt")).unwrap(), b"alpha");
+    assert_eq!(std::fs::read(sorted.join("b.txt")).unwrap(), b"bravo");
+    assert!(files.join("b.txt").exists() && !files.join("a.txt").exists());
+    assert_eq!(std::fs::read(sorted.join("note.txt")).unwrap(), b"");
+
+    // Applied once: it is gone.
+    let reply = ask(&mut client, Request::PreviewApply { preview }).await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::NoSuchPreview),
+        "{reply:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_row_that_fails_cancels_the_rows_after_it() {
+    let core = start_core();
+    let files = core.files();
+    std::fs::write(files.join("b.txt"), b"bravo").unwrap();
+    let (mut client, mut events) = greeted(&core, "preview-test").await;
+    let reply = ask(
+        &mut client,
+        Request::PreviewListing {
+            title: "Broken".to_owned(),
+            rows: vec![
+                row(
+                    &files.join("missing.txt"),
+                    ChangeKind::Rename,
+                    Some("x.txt".to_owned()),
+                ),
+                row(
+                    &files.join("b.txt"),
+                    ChangeKind::Move,
+                    Some(files.join("elsewhere").display().to_string()),
+                ),
+            ],
+        },
+    )
+    .await;
+    let Response::PreviewOpened { preview, .. } = reply else {
+        panic!("{reply:?}")
+    };
+    let Response::JobsStarted { jobs } = ask(&mut client, Request::PreviewApply { preview }).await
+    else {
+        panic!("not applied")
+    };
+    let states = final_states(&mut events, &jobs).await;
+    assert_eq!(states, [JobState::CompletedWithErrors, JobState::Cancelled]);
+    assert!(files.join("b.txt").exists(), "the move never ran");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn previews_are_cancelled_and_expire() {
+    let core = start_core_with(&[("CABINETOS_PREVIEW_TTL_MS", "400")]);
+    let files = core.files();
+    let (mut client, mut events) = greeted(&core, "preview-test").await;
+    let (mut other, _other_events) = greeted(&core, "other-window").await;
+    let one = || Request::PreviewListing {
+        title: "One file".to_owned(),
+        rows: vec![row(&files.join("x.txt"), ChangeKind::Create, None)],
+    };
+
+    let Response::PreviewOpened { preview, .. } = ask(&mut client, one()).await else {
+        panic!("no preview")
+    };
+    // Another window opens it by its ID, as it does one a plugin proposed.
+    let reply = ask(
+        &mut other,
+        Request::OpenPreview {
+            preview: preview.clone(),
+        },
+    )
+    .await;
+    assert!(matches!(reply, Response::PreviewOpened { .. }), "{reply:?}");
+    assert_eq!(
+        ask(
+            &mut client,
+            Request::PreviewCancel {
+                preview: preview.clone()
+            }
+        )
+        .await,
+        Response::Ok
+    );
+    let cancelled = next_event(&mut events, |event| match event {
+        Event::PreviewCancelled { preview } => Some(preview.clone()),
+        _ => None,
+    })
+    .await;
+    assert_eq!(cancelled, preview);
+    let reply = ask(&mut client, Request::OpenPreview { preview }).await;
+    assert_eq!(error_code(&reply), Some(ErrorCode::NoSuchPreview));
+
+    // Not applied in time: dropped with the same event.
+    let Response::PreviewOpened { preview, .. } = ask(&mut client, one()).await else {
+        panic!("no preview")
+    };
+    let expired = next_event(&mut events, |event| match event {
+        Event::PreviewCancelled { preview } => Some(preview.clone()),
+        _ => None,
+    })
+    .await;
+    assert_eq!(expired, preview);
+    assert!(!files.join("x.txt").exists());
+
+    // Rows are checked before anything is kept.
+    let reply = ask(
+        &mut client,
+        Request::PreviewListing {
+            title: "Bad".to_owned(),
+            rows: vec![PreviewRow {
+                path: "relative.txt".to_owned(),
+                kind: ChangeKind::Delete,
+                to: None,
+            }],
+        },
+    )
+    .await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::InvalidPath),
+        "{reply:?}"
+    );
+    // A preview needs hello: it becomes a listing in the client's process.
+    let mut stranger = connect(&core.pipe).await;
+    let reply = ask(&mut stranger, one()).await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::ProtocolError),
+        "{reply:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_twenty_first_preview_of_a_client_is_refused() {
+    let core = start_core();
+    let files = core.files();
+    let (mut client, _events) = greeted(&core, "preview-test").await;
+    let (mut other, _other_events) = greeted(&core, "other-window").await;
+    let one = || Request::PreviewListing {
+        title: "One file".to_owned(),
+        rows: vec![row(&files.join("x.txt"), ChangeKind::Create, None)],
+    };
+    let mut first = None;
+    for _ in 0..20 {
+        let Response::PreviewOpened { preview, .. } = ask(&mut client, one()).await else {
+            panic!("refused too early")
+        };
+        first.get_or_insert(preview);
+    }
+    let reply = ask(&mut client, one()).await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::TooManyPreviews),
+        "{reply:?}"
+    );
+    // Another client has twenty of its own.
+    assert!(matches!(
+        ask(&mut other, one()).await,
+        Response::PreviewOpened { .. }
+    ));
+    // Cancelling one makes room.
+    let cancel = Request::PreviewCancel {
+        preview: first.unwrap(),
+    };
+    assert_eq!(ask(&mut client, cancel).await, Response::Ok);
+    assert!(matches!(
+        ask(&mut client, one()).await,
+        Response::PreviewOpened { .. }
+    ));
 }

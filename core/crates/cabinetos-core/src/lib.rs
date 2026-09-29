@@ -30,6 +30,7 @@ mod listing;
 mod market;
 mod measure;
 mod plugins;
+mod preview;
 mod search;
 mod settings;
 mod terminal;
@@ -236,6 +237,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         Arc::clone(&themes),
     ));
     let terminals = terminal::start(&events);
+    let previews = preview::Previews::start(&events);
     // Dropping the watcher at the end stops it.
     let _drives = volumes::watch(Arc::clone(&events));
     let services = Arc::new(Services {
@@ -249,6 +251,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         themes,
         market,
         windows: window::WindowStates::default(),
+        previews,
     });
     let mut result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     if result.is_ok() && panicked.load(Ordering::SeqCst) {

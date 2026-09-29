@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use cabinetos_jobs::{EngineConfig, EventSink, JobError, JobGate, JobPreview, JobQueueManager};
 use cabinetos_protocol::{
     Conflict, ConflictKind, ConflictPolicy, ErrorCode, Event, JobAction, JobKind, JobOptions,
-    JobProgress, JobRequest, JobState, LinkPolicy, Resolution,
+    JobProgress, JobRequest, JobState, JobStep, LinkPolicy, Resolution,
 };
 use tempfile::TempDir;
 
@@ -1785,4 +1785,168 @@ fn copyfile_keeps_the_write_time_and_the_option_adds_the_creation_time() {
             );
         }
     }
+}
+
+#[test]
+fn a_steps_job_runs_its_steps_in_order_and_counts_what_failed() {
+    let dir = scratch("steps");
+    let folder = dir.path().join("New folder");
+    let path = |name: &str| folder.join(name).display().to_string();
+    let steps = vec![
+        JobStep::CreateFolder {
+            path: folder.display().to_string(),
+        },
+        JobStep::CreateFile {
+            path: path("a.txt"),
+        },
+        JobStep::Rename {
+            from: path("a.txt"),
+            to: path("b.txt"),
+        },
+        // Gone already: fails, and the job goes on.
+        JobStep::Rename {
+            from: path("a.txt"),
+            to: path("c.txt"),
+        },
+        // Never replaces anything.
+        JobStep::CreateFile {
+            path: path("b.txt"),
+        },
+    ];
+    let engine = engine();
+    let job = engine
+        .manager
+        .start(JobRequest {
+            kind: JobKind::Steps { steps },
+            sources: Vec::new(),
+            destination: None,
+            options: JobOptions::default(),
+        })
+        .unwrap();
+    let info = engine
+        .manager
+        .list()
+        .into_iter()
+        .find(|info| info.progress.job_id == job)
+        .unwrap();
+    assert_eq!(info.sources.len(), 5, "the sources are the steps' paths");
+    let (progress, conflicts) = engine.finish(job);
+    assert_eq!(progress.state, JobState::CompletedWithErrors);
+    assert_eq!((progress.files_done, progress.files_failed), (5, 2));
+    assert!(conflicts.is_empty());
+    assert!(folder.join("b.txt").exists() && !folder.join("a.txt").exists());
+
+    let refused = engine.manager.start(JobRequest {
+        kind: JobKind::Steps {
+            steps: vec![JobStep::CreateFile {
+                path: "relative.txt".to_owned(),
+            }],
+        },
+        sources: Vec::new(),
+        destination: None,
+        options: JobOptions::default(),
+    });
+    assert_eq!(refused.unwrap_err().code, ErrorCode::InvalidPath);
+}
+
+/// Holds every job in its gate until released.
+struct Turnstile(Mutex<bool>, std::sync::Condvar);
+
+impl JobGate for Turnstile {
+    fn check(&self, _job: &JobPreview<'_>) -> Result<(), String> {
+        let mut open = self.0.lock().unwrap();
+        while !*open {
+            open = self.1.wait(open).unwrap();
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn chained_jobs_wait_their_turn_and_a_cancel_takes_the_rest_along() {
+    let dir = scratch("chain");
+    let folder = dir.path().join("Sorted");
+    let source = dir.path().join("a.txt");
+    fs::write(&source, b"alpha").unwrap();
+    let steps = |step: JobStep| JobRequest {
+        kind: JobKind::Steps { steps: vec![step] },
+        sources: Vec::new(),
+        destination: None,
+        options: JobOptions::default(),
+    };
+    let copy = JobRequest {
+        kind: JobKind::Copy,
+        sources: vec![source.display().to_string()],
+        destination: Some(folder.display().to_string()),
+        options: JobOptions::default(),
+    };
+    let engine = engine();
+    // The second job's source does not exist yet when the chain starts: it
+    // is checked only when its turn comes.
+    let made = folder.join("a.txt");
+    let chain = engine
+        .manager
+        .start_chain(vec![
+            steps(JobStep::CreateFolder {
+                path: folder.display().to_string(),
+            }),
+            copy.clone(),
+            steps(JobStep::Rename {
+                from: made.display().to_string(),
+                to: folder.join("b.txt").display().to_string(),
+            }),
+        ])
+        .unwrap();
+    for job in &chain {
+        assert_eq!(
+            engine.finish(*job).0.state,
+            JobState::Completed,
+            "job {job}"
+        );
+    }
+    assert!(folder.join("b.txt").exists() && source.exists());
+
+    // Held at the gate, the first job cannot end; cancelling the second,
+    // still waiting in the chain, ends it and the third at once.
+    let gate = Arc::new(Turnstile(Mutex::new(false), std::sync::Condvar::new()));
+    assert!(
+        engine
+            .manager
+            .set_gate(Arc::clone(&gate) as Arc<dyn JobGate>)
+    );
+    let chain = engine
+        .manager
+        .start_chain(vec![
+            steps(JobStep::CreateFile {
+                path: dir.path().join("first.txt").display().to_string(),
+            }),
+            steps(JobStep::CreateFile {
+                path: dir.path().join("second.txt").display().to_string(),
+            }),
+            steps(JobStep::CreateFile {
+                path: dir.path().join("third.txt").display().to_string(),
+            }),
+        ])
+        .unwrap();
+    engine.manager.control(chain[1], JobAction::Cancel).unwrap();
+    let states: Vec<JobState> = engine
+        .manager
+        .list()
+        .into_iter()
+        .filter(|info| chain[1..].contains(&info.progress.job_id))
+        .map(|info| info.progress.state)
+        .collect();
+    assert_eq!(states, [JobState::Cancelled, JobState::Cancelled]);
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    assert_eq!(engine.finish(chain[0]).0.state, JobState::Completed);
+    assert!(dir.path().join("first.txt").exists());
+    assert!(!dir.path().join("second.txt").exists() && !dir.path().join("third.txt").exists());
+
+    // The first job refused: nothing is queued, the chain is refused whole.
+    let refused = engine.manager.start_chain(vec![JobRequest {
+        sources: vec![dir.path().join("missing.txt").display().to_string()],
+        ..copy
+    }]);
+    assert_eq!(refused.unwrap_err().code, ErrorCode::NotFound);
 }

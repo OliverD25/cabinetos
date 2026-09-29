@@ -23,6 +23,65 @@ pub enum JobKind {
         #[serde(default)]
         permanent: bool,
     },
+    /// Simple steps, one after another: renames, new folders and files,
+    /// the Recycle Bin, and restores of saved copies. `preview_apply` and
+    /// `undo_job` start them; the job's `sources` are the steps' paths.
+    Steps {
+        /// The steps, in order.
+        steps: Vec<JobStep>,
+    },
+}
+
+/// One step of a `steps` job. A step that fails is counted as failed and
+/// the job goes on with the next.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum JobStep {
+    /// Gives `from` the full path `to`, never replacing anything: a rename
+    /// in its folder, or a move (a file may cross volumes).
+    Rename {
+        /// The file or folder.
+        from: String,
+        /// Its new full path.
+        to: String,
+    },
+    /// Creates a folder; its parent must exist.
+    CreateFolder {
+        /// The new folder.
+        path: String,
+    },
+    /// Creates an empty file; nothing is ever replaced.
+    CreateFile {
+        /// The new file.
+        path: String,
+    },
+    /// Puts a file or folder into the Recycle Bin.
+    Recycle {
+        /// The file or folder.
+        path: String,
+    },
+    /// Puts a saved copy back in place of `to`, replacing what is there.
+    Restore {
+        /// The saved copy (in the undo folder).
+        saved: String,
+        /// Where it was.
+        to: String,
+    },
+}
+
+impl JobStep {
+    /// The path the step works on: its source, or what it creates.
+    #[must_use]
+    pub fn path(&self) -> &str {
+        match self {
+            Self::Rename { from, .. } => from,
+            Self::CreateFolder { path } | Self::CreateFile { path } | Self::Recycle { path } => {
+                path
+            }
+            Self::Restore { to, .. } => to,
+        }
+    }
 }
 
 /// A job to start.

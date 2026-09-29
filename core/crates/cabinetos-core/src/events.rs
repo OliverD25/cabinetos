@@ -12,6 +12,7 @@ use cabinetos_terminal::Terminals;
 use tokio::sync::broadcast;
 
 use crate::market::Marketplace;
+use crate::preview::Previews;
 use crate::search::IndexerLink;
 use crate::settings::Settings;
 use crate::themes::Themes;
@@ -70,4 +71,7 @@ pub(crate) struct Services {
     pub(crate) market: Arc<Marketplace>,
     /// What each window shows, as it last said (`window_state`).
     pub(crate) windows: WindowStates,
+    /// The previews of proposed changes, until applied, cancelled or
+    /// expired.
+    pub(crate) previews: Arc<Previews>,
 }

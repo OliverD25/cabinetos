@@ -1129,12 +1129,122 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Proposes changes without making them: the core checks the rows and\nwrites them into shared memory as a listing, which a pane shows\nlike a folder. Needs `hello`. The core answers `preview_opened`.",
+      "type": "object",
+      "properties": {
+        "rows": {
+          "description": "The changes, in the order they would run.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PreviewRow"
+          }
+        },
+        "title": {
+          "description": "What the preview is about, for the pane's title.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "preview_listing"
+        }
+      },
+      "required": [
+        "type",
+        "title",
+        "rows"
+      ]
+    },
+    {
+      "description": "Opens the listing of a preview that exists already, such as one a\nplugin proposed. Needs `hello`. The core answers `preview_opened`.",
+      "type": "object",
+      "properties": {
+        "preview": {
+          "description": "The preview, from `preview_opened` or an event that names it.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "open_preview"
+        }
+      },
+      "required": [
+        "type",
+        "preview"
+      ]
+    },
+    {
+      "description": "Runs a preview's rows in order, as jobs; the preview is gone\nafterwards. The core answers `jobs_started`, and every client that\nsaid `hello` gets `preview_applied`.",
+      "type": "object",
+      "properties": {
+        "preview": {
+          "description": "The preview.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "preview_apply"
+        }
+      },
+      "required": [
+        "type",
+        "preview"
+      ]
+    },
+    {
+      "description": "Drops a preview without running it. The core answers `ok`, and every\nclient that said `hello` gets `preview_cancelled`.",
+      "type": "object",
+      "properties": {
+        "preview": {
+          "description": "The preview.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "preview_cancel"
+        }
+      },
+      "required": [
+        "type",
+        "preview"
+      ]
     }
   ],
   "required": [
     "id"
   ],
   "$defs": {
+    "ChangeKind": {
+      "description": "What a row of a preview would do.",
+      "oneOf": [
+        {
+          "description": "Give `path` another name in its folder: `to` is the new name, or\nthe new full path in the same folder.",
+          "type": "string",
+          "const": "rename"
+        },
+        {
+          "description": "Move `path` into the folder `to`.",
+          "type": "string",
+          "const": "move"
+        },
+        {
+          "description": "Copy `path` into the folder `to`.",
+          "type": "string",
+          "const": "copy"
+        },
+        {
+          "description": "Put `path` into the Recycle Bin.",
+          "type": "string",
+          "const": "delete"
+        },
+        {
+          "description": "Create `path`: a folder when it ends with `\\`, else an empty file.",
+          "type": "string",
+          "const": "create"
+        }
+      ]
+    },
     "ConflictPolicy": {
       "description": "What to do when a file already exists at the destination.",
       "oneOf": [
@@ -1251,6 +1361,27 @@
           "required": [
             "type"
           ]
+        },
+        {
+          "description": "Simple steps, one after another: renames, new folders and files,\nthe Recycle Bin, and restores of saved copies. `preview_apply` and\n`undo_job` start them; the job's `sources` are the steps' paths.",
+          "type": "object",
+          "properties": {
+            "steps": {
+              "description": "The steps, in order.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/JobStep"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "steps"
+            }
+          },
+          "required": [
+            "type",
+            "steps"
+          ]
         }
       ]
     },
@@ -1316,6 +1447,111 @@
       "required": [
         "kind",
         "sources"
+      ]
+    },
+    "JobStep": {
+      "description": "One step of a `steps` job. A step that fails is counted as failed and\nthe job goes on with the next.",
+      "oneOf": [
+        {
+          "description": "Gives `from` the full path `to`, never replacing anything: a rename\nin its folder, or a move (a file may cross volumes).",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "The file or folder.",
+              "type": "string"
+            },
+            "op": {
+              "type": "string",
+              "const": "rename"
+            },
+            "to": {
+              "description": "Its new full path.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Creates a folder; its parent must exist.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "create_folder"
+            },
+            "path": {
+              "description": "The new folder.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "path"
+          ]
+        },
+        {
+          "description": "Creates an empty file; nothing is ever replaced.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "create_file"
+            },
+            "path": {
+              "description": "The new file.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "path"
+          ]
+        },
+        {
+          "description": "Puts a file or folder into the Recycle Bin.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "recycle"
+            },
+            "path": {
+              "description": "The file or folder.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "path"
+          ]
+        },
+        {
+          "description": "Puts a saved copy back in place of `to`, replacing what is there.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "restore"
+            },
+            "saved": {
+              "description": "The saved copy (in the undo folder).",
+              "type": "string"
+            },
+            "to": {
+              "description": "Where it was.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "saved",
+            "to"
+          ]
+        }
       ]
     },
     "LinkPolicy": {
@@ -1384,6 +1620,32 @@
           }
         }
       }
+    },
+    "PreviewRow": {
+      "description": "One proposed change.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "What would happen to it.",
+          "$ref": "#/$defs/ChangeKind"
+        },
+        "path": {
+          "description": "The file or folder it concerns, as an absolute path. For `create`,\nthe new item: a trailing `\\` makes it a folder.",
+          "type": "string"
+        },
+        "to": {
+          "description": "For `rename`, the new name (or the new full path in the same\nfolder); for `move` and `copy`, the folder it goes into; `null` for\n`delete` and `create`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "path",
+        "kind"
+      ]
     },
     "RequestId": {
       "description": "A ULID created by the sender of a request and echoed unchanged in the reply.",

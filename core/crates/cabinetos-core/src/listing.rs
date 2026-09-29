@@ -4,7 +4,10 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use cabinetos_fs::{DirectoryChanged, DirectoryWatcher, FsError, ListOptions, ListingWriter};
+use cabinetos_fs::{
+    DirectoryChanged, DirectoryWatcher, FsError, ListOptions, ListingWriter, PreviewEntry,
+    PreviewWriter,
+};
 use cabinetos_ipc::SharedSection;
 use cabinetos_protocol::{Envelope, ErrorCode, Event, RefreshReason, RequestId};
 use tokio::sync::mpsc;
@@ -75,6 +78,26 @@ pub(crate) fn publish(
         section,
         size: writer.section_size() as u64,
         entry_count: u32::try_from(listing.len()).unwrap_or(u32::MAX),
+        elapsed_us: micros(started.elapsed()),
+    })
+}
+
+/// Writes a preview's rows into a new section. Blocking only for the
+/// section itself: the rows' metadata was read before.
+pub(crate) fn publish_preview(rows: &[PreviewEntry]) -> Result<Published, Failure> {
+    let started = Instant::now();
+    let writer = PreviewWriter::new(rows).map_err(|error| (ErrorCode::Io, error.to_string()))?;
+    let section = SharedSection::create(writer.section_size()).map_err(internal)?;
+    {
+        let mut view = section.map().map_err(internal)?;
+        writer
+            .write(view.as_mut_slice())
+            .map_err(|error| (ErrorCode::Internal, error.to_string()))?;
+    }
+    Ok(Published {
+        section,
+        size: writer.section_size() as u64,
+        entry_count: u32::try_from(rows.len()).unwrap_or(u32::MAX),
         elapsed_us: micros(started.elapsed()),
     })
 }

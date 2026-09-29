@@ -176,6 +176,7 @@ fn job_line(job: &JobInfo) -> String {
         JobKind::Move => "move",
         JobKind::Delete { permanent: false } => "delete",
         JobKind::Delete { permanent: true } => "delete --permanent",
+        JobKind::Steps { .. } => "steps",
     };
     let target = job
         .destination

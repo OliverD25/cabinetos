@@ -10,7 +10,8 @@
 
 use std::mem::offset_of;
 
-use cabinetos_protocol::shm::{EntryKind, ListingEntry, ListingHeader, ListingMeta};
+use cabinetos_protocol::ChangeKind;
+use cabinetos_protocol::shm::{EntryKind, ListingEntry, ListingHeader, ListingMeta, PreviewRow};
 
 use crate::Listing;
 
@@ -19,6 +20,12 @@ use crate::Listing;
 #[derive(Debug, thiserror::Error)]
 #[error("listing section: {0}")]
 pub struct LayoutError(String);
+
+impl LayoutError {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+}
 
 const HEADER_SIZE: usize = size_of::<ListingHeader>();
 const ENTRY_SIZE: usize = size_of::<ListingEntry>();
@@ -135,7 +142,7 @@ impl<'a> ListingWriter<'a> {
                 layout.entries_offset,
             ),
             (offset_of!(ListingHeader, flags), 0),
-            (offset_of!(ListingHeader, reserved), 0),
+            (offset_of!(ListingHeader, preview_offset), 0),
         ];
         for (at, value) in header {
             put(out, at, &value.to_le_bytes());
@@ -360,7 +367,7 @@ impl<'a> ListingReader<'a> {
             meta_offset: field(offset_of!(ListingHeader, meta_offset))?,
             entries_offset: field(offset_of!(ListingHeader, entries_offset))?,
             flags: field(offset_of!(ListingHeader, flags))?,
-            reserved: field(offset_of!(ListingHeader, reserved))?,
+            preview_offset: field(offset_of!(ListingHeader, preview_offset))?,
         };
         if header.magic != ListingHeader::MAGIC {
             return Err(LayoutError(format!("wrong magic {:#010x}", header.magic)));
@@ -373,6 +380,7 @@ impl<'a> ListingReader<'a> {
             )));
         }
         let count = u64::from(header.entry_count);
+        let preview = header.flags & ListingHeader::FLAG_PREVIEW != 0;
         let parts = [
             (
                 "entries",
@@ -386,6 +394,16 @@ impl<'a> ListingReader<'a> {
                 header.name_arena_offset,
                 u64::from(header.name_arena_len),
                 2,
+            ),
+            (
+                "preview rows",
+                header.preview_offset,
+                if preview {
+                    count * size_of::<PreviewRow>() as u64
+                } else {
+                    0
+                },
+                4,
             ),
         ];
         for (part, offset, len, align) in parts {
@@ -490,6 +508,71 @@ impl<'a> ListingReader<'a> {
     pub fn entries(&self) -> impl Iterator<Item = Result<EntryView, LayoutError>> + '_ {
         (0..self.len()).map(|index| self.entry(index))
     }
+
+    /// Whether the listing is a preview of proposed changes
+    /// ([`ListingHeader::FLAG_PREVIEW`]).
+    #[must_use]
+    pub fn is_preview(&self) -> bool {
+        self.header.flags & ListingHeader::FLAG_PREVIEW != 0
+    }
+
+    /// The change and target of preview row `index`. An error for a
+    /// listing that is no preview.
+    pub fn preview_row(&self, index: usize) -> Result<PreviewView, LayoutError> {
+        if !self.is_preview() {
+            return Err(LayoutError::new("the listing is not a preview"));
+        }
+        if index >= self.len() {
+            return Err(LayoutError(format!("no entry {index} in {}", self.len())));
+        }
+        let malformed = || LayoutError(format!("preview row {index} is malformed"));
+        let at = self.header.preview_offset as usize + index * size_of::<PreviewRow>();
+        let to_offset =
+            read_u32(self.bytes, at + offset_of!(PreviewRow, to_offset)).ok_or_else(malformed)?;
+        let to_len =
+            read_u32(self.bytes, at + offset_of!(PreviewRow, to_len)).ok_or_else(malformed)?;
+        let change = *self
+            .bytes
+            .get(at + offset_of!(PreviewRow, change))
+            .ok_or_else(malformed)?;
+        let to = if to_len == 0 {
+            None
+        } else {
+            let start = to_offset as usize;
+            let end = start + to_len as usize * 2;
+            if end > self.header.name_arena_len as usize {
+                return Err(LayoutError(format!(
+                    "the target of preview row {index} lies outside the arena"
+                )));
+            }
+            let arena = self.header.name_arena_offset as usize;
+            let bytes = self
+                .bytes
+                .get(arena + start..arena + end)
+                .ok_or_else(malformed)?;
+            let units: Vec<u16> = bytes
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| u16::from_le_bytes(*pair))
+                .collect();
+            Some(String::from_utf16_lossy(&units))
+        };
+        Ok(PreviewView {
+            change: ChangeKind::from_raw(change),
+            to,
+        })
+    }
+}
+
+/// A preview row's change and target, decoded from a section.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PreviewView {
+    /// The change; `None` for a value this build does not know.
+    pub change: Option<ChangeKind>,
+    /// The target: the new full path of a rename, the folder of a move or
+    /// a copy; `None` when the row has none.
+    pub to: Option<String>,
 }
 
 fn short(len: usize, needed: usize) -> LayoutError {
@@ -568,7 +651,7 @@ mod tests {
         assert_eq!(u32_at(24), 88, "meta_offset");
         assert_eq!(u32_at(28), 40, "entries_offset");
         assert_eq!(u32_at(32), 0, "flags");
-        assert_eq!(u32_at(36), 0, "reserved");
+        assert_eq!(u32_at(36), 0, "preview_offset");
         // The second entry's name starts after "docs" (4 units = 8 bytes).
         assert_eq!(u32_at(40 + 16 + 8), 8);
 

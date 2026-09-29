@@ -287,6 +287,11 @@ destination folder. The job ends `failed` with the message
 `denied by plugin <id>: <reason>`. When several plugins judge a job, the
 first refusal wins.
 
+A `steps` job (a preview's renames and creates, or an undo) has no WIT
+kind of its own: the plugin sees `delete` when any step goes to the
+Recycle Bin, else `move` when any renames or restores, else `copy`
+([jobs.md](jobs.md), "Chains and steps").
+
 A plugin that crashes while judging, or does not answer in time, counts as
 allowing the job: a broken plugin must not block the user's file work. The
 crash itself is handled as above.

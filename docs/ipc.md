@@ -124,7 +124,12 @@ events `measure_progress` and `measure_finished`, and `cancel_measure`;
 `terminal_type_paths`. Version 13 (sub-phase 14a, the foundations of
 Phase 14, each general and useful without AI) added `window_state` and
 `get_window_state`, with the reply `window_state` and the error code
-`no_window` ("What the window shows").
+`no_window` ("What the window shows"); the previews: `preview_listing` and
+`open_preview` with the reply `preview_opened`, `preview_apply` with the
+reply `jobs_started`, `preview_cancel`, the events `preview_applied` and
+`preview_cancelled`, the error codes `no_such_preview` and
+`too_many_previews`, the listing header's preview flag and its preview
+rows ("Previews"); and the job kind `steps` ("Jobs").
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -189,6 +194,10 @@ as absent from an older core.
 | `uninstall_extension` | `extension_id` | `ok` |
 | `window_state` | `active_pane`, `panes` (after `hello`) | `ok` |
 | `get_window_state` | `client` (without it: the client that spoke last) | `window_state` (`client`, `sent_at_ms`, `state`) |
+| `preview_listing` | `title`, `rows` (after `hello`) | `preview_opened` (`preview`, `title`, `listing`) |
+| `open_preview` | `preview` (after `hello`) | `preview_opened` |
+| `preview_apply` | `preview` | `jobs_started` (`jobs`) |
+| `preview_cancel` | `preview` | `ok` |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -224,6 +233,8 @@ Any request can instead get `error` with a `code` and a `message`:
 | `hash_mismatch` | The download's SHA-256 is not the one the index gives. It was deleted, and nothing was installed. |
 | `incompatible` | The extension needs a newer CabinetOS (`minCoreVersion`). |
 | `no_window` | No client told the core what its window shows (`window_state`), or not the client named. |
+| `no_such_preview` | No preview has that ID: it was applied, cancelled or expired, or never made. |
+| `too_many_previews` | The client (or plugin) has 20 previews alive; apply or cancel one first. |
 
 Requests on one connection are independent: `list_directory`,
 `describe_entries`, `match_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
@@ -232,7 +243,8 @@ Requests on one connection are independent: `list_directory`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
 `terminal_open`, `terminal_close`, `terminal_sync_cwd`, `list_themes`,
-`get_theme` of a named theme, `list_tools` and the marketplace requests
+`get_theme` of a named theme, `list_tools`, the marketplace requests,
+`preview_listing`, `open_preview` and `preview_apply`
 run in the background, so a slow directory, plugin, search or shell does not hold up
 the next request, and their replies may come in any order. Match replies to
 requests by `id`.
@@ -330,8 +342,10 @@ offset 0                                        the section
 20  generation         1, then one more for each refresh
 24  meta_offset        bytes from the start of the section
 28  entries_offset     bytes from the start of the section
-32  flags              none defined yet; 0
-36  reserved           0; pads the header to 40 bytes
+32  flags              bit 0 (1): a preview of proposed changes (below)
+36  preview_offset     in a preview: bytes from the start of the section to
+                       the preview rows; 0 otherwise (and pads the header
+                       to 40 bytes)
 ```
 
 `ListingEntry` (16 bytes, 8-byte aligned):
@@ -393,6 +407,31 @@ The flags and the tag are additive: `reparse_tag` was a reserved field,
 always 0, and clients ignore flag bits they do not know, so the layout
 version stays 2. A link whose target is gone is still listed as a link;
 listing its path is `not_found`.
+
+**Previews.** A listing whose header has flag bit 0 is a preview of
+proposed changes (`preview_listing`, "Previews" below), not a folder. Its
+entries are the rows in their order; each entry's name is the row's full
+path (a pane shows it whole, since rows may come from several folders),
+its `id` is the row's index from 0, and its kind, size, times and
+attributes are what the disk says now (a row whose path does not exist has
+kind 0 and zeros; a created item has the kind it will have). After the
+name arena, at `preview_offset` (4-byte aligned), one `PreviewRow` per
+entry, in the same order:
+
+```text
+ 0  to_offset  u32  bytes from the start of the name arena to the target
+ 4  to_len     u32  the target's UTF-16 code units; 0 when the row has none
+ 8  change     u8   1 rename, 2 move, 3 copy, 4 delete, 5 create; 0 or
+                    another value reads as unknown
+ 9  reserved   3 bytes, 0
+```
+
+The target is the new full path of a rename, and the folder of a move or a
+copy; the targets sit in the name arena after the names, so
+`name_arena_len` counts them too. The preview flag and `preview_offset`
+are additive in the same way (`preview_offset` was the reserved field,
+always 0), so the layout version stays 2: a client that ignores them reads
+a preview as a list of paths.
 
 ## Type names and icons
 
@@ -910,8 +949,14 @@ disconnects, and `list_jobs` from any connection shows it.
 {"id":"01M…","type":"job_started","job_id":7}
 ```
 
-- `kind` is `{"type":"copy"}`, `{"type":"move"}` or
-  `{"type":"delete","permanent":false}`. Paths are absolute. `options` and
+- `kind` is `{"type":"copy"}`, `{"type":"move"}`,
+  `{"type":"delete","permanent":false}`, or (protocol 13)
+  `{"type":"steps","steps":[…]}`: simple steps in order, which
+  `preview_apply` and `undo_job` start ([jobs.md](jobs.md), "Chains and
+  steps"). A step is `{"op":"rename","from","to"}`,
+  `{"op":"create_folder","path"}`, `{"op":"create_file","path"}`,
+  `{"op":"recycle","path"}` or `{"op":"restore","saved","to"}`; a steps
+  job's `sources` are its steps' paths. Paths are absolute. `options` and
   each of its fields may be left out; the defaults are shown above.
 - `job_started` means the paths were checked and the job is queued. The
   work itself is reported by events.
@@ -1275,6 +1320,79 @@ configuration says where it is; the core reads it only when a client asks.
   a tool install or uninstall. A client that fell behind on events gets a
   `tools_changed` with the tools as they are, after the other events sent
   again.
+
+## Previews
+
+A preview shows proposed changes as a listing, with nothing done on disk
+until the user applies it. Any client may propose one (an extension's
+tool, the command line), and so may a plugin; a window shows it in a pane
+like a folder.
+
+```json
+{"id":"01M…","type":"preview_listing","title":"Sort the photos","rows":[
+ {"path":"C:\\Users\\me\\Pictures\\Beach\\","kind":"create","to":null},
+ {"path":"C:\\Users\\me\\Pictures\\IMG_1.jpg","kind":"rename","to":"2026-09-30 beach.jpg"},
+ {"path":"C:\\Users\\me\\Pictures\\2026-09-30 beach.jpg","kind":"move","to":"C:\\Users\\me\\Pictures\\Beach"}]}
+{"id":"01M…","type":"preview_opened","preview":"preview-3","title":"Sort the photos",
+ "listing":{"listing_id":9,"section_handle":1188,"section_size":736,"entry_count":3,
+            "generation":1,"elapsed_us":210}}
+```
+
+- Each row has an absolute `path` (not a volume root), a `kind` and a
+  `to`:
+
+  | `kind` | `to` | What applying does |
+  |---|---|---|
+  | `rename` | the new name, or the new full path in the same folder | renames it, never replacing anything |
+  | `move` | the folder it goes into | moves it there, as a move job |
+  | `copy` | the folder it goes into | copies it there, as a copy job |
+  | `delete` | `null` | puts it into the Recycle Bin, as a delete job |
+  | `create` | `null` | creates it: a folder when `path` ends with `\`, else an empty file (never replacing anything) |
+
+- The core checks every row before it keeps anything, and refuses the
+  whole preview with `invalid_path` (a relative path, a root, a `rename`
+  without a valid name or to another folder, a `move` or `copy` without an
+  absolute folder, a `delete` or `create` with a `to`) or
+  `protocol_error` (no rows). Whether the paths exist is checked when the
+  rows run, not before: a row may name what an earlier row makes.
+- `preview_listing` needs `hello`: the reply's `listing` is a listing in
+  shared memory, handed to the client's process as for `list_directory`,
+  with the preview flag and the preview rows ("The listing section").
+  `describe_entries`, `match_entries` and `close_listing` work on it; it is
+  never refreshed. The core reads each row's metadata (one read per path)
+  to fill it.
+- `open_preview { preview }` opens the listing of a preview that exists
+  already: one a plugin proposed, which a window shows when it hears of
+  it, or one another window made. It answers `preview_opened` too.
+- A preview lives until it is applied or cancelled, or for 10 minutes. A
+  client (or a plugin) may keep at most 20 alive: the 21st is refused
+  with `too_many_previews`. A preview does not end with the connection
+  that made it.
+
+```json
+{"id":"01N…","type":"preview_apply","preview":"preview-3"}
+{"id":"01N…","type":"jobs_started","jobs":[12,13]}
+{"id":"01P…","type":"preview_applied","preview":"preview-3","jobs":[12,13]}
+{"id":"01Q…","type":"preview_cancel","preview":"preview-4"}
+{"id":"01Q…","type":"ok"}
+{"id":"01R…","type":"preview_cancelled","preview":"preview-4"}
+```
+
+- `preview_apply` runs the rows in order, as jobs ([jobs.md](jobs.md),
+  "Chains and steps"). Neighbouring rows that fit one job share it:
+  renames and creates become one `steps` job; moves or copies into one
+  folder one move or copy job; deletes one delete. Each job starts only
+  when the one before it has completed; a job that does not complete
+  (failed, cancelled, or a row that failed) cancels the jobs after it.
+  The reply lists the jobs in order; their events follow as for any job.
+  The preview is gone afterwards (`no_such_preview` for a second apply).
+  When the first job is refused (its source does not exist, say), the
+  reply is that error and the preview stays.
+- `preview_applied` goes to every client that said `hello`, with the
+  jobs; `preview_cancelled` too, when a preview is cancelled or when it
+  expires unapplied.
+- For tests, the environment variable `CABINETOS_PREVIEW_TTL_MS` sets the
+  life of a preview in milliseconds.
 
 ## What the window shows
 

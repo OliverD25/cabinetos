@@ -16,8 +16,9 @@ use windows::Win32::Storage::FileSystem::{
     FILE_WRITE_ATTRIBUTES, FIND_FIRST_EX_FLAGS, FindClose, FindExInfoBasic, FindExSearchNameMatch,
     FindFirstFileExW, GetFileAttributesExW, GetFileExInfoStandard,
     LPPROGRESS_ROUTINE_CALLBACK_REASON, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, MOVE_FILE_FLAGS,
-    MOVEFILE_REPLACE_EXISTING, MoveFileExW, OPEN_EXISTING, PROGRESS_CANCEL, PROGRESS_CONTINUE,
-    RemoveDirectoryW, SetFileAttributesW, SetFileTime, WIN32_FILE_ATTRIBUTE_DATA, WIN32_FIND_DATAW,
+    MOVEFILE_COPY_ALLOWED, MOVEFILE_REPLACE_EXISTING, MoveFileExW, OPEN_EXISTING, PROGRESS_CANCEL,
+    PROGRESS_CONTINUE, RemoveDirectoryW, SetFileAttributesW, SetFileTime,
+    WIN32_FILE_ATTRIBUTE_DATA, WIN32_FIND_DATAW,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 use windows::Win32::System::Ioctl::{FSCTL_GET_REPARSE_POINT, FSCTL_SET_REPARSE_POINT};
@@ -266,6 +267,21 @@ pub(crate) fn move_file(source: &str, destination: &str, replace: bool) -> Resul
         MOVEFILE_REPLACE_EXISTING
     } else {
         MOVE_FILE_FLAGS(0)
+    };
+    // SAFETY: both paths are NUL-terminated and outlive the call.
+    unsafe { MoveFileExW(PCWSTR(source.as_ptr()), PCWSTR(destination.as_ptr()), flags) }
+        .map_err(|error| code_of(&error))
+}
+
+/// Moves `source` to `destination`, a file also to another volume (Windows
+/// copies it and deletes the source); a folder only on its volume.
+pub(crate) fn move_anywhere(source: &str, destination: &str, replace: bool) -> Result<(), Code> {
+    let source = wide(source)?;
+    let destination = wide(destination)?;
+    let flags = if replace {
+        MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING
+    } else {
+        MOVEFILE_COPY_ALLOWED
     };
     // SAFETY: both paths are NUL-terminated and outlive the call.
     unsafe { MoveFileExW(PCWSTR(source.as_ptr()), PCWSTR(destination.as_ptr()), flags) }

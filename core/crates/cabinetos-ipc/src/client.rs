@@ -5,8 +5,8 @@
 //! [`PipeClient::events`]). So requests may overlap, and events arrive
 //! whenever the core sends them.
 //!
-//! Section handles arrive as plain numbers inside `listing_opened` and
-//! `listing_refreshed`. The reader notes each one, and
+//! Section handles arrive as plain numbers inside `listing_opened`,
+//! `preview_opened` and `listing_refreshed`. The reader notes each one, and
 //! [`PipeClient::take_section`] hands it out once as an owned
 //! [`SharedSection`]. Handles never taken are closed when the client drops.
 
@@ -220,13 +220,16 @@ async fn read_loop(
                 trace,
                 body: Incoming::Response(response),
             }) => {
-                if let Response::ListingOpened {
-                    section_handle,
-                    section_size,
-                    ..
-                } = &response
-                {
-                    record_section(&shared, *section_handle, *section_size);
+                match &response {
+                    Response::ListingOpened {
+                        section_handle,
+                        section_size,
+                        ..
+                    } => record_section(&shared, *section_handle, *section_size),
+                    Response::PreviewOpened { listing, .. } => {
+                        record_section(&shared, listing.section_handle, listing.section_size);
+                    }
+                    _ => {}
                 }
                 let waiter = lock(&shared).pending.remove(&id);
                 match waiter {

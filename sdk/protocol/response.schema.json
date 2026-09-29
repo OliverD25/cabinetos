@@ -762,6 +762,57 @@
         "sent_at_ms",
         "state"
       ]
+    },
+    {
+      "description": "Reply to `preview_listing` and `open_preview`: the preview is\ncomplete in shared memory.",
+      "type": "object",
+      "properties": {
+        "listing": {
+          "description": "The listing, as `listing_opened` describes one; its header has\nthe preview flag and each row's change and target.",
+          "$ref": "#/$defs/OpenedListing"
+        },
+        "preview": {
+          "description": "Names the preview in `preview_apply`, `preview_cancel` and the\nevents.",
+          "type": "string"
+        },
+        "title": {
+          "description": "What the preview is about.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "preview_opened"
+        }
+      },
+      "required": [
+        "type",
+        "preview",
+        "title",
+        "listing"
+      ]
+    },
+    {
+      "description": "Reply to `preview_apply`: the jobs that run the rows, in order. Each\nstarts when the one before it ends.",
+      "type": "object",
+      "properties": {
+        "jobs": {
+          "description": "The jobs' IDs, as `job_started` gives one.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "jobs_started"
+        }
+      },
+      "required": [
+        "type",
+        "jobs"
+      ]
     }
   ],
   "required": [
@@ -1220,6 +1271,16 @@
           "description": "No window told the core what it shows (`window_state`), or not the\nclient named.",
           "type": "string",
           "const": "no_window"
+        },
+        {
+          "description": "No preview has that ID: it was never made, was applied or\ncancelled, or expired after 10 minutes.",
+          "type": "string",
+          "const": "no_such_preview"
+        },
+        {
+          "description": "The client has 20 previews alive already; apply or cancel one first.",
+          "type": "string",
+          "const": "too_many_previews"
         }
       ]
     },
@@ -1572,6 +1633,27 @@
           "required": [
             "type"
           ]
+        },
+        {
+          "description": "Simple steps, one after another: renames, new folders and files,\nthe Recycle Bin, and restores of saved copies. `preview_apply` and\n`undo_job` start them; the job's `sources` are the steps' paths.",
+          "type": "object",
+          "properties": {
+            "steps": {
+              "description": "The steps, in order.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/JobStep"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "steps"
+            }
+          },
+          "required": [
+            "type",
+            "steps"
+          ]
         }
       ]
     },
@@ -1685,6 +1767,111 @@
           "required": [
             "type",
             "message"
+          ]
+        }
+      ]
+    },
+    "JobStep": {
+      "description": "One step of a `steps` job. A step that fails is counted as failed and\nthe job goes on with the next.",
+      "oneOf": [
+        {
+          "description": "Gives `from` the full path `to`, never replacing anything: a rename\nin its folder, or a move (a file may cross volumes).",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "The file or folder.",
+              "type": "string"
+            },
+            "op": {
+              "type": "string",
+              "const": "rename"
+            },
+            "to": {
+              "description": "Its new full path.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "description": "Creates a folder; its parent must exist.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "create_folder"
+            },
+            "path": {
+              "description": "The new folder.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "path"
+          ]
+        },
+        {
+          "description": "Creates an empty file; nothing is ever replaced.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "create_file"
+            },
+            "path": {
+              "description": "The new file.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "path"
+          ]
+        },
+        {
+          "description": "Puts a file or folder into the Recycle Bin.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "recycle"
+            },
+            "path": {
+              "description": "The file or folder.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "path"
+          ]
+        },
+        {
+          "description": "Puts a saved copy back in place of `to`, replacing what is there.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "restore"
+            },
+            "saved": {
+              "description": "The saved copy (in the undo folder).",
+              "type": "string"
+            },
+            "to": {
+              "description": "Where it was.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "saved",
+            "to"
           ]
         }
       ]
@@ -2377,6 +2564,56 @@
       "type": "number",
       "maximum": 1,
       "minimum": 0
+    },
+    "OpenedListing": {
+      "description": "A listing in shared memory, as `listing_opened` describes it.",
+      "type": "object",
+      "properties": {
+        "elapsed_us": {
+          "description": "Microseconds the core spent writing it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "entry_count": {
+          "description": "Rows in the listing.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "generation": {
+          "description": "Always 1: a preview is never read again.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "listing_id": {
+          "description": "Names the listing in `close_listing` and `describe_entries`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "section_handle": {
+          "description": "A handle to the section, already valid in the client's process. The\nclient owns it and must close it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "section_size": {
+          "description": "How many bytes of the section hold the listing.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "listing_id",
+        "section_handle",
+        "section_size",
+        "entry_count",
+        "generation",
+        "elapsed_us"
+      ]
     },
     "Palette": {
       "description": "The colours of the window. Colours with an alpha part (`#RRGGBBAA`) are\nlaid over the backdrop.",

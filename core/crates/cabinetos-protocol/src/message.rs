@@ -6,6 +6,7 @@ use crate::index::{FileHit, SearchSource, VolumeStatus, default_file_search_limi
 use crate::job::{Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution};
 use crate::market::{ExtensionKind, MarketItem, ToolInfo};
 use crate::plugin::{PluginInfo, PluginState};
+use crate::preview::{OpenedListing, PreviewRow};
 use crate::terminal::TerminalSession;
 use crate::theme::{Theme, ThemeInfo};
 use crate::window::WindowState;
@@ -450,6 +451,34 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         client: Option<String>,
     },
+    /// Proposes changes without making them: the core checks the rows and
+    /// writes them into shared memory as a listing, which a pane shows
+    /// like a folder. Needs `hello`. The core answers `preview_opened`.
+    PreviewListing {
+        /// What the preview is about, for the pane's title.
+        title: String,
+        /// The changes, in the order they would run.
+        rows: Vec<PreviewRow>,
+    },
+    /// Opens the listing of a preview that exists already, such as one a
+    /// plugin proposed. Needs `hello`. The core answers `preview_opened`.
+    OpenPreview {
+        /// The preview, from `preview_opened` or an event that names it.
+        preview: String,
+    },
+    /// Runs a preview's rows in order, as jobs; the preview is gone
+    /// afterwards. The core answers `jobs_started`, and every client that
+    /// said `hello` gets `preview_applied`.
+    PreviewApply {
+        /// The preview.
+        preview: String,
+    },
+    /// Drops a preview without running it. The core answers `ok`, and every
+    /// client that said `hello` gets `preview_cancelled`.
+    PreviewCancel {
+        /// The preview.
+        preview: String,
+    },
 }
 
 fn default_search_limit() -> u32 {
@@ -512,6 +541,10 @@ impl Request {
         "uninstall_extension",
         "window_state",
         "get_window_state",
+        "preview_listing",
+        "open_preview",
+        "preview_apply",
+        "preview_cancel",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -570,6 +603,10 @@ impl Request {
             Self::UninstallExtension { .. } => "uninstall_extension",
             Self::WindowState(_) => "window_state",
             Self::GetWindowState { .. } => "get_window_state",
+            Self::PreviewListing { .. } => "preview_listing",
+            Self::OpenPreview { .. } => "open_preview",
+            Self::PreviewApply { .. } => "preview_apply",
+            Self::PreviewCancel { .. } => "preview_cancel",
         }
     }
 }
@@ -821,6 +858,24 @@ pub enum Response {
         /// The state, as the client sent it.
         state: WindowState,
     },
+    /// Reply to `preview_listing` and `open_preview`: the preview is
+    /// complete in shared memory.
+    PreviewOpened {
+        /// Names the preview in `preview_apply`, `preview_cancel` and the
+        /// events.
+        preview: String,
+        /// What the preview is about.
+        title: String,
+        /// The listing, as `listing_opened` describes one; its header has
+        /// the preview flag and each row's change and target.
+        listing: OpenedListing,
+    },
+    /// Reply to `preview_apply`: the jobs that run the rows, in order. Each
+    /// starts when the one before it ends.
+    JobsStarted {
+        /// The jobs' IDs, as `job_started` gives one.
+        jobs: Vec<u64>,
+    },
 }
 
 impl Response {
@@ -856,6 +911,8 @@ impl Response {
         "tools",
         "marketplace_index",
         "window_state",
+        "preview_opened",
+        "jobs_started",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -892,6 +949,8 @@ impl Response {
             Self::Tools { .. } => "tools",
             Self::MarketplaceIndex { .. } => "marketplace_index",
             Self::WindowState { .. } => "window_state",
+            Self::PreviewOpened { .. } => "preview_opened",
+            Self::JobsStarted { .. } => "jobs_started",
         }
     }
 }
@@ -1235,6 +1294,20 @@ pub enum Event {
         /// Every installed tool.
         tools: Vec<ToolInfo>,
     },
+    /// A preview was applied: its rows run as these jobs. Sent to every
+    /// connection that said `hello`.
+    PreviewApplied {
+        /// The preview.
+        preview: String,
+        /// The jobs, in order.
+        jobs: Vec<u64>,
+    },
+    /// A preview was dropped: cancelled, or not applied within 10 minutes.
+    /// Sent to every connection that said `hello`.
+    PreviewCancelled {
+        /// The preview.
+        preview: String,
+    },
 }
 
 impl Event {
@@ -1260,6 +1333,8 @@ impl Event {
         "install_progress",
         "install_finished",
         "tools_changed",
+        "preview_applied",
+        "preview_cancelled",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -1285,6 +1360,8 @@ impl Event {
             Self::InstallProgress { .. } => "install_progress",
             Self::InstallFinished { .. } => "install_finished",
             Self::ToolsChanged { .. } => "tools_changed",
+            Self::PreviewApplied { .. } => "preview_applied",
+            Self::PreviewCancelled { .. } => "preview_cancelled",
         }
     }
 }
@@ -1398,6 +1475,11 @@ pub enum ErrorCode {
     /// No window told the core what it shows (`window_state`), or not the
     /// client named.
     NoWindow,
+    /// No preview has that ID: it was never made, was applied or
+    /// cancelled, or expired after 10 minutes.
+    NoSuchPreview,
+    /// The client has 20 previews alive already; apply or cancel one first.
+    TooManyPreviews,
 }
 
 #[cfg(test)]
@@ -1694,6 +1776,30 @@ mod tests {
             Request::GetWindowState {
                 client: Some("CabinetOS#2".to_owned()),
             },
+            Request::PreviewListing {
+                title: "Rename 2 photos".to_owned(),
+                rows: vec![
+                    PreviewRow {
+                        path: r"C:\Users\me\IMG_1.jpg".to_owned(),
+                        kind: crate::ChangeKind::Rename,
+                        to: Some("2026-09-30 beach.jpg".to_owned()),
+                    },
+                    PreviewRow {
+                        path: r"C:\Users\me\Beach\".to_owned(),
+                        kind: crate::ChangeKind::Create,
+                        to: None,
+                    },
+                ],
+            },
+            Request::OpenPreview {
+                preview: "preview-3".to_owned(),
+            },
+            Request::PreviewApply {
+                preview: "preview-3".to_owned(),
+            },
+            Request::PreviewCancel {
+                preview: "preview-3".to_owned(),
+            },
         ]
     }
 
@@ -1952,9 +2058,23 @@ mod tests {
                 sent_at_ms: 1_790_000_000_000,
                 state: window_state(),
             },
+            Response::PreviewOpened {
+                preview: "preview-3".to_owned(),
+                title: "Rename 2 photos".to_owned(),
+                listing: OpenedListing {
+                    listing_id: 9,
+                    section_handle: 0x1A8,
+                    section_size: 512,
+                    entry_count: 2,
+                    generation: 1,
+                    elapsed_us: 80,
+                },
+            },
+            Response::JobsStarted { jobs: vec![4, 5] },
         ]
     }
 
+    #[expect(clippy::too_many_lines, reason = "one example of every event")]
     fn every_event() -> Vec<Event> {
         vec![
             Event::ListingRefreshed {
@@ -2055,7 +2175,53 @@ mod tests {
             Event::ToolsChanged {
                 tools: vec![tool()],
             },
+            Event::PreviewApplied {
+                preview: "preview-3".to_owned(),
+                jobs: vec![4, 5],
+            },
+            Event::PreviewCancelled {
+                preview: "preview-4".to_owned(),
+            },
         ]
+    }
+
+    #[test]
+    fn steps_jobs_have_the_documented_wire_form() {
+        let request = Request::StartJob(JobRequest {
+            kind: JobKind::Steps {
+                steps: vec![
+                    crate::JobStep::Rename {
+                        from: r"C:\a.txt".to_owned(),
+                        to: r"C:\b.txt".to_owned(),
+                    },
+                    crate::JobStep::CreateFolder {
+                        path: r"C:\new".to_owned(),
+                    },
+                    crate::JobStep::CreateFile {
+                        path: r"C:\new\empty.txt".to_owned(),
+                    },
+                    crate::JobStep::Recycle {
+                        path: r"C:\old".to_owned(),
+                    },
+                    crate::JobStep::Restore {
+                        saved: r"C:\undo\7\0".to_owned(),
+                        to: r"C:\b.txt".to_owned(),
+                    },
+                ],
+            },
+            sources: Vec::new(),
+            destination: None,
+            options: JobOptions::default(),
+        });
+        let value = serde_json::to_value(Envelope::new(id(), request.clone())).unwrap();
+        assert_eq!(value["kind"]["type"], "steps");
+        assert_eq!(
+            value["kind"]["steps"][0],
+            json!({"op": "rename", "from": r"C:\a.txt", "to": r"C:\b.txt"})
+        );
+        assert_eq!(value["kind"]["steps"][4]["op"], "restore");
+        let back: Envelope<Request> = serde_json::from_value(value).unwrap();
+        assert_eq!(back.body, request);
     }
 
     #[test]
@@ -2299,6 +2465,8 @@ mod tests {
             (ErrorCode::HashMismatch, "hash_mismatch"),
             (ErrorCode::Incompatible, "incompatible"),
             (ErrorCode::NoWindow, "no_window"),
+            (ErrorCode::NoSuchPreview, "no_such_preview"),
+            (ErrorCode::TooManyPreviews, "too_many_previews"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));

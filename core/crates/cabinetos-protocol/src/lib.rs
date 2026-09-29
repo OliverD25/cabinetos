@@ -23,6 +23,7 @@ mod job;
 mod market;
 mod message;
 mod plugin;
+mod preview;
 pub mod shm;
 mod terminal;
 mod theme;
@@ -38,7 +39,7 @@ pub use index::{
 };
 pub use job::{
     Conflict, ConflictKind, ConflictPolicy, JobAction, JobInfo, JobKind, JobOptions, JobProgress,
-    JobRequest, JobState, LinkPolicy, Rate, Resolution,
+    JobRequest, JobState, JobStep, LinkPolicy, Rate, Resolution,
 };
 pub use market::{
     Author, Download, ExtensionKind, INDEX_SCHEMA_VERSION, MarketCapability, MarketIndex,
@@ -50,6 +51,7 @@ pub use message::{
     Response, SearchHit, SortKey, SortSpec, VolumeDetails,
 };
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
+pub use preview::{ChangeKind, OpenedListing, PreviewRow};
 pub use terminal::{TerminalSession, TerminalState};
 pub use theme::{
     Chrome, Color, Decimal, FileTypeColors, METRICS, MetricSpec, MetricUnit, Metrics, MicaTint,
@@ -90,5 +92,10 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// `match_entries` with its reply `entry_matches`; and
 /// `terminal_type_paths`; version 13 the foundations of Phase 14:
 /// `window_state` and `get_window_state` (reply `window_state`, error
-/// code `no_window`).
+/// code `no_window`); previews (`preview_listing` and `open_preview` with
+/// the reply `preview_opened`, `preview_apply` with the reply
+/// `jobs_started`, `preview_cancel`, the events `preview_applied` and
+/// `preview_cancelled`, the error codes `no_such_preview` and
+/// `too_many_previews`, the listing header's preview flag) and the job
+/// kind `steps`.
 pub const PROTOCOL_VERSION: u32 = 13;
