@@ -67,7 +67,8 @@ public static class Live {
 [void][Live]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
 $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L = 0x4C; Esc = 0x1B; Tab = 0x09; Enter = 0x0D; Back = 0x08; Down = 0x28; PgDn = 0x22; F2 = 0x71;
   F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56;
-  F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A }
+  F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A;
+  T = 0x54; Up = 0x26 }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   if ($script:h -and [Live]::GetForegroundWindow() -ne $script:h) {
@@ -430,6 +431,61 @@ foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPatt
   "file.calculateAllFolderSizes", "go.root", "go.chooseDriveLeft", "view.swapPanes", "file.view", "file.edit", "file.newTextFile", "terminal.insertPath") {
   "  ran $command from a key: $($ran -contains $command)"
 }
+
+# ----- Commander Compact (docs/ui.md, "Metrics and chrome"): the density preset, switched live -----
+# The picker lists the run's shipped themes by ID: catppuccin-mocha, commander-compact, default, nord,
+# rose-pine-moon; its highlight starts on the theme in effect. The last "metrics applied" line of the
+# window's log says what the window laid itself out with.
+function LastMetrics { Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"metrics applied"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields } | Select-Object -Last 1 }
+$cc = "$files\compact"
+New-Item -ItemType Directory -Force "$cc\src", "$cc\dst" | Out-Null
+Set-Content -LiteralPath "$cc\src\cabinetos-live-check-f5.txt" -Value "copied by the function-key bar" -NoNewline
+
+Step "compact: the source folder in the active pane, the destination in the other"
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type("$cc\src"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type("$cc\dst"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+
+Step "compact: Ctrl+K Ctrl+T, the theme picker; Up to Commander Compact, Enter"
+[Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 900
+Shot $h "$ShotDir\compact-picker-live.png"
+[Live]::Press($VK.Up); Start-Sleep -Milliseconds 200
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2000
+Shot $h "$ShotDir\compact-live.png"
+$metrics = LastMetrics
+"compact: the window laid itself out with $($metrics.theme): rows $($metrics.row_height) px (20 expected), function keys $($metrics.fkey_bar), stripes $($metrics.row_stripes), hairlines $($metrics.hairlines)"
+
+Step "compact: Tab twice goes to the other pane and back, never to a function key"
+$barNames = "F3 View", "F4 Edit", "F5 Copy", "F6 Move", "F7 Mkdir", "F8 Delete", "Alt+F1 Drv"
+$onBar = 0
+foreach ($i in 1..2) {
+  [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+  $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+  if ($focused -and $barNames -contains $focused.Current.Name) { $onBar++ }
+}
+"Tab reached a function key: $($onBar -gt 0)"
+
+Step "compact: F5 Copy pressed through the bar's button by its accessible name"
+$byName = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "F5 Copy")
+$f5 = [System.Windows.Automation.AutomationElement]::FromHandle($h).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $byName)
+if ($f5) { ([System.Windows.Automation.InvokePattern]$f5.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke(); Step "F5 Copy pressed through UI Automation" } else { Step "no F5 Copy button found" }
+Start-Sleep -Milliseconds 2500
+Shot $h "$ShotDir\compact-f5-live.png"
+"the bar's F5 copied the file: $(Test-Path -LiteralPath "$cc\dst\cabinetos-live-check-f5.txt")"
+"the bar ran file.copyToOtherPane: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' -and $_ -match 'file\.copyToOtherPane' -and $_ -match '"trigger":"fkeyBar"' }))"
+
+Step "compact: Ctrl+K Ctrl+T, Down to Default, Enter"
+[Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 200
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2000
+Shot $h "$ShotDir\compact-back-live.png"
+$metrics = LastMetrics
+"compact: switched back to $($metrics.theme): rows $($metrics.row_height) px (30 expected), function keys $($metrics.fkey_bar)"
 
 # ----- Edge cases (docs/ui.md, "Edge cases"): the shared fixture, with real keys -----
 # The fixture has links, so it lives outside $root: only its own script removes it (rmdir, which
