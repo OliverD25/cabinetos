@@ -163,6 +163,20 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
             ),
         ));
     }
+    if let Some(editor) = &config.files.editor
+        && editor.command.trim().is_empty()
+    {
+        return Err(ConfigError::at(
+            text,
+            &[
+                Segment::Key("files"),
+                Segment::Key("editor"),
+                Segment::Key("command"),
+            ],
+            "files.editor.command is empty; name the editor's program, or set files.editor to null"
+                .to_owned(),
+        ));
+    }
     let profiles = &config.terminal.profiles;
     for (index, profile) in profiles.iter().enumerate() {
         if profiles[..index]
@@ -281,6 +295,17 @@ mod tests {
         assert_eq!(error.line, Some(1));
         // `"x"` starts at character 28; in bytes it would be 34.
         assert!(error.column.unwrap() <= 32, "{error}");
+    }
+
+    #[test]
+    fn an_editor_needs_a_program() {
+        let error = parse(r#"{"files": {"editor": {"command": "  ", "args": []}}}"#).unwrap_err();
+        assert!(
+            error.message.contains("files.editor.command is empty"),
+            "{error}"
+        );
+        assert_eq!(error.line, Some(1), "{error}");
+        assert!(parse(r#"{"files": {"editor": {"command": "notepad++.exe"}}}"#).is_ok());
     }
 
     #[test]

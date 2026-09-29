@@ -35,6 +35,8 @@ pub struct Config {
     pub ui: UiConfig,
     /// The file panes.
     pub panes: PanesConfig,
+    /// What happens to files: the editor that opens them.
+    pub files: FilesConfig,
     /// The integrated terminal.
     pub terminal: TerminalConfig,
     /// The user's changes to key bindings. The defaults live in the command
@@ -56,6 +58,7 @@ impl Default for Config {
             version: FORMAT_VERSION,
             ui: UiConfig::default(),
             panes: PanesConfig::default(),
+            files: FilesConfig::default(),
             terminal: TerminalConfig::default(),
             keybindings: Vec::new(),
             logging: LoggingConfig::default(),
@@ -154,6 +157,49 @@ pub struct PanesConfig {
     pub show_hidden: bool,
     /// The order of entries; directories always come first.
     pub sort: SortConfig,
+    /// How the keyboard marks rows: as Windows does, or as Total Commander
+    /// does.
+    pub selection: SelectionMode,
+}
+
+/// How the keyboard marks rows in a file pane (`docs/config.md`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum SelectionMode {
+    /// As in Explorer: a key that moves the cursor selects the row it moves
+    /// to, and Shift extends the selection.
+    #[default]
+    Windows,
+    /// As in Total Commander: keys that move the cursor keep the marks,
+    /// Shift with them marks the rows passed over, and commands act on the
+    /// marked rows, or on the cursor row when none is marked.
+    Commander,
+}
+
+/// What happens to files.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default, rename_all = "camelCase")]
+pub struct FilesConfig {
+    /// The program that edits a file (`file.edit`, F4). `null`: Windows'
+    /// own edit verb for the file's type, else Notepad.
+    pub editor: Option<EditorProgram>,
+}
+
+/// A program that edits a file: the file's path is added as its last
+/// argument. The program is a full path, or a name found on the PATH, as
+/// for a terminal profile; never the current folder.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct EditorProgram {
+    /// The program, for example `notepad++.exe` or
+    /// `C:\Program Files\Microsoft VS Code\Code.exe`.
+    pub command: String,
+    /// Its arguments, before the file's path, for example `["--wait"]`.
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 /// The order of a listing.
@@ -381,6 +427,9 @@ mod tests {
         );
         assert!(!config.panes.show_hidden);
         assert_eq!(SortSpec::from(config.panes.sort), SortSpec::default());
+        // Article 4: the first run marks files as Windows does.
+        assert_eq!(config.panes.selection, SelectionMode::Windows);
+        assert_eq!(config.files.editor, None);
         assert_eq!(config.terminal.default_profile, "pwsh");
         let names: Vec<&str> = config
             .terminal
@@ -393,6 +442,44 @@ mod tests {
         assert_eq!(config.logging.level, LogLevel::Info);
         assert_eq!(config.marketplace.index, DEFAULT_MARKETPLACE_INDEX);
         assert!(!config.marketplace.allow_insecure);
+    }
+
+    #[test]
+    fn the_selection_mode_and_the_editor_are_read() {
+        let config: Config = serde_json::from_str(
+            r#"{"panes": {"selection": "commander"},
+                "files": {"editor": {"command": "code.cmd", "args": ["--wait"]}}}"#,
+        )
+        .unwrap();
+        assert_eq!(config.panes.selection, SelectionMode::Commander);
+        assert_eq!(
+            config.files.editor,
+            Some(EditorProgram {
+                command: "code.cmd".to_owned(),
+                args: vec!["--wait".to_owned()],
+            })
+        );
+        // Arguments are optional, as for a terminal profile.
+        let bare: FilesConfig =
+            serde_json::from_str(r#"{"editor": {"command": "notepad++.exe"}}"#).unwrap();
+        assert_eq!(bare.editor.unwrap().args, Vec::<String>::new());
+        let none: FilesConfig = serde_json::from_str(r#"{"editor": null}"#).unwrap();
+        assert_eq!(none.editor, None);
+        for (bad, expected) in [
+            (r#"{"panes": {"selection": "tc"}}"#, "unknown variant `tc`"),
+            (
+                r#"{"files": {"editor": {"command": "x", "arg": []}}}"#,
+                "unknown field `arg`",
+            ),
+            (
+                r#"{"files": {"editor": "notepad.exe"}}"#,
+                "invalid type: string",
+            ),
+            (r#"{"files": {"viewer": null}}"#, "unknown field `viewer`"),
+        ] {
+            let error = serde_json::from_str::<Config>(bad).unwrap_err().to_string();
+            assert!(error.contains(expected), "{bad}: {error}");
+        }
     }
 
     #[test]
@@ -417,6 +504,7 @@ mod tests {
             "\"version\"",
             "\"ui\"",
             "\"panes\"",
+            "\"files\"",
             "\"terminal\"",
             "\"keybindings\"",
             "\"logging\"",
@@ -437,6 +525,8 @@ mod tests {
         );
         assert!(serde_json::from_str::<UiConfig>(r#"{"dockSize": {"left": 1}}"#).is_err());
         assert!(text.contains("\"showHidden\":false"));
+        assert!(text.contains("\"selection\":\"windows\""), "{text}");
+        assert!(text.contains("\"files\":{\"editor\":null}"), "{text}");
         assert!(text.contains("\"defaultProfile\":\"pwsh\""));
         assert!(text.contains("\"allowInsecure\":false"));
     }

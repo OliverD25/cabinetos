@@ -699,6 +699,37 @@ mod tests {
     }
 
     #[test]
+    fn set_value_sets_the_selection_mode_and_the_editor() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let changed = store
+            .set_value("panes.selection", Value::from("commander"), accept)
+            .unwrap();
+        assert_eq!(changed, ["panes.selection"]);
+        let editor = serde_json::json!({"command": "notepad++.exe", "args": ["-multiInst"]});
+        let changed = store
+            .set_value("files.editor", editor.clone(), accept)
+            .unwrap();
+        assert_eq!(changed, ["files.editor"]);
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["panes"]["selection"], "commander");
+        assert_eq!(file["files"]["editor"], editor);
+        // Back to the default: Windows' own edit verb, then Notepad.
+        store
+            .set_value("files.editor", Value::Null, accept)
+            .unwrap();
+        assert_eq!(store.config().files.editor, None);
+        assert!(matches!(
+            store.set_value("files.editor", serde_json::json!({"command": ""}), accept),
+            Err(UpdateError::Rejected(_))
+        ));
+        assert!(matches!(
+            store.set_value("panes.selection", Value::from("tc"), accept),
+            Err(UpdateError::Rejected(_))
+        ));
+    }
+
+    #[test]
     fn set_value_keeps_the_file_readable() {
         let (_dir, path) = temp_config();
         let (mut store, _) = ConfigStore::open(path.clone(), accept);

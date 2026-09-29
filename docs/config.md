@@ -101,6 +101,8 @@ while you type.
 | `panes.showHidden` | `true`, `false` | `false` | Also list hidden and system entries |
 | `panes.sort.key` | `name`, `size`, `modified`, `kind` | `name` | The order of a listing ([ipc.md](ipc.md), "Listing a directory"); directories always come first |
 | `panes.sort.descending` | `true`, `false` | `false` | Reverse the order |
+| `panes.selection` | `windows`, `commander` | `windows` | How the keyboard marks rows. `windows`: as in Explorer, a key that moves the cursor selects the row it moves to. `commander`: as in Total Commander, keys that move the cursor keep the marks, Shift with them marks the rows passed over, a new listing starts with nothing marked, and commands act on the marked rows, or on the cursor row when none is marked. The mouse keeps the Windows rules in both |
+| `files.editor` | `null`, or `{ "command", "args" }` | `null` | The program `file.edit` (F4) opens a file with; the file's path is added as the last argument. `null`: Windows' own edit verb for the file's type, else Notepad. `command` is a full path, or a program name found on the `PATH`, as for a terminal profile, never the current folder; it may not be empty. `args` may be left out |
 | `terminal.defaultProfile` | a profile `name` | `pwsh` | The shell a new terminal starts with when the client names none; must name one of the profiles |
 | `terminal.profiles` | list of `{ "name", "command", "args" }` | pwsh, cmd, wsl | The shells a terminal can run. Names must be unique; `args` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
@@ -127,6 +129,10 @@ Who uses what:
 - `terminal`: the core, at each `terminal_open`. An edited profile applies
   to the next shell; running shells keep what they started with
   ([terminal.md](terminal.md)).
+- `files.editor`: the core, at each `edit_path` ([ipc.md](ipc.md), "Files
+  and folders").
+- `panes.selection`: the UI, at once; the core only checks, stores and
+  announces it.
 - `ui`: the UI (Phase 5). The core only checks, stores and announces it.
 
 ## Editing by hand

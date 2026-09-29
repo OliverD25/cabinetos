@@ -11,6 +11,13 @@
         "null"
       ]
     },
+    "files": {
+      "description": "What happens to files: the editor that opens them.",
+      "$ref": "#/$defs/FilesConfig",
+      "default": {
+        "editor": null
+      }
+    },
     "keybindings": {
       "description": "The user's changes to key bindings. The defaults live in the command\nregistry; list only what differs.",
       "type": "array",
@@ -38,6 +45,7 @@
       "description": "The file panes.",
       "$ref": "#/$defs/PanesConfig",
       "default": {
+        "selection": "windows",
         "showHidden": false,
         "sort": {
           "descending": false,
@@ -128,6 +136,47 @@
           "format": "uint32",
           "default": null,
           "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "EditorProgram": {
+      "description": "A program that edits a file: the file's path is added as its last\nargument. The program is a full path, or a name found on the PATH, as\nfor a terminal profile; never the current folder.",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Its arguments, before the file's path, for example `[\"--wait\"]`.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "description": "The program, for example `notepad++.exe` or\n`C:\\Program Files\\Microsoft VS Code\\Code.exe`.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ]
+    },
+    "FilesConfig": {
+      "description": "What happens to files.",
+      "type": "object",
+      "properties": {
+        "editor": {
+          "description": "The program that edits a file (`file.edit`, F4). `null`: Windows'\nown edit verb for the file's type, else Notepad.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EditorProgram"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "additionalProperties": false
@@ -245,6 +294,11 @@
       "description": "The file panes. These are the defaults for `list_directory` requests that\ndo not say otherwise.",
       "type": "object",
       "properties": {
+        "selection": {
+          "description": "How the keyboard marks rows: as Windows does, or as Total Commander\ndoes.",
+          "$ref": "#/$defs/SelectionMode",
+          "default": "windows"
+        },
         "showHidden": {
           "description": "Also list hidden and system entries.",
           "type": "boolean",
@@ -280,6 +334,21 @@
         }
       },
       "additionalProperties": false
+    },
+    "SelectionMode": {
+      "description": "How the keyboard marks rows in a file pane (`docs/config.md`).",
+      "oneOf": [
+        {
+          "description": "As in Explorer: a key that moves the cursor selects the row it moves\nto, and Shift extends the selection.",
+          "type": "string",
+          "const": "windows"
+        },
+        {
+          "description": "As in Total Commander: keys that move the cursor keep the marks,\nShift with them marks the rows passed over, and commands act on the\nmarked rows, or on the cursor row when none is marked.",
+          "type": "string",
+          "const": "commander"
+        }
+      ]
     },
     "SortConfig": {
       "description": "The order of a listing.",
