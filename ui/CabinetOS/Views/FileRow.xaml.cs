@@ -13,14 +13,28 @@ namespace CabinetOS.Views;
 /// <summary>
 /// One file row. The repeater gives it a <see cref="RowItem"/>; the row reads
 /// name, kind, time, type and size from shared memory right then, and keeps
-/// nothing else, so recycling it for another index costs a few reads.
+/// nothing else, so recycling it for another index costs a few reads. It
+/// sets only the values that differ from what it shows (<see cref="Shown{T}"/>):
+/// WinUI lays a text out again even when it gets the same string, and while
+/// a folder scrolls most rows repeat their time, type or size.
 /// </summary>
 public sealed partial class FileRow : UserControl
 {
     // Segoe Fluent Icons: Document (folders draw FolderGlyph; a link adds LinkBadge).
-    private const string FileGlyph = "";
+    private const string FileGlyph = "\uE8A5";
 
     private readonly Brush _plainIconBrush;
+    private Shown<string> _name;
+    private Shown<string> _second;
+    private Shown<string> _size;
+    private Shown<string> _type;
+    private Shown<string> _state;
+    private Shown<IconShown> _icon;
+    private Shown<ImageSource?> _image;
+    private Shown<Brush?> _glyphBrush;
+    private Shown<bool> _link;
+    private Shown<bool> _cloud;
+    private Shown<bool> _cursor;
     private RowItem? _item;
     private SearchRowItem? _hit;
     private bool _selected;
@@ -31,6 +45,7 @@ public sealed partial class FileRow : UserControl
     {
         InitializeComponent();
         _plainIconBrush = Icon.Foreground;
+        Icon.Glyph = FileGlyph;
         DataContextChanged += (_, _) =>
         {
             var started = FrameParts.Start();
@@ -48,17 +63,16 @@ public sealed partial class FileRow : UserControl
         PointerExited += OnPointerExited;
     }
 
+    // Which of the three icon elements shows.
+    private enum IconShown
+    {
+        Image,
+        Folder,
+        File,
+    }
+
     /// <summary>The row's index in its listing, or -1.</summary>
     public int Index { get; private set; } = -1;
-
-    /// <inheritdoc/>
-    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
-    {
-        var started = FrameParts.Start();
-        var size = base.MeasureOverride(availableSize);
-        FrameParts.Stop(FramePart.RowMeasure, started);
-        return size;
-    }
 
     /// <summary>The theme's stroke for a file named <paramref name="name"/> (the editor tab's glyph too).</summary>
     public static Brush IconBrushFor(string name) =>
@@ -85,7 +99,13 @@ public sealed partial class FileRow : UserControl
     public bool ShowsCursor
     {
         get => CursorOutline.Visibility == Visibility.Visible;
-        set => CursorOutline.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+        set
+        {
+            if (_cursor.Take(value))
+            {
+                CursorOutline.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
     }
 
     /// <summary>The name's text, where inline rename puts its text box.</summary>
@@ -104,15 +124,24 @@ public sealed partial class FileRow : UserControl
         }
     }
 
+    /// <inheritdoc/>
+    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
+    {
+        var started = FrameParts.Start();
+        var size = base.MeasureOverride(availableSize);
+        FrameParts.Stop(FramePart.RowMeasure, started);
+        return size;
+    }
+
     // A search hit (docs/ui.md, "Search"): its folder where a listing shows the time, and no size.
     private void BindHit(SearchRowItem hit)
     {
         _item = null;
         _hit = hit;
         Index = hit.Index;
-        NameText.Text = hit.Name;
-        ModifiedText.Text = hit.FolderText;
-        SizeText.Text = "";
+        SetText(NameText, ref _name, hit.Name);
+        SetText(ModifiedText, ref _second, hit.FolderText);
+        SetText(SizeText, ref _size, "");
         ShowTypeAndIcon(hit.Name, hit.Hit.IsFolder ? EntryKind.Directory : EntryKind.File, hit.Hit.IsFolder, hit.Details, -1);
         _pointerOver = false;
         UpdateState();
@@ -131,12 +160,10 @@ public sealed partial class FileRow : UserControl
         var view = item.View;
         var index = item.Index;
         Index = index;
-        var name = view.NameSpan(index);
         var isFolder = view.IsFolder(index);
-
-        NameText.Text = name.ToString();
-        ModifiedText.Text = DisplayFormat.Modified(view.Modified(index), DateTime.Now);
-        SizeText.Text = DisplayFormat.Size(view.Size(index), isFolder);
+        SetText(NameText, ref _name, view.Name(index));
+        SetText(ModifiedText, ref _second, DisplayFormat.Modified(view.Modified(index), DateTime.Now));
+        SetText(SizeText, ref _size, DisplayFormat.Size(view.Size(index), isFolder));
         BindDetails(item);
         _pointerOver = false;
         UpdateState();
@@ -156,28 +183,54 @@ public sealed partial class FileRow : UserControl
         LinkKind link = LinkKind.None, uint attributes = 0)
     {
         var detail = details?.Detail(index, name, isFolder);
-        TypeText.Text = DisplayFormat.RowType(name, kind, isFolder, link, detail);
-        LinkBadge.Visibility = link != LinkKind.None ? Visibility.Visible : Visibility.Collapsed;
-        CloudMark.Visibility = EntryFacts.IsNotOnDisk(attributes) ? Visibility.Visible : Visibility.Collapsed;
+        SetText(TypeText, ref _type, DisplayFormat.RowType(name, kind, isFolder, link, detail));
+        if (_link.Take(link != LinkKind.None))
+        {
+            LinkBadge.Visibility = link != LinkKind.None ? Visibility.Visible : Visibility.Collapsed;
+        }
+        var cloud = EntryFacts.IsNotOnDisk(attributes);
+        if (_cloud.Take(cloud))
+        {
+            CloudMark.Visibility = cloud ? Visibility.Visible : Visibility.Collapsed;
+        }
         IconKey = detail is null ? null : DisplayFormat.IconKeyFor(detail, name, isFolder, attributes);
         if (IconKey is not null && details?.Icon(IconKey) is { } image)
         {
-            IconImage.Source = image;
-            IconImage.Visibility = Visibility.Visible;
-            Icon.Visibility = Visibility.Collapsed;
-            FolderIcon.Visibility = Visibility.Collapsed;
+            if (_image.Take(image))
+            {
+                IconImage.Source = image;
+            }
+            ShowIcon(IconShown.Image);
             return;
         }
-        IconImage.Source = null;
-        IconImage.Visibility = Visibility.Collapsed;
         // A folder until its shell icon comes: the design's two-tone folder in the theme's colours
         // (a link to a folder too: its badge says it is a link).
-        FolderIcon.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
-        Icon.Visibility = isFolder ? Visibility.Collapsed : Visibility.Visible;
+        ShowIcon(isFolder ? IconShown.Folder : IconShown.File);
         if (!isFolder)
         {
-            Icon.Glyph = FileGlyph;
-            Icon.Foreground = ThemeBrushes.FileType(DisplayFormat.Extension(name)) ?? _plainIconBrush;
+            var brush = ThemeBrushes.FileType(DisplayFormat.Extension(name)) ?? _plainIconBrush;
+            if (_glyphBrush.Take(brush))
+            {
+                Icon.Foreground = brush;
+            }
+        }
+    }
+
+    private void ShowIcon(IconShown shown)
+    {
+        if (_icon.Take(shown))
+        {
+            IconImage.Visibility = shown == IconShown.Image ? Visibility.Visible : Visibility.Collapsed;
+            FolderIcon.Visibility = shown == IconShown.Folder ? Visibility.Visible : Visibility.Collapsed;
+            Icon.Visibility = shown == IconShown.File ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private static void SetText(TextBlock text, ref Shown<string> shown, string value)
+    {
+        if (shown.Take(value))
+        {
+            text.Text = value;
         }
     }
 
@@ -193,6 +246,12 @@ public sealed partial class FileRow : UserControl
         UpdateState();
     }
 
-    private void UpdateState() =>
-        VisualStateManager.GoToState(this, _selected ? "Selected" : _pointerOver ? "PointerOver" : "Normal", false);
+    private void UpdateState()
+    {
+        var state = _selected ? "Selected" : _pointerOver ? "PointerOver" : "Normal";
+        if (_state.Take(state))
+        {
+            VisualStateManager.GoToState(this, state, false);
+        }
+    }
 }
