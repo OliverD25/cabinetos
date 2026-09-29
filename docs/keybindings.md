@@ -81,6 +81,37 @@ The core's commands, in palette order:
 | `terminal.show` | Terminal: Show Terminal | | | UI |
 | `terminal.close` | Terminal: Close Terminal | | | UI |
 | `terminal.reload` | Terminal: Reload Terminal | | | UI |
+| `go.root` | Go: Up to Root | `ctrl+backslash` | | UI |
+| `go.chooseDriveLeft` | Go: Choose Drive for Left Pane… | `alt+f1` | | UI |
+| `go.chooseDriveRight` | Go: Choose Drive for Right Pane… | `alt+f2` | | UI |
+| `go.showInLeftPane` | Go: Show in Left Pane | `ctrl+left` | `filesView` | UI |
+| `go.showInRightPane` | Go: Show in Right Pane | `ctrl+right` | `filesView` | UI |
+| `go.pinnedFolders` | Go: Pinned Folders… | `ctrl+d` | | UI |
+| `view.swapPanes` | View: Swap Panes | `ctrl+u` | `filesView` | UI |
+| `view.refresh` | View: Refresh | `ctrl+r` | `filesView` | UI |
+| `view.sortByName` | View: Sort by Name | `ctrl+f3` | `filesView` | UI |
+| `view.sortByExtension` | View: Sort by Extension | `ctrl+f4` | `filesView` | UI |
+| `view.sortByModified` | View: Sort by Date Modified | `ctrl+f5` | `filesView` | UI |
+| `view.sortBySize` | View: Sort by Size | `ctrl+f6` | `filesView` | UI |
+| `edit.toggleSelectionInPlace` | Edit: Toggle Selection in Place | `space` | `filesView` | UI |
+| `edit.selectByPattern` | Edit: Select by Pattern… | `numpadadd` | `filesView` | UI |
+| `edit.unselectByPattern` | Edit: Unselect by Pattern… | `numpadsubtract` | `filesView` | UI |
+| `edit.selectSameExtension` | Edit: Select Same Extension | `alt+numpadadd` | `filesView` | UI |
+| `edit.unselectSameExtension` | Edit: Unselect Same Extension | `alt+numpadsubtract` | `filesView` | UI |
+| `edit.invertSelection` | Edit: Invert Selection | `numpadmultiply` | `filesView` | UI |
+| `edit.unselectAll` | Edit: Unselect All | `ctrl+numpadsubtract` | `filesView` | UI |
+| `edit.restoreSelection` | Edit: Restore Selection | `numpaddivide` | `filesView` | UI |
+| `edit.copyFullPath` | Edit: Copy Full Path | `ctrl+shift+c` | `filesView` | UI |
+| `edit.copyName` | Edit: Copy Name | `ctrl+k ctrl+n` | `filesView` | UI |
+| `edit.copyFolderPath` | Edit: Copy Folder Path | `ctrl+k ctrl+p` | `filesView` | UI |
+| `file.view` | File: View | `f3` | `filesView` | UI |
+| `file.edit` | File: Edit | `f4` | `filesView` | UI |
+| `file.newTextFile` | File: New Text File | `shift+f4` | `filesView` | UI |
+| `file.windowsProperties` | File: Windows Properties | | `filesView` | UI |
+| `file.calculateFolderSize` | File: Calculate Folder Size | | `filesView` | UI |
+| `file.calculateAllFolderSizes` | File: Calculate All Folder Sizes | `shift+alt+enter` | `filesView` | UI |
+| `terminal.insertPath` | Terminal: Insert Folder Path | `ctrl+p` | `filesView` | UI |
+| `terminal.insertSelectedPaths` | Terminal: Insert Selected Paths | `ctrl+shift+enter` | `filesView` | UI |
 | `window.new` | Window: New Window | `ctrl+n` | | UI |
 | `help.about` | Help: About CabinetOS | | | UI |
 
@@ -96,6 +127,14 @@ The core's commands, in palette order:
   palette and can be rebound like any other (Article 7); the window's
   buttons run the same commands, with arguments (a session, a path) that
   the palette leaves out.
+- The rows from `go.root` to `terminal.insertSelectedPaths` are Total
+  Commander's small commands (sub-phase 11a): their titles, keys and
+  contexts are the research note's
+  ([research/total-commander.md](research/total-commander.md), Part 3 (b),
+  N1 to N31), and what each does is the window's ([ui.md](ui.md)). None of
+  their keys is used by another command in any context, and none starts a
+  chord; `ctrl+k ctrl+n` and `ctrl+k ctrl+p` are chords under `ctrl+k`,
+  like `ctrl+k ctrl+s`.
 - The second keys of `file.rename` (`shift+f6`), `file.delete` (`f8`),
   `file.deletePermanently` (`shift+f8`), `edit.selectAll`
   (`ctrl+numpadadd`) and `search.focus` (`alt+f7`) are Total Commander's

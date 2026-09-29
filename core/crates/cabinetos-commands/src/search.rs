@@ -157,13 +157,15 @@ mod tests {
         // first; toggling the panel comes right after them.
         let terminal = ids("terminal");
         assert_eq!(
-            terminal[..6],
+            terminal[..8],
             [
                 "terminal.runTask",
                 "terminal.new",
                 "terminal.show",
                 "terminal.close",
                 "terminal.reload",
+                "terminal.insertPath",
+                "terminal.insertSelectedPaths",
                 "view.toggleTerminal"
             ]
         );

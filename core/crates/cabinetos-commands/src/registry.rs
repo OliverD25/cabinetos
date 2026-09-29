@@ -71,11 +71,11 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// (`docs/design/FileForge.dc.html`, `COMMANDS`) without its plugin commands,
 /// the shell's own navigation, file, edit and search commands, the window's
 /// own commands (the sidebar's pins, the editor tabs, the transfer panel,
-/// the plugin list, the terminal tabs), then the palette, overlays, a new
-/// window and About. Every one of them runs in the UI: the shell starts the file jobs
+/// the plugin list, the terminal tabs), Total Commander's small commands
+/// (sub-phase 11a), then the palette, overlays, a new window and About. Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 52] = [
+const SEED: [Seed; 83] = [
     seed(
         "palette.show",
         "View",
@@ -328,6 +328,228 @@ const SEED: [Seed; 52] = [
         UI,
         None,
     ),
+    // Sub-phase 11a: Total Commander's keys and small commands
+    // (docs/research/total-commander.md, Part 3 (b), N1 to N31).
+    seed("go.root", "Go", "Up to Root", &["ctrl+backslash"], UI, None),
+    seed(
+        "go.chooseDriveLeft",
+        "Go",
+        "Choose Drive for Left Pane…",
+        &["alt+f1"],
+        UI,
+        None,
+    ),
+    seed(
+        "go.chooseDriveRight",
+        "Go",
+        "Choose Drive for Right Pane…",
+        &["alt+f2"],
+        UI,
+        None,
+    ),
+    seed(
+        "go.showInLeftPane",
+        "Go",
+        "Show in Left Pane",
+        &["ctrl+left"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "go.showInRightPane",
+        "Go",
+        "Show in Right Pane",
+        &["ctrl+right"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "go.pinnedFolders",
+        "Go",
+        "Pinned Folders…",
+        &["ctrl+d"],
+        UI,
+        None,
+    ),
+    seed(
+        "view.swapPanes",
+        "View",
+        "Swap Panes",
+        &["ctrl+u"],
+        UI,
+        FILES,
+    ),
+    seed("view.refresh", "View", "Refresh", &["ctrl+r"], UI, FILES),
+    seed(
+        "view.sortByName",
+        "View",
+        "Sort by Name",
+        &["ctrl+f3"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "view.sortByExtension",
+        "View",
+        "Sort by Extension",
+        &["ctrl+f4"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "view.sortByModified",
+        "View",
+        "Sort by Date Modified",
+        &["ctrl+f5"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "view.sortBySize",
+        "View",
+        "Sort by Size",
+        &["ctrl+f6"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.toggleSelectionInPlace",
+        "Edit",
+        "Toggle Selection in Place",
+        &["space"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.selectByPattern",
+        "Edit",
+        "Select by Pattern…",
+        &["numpadadd"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.unselectByPattern",
+        "Edit",
+        "Unselect by Pattern…",
+        &["numpadsubtract"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.selectSameExtension",
+        "Edit",
+        "Select Same Extension",
+        &["alt+numpadadd"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.unselectSameExtension",
+        "Edit",
+        "Unselect Same Extension",
+        &["alt+numpadsubtract"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.invertSelection",
+        "Edit",
+        "Invert Selection",
+        &["numpadmultiply"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.unselectAll",
+        "Edit",
+        "Unselect All",
+        &["ctrl+numpadsubtract"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.restoreSelection",
+        "Edit",
+        "Restore Selection",
+        &["numpaddivide"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.copyFullPath",
+        "Edit",
+        "Copy Full Path",
+        &["ctrl+shift+c"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.copyName",
+        "Edit",
+        "Copy Name",
+        &["ctrl+k ctrl+n"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "edit.copyFolderPath",
+        "Edit",
+        "Copy Folder Path",
+        &["ctrl+k ctrl+p"],
+        UI,
+        FILES,
+    ),
+    seed("file.view", "File", "View", &["f3"], UI, FILES),
+    seed("file.edit", "File", "Edit", &["f4"], UI, FILES),
+    seed(
+        "file.newTextFile",
+        "File",
+        "New Text File",
+        &["shift+f4"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "file.windowsProperties",
+        "File",
+        "Windows Properties",
+        &[],
+        UI,
+        FILES,
+    ),
+    seed(
+        "file.calculateFolderSize",
+        "File",
+        "Calculate Folder Size",
+        &[],
+        UI,
+        FILES,
+    ),
+    seed(
+        "file.calculateAllFolderSizes",
+        "File",
+        "Calculate All Folder Sizes",
+        &["shift+alt+enter"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "terminal.insertPath",
+        "Terminal",
+        "Insert Folder Path",
+        &["ctrl+p"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "terminal.insertSelectedPaths",
+        "Terminal",
+        "Insert Selected Paths",
+        &["ctrl+shift+enter"],
+        UI,
+        FILES,
+    ),
     // Explorer's key for another window of the same folder.
     seed("window.new", "Window", "New Window", &["ctrl+n"], UI, None),
     seed("help.about", "Help", "About CabinetOS", &[], UI, None),
@@ -489,7 +711,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 52);
+        assert_eq!(registry.commands().len(), 83);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -523,6 +745,242 @@ mod tests {
                     .all(|command| !command.id.contains(plugin_command)),
                 "{plugin_command}"
             );
+        }
+    }
+
+    /// A seeded command as a test expects it: id, category, title, default
+    /// keys and `when`.
+    type Expected = (
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static [&'static str],
+        Option<&'static str>,
+    );
+
+    /// Sub-phase 11a (`docs/research/total-commander.md`, Part 3 (b), N1 to
+    /// N31): Total Commander's small commands, with the note's titles, keys
+    /// and contexts.
+    const TOTAL_COMMANDER: [Expected; 31] = [
+        ("go.root", "Go", "Up to Root", &["ctrl+backslash"], None),
+        (
+            "go.chooseDriveLeft",
+            "Go",
+            "Choose Drive for Left Pane…",
+            &["alt+f1"],
+            None,
+        ),
+        (
+            "go.chooseDriveRight",
+            "Go",
+            "Choose Drive for Right Pane…",
+            &["alt+f2"],
+            None,
+        ),
+        (
+            "go.showInLeftPane",
+            "Go",
+            "Show in Left Pane",
+            &["ctrl+left"],
+            Some("filesView"),
+        ),
+        (
+            "go.showInRightPane",
+            "Go",
+            "Show in Right Pane",
+            &["ctrl+right"],
+            Some("filesView"),
+        ),
+        (
+            "go.pinnedFolders",
+            "Go",
+            "Pinned Folders…",
+            &["ctrl+d"],
+            None,
+        ),
+        (
+            "view.swapPanes",
+            "View",
+            "Swap Panes",
+            &["ctrl+u"],
+            Some("filesView"),
+        ),
+        (
+            "view.refresh",
+            "View",
+            "Refresh",
+            &["ctrl+r"],
+            Some("filesView"),
+        ),
+        (
+            "view.sortByName",
+            "View",
+            "Sort by Name",
+            &["ctrl+f3"],
+            Some("filesView"),
+        ),
+        (
+            "view.sortByExtension",
+            "View",
+            "Sort by Extension",
+            &["ctrl+f4"],
+            Some("filesView"),
+        ),
+        (
+            "view.sortByModified",
+            "View",
+            "Sort by Date Modified",
+            &["ctrl+f5"],
+            Some("filesView"),
+        ),
+        (
+            "view.sortBySize",
+            "View",
+            "Sort by Size",
+            &["ctrl+f6"],
+            Some("filesView"),
+        ),
+        (
+            "edit.toggleSelectionInPlace",
+            "Edit",
+            "Toggle Selection in Place",
+            &["space"],
+            Some("filesView"),
+        ),
+        (
+            "edit.selectByPattern",
+            "Edit",
+            "Select by Pattern…",
+            &["numpadadd"],
+            Some("filesView"),
+        ),
+        (
+            "edit.unselectByPattern",
+            "Edit",
+            "Unselect by Pattern…",
+            &["numpadsubtract"],
+            Some("filesView"),
+        ),
+        (
+            "edit.selectSameExtension",
+            "Edit",
+            "Select Same Extension",
+            &["alt+numpadadd"],
+            Some("filesView"),
+        ),
+        (
+            "edit.unselectSameExtension",
+            "Edit",
+            "Unselect Same Extension",
+            &["alt+numpadsubtract"],
+            Some("filesView"),
+        ),
+        (
+            "edit.invertSelection",
+            "Edit",
+            "Invert Selection",
+            &["numpadmultiply"],
+            Some("filesView"),
+        ),
+        (
+            "edit.unselectAll",
+            "Edit",
+            "Unselect All",
+            &["ctrl+numpadsubtract"],
+            Some("filesView"),
+        ),
+        (
+            "edit.restoreSelection",
+            "Edit",
+            "Restore Selection",
+            &["numpaddivide"],
+            Some("filesView"),
+        ),
+        (
+            "edit.copyFullPath",
+            "Edit",
+            "Copy Full Path",
+            &["ctrl+shift+c"],
+            Some("filesView"),
+        ),
+        (
+            "edit.copyName",
+            "Edit",
+            "Copy Name",
+            &["ctrl+k ctrl+n"],
+            Some("filesView"),
+        ),
+        (
+            "edit.copyFolderPath",
+            "Edit",
+            "Copy Folder Path",
+            &["ctrl+k ctrl+p"],
+            Some("filesView"),
+        ),
+        ("file.view", "File", "View", &["f3"], Some("filesView")),
+        ("file.edit", "File", "Edit", &["f4"], Some("filesView")),
+        (
+            "file.newTextFile",
+            "File",
+            "New Text File",
+            &["shift+f4"],
+            Some("filesView"),
+        ),
+        (
+            "file.windowsProperties",
+            "File",
+            "Windows Properties",
+            &[],
+            Some("filesView"),
+        ),
+        (
+            "file.calculateFolderSize",
+            "File",
+            "Calculate Folder Size",
+            &[],
+            Some("filesView"),
+        ),
+        (
+            "file.calculateAllFolderSizes",
+            "File",
+            "Calculate All Folder Sizes",
+            &["shift+alt+enter"],
+            Some("filesView"),
+        ),
+        (
+            "terminal.insertPath",
+            "Terminal",
+            "Insert Folder Path",
+            &["ctrl+p"],
+            Some("filesView"),
+        ),
+        (
+            "terminal.insertSelectedPaths",
+            "Terminal",
+            "Insert Selected Paths",
+            &["ctrl+shift+enter"],
+            Some("filesView"),
+        ),
+    ];
+
+    /// Every one of them is seeded as the note says, and runs in the window.
+    #[test]
+    fn total_commander_s_commands_are_seeded_as_the_note_says() {
+        let registry = CommandRegistry::core();
+        for (id, category, title, keys, when) in TOTAL_COMMANDER {
+            let command = registry
+                .get(id)
+                .unwrap_or_else(|| panic!("{id} is not seeded"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                (category, title),
+                "{id}"
+            );
+            assert_eq!(texts(&command.default_keys), keys, "{id}");
+            assert_eq!(command.when.as_deref(), when, "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.source, CommandSource::Core, "{id}");
+            assert!(!command.immutable, "{id}");
         }
     }
 
