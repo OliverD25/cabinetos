@@ -604,6 +604,44 @@ unchanged.
 
 Articles: 1, 4, 7, 8, 10, 11, 12.
 
+**14a, the core foundations, built 2026-09-30 (protocol 13; 46c644c,
+b6bd317, 942b82e, 94b0e33, 85d6cd5, c6489a3, 44f2c66, 4feb72f).** Every
+addition is general and works without AI. `window_state` keeps one state
+per connection (a client is "<hello name>#N") and `get_window_state`
+returns the newest or a named one; `cabinetos-cli state` prints it.
+Previews: `preview_listing` answers `preview_opened` with the listing (a
+normal listing with the header's preview flag and 12-byte preview rows
+at the old reserved offset, so a folder listing is byte-identical to
+before), `open_preview` reopens one a plugin proposed, `preview_apply`
+runs the rows as chained `steps` jobs (neighbouring rows of one kind
+share a job; a failed job cancels the rest) and answers `jobs_started`,
+`preview_cancel` drops it; previews expire after 10 minutes, 20 per
+client. Secrets live in the Windows Credential Manager through the new
+crate `cabinetos-secrets` (`secret_set`, `secret_get`, `secret_delete`,
+`secret_list`, `cabinetos-cli secret`); a value never prints, and a test
+scans a trace-level log for it. A plugin reaches the network only
+through the core's `http-request` (ureq on rustls with the Windows
+certificate store): `https:` only except localhost, only the hosts and
+the secrets its manifest names, no redirects, 8 MiB, 120 s, the secret
+put into the named header by the core and never seen by the plugin, one
+log line per request; the WIT package is 0.2.0, and a 0.1 plugin is
+refused. `fs:watch` gives a plugin `watch-folder` and `unwatch-folder`
+under its roots and the export `on-event` with `folder-changed` (200 ms
+batches, an `overflow` flag, at most 16 watches). A plugin command may
+declare `input` in its manifest, and `list_commands` says so. Every job
+leaves one line in the undo journal (`%LOCALAPPDATA%\CabinetOS\undo`,
+200 jobs, 256 MiB of saved copies, a replaced file moved aside rather
+than copied); `undo_job` reverses a job or the newest one not yet
+undone, names what cannot come back (a file in the Recycle Bin, a delete
+for good), and `cabinetos-cli undo <job>|--last` follows it. The release
+carries `cab.exe`, the command line under a short name. New fixture
+plugins `fetcher` and `watcher`. 700 core tests. Left for the extension
+and decided the same night: a plugin can make core requests only through
+a new host function under an allow-listed capability, and a plugin may
+read its own settings under `plugins.<id>.settings`; both go in with 14b.
+Guides: [ipc.md](ipc.md), [plugins.md](plugins.md), [jobs.md](jobs.md)
+("Chains and steps", "Undo").
+
 ### Phase 15 — Heavy logging mode and trace ids (the creator's idea, 2026-09-29 late evening; built in the sleep-mode run of 2026-09-29/30)
 
 Goal: a switch that makes CabinetOS record every operation, even at the
