@@ -1,9 +1,10 @@
 # Runs the live check and, when it ends, writes a DONE file and opens it in Notepad, so whoever
 # waits at the PC sees on screen that the keyboard and mouse are free again (docs/ui.md, "The live
 # check"). The output goes to _io\live-check next to the repository, never into the repository.
-param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'))
+# -Io names that folder when the repository is a git worktree somewhere else.
+param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '')
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$io = Join-Path (Split-Path $repo -Parent) '_io\live-check'
+$io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $out = "$io\run-$Tag.txt"
 $started = Get-Date

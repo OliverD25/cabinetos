@@ -119,7 +119,9 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   menu, Properties with Esc and a key that must not run under it, the
   terminal typed with Unicode key events, the palette from the terminal,
   search, and Markdown Preview with Enter and then Ctrl+K V. Then Total
-  Commander's keys, Commander Compact chosen in the theme picker with its
+  Commander's keys, with the preview still open in the other pane until
+  Ctrl+P has shown the terminal (whose page must then have the keyboard:
+  "The terminal", "Handing the keyboard to the page"), Commander Compact chosen in the theme picker with its
   keys (the window's log must say 20 px rows; Tab must never land on a
   function key; F5 pressed through the bar's button by its accessible name
   must copy a file) and switched back, and the edge cases.
@@ -129,7 +131,8 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   preview.
 
 `run-livecheck.ps1` runs `livecheck.ps1 -Strict`, keeps the output in
-`_io\live-check\run-<time>.txt` next to the repository, and at the end writes
+`_io\live-check\run-<time>.txt` next to the repository (`-Io <folder>`
+names another folder, for a git worktree elsewhere), and at the end writes
 `DONE.md` there and opens it in Notepad: the sign, on a PC where someone is
 waiting, that the keyboard and mouse are free again. The script types into a
 name box only after the window's "rename box shown" line, reads the
@@ -763,9 +766,6 @@ Windows style on the cursor row, selected alone by the key that moved
 there, keeps it selected (and measures a folder) instead of leaving
 nothing selected.
 
-### Prompts in the palette's frame
-
-The pattern box, the pinned folders and the drive list use one prompt,
 In the Windows style that cursor row, selected alone, is the cursor, not a
 mark (`SelectionModel.HasMarks`, which Restore Selection also uses). Num *,
 Num + and Alt+Num + drop it before they mark, so a cursor on a folder is
@@ -776,6 +776,9 @@ folder under the cursor is unmarked. Before, it said "7 selected, 29 B"
 A selection of several rows, or of a row the cursor is not on, is marks,
 and stays.
 
+### Prompts in the palette's frame
+
+The pattern box, the pinned folders and the drive list use one prompt,
 `PromptBox`: the palette's Acrylic panel, entrance and rows, with a label,
 a box, an optional check box, a few rows and a hint line. Up and Down move
 the highlight, Enter takes it, Esc (`overlay.close`) or a click outside
@@ -1057,8 +1060,36 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   and Ctrl+V pastes (bracketed when the shell asked for it). Esc, Tab and
   chords such as Ctrl+K … stay in the shell, which needs them. The page
   hands the window's keys over as messages, and a key that also reaches
-  the window through XAML is ignored there, so none runs twice. The
-  palette opened from the terminal gives the keyboard back to it.
+  the window through XAML is ignored there, so none runs twice (unless the
+  page never got it: next point). The palette opened from the terminal
+  gives the keyboard back to it.
+- **Handing the keyboard to the page.** XAML's focus on the terminal's
+  WebView2 is not enough. WinUI moves the keys into a page's browser only
+  when XAML's focus arrives while the page's controller is visible, and a
+  dock shown a moment ago becomes visible to it only at the next frame
+  (WinUI's `WebView2.HandleRendered`). When the focus came first, WinUI
+  kept the move pending and never made it: XAML's focus sat on the page,
+  Windows sent the keys to the window's own input window, and the window
+  ignored them as the page's. The real-key runs of 2026-09-29 lost every
+  key that way after Ctrl+P, in three of thirteen runs, each with the
+  Markdown Preview open in the other pane, until a mouse click. Now,
+  150 ms after it gives a page the keyboard (the terminal, and a tool's
+  editor tab the same way), the window looks which window gets the keys
+  (`PageKeyboard`, tested; `WindowsPlatform.KeyboardFocus`): Chromium's
+  input window (`Chrome_WidgetWin_*`) means the page has them; WinUI's
+  (`InputSiteWindowClass`) means it has not, and the window moves the
+  focus away for a moment (to a shown pane, else to the close button of
+  the page's own header) and back to the page, up to three times: WinUI
+  makes the move only when XAML's focus arrives anew.
+  A key that reaches the window while XAML's focus is on a page that
+  does not have the keys is the window's to act on: the page's ways out
+  (Ctrl+Shift+P, Ctrl+`, a `terminalFocus` binding) run, and any other
+  key hands the keyboard to the page again. Hiding the terminal gives the
+  keys back to the pane. Checked with real keys on 2026-09-30 (a copy of
+  the live check without the scroll): after Ctrl+P, with the preview open
+  in the other pane, the first check found the keys in the window
+  (`InputSiteWindowClass`), the second hand-over reached the page, and
+  Ctrl+` then reached the window.
 - **Characters sent as Unicode key events** (the touch keyboard, Voice
   Access, automation tools: `VK_PACKET`) are typed from their `keypress`,
   not their `keydown`. The `keydown` can carry the character of an earlier
@@ -1120,7 +1151,14 @@ How it is built:
   "terminal shell exited", "cwd sync" with its decision (debug level),
   "terminal tab closed". Target `cabinetos_ui::webview`: "WebView2
   started" with its browser process ID, every blocked request, and "a
-  WebView2 process failed" with the kind and reason.
+  WebView2 process failed" with the kind and reason. Target
+  `cabinetos_ui::shell`: "a page has the keyboard" with the page and the
+  hand-overs it took, "a page did not get the keyboard; handing it over
+  again" with the window that had the keys, "a page did not get the
+  keyboard" (a warning, after three), "a key the page did not get" with
+  the key and the command it ran, and "keyboard owner" (XAML's focused
+  element and the page or window that gets the keys) 300 ms after the
+  terminal hides and at the snapshot aid's `focus:` step.
 
 ## Tool Extensions
 

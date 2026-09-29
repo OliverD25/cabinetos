@@ -168,6 +168,9 @@ internal sealed class TerminalController
         }
     }
 
+    /// <summary>The command the page passes on for <paramref name="combo"/> (<c>ctrl+`</c>), or null: the key is the shell's.</summary>
+    public string? PassKeyCommand(string combo) => _passKeys.TryGetValue(combo, out var command) ? command : null;
+
     /// <summary>Colors and font for the page (the theme changed).</summary>
     public void SetTheme(string theme)
     {

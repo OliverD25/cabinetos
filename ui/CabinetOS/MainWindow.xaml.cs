@@ -620,6 +620,7 @@ public sealed partial class MainWindow : Window
             : "elsewhere";
         Diag.Info("cabinetos_ui::snapshot", "keyboard focus", new LogField("label", label), new LogField("element", focused?.GetType().Name ?? "none"),
             new LogField("name", name), new LogField("within", within));
+        LogKeyboard(label);
 
         static bool IsWithin(DependencyObject element, DependencyObject container)
         {
@@ -2347,11 +2348,12 @@ public sealed partial class MainWindow : Window
             }
             return;
         }
-        if (RootGrid.XamlRoot is { } focusRoot && FocusManager.GetFocusedElement(focusRoot) is WebView2)
+        if (RootGrid.XamlRoot is { } focusRoot && FocusManager.GetFocusedElement(focusRoot) is WebView2 page)
         {
             // A web page (the terminal, a tool) takes its own keys and passes the
             // window's back as messages (TerminalKeys); a key that also arrives
-            // here must not run twice.
+            // here must not run twice, unless the page never got it (PageKeyboard).
+            HandleKeyForPage(page, e);
             return;
         }
         var virtualKey = (int)e.Key;

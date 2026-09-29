@@ -374,25 +374,11 @@ Shot $h "$ShotDir\phase-5c-markdown-chord.png"
 $ready = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool ready"' }).Count
 "the preview said ready for each open (2 expected): $ready"
 
-# The sections from here on assume two file panes with the keyboard in a pane. In the first complete
-# real-key run the preview (a web page in the other pane) and the terminal stayed open, the long path
-# landed in the wrong pane, and keys pressed while a page had the keyboard were lost.
-Step "close the preview and hide the terminal, so the later sections find two file panes"
-$closed = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
-[Live]::Type("Close Editor"); Start-Sleep -Milliseconds 700
-[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 800
-"the preview closed: $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count -gt $closed)"
-$toggles = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count
-[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
-if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
-  "Ctrl+Backquote did not reach the window; hiding the terminal from the palette"
-  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
-  [Live]::Type("Toggle Terminal"); Start-Sleep -Milliseconds 700
-  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 700
-}
-"the terminal is hidden: $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -gt $toggles)"
-Shot $h "$ShotDir\phase-5c-two-panes-again.png"
+# The preview stays open in the right pane through sub-phase 11a's Ctrl+P: the terminal then shows
+# while a web page is open in the other pane, where run 4 lost every key until a mouse click (the
+# window left the keys in its own input window; docs/ui.md, "The terminal"). It closes right after
+# that check, so the later sections find two file panes.
+Shot $h "$ShotDir\phase-5c-preview-stays.png"
 
 # ----- Sub-phase 11a: Total Commander's keys (docs/ui.md, "Total Commander's keys") -----
 $tc = "$files\tc"
@@ -465,28 +451,32 @@ Start-Sleep -Milliseconds 2500
 "Shift+F8 removed it for good: $(-not (Test-Path -LiteralPath "$tc\cabinetos-live-check-shift-f8.txt"))"
 
 Step "11a: Ctrl+P: the terminal shows with the folder typed at the prompt"
+function HandedToTerminal { @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a page has the keyboard"' -and $_ -match '"page":"terminal"' }) }
+$handedBefore = (HandedToTerminal).Count
 [Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Seconds 3
 Shot $h "$ShotDir\11a-terminal-path-live.png"
 "the path was typed: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"paths typed at the prompt"' -and $_ -match 'OkReply' }))"
+# The preview is open in the right pane (phase 5c left it there). The window checks where Windows
+# sends the keys after it gave the terminal the keyboard, and hands them over again when WinUI left
+# them in the window ("a page has the keyboard" with the hand-overs it took).
+$handed = HandedToTerminal | Select-Object -Skip $handedBefore | Select-Object -Last 1
+"the terminal's page has the keyboard after Ctrl+P (hand-overs: $(if ($handed) { ($handed | ConvertFrom-Json).fields.hand_overs } else { 'none' })), the preview open in the other pane: $([bool]$handed)"
 # Esc clears the typed line in pwsh; Ctrl+Backquote gives the keyboard back to the pane (the page
-# passes it to the window, which logs view.toggleTerminal). If nothing was logged, the page did not
-# have the keyboard: the terminal is hidden from the palette instead, which also focuses the pane.
+# passes it to the window, which runs view.toggleTerminal).
+function ToggleCount { @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' -and $_ -match 'view\.toggleTerminal' }).Count }
+$lostBefore = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a key the page did not get"' }).Count
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 300
-$toggles = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count
+$toggles = ToggleCount
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
-$script:terminalHidden = $false
-if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
-  "after Ctrl+P the terminal did not pass Ctrl+Backquote to the window (its page did not have the keyboard); a click into the left pane takes the keyboard back, and Ctrl+Backquote from there hides the terminal"
-  ClickLeftPane
-  [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
-  if (@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match 'view\.toggleTerminal' }).Count -eq $toggles) {
-    "still nothing: hiding the terminal from the palette"
-    [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
-    [Live]::Type("Toggle Terminal"); Start-Sleep -Milliseconds 700
-    [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 700
-  }
-  $script:terminalHidden = $true
-}
+"Ctrl+Backquote reached the window after Ctrl+P, the preview open in the other pane: $((ToggleCount) -gt $toggles)"
+"keys the window had to take for the page (0 expected): $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a key the page did not get"' }).Count - $lostBefore)"
+
+Step "11a: close the preview, so the later sections find two file panes"
+$closed = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+[Live]::Type("Close Editor"); Start-Sleep -Milliseconds 700
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 800
+"the preview closed: $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count -gt $closed)"
 
 Step "11a: Ctrl+\: the drive's root"
 [Live]::Press($VK.Ctrl, $VK.Backslash); Start-Sleep -Milliseconds 1200
@@ -511,8 +501,13 @@ Step "11a: Ctrl+U: the panes change places"
 Shot $h "$ShotDir\11a-swapped-live.png"
 # And back, so the sections after this one find the panes where they expect them.
 [Live]::Press($VK.Ctrl, $VK.U); Start-Sleep -Milliseconds 800
-# The keyboard is in the pane: Ctrl+Backquote hides the terminal Ctrl+P showed (unless the palette did).
-if (-not $script:terminalHidden) { [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600 }
+# The keyboard is in the pane: Ctrl+Backquote hides the terminal Ctrl+P showed, and the pane keeps the keys.
+$toggles = ToggleCount
+[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 800
+$owner = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"keyboard owner"' -and $_ -match 'terminal hidden' } | Select-Object -Last 1
+$ownerFields = if ($owner) { ($owner | ConvertFrom-Json).fields } else { $null }
+"Ctrl+Backquote hid the terminal: $((ToggleCount) -gt $toggles)"
+"then the keys go to $(if ($ownerFields) { "$($ownerFields.element), $($ownerFields.keys_to)" } else { '(not logged)' }), the pane: $([bool]($ownerFields -and $ownerFields.element -eq 'FilePane' -and $ownerFields.keys_to -eq 'window'))"
 $ran = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields.command }
 foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPattern", "edit.invertSelection", "edit.unselectAll", "edit.toggleSelectionInPlace",
   "file.calculateAllFolderSizes", "go.root", "go.chooseDriveLeft", "view.swapPanes", "file.view", "file.edit", "file.newTextFile", "terminal.insertPath") {

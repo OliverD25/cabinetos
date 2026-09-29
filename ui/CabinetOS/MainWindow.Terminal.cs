@@ -162,10 +162,9 @@ public sealed partial class MainWindow
         }
         // A dock that was collapsed a moment ago has no size yet, and a WebView2 without one takes no focus.
         MainColumn.UpdateLayout();
-        if (Dock.FocusTerminalPage())
-        {
-            _terminal.FocusPage();
-        }
+        // A dock shown a moment ago is visible to WebView2 only from the next frame, and the keys
+        // may stay in the window: GiveKeysToPage checks and hands them over again (PageKeyboard).
+        GiveKeysToPage(Dock.TerminalPage.View, "terminal", () => _dockVisible, _terminal.FocusPage);
     }
 
     private void HideDock()
@@ -173,6 +172,7 @@ public sealed partial class MainWindow
         SetDockVisible(false);
         // The collapsed page cannot keep the keyboard; the pane takes it.
         FocusActivePane();
+        LogKeyboardSoon("terminal hidden, 300 ms later");
     }
 
     private void SetDockVisible(bool visible)

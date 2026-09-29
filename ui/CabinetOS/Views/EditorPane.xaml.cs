@@ -97,8 +97,11 @@ public sealed partial class EditorPane : UserControl
         ToolFrame.Visibility = Visibility.Visible;
     }
 
-    /// <summary>Gives the tool's page the keyboard.</summary>
-    public bool FocusPage() => ToolFrame.Child is Control page && page.Focus(FocusState.Programmatic);
+    /// <summary>The tool's page (its WebView2), once started; the window gives it the keyboard.</summary>
+    internal WebView2? PageView => ToolFrame.Child as WebView2;
+
+    /// <summary>A control of the tab strip the keyboard can rest on for a moment, while the window hands it to the page again.</summary>
+    internal Control HeaderStop => CloseButton;
 
     private void Run(string command, JsonElement? args) => _ = RunCommand?.Invoke(command, args, "button");
 

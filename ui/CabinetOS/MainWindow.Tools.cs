@@ -178,7 +178,7 @@ public sealed partial class MainWindow
         {
             // The pane that had the keyboard is covered by the editor: the page takes it.
             MainColumn.UpdateLayout();
-            _editorViews[pane].FocusPage();
+            FocusEditorPage(pane);
         }
         ScheduleToolContext();
     }
@@ -306,12 +306,16 @@ public sealed partial class MainWindow
 
     private void FocusPaneOrEditor()
     {
-        if (_editorViews is { } editors && editors[_active].IsOpen && editors[_active].FocusPage())
+        if (_editorViews is { } editors && editors[_active].IsOpen && FocusEditorPage(_active))
         {
             return;
         }
         _paneViews[_active].Focus(FocusState.Programmatic);
     }
+
+    // The editor's page takes the keyboard, and the window checks that Windows sends the keys there (PageKeyboard).
+    private bool FocusEditorPage(int pane) =>
+        GiveKeysToPage(_editorViews[pane].PageView, $"tool:{_toolHosts[pane]?.Tool.Manifest.Id}", () => _editorViews[pane].IsOpen);
 
     private CoreWebView2PreferredColorScheme ToolColorScheme() =>
         RootGrid.ActualTheme == ElementTheme.Light ? CoreWebView2PreferredColorScheme.Light : CoreWebView2PreferredColorScheme.Dark;

@@ -4,3 +4,9 @@ CloseHandle
 MessageBox
 AllowSetForegroundWindow
 GetSystemTimes
+GetGUIThreadInfo
+GetWindowThreadProcessId
+GetClassName
+GetCurrentThreadId
+GetWindowRect
+ClientToScreen

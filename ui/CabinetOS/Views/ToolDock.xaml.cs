@@ -71,12 +71,12 @@ public sealed partial class ToolDock : UserControl
     /// <summary>The terminal page's WebView2.</summary>
     internal WebViewHost TerminalPage { get; }
 
+    /// <summary>A control of the header the keyboard can rest on for a moment, while the window hands it to the page again.</summary>
+    internal Control HeaderStop => CloseButton;
+
     /// <summary>Whether the terminal page has the keyboard.</summary>
     public bool HasTerminalFocus =>
         XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused && IsInside(focused, TerminalFrame);
-
-    /// <summary>Gives the terminal page the keyboard (the page then focuses its shown terminal).</summary>
-    public bool FocusTerminalPage() => TerminalPage.View?.Focus(FocusState.Programmatic) ?? false;
 
     /// <summary>How many cells the body holds now, for a new session; the page then fits it exactly.</summary>
     public (ushort Cols, ushort Rows) EstimateCells()
