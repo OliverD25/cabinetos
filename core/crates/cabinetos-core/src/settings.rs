@@ -84,6 +84,7 @@ impl Settings {
         });
         log_warnings(&compiled.warnings);
         apply_log_level(store.config().logging.level);
+        apply_heavy(store.config().logging.heavy);
         let snapshot = Snapshot {
             config: store.config().clone(),
             keymap: compiled.keymap,
@@ -481,6 +482,9 @@ impl Settings {
         if config.logging.level != previous.config.logging.level {
             apply_log_level(config.logging.level);
         }
+        if config.logging.heavy != previous.config.logging.heavy {
+            apply_heavy(config.logging.heavy);
+        }
         tracing::info!(?changed, keymap_changed, "configuration changed");
         let wire_keymap = keymap_changed.then(|| keymap.to_wire());
         self.current
@@ -586,6 +590,15 @@ fn apply_log_level(level: LogLevel) {
         tracing::debug!(
             ?level,
             "logging.level is not applied: CABINETOS_LOG sets the log filter"
+        );
+    }
+}
+
+fn apply_heavy(on: bool) {
+    if !cabinetos_diag::set_heavy(on) {
+        tracing::debug!(
+            on,
+            "logging.heavy is not applied: CABINETOS_LOG_HEAVY decides"
         );
     }
 }

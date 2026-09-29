@@ -19,6 +19,10 @@
 //!   shutdown from there, whichever thread panicked.
 //! - [`set_level`] changes the level while the process runs (the core applies
 //!   `logging.level` from `cabinetos.json`); `CABINETOS_LOG` wins over it.
+//! - [`set_heavy`] turns heavy mode on or off (the core applies
+//!   `logging.heavy`; `CABINETOS_LOG_HEAVY` wins over it): every event at
+//!   every level also goes into `heavy-<process>.<date>.jsonl`, and a thread
+//!   that logs may wait for that writer (the `heavy` module, ADR 0013).
 //!
 //! Serves Constitution Article 12 (Unified, Zero-Latency Diagnostics & Logging)
 //! and Article 1 (logging never blocks the caller). Brief §8.
@@ -26,6 +30,8 @@
 
 mod clock;
 mod format;
+mod heavy;
+mod mask;
 mod panic;
 mod ring;
 
@@ -41,11 +47,20 @@ use tracing::Subscriber;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::Layer;
+use tracing_subscriber::filter::FilterExt;
 use tracing_subscriber::filter::{LevelFilter, Targets, filter_fn};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::{LookupSpan, Registry};
 use tracing_subscriber::reload;
 
+pub use heavy::{
+    HEAVY_CAP_CHECK_BYTES, HEAVY_DISK_CAP, HEAVY_FILE_BYTES, HEAVY_FILE_PREFIX,
+    HEAVY_NEVER_WAIT_EXTRA, HEAVY_QUEUE_CAP, HEAVY_TARGET_PREFIX, LOG_HEAVY_ENV, heavy_enabled,
+    never_wait_for_heavy_log,
+};
+pub use mask::{
+    MASK, PAYLOAD_CAP, cap_text, is_secret_env, mask_secrets, masked_json, masked_json_bytes,
+};
 pub use panic::on_panic;
 pub use ring::{RING_CAPACITY, recent_events};
 
@@ -179,7 +194,17 @@ struct ProcessInfo {
     process: &'static str,
     boundary: Boundary,
     log_dir: PathBuf,
+    /// Whether the process writes log files at all; heavy mode needs them.
+    log_file: bool,
 }
+
+/// Set when `CABINETOS_LOG_HEAVY` decided heavy mode: the configuration
+/// cannot change it then.
+static HEAVY_FROM_ENV: AtomicBool = AtomicBool::new(false);
+
+/// How long switching heavy mode off waits for the heavy writer to write
+/// what is queued and close its file.
+const HEAVY_CLOSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 static PROCESS: OnceLock<ProcessInfo> = OnceLock::new();
 
@@ -269,12 +294,19 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
     // that declares one, whatever the level: the trace they carry goes out
     // on the pipe even when nothing is logged. The file, stderr and the ring
     // buffer follow the level.
+    // Lines only heavy mode writes stay out of them whatever the level.
     let logged = Layer::and_then(file_layer, stderr_layer)
         .and_then(ring::RingLayer::new(boundary))
-        .with_filter(level_filter);
+        .with_filter(level_filter.and(filter_fn(|metadata| {
+            !metadata.target().starts_with(HEAVY_TARGET_PREFIX)
+        })));
+    // Heavy mode has a filter of its own: `CABINETOS_LOG` does not limit it.
+    let heavy_layer =
+        log_file.then(|| heavy::HeavyLayer { boundary }.with_filter(heavy::HeavyFilter));
     let subscriber = Registry::default()
         .with(format::SpanIdsLayer.with_filter(filter_fn(format::is_id_span)))
-        .with(logged);
+        .with(logged)
+        .with(heavy_layer);
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|_| DiagError::SubscriberAlreadySet)?;
 
@@ -292,6 +324,7 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
         process,
         boundary,
         log_dir: log_dir.clone(),
+        log_file,
     });
     panic::install_panic_hook();
 
@@ -301,7 +334,89 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
             "ignoring {LOG_FILTER_ENV}: it is not a valid filter; logging at info"
         );
     }
+    heavy_from_env();
     Ok(DiagGuard { log_dir })
+}
+
+/// Applies `CABINETOS_LOG_HEAVY` when it is set; from then on the
+/// configuration cannot change heavy mode.
+fn heavy_from_env() {
+    match parse_heavy(std::env::var(LOG_HEAVY_ENV).ok().as_deref()) {
+        Ok(Some(on)) => {
+            HEAVY_FROM_ENV.store(true, Ordering::SeqCst);
+            apply_heavy(on);
+        }
+        Ok(None) => {}
+        Err(text) => tracing::warn!(
+            value = %text,
+            "ignoring {LOG_HEAVY_ENV}: expected 1 or 0; the configuration decides"
+        ),
+    }
+}
+
+/// Turns heavy mode on or off, for example from `logging.heavy` in
+/// `cabinetos.json`; it applies at once. Switching off writes what is
+/// queued and closes the heavy file. Returns `false`, and changes nothing,
+/// before [`init`], in a process that writes no log file, or when
+/// `CABINETOS_LOG_HEAVY` decided: the environment wins over the
+/// configuration file.
+pub fn set_heavy(on: bool) -> bool {
+    if HEAVY_FROM_ENV.load(Ordering::SeqCst) {
+        return false;
+    }
+    apply_heavy(on)
+}
+
+fn apply_heavy(on: bool) -> bool {
+    let Some(process) = PROCESS.get().filter(|process| process.log_file) else {
+        return false;
+    };
+    if on {
+        let started = heavy::HEAVY.get_or_init(|| {
+            heavy::Heavy::start(
+                process.log_dir.clone(),
+                process.process,
+                process.boundary,
+                heavy::Limits::DEFAULT,
+            )
+            .map_err(|error| error.to_string())
+        });
+        if let Err(error) = started {
+            tracing::error!(%error, "cannot start the heavy log writer; heavy logging stays off");
+            return false;
+        }
+        if !heavy::set_on(true) {
+            // Log statements that were off for every layer come on now.
+            tracing::callsite::rebuild_interest_cache();
+            tracing::info!(
+                dir = %process.log_dir.display(),
+                queue_cap_bytes = HEAVY_QUEUE_CAP,
+                disk_cap_bytes = HEAVY_DISK_CAP,
+                "heavy logging is on"
+            );
+        }
+    } else if heavy_enabled() {
+        // Logged first, so it is the heavy file's last line too.
+        tracing::info!("heavy logging is off");
+        heavy::set_on(false);
+        tracing::callsite::rebuild_interest_cache();
+        if let Some(Ok(heavy)) = heavy::HEAVY.get() {
+            heavy.queue.flush(true, HEAVY_CLOSE_TIMEOUT);
+        }
+    }
+    true
+}
+
+/// `CABINETOS_LOG_HEAVY`: `1` or `true` on, `0` or `false` off, unset or
+/// empty for the configuration to decide; anything else is returned to be
+/// warned about.
+fn parse_heavy(text: Option<&str>) -> Result<Option<bool>, String> {
+    match text.map(str::trim).filter(|text| !text.is_empty()) {
+        None => Ok(None),
+        Some("1" | "true") => Ok(Some(true)),
+        Some("0" | "false") => Ok(Some(false)),
+        Some(other) => Err(other.to_owned()),
+    }
 }
 
 /// Sets the least important level this process logs, for example from
@@ -397,6 +512,12 @@ fn parse_filter(text: Option<&str>) -> (Targets, Option<String>) {
 /// Stops the background writer after it has written every queued event.
 /// Called when the [`DiagGuard`] drops and by the panic hook.
 fn flush_log_writer() {
+    // The heavy file first: it is written by its own thread, which the
+    // panic hook must not wait for when it is the thread that panicked.
+    let on_heavy_writer = std::thread::current().name() == Some(heavy::WRITER_THREAD);
+    if !on_heavy_writer && let Some(Ok(heavy)) = heavy::HEAVY.get() {
+        heavy.queue.flush(true, std::time::Duration::from_secs(2));
+    }
     let Some(slot) = WORKER.get() else { return };
     // try_lock: the panic hook must never wait here. If another thread holds
     // the slot, that thread is already flushing.
@@ -454,6 +575,15 @@ mod tests {
         assert_eq!(bad.as_deref(), Some("=nonsense="));
         assert!(targets.would_enable("cabinetos_core", &tracing::Level::INFO));
         assert!(!targets.would_enable("cabinetos_core", &tracing::Level::DEBUG));
+    }
+
+    #[test]
+    fn heavy_mode_from_the_environment_is_one_or_zero() {
+        assert_eq!(parse_heavy(None), Ok(None));
+        assert_eq!(parse_heavy(Some(" ")), Ok(None));
+        assert_eq!(parse_heavy(Some("1")), Ok(Some(true)));
+        assert_eq!(parse_heavy(Some("false")), Ok(Some(false)));
+        assert_eq!(parse_heavy(Some("yes")), Err("yes".to_owned()));
     }
 
     #[test]

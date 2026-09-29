@@ -99,6 +99,47 @@ fn timed<T>(inner: &HostInner, activity: &Activity, call: impl FnOnce() -> T) ->
     result
 }
 
+/// The most bytes of a host call's arguments heavy mode writes.
+const HOST_ARGS_CAP: usize = 4 * 1024;
+
+/// Heavy mode's line for one call the plugin makes to the host: written
+/// when it drops, with the function, its arguments (secrets masked, at
+/// most 4 KB) and its time. Costs one check when heavy mode is off.
+struct HostCall {
+    function: &'static str,
+    args: Option<(String, bool)>,
+    started: Instant,
+}
+
+impl HostCall {
+    fn start(function: &'static str, args: impl FnOnce() -> serde_json::Value) -> Self {
+        let args = tracing::enabled!(target: "heavy::plugins", tracing::Level::DEBUG)
+            .then(|| cabinetos_diag::masked_json(&args(), HOST_ARGS_CAP));
+        Self {
+            function,
+            args,
+            started: Instant::now(),
+        }
+    }
+}
+
+impl Drop for HostCall {
+    fn drop(&mut self) {
+        let Some((args, truncated)) = &self.args else {
+            return;
+        };
+        let ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        tracing::debug!(
+            target: "heavy::plugins",
+            function = self.function,
+            args = %args,
+            truncated,
+            ms,
+            "host call"
+        );
+    }
+}
+
 /// The data of a plugin's store.
 pub(crate) struct State {
     wasi: WasiCtx,
@@ -129,6 +170,10 @@ impl host::Host for State {
         category: String,
         default_keys: Vec<String>,
     ) -> wasmtime::Result<()> {
+        let _call = HostCall::start(
+            "register-command",
+            || serde_json::json!({"id": id, "title": title, "category": category, "default_keys": default_keys}),
+        );
         let plugin = &self.plugin;
         if !self.activating {
             wasmtime::bail!("register-command may only be called from activate");
@@ -161,6 +206,10 @@ impl host::Host for State {
     }
 
     fn log(&mut self, level: LogLevel, message: String) -> wasmtime::Result<()> {
+        let _call = HostCall::start(
+            "log",
+            || serde_json::json!({"level": format!("{level:?}"), "message": message}),
+        );
         match level {
             LogLevel::Trace => tracing::trace!("{message}"),
             LogLevel::Debug => tracing::debug!("{message}"),
@@ -172,6 +221,7 @@ impl host::Host for State {
     }
 
     fn config_get(&mut self, path: String) -> wasmtime::Result<Option<String>> {
+        let _call = HostCall::start("config-get", || serde_json::json!({"path": path}));
         if !self.plugin.granted.contains(&Capability::ConfigRead) {
             tracing::debug!(path = %path, "config-get without config:read: none");
             return Ok(None);
@@ -180,6 +230,10 @@ impl host::Host for State {
     }
 
     fn emit(&mut self, name: String, payload: String) -> wasmtime::Result<()> {
+        let _call = HostCall::start(
+            "emit",
+            || serde_json::json!({"name": name, "payload": payload}),
+        );
         if !self.plugin.granted.contains(&Capability::EventsEmit) {
             tracing::debug!(event = %name, "emit without events:emit: dropped");
             return Ok(());

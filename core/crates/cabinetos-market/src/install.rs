@@ -372,6 +372,9 @@ impl Market {
                 item.id, item.version
             ))
         };
+        let started = std::time::Instant::now();
+        // Set for a download over the network, which heavy mode logs.
+        let mut web = None;
         let mut source: Box<dyn Read> = match index.locate(&item.download.url, allow_insecure)? {
             Location::File(path) => Box::new(
                 File::open(&path)
@@ -383,11 +386,16 @@ impl Market {
                     .agent(allow_insecure)
                     .get(url.as_str())
                     .call()
-                    .map_err(|error| failed(error.to_string()))?;
+                    .map_err(|error| {
+                        crate::http_line(&url, "GET", 0, 0, started);
+                        failed(error.to_string())
+                    })?;
                 let status = response.status().as_u16();
                 if status != 200 {
+                    crate::http_line(&url, "GET", status, 0, started);
                     return Err(failed(format!("the server answered {status} for {url}")));
                 }
+                web = Some(url);
                 Box::new(response.into_body().into_reader())
             }
         };
@@ -419,6 +427,9 @@ impl Market {
         }
         file.flush()
             .map_err(|error| failed(format!("{}: {error}", to.display())))?;
+        if let Some(url) = &web {
+            crate::http_line(url, "GET", 200, done, started);
+        }
         progress(done, item.size, true);
         let hash = hex(&hasher.finalize());
         if !hash.eq_ignore_ascii_case(&item.download.sha256) {

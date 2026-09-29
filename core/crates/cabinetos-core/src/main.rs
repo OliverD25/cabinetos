@@ -97,6 +97,11 @@ fn main() -> ExitCode {
         .worker_threads(workers)
         .enable_all()
         .thread_name_fn(runtime_thread_name)
+        // The async workers read and answer the pipe: in heavy mode they
+        // never wait for the log writer (only workers park; the blocking
+        // threads, which do the work, may wait).
+        .on_thread_park(cabinetos_diag::never_wait_for_heavy_log)
+        .on_thread_unpark(cabinetos_diag::never_wait_for_heavy_log)
         .build()
     {
         Ok(runtime) => runtime,

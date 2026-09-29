@@ -67,6 +67,22 @@ enum Outcome {
     Cancelled,
 }
 
+impl Outcome {
+    /// The outcome as one word, for heavy mode's `entry done` line.
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Done => "done",
+            Self::Skipped => "skipped",
+            Self::Failed => "failed",
+            Self::Conflict { .. } => "conflict",
+            Self::Held => "held",
+            Self::Expanded => "expanded",
+            Self::Deferred => "deferred",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
 /// Asks the engine's gate, if one is set, whether the job may go on.
 fn ask_gate(engine: &Engine, job: &Job, files_total: u64, bytes_total: u64) -> Result<(), String> {
     let Some(gate) = engine.gate.get() else {
@@ -441,11 +457,13 @@ impl Run<'_> {
 
     fn worker(&self, apartment: Option<&Apartment>) {
         while let Some(work) = self.next_work() {
+            let started = Instant::now();
             let outcome = if self.job.control.wait_while_paused() {
                 self.process(&work, apartment)
             } else {
                 Outcome::Cancelled
             };
+            self.entry_done(&work, &outcome, started);
             self.settle(work, outcome, apartment);
             lock(&self.job.queue).in_flight -= 1;
             self.job.work_ready.notify_all();
@@ -1040,6 +1058,51 @@ impl Run<'_> {
             Target::Remove(index) => plan.removals[index].path.clone(),
             Target::Recycle(index) => plan.recycles[index].clone(),
         }
+    }
+
+    /// Heavy mode's line for one piece of work: what it was, from where to
+    /// where, its bytes, its time and how it ended. `to` is where the plan
+    /// put it (a rename that answers a conflict ends elsewhere).
+    fn entry_done(&self, work: &Work, outcome: &Outcome, started: Instant) {
+        if !tracing::enabled!(target: "heavy::jobs", tracing::Level::DEBUG) {
+            return;
+        }
+        let ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        // The plan's lock is let go before the queue's is taken.
+        let (kind, placed) = {
+            let plan = lock(&self.plan);
+            match work.target {
+                Target::Dir(index) => {
+                    let item = &plan.dirs[index];
+                    ("folder", Some((item.parent, item.name.clone())))
+                }
+                Target::File(index) => {
+                    let item = &plan.files[index];
+                    ("file", Some((item.parent, item.name.clone())))
+                }
+                Target::Rename(index) => ("rename", Some((None, plan.renames[index].name.clone()))),
+                Target::Remove(_) => ("delete", None),
+                Target::Recycle(_) => ("recycle", None),
+            }
+        };
+        let to = placed.map_or_else(String::new, |(parent, name)| {
+            let folder = match parent {
+                Some(parent) => lock(&self.job.queue).dirs[parent].destination.clone(),
+                None => self.job.request.destination.clone().unwrap_or_default(),
+            };
+            join(&folder, &name)
+        });
+        tracing::debug!(
+            target: "heavy::jobs",
+            job_id = self.job.id,
+            kind,
+            from = %self.source_of(work),
+            to = %to,
+            bytes = self.bytes_of(work),
+            ms,
+            outcome = outcome.name(),
+            "entry done"
+        );
     }
 
     /// The bytes a piece of work was going to copy.

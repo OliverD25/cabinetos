@@ -81,9 +81,15 @@ impl Outbox {
     }
 
     /// Queues the reply to request `id`. It carries the trace of the span it
-    /// is sent in: the request's own.
+    /// is sent in: the request's own. In heavy mode its JSON is logged.
     pub(crate) fn reply(&self, id: RequestId, response: Response) {
-        self.send(&Envelope::traced(id, current_trace(), response));
+        let envelope = Envelope::traced(id, current_trace(), response);
+        if cabinetos_diag::heavy_enabled()
+            && let Ok(json) = serde_json::to_vec(&envelope)
+        {
+            log_payload("reply payload", &json);
+        }
+        self.send(&envelope);
     }
 
     /// Queues an event that the request being handled caused (a measure's
@@ -304,6 +310,10 @@ impl Session {
         let (id, request) = (envelope.id, envelope.body);
         let span = span_for_action(&id, &trace);
         let kind = request.type_tag();
+        if cabinetos_diag::heavy_enabled() {
+            let _entered = span.enter();
+            log_payload("request payload", frame);
+        }
         let reply = {
             let _entered = span.enter();
             match request {
@@ -1811,6 +1821,17 @@ fn job_error(error: cabinetos_jobs::JobError) -> Response {
     Response::Error {
         code: error.code,
         message: error.message,
+    }
+}
+
+/// Heavy mode's line for a request's or a reply's JSON: secrets masked, at
+/// most 64 KB, the rest cut and marked `truncated`.
+fn log_payload(message: &'static str, json: &[u8]) {
+    let (payload, truncated) = cabinetos_diag::masked_json_bytes(json, cabinetos_diag::PAYLOAD_CAP);
+    if truncated {
+        tracing::debug!(target: "heavy::core", payload = %payload, truncated, "{message}");
+    } else {
+        tracing::debug!(target: "heavy::core", payload = %payload, "{message}");
     }
 }
 

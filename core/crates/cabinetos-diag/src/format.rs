@@ -93,55 +93,114 @@ pub(crate) fn render_line<S>(
 where
     S: for<'a> LookupSpan<'a>,
 {
+    render_event(event, Around::of(scope), boundary)
+}
+
+/// What an event takes from the spans around it: the innermost span's name
+/// and the IDs.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Around {
+    span: Option<&'static str>,
+    trace_id: Option<String>,
+    request_id: Option<String>,
+    plugin_id: Option<String>,
+}
+
+impl Around {
+    /// Reads `scope`, innermost span first.
+    pub(crate) fn of<S>(scope: Option<Scope<'_, S>>) -> Self
+    where
+        S: for<'a> LookupSpan<'a>,
+    {
+        let mut around = Self::default();
+        for span_ref in scope.into_iter().flatten() {
+            around.span.get_or_insert(span_ref.name());
+            if let Some(ids) = span_ref.extensions().get::<SpanIds>() {
+                if around.trace_id.is_none() {
+                    around.trace_id.clone_from(&ids.trace_id);
+                }
+                if around.request_id.is_none() {
+                    around.request_id.clone_from(&ids.request_id);
+                }
+                if around.plugin_id.is_none() {
+                    around.plugin_id.clone_from(&ids.plugin_id);
+                }
+            }
+            if around.trace_id.is_some()
+                && around.request_id.is_some()
+                && around.plugin_id.is_some()
+            {
+                break;
+            }
+        }
+        around
+    }
+}
+
+/// Renders `event` with what it takes from the spans around it.
+pub(crate) fn render_event(event: &Event<'_>, around: Around, boundary: Boundary) -> String {
     let metadata = event.metadata();
     let mut visitor = EventVisitor::default();
     event.record(&mut visitor);
-
-    let mut span = None;
-    let mut trace_id = None;
-    let mut request_id = None;
-    let mut plugin_id = None;
-    for span_ref in scope.into_iter().flatten() {
-        span.get_or_insert(span_ref.name());
-        if let Some(ids) = span_ref.extensions().get::<SpanIds>() {
-            if trace_id.is_none() {
-                trace_id.clone_from(&ids.trace_id);
-            }
-            if request_id.is_none() {
-                request_id.clone_from(&ids.request_id);
-            }
-            if plugin_id.is_none() {
-                plugin_id.clone_from(&ids.plugin_id);
-            }
-        }
-        if trace_id.is_some() && request_id.is_some() && plugin_id.is_some() {
-            break;
-        }
-    }
+    let mut around = around;
     if let Some(Value::String(named)) = visitor.fields.get(PLUGIN_ID)
-        && plugin_id
+        && around
+            .plugin_id
             .as_ref()
             .is_none_or(|from_span| from_span == named)
     {
-        plugin_id = Some(named.clone());
+        around.plugin_id = Some(named.clone());
         visitor.fields.remove(PLUGIN_ID);
     }
+    render(
+        around,
+        boundary,
+        (metadata.level().as_str(), metadata.target()),
+        visitor.message,
+        visitor.fields,
+    )
+}
 
+/// Renders a line that no `tracing` event made: a note the log writer adds
+/// itself, such as how long a thread waited for it.
+pub(crate) fn render_note(
+    around: Around,
+    boundary: Boundary,
+    (level, target): (&'static str, &str),
+    message: &str,
+    fields: Map<String, Value>,
+) -> String {
+    render(
+        around,
+        boundary,
+        (level, target),
+        message.to_owned(),
+        fields,
+    )
+}
+
+fn render(
+    around: Around,
+    boundary: Boundary,
+    (level, target): (&'static str, &str),
+    message: String,
+    fields: Map<String, Value>,
+) -> String {
     let line = Line {
         ts: clock::rfc3339_millis(clock::now()),
-        level: metadata.level().as_str(),
-        boundary: if plugin_id.is_some() {
+        level,
+        boundary: if around.plugin_id.is_some() {
             Boundary::Plugin
         } else {
             boundary
         },
-        target: metadata.target(),
-        message: visitor.message,
-        trace_id,
-        request_id,
-        plugin_id,
-        span,
-        fields: visitor.fields,
+        target,
+        message,
+        trace_id: around.trace_id,
+        request_id: around.request_id,
+        plugin_id: around.plugin_id,
+        span: around.span,
+        fields,
         thread: thread_label(),
     };
     serde_json::to_string(&line)

@@ -14,6 +14,7 @@ The Rust processes (core, indexer, CLI) get all of this from the
 | Directory | `%LOCALAPPDATA%\CabinetOS\logs\` |
 | Log files | One per process and UTC day: `core.2026-09-28.jsonl`, `indexer.<date>.jsonl`, `ui.<date>.jsonl` (Phase 5). The CLI writes `cli.<date>.jsonl` only when it is given `--log-dir`. The indexer running as a service writes to `%ProgramData%\CabinetOS\logs` instead ([indexer.md](indexer.md)). |
 | Crash traces | `crash-<YYYYMMDDTHHMMSSmmmZ>.json` in the same directory, for example `crash-20260928T010203004Z.json` |
+| Heavy log files | Only while heavy mode is on ("Heavy mode", below): `heavy-<process>.<date>.jsonl`, for example `heavy-core.2026-09-29.jsonl`, and `heavy-core.2026-09-29.1.jsonl` for the next part of the same day. At most 2 GiB for all of them together. |
 
 - **Other directory.** `--log-dir <path>` on `cabinetos-core` and
   `cabinetos-cli`, or the environment variable `CABINETOS_LOG_DIR`. The flag
@@ -33,7 +34,8 @@ The Rust processes (core, indexer, CLI) get all of this from the
   unless `CABINETOS_LOG` asks for more.
 - **Never blocking.** The calling thread formats the line and hands it to a
   background writer thread; it never waits for the disk. If that thread falls
-  far behind, new lines are dropped rather than stalling the caller.
+  far behind, new lines are dropped rather than stalling the caller. Heavy
+  mode is the one exception ("Heavy mode", below).
 - **Two cores, one file.** Two windows are two cores that write the same
   `core.<date>.jsonl`. The writer opens it for appending
   (`FILE_APPEND_DATA`), so each write lands at the end of the file, and it
@@ -45,6 +47,86 @@ The Rust processes (core, indexer, CLI) get all of this from the
   queue of the last 256 lines that drops its oldest line when full. Reading
   the ring (for a crash trace) moves the queued lines into a reader-side copy;
   only readers ever wait for each other, never a thread that logs.
+
+## Heavy mode
+
+A switch for the times when a problem has to be found: every operation is
+logged, even at the cost of speed. It stays on until someone turns it off.
+Decided by the creator on 2026-09-29.
+
+**The switch.** `logging.heavy` in `cabinetos.json` ([config.md](config.md)),
+`false` by default. The core applies a change within a second, like
+`logging.level`: `cabinetos-cli config set logging.heavy true` turns it on
+for the core, and the window follows the core's `config_changed`. The
+environment variable `CABINETOS_LOG_HEAVY` (`1` or `0`) wins over the file
+for the process it is set for; the indexer, which does not read the user's
+`cabinetos.json`, is switched only by it. When heavy mode comes on, the
+normal log says `heavy logging is on` (with the caps); when it goes off,
+`heavy logging is off`, and that is also the heavy file's last line.
+
+**The files.** Each process writes its own `heavy-<process>.<date>.jsonl`
+next to its normal log: `heavy-core`, `heavy-indexer`, `heavy-ui`,
+`heavy-cli` (the CLI only with `--log-dir`). The process name comes after
+`heavy-`, not before, because the normal log's writer deletes old files by
+the process name at the start of the file name. The same line format as
+the normal file, with every event at every level, `TRACE` included, whatever
+`logging.level` or `CABINETOS_LOG` say. A new file starts at midnight UTC,
+and when a file reaches 256 MiB the next part starts
+(`heavy-core.2026-09-29.1.jsonl`, `.2.`, …). Writes are append-only, one
+batch per write, as in the normal file, so two cores can share one file.
+Switching heavy mode off writes what is queued and closes the file.
+
+**The cap.** After each new file and after each 64 MiB written, the core
+measures every `heavy-*.jsonl` of every process in the folder, and deletes
+the oldest (by date, then part) until they hold at most 2 GiB together. It
+names the deleted files in its normal log (`heavy log files deleted to keep
+the folder under its cap`). A heavy file is opened without delete sharing,
+so the file another process is writing is never deleted; its turn comes
+when that process moves on to its next file.
+
+**The wait rule.** Normal mode never waits: a line that finds the writer
+far behind is dropped. Heavy mode counts its queue in bytes. Up to 256 MiB a
+thread that logs hands its line over and goes on. Above that, it waits
+until the writer has written enough, so no operation goes unrecorded; the
+operation is slower for that time. Afterwards the heavy file gets one line
+`heavy log waited` with `waited_ms`, under the same trace and request, so a
+slow operation explains itself. This is an exception to Constitution
+Article 12 ("logging must never block the main I/O pipeline"), for heavy
+mode only, chosen by the creator; it is recorded in ADR 0013. Threads that
+must stay responsive never wait: in the core the async runtime's workers,
+which read and answer the pipe (marked when they park), and the main
+thread, which accepts connections; in the window the UI thread. Their lines
+may go 32 MiB over the cap; beyond that they are dropped, and the next
+batch carries `heavy log dropped lines of threads that never wait` with
+the count. Jobs, plugin calls and every other blocking thread may wait.
+
+**What heavy mode records beyond the normal log.** Its own lines have
+targets starting with `heavy::`, which the normal file leaves out at every
+level.
+
+| Line | Target | Fields | Written by |
+|---|---|---|---|
+| `request payload` | `heavy::core` | `payload`: the request as it came over the pipe; `truncated: true` when it was cut | the core, inside the request's span |
+| `reply payload` | `heavy::core` | `payload`: the reply as sent; `truncated` | the core, inside the request's span |
+| `entry done` | `heavy::jobs` | `job_id`, `kind` (`file`, `folder`, `rename`, `delete`, `recycle`), `from`, `to` (where the plan puts it; empty for deletes), `bytes`, `ms`, `outcome` (`done`, `skipped`, `failed`, `conflict`, `held`, …) | the job's threads, one line per piece of work, with the job's trace |
+| `host call` | `heavy::plugins` | `function` (`register-command`, `log`, `config-get`, `emit`), `args` (JSON, at most 4 KB), `truncated`, `ms` | the plugin's thread, with the caller's trace |
+| `http request` | `heavy::market` | `host`, `method`, `status` (0: no answer), `bytes`, `ms`; never headers or bodies | the marketplace's index and download requests |
+
+A payload is at most 64 KB; the rest is cut and the line gets
+`truncated: true`. A listing writes one line per listing (`listing opened`,
+`listing refreshed`), never one per entry.
+
+**Masking.** Before a payload or a host call's arguments are written, the
+secrets in them become `"***"`: the `value` and `secret` of any message
+whose `type` starts with `secret_`; every field named `secret`, `password`,
+`passphrase`, `token`, `access_token`, `refresh_token`, `client_secret`,
+`api_key`, `apikey`, `authorization` or `x-api-key`, at any depth; and the
+values of the headers `Authorization`, `Proxy-Authorization`, `X-Api-Key`
+and `Cookie` in a `headers` object, in `[name, value]` pairs, or in
+`{"name", "value"}` objects. The `CABINETOS_*` environment variables whose
+names contain `KEY`, `TOKEN`, `SECRET` or `PASSWORD` are masked wherever
+the diagnostics write the environment. `cabinetos-diag` does all of it
+(`mask_secrets`, `masked_json`), and the window must mask the same way.
 
 ## Log line format
 

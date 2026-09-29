@@ -255,6 +255,7 @@ name = "cabinetos-diag"
 version = "0.1.0"
 dependencies = [
  "cabinetos-protocol",
+ "crossbeam-channel",
  "crossbeam-queue",
  "serde",
  "serde_json",
@@ -364,6 +365,7 @@ dependencies = [
  "bytes",
  "cabinetos-commands",
  "cabinetos-config",
+ "cabinetos-diag",
  "cabinetos-protocol",
  "serde",
  "serde_json",

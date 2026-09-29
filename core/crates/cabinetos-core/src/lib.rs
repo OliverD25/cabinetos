@@ -185,6 +185,8 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         marketplace_dir,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
+    // This thread runs the pipe server: it never waits for the heavy log.
+    cabinetos_diag::never_wait_for_heavy_log();
     let panicked = stop_on_panic(&shutdown);
     if let (_, Some(rejected)) = worker_threads(std::env::var(WORKERS_ENV).ok().as_deref()) {
         tracing::warn!(

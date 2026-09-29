@@ -322,14 +322,20 @@ fn download(
     http: &Http,
     allow_insecure: bool,
 ) -> Result<Downloaded, MarketError> {
+    let started = std::time::Instant::now();
     let mut request = http.agent(allow_insecure).get(url.as_str());
     if let Some(tag) = tag {
         request = request.header("If-None-Match", tag);
     }
-    let response = request
-        .call()
-        .map_err(|error| MarketError::market(format!("cannot fetch the index {url}: {error}")))?;
-    match response.status().as_u16() {
+    let response = request.call().map_err(|error| {
+        crate::http_line(url, "GET", 0, 0, started);
+        MarketError::market(format!("cannot fetch the index {url}: {error}"))
+    })?;
+    let status = response.status().as_u16();
+    if status != 200 {
+        crate::http_line(url, "GET", status, 0, started);
+    }
+    match status {
         304 if tag.is_some() => Ok(Downloaded::NotModified),
         200 => {
             let etag = response
@@ -345,6 +351,7 @@ fn download(
                 .map_err(|error| {
                     MarketError::market(format!("cannot read the index {url}: {error}"))
                 })?;
+            crate::http_line(url, "GET", status, bytes.len() as u64, started);
             Ok(Downloaded::Whole {
                 text: text_of(&bytes, url.as_str())?,
                 etag,

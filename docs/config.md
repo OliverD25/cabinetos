@@ -68,7 +68,8 @@ file itself shows everything that can be set:
   },
   "keybindings": [],
   "logging": {
-    "level": "info"
+    "level": "info",
+    "heavy": false
   },
   "plugins": {},
   "marketplace": {
@@ -119,6 +120,7 @@ while you type.
 | `terminal.profiles` | list of `{ "name", "command", "args" }` | pwsh, cmd, wsl | The shells a terminal can run. Names must be unique; `args` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
+| `logging.heavy` | `true`, `false` | `false` | Heavy logging: every operation is also written, at every level, into `heavy-<process>.<date>.jsonl` files next to the logs, at most 2 GB in all, even when that slows an operation down. On until turned off ([diagnostics.md](diagnostics.md), "Heavy mode") |
 | `plugins.<id>.enabled` | `true`, `false` | `true` | Run the Core Plugin with this ID ([plugins.md](plugins.md)) |
 | `plugins.<id>.granted` | list of capability names | empty | The capabilities the user granted it, such as `fs:read`. It runs only when it has every capability it asks for. Installing the plugin from the marketplace clears them. |
 | `marketplace.index` | an `https:` URL, a `file:` URL, or the path of an `index.json` or of its folder | `https://oliverd25.github.io/cabinetos-marketplace/index.json`, the public index ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)) | Where the marketplace index is ([marketplace.md](marketplace.md)). The core reads it only when a client asks. A file written before 2026-09-30 may still hold the old placeholder `https://marketplace.cabinetos.invalid/index.json`, which never resolves; remove the line and the public index is used. |
@@ -149,6 +151,11 @@ Who uses what:
   with.
 - `logging.level`: the core, at once. The environment variable
   `CABINETOS_LOG`, when set, wins over it ([diagnostics.md](diagnostics.md)).
+- `logging.heavy`: the core, within a second, and the window, which follows
+  the core's `config_changed`. The environment variable
+  `CABINETOS_LOG_HEAVY` (`1` or `0`), when set, wins over it. The chat that
+  asked for heavy mode named the key `diagnostics.level`; it lives in the
+  existing `logging` section instead.
 - `keybindings`: the core compiles the keymap from them and sends it to the
   UI.
 - `plugins`: the core, at once. A plugin that is not listed is on, with

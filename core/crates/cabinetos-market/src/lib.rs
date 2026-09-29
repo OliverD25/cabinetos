@@ -35,6 +35,26 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use cabinetos_protocol::ErrorCode;
 
 pub use index::{Index, Source, parse_index, search};
+
+/// Heavy mode's line for one network request: host, method, status (0 when
+/// no answer came), bytes and time; never its headers or its body.
+pub(crate) fn http_line(
+    url: &url::Url,
+    method: &'static str,
+    status: u16,
+    bytes: u64,
+    started: std::time::Instant,
+) {
+    tracing::debug!(
+        target: "heavy::market",
+        host = url.host_str().unwrap_or_default(),
+        method,
+        status,
+        bytes,
+        ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        "http request"
+    );
+}
 pub use install::{Dirs, Installed, Market};
 pub use tools::{TOOL_MANIFEST_FILE, list_tools};
 

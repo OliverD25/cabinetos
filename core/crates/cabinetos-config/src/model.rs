@@ -416,6 +416,11 @@ pub struct LoggingConfig {
     /// The least important level written to the log. The environment
     /// variable `CABINETOS_LOG` overrides it.
     pub level: LogLevel,
+    /// Heavy logging: every operation is also written, at every level, into
+    /// `heavy-<process>.<date>.jsonl` files (at most 2 GB in all), even at
+    /// the cost of speed. On until turned off. The environment variable
+    /// `CABINETOS_LOG_HEAVY` overrides it.
+    pub heavy: bool,
 }
 
 /// Log levels, most detailed first.
