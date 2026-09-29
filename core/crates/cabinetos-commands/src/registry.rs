@@ -77,7 +77,7 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// (sub-phase 11a), the tab commands (Phase 12), then the palette, overlays, a new window and About. Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 93] = [
+const SEED: [Seed; 97] = [
     seed(
         "palette.show",
         "View",
@@ -143,6 +143,31 @@ const SEED: [Seed; 93] = [
         UI,
         None,
     ),
+    seed(
+        "view.showExplorer",
+        "View",
+        "Show Explorer",
+        &["ctrl+shift+e"],
+        UI,
+        None,
+    ),
+    seed(
+        "view.showSearch",
+        "View",
+        "Show Search",
+        &["ctrl+shift+f"],
+        UI,
+        None,
+    ),
+    seed(
+        "sidebar.locate",
+        "Sidebar",
+        "Locate Active Folder",
+        &["shift+alt+l"],
+        UI,
+        None,
+    ),
+    seed("sidebar.lock", "Sidebar", "Lock Folder Tree", &[], UI, None),
     seed("sidebar.pin", "Sidebar", "Pin Folder", &[], UI, None),
     seed("sidebar.unpin", "Sidebar", "Unpin Folder", &[], UI, None),
     seed(
@@ -770,7 +795,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 93);
+        assert_eq!(registry.commands().len(), 97);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1133,6 +1158,47 @@ mod tests {
             .map(|command| command.id.as_str())
             .collect();
         assert!(core.is_empty(), "{core:?}");
+    }
+
+    /// Phase 13: the commands of the activity rail and its sidebar. They run
+    /// in the window from anywhere, and the keys are the design's (VS Code's).
+    #[test]
+    fn the_sidebar_commands_are_seeded_with_their_keys() {
+        let registry = CommandRegistry::core();
+        for (id, category, title, keys) in [
+            (
+                "view.showExplorer",
+                "View",
+                "Show Explorer",
+                &["ctrl+shift+e"][..],
+            ),
+            (
+                "view.showSearch",
+                "View",
+                "Show Search",
+                &["ctrl+shift+f"][..],
+            ),
+            (
+                "sidebar.locate",
+                "Sidebar",
+                "Locate Active Folder",
+                &["shift+alt+l"][..],
+            ),
+            ("sidebar.lock", "Sidebar", "Lock Folder Tree", &[][..]),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                (category, title),
+                "{id}"
+            );
+            assert_eq!(texts(&command.default_keys), keys, "{id}");
+            assert_eq!(command.when, None, "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert!(!command.immutable, "{id}");
+        }
+        // The keymap accepts them beside every other key.
+        assert!(crate::keymap::compile(&registry, &[]).is_ok());
     }
 
     /// Phase 12: the tab commands, with the keys the creator chose. Every

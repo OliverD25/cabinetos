@@ -146,11 +146,17 @@ mod tests {
     #[test]
     fn a_word_finds_its_command_first() {
         assert_eq!(ids("dual")[0], "view.toggleDualPane");
-        // The three sidebar commands lead; the two whose category is the
+        // The five sidebar commands lead; the four whose category is the
         // word itself come first.
         let sidebar = ids("sidebar");
-        for id in ["sidebar.pin", "sidebar.unpin", "view.toggleSidebar"] {
-            assert!(sidebar[..3].contains(&id.to_owned()), "{sidebar:?}");
+        for id in [
+            "sidebar.pin",
+            "sidebar.unpin",
+            "sidebar.lock",
+            "sidebar.locate",
+            "view.toggleSidebar",
+        ] {
+            assert!(sidebar[..5].contains(&id.to_owned()), "{sidebar:?}");
         }
         assert_eq!(ids("toggle sidebar")[0], "view.toggleSidebar");
         // Every terminal command leads, the ones whose category is the word

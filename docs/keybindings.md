@@ -39,6 +39,10 @@ The core's commands, in palette order:
 | `view.toggleTerminal` | View: Toggle Integrated Terminal | `ctrl+backquote` | | UI |
 | `view.focusOtherPane` | View: Focus Other Pane | `tab` | `filesView` | UI |
 | `view.toggleSidebar` | View: Toggle Sidebar | `ctrl+b` | | UI |
+| `view.showExplorer` | View: Show Explorer | `ctrl+shift+e` | | UI |
+| `view.showSearch` | View: Show Search | `ctrl+shift+f` | | UI |
+| `sidebar.locate` | Sidebar: Locate Active Folder | `shift+alt+l` | | UI |
+| `sidebar.lock` | Sidebar: Lock Folder Tree | | | UI |
 | `sidebar.pin` | Sidebar: Pin Folder | | | UI |
 | `sidebar.unpin` | Sidebar: Unpin Folder | | | UI |
 | `pane.openSelected` | Pane: Open Selected Item | `enter` | `filesView` | UI |
