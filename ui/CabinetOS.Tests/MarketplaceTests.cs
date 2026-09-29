@@ -214,7 +214,7 @@ public class MarketplaceTests
     }
 
     [Theory]
-    [InlineData("https://marketplace.cabinetos.invalid/index.json", "The marketplace index is not published yet.", "build-index.ps1")]
+    [InlineData("https://marketplace.cabinetos.invalid/index.json", "The marketplace index setting is stale.", "the public index is used")]
     [InlineData(null, "No marketplace index is set.", "marketplace.index")]
     [InlineData("", "No marketplace index is set.", "marketplace.index")]
     [InlineData(@"D:\market", "Cannot read the marketplace index.", "cannot read the index")]

@@ -62,7 +62,7 @@ file itself shows everything that can be set:
   },
   "plugins": {},
   "marketplace": {
-    "index": "https://marketplace.cabinetos.invalid/index.json",
+    "index": "https://oliverd25.github.io/cabinetos-marketplace/index.json",
     "allowInsecure": false
   }
 }
@@ -109,7 +109,7 @@ while you type.
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
 | `plugins.<id>.enabled` | `true`, `false` | `true` | Run the Core Plugin with this ID ([plugins.md](plugins.md)) |
 | `plugins.<id>.granted` | list of capability names | empty | The capabilities the user granted it, such as `fs:read`. It runs only when it has every capability it asks for. Installing the plugin from the marketplace clears them. |
-| `marketplace.index` | an `https:` URL, a `file:` URL, or the path of an `index.json` or of its folder | `https://marketplace.cabinetos.invalid/index.json`, a placeholder that never resolves | Where the marketplace index is ([marketplace.md](marketplace.md)). The core reads it only when a client asks. |
+| `marketplace.index` | an `https:` URL, a `file:` URL, or the path of an `index.json` or of its folder | `https://oliverd25.github.io/cabinetos-marketplace/index.json`, the public index ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)) | Where the marketplace index is ([marketplace.md](marketplace.md)). The core reads it only when a client asks. A file written before 2026-09-30 may still hold the old placeholder `https://marketplace.cabinetos.invalid/index.json`, which never resolves; remove the line and the public index is used. |
 | `marketplace.allowInsecure` | `true`, `false` | `false` | Also accept a plain `http:` index and downloads, which anyone on the network could change on the way. For testing only. |
 
 Who uses what:

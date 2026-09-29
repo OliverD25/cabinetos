@@ -200,6 +200,29 @@ install and uninstall holds `.installed.json.lock` in the marketplace
 folder (`LockFileEx`) from its first read of the record to its last write;
 Windows releases it if a core ends.
 
+## The public index
+
+`marketplace.index` defaults to the public index,
+`https://oliverd25.github.io/cabinetos-marketplace/index.json`
+([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)). It is
+GitHub Pages of the separate public repository
+[cabinetos-marketplace](https://github.com/OliverD25/cabinetos-marketplace),
+which holds `index.json` and the `files\` folder beside it. The index is
+built in this repository and committed in that one:
+
+```text
+powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <cabinetos-marketplace checkout> -Collection -ThemesOnly
+```
+
+`-ThemesOnly` leaves the fixture plugins out: they are test material, not
+extensions for the public. The first index (2026-09-29) offers 41 themes:
+the five shipped themes and the 36 of the collection.
+
+A configuration file written before 2026-09-30 may still name the old
+placeholder, `https://marketplace.cabinetos.invalid/index.json`, which can
+never resolve. The window then says the line is stale; remove it and the
+public index is used.
+
 ## A local index
 
 `sdk/marketplace/build-index.ps1` builds an index from the fixture plugins
@@ -244,14 +267,6 @@ stays installed.
 
 ## Not yet
 
-- There is no public index yet: `marketplace.index` defaults to a
-  placeholder, `https://marketplace.cabinetos.invalid/index.json`, which can
-  never resolve. Where the real one will live is decided
-  ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)): GitHub
-  Pages of a separate public repository, at
-  `https://oliverd25.github.io/cabinetos-marketplace/index.json`. Once the
-  creator has created it, the default changes here, in the config schema
-  and in the shell's empty state.
 - Publisher identities and signatures; until then `verified` is only shown.
 - The marketplace view is UI work. The window reads the tools folders at
   its start, so a tool installed while it runs shows at its next start;

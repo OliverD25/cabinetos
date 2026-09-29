@@ -591,9 +591,9 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         }
         if (Uri.TryCreate(index, UriKind.Absolute, out var uri) && uri.Host.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase))
         {
-            // docs/marketplace.md, "Not yet": the default index is a placeholder that never resolves.
-            return new MarketNotice("The marketplace index is not published yet.",
-                $"marketplace.index is the placeholder {index}. To try the marketplace, set it to a local index; sdk/marketplace/build-index.ps1 builds one.");
+            // docs/marketplace.md, "The public index": a file written before the public index existed may still name the placeholder, which never resolves.
+            return new MarketNotice("The marketplace index setting is stale.",
+                $"marketplace.index is the old placeholder {index}. Remove the line from cabinetos.json and the public index is used.");
         }
         return new MarketNotice("Cannot read the marketplace index.", error.Message);
     }

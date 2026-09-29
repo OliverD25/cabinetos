@@ -15,10 +15,10 @@ pub const SCHEMA_REFERENCE: &str = "./cabinetos.schema.json";
 /// The version of the file format this build reads.
 pub const FORMAT_VERSION: u32 = 1;
 
-/// The default `marketplace.index`: a placeholder until a public index
-/// exists. `.invalid` is a name reserved never to resolve, so nothing is
-/// ever fetched from it.
-pub const DEFAULT_MARKETPLACE_INDEX: &str = "https://marketplace.cabinetos.invalid/index.json";
+/// The default `marketplace.index`: the public index, GitHub Pages of the
+/// repository `cabinetos-marketplace` (ADR 0012).
+pub const DEFAULT_MARKETPLACE_INDEX: &str =
+    "https://oliverd25.github.io/cabinetos-marketplace/index.json";
 
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

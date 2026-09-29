@@ -1582,9 +1582,11 @@ the core's events.
   button is disabled.
 - **Empty and error states** say what happened and what to do:
   - "No marketplace index is set.", with the key `marketplace.index`;
-  - "The marketplace index is not published yet.", for the placeholder
-    address (a host ending in `.invalid`), with a hint to build a local
-    index with `sdk/marketplace/build-index.ps1`;
+  - "The marketplace index setting is stale.", for the old placeholder
+    address (a host ending in `.invalid`) that a file written before the
+    public index existed may hold, with the advice to remove the line so
+    the public index is used ([marketplace.md](marketplace.md), "The
+    public index");
   - "Cannot read the marketplace index.", with the core's reason;
   - "This core has no marketplace yet.", for a core before protocol 10;
   - "Nothing was installed from the marketplace yet.", which adds that

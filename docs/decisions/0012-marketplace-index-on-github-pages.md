@@ -58,3 +58,9 @@ step; whoever creates the repository decides and records it).
   download is checked against the index's SHA-256, but nothing yet proves
   who wrote the index. Signing it is a later record.
 - A `file:` URL or a folder keeps working for testing, as today.
+- **Done on 2026-09-30.** The creator created the repository on 2026-09-29
+  and the first index (41 themes, built with
+  `sdk/marketplace/build-index.ps1 -Collection -ThemesOnly`, which stays in
+  this repository) was pushed there. The default changed in one commit as
+  listed above; the shell's empty state still recognises the placeholder,
+  since a file written before may hold it, and now says the line is stale.
