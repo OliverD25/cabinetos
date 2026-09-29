@@ -219,6 +219,17 @@ Core side done 2026-09-28. Built: the JSON theme format as one Rust type (`Theme
 
 **Theme collection, 2026-09-29.** The creator's card "Develop 30 most world popular theme for CabinetOS" is answered outside the core (Article 10): `sdk/themes/collection` holds 36 themes (27 dark, 9 light) ported from 27 of the 30 themes on the creator's list, with their well-known variants; Nord and Catppuccin Mocha already ship with the core. Every colour was read from the theme's own repository at a fixed commit under the MIT License; `NOTICES.md` names the source, author, license and commit of each. Monokai is the classic scheme Visual Studio Code ships (Monokai Pro is commercial), and Darcula comes from an MIT community port. City Lights (its CC BY-NC-ND license forbids ports) and Dainty (its colours are no longer published) are left out. Every theme reaches 4.5:1 for body text as the window draws it; the collection's README lists where a theme's own text colour had to change. `build-index.ps1 -Collection` packs the collection into the local index (without the switch the index is unchanged), and every theme installed, applied and uninstalled through the marketplace against the real core; the planning session checked that the core lists all 40 and applies them. A test in `cabinetos-themes` now holds the collection to its rules with the five checks: every file parses as a strict theme under its own name, none repeats a shipped theme, and `marketplace.csv` has exactly one row, with a license and a description, per file. It goes with the public index once that exists (ADR 0012). Snapshots: [log/2026-09-28/](log/2026-09-28/) `themes-*.png`. Guide: [themes.md](themes.md), "The collection".
 
+**The public index, 2026-09-29 evening.** The creator created the public
+repository `OliverD25/cabinetos-marketplace` ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md))
+and chose a first index of themes only: the test fixture plugins are not
+for the public. `build-index.ps1` gained `-ThemesOnly` (fef2e58), and the
+planning session built the index (41 themes: the five shipped and the 36
+of the collection), added the collection's notices, the MIT license and a
+README, and pushed it (167256f in that repository). Turning on GitHub Pages
+is the creator's switch; the default address changes in the sleep-mode run
+of 2026-09-29/30, the core agent's first item, and is checked against the
+live address after the switch.
+
 **Commander Compact, the core's part, 2026-09-29.** The creator's Commander Compact handout, now in `docs/design/compact/`, is a density preset of the default look: 20 px rows, hairlines instead of cards, striped lists and an F-key bar, in the same colours. Its rule is the format's rule: a theme may change colours, sizes and the presence of chrome elements, never commands, keys or the layout. The theme format gains two optional objects: `metrics`, 76 named sizes (one for every value of the handout's Metrics section, with bounds: text 8 to 32 px, rows and bars 14 to 80 px, and so on), and `chrome` (`fkeyBar`, `rowStripes`, `hairlines`). Reading stays strict: an unknown name, a value outside its bounds or pixels with a fraction refuse the theme with the reason. `get_theme` and `theme_changed` carry both objects as the file has them, and `list_themes` says `has_metrics`. All of it is optional, so protocol 11 stays; the schema's `$id` names the format, `urn:cabinetos:theme:2`. `commander-compact` ships as the fifth theme: the default theme's colours, the handout's acrylic tint, every metric and all three chrome elements; `cabinetos-cli themes list` marks it `compact`. The shell applies the objects in its half. Two of its end-to-end tests pin four shipped themes and wait for that half. 564 core tests.
 
 **Commander Compact, the shell's part, 2026-09-29.** The window applies a theme's `metrics` and `chrome` live, as it does its colours. One table in `CabinetOS.Core` (`MetricsMapper`) names all 76 metrics with their units, bounds and the default look's values, and a test holds it equal to the schema; every view lays itself out from the metrics in effect, a `theme_changed` re-lays the window without a restart, and a theme without metrics gives the default look's sizes, so switching back to `default` restores every size number for number (the two images differ in 80 of 3.24 million pixels, all on the edges of rounded corners). The three chrome elements sit behind their switches: the function-key bar (its own control, never a Tab stop, each button running the command its key runs and showing the key the keymap has), striped rows, and hairlines instead of floating cards. On hairlines ride the handout's narrow-column choices (the Size column in fixed-width figures, a drive's free space without "free", dates older than a week without their time, short type names), and the status bar's layout item starts with the density preset's name; the picker marks density presets from `has_metrics`. The base text of the default look is now the design's 13 px (it was WinUI's 14 px). Measured on 2026-09-29 with the snapshot aid's new `size:`, `fit:`, `theme:` and `layout:` steps on folders shaped like the handout's page: at a 924 px window no name, date, type or size is cut short in either pane and every function key fits; 20 whole rows of 20 px in a 400 px list; no corner radius above 3 px outside the overlays; the keymap's 67 bindings unchanged; F5 pressed through the bar's automation peer copied the file. Two of the text choices go beyond the handout's list because the acceptance failed without them (the short dates and types); two things differ from its page and cannot follow it (the title bar is 32 px, not 30, since Windows draws the caption buttons that high; the fonts are Segoe UI Variable and Cascadia Mono where Fira Code is not installed). Eight metrics have no place in the window yet (the caption buttons' width, tags, the Markdown Preview's sizes, a hex view). Snapshots at half size are in `docs/log/2026-09-28/compact-*.png`, and `docs/ui.md` "Metrics and chrome" says where each metric lands. The shell agent's session ended on the account's model limit right after its last push, before its own test run; the planning session ran it (Debug and Release builds clean, 631 UI tests with the two-window test on). Checked with real keys on 2026-09-29 (run 4 of the live check, [log/2026-09-28/live-check.md](log/2026-09-28/live-check.md)): the picker's keys switched to the preset, the window logged 20 px rows with the function-key bar, stripes and hairlines, Tab never landed on a function key, F5 through the bar's button copied the file, and the picker's keys switched back to 30 px rows.
@@ -301,7 +312,8 @@ Articles: 1, 5, 7, 9.
 Covers features 12 (branch view), 14 (folder tabs), 11 (the transfer
 queue), 13 (files to and from Explorer), 7 (comparing the two panes), 17
 (quick filter), 10 (search hits as a listing), and the optional parts of 1
-(the copy dialog) and 2 (the function-key bar).
+(the copy dialog) and 2 (the function-key bar). Folder tabs (feature 14)
+moved to Phase 12 on 2026-09-29, on the creator's card.
 
 Produces: in the core, listings built from a tree (branch view) and from a
 list of paths (search hits), with a folder for each entry, which changes the
@@ -413,6 +425,134 @@ Articles: 1, 8, 10, 11.
 Not in Phase 11: the Android app (feature 20; Articles 1 and 3), and Total
 Commander's own plugin DLLs, which are native code that cannot be sandboxed
 (Article 8).
+
+### Phase 12 — Tabs per pane (the creator's card "Per Pane Tabs Design", 2026-09-29; started in the sleep-mode run of 2026-09-29/30)
+
+Goal: each pane has its own row of tabs, hidden while the pane has one tab
+(Article 4), so a user keeps several folders and tools open side by side
+without a second window.
+
+Decided 2026-09-29 with the creator, against the card's draft where they
+differ: Tab stays the pane switch, and Alt+Left and Alt+Right keep Back and
+Forward; the window owns the tab state and saves it as `ui.tabs`
+(Article 6), and reports it to the core on each change so a command-line or
+AI tool can ask for it (`window_state`, Phase 14); no Acrylic dimming of the
+inactive pane, focus shows as an accent line over the active tab and the
+active-pane header (Article 1, the drawing cost is already why the scroll
+goal is missed); a tab may hold a Tool Extension as well as a folder. This
+takes feature 14 (folder tabs) out of 11b.
+
+Produces: in the core, the `ui.tabs` field of the config (per pane a list of
+`{path, locked}` and the active index) and the `window_state` request. In
+the shell, a tab row above each pane's list (`TabView`, or `ItemsRepeater`
+if `TabView` costs frames on the bench folder) with `tab.new` (Ctrl+T),
+`tab.close` (Ctrl+W), `tab.next` (Ctrl+Tab), `tab.previous`
+(Ctrl+Shift+Tab), `tab.toggleLock`, `tab.openFolderInNewTab` (Ctrl+Up) and
+`tab.moveToOtherPane` (Ctrl+K Ctrl+Right, Ctrl+K Ctrl+Left); each tab keeps
+its folder, history, sort and lock; in a locked tab, going into a folder
+opens a new tab, as in Total Commander; a tool's editor tab is a tab of the
+same row; the row is collapsed with one tab; the tabs come back after a
+restart from `ui.tabs`.
+
+Done when: five tabs on the left and three on the right open independently;
+closing all but one tab hides that pane's row; Tab switches panes with the
+visual focus moving at once; F5 copies from the active tab of the active
+pane to the active tab of the other pane; tabs and locks come back after a
+restart; a scroll on the bench folder is no slower than before (frame
+stats); a live-check section covers the keys.
+
+Articles: 4, 5, 6, 7, 11.
+
+### Phase 13 — The activity rail and the modular sidebar (the creator's card "Activity Bar & Modular Sidebar", 2026-09-29; last in the sleep-mode run of 2026-09-29/30, if time remains)
+
+Goal: the design's rail layout: a 44 px strip of icons at the left edge
+that swaps the sidebar between views, so the folder tree, search and
+installed extension views share one place without touching the panes or
+the terminal.
+
+Decided 2026-09-29 with the creator: the rail is built as `ui.layout: rail`,
+a choice next to `classic` and `right`, and the default is chosen after
+use. Core views: the folder tree (Explorer) and search. Git, remote
+environments, a drop zone, AI and an inspector are extensions (Article 10).
+An extension's view is a Tool Extension page in WebView2, which already
+runs in a browser process of its own; no new process model (Articles 8
+and 11).
+
+Produces: in the shell, the rail (Explorer, Search, Marketplace, Terminal,
+and one button per installed sidebar tool, in a saved order); the sidebar
+as a host of views that keep their state while hidden (native views kept;
+the last web view kept warm, the others suspended); the Explorer view: the
+folder tree over `list_directory`, with today's Pinned and Drives sections
+above it, following the active pane (`sidebar.autoReveal`, on by default)
+with a lock (`sidebar.lock`) and `sidebar.locate` (Alt+Shift+L); the Search
+view with the file search of Phase 5c and its filters; `view.showExplorer`
+(Ctrl+Shift+E), `view.showSearch` (Ctrl+Shift+F), `view.toggleSidebar`
+stays Ctrl+B; dragging the divider under 150 px snaps the sidebar shut;
+badges from plugin events; the width saved. In the core: nothing beyond
+Phase 12's `window_state`. In the SDK: `tool.json` gains `sidebar` for a
+tool that offers a sidebar view.
+
+Done when: switching Explorer, Search, Explorer keeps the tree's expanded
+nodes and scroll; the tree follows the active pane and stops following
+when locked; Ctrl+B, Ctrl+Shift+E, Ctrl+Shift+F and Alt+Shift+L do what
+they say; dragging the sidebar under 150 px closes it; `ui.layout: classic`
+works exactly as today; a live-check section covers the keys.
+
+Articles: 3, 4, 8, 10, 11.
+
+### Phase 14 — The AI agent extension (the card "AI Agent & Intelligent Workflows — the decision", 2026-09-29, which combines the two drafts at the creator's command; built in the sleep-mode run of 2026-09-29/30)
+
+Goal: an opt-in extension, CabinetOS Agent, that works the file manager
+next to the user through the same command line a human uses, with a
+preview before every change. Nothing AI-specific in the core (Article 10);
+the extension is the flagship pair of Article 11: a Core Plugin (the
+engine) and a Tool Extension (the chat).
+
+Decided 2026-09-29 (the card): the model never gets a shell, only command
+lines in `cab` syntax, which the plugin parses with the command line's own
+definitions and turns into core requests; the window owns and reports its
+state; the preview pane is a core listing built from proposed changes;
+keys live in the Windows Credential Manager and never reach the plugin,
+the core adds the header; the undo journal reverses renames and moves from
+a log and keeps a copy only of overwritten files; the audit log is JSON
+Lines next to the core's logs (Article 12); providers Anthropic and any
+OpenAI-compatible endpoint (Ollama, LM Studio, OpenAI); the tiers Advisor,
+Diff and approve (the default) and Autonomous, enforced by the plugin,
+which is the only thing that issues commands.
+
+Stages, in order:
+
+- **14a, core foundations (protocol 13):** `window_state` and
+  `cabinetos-cli state --json`; `preview_listing`, `preview_apply`,
+  `preview_cancel`; `secret_set`, `secret_get`, `secret_delete`,
+  `secret_list`; the plugin capability `net`, grantable with named hosts
+  and served by the core's own HTTP client (`http-request`, with an
+  optional secret the core inserts as a header); `fs:watch` for plugins;
+  plugin commands with an `input` prompt; plugin events forwarded to tool
+  pages; the undo journal, `undo_job` and `cabinetos-cli undo`; `cab.exe`
+  as a second name of the CLI in the release folder.
+- **14b, the extension:** `sdk/extensions/agent`: the plugin (Rust to
+  WASM) with the two providers behind one trait and a fake for tests,
+  settings under `plugins.agent`, the command parser shared with the CLI;
+  the chat page `sdk/tools/agent-chat`.
+- **14c, Ask:** `agent.ask` (Ctrl+K Ctrl+A) through the window's prompt
+  box; the preview in the other pane; Enter applies, Esc cancels.
+- **14d, the agent terminal:** the chat page in the dock or a pane's
+  editor tab; paths dragged in from a pane; every command shown before it
+  runs.
+- **14e, the rest:** watch folders (`agent.rule.add`), the tiers, undo
+  (`agent.undo`), the audit log and its list in the page; the two items
+  in the marketplace index.
+
+Done when: with the fake provider, "rename these to vacation_*" from Ask
+shows the preview and Enter renames; the chat runs a read command and
+shows a write command for approval; a rule on a test folder runs on a new
+file; tier 1 blocks a write; `cab undo` reverses a rename; nothing calls a
+real model until the creator stores a key (`cabinetos-cli secret set
+anthropic`); the core's size and start time without the extension are
+unchanged.
+
+Articles: 1, 4, 7, 8, 10, 11, 12.
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
