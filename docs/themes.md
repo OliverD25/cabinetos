@@ -181,9 +181,10 @@ that names the problem, for:
 The core carries both objects as the file has them, in `get_theme` and
 `theme_changed`. `list_themes` says `has_metrics: true` for a theme that
 sets any metric, so the picker can mark the density presets. The shell
-applies them: each metric is one size of the window, and each chrome key
-one element ([ui.md](ui.md), "Themes", once the shell's half is built;
-until then the shell reads the colours and leaves the two objects alone).
+applies them live, as it applies the colours: each metric is one size of
+the window, and each chrome key one element. [ui.md](ui.md), "Metrics and
+chrome", says where each one lands, which of the handout's text choices
+each switch carries, and the few sizes the window cannot take.
 
 ### Metrics
 
@@ -292,7 +293,9 @@ carry them:
   handout's shades when `chrome` turns it on.
 - The Size column in Fira Code, the drive's shorter free-space label
   ("118 GB") and the status bar's "Commander compact ·" prefix: text and
-  type choices, which are the shell's.
+  type choices, which are the shell's. The shell ties the first two to
+  `hairlines` and writes the prefix with the preset's own name
+  ([ui.md](ui.md), "Metrics and chrome").
 - One colour, the overlays' acrylic tint: Commander Compact's palette has
   it (`acrylicTint` `#262626E6` instead of the default's `#2C2C2CB8`).
 

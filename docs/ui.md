@@ -118,7 +118,11 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   and F5 with a conflict answered Skip through UI Automation, the context
   menu, Properties with Esc and a key that must not run under it, the
   terminal typed with Unicode key events, the palette from the terminal,
-  search, and Markdown Preview with Enter and then Ctrl+K V.
+  search, and Markdown Preview with Enter and then Ctrl+K V. Then Total
+  Commander's keys, Commander Compact chosen in the theme picker with its
+  keys (the window's log must say 20 px rows; Tab must never land on a
+  function key; F5 pressed through the bar's button by its accessible name
+  must copy a file) and switched back, and the edge cases.
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
@@ -159,7 +163,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_PLUGINS_DIR`, `CABINETOS_MARKETPLACE_DIR` | Not read by the UI, except the plugins folder for the empty plugin list's hint; the core it starts inherits them and installs there ([marketplace.md](marketplace.md), "Folders"). Set both to a scratch folder to try installs without touching `%LOCALAPPDATA%\CabinetOS` |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part ("Scrolling"). The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load, and a `slow frame` line for each frame of 33 ms or more |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -1046,7 +1050,8 @@ How it is built:
 
 - One WebView2 holds every session, each an xterm.js terminal: the DOM
   renderer, Cascadia Code 12 px, line height 1.25 (the design's 1.6 is for
-  the prototype's static lines and would cost a third of the rows), 5,000
+  the prototype's static lines and would cost a third of the rows; a
+  theme's `terminalLineHeight` scales it, "Metrics and chrome"), 5,000
   lines of scrollback, and `windowsPty` set for ConPTY with the Windows
   build number (so xterm.js reflows and scrolls the way ConPTY expects).
 - The page is `ui/CabinetOS/Assets/xterm/terminal.html`, served from
@@ -1155,7 +1160,8 @@ A theme from the core changes the window's colours at once, without a
 restart: the accent, the Mica tint, text, fills and strokes, the Acrylic of
 the palette and menus, the terminal, the file icons and the capability
 levels. [themes.md](themes.md) has the format and the shipped themes
-(Constitution Articles 3, 6 and 8).
+(Constitution Articles 3, 6 and 8). A theme's sizes and its three chrome
+elements apply the same way ("Metrics and chrome").
 
 - **When.** At start the window asks `get_theme` for the theme in effect.
   Each `theme_changed` applies the theme it carries: a choice in the
@@ -1277,6 +1283,187 @@ What a theme does not change:
   tooltips were not opened in light mode. Dialogs take the window's light
   or dark when they open, so one that is open while the mode changes keeps
   the old one.
+
+## Metrics and chrome
+
+A theme may also change the window's sizes and show three more elements:
+its `metrics` and its `chrome` ([themes.md](themes.md), "Metrics and
+chrome"). They apply live, as the colours do: a `theme_changed` lays the
+window out again, without a restart. A theme without `metrics` gives the
+default look's sizes, so switching back to `default` restores every size.
+A theme never changes a command, a key or where things are: the rule of
+the Commander Compact handout
+([design/compact/COMPACT_THEME.md](design/compact/COMPACT_THEME.md),
+"Scope"). Constitution Articles 3, 6 and 8.
+
+- **How.** `MetricsMapper` (in `CabinetOS.Core`, tested) is one table:
+  every metric's name, unit and bounds, and the default look's value. A
+  test holds the table equal to `sdk/themes/theme.schema.json`: the same
+  76 names, the same bounds, and the default that each name's description
+  gives. Another test checks every value of Commander Compact. The mapper
+  gives one value for each name: the theme's, held to its bounds and
+  rounded to whole pixels, or else the default look's. A name that is not
+  a metric changes nothing, and the log names it. `ThemeMapper` adds the
+  sizes and the chrome to the theme's look. The window keeps them in
+  `WindowMetrics`, and each view lays itself out from them
+  (`ApplyMetrics`). A row that the list reuses for another entry checks
+  whether the sizes changed since it was made.
+- **The log.** Target `cabinetos_ui::theme`: "metrics applied" with the
+  theme, whether it is a density preset (`preset`: it sets any metric),
+  the row height, the text size, the pane header's height, the three
+  chrome switches, and the names it ignored.
+
+### Where each metric goes
+
+| Metrics | What they size in the window |
+|---|---|
+| `fontSize` | The base text: names in the file lists, pane titles, the sidebar's rows, the crumbs, the address and search fields, the rows of the palette, the menus and the prompts, and the rename box. The default look draws the design's 13 px; before this, these texts were WinUI's own 14 px. |
+| `lineHeight` | Wrapped text: a pane's message ("This folder is empty.") and the search note. Single lines sit in rows of a fixed height, so it does not change them. |
+| `backdropOpacity` | Mica. At 0.86 and below, plain Mica (the default look). Above it, Mica's own base colour is laid over Mica, up to opaque at 1: Commander Compact's 0.94 is a tint opacity of 0.91 in dark mode. A theme with a `mica` tint of its own keeps it. |
+| `radiusControl` | Buttons, fields, the rows of the palette and the menus, the terminal's and the editor's buttons, and the marketplace's search field and buttons. WinUI's own controls made from then on take it too (`ControlCornerRadius`). |
+| `radiusSurface` | The panes, the editor, the terminal and the marketplace. Icon tiles and info boxes (the app tile, the marketplace's tiles and stat boxes) keep the design's radius in proportion to it, and never less than `radiusControl`. |
+| `gap`, `bodyPadding` | The space between the sidebar and the panes, between the two panes, and between the panes and the terminal, which is also the splitter; with no gap, the splitter keeps a 6 px handle laid over the edges it joins. The space at the window's sides and bottom. |
+| `titleBarHeight` | The title bar, never lower than 32 px: Windows draws the minimize, maximize and close buttons that high. |
+| `tabHeight`, `tabPaddingX`, `tabMinWidth`, `tabFontSize`, `tabRadius` | The workspace tab in the title bar. |
+| `captionButtonWidth` | Nothing: Windows draws the caption buttons 46 px wide, and a window cannot change that. |
+| `commandBarHeight`, `iconButtonSize`, `fieldHeight`, `toggleHeight` | The command bar; its icon buttons; the address and search fields (the crumbs inside are at most 4 px lower than the field); the Dual/Single toggle. |
+| `sidebarMinWidth`, `sidebarWidthPercent`, `sidebarMaxWidth` | The sidebar's width. |
+| `sidebarHeaderFontSize`, `sidebarHeaderPaddingTop`, `sidebarHeaderPaddingX`, `sidebarHeaderPaddingBottom` | The PINNED and DRIVES labels. The first label sits 8 px higher, as the design's first one does. |
+| `sidebarRowHeight`, `sidebarRowInset`, `sidebarRowRadius` | The pinned folders' rows, and the inset and corners of every sidebar row. The default look's pinned rows are 32 px; its 34 px are for workspace rows, which do not exist yet. Between the rows, and above and below the sections, the space follows the inset. |
+| `selectionBarWidth` | The accent bar of a selected or highlighted row: in the sidebar, the file lists, the palette, the prompts and the theme picker. |
+| `driveRowPaddingY`, `driveRowPaddingX` | The drive rows. The pinned rows take the same side padding. |
+| `tagRadius`, `tagFontSize` | Nothing yet: the sidebar has no tags. |
+| `paneHeaderHeight`, `columnHeaderPaddingY`, `columnHeaderPaddingX` | A pane's header and its column headers. The header's sides take the column headers' padding. |
+| `nameColumnWeight`, `modifiedColumnWeight`, `typeColumnWeight`, `nameColumnMinWidth`, `sizeColumnWidth`, `columnGap` | The columns, in the column headers and in every row alike. The default look keeps 8 px after the Modified and Type texts; a theme that sets `columnGap` spaces the columns by it instead. |
+| `rowHeight`, `rowPaddingX`, `rowRadius`, `rowIconGap`, `secondaryFontSize` | A file row; the scrolling arithmetic (PageDown, keeping the focused row in view); and the rename box over a row, as high as the row allows but never lower than its text. |
+| `editorTabHeight` | A pane's editor tab strip. |
+| `markdownPaddingY`, `markdownPaddingX`, `markdownLineHeight` | Nothing yet: the Markdown Preview is a Tool Extension page, and the tool messages carry no sizes ([tool-extensions.md](tool-extensions.md)). |
+| `hexRowHeight`, `hexColumnGap` | Nothing yet: there is no hex view. |
+| `terminalDockMinHeight`, `terminalDockHeightPercent`, `terminalDockMaxHeight` | The bottom terminal dock's height, and the least a drag leaves it. |
+| `terminalHeaderHeight`, `terminalTabHeight` | The dock's header and its session tabs. |
+| `terminalPaddingY`, `terminalPaddingX`, `terminalLineHeight` | The terminal page, through its `theme` message. The page's own look (xterm.js's line height 1.25, and 8, 4, 4 and 12 px around the text) stands for the design's 1.6 and 10 by 12 px; a theme's values scale it by their share of those. |
+| `marketplaceTabHeight`, `marketplaceTabRadius`, `marketplaceCardGap`, `marketplaceCardPaddingY`, `marketplaceCardPaddingX`, `marketplaceCardRadius` | The marketplace's tabs and cards. |
+| `paletteRowHeight`, `menuRowHeight` | The rows of the palette and the theme picker; the rows of the context menu and of the prompts in the palette's frame (the pattern box, the drive list, the pinned folders). |
+| `statusBarHeight`, `statusBarPaddingX`, `statusBarGap` | The status bar. |
+| `fkeyBarHeight`, `fkeyBarGap`, `fkeyButtonRadius`, `fkeyBarFontSize` | The function-key bar, when `chrome.fkeyBar` shows it. |
+
+### The chrome elements
+
+- **`fkeyBar`: the function-key bar**, a row between the panes and the
+  status bar: F3 View, F4 Edit, F5 Copy, F6 Move, F7 Mkdir, F8 Delete,
+  Alt+F1 Drv. Each button runs the command its key runs (`file.view`,
+  `file.edit`, `file.copyToOtherPane`, `file.moveToOtherPane`,
+  `file.newFolder`, `file.delete`, `go.chooseDriveLeft`) through the
+  router, with the trigger `fkeyBar`. The keys stay as the keymap has
+  them: a button shows its handout key while the command is still bound to
+  it, else the command's first key, else no key. The bar is never a Tab
+  stop and never takes the keyboard, so a click acts on the active pane's
+  selection, as the key would. A button's accessible name is its key and
+  label ("F5 Copy"). When the bar is off, it and its row are gone. The key
+  is in the accent colour, in Fira Code where it is installed and else in
+  Cascadia Mono; the label is white at .8; a button is white at .05, and
+  .12 under the mouse.
+- **`rowStripes`**: every other row of a file list at .025 white, and a
+  selected row at .12 over the stripes (.08 without them).
+- **`hairlines`**: 1 px lines between the surfaces instead of floating
+  cards. The command bar is filled (.03) with a line above and below it
+  (.06). The sidebar has a line on its right (.08). With no gap, the two
+  panes' borders overlap into one line. The active pane's header is filled
+  (.06; a single pane's always is) over a line (.08). The column headers
+  are filled (.03) over a line (.10). The list has no 4 px inset inside
+  its pane: a card's inset goes with the card. The terminal dock has a line
+  only on the edge that meets the panes (.10). The marketplace has no frame
+  of its own.
+- **The handout's text choices ride on `hairlines`**, which brings the
+  narrow columns they are for: the Size column in fixed-width figures
+  (Fira Code where installed, else Cascadia Mono); a drive's free space
+  without "free" ("1.2 TB"); dates older than a week without their time
+  ("2026-09-02"); and short types: "Folder", a link's kind, or the
+  extension in capitals ("MD", "EXE"; "File" without one). The last two
+  are not in the handout's list: its page shows short dates and types, and
+  without them the shell's type names and long dates are cut short at
+  924 px.
+- **The shades** come from the theme's `textPrimary` at the handout's
+  alphas, in `ThemeMapper`, so a light theme gets dark lines:
+  `CbHairlineBrush`, `CbHairlineStrongBrush`, `CbBarFillBrush`,
+  `CbHeaderActiveFillBrush`, `CbRowStripeBrush`,
+  `CbStripedSelectedFillBrush`, `CbFkeyFillBrush`, `CbFkeyHoverFillBrush`
+  and `CbFkeyLabelBrush`.
+- **The preset's name.** When the theme sets any metric, the status bar's
+  layout item starts with the theme's name: "Commander Compact · Terminal:
+  bottom".
+- **The picker** marks a theme whose `list_themes` item says
+  `has_metrics` as a "density preset".
+- **The overlays keep their corners** (8 px): the palette's frame (the
+  palette, the prompts, the theme picker), the context menu, the transfer
+  card and the dialogs.
+
+### Checked
+
+On 2026-09-29, with release builds, the display asleep, a screen scale of
+1.5, the snapshot aid (its `size:`, `fit:`, `theme:` and `layout:` steps),
+the shipped `commander-compact`, and folders shaped like the handout's
+page (`fileforge` and its `src`, with the page's names, sizes and kinds
+of dates):
+
+- Dual pane at 924 px: rows 20 px high; no name, date, type or size cut
+  short in either pane; the seven function keys 130 to 131 px wide, none
+  cut short; no corner radius above 3 px outside the overlays.
+- The list made 400 px high (`fit:400`): 20 whole rows of 20 px.
+- At 1600 px, with the terminal open (a 200 px dock), in the marketplace
+  and in its detail column: no corner radius above 3 px.
+- The keymap: 67 bindings with the same fingerprint (a hash of every
+  binding) at a start in `default`, in `commander-compact`, and after
+  switching back.
+- Switching back to `default` live gave the same sizes, number for
+  number, as a fresh start in `default`: the title bar and its tab, the
+  command bar and its controls, the body, the sidebar, both panes, their
+  headers, rows and corners, and the status bar. The two images differ in
+  80 of 3.24 million pixels, all on the edge of a rounded corner.
+- F5 Copy pressed through its automation peer (the way UI Automation
+  presses it) ran `file.copyToOtherPane` with the trigger `fkeyBar`, and
+  the file was copied.
+- For comparison, the default look at 924 px cuts 19 dates and types
+  short in the same folders.
+
+The snapshots, at half size:
+[the dual pane at 924 px](log/2026-09-28/compact-dual-924.png),
+[the list at 400 px](log/2026-09-28/compact-list-400.png),
+[the dual pane at 1600 px](log/2026-09-28/compact-dual-1600.png),
+[the terminal](log/2026-09-28/compact-terminal.png),
+[the palette](log/2026-09-28/compact-palette.png),
+[the marketplace](log/2026-09-28/compact-marketplace.png) and
+[the theme picker](log/2026-09-28/compact-picker.png).
+`livecheck.ps1` also switches to Commander Compact and back with the
+picker's keys, and presses F5 through the bar's button by its accessible
+name ("The live check").
+
+### Where the window differs from the handout's page
+
+- The title bar is 32 px high, not 30, and its caption buttons are 46 px
+  wide, not 40: Windows draws them.
+- The title bar has the app tile and one "Default" tab; the page has three
+  workspace tabs and "+". The sidebar has no Workspaces and no Tags. Those
+  features do not exist yet.
+- Types are extensions ("MD", "LOCK", "EXE") where the page has words
+  ("Markdown", "Lock file", "Application"): the window has only the
+  shell's names, which do not fit. Old dates use the PC's short date
+  ("2026-09-02"), not the page's "2 Sep 2026".
+- The fonts are Segoe UI Variable and Cascadia Mono: the page's Open Sans
+  and Fira Code are web fonts. Fira Code is used where it is installed.
+- The status bar's prefix is the theme's name, "Commander Compact", with
+  a capital C, and there is no git branch item.
+- A pane's header has no list button at its right end.
+- The terminal's padding and line height scale xterm.js's own values
+  (about 5, 3, 2 and 8 px around the text, and a line height of 1.13)
+  rather than the page's CSS (6 by 8 px, 1.45).
+- The marketplace's icon tiles and stat boxes have 2 px corners, where the
+  page keeps 8 and 6 px: the acceptance allows no radius above 3 px
+  outside the palette and the context menu.
+- The snapshots show a flat stand-in for Mica; the page draws
+  `rgba(32,32,32,.94)` over a picture.
+- The page's Markdown and hex views have no counterpart here: the Markdown
+  Preview gets no sizes, and there is no hex view.
 
 ## The marketplace
 
@@ -1789,6 +1976,7 @@ planning session's, on a screen someone watches.
 | Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |
 | Sorting by a click on a column heading | The headings are static; Ctrl+F3 to Ctrl+F6 sort a pane ("A pane's order"), and sub-phase 11c brings the headings |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
+| The metrics `captionButtonWidth`, `tagRadius`, `tagFontSize`, `markdownPaddingY`, `markdownPaddingX`, `markdownLineHeight`, `hexRowHeight` and `hexColumnGap` | Windows draws the caption buttons; there are no tags yet, the tool messages carry no sizes, and there is no hex view ("Metrics and chrome") |
 
 ## Known gaps
 
@@ -1808,8 +1996,10 @@ the protocol 11 work that night:
   real keys yet: Ctrl+Shift+X, Ctrl+K Ctrl+T and Tab through the
   marketplace, the uninstall confirmation, a real drag of the dock's
   splitter, keys inside the Markdown Preview, menus and tooltips in light
-  mode, and the window following a real change of Windows' light or dark
-  mode.
+  mode, the window following a real change of Windows' light or dark
+  mode, and Commander Compact chosen in the picker with Tab and the
+  function-key bar (the live check has the step; its snapshot-aid
+  counterpart passed, "Metrics and chrome").
 - **The icon cache has no limit.** Every icon the core sent stays until
   the window closes. They are 16 to 32 px bitmaps, so a session that shows
   thousands of program icons holds a few MB.
