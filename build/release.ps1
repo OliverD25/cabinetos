@@ -21,7 +21,8 @@
 #     the compiled XAML, into the publish; the app stays unpackaged.
 #  3. The three programs and their .pdb files next to CabinetOS.exe, where
 #     the window's launcher looks first; crash traces read the .pdb files
-#     for file and line.
+#     for file and line. cabinetos-cli.exe once more as cab.exe, the short
+#     name to type (the same program; its .pdb serves both).
 #  4. extras\: copies of the four built-in themes with their schema, and
 #     the Markdown Preview tool, which is opt-in (Constitution Article 10).
 #  5. LICENSE, THIRD-PARTY-NOTICES.md (build\notices.ps1), install.ps1,
@@ -120,6 +121,7 @@ if (-not $PackageOnly) {
         Copy-Item -LiteralPath (Join-Path $binaries "$program.exe") -Destination $folder
         Copy-Item -LiteralPath (Join-Path $binaries "$($program.Replace('-', '_')).pdb") -Destination $folder
     }
+    Copy-Item -LiteralPath (Join-Path $binaries 'cabinetos-cli.exe') -Destination (Join-Path $folder 'cab.exe')
 
     # 4. Extras.
     $themes = New-Item -ItemType Directory -Force -Path (Join-Path $folder 'extras\themes')

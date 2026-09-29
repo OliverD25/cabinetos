@@ -15,6 +15,7 @@ the zip's root:
 | `CabinetOS.exe` and the libraries next to it | The window: .NET 10, WinUI 3, published framework-dependent |
 | `CabinetOS.pri` | The window's compiled XAML; without it the window cannot start |
 | `cabinetos-core.exe`, `cabinetos-indexer.exe`, `cabinetos-cli.exe` | The Rust programs. The window's launcher finds the core next to `CabinetOS.exe` ([ui.md](ui.md)) |
+| `cab.exe` | `cabinetos-cli.exe` once more, under a short name to type: `cab jobs`, `cab undo --last`. The same program, byte for byte; everything else keeps the name `cabinetos-cli` (the docs, the help text, the tests) |
 | `*.pdb` | Symbols, so crash traces name file and line |
 | `Assets\xterm\` | The terminal page |
 | `extras\themes\` | Copies of the four built-in themes and their schema, as a start for your own. The core also writes them into `%LOCALAPPDATA%\CabinetOS\themes` |
@@ -61,8 +62,9 @@ What it runs, in order:
    which writes `CabinetOS.pri`, the compiled XAML, into the publish; without
    it the window stops at start. The app stays unpackaged. The script stops
    if the `.pri` file is missing.
-3. Copies the three programs and their `.pdb` files, the themes, Markdown
-   Preview, `LICENSE` and the two install scripts; writes `release.json`
+3. Copies the three programs and their `.pdb` files, `cabinetos-cli.exe`
+   once more as `cab.exe`, the themes, Markdown Preview, `LICENSE` and the
+   two install scripts; writes `release.json`
    from the publish output and the Windows App SDK package (the minimum
    Windows App Runtime is the one the SDK's bootstrapper asks for).
 4. `build\notices.ps1` writes `THIRD-PARTY-NOTICES.md`: every Rust crate the
@@ -142,7 +144,7 @@ in a PowerShell started with `-ExecutionPolicy Bypass`):
 | `-AllUsers` | Copies to `%ProgramFiles%\CabinetOS` instead. Needs "Run as administrator" |
 | `-Destination <folder>` | Another folder: new, empty, or an earlier CabinetOS install; never a drive's root |
 | `-StartMenu` | A Start Menu shortcut: yours, or every user's with `-AllUsers` |
-| `-AddToPath` | The install folder on your PATH (the machine's with `-AllUsers`), for `cabinetos-cli`; new terminals see it |
+| `-AddToPath` | The install folder on your PATH (the machine's with `-AllUsers`), for `cabinetos-cli` and `cab`; new terminals see it. Off unless given |
 | `-Indexer` | Also installs and starts the indexer service (`cabinetos-indexer --install`). Needs `-AllUsers` and a folder inside Program Files: the service runs as LocalSystem, so its program must sit where only administrators can change it. The service starts manually: after a restart of Windows, start it with `Start-Service cabinetos-indexer` as administrator |
 | `-SkipPrerequisiteCheck` | Installs even when a prerequisite looks missing |
 | `-WhatIf` | Shows every step and changes nothing |
@@ -207,7 +209,7 @@ of `<thumbprint>`):
 
 ```powershell
 # PowerShell - signtool and the certificate store are Windows-only
-$release = 'E:\codespace\_claude_code\_rde\_cabinetos_windows_system_manager\cabinetos\dist\CabinetOS-0.1.0-win-x64'; $signtool = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe'; $files = 'CabinetOS.exe', 'CabinetOS.dll', 'CabinetOS.Core.dll', 'cabinetos-core.exe', 'cabinetos-indexer.exe', 'cabinetos-cli.exe' | ForEach-Object { Join-Path $release $_ }; & $signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <thumbprint> $files; & $signtool verify /pa /v $files; Set-AuthenticodeSignature -FilePath "$release\install.ps1", "$release\uninstall.ps1" -Certificate (Get-Item Cert:\CurrentUser\My\<thumbprint>) -HashAlgorithm SHA256 -TimestampServer http://timestamp.digicert.com
+$release = 'E:\codespace\_claude_code\_rde\_cabinetos_windows_system_manager\cabinetos\dist\CabinetOS-0.1.0-win-x64'; $signtool = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe'; $files = 'CabinetOS.exe', 'CabinetOS.dll', 'CabinetOS.Core.dll', 'cabinetos-core.exe', 'cabinetos-indexer.exe', 'cabinetos-cli.exe', 'cab.exe' | ForEach-Object { Join-Path $release $_ }; & $signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <thumbprint> $files; & $signtool verify /pa /v $files; Set-AuthenticodeSignature -FilePath "$release\install.ps1", "$release\uninstall.ps1" -Certificate (Get-Item Cert:\CurrentUser\My\<thumbprint>) -HashAlgorithm SHA256 -TimestampServer http://timestamp.digicert.com
 ```
 
 The timestamp keeps the signatures valid after the certificate expires.
@@ -254,7 +256,8 @@ manifest schema 1.10.0. The package is the zip as a portable app
 (`InstallerType: zip`, `NestedInstallerType: portable`, with
 `ArchiveBinariesDependOnPath: true`): winget unpacks it into its own
 folder and puts that folder on the PATH, because `CabinetOS.exe` needs the
-files next to it. A winget install gets no Start Menu entry and no indexer
+files next to it; `cabinetos-cli.exe` and `cab.exe` are listed as its
+commands. A winget install gets no Start Menu entry and no indexer
 service; `install.ps1` does those. The committed files carry 0.1.0 and a
 zero hash; `release.ps1` fills in the real ones. `winget validate` accepts
 them (checked 2026-09-28 with winget 1.29.380).

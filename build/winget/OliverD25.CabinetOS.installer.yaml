@@ -17,6 +17,7 @@ NestedInstallerType: portable
 NestedInstallerFiles:
   - RelativeFilePath: CabinetOS.exe
   - RelativeFilePath: cabinetos-cli.exe
+  - RelativeFilePath: cab.exe
 ArchiveBinariesDependOnPath: true
 Dependencies:
   PackageDependencies:

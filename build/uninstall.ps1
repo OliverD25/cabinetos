@@ -34,7 +34,7 @@ Set-StrictMode -Version 3.0
 
 $markerName = '.cabinetos-install.json'
 $serviceName = 'cabinetos-indexer'
-$programNames = 'CabinetOS', 'cabinetos-core', 'cabinetos-cli', 'cabinetos-indexer'
+$programNames = 'CabinetOS', 'cabinetos-core', 'cabinetos-cli', 'cab', 'cabinetos-indexer'
 
 function Stop-Uninstall([string] $Message) {
     $Host.UI.WriteErrorLine("uninstall.ps1: $Message")

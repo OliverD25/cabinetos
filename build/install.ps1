@@ -27,7 +27,8 @@ Add CabinetOS to the Start Menu: yours, or every user's with -AllUsers.
 
 .PARAMETER AddToPath
 Add the install folder to your PATH (the machine's with -AllUsers), so
-cabinetos-cli runs in any new terminal.
+cabinetos-cli, and cab (the same program under a short name), run in any
+new terminal. Off unless given.
 
 .PARAMETER Indexer
 Also install and start the indexer service, for instant search of whole
@@ -61,7 +62,7 @@ Set-StrictMode -Version 3.0
 
 $markerName = '.cabinetos-install.json'
 $serviceName = 'cabinetos-indexer'
-$programNames = 'CabinetOS', 'cabinetos-core', 'cabinetos-cli', 'cabinetos-indexer'
+$programNames = 'CabinetOS', 'cabinetos-core', 'cabinetos-cli', 'cab', 'cabinetos-indexer'
 
 function Stop-Install([string] $Message) {
     $Host.UI.WriteErrorLine("install.ps1: $Message")
@@ -389,7 +390,7 @@ if ($WhatIfPreference) {
 $who = if ($AllUsers) { 'every user of this PC' } else { $env:USERNAME }
 Write-Host "CabinetOS $($release.version) is installed for $who in $target"
 Write-Host "  Start it:  & '$(Join-Path $target 'CabinetOS.exe')'$(if ($shortcut) { ', or from the Start Menu' })"
-if ($pathEntry) { Write-Host '  cabinetos-cli is on the PATH of terminals opened from now on.' }
+if ($pathEntry) { Write-Host '  cabinetos-cli, and cab for short, are on the PATH of terminals opened from now on.' }
 if ($Indexer) { Write-Host "  The indexer service runs now. It starts manually: after a restart of Windows, run Start-Service $serviceName as administrator." }
 Write-Host "  Remove it: powershell -ExecutionPolicy Bypass -File '$(Join-Path $target 'uninstall.ps1')'"
 if (Get-Item -LiteralPath (Join-Path $source 'CabinetOS.exe') -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue) {
