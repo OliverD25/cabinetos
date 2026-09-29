@@ -108,15 +108,21 @@ function Shot([IntPtr]$h, [string]$path) {
 function SelectionText {
   $window = [System.Windows.Automation.AutomationElement]::FromHandle($script:h)
   $byId = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'SelectionText')
+  $isPane = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Pane)
   foreach ($try in 1..3) {
-    foreach ($scope in [System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.TreeScope]::Descendants) {
-      $e = $window.FindFirst($scope, $byId)
-      if ($e) {
+    # The status texts are children of the window's XAML root, a pane: two child lookups reach them
+    # without walking the web pages; the whole-tree search is the fallback.
+    $e = $null
+    foreach ($pane in $window.FindAll([System.Windows.Automation.TreeScope]::Children, $isPane)) {
+      $e = $pane.FindFirst([System.Windows.Automation.TreeScope]::Children, $byId)
+      if ($e) { break }
+    }
+    if (-not $e) { $e = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $byId) }
+    if ($e) {
         $name = $e.Current.Name
         if ($name -match '^\d[\d,]* selected') { return $name }
         if ($name -eq '') { return "(nothing selected)" }
         return "(status bar says '$name')"
-      }
     }
     Start-Sleep -Milliseconds 300
   }
