@@ -200,9 +200,40 @@ public class HeavyLogTests
             Assert.True(File.Exists(path));
 
             writer.SetHeavy(false);
+            // The writer closes the file in its own time; a flush waits for it.
+            Assert.True(writer.Flush(TimeSpan.FromSeconds(5)));
             Assert.Null(writer.HeavyFilePath);
             File.Delete(path);
             Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(dir);
+        }
+    }
+
+    [Fact]
+    public void Switching_heavy_mode_off_does_not_wait_for_a_slow_writer_because_the_ui_thread_does_it()
+    {
+        var dir = Repo.NewTempFolder("heavy");
+        try
+        {
+            using var gate = new ManualResetEventSlim();
+            using var writer = new LogWriter(dir, LogFilter.Default, "ui", "0.1.0", () => At, Limits());
+            writer.SetHeavy(true);
+            Assert.True(writer.Flush(TimeSpan.FromSeconds(5)));
+            writer.BeforeHeavyWrite = _ => gate.Wait(TimeSpan.FromSeconds(10));
+            writer.Write(LogLevel.Debug, "cabinetos_ui::test", "a line the stuck writer holds");
+
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            Assert.True(writer.SetHeavy(false));
+            Assert.True(System.Diagnostics.Stopwatch.GetElapsedTime(started) < TimeSpan.FromSeconds(2), "going off returned at once");
+            Assert.False(writer.HeavyEnabled);
+
+            gate.Set();
+            Assert.True(writer.Flush(TimeSpan.FromSeconds(10)));
+            Assert.Null(writer.HeavyFilePath);
+            Assert.Equal("heavy logging is off", Text(ReadLines(HeavyPath(dir)).Last(), "message"));
         }
         finally
         {
@@ -279,6 +310,7 @@ public class HeavyLogTests
                 Assert.InRange(lost, 1, 99);
                 gate.Set();
                 writer.SetHeavy(false);
+                Assert.True(writer.Flush(TimeSpan.FromSeconds(10)));
 
                 var lines = ReadLines(HeavyPath(dir));
                 var kept = lines.Count(l => Text(l, "message").StartsWith("ui line ", StringComparison.Ordinal));
@@ -332,6 +364,7 @@ public class HeavyLogTests
                 Assert.True(System.Diagnostics.Stopwatch.GetElapsedTime(waitStarted) >= TimeSpan.FromMilliseconds(200), "outside the scope the thread waits");
                 release.Join();
                 writer.SetHeavy(false);
+                Assert.True(writer.Flush(TimeSpan.FromSeconds(10)));
                 Assert.Contains(ReadLines(HeavyPath(dir)), l => Text(l, "message").StartsWith("after the scope", StringComparison.Ordinal));
             }
         }
@@ -644,6 +677,7 @@ public class HeavyLogTests
 
                 Assert.True(await settings.SetAsync("logging.heavy", false));
                 Assert.Equal(HeavyLogChange.TurnedOff, heavy.Follow(false));
+                Assert.True(window.Flush(TimeSpan.FromSeconds(5)));
                 await UntilAsync(() => LastMessage(coreHeavy) == "heavy logging is off", "the core's heavy file to end");
 
                 var coreLines = ReadLines(coreHeavy).Select(l => Text(l, "message")).ToList();
@@ -718,6 +752,7 @@ public class HeavyLogTests
                 Assert.Equal(Trace, outcome.RequestId);
                 Assert.Equal(Trace, request.GetProperty("trace").GetString());
                 Diag.Writer!.SetHeavy(false);
+                Assert.True(Diag.Writer!.Flush(TimeSpan.FromSeconds(5)));
                 var heavy = ReadLines(HeavyPath(dir, $"heavy-ui.{DateTime.UtcNow:yyyy-MM-dd}.jsonl"));
 
                 var commandRun = heavy.Single(l => Text(l, "message") == "command run");

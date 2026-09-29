@@ -172,8 +172,9 @@ public sealed class LogWriter : IDisposable
     }
 
     /// <summary>
-    /// Turns heavy mode on or off (<c>logging.heavy</c>). Both files say so, and going off writes
-    /// what is queued and closes the heavy file. Returns whether the mode changed.
+    /// Turns heavy mode on or off (<c>logging.heavy</c>). Both files say so, and going off has the writer
+    /// write what is queued and close the heavy file. It never waits for that (the window calls it on the
+    /// UI thread): <see cref="Flush"/> waits until the file is closed. Returns whether the mode changed.
     /// </summary>
     public bool SetHeavy(bool on)
     {
@@ -199,7 +200,7 @@ public sealed class LogWriter : IDisposable
             Write(LogLevel.Info, "cabinetos_ui::diag", "heavy logging is off");
             _heavyOn = false;
             Volatile.Write(ref _heavyClosePending, 1);
-            Flush(TimeSpan.FromSeconds(2));
+            _signal.Set();
         }
         return true;
     }

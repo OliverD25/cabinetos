@@ -242,6 +242,8 @@ public static class Diag
         {
             return null;
         }
+        // A crash hook must not wait for a heavy queue that a slow disk keeps full.
+        using var neverWait = LogWriter.NeverWait();
         writer.Write(LogLevel.Error, "cabinetos_ui::app", message, fields: [new LogField("error", exception?.ToString())]);
         if (Interlocked.Exchange(ref _crashed, 1) == 1)
         {
