@@ -3,3 +3,4 @@ UnmapViewOfFile
 CloseHandle
 MessageBox
 AllowSetForegroundWindow
+GetSystemTimes

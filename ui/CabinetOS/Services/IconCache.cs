@@ -69,14 +69,22 @@ internal sealed class IconCache(ICoreChannel core)
             case IconReply icon:
                 try
                 {
+                    var started = FrameParts.Start();
                     var bytes = Convert.FromBase64String(icon.PngBase64);
                     using var stream = new InMemoryRandomAccessStream();
-                    await stream.WriteAsync(bytes.AsBuffer());
+                    var written = stream.WriteAsync(bytes.AsBuffer());
+                    FrameParts.Stop(FramePart.Icons, started);
+                    await written;
+                    started = FrameParts.Start();
                     stream.Seek(0);
                     var bitmap = new BitmapImage { DecodePixelWidth = (int)size, DecodePixelHeight = (int)size };
-                    await bitmap.SetSourceAsync(stream);
+                    var decoded = bitmap.SetSourceAsync(stream);
+                    FrameParts.Stop(FramePart.Icons, started);
+                    await decoded;
+                    started = FrameParts.Start();
                     _icons[(key, size)] = bitmap;
                     _anySize[key] = bitmap;
+                    FrameParts.Stop(FramePart.Icons, started);
                     Loaded?.Invoke(key);
                 }
                 catch (Exception error) when (error is FormatException or System.Runtime.InteropServices.COMException)

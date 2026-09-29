@@ -148,6 +148,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
             ForgetIfCurrent();
             return;
         }
+        var started = FrameParts.Start();
         switch (reply)
         {
             case EntryDetailsReply details when _details.Apply(details) && _view is { } view:
@@ -156,6 +157,8 @@ public sealed class PaneModel : ObservableObject, IRowDetails
                     var index = (int)details.From + i;
                     _known.Learn(view.NameSpan(index), view.IsFolder(index), details.Details[i]);
                 }
+                FrameParts.Stop(FramePart.Details, started);
+                started = 0;
                 DetailsArrived?.Invoke((int)details.From, details.Details.Count);
                 break;
             case EntryDetailsReply:
@@ -171,6 +174,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
                 ForgetIfCurrent();
                 break;
         }
+        FrameParts.Stop(FramePart.Details, started);
 
         void ForgetIfCurrent()
         {

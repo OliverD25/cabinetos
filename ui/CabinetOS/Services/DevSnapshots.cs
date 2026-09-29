@@ -33,6 +33,8 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// kind <c>system</c> follows) without changing the PC's setting,
 /// <c>click:&lt;name&gt;</c> presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it
 /// (the keyboard moves to it, then its automation peer invokes it), <c>focus:&lt;label&gt;</c> logs where the keyboard is,
+/// <c>scroll:&lt;pages&gt;</c> presses PageDown in the active pane 30 times a second (<c>scroll:&lt;pages&gt;/&lt;n&gt;</c>: once every n frames)
+/// and logs the frame table of the run when <c>CABINETOS_UI_FRAMESTATS=1</c>,
 /// <c>until:running|conflict|terminal|search|tool</c> waits for a job, a shell, an answer or a tool page, <c>wait:&lt;ms&gt;</c> waits, and
 /// <c>shot:&lt;name&gt;</c> renders the window's content to <c>&lt;name&gt;.png</c>.
 /// The window draws its own content, so this works when the screen is locked

@@ -379,6 +379,7 @@ public sealed partial class FilePane : UserControl
     /// <summary>Shows the icon of <paramref name="key"/> in the rows that wait for it.</summary>
     public void RefreshIcon(string key)
     {
+        using var timed = FrameParts.Time(FramePart.Icons);
         foreach (var row in _realized)
         {
             if (string.Equals(row.IconKey, key, StringComparison.Ordinal))
@@ -399,6 +400,7 @@ public sealed partial class FilePane : UserControl
 
     private void OnElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
     {
+        var started = FrameParts.Start();
         if (args.Element is FileRow row)
         {
             _realized.Add(row);
@@ -415,10 +417,12 @@ public sealed partial class FilePane : UserControl
         {
             _detailsQueued = DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, AskForDetails);
         }
+        FrameParts.Stop(FramePart.Bind, started);
     }
 
     private void AskForDetails()
     {
+        var started = FrameParts.Start();
         _detailsQueued = false;
         var (first, last) = (_preparedFirst, _preparedLast);
         _preparedFirst = int.MaxValue;
@@ -428,10 +432,12 @@ public sealed partial class FilePane : UserControl
         {
             model.EnsureDetails(first, last);
         }
+        FrameParts.Stop(FramePart.Requests, started);
     }
 
     private void OnDetailsArrived(int from, int count)
     {
+        var started = FrameParts.Start();
         foreach (var row in _realized)
         {
             if (row.Index >= from && row.Index < from + count)
@@ -439,16 +445,19 @@ public sealed partial class FilePane : UserControl
                 row.RefreshDetails();
             }
         }
+        FrameParts.Stop(FramePart.Details, started);
     }
 
     private void OnElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
     {
+        var started = FrameParts.Start();
         if (args.Element is FileRow row)
         {
             _realized.Remove(row);
             row.IsSelected = false;
             row.ShowsCursor = false;
         }
+        FrameParts.Stop(FramePart.Bind, started);
     }
 
     // Logs "listing shown" at the first frame after the first row exists: from
@@ -486,10 +495,12 @@ public sealed partial class FilePane : UserControl
 
     private void MarkSelection()
     {
+        var started = FrameParts.Start();
         foreach (var row in _realized)
         {
             Mark(row, row.Index);
         }
+        FrameParts.Stop(FramePart.Selection, started);
     }
 
     private void Mark(FileRow row, int index)
@@ -581,6 +592,18 @@ public sealed partial class FilePane : UserControl
     }
 
     private int RowsPerPage() => Math.Max(1, (int)((Scroller.ViewportHeight - (2 * ListPadding)) / RowHeight) - 1);
+
+    /// <summary>The rows one PageDown moves now (the snapshot aid's scroll run reports it).</summary>
+    public int RowsPerPageNow => RowsPerPage();
+
+    /// <summary>PageDown as the key does it: the focus moves a page, alone selected (the snapshot aid's <c>scroll:</c> step).</summary>
+    public void PageDownForSnapshot()
+    {
+        if (_model is not null)
+        {
+            MoveFocus(_model.CurrentSelection.Focus + RowsPerPage(), SelectMode.Single);
+        }
+    }
 
     private void ScrollIntoView(int index)
     {

@@ -65,6 +65,7 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _noticeTimer;
     private readonly DispatcherQueueTimer _speedTimer;
     private readonly WindowArgs _args;
+    private readonly FrameMonitor? _frames;
     private readonly bool _selfTestCrash;
     private readonly string? _toolsDir;
     private UiSettings _settings = UiSettings.Defaults;
@@ -193,7 +194,8 @@ public sealed partial class MainWindow : Window
 
         if (FrameMonitor.Enabled)
         {
-            new FrameMonitor().Start();
+            _frames = new FrameMonitor(() => _session.CoreProcessId);
+            _frames.Start();
         }
         ApplyDual(true);
         UpdateStatus();
@@ -340,6 +342,9 @@ public sealed partial class MainWindow : Window
         {
             switch (step.Kind)
             {
+                case "scroll" when ScrollStep.TryParse(step.Argument, out var scroll):
+                    await ScrollForSnapshotAsync(scroll);
+                    break;
                 case "cmd" or "cmd-nowait":
                     var space = step.Argument.IndexOf(' ');
                     JsonElement? args = space < 0 ? null : JsonDocument.Parse(step.Argument[(space + 1)..]).RootElement.Clone();
@@ -444,6 +449,53 @@ public sealed partial class MainWindow : Window
                     break;
             }
         }
+    }
+
+    // The snapshot aid's scroll:<pages> step: PageDown in the active pane, 30 times a second as a
+    // held key repeats. A press that falls due during a slow frame is made at the next frame,
+    // as queued key messages are. scroll:<pages>/<n> presses once every n frames instead: with the
+    // display asleep Windows draws 30 frames a second, and one press every other frame is then the
+    // rhythm of 30 presses a second on a 60 Hz display. The frames of the presses are one run
+    // ("scroll run"); the second after the last press is another ("scroll settle"). docs/ui.md, "Scrolling".
+    private async Task ScrollForSnapshotAsync(ScrollStep scroll)
+    {
+        const int PerSecond = 30;
+        var pages = scroll.Pages;
+        var frames = 0;
+        var view = _paneViews[_active];
+        view.Focus(FocusState.Programmatic);
+        var firstFocus = Active.CurrentSelection.Focus;
+        var done = new TaskCompletionSource();
+        var pressed = 0;
+        long started = 0;
+        void OnFrame(object? sender, object e)
+        {
+            if (started == 0)
+            {
+                started = System.Diagnostics.Stopwatch.GetTimestamp();
+            }
+            var due = scroll.EveryFrames > 0
+                ? Math.Min(pages, (frames++ / scroll.EveryFrames) + 1)
+                : Math.Min(pages, 1 + (int)(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds * PerSecond));
+            while (pressed < due)
+            {
+                view.PageDownForSnapshot();
+                pressed++;
+            }
+            if (pressed >= pages)
+            {
+                CompositionTarget.Rendering -= OnFrame;
+                done.TrySetResult();
+            }
+        }
+        _frames?.BeginRun($"scroll:{scroll}");
+        CompositionTarget.Rendering += OnFrame;
+        await done.Task;
+        var rows = new[] { new LogField("pages", pages), new LogField("rows_moved", Active.CurrentSelection.Focus - firstFocus), new LogField("rows_per_page", view.RowsPerPageNow) };
+        _frames?.EndRun(rows);
+        _frames?.BeginRun("scroll settle");
+        await Task.Delay(1000);
+        _frames?.EndRun();
     }
 
     // Every WebView2 the window hosts, for the snapshot aid.
@@ -1978,6 +2030,7 @@ public sealed partial class MainWindow : Window
 
     private void OnPaneChanged(object? sender, PropertyChangedEventArgs e)
     {
+        using var timed = FrameParts.Time(FramePart.Status);
         if (e.PropertyName == nameof(PaneModel.Path) && _searchPane >= 0 && sender == _panes[_searchPane])
         {
             // The pane went elsewhere (Backspace, a crumb, a lost folder): its results are stale.

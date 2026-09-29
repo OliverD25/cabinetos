@@ -1,3 +1,4 @@
+using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Listing;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Services;
@@ -32,6 +33,7 @@ public sealed partial class FileRow : UserControl
         _plainIconBrush = Icon.Foreground;
         DataContextChanged += (_, _) =>
         {
+            var started = FrameParts.Start();
             if (DataContext is SearchRowItem hit)
             {
                 BindHit(hit);
@@ -40,6 +42,7 @@ public sealed partial class FileRow : UserControl
             {
                 Bind(DataContext as RowItem);
             }
+            FrameParts.Stop(FramePart.Bind, started);
         };
         PointerEntered += OnPointerEntered;
         PointerExited += OnPointerExited;
@@ -47,6 +50,15 @@ public sealed partial class FileRow : UserControl
 
     /// <summary>The row's index in its listing, or -1.</summary>
     public int Index { get; private set; } = -1;
+
+    /// <inheritdoc/>
+    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
+    {
+        var started = FrameParts.Start();
+        var size = base.MeasureOverride(availableSize);
+        FrameParts.Stop(FramePart.RowMeasure, started);
+        return size;
+    }
 
     /// <summary>The theme's stroke for a file named <paramref name="name"/> (the editor tab's glyph too).</summary>
     public static Brush IconBrushFor(string name) =>
