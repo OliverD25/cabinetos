@@ -33,7 +33,7 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper (with the light colours of a `system` theme) and the theme picker's model, the marketplace view's model and card texts, the in-app clipboard, the settings the window reads and writes, display formatting, and diagnostics. |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper (with the light colours of a `system` theme) and the theme picker's model, the marketplace view's model and card texts, the in-app clipboard, the settings the window reads and writes, display formatting, diagnostics, and the parts of Total Commander's keys that need no window (the marking styles, the marks kept by name, a pane's sort, measured folder sizes, quick search, the prompts' lists and pattern history, the drive memory). |
 | `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, the editor tabs of Tool Extensions, the plugin list and review, the theme applier (brushes, WinUI's accent, the tinted Mica backdrop) and the theme picker, the marketplace view, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
@@ -307,9 +307,10 @@ Every key press goes first to the window (`PreviewKeyDown`), then to the
 
 | Keys in a pane | What they do | From |
 |---|---|---|
-| Up, Down, Home, End, PageUp, PageDown | Move the focus; only the new row is selected | the pane |
-| the same with Shift | Select from the anchor to the new row | the pane |
+| Up, Down, Home, End, PageUp, PageDown | Move the focus; only the new row is selected (with `panes.selection: commander`, the marks stay) | the pane |
+| the same with Shift | Select from the anchor to the new row (commander: mark the rows passed over, "Marking") | the pane |
 | the same with Ctrl | Move the focus and keep the selection | the pane |
+| letters, digits, other characters no key takes | Quick search: the first name that starts with what was typed ("Quick search") | the pane |
 | Backspace | `go.up` | the pane |
 | Shift+F10, the Menu key | The context menu of the focused row | the pane |
 | Insert | `edit.toggleSelection`: select or unselect the focused row and move down (Total Commander) | keymap |
@@ -323,9 +324,13 @@ Every key press goes first to the window (`PreviewKeyDown`), then to the
 | Delete, Shift+Delete | `file.delete` to the Recycle Bin; `file.deletePermanently`, after a dialog | keymap |
 | Ctrl+X, Ctrl+C, Ctrl+V | `edit.cut`, `edit.copy`, `edit.paste` | keymap |
 | F5, F6, F7 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | keymap |
+| F8, Shift+F8, Shift+F6, Alt+F7, Ctrl+Num + | Total Commander's keys for delete, delete permanently, rename, search and select all, next to the ones above | keymap |
+| Space, the keypad, F3, F4, Ctrl+F3 to Ctrl+F6, and the rest of Total Commander's keys | "Total Commander's keys", below | keymap |
 
 The keys marked "keymap" are the core's defaults; each can be rebound in
-the palette or in `cabinetos.json`.
+the palette or in `cabinetos.json`. The keypad's operators are keys of
+their own (`numpadadd` and the rest, shown as "Num +"); its digits are the
+plain digits.
 
 Click selects one row, Ctrl+Click adds or removes one, Shift+Click selects
 a range. A right-click inside the selection keeps it; outside, it selects
@@ -395,6 +400,7 @@ search hit. From the context menu it gets the menu's rows
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
 | `view.toggleTerminal` | Shows the terminal, gives the keyboard back to the pane, or hides it ("The terminal") |
 | `marketplace.browse`, `preferences.selectColorTheme` | Open the marketplace and the theme picker ("The marketplace", "Themes") |
+| `go.root` to `terminal.insertSelectedPaths` | Total Commander's small commands, 31 of them, run in the window ("Total Commander's keys") |
 | `workspace.switch`, `terminal.runTask` | "arrives in a later version" in the status bar |
 
 ### Dialogs
@@ -678,6 +684,177 @@ when they open for a button that is not shown (`OpenToolTips.Set`).
 Checked with the snapshot step `tooltip:Change keybinding`: open with the
 palette shown, and closed at once after the palette closed.
 
+## Total Commander's keys
+
+Sub-phase 11a gives Total Commander users the keys their hands know
+([research/total-commander.md](research/total-commander.md), Part 3 (b)).
+The core lists 31 new commands with target `ui` and their keys (protocol
+12, [keybindings.md](keybindings.md)), and gave five existing commands a
+Total Commander key next to their own: F8 and Shift+F8 delete, Shift+F6
+renames, Alt+F7 finds files, Ctrl+Num + marks every row. The window's
+handlers are in `MainWindow.Commander.cs`; what they share without a
+window is in `CabinetOS.Core` and tested there.
+
+| Keys | Command | What the window does |
+|---|---|---|
+| Ctrl+\ | `go.root` | The drive's root (`C:\`), or the share's (`\\server\share\`) |
+| Alt+F1, Alt+F2 | `go.chooseDriveLeft`, `go.chooseDriveRight` | The drive list under that pane ("The drive list") |
+| Ctrl+Left, Ctrl+Right | `go.showInLeftPane`, `go.showInRightPane` | The folder under the cursor, or the pane's own folder when the cursor is on a file, shown in that pane; the right pane appears first when one pane is shown |
+| Ctrl+D | `go.pinnedFolders` | The sidebar's folders in the palette's frame ("Prompts in the palette's frame") |
+| Ctrl+U | `view.swapPanes` | The panes change places with all they hold: folder, marks, history, sort, search results. The keyboard stays on its side |
+| Ctrl+R | `view.refresh` | The folder listed again, for drives whose changes Windows does not report; the cursor and the marks stay, found again by name |
+| Ctrl+F3 to Ctrl+F6 | `view.sortByName`, `view.sortByExtension`, `view.sortByModified`, `view.sortBySize` | The pane's own order ("A pane's order") |
+| Space | `edit.toggleSelectionInPlace` | Marks or unmarks the cursor row, and the cursor stays; a folder it marks is measured |
+| Num +, Num - | `edit.selectByPattern`, `edit.unselectByPattern` | The pattern box ("Prompts in the palette's frame") |
+| Alt+Num +, Alt+Num - | `edit.selectSameExtension`, `edit.unselectSameExtension` | Every file with the cursor file's extension: `*.txt`, and `*.` (no dot) for a name without one |
+| Num * | `edit.invertSelection` | The files' marks turn around; folders keep theirs |
+| Ctrl+Num - | `edit.unselectAll` | Nothing marked; a command then acts on the cursor row |
+| Num / | `edit.restoreSelection` | The marks the last copy, move, delete or unmark cleared in this pane, found again by name; a name that is gone is skipped |
+| Ctrl+Shift+C, Ctrl+K Ctrl+N, Ctrl+K Ctrl+P | `edit.copyFullPath`, `edit.copyName`, `edit.copyFolderPath` | The targets' paths, their names, or the pane's folder, on Windows' clipboard as text: one per line, no quotes. CabinetOS's own file clipboard (Ctrl+C) is not touched |
+| F3 | `file.view` | The cursor file in the first installed Tool Extension that shows it; without one, a note in the status bar, never the file's default program (which for a program would run it). On a folder, its size, as Total Commander's F3 |
+| F4 | `file.edit` | The cursor file opens for editing, and never runs: `files.editor`, else the type's edit verb, else Notepad; the core decides (`edit_path`) |
+| Shift+F4 | `file.newTextFile` | A name box over a new row ("New text file") |
+| (none) | `file.windowsProperties` | Windows' own property sheet for the targets, or the folder (`show_properties`); also the "Windows Properties" button of the Properties dialog |
+| (none), Shift+Alt+Enter | `file.calculateFolderSize`, `file.calculateAllFolderSizes` | The marked folders, or the cursor folder; or every folder of the listing: measured ("Folder sizes") |
+| Ctrl+P, Ctrl+Shift+Enter | `terminal.insertPath`, `terminal.insertSelectedPaths` | The terminal shows, its default shell started when none runs, with the pane's folder, or the targets' paths, typed at the prompt, quoted for that shell and without Enter (`terminal_type_paths`); the terminal gets the keyboard |
+
+Snapshots of 2026-09-29 in [log/2026-09-28/](log/2026-09-28/):
+`11a-drive-list.png`, `11a-pattern-box.png`, `11a-pinned-folders.png`,
+`11a-folder-sizes.png`, `11a-quick-search.png`, `11a-new-text-file.png`
+and `11a-terminal-path.png`.
+
+### Marking
+
+`panes.selection` ([config.md](config.md)) says how the keyboard marks.
+`windows`, the default, is Explorer's: a key that moves the cursor
+selects the row it moves to. `commander` is Total Commander's
+(`SelectionModel.KeyMode`, tested in both styles):
+
+- A key that moves the cursor keeps the marks, and a new listing starts
+  with nothing marked. A command acts on the marked rows, or on the cursor
+  row when none is marked; the cursor row has an outline.
+- Shift with a key that moves the cursor marks the rows it leaves, not the
+  one it lands on, so Shift+Down marks one row per press. When the cursor
+  cannot move (the end of the list), the row it stays on is marked. Shift
+  with Home or End marks through the first or the last row. If the row the
+  cursor leaves was marked, the rows passed over are unmarked instead.
+- The mouse keeps the Windows rules in both styles: a click selects one
+  row, Ctrl+Click toggles one, Shift+Click selects a range.
+
+A change of the setting applies at once and keeps the marks; the Windows
+style then selects the cursor row when nothing is selected. Space in the
+Windows style on the cursor row, selected alone by the key that moved
+there, keeps it selected (and measures a folder) instead of leaving
+nothing selected.
+
+### Prompts in the palette's frame
+
+The pattern box, the pinned folders and the drive list use one prompt,
+`PromptBox`: the palette's Acrylic panel, entrance and rows, with a label,
+a box, an optional check box, a few rows and a hint line. Up and Down move
+the highlight, Enter takes it, Esc (`overlay.close`) or a click outside
+cancels, and the keyboard goes back to the pane.
+
+- **The pattern box** (Num +, Num -) offers the last pattern, `*.*` the
+  first time, selected, and lists the last ten of this session; Up and
+  Down put one in the box. Total Commander's syntax: `*` and `?`, `;`
+  between patterns, `|` before the ones to leave out (`*.*|*.bak`). The
+  core matches (`match_entries`), case ignored; the window never reads
+  the names for it. "Include folders" is off by default, so a pattern
+  marks files. The answer is a list of row ranges of the section the core
+  read; an answer about an older listing is asked again, so no mark lands
+  on the wrong row. The status bar says how many rows matched.
+- **The pinned folders** (Ctrl+D) are the sidebar's; typing narrows them
+  by name or path, Enter goes there in the active pane, and the last row
+  pins the pane's folder when it is not pinned yet.
+- **The drive list** (Alt+F1, Alt+F2) has no box: it opens under that
+  pane's header with the sidebar's `list_volumes` data (name, free space),
+  the pane's own drive highlighted. A drive's letter picks it at once, as
+  in Total Commander; the arrows and Enter, or a click, too. A drive goes
+  to the folder this pane last showed on it in this session, else to its
+  root (`DriveMemory`). A WinUI `Flyout` was tried first: the snapshot aid
+  could not draw it (its presenter gave `RenderTargetBitmap` no pixels),
+  and the prompt is part of the window.
+
+### A pane's order
+
+Ctrl+F3 to Ctrl+F6 sort the active pane by name, extension, date modified
+or size, and the same key again reverses the order. A pane keeps its
+order and sends it with each of its listings; the core sorts (the key
+`extension` is protocol 12), the other pane and `panes.sort` stay as they
+are. A new key starts in its own direction, the largest and the newest
+first for size and time, as in Total Commander (`PaneSort`). The cursor
+and the marks stay. The sorted column's heading has a small chevron, up
+from A to Z (smallest, oldest), down the other way; the design's plain
+headings stay for its default, name from A to Z. The status bar says the
+order: "Sorted by size, largest first."
+
+### Folder sizes
+
+A folder's Size is empty until it is measured: Space on a folder,
+Calculate Folder Size (the marked folders, or the cursor folder), Shift+
+Alt+Enter (every folder of the listing), or F3 on a folder. The core
+counts (`measure_paths`); the Size column shows its running total in the
+tertiary colour, then the total. The status bar's selected size adds the
+measured folders, and one selected measured folder says its size ("1
+selected · WinSxS, 3.5 GB"); folders that could not be read are named
+there, and are not in the size. Sizes belong to the folder the pane
+shows (`FolderSizes`): leaving it forgets them and cancels a count still
+running. A folder being counted is not asked about again. Checked on
+2026-09-29: Space on `C:\Windows\WinSxS` showed 2.3 GB while the core
+counted and 3.5 GB at the end; Shift+Alt+Enter on the repository counted
+`core\` at 27.7 GB in under a second.
+
+### New text file
+
+Shift+F4 shows a name box over a new row at the top of the rows on
+screen, "New Text Document.txt" with the name part selected. Enter asks
+the core to create the empty file (`create_file`, which never replaces
+one); the row is selected once the watcher lists it, and the file opens
+for editing as F4 does. A name that is taken opens that file instead, as
+in Total Commander; a folder's name is refused in the status bar. Esc
+cancels.
+
+### Quick search
+
+Letters typed in a pane, where no key of the keymap takes them, jump to
+the first name that starts with them; the status bar shows "Quick search:
+rep". After a second without a key a new search starts, as in Explorer;
+Esc clears it, and so does another folder. The core finds the name
+(`match_entries` with `first_from`): a search's first letter looks from
+the row after the cursor, so the same letter again goes on to the next
+name; a longer text looks from the cursor. The characters come from
+`CharacterReceived`, so the keyboard layout decides (Cyrillic works), and
+Ctrl or Alt alone makes a shortcut, not a letter; AltGr types. A key the
+window took first, Space among them, types nothing into the search, so a
+search cannot hold a space; `;` and `|` find nothing, since the pattern
+syntax reads them.
+
+### Checked
+
+- Unit tests: `SelectionModelTests` (both styles, Space, invert,
+  unmark), `MarkMemoryTests`, `PaneSortTests`, `FolderSizesTests`,
+  `QuickSearchTests`, `PromptTests` (the pattern history, the pick list,
+  ranges, the same extension), `DriveMemoryTests`, `KeyTests` (the keypad
+  names), `DisplayFormatTests` (the root), `TerminalTests` (paths typed
+  hold the line) and `ProtocolTests` (the version 12 messages against the
+  core's schemas).
+- End-to-end against the real core (`CommanderEndToEndTests`): the sort by
+  extension; `create_file` and `edit_path` with an editor found nowhere,
+  so none starts; `show_properties` errors; `measure_paths` into
+  `FolderSizes`; `match_entries` for the pattern box, the same extension
+  and quick search; `terminal_type_paths` for a shell that is gone.
+- The snapshot aid (steps `type:` and `accept` for a prompt, `drive:`,
+  `quick:`), with a stand-in editor that notes each file and shows no
+  window (`wscript.exe` and a script, as `files.editor`): F3 on a program
+  said no tool shows it, F4 and Shift+F4 handed it the file, the Windows
+  Properties button opened the sheet, which closed with the core.
+- `ui/livecheck/livecheck.ps1` presses the keys for real: Num *, Ctrl+Num
+  -, Num + with `*.txt`, Space on a folder, Shift+Alt+Enter, F3 on a
+  program, F4 and Shift+F4 with its own stand-in editor, a quick search
+  and F8, Shift+F8, Ctrl+P, Ctrl+\, Alt+F1, Ctrl+U; the planning session
+  runs it.
+
 ## Search
 
 The field in the command bar (Ctrl+F, `search.focus`; placeholder
@@ -716,8 +893,14 @@ nothing.
 - In search results, the file commands (F5, F6, F7, Delete, F2, Ctrl+X,
   Ctrl+C, Ctrl+V, Alt+Enter, Insert, Ctrl+A) only say "These are search
   results: Enter goes to a hit, Esc back to the folder." The listing's
-  selection is out of sight, so they must not act on it. Hits have no
-  context menu.
+  selection is out of sight, so they must not act on it. So do Total
+  Commander's selection and file commands: Space, Num +, Num -,
+  Alt+Num +, Alt+Num -, Num *, Ctrl+Num -, Num /, Ctrl+F3 to Ctrl+F6,
+  Ctrl+Shift+C, Ctrl+K Ctrl+N, F3, F4, Shift+F4, Windows Properties from
+  a key, Calculate Folder Size, Shift+Alt+Enter, Ctrl+Left, Ctrl+Right and
+  Ctrl+Shift+Enter. Ctrl+R runs the search again; Ctrl+\, Ctrl+U, Ctrl+D,
+  Alt+F1, Alt+F2, Ctrl+K Ctrl+P and Ctrl+P act on the pane, not the hits,
+  and work. Hits have no context menu and no quick search.
 - An answer to an older request, or one that arrives after the search was
   left, is dropped (`SearchModel`, tested). The status bar counts the hits
   and shows the focused hit's path.
@@ -1604,9 +1787,8 @@ planning session's, on a screen someone watches.
 | Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
 | Light-mode tokens from the design | The design has none yet; a `system` theme in light mode uses Windows 11's own light colours ("Themes") |
 | Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |
-| Sorting by a column | The column headers are static; the order is `panes.sort` from `cabinetos.json` |
+| Sorting by a click on a column heading | The headings are static; Ctrl+F3 to Ctrl+F6 sort a pane ("A pane's order"), and sub-phase 11c brings the headings |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
-| A shell property sheet | Properties shows the listing's metadata |
 
 ## Known gaps
 
