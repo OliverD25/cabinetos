@@ -410,8 +410,13 @@ public class ProtocolTests
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"jobs_started","jobs":[12,13]}""",
                 b => Assert.Equal([12UL, 13UL], Assert.IsType<JobsStartedReply>(b).Jobs)),
-            ($$$"""{"id":"{{{Id}}}","type":"plugins","plugins":[{"id":"agent","name":"Agent","version":"0.1.0","author":"CabinetOS","description":"Works next to you.","state":{"type":"needs_review","missing":["net"]},"capabilities":[{"name":"net","level":"high","granted":false,"reason":"Asks the model provider.","hosts":["api.anthropic.com","localhost:11434"]}],"commands":[]}]}""",
-                b => Assert.Equal(["api.anthropic.com", "localhost:11434"], Assert.IsType<PluginsReply>(b).Plugins.Single().Capabilities.Single().Hosts)),
+            ($$$"""{"id":"{{{Id}}}","type":"plugins","plugins":[{"id":"agent","name":"Agent","version":"0.1.0","author":"CabinetOS","description":"Works next to you.","state":{"type":"needs_review","missing":["net"]},"capabilities":[{"name":"net","level":"high","granted":false,"reason":"Asks the model provider.","hosts":["api.anthropic.com","localhost:11434"],"secrets":["anthropic"]}],"commands":[]}]}""",
+                b =>
+                {
+                    var capability = Assert.IsType<PluginsReply>(b).Plugins.Single().Capabilities.Single();
+                    Assert.Equal(["api.anthropic.com", "localhost:11434"], capability.Hosts);
+                    Assert.Equal(["anthropic"], capability.Secrets);
+                }),
         };
         foreach (var (json, check) in samples)
         {

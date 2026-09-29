@@ -181,7 +181,7 @@ public sealed partial class PluginsPanel : UserControl
             Foreground = ThemeResources.Brush("CbHintTextBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         });
-        ToolTipService.SetToolTip(line, capability.DetailWithHosts);
+        ToolTipService.SetToolTip(line, capability.FullDetail);
         return line;
     }
 

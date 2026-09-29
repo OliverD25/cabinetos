@@ -24,7 +24,7 @@ public static class CapabilityLevels
 }
 
 /// <summary>One capability as the list and the review dialog show it.</summary>
-public sealed record CapabilityRow(string Name, string Level, string Reason, string? Roots, bool Granted, string? Hosts = null)
+public sealed record CapabilityRow(string Name, string Level, string Reason, string? Roots, bool Granted, string? Hosts = null, string? Secrets = null)
 {
     /// <summary>"LOW", "MEDIUM", "HIGH".</summary>
     public string LevelText => Level.ToUpperInvariant();
@@ -42,14 +42,22 @@ public sealed record CapabilityRow(string Name, string Level, string Reason, str
     /// </summary>
     public string? HostsText => Hosts is { Length: > 0 } hosts ? $"Can reach: {hosts}" : null;
 
-    /// <summary>The reason with the hosts, for a tooltip.</summary>
-    public string DetailWithHosts => HostsText is { } text ? $"{Detail} {text}" : Detail;
+    /// <summary>
+    /// For <c>net</c>, the names of the stored secrets the core may send for the plugin
+    /// ("Can use the stored secrets: anthropic"); null when it names none. Only the names
+    /// show, never a value (Article 8).
+    /// </summary>
+    public string? SecretsText => Secrets is { Length: > 0 } secrets ? $"Can use the stored secrets: {secrets}" : null;
+
+    /// <summary>The reason with the hosts and the secrets, for a tooltip.</summary>
+    public string FullDetail => string.Join(" ", new[] { Detail, HostsText, SecretsText }.Where(t => t is not null));
 
     /// <summary>The row of a capability of the core's list.</summary>
     public static CapabilityRow From(CapabilityInfo capability) =>
         new(capability.Name, capability.Level, capability.Reason,
             capability.Roots is { Count: > 0 } roots ? string.Join("; ", roots) : null, capability.Granted,
-            capability.Hosts is { Count: > 0 } hosts ? string.Join(", ", hosts) : null);
+            capability.Hosts is { Count: > 0 } hosts ? string.Join(", ", hosts) : null,
+            capability.Secrets is { Count: > 0 } secrets ? string.Join(", ", secrets) : null);
 }
 
 /// <summary>
@@ -155,7 +163,7 @@ public sealed class PermissionReview(PluginInfo plugin)
     public static PermissionReview ForInstall(MarketItem item)
     {
         var capabilities = (item.Capabilities ?? [])
-            .Select(c => new CapabilityInfo(c.Name, c.Level ?? "unknown", false, c.Reason, c.Roots, c.Hosts))
+            .Select(c => new CapabilityInfo(c.Name, c.Level ?? "unknown", false, c.Reason, c.Roots, c.Hosts, c.Secrets))
             .ToList();
         var plugin = new PluginInfo(item.Id, item.Name, item.Version, item.Author.Name, item.Description,
             new PluginState(PluginState.NeedsReview, capabilities.Select(c => c.Name).ToList()), capabilities, []);

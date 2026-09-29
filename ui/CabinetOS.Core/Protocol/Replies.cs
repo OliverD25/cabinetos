@@ -225,7 +225,7 @@ public sealed record IndexVolumeStatus(string Letter, IndexState State, ulong En
 public sealed record IndexStatusReply(bool Available, IReadOnlyList<IndexVolumeStatus> Volumes) : CoreReply;
 
 /// <summary>One capability a plugin asks for, for the review dialog.</summary>
-public sealed record CapabilityInfo(string Name, string Level, bool Granted, string Reason, IReadOnlyList<string>? Roots = null, IReadOnlyList<string>? Hosts = null);
+public sealed record CapabilityInfo(string Name, string Level, bool Granted, string Reason, IReadOnlyList<string>? Roots = null, IReadOnlyList<string>? Hosts = null, IReadOnlyList<string>? Secrets = null);
 
 /// <summary>
 /// Where a plugin is: <c>loading</c>, <c>active</c>, <c>disabled</c>,
@@ -459,7 +459,7 @@ public sealed record MarketRating(double Average, ulong Count);
 public sealed record MarketDownload(string Url, string Sha256);
 
 /// <summary>A capability a plugin asks for, as the index lists it; the core adds the level.</summary>
-public sealed record MarketCapability(string Name, string Reason, string? Level = null, IReadOnlyList<string>? Roots = null, IReadOnlyList<string>? Hosts = null);
+public sealed record MarketCapability(string Name, string Reason, string? Level = null, IReadOnlyList<string>? Roots = null, IReadOnlyList<string>? Hosts = null, IReadOnlyList<string>? Secrets = null);
 
 /// <summary>
 /// One extension as the core offers it (docs/marketplace.md, "The index"):

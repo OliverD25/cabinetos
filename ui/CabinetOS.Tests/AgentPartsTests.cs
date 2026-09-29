@@ -339,7 +339,7 @@ public class AgentPartsTests
         var plugin = new PluginInfo("agent", "Agent", "0.1.0", "CabinetOS", "Works next to you.",
             new PluginState(PluginState.NeedsReview, ["net"]),
             [
-                new CapabilityInfo("net", "high", false, "Asks the model provider.", null, ["api.anthropic.com", "localhost:11434"]),
+                new CapabilityInfo("net", "high", false, "Asks the model provider.", null, ["api.anthropic.com", "localhost:11434"], ["anthropic"]),
                 new CapabilityInfo("fs:read", "medium", false, "Reads the folder you point it at.", [@"C:\photos"]),
                 new CapabilityInfo("cmd:register", "low", false, "Adds the Ask command."),
             ],
@@ -348,10 +348,12 @@ public class AgentPartsTests
         var rows = new PermissionReview(plugin).Rows;
 
         Assert.Equal("Can reach: api.anthropic.com, localhost:11434", rows[0].HostsText);
-        Assert.Equal("Asks the model provider. Can reach: api.anthropic.com, localhost:11434", rows[0].DetailWithHosts);
+        Assert.Equal("Can use the stored secrets: anthropic", rows[0].SecretsText);
+        Assert.Equal("Asks the model provider. Can reach: api.anthropic.com, localhost:11434 Can use the stored secrets: anthropic", rows[0].FullDetail);
         Assert.Equal("Asks the model provider.", rows[0].Detail);
         Assert.Null(rows[1].HostsText);
-        Assert.Equal(@"Reads the folder you point it at. (C:\photos)", rows[1].DetailWithHosts);
+        Assert.Null(rows[1].SecretsText);
+        Assert.Equal(@"Reads the folder you point it at. (C:\photos)", rows[1].FullDetail);
         Assert.Null(rows[2].HostsText);
     }
 
@@ -361,16 +363,20 @@ public class AgentPartsTests
         var plugins = MessageCodec.Decode("""
             {"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"plugins","plugins":[{"id":"agent","name":"Agent","version":"0.1.0","author":"CabinetOS",
               "description":"","state":{"type":"needs_review","missing":["net"]},
-              "capabilities":[{"name":"net","level":"high","granted":false,"reason":"Asks the provider.","hosts":["api.anthropic.com"]}],"commands":[]}]}
+              "capabilities":[{"name":"net","level":"high","granted":false,"reason":"Asks the provider.","hosts":["api.anthropic.com"],"secrets":["anthropic"]}],"commands":[]}]}
             """u8);
         var capability = Assert.IsType<PluginsReply>(plugins.Body).Plugins.Single().Capabilities.Single();
         Assert.Equal(["api.anthropic.com"], capability.Hosts);
+        Assert.Equal(["anthropic"], capability.Secrets);
 
-        var market = JsonSerializer.Deserialize<MarketCapability>("""{"name":"net","reason":"Asks the provider.","hosts":["localhost:11434"]}""", Web);
+        var market = JsonSerializer.Deserialize<MarketCapability>("""{"name":"net","reason":"Asks the provider.","hosts":["localhost:11434"],"secrets":["local-key"]}""", Web);
         Assert.Equal(["localhost:11434"], market!.Hosts);
+        Assert.Equal(["local-key"], market.Secrets);
         using var manifest = JsonDocument.Parse("{}");
         var item = new MarketItem("agent", ExtensionKinds.Plugin, "Agent", new MarketAuthor("CabinetOS"), "0.1.0", "Works next to you.", 1000,
             new MarketDownload("files/agent-0.1.0.zip", new string('a', 64)), manifest.RootElement.Clone(), "0.1.0", "MIT", Capabilities: [market]);
-        Assert.Equal("Can reach: localhost:11434", PermissionReview.ForInstall(item).Rows.Single().HostsText);
+        var row = PermissionReview.ForInstall(item).Rows.Single();
+        Assert.Equal("Can reach: localhost:11434", row.HostsText);
+        Assert.Equal("Can use the stored secrets: local-key", row.SecretsText);
     }
 }

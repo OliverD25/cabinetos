@@ -143,12 +143,13 @@ public sealed partial class ReviewDialog : UserControl
             Foreground = ThemeResources.Brush("CbStatusTextBrush"),
             TextWrapping = TextWrapping.Wrap,
         });
-        if (row.HostsText is { } hosts)
+        foreach (var network in new[] { row.HostsText, row.SecretsText }.OfType<string>())
         {
-            // Under the reason, in the normal text colour: the user reads where the plugin may connect before allowing it.
+            // Under the reason, in the normal text colour: the user reads where the plugin may connect,
+            // and which stored secrets it may use there, before allowing it.
             text.Children.Add(new TextBlock
             {
-                Text = hosts,
+                Text = network,
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 2, 0, 0),

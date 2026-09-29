@@ -1129,8 +1129,8 @@ for, and says what they do (Constitution Article 8).
   until plugins bring icons of their own), "Review permissions", "{name}
   by {author}", "This plugin runs in a WebAssembly sandbox. It can only do
   what you allow here.", one row per capability (level dot, name, LEVEL,
-  reason, the folders for `fs:read` and `fs:write`, and the hosts for
-  `net`), the box "Trust
+  reason, the folders for `fs:read` and `fs:write`, and the hosts and the
+  stored secrets' names for `net`), the box "Trust
   {author} for future updates", disabled with the tooltip "Publisher
   identities come in a later version; until then every update is
   reviewed.", and Cancel / "Allow and install". Allow sends
@@ -1232,10 +1232,13 @@ and [plugins.md](plugins.md).
   takes drops for itself), with a 2 px accent edge and the caption "Send to
   {tool}" where a drop is possible. The drag carries the paths as text, one
   per line; the selection goes with it when the dragged row is part of it.
-- **A `net` capability's hosts.** The permissions review shows a line
-  under the reason, "Can reach: api.anthropic.com, localhost:11434", in
-  the normal text colour; the plugin list has it in the tooltip. The user
-  reads where a plugin may connect before allowing it (Article 8).
+- **A `net` capability's hosts and secrets.** The permissions review shows
+  a line under the reason, "Can reach: api.anthropic.com, localhost:11434",
+  and, when the manifest names stored secrets, a second one, "Can use the
+  stored secrets: anthropic", in the normal text colour; the plugin list has
+  both in the tooltip. Only the names show, never a value. The user reads
+  where a plugin may connect, and which secrets it may use there, before
+  allowing it (Article 8).
 
 Checked with the snapshot aid against the real core: a preview of six files
 shows the rows (create, three renames, a delete tinted red, a move and a
