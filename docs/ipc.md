@@ -125,7 +125,7 @@ as absent from an older core.
 | `get_icon` | `key`, `size` (16, 24, 32 or 48) | `icon` (`key`, `size`, `png_base64`) |
 | `volume_info` | `path` (need not exist) | `volume_info` |
 | `list_volumes` | — | `volumes` (`volumes`) |
-| `open_path` | `path` (absolute) | `ok` |
+| `open_path` | `path` (absolute) | `ok`; a console program gets a console window of its own |
 | `edit_path` | `path` (absolute, a file) | `ok` |
 | `show_properties` | `paths` (absolute, at least one) | `ok` |
 | `create_directory` | `path` (absolute; the parent must exist) | `ok` |
@@ -638,7 +638,11 @@ so they need no job; copy, move and delete are jobs ("Jobs" below).
 `open_path` opens a file or folder with its default application, as a
 double-click in Explorer does: the shell's `open` verb
 (`ShellExecuteExW`), without error dialogs. The reply comes once the shell
-has handed the file over, not when the application ends. Which
+has handed the file over, not when the application ends. A console
+program (a batch file, a script, a console `.exe`) gets a console window
+of its own, as from Explorer (`SEE_MASK_NO_CONSOLE`): the window starts
+the core without a console window, and a program that shared the core's
+console would run where nobody sees it. Which
 application that is, is the user's choice in Windows: an editor or viewer
 for a document, Explorer for a folder, the program itself for an `.exe`.
 The path must be absolute (`invalid_path` otherwise) and must exist as

@@ -29,7 +29,9 @@ use crate::{FsError, path};
 
 /// Opens `path`, a file or a folder, with its default application: the
 /// `open` verb of `ShellExecuteExW`, without error dialogs, returning once
-/// the shell has handed it over (not when the application ends).
+/// the shell has handed it over (not when the application ends). A console
+/// program (a batch file, a script, a console `.exe`) gets a console window
+/// of its own, as from Explorer.
 ///
 /// The path must exist as given. The shell would otherwise look further: a
 /// name without an extension may run a program with that name.
@@ -38,13 +40,20 @@ pub fn open_path(path: &str) -> Result<(), FsError> {
     let plain = plain_wide(path)?;
     // The shell may hand the file to a COM server; COM wants to be ready.
     let _apartment = Apartment::enter();
-    shell_execute(&Launch {
+    shell_execute(&open_launch(&plain)).map_err(|error| refused(path, &plain, &error))
+}
+
+/// The launch of `open_path` for the NUL-terminated plain path `plain`.
+/// Without `SEE_MASK_NO_CONSOLE` a console program would share the core's
+/// console, which the window starts without a window: it would run where
+/// nobody sees it.
+fn open_launch(plain: &[u16]) -> Launch<'_> {
+    Launch {
         verb: w!("open"),
-        file: &plain,
+        file: plain,
         parameters: None,
-        mask: 0,
-    })
-    .map_err(|error| refused(path, &plain, &error))
+        mask: SEE_MASK_NO_CONSOLE,
+    }
 }
 
 /// Shows Windows' own property sheet for `paths`, each of which must
@@ -227,7 +236,17 @@ struct Launch<'a> {
 /// Runs `launch` without error dialogs, returning once the shell is done
 /// with it. The caller is in a COM apartment.
 fn shell_execute(launch: &Launch<'_>) -> windows::core::Result<()> {
-    let mut info = SHELLEXECUTEINFOW {
+    let mut info = execute_info(launch);
+    // SAFETY: `info` is a valid structure with its size in `cbSize`; its
+    // strings are `launch`'s, NUL-terminated, and outlive the call, which
+    // returns once the shell is done with them (SEE_MASK_NOASYNC).
+    unsafe { ShellExecuteExW(&raw mut info) }
+}
+
+/// What `ShellExecuteExW` gets for `launch`: always without error dialogs
+/// and returning only once the shell is done, plus the launch's own flags.
+fn execute_info(launch: &Launch<'_>) -> SHELLEXECUTEINFOW {
+    SHELLEXECUTEINFOW {
         cbSize: u32::try_from(size_of::<SHELLEXECUTEINFOW>()).unwrap_or(u32::MAX),
         fMask: SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI | launch.mask,
         lpVerb: launch.verb,
@@ -237,11 +256,7 @@ fn shell_execute(launch: &Launch<'_>) -> windows::core::Result<()> {
             .map_or_else(PCWSTR::null, |parameters| PCWSTR(parameters.as_ptr())),
         nShow: SW_SHOWNORMAL.0,
         ..SHELLEXECUTEINFOW::default()
-    };
-    // SAFETY: `info` is a valid structure with its size in `cbSize`; its
-    // strings are NUL-terminated and outlive the call, which returns once
-    // the shell is done with them (SEE_MASK_NOASYNC).
-    unsafe { ShellExecuteExW(&raw mut info) }
+    }
 }
 
 /// The error for a file the shell refused to open, `plain` its
@@ -605,6 +620,23 @@ mod tests {
                 (!sheets().contains(&sheet)).then_some(())
             });
         }
+    }
+
+    /// What `open_path` hands the shell for a batch file: a console of its
+    /// own, no error dialogs, the call returning once the shell is done.
+    /// The launch itself is not made: it would run the file.
+    #[test]
+    fn open_path_gives_a_console_program_a_console_of_its_own() {
+        let file: Vec<u16> = r"C:\workuild 2026.cmd".encode_utf16().chain([0]).collect();
+        let info = execute_info(&open_launch(&file));
+        let wanted = SEE_MASK_NO_CONSOLE | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+        assert_eq!(info.fMask & wanted, wanted, "{:#x}", info.fMask);
+        assert_eq!(info.fMask & SEE_MASK_INVOKEIDLIST, 0);
+        // SAFETY: the verb is a NUL-terminated string literal from `w!`.
+        assert_eq!(unsafe { info.lpVerb.to_string() }.unwrap(), "open");
+        assert_eq!(info.lpFile.0, file.as_ptr());
+        assert!(info.lpParameters.is_null());
+        assert_eq!(info.nShow, SW_SHOWNORMAL.0);
     }
 
     #[test]
