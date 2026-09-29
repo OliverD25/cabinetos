@@ -179,9 +179,11 @@ the left pane at each section's start; two pass lines that read as False.
 
 Findings:
 
-- On this PC Alt+F1 never reaches the window: the Claude desktop app's
-  global hotkey takes it and brings its own window to the front. The key
-  is bound right; it cannot be checked with real keys here.
+- During these runs Alt+F1 never reached the window: the Claude desktop
+  app's global hotkey took it and brought its own window to the front.
+  The creator freed the key the same evening, and a probe (a fresh window,
+  Alt+F1 sent the same way) then logged `go.chooseDriveLeft` from the key
+  and the "Drives" prompt with 11 rows.
 - With the Markdown Preview open in the other pane, the keyboard after
   Ctrl+P was lost to a web page in three runs: neither Ctrl+` nor the
   palette chord reached the window until a mouse click. With the preview

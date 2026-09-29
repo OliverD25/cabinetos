@@ -135,9 +135,9 @@ waiting, that the keyboard and mouse are free again. The script types into a
 name box only after the window's "rename box shown" line, reads the
 selection from its "selection shown" line, stops when a window of another
 process comes to the front (a flyout of the window's own process is fine),
-and, where a global hotkey of another program takes Alt+F1 (the Claude
-desktop app on the development PC), says so and opens the drive list from
-the palette.
+and, where a global hotkey of another program takes Alt+F1 (as the Claude
+desktop app's did on the development PC until it was changed), says so and
+opens the drive list from the palette.
 
 Run one only on an unlocked screen you are watching. It stops when the
 screen is locked, and the moment another window comes to the front, so no
