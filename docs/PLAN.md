@@ -635,6 +635,35 @@ process's newest lines. Tests: core +12 (the end-to-end ones in
 Guide: [diagnostics.md](diagnostics.md), "How an action's trace id
 travels".
 
+**Heavy mode in the core, built 2026-09-30 (3f053d3, bd36611).**
+`logging.heavy` in `cabinetos.json` (or `CABINETOS_LOG_HEAVY=1`, which
+wins, like `CABINETOS_LOG`) switches it within a second while the core
+runs. Every event at every level, TRACE included, goes into
+`heavy-<process>.<date>[.<part>].jsonl` next to the normal files: the
+prefix, because the daily writer prunes every file whose name starts with
+the process name; a new part every 256 MiB, so a file in use never grows
+past the cap; 2 GiB in the folder across all processes, the oldest part
+deleted first and named in the normal log, never a file another process
+has open. The queue is counted in bytes: over 256 MiB a thread waits in
+50 ms slices and the wait is logged afterwards ("heavy log waited",
+with the trace); the core's async workers and its main thread, which
+carry the pipe, never wait and get 32 MiB of extra room, then drop and
+count. That is the exception the creator chose to Article 12, for heavy
+mode only, to be recorded as ADR 0013. Heavy-only lines carry a target
+under `heavy::` and stay out of the normal file: the request and reply
+payloads (masked, 64 KB per line, `truncated` when cut), one `entry done`
+per piece of job work with its kind, paths, bytes, milliseconds and
+outcome, every plugin host call with its arguments, and every marketplace
+HTTP request's host, method, status, bytes and time. Masking covers the
+secret messages' values, every field named like a secret at any depth,
+and the authorization, x-api-key and cookie headers in any shape. A
+listing still logs one line per listing, never one per entry. The
+indexer follows the environment variable only, since it does not read the
+user's config. Tests +13, among them a slow writer that makes a thread
+wait without losing a line, a never-wait thread that drops and counts,
+the parts and the cap with tiny limits, and the switch on and off while
+the core runs. Guide: [diagnostics.md](diagnostics.md), "Heavy mode".
+
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
