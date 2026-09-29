@@ -373,6 +373,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "settings": {
+          "description": "The plugin's own settings: any keys and values, since the core does\nnot know what the plugin means by them. The plugin reads them with\n`config-get` (`plugins.<id>.settings`), and `config set\nplugins.<id>.settings.<key> <value>` writes one, creating what is\nmissing on the way. A change is told to the running plugin as the\nevent `settings-changed`; it does not restart it.",
+          "type": "object",
+          "additionalProperties": true
         }
       },
       "additionalProperties": false

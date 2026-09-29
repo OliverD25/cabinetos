@@ -19,11 +19,34 @@ use cabinetos_protocol::{ErrorCode, Event, JobKind, PluginState};
 struct Recorder {
     events: Mutex<Vec<Event>>,
     command_sets: Mutex<Vec<(String, Vec<String>)>>,
+    /// The requests plugins sent with `core-request`: the plugin and the
+    /// JSON the core would have run.
+    core_requests: Mutex<Vec<(String, String)>>,
 }
 
 impl HostServices for Recorder {
     fn config_value(&self, path: &str) -> Option<String> {
-        (path == "appearance.theme").then(|| "\"dark\"".to_owned())
+        // The host decides what a plugin may see: this answers everything
+        // it is asked, so a leak would show.
+        match path {
+            "appearance.theme" => Some("\"dark\"".to_owned()),
+            "plugins.requester.settings.provider" => Some("\"fake\"".to_owned()),
+            "plugins.other.settings.provider" => Some("\"leak\"".to_owned()),
+            "plugins.requester.granted" => Some("[\"core:request\"]".to_owned()),
+            "plugins" => Some("{\"other\":{}}".to_owned()),
+            _ => None,
+        }
+    }
+
+    fn core_request(&self, plugin_id: &str, request: &str) -> Result<String, String> {
+        self.core_requests
+            .lock()
+            .unwrap()
+            .push((plugin_id.to_owned(), request.to_owned()));
+        if request.contains("no_window") {
+            return Err("the core says no".to_owned());
+        }
+        Ok(r#"{"id":"reply","type":"ok"}"#.to_owned())
     }
 
     fn publish(&self, event: Event) {
@@ -135,6 +158,7 @@ fn grants(pairs: &[(&str, &[&str])]) -> BTreeMap<String, PluginSettings> {
                 PluginSettings {
                     enabled: true,
                     granted: granted.iter().map(|name| (*name).to_owned()).collect(),
+                    ..PluginSettings::default()
                 },
             )
         })
@@ -891,4 +915,200 @@ fn watches_end_with_the_plugin() {
     assert!(folder_changes(&setup.recorder).is_empty());
     // The folder was never locked by the watch.
     std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// The requester fixture with every capability it asks for.
+fn requester(setup: &Setup) -> PluginHost {
+    let host = setup.host(|_| {});
+    host.load_all(&grants(&[(
+        "requester",
+        &["cmd:register", "config:read", "events:emit", "core:request"],
+    )]));
+    wait_until(&host, "requester", active);
+    host
+}
+
+/// `requester.ask` with `request`: the core's reply, or the error text.
+fn ask_core(host: &PluginHost, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+    host.execute(
+        "requester",
+        "requester.ask",
+        &serde_json::json!({ "request": request }).to_string(),
+    )
+    .map(|answer| serde_json::from_str::<serde_json::Value>(&answer).unwrap()["reply"].clone())
+    .map_err(|error| error.message)
+}
+
+#[test]
+fn core_request_passes_only_what_the_manifest_lists_and_the_core_sets_the_id() {
+    let setup = Setup::new(&["requester"]);
+    let host = requester(&setup);
+
+    let reply = ask_core(
+        &host,
+        &serde_json::json!({ "type": "get_window_state", "id": "mine", "trace": "mine" }),
+    )
+    .unwrap();
+    assert_eq!(reply["type"], "ok");
+    let seen = setup.recorder.core_requests.lock().unwrap().clone();
+    assert_eq!(
+        seen,
+        [(
+            "requester".to_owned(),
+            r#"{"type":"get_window_state"}"#.to_owned()
+        )],
+        "the plugin's own id and trace never reach the core"
+    );
+
+    // Not listed: refused by name, and the core never hears of it.
+    let refused = ask_core(&host, &serde_json::json!({ "type": "list_jobs" })).unwrap_err();
+    assert!(refused.contains("`list_jobs`"), "{refused}");
+    // Listed in the manifest on purpose, and still never allowed.
+    for kind in ["hello", "secret_get"] {
+        let refused = ask_core(&host, &serde_json::json!({ "type": kind })).unwrap_err();
+        assert!(refused.contains(&format!("`{kind}`")), "{refused}");
+        assert!(refused.contains("never allowed"), "{refused}");
+    }
+    let refused = ask_core(&host, &serde_json::json!("not a request")).unwrap_err();
+    assert!(
+        refused.contains("not JSON") || refused.contains("object"),
+        "{refused}"
+    );
+    assert_eq!(setup.recorder.core_requests.lock().unwrap().len(), 1);
+
+    // An error of the core comes back as an error, and the plugin lives.
+    let error = ask_core(
+        &host,
+        &serde_json::json!({ "type": "search", "query": "no_window" }),
+    )
+    .unwrap_err();
+    assert!(error.contains("the core says no"), "{error}");
+    assert!(active(&state(&host, "requester")));
+}
+
+#[test]
+fn a_manifest_names_known_request_types_and_core_request_needs_them() {
+    let setup = Setup::new(&["requester"]);
+    setup.edit_manifest("requester", |manifest| {
+        manifest["capabilities"][3]["requests"] = serde_json::json!(["get_window_state", "nope"]);
+    });
+    let host = setup.host(|_| {});
+    host.load_all(&grants(&[(
+        "requester",
+        &["cmd:register", "config:read", "events:emit", "core:request"],
+    )]));
+    let PluginState::Failed { message } = state(&host, "requester") else {
+        panic!("{:?}", state(&host, "requester"))
+    };
+    assert!(
+        message.contains("`nope` is not a request type"),
+        "{message}"
+    );
+    drop(host);
+
+    setup.edit_manifest("requester", |manifest| {
+        manifest["capabilities"][3]["requests"] = serde_json::json!([]);
+    });
+    let host = setup.host(|_| {});
+    host.load_all(&grants(&[("requester", &["core:request"])]));
+    let PluginState::Failed { message } = state(&host, "requester") else {
+        panic!("{:?}", state(&host, "requester"))
+    };
+    assert!(message.contains("needs `requests`"), "{message}");
+    drop(host);
+
+    // The grant is what lets it start at all.
+    setup.edit_manifest("requester", |manifest| {
+        manifest["capabilities"][3]["requests"] = serde_json::json!(["search"]);
+    });
+    let host = setup.host(|_| {});
+    host.load_all(&grants(&[(
+        "requester",
+        &["cmd:register", "config:read", "events:emit"],
+    )]));
+    assert_eq!(
+        state(&host, "requester"),
+        PluginState::NeedsReview {
+            missing: vec!["core:request".to_owned()]
+        }
+    );
+    let listed = host.list();
+    let capability = &listed[0].capabilities[3];
+    assert_eq!(capability.name, "core:request");
+    assert_eq!(
+        capability.requests,
+        ["search"],
+        "the review dialog shows them"
+    );
+}
+
+/// The settings a plugin reads: its own, and nothing else of the
+/// `plugins` section.
+#[test]
+fn a_plugin_reads_its_own_settings_and_not_those_of_others() {
+    let setup = Setup::new(&["requester"]);
+    let host = requester(&setup);
+    let read = |path: &str| -> serde_json::Value {
+        let answer = host
+            .execute(
+                "requester",
+                "requester.setting",
+                &serde_json::json!({ "path": path }).to_string(),
+            )
+            .unwrap();
+        serde_json::from_str::<serde_json::Value>(&answer).unwrap()["value"].clone()
+    };
+    assert_eq!(read("plugins.requester.settings.provider"), "fake");
+    assert_eq!(read("appearance.theme"), "dark");
+    for hidden in [
+        "plugins.other.settings.provider",
+        "plugins.requester.granted",
+        "plugins",
+    ] {
+        assert_eq!(read(hidden), serde_json::Value::Null, "{hidden}");
+    }
+}
+
+#[test]
+fn a_change_of_a_plugin_s_settings_is_told_to_it_and_does_not_restart_it() {
+    let setup = Setup::new(&["requester"]);
+    let host = requester(&setup);
+    let commands_before = setup.recorder.command_sets.lock().unwrap().len();
+
+    let mut changed = grants(&[(
+        "requester",
+        &["cmd:register", "config:read", "events:emit", "core:request"],
+    )]);
+    changed
+        .get_mut("requester")
+        .unwrap()
+        .settings
+        .insert("provider".to_owned(), serde_json::json!("fake"));
+    host.apply_settings(&changed);
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !setup.recorder.events().iter().any(|event| {
+        matches!(event, Event::PluginEvent { plugin_id, name, .. }
+            if plugin_id == "requester" && name == "settings-changed")
+    }) {
+        assert!(Instant::now() < deadline, "the plugin was not told");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(active(&state(&host, "requester")));
+    assert_eq!(
+        setup.recorder.command_sets.lock().unwrap().len(),
+        commands_before,
+        "no restart: its commands were not registered again"
+    );
+
+    // A grant that changes still restarts it.
+    let mut fewer = changed.clone();
+    fewer.get_mut("requester").unwrap().granted.pop();
+    host.apply_settings(&fewer);
+    assert_eq!(
+        state(&host, "requester"),
+        PluginState::NeedsReview {
+            missing: vec!["core:request".to_owned()]
+        }
+    );
 }

@@ -393,6 +393,14 @@ pub struct PluginSettings {
     /// The capabilities the user granted it, for example `fs:read`. It runs
     /// only when it has every capability it asks for (docs/plugins.md).
     pub granted: Vec<String>,
+    /// The plugin's own settings: any keys and values, since the core does
+    /// not know what the plugin means by them. The plugin reads them with
+    /// `config-get` (`plugins.<id>.settings`), and `config set
+    /// plugins.<id>.settings.<key> <value>` writes one, creating what is
+    /// missing on the way. A change is told to the running plugin as the
+    /// event `settings-changed`; it does not restart it.
+    #[serde(skip_serializing_if = "serde_json::Map::is_empty")]
+    pub settings: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for PluginSettings {
@@ -400,6 +408,7 @@ impl Default for PluginSettings {
         Self {
             enabled: true,
             granted: Vec::new(),
+            settings: serde_json::Map::new(),
         }
     }
 }

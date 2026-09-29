@@ -1,0 +1,52 @@
+{
+  "id": "requester",
+  "name": "Requester",
+  "version": "0.1.0",
+  "author": "CabinetOS tests",
+  "description": "A test fixture that sends requests to the core and reads its own settings.",
+  "apiVersion": "0.2.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "cmd:register",
+      "reason": "Adds the Ask the Core and Read a Setting commands."
+    },
+    {
+      "name": "config:read",
+      "reason": "Reads its own settings."
+    },
+    {
+      "name": "events:emit",
+      "reason": "Passes each event it hears on to the window."
+    },
+    {
+      "name": "core:request",
+      "requests": [
+        "get_window_state",
+        "list_directory",
+        "preview_listing",
+        "preview_apply",
+        "preview_cancel",
+        "undo_job",
+        "search",
+        "hello",
+        "secret_get"
+      ],
+      "reason": "Asks the core for what its tests want. hello and secret_get are listed on purpose: the core refuses them whatever a manifest says."
+    }
+  ],
+  "commands": [
+    {
+      "id": "requester.ask",
+      "title": "Ask the Core",
+      "category": "Requester",
+      "defaultKeys": []
+    },
+    {
+      "id": "requester.setting",
+      "title": "Read a Setting",
+      "category": "Requester",
+      "defaultKeys": []
+    }
+  ]
+}

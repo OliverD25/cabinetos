@@ -177,6 +177,10 @@ pub fn diag_config(log_dir: Option<PathBuf>) -> DiagConfig {
 /// Ctrl+C, or by the parent process exiting.
 ///
 /// Initializes diagnostics first, so it must be called once per process.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the wiring of every service, in order"
+)]
 pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), CoreError> {
     let CoreConfig {
         pipe,
@@ -222,6 +226,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         Arc::new(move |event| job_events.publish(event)),
     );
     let secrets = secrets::from_env();
+    let plugin_link = Arc::new(plugins::ServicesLink::default());
     let plugins = plugins::start(
         dirs.plugins.clone(),
         cabinetos_plugins::plugins_data_dir(plugins_data_dir),
@@ -229,6 +234,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         &events,
         &jobs,
         &secrets,
+        &plugin_link,
     );
     if let Some(host) = &plugins {
         tokio::spawn(plugins::follow_settings(
@@ -261,6 +267,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         previews,
         secrets,
     });
+    plugin_link.set(&services);
     let mut result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     if result.is_ok() && panicked.load(Ordering::SeqCst) {
         result = Err(CoreError::Panicked);

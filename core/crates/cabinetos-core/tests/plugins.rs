@@ -831,3 +831,262 @@ async fn a_plugin_command_that_asks_for_text_says_so_in_the_list() {
         "{message}"
     );
 }
+
+/// The requester fixture's grants: everything it asks for.
+const REQUESTER_GRANTS: &[&str] = &["cmd:register", "config:read", "events:emit", "core:request"];
+
+/// `requester.ask` with `request`: the core's reply as JSON, or the error.
+async fn ask_core(client: &mut PipeClient, request: Value) -> Result<Value, (ErrorCode, String)> {
+    match ask(client, exec("requester.ask", json!({ "request": request }))).await {
+        Response::CommandResult { result } => Ok(result["reply"].clone()),
+        other => Err(error_of(other)),
+    }
+}
+
+/// A plugin proposes a preview and undoes what applied it, all through
+/// `core-request`; the core answers in the plugin's name.
+#[tokio::test(flavor = "multi_thread")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one plugin's requests from end to end"
+)]
+async fn a_plugin_proposes_a_preview_and_undoes_it_through_core_requests() {
+    let core = start_core(&["requester"], &grants(&[("requester", REQUESTER_GRANTS)]));
+    let files = scratch("requests");
+    fs::write(files.path().join("a.txt"), b"alpha").unwrap();
+    let (mut client, mut events) = greeted(&core).await;
+    wait_state(&mut client, "requester", active).await;
+
+    // No window has spoken: the core's own error comes back as an answer.
+    let reply = ask_core(&mut client, json!({ "type": "get_window_state" }))
+        .await
+        .unwrap();
+    assert_eq!(reply["type"], "error", "{reply}");
+    assert_eq!(reply["code"], "no_window", "{reply}");
+    assert!(
+        reply["id"].as_str().is_some_and(|id| id.len() == 26),
+        "{reply}"
+    );
+    let window = cabinetos_protocol::WindowState {
+        active_pane: cabinetos_protocol::Pane::Left,
+        panes: cabinetos_protocol::WindowPanes {
+            left: cabinetos_protocol::PaneState {
+                tabs: vec![cabinetos_protocol::WindowTab {
+                    path: files.path().display().to_string(),
+                    locked: false,
+                    tool: None,
+                }],
+                active: 0,
+                cursor: None,
+                marked: Vec::new(),
+            },
+            right: cabinetos_protocol::PaneState::default(),
+        },
+    };
+    assert_eq!(
+        ask(&mut client, Request::WindowState(window)).await,
+        Response::Ok
+    );
+    let reply = ask_core(&mut client, json!({ "type": "get_window_state" }))
+        .await
+        .unwrap();
+    assert_eq!(reply["type"], "window_state", "{reply}");
+    assert_eq!(
+        reply["state"]["panes"]["left"]["tabs"][0]["path"],
+        files.path().display().to_string()
+    );
+
+    // A listing comes back as its description only: nothing to map.
+    let reply = ask_core(
+        &mut client,
+        json!({ "type": "list_directory", "path": files.path().display().to_string(), "watch": true }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply["type"], "listing_opened", "{reply}");
+    assert_eq!(reply["section_handle"], 0, "{reply}");
+    assert_eq!(reply["entry_count"], 1, "{reply}");
+
+    // The plugin proposes; nothing changes on disk until the window applies.
+    let from = files.path().join("a.txt").display().to_string();
+    let reply = ask_core(
+        &mut client,
+        json!({
+            "type": "preview_listing",
+            "title": "Rename a",
+            "rows": [{ "path": from, "kind": "rename", "to": "vacation_a.txt" }],
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply["type"], "preview_opened", "{reply}");
+    assert_eq!(reply["listing"]["section_handle"], 0, "{reply}");
+    assert_eq!(reply["listing"]["entry_count"], 1, "{reply}");
+    let preview = reply["preview"].as_str().unwrap().to_owned();
+    assert!(files.path().join("a.txt").exists());
+
+    let applied = ask(&mut client, Request::PreviewApply { preview }).await;
+    let Response::JobsStarted { jobs } = applied else {
+        panic!("{applied:?}")
+    };
+    let renamed = files.path().join("vacation_a.txt");
+    let deadline = Instant::now() + SETTLE_DEADLINE;
+    while !renamed.exists() {
+        assert!(Instant::now() < deadline, "the preview was not applied");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    next_event(&mut events, |event| {
+        matches!(event, Event::JobStateChanged { job_id, state }
+            if *job_id == jobs[0] && state.is_terminal())
+    })
+    .await;
+
+    // Undo through the same door: the newest job that is not an undo.
+    let reply = ask_core(&mut client, json!({ "type": "undo_job" }))
+        .await
+        .unwrap();
+    assert_eq!(reply["type"], "undo_started", "{reply}");
+    assert_eq!(reply["undoes"], jobs[0], "{reply}");
+    let deadline = Instant::now() + SETTLE_DEADLINE;
+    while !files.path().join("a.txt").exists() {
+        assert!(Instant::now() < deadline, "the rename was not undone");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // A plugin applies its own preview, too (a tier that needs no window).
+    let reply = ask_core(
+        &mut client,
+        json!({
+            "type": "preview_listing",
+            "title": "Make a folder",
+            "rows": [{ "path": format!("{}\\Sorted\\", files.path().display()), "kind": "create" }],
+        }),
+    )
+    .await
+    .unwrap();
+    let reply = ask_core(
+        &mut client,
+        json!({ "type": "preview_apply", "preview": reply["preview"] }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply["type"], "jobs_started", "{reply}");
+    let deadline = Instant::now() + SETTLE_DEADLINE;
+    while !files.path().join("Sorted").is_dir() {
+        assert!(
+            Instant::now() < deadline,
+            "the plugin's own apply did not run"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(active(&state(&mut client, "requester").await));
+}
+
+#[tokio::test]
+async fn a_plugin_is_refused_what_its_manifest_does_not_list_and_what_no_manifest_allows() {
+    let mut core = start_core(&["requester"], &grants(&[("requester", REQUESTER_GRANTS)]));
+    let (mut client, _events) = greeted(&core).await;
+    wait_state(&mut client, "requester", active).await;
+
+    // Not in the manifest: the type is named in the refusal.
+    let (error_code, message) = ask_core(&mut client, json!({ "type": "list_jobs" }))
+        .await
+        .unwrap_err();
+    assert_eq!(error_code, ErrorCode::PluginError);
+    assert!(message.contains("`list_jobs`"), "{message}");
+    // In the manifest on purpose, and refused all the same.
+    for kind in ["hello", "secret_get"] {
+        let (_, message) = ask_core(&mut client, json!({ "type": kind, "name": "anthropic" }))
+            .await
+            .unwrap_err();
+        assert!(message.contains(&format!("`{kind}`")), "{message}");
+        assert!(message.contains("never allowed"), "{message}");
+    }
+    // Without the grant the plugin does not even start.
+    core.stop(&mut client).await;
+    let core = start_core(
+        &["requester"],
+        &grants(&[("requester", &["cmd:register", "config:read", "events:emit"])]),
+    );
+    let (mut client, _events) = greeted(&core).await;
+    let state = wait_state(&mut client, "requester", |state| {
+        matches!(state, PluginState::NeedsReview { .. })
+    })
+    .await;
+    assert_eq!(
+        state,
+        PluginState::NeedsReview {
+            missing: vec!["core:request".to_owned()]
+        }
+    );
+    let listed = plugins(&mut client).await;
+    let capability = listed[0]
+        .capabilities
+        .iter()
+        .find(|capability| capability.name == "core:request")
+        .unwrap();
+    assert!(capability.requests.contains(&"preview_listing".to_owned()));
+}
+
+/// `config set plugins.<id>.settings.<key> <value>` through the existing
+/// `set_value`, read back by the plugin with `config-get`, and told to it
+/// as an event without a restart.
+#[tokio::test]
+async fn a_plugin_reads_its_own_settings_from_the_file_and_is_told_of_a_change() {
+    let core = start_core(&["requester"], &grants(&[("requester", REQUESTER_GRANTS)]));
+    let (mut client, mut events) = greeted(&core).await;
+    wait_state(&mut client, "requester", active).await;
+    let read = |path: &'static str| exec("requester.setting", json!({ "path": path }));
+    let Response::CommandResult { result } =
+        ask(&mut client, read("plugins.requester.settings")).await
+    else {
+        panic!("no result")
+    };
+    assert_eq!(
+        result["value"],
+        json!({}),
+        "no settings yet: an empty object"
+    );
+
+    let set = Request::SetValue {
+        path: "plugins.requester.settings.provider".to_owned(),
+        value: json!("anthropic"),
+    };
+    assert_eq!(ask(&mut client, set).await, Response::Ok);
+    let told = next_event(
+        &mut events,
+        |event| matches!(event, Event::PluginEvent { name, .. } if name == "settings-changed"),
+    )
+    .await;
+    assert!(matches!(told, Event::PluginEvent { plugin_id, .. } if plugin_id == "requester"));
+    assert!(
+        active(&state(&mut client, "requester").await),
+        "not restarted"
+    );
+
+    let value_of = |reply: Response| match reply {
+        Response::CommandResult { result } => result["value"].clone(),
+        other => panic!("{other:?}"),
+    };
+    let own = value_of(ask(&mut client, read("plugins.requester.settings.provider")).await);
+    assert_eq!(own, "anthropic");
+    let all = value_of(ask(&mut client, read("plugins.requester.settings")).await);
+    assert_eq!(all, json!({ "provider": "anthropic" }));
+    // Its grants, its switch and the section itself are not its business.
+    for hidden in ["plugins", "plugins.requester", "plugins.requester.granted"] {
+        let hidden = value_of(ask(&mut client, read(hidden)).await);
+        assert_eq!(hidden, Value::Null);
+    }
+    // The file says it, and a hand edit is told to the plugin as well.
+    let text = fs::read_to_string(core.config_path()).unwrap();
+    assert!(text.contains(r#""provider": "anthropic""#), "{text}");
+    let edited = text.replace("anthropic", "openai");
+    fs::write(core.config_path(), edited).unwrap();
+    next_event(
+        &mut events,
+        |event| matches!(event, Event::PluginEvent { name, .. } if name == "settings-changed"),
+    )
+    .await;
+    let own = value_of(ask(&mut client, read("plugins.requester.settings.provider")).await);
+    assert_eq!(own, "openai");
+}

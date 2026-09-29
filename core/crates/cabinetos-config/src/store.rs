@@ -348,7 +348,9 @@ impl ConfigStore {
     /// Sets one setting by its dotted path, for example `ui.layout` to
     /// `"rail"`. The path must exist and the value must fit it; the result
     /// must pass the checks a file must pass (the version, the terminal
-    /// profiles) and `validate`.
+    /// profiles) and `validate`. The one place that may be new is a plugin's
+    /// own `settings`: `plugins.<id>.settings.<key>` is created with the
+    /// plugin's entry and whatever objects lie on the way.
     pub fn set_value(
         &mut self,
         path: &str,
@@ -363,13 +365,8 @@ impl ConfigStore {
             |config| {
                 let mut document =
                     serde_json::to_value(&*config).map_err(|error| refuse(error.to_string()))?;
-                let mut slot = &mut document;
-                for key in path.split('.') {
-                    slot = slot
-                        .get_mut(key)
-                        .ok_or_else(|| refuse(format!("there is no setting `{path}`")))?;
-                }
-                *slot = value;
+                *slot_of(&mut document, path)
+                    .ok_or_else(|| refuse(format!("there is no setting `{path}`")))? = value;
                 *config = serde_json::from_value(document)
                     .map_err(|error| refuse(format!("{path}: {error}")))?;
                 check_values(config).map_err(refuse)
@@ -405,6 +402,26 @@ impl ConfigStore {
             tracing::warn!(path = %schema_path.display(), %error, "cannot write the configuration schema");
         }
     }
+}
+
+/// The place `path` names in the configuration as JSON. Every key must
+/// exist, except in a plugin's own settings, `plugins.<id>.settings…`: the
+/// plugin's entry, its `settings` and the objects under them are made as
+/// the path asks (the plugin's own keys are not the core's to list).
+fn slot_of<'a>(document: &'a mut Value, path: &str) -> Option<&'a mut Value> {
+    let keys: Vec<&str> = path.split('.').collect();
+    let in_plugin_settings = keys.len() > 2 && keys[0] == "plugins" && keys[2] == "settings";
+    let mut slot = document;
+    for (depth, key) in keys.iter().enumerate() {
+        slot = if in_plugin_settings && depth >= 1 {
+            slot.as_object_mut()?
+                .entry(*key)
+                .or_insert_with(|| Value::Object(serde_json::Map::new()))
+        } else {
+            slot.get_mut(*key)?
+        };
+    }
+    Some(slot)
 }
 
 /// Reads the whole file; `None` if it does not exist. Retries for a short
@@ -696,6 +713,95 @@ mod tests {
             store.set_value("ui.lastPaths", Value::from(r"C:\"), accept),
             Err(UpdateError::Rejected(_))
         ));
+    }
+
+    /// `config set plugins.agent.settings.provider anthropic` must work on a
+    /// file that never heard of the plugin: a plugin's own settings are the
+    /// one place where the path may be new.
+    #[test]
+    fn set_value_makes_a_plugin_s_own_settings_and_nothing_else_new() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let changed = store
+            .set_value(
+                "plugins.agent.settings.provider",
+                Value::from("anthropic"),
+                accept,
+            )
+            .unwrap();
+        assert_eq!(changed, ["plugins.agent"]);
+        let entry = &store.config().plugins["agent"];
+        assert_eq!(entry.settings["provider"], "anthropic");
+        assert!(entry.enabled && entry.granted.is_empty(), "the defaults");
+
+        // Deeper keys, new objects on the way, and a whole list.
+        store
+            .set_value(
+                "plugins.agent.settings.limits.maxTokens",
+                Value::from(2000),
+                accept,
+            )
+            .unwrap();
+        let rules = serde_json::json!([{"folder": r"C:\Inbox", "rule": "sort by year"}]);
+        store
+            .set_value("plugins.agent.settings.rules", rules.clone(), accept)
+            .unwrap();
+        store
+            .set_value(
+                "plugins.agent.settings.provider",
+                Value::from("fake"),
+                accept,
+            )
+            .unwrap();
+        let settings = &store.config().plugins["agent"].settings;
+        assert_eq!(settings["limits"]["maxTokens"], 2000);
+        assert_eq!(settings["rules"], rules);
+        assert_eq!(settings["provider"], "fake");
+
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["plugins"]["agent"]["settings"]["provider"], "fake");
+        let reread = parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            reread.plugins["agent"].settings, *settings,
+            "written and read back"
+        );
+
+        // The whole object may be set, and must stay an object; nothing else
+        // in a plugin's entry, or anywhere else, may be new.
+        store
+            .set_value(
+                "plugins.agent.settings",
+                serde_json::json!({"tier": 1}),
+                accept,
+            )
+            .unwrap();
+        assert_eq!(store.config().plugins["agent"].settings.len(), 1);
+        for (bad, value) in [
+            ("plugins.agent.settings", Value::from(3)),
+            ("plugins.agent.nope", Value::from(1)),
+            ("plugins.agent.granted.x", Value::from(1)),
+            ("plugins.other.enabled", Value::from(false)),
+            ("plugins.other", serde_json::json!({})),
+            ("ui.nope.x", Value::from(1)),
+        ] {
+            assert!(
+                matches!(
+                    store.set_value(bad, value, accept),
+                    Err(UpdateError::Rejected(_))
+                ),
+                "{bad}"
+            );
+        }
+        assert!(
+            !store.config().plugins.contains_key("other"),
+            "a refused path leaves nothing behind"
+        );
+        // Unknown keys are still an error in the entry itself.
+        assert!(parse(r#"{"plugins": {"agent": {"colour": 1}}}"#).is_err());
+        assert!(parse(r#"{"plugins": {"agent": {"settings": 5}}}"#).is_err());
+        assert!(
+            parse(r#"{"plugins": {"agent": {"settings": {"any": [1, {"b": null}]}}}}"#).is_ok()
+        );
     }
 
     #[test]

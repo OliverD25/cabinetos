@@ -126,6 +126,7 @@ while you type.
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
 | `logging.heavy` | `true`, `false` | `false` | Heavy logging: every operation is also written, at every level, into `heavy-<process>.<date>.jsonl` files next to the logs, at most 2 GB in all, even when that slows an operation down. On until turned off ([diagnostics.md](diagnostics.md), "Heavy mode") |
 | `plugins.<id>.enabled` | `true`, `false` | `true` | Run the Core Plugin with this ID ([plugins.md](plugins.md)) |
+| `plugins.<id>.settings` | object | empty | The plugin's own settings: any keys and values, which only the plugin knows. It reads them with `config-get` (`plugins.<id>.settings`, and paths under it); nothing else of `plugins` is readable to a plugin. `cabinetos-cli config set plugins.agent.settings.provider anthropic` writes one, and makes the plugin's entry and the objects on the way when they are missing (the one place a `config set` path may be new). A change is told to the running plugin as the event `settings-changed`; it does not restart it ([plugins.md](plugins.md), "Settings"). |
 | `plugins.<id>.granted` | list of capability names | empty | The capabilities the user granted it, such as `fs:read`. It runs only when it has every capability it asks for. Installing the plugin from the marketplace clears them. |
 | `marketplace.index` | an `https:` URL, a `file:` URL, or the path of an `index.json` or of its folder | `https://oliverd25.github.io/cabinetos-marketplace/index.json`, the public index ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)) | Where the marketplace index is ([marketplace.md](marketplace.md)). The core reads it only when a client asks. A file written before 2026-09-30 may still hold the old placeholder `https://marketplace.cabinetos.invalid/index.json`, which never resolves; remove the line and the public index is used. |
 | `marketplace.allowInsecure` | `true`, `false` | `false` | Also accept a plain `http:` index and downloads, which anyone on the network could change on the way. For testing only. |
@@ -166,7 +167,9 @@ Who uses what:
   UI.
 - `plugins`: the core, at once. A plugin that is not listed is on, with
   nothing granted. A changed entry starts, stops or restarts that plugin;
-  an ID with no installed plugin is kept and noted in the log. Example:
+  an ID with no installed plugin is kept and noted in the log. A change
+  to only a plugin's `settings` does not restart it: the plugin is told.
+  Example:
   `"plugins": { "reader": { "granted": ["cmd:register", "fs:read"] } }`.
 - `terminal`: the core, at each `terminal_open`. An edited profile applies
   to the next shell; running shells keep what they started with

@@ -203,6 +203,7 @@ pub(crate) async fn handle_connection(
         events: None,
         last_listed: None,
         measures: HashMap::new(),
+        in_process: false,
     };
     loop {
         tokio::select! {
@@ -293,6 +294,11 @@ struct Session {
     /// The running measures of this connection, each with the flag that
     /// stops it.
     measures: HashMap<u64, Arc<AtomicBool>>,
+    /// A session that serves a plugin's `core-request` inside this
+    /// process: there is no other process to hand a shared-memory section
+    /// to, so a reply that carries one names it with handle 0 and the
+    /// description only.
+    in_process: bool,
 }
 
 impl Session {
@@ -585,9 +591,8 @@ impl Session {
         } = ready;
         let span = span_for_request(&request_id);
         let _entered = span.enter();
-        let client_pid = self.client.as_ref().map_or(0, |client| client.pid);
         let reply = match result.and_then(|published| {
-            let handle = published.hand_to(client_pid)?;
+            let handle = self.hand_section(&published)?;
             Ok((published, handle))
         }) {
             Ok((published, section_handle)) => {
@@ -617,6 +622,16 @@ impl Session {
         };
         log_handled(kind, started, &reply);
         self.out.reply(request_id, reply);
+    }
+
+    /// Hands a listing's section to the client (its handle in the client's
+    /// process); nothing to hand to a plugin, whose reply describes the
+    /// listing with handle 0.
+    fn hand_section(&self, published: &Published) -> Result<u64, Failure> {
+        if self.in_process {
+            return Ok(0);
+        }
+        published.hand_to(self.client.as_ref().map_or(0, |client| client.pid))
     }
 
     /// `window_state`: kept as this client's last state.
@@ -1652,7 +1667,7 @@ impl Session {
         let client_pid = self.client.as_ref().map_or(0, |client| client.pid);
         // Handed over here, where the reply that carries it is queued; a
         // connection that ended first never runs this.
-        let section_handle = match published.hand_to(client_pid) {
+        let section_handle = match self.hand_section(&published) {
             Ok(handle) => handle,
             Err(failure) => {
                 let reply = failure_reply(failure);
@@ -1789,6 +1804,96 @@ async fn run_blocking<T: Send + 'static>(
         Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
         Err(_) => Err((ErrorCode::Internal, "the request was cancelled".to_owned())),
     }
+}
+
+/// How long a plugin's `core-request` waits for the core's reply before it
+/// gets an error: a search may take seconds, nothing takes half a minute.
+const PLUGIN_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Runs one request of the plugin `plugin_id` (`core-request`, docs/plugins.md
+/// "Asking the core") as if a client had sent it: a session of its own with
+/// no pipe, whose client is `plugin:<id>` (previews are counted per client),
+/// the request handled like a frame, its tasks run until the reply is there.
+/// The reply is returned as the JSON a client would read, `id` and `trace`
+/// included. Never `hello` and the requests of
+/// `cabinetos_plugins::policy::NEVER_ALLOWED`: the host checked them, and
+/// this checks again.
+pub(crate) async fn run_plugin_request(
+    services: Arc<Services>,
+    plugin_id: &str,
+    mut request: Value,
+) -> Result<String, String> {
+    let kind = request
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    if cabinetos_plugins::policy::never_allowed(&kind) {
+        return Err(format!(
+            "core-request: the request type `{kind}` is never allowed for a plugin"
+        ));
+    }
+    let id = RequestId::new();
+    let trace = current_trace().unwrap_or_else(|| id.clone());
+    let Some(object) = request.as_object_mut() else {
+        return Err("core-request: the request must be a JSON object".to_owned());
+    };
+    // A listing that watches would keep refreshing into a session nobody reads.
+    if kind == "list_directory" {
+        object.insert("watch".to_owned(), Value::Bool(false));
+    }
+    object.insert("id".to_owned(), Value::String(id.to_string()));
+    object.insert("trace".to_owned(), Value::String(trace.to_string()));
+    let frame = serde_json::to_vec(&request)
+        .map_err(|error| format!("core-request: cannot write the request: {error}"))?;
+
+    let (out, mut replies) = mpsc::unbounded_channel::<Vec<u8>>();
+    let mut session = Session {
+        out: Outbox(out),
+        client: Some(Client {
+            pid: std::process::id(),
+            id: format!("plugin:{plugin_id}"),
+        }),
+        client_pid_from_windows: None,
+        listings: HashMap::new(),
+        tasks: JoinSet::new(),
+        shutdown: CancellationToken::new(),
+        services,
+        events: None,
+        last_listed: None,
+        measures: HashMap::new(),
+        in_process: true,
+    };
+    session.handle_frame(&frame);
+    let answer = async {
+        loop {
+            tokio::select! {
+                frame = replies.recv() => {
+                    let Some(frame) = frame else {
+                        return Err("core-request: the request ended without a reply".to_owned());
+                    };
+                    // Events the request caused (a measure's progress) carry
+                    // other IDs: only the reply is the plugin's business.
+                    let value: Value = serde_json::from_slice(&frame)
+                        .map_err(|error| format!("core-request: unreadable reply: {error}"))?;
+                    if value.get("id").and_then(Value::as_str) == Some(id.as_str()) {
+                        return String::from_utf8(frame)
+                            .map_err(|error| format!("core-request: unreadable reply: {error}"));
+                    }
+                }
+                Some(done) = session.tasks.join_next() => session.task_done(done),
+            }
+        }
+    };
+    let result = tokio::time::timeout(PLUGIN_REQUEST_TIMEOUT, answer).await;
+    session.stop_measures();
+    session.tasks.shutdown().await;
+    result.unwrap_or_else(|_| {
+        Err(format!(
+            "core-request: the core did not answer {kind} within {} s",
+            PLUGIN_REQUEST_TIMEOUT.as_secs()
+        ))
+    })
 }
 
 fn no_such_plugin(plugin_id: &str) -> Response {

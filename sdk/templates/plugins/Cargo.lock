@@ -160,6 +160,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "requester"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"

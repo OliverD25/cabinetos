@@ -143,6 +143,9 @@ pub struct MarketCapability {
     /// The secrets the core may put into its requests, for `net`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secrets: Vec<String>,
+    /// The request types the plugin may send the core, for `core:request`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requests: Vec<String>,
     /// How much it lets the plugin do. The core fills it in; an index
     /// leaves it out.
     #[serde(default, skip_serializing_if = "Option::is_none")]

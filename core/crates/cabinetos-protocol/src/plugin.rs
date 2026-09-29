@@ -79,6 +79,10 @@ pub struct CapabilityInfo {
     /// (protocol 13).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secrets: Vec<String>,
+    /// The request types the plugin may send the core, for `core:request`
+    /// (protocol 13).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requests: Vec<String>,
 }
 
 /// How much a capability lets a plugin do, as the review dialog colors it.

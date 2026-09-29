@@ -64,6 +64,11 @@ pub struct CapabilityRequest {
     /// may put into its requests; the plugin never sees their values.
     #[serde(default)]
     pub secrets: Vec<String>,
+    /// For `core:request`: the request types (`preview_listing`, `search`,
+    /// ...) the plugin may send with `core-request`. The review dialog shows
+    /// them under the reason.
+    #[serde(default)]
+    pub requests: Vec<String>,
     /// Why, in plain words; the review dialog shows it.
     pub reason: String,
 }
@@ -112,11 +117,14 @@ pub enum Capability {
     Net,
     /// Read stored credentials. Never granted in this version.
     Credentials,
+    /// Send the core the request types its manifest lists, as if a client
+    /// had (`core-request`).
+    CoreRequest,
 }
 
 impl Capability {
     /// Every capability, in the order the review dialog lists them.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::CmdRegister,
         Self::ConfigRead,
         Self::EventsEmit,
@@ -126,6 +134,7 @@ impl Capability {
         Self::JobsIntercept,
         Self::ProcessRun,
         Self::Net,
+        Self::CoreRequest,
         Self::Credentials,
     ];
 
@@ -143,6 +152,7 @@ impl Capability {
             Self::ProcessRun => "process:run",
             Self::Net => "net",
             Self::Credentials => "credentials",
+            Self::CoreRequest => "core:request",
         }
     }
 
@@ -164,7 +174,7 @@ impl Capability {
             | Self::FsWatch
             | Self::JobsIntercept
             | Self::ProcessRun => CapabilityLevel::Medium,
-            Self::Net | Self::Credentials => CapabilityLevel::High,
+            Self::Net | Self::CoreRequest | Self::Credentials => CapabilityLevel::High,
         }
     }
 
@@ -178,6 +188,12 @@ impl Capability {
     #[must_use]
     pub const fn takes_hosts(self) -> bool {
         matches!(self, Self::Net)
+    }
+
+    /// Whether it names request types (`requests`).
+    #[must_use]
+    pub const fn takes_requests(self) -> bool {
+        matches!(self, Self::CoreRequest)
     }
 
     /// Whether this version refuses it whatever the user grants: the
@@ -299,6 +315,7 @@ fn check_capabilities(manifest: &Manifest) -> Result<(), String> {
             _ => {}
         }
         check_hosts(capability, request)?;
+        check_requests(capability, request)?;
     }
     if !manifest.commands.is_empty() && !seen.contains(&Capability::CmdRegister) {
         return Err("it declares commands but does not ask for `cmd:register`".to_owned());
@@ -334,6 +351,33 @@ fn check_hosts(capability: Capability, request: &CapabilityRequest) -> Result<()
             return Err(format!(
                 "`{secret}` is not a secret name: use letters, digits, `-`, `_` and `.`"
             ));
+        }
+    }
+    Ok(())
+}
+
+/// `requests` belongs to `core:request` alone, which needs at least one,
+/// each a request type this core knows, listed once. A type a plugin may
+/// never send (`crate::policy::NEVER_ALLOWED`) is not refused here: it is
+/// refused when the plugin sends it, whatever the manifest says.
+fn check_requests(capability: Capability, request: &CapabilityRequest) -> Result<(), String> {
+    if !capability.takes_requests() {
+        if !request.requests.is_empty() {
+            return Err(format!("capability `{}` takes no `requests`", request.name));
+        }
+        return Ok(());
+    }
+    if request.requests.is_empty() {
+        return Err(format!("capability `{}` needs `requests`", request.name));
+    }
+    for (index, name) in request.requests.iter().enumerate() {
+        if !cabinetos_protocol::Request::TYPES.contains(&name.as_str()) {
+            return Err(format!(
+                "`{name}` is not a request type of this core (see docs/ipc.md)"
+            ));
+        }
+        if request.requests[..index].contains(name) {
+            return Err(format!("request type `{name}` is listed twice"));
         }
     }
     Ok(())
@@ -609,6 +653,7 @@ mod tests {
                 roots: Vec::new(),
                 hosts: hosts.iter().map(|host| (*host).to_owned()).collect(),
                 secrets: secrets.iter().map(|secret| (*secret).to_owned()).collect(),
+                requests: Vec::new(),
                 reason: "Asks a model.".to_owned(),
             });
             check(&manifest, Some("hello"), "0.1.0")
@@ -643,6 +688,47 @@ mod tests {
         assert!(rule.matches("API.anthropic.com", 443, 443));
         assert!(!rule.matches("api.anthropic.com", 8443, 443));
         assert!(!rule.matches("evil.anthropic.com", 443, 443));
+    }
+
+    #[test]
+    fn core_request_names_the_request_types_it_may_send() {
+        let with_requests = |requests: &[&str]| {
+            let mut manifest = manifest();
+            manifest.capabilities.push(CapabilityRequest {
+                name: "core:request".to_owned(),
+                roots: Vec::new(),
+                hosts: Vec::new(),
+                secrets: Vec::new(),
+                requests: requests.iter().map(|kind| (*kind).to_owned()).collect(),
+                reason: "Proposes changes.".to_owned(),
+            });
+            check(&manifest, Some("hello"), "0.1.0")
+        };
+        with_requests(&["preview_listing", "search"]).unwrap();
+        assert!(with_requests(&[]).unwrap_err().contains("needs `requests`"));
+        assert!(
+            with_requests(&["nope"])
+                .unwrap_err()
+                .contains("`nope` is not a request type")
+        );
+        assert!(
+            with_requests(&["search", "search"])
+                .unwrap_err()
+                .contains("listed twice")
+        );
+        // A type no plugin may send is still a request type: the manifest
+        // may list it, and it is refused when the plugin sends it.
+        with_requests(&["secret_get"]).unwrap();
+        assert!(
+            problem(|m| m.capabilities[0].requests = vec!["search".to_owned()])
+                .contains("takes no `requests`")
+        );
+        assert_eq!(Capability::CoreRequest.level(), CapabilityLevel::High);
+        assert_eq!(
+            Capability::parse("core:request"),
+            Some(Capability::CoreRequest)
+        );
+        assert!(!Capability::CoreRequest.never_granted());
     }
 
     #[test]

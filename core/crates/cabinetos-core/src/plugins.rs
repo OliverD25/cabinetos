@@ -4,7 +4,7 @@
 //! `plugins` settings.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, Weak};
 
 use cabinetos_jobs::{JobGate, JobPreview, JobQueueManager};
 use cabinetos_plugins::manifest::Capability;
@@ -12,29 +12,63 @@ use cabinetos_plugins::{HostConfig, HostServices, PluginCommand, PluginHost};
 use cabinetos_protocol::Event;
 use tokio::sync::watch;
 
-use crate::CORE_VERSION;
-use crate::events::EventHub;
+use crate::events::{EventHub, Services};
 use crate::settings::{Settings, Snapshot};
+use crate::{CORE_VERSION, connection};
+
+/// The way from the plugin host back to the core's services, which are made
+/// after the host (the services hold the host): filled once, then read by a
+/// plugin's `core-request`.
+#[derive(Default)]
+pub(crate) struct ServicesLink(OnceLock<Weak<Services>>);
+
+impl ServicesLink {
+    /// Lets `core-request` reach `services`.
+    pub(crate) fn set(&self, services: &Arc<Services>) {
+        let _ = self.0.set(Arc::downgrade(services));
+    }
+}
 
 /// What the plugin host may ask of the core.
 struct Bridge {
     settings: Arc<Settings>,
     events: Arc<EventHub>,
     secrets: cabinetos_secrets::Secrets,
+    link: Arc<ServicesLink>,
+    /// The core's runtime: a plugin's thread is not part of it and waits
+    /// for a request's reply with `block_on`.
+    runtime: tokio::runtime::Handle,
 }
 
 impl HostServices for Bridge {
     fn config_value(&self, path: &str) -> Option<String> {
-        // What other plugins were granted is none of a plugin's business.
-        if path == "plugins" || path.starts_with("plugins.") {
-            return None;
-        }
+        // The host has decided what the plugin may see: of the `plugins`
+        // section only its own `settings` (cabinetos_plugins::policy).
         let config = serde_json::to_value(&self.settings.snapshot().config).ok()?;
         let mut value = &config;
         for key in path.split('.') {
-            value = value.get(key)?;
+            let Some(next) = value.get(key) else {
+                // A plugin without settings, or one whose entry is not in
+                // the file, has an empty object: not an error.
+                return (path.split('.').count() == 3 && path.ends_with(".settings"))
+                    .then(|| "{}".to_owned());
+            };
+            value = next;
         }
         Some(value.to_string())
+    }
+
+    fn core_request(&self, plugin_id: &str, request: &str) -> Result<String, String> {
+        let services = self
+            .link
+            .0
+            .get()
+            .and_then(Weak::upgrade)
+            .ok_or("core-request: the core is not ready, or is stopping")?;
+        let request = serde_json::from_str(request)
+            .map_err(|error| format!("core-request: the request is not JSON: {error}"))?;
+        self.runtime
+            .block_on(connection::run_plugin_request(services, plugin_id, request))
     }
 
     fn publish(&self, event: Event) {
@@ -83,11 +117,14 @@ pub(crate) fn start(
     events: &Arc<EventHub>,
     jobs: &JobQueueManager,
     secrets: &cabinetos_secrets::Secrets,
+    link: &Arc<ServicesLink>,
 ) -> Option<Arc<PluginHost>> {
     let bridge = Arc::new(Bridge {
         settings: Arc::clone(settings),
         events: Arc::clone(events),
         secrets: secrets.clone(),
+        link: Arc::clone(link),
+        runtime: tokio::runtime::Handle::current(),
     });
     tracing::info!(
         plugins_dir = %plugins_dir.display(),

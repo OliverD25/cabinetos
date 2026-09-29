@@ -72,7 +72,7 @@ start, or at once with `reload_plugin`.
 | `version` | `major.minor.patch`, numbers only. |
 | `apiVersion` | The WIT version the plugin was built against. Its major and minor must match this core's (`0.2`). A `0.1` plugin is refused: 0.2 changed the interface (see "The WIT versions"). |
 | `minCoreVersion` | The oldest core it runs on, `major.minor.patch`. |
-| `capabilities` | Each known, listed once, with a `reason` the review dialog shows. `fs:read`, `fs:write` and `fs:watch` need `roots`. `net` needs `hosts` and may list `secrets` (see "The network"). The others take none of these. |
+| `capabilities` | Each known, listed once, with a `reason` the review dialog shows. `fs:read`, `fs:write` and `fs:watch` need `roots`. `net` needs `hosts` and may list `secrets` (see "The network"). `core:request` needs `requests` (see "Asking the core"). The others take none of these. |
 | `commands` | Each ID starts with `<id>.`, then letters, digits, `.`, `_` or `-`; each has a `title` and a `category`; `defaultKeys` follow the key grammar ([keybindings.md](keybindings.md)). An optional `input` asks for a line of text first (see "Commands that ask for text"). Declaring commands needs `cmd:register`. |
 
 The core reads the manifest strictly. An unknown key, a missing key or a
@@ -92,7 +92,7 @@ folder must exist when the plugin starts.
 | Capability | Level | What it allows |
 |---|---|---|
 | `cmd:register` | low | Register the commands declared in `plugin.json`, during `activate` |
-| `config:read` | low | Read settings with `config-get` (except the `plugins` section) |
+| `config:read` | low | Read settings with `config-get`; of the `plugins` section only the plugin's own `settings` (see "Settings") |
 | `events:emit` | low | Send events to the UI with `emit` |
 | `fs:read` | medium | Read the files under its `roots` |
 | `fs:write` | medium | Read and write the files under its `roots` |
@@ -100,6 +100,7 @@ folder must exist when the plugin starts.
 | `jobs:intercept` | medium | See every job before it starts (`before-job`), and stop it |
 | `process:run` | medium | Start programs. **Never granted in this version.** |
 | `net` | high | Ask the core for web requests (`http-request`), only to the `hosts` its manifest names, with only the `secrets` it names |
+| `core:request` | high | Ask the core to run the request types its manifest lists, as if a client had sent them (`core-request`; see "Asking the core") |
 | `credentials` | high | Read stored credentials. **Never granted in this version.** A plugin never reads a secret; `net` lets the core use one for it. |
 
 The level is the color of the dot in the design's permissions review dialog
@@ -381,6 +382,7 @@ folder:
 |---|---|
 | `folder-changed` | `path` (the watched folder), `changes` in the order Windows reported them, and `overflow` |
 | `folder-unwatched` | `path` and `message`: the watch ended by itself, for example because the folder was deleted |
+| `settings-changed` | `{}`: the plugin's own `settings` changed (see "Settings") |
 
 - `kind` is `created`, `modified`, `removed` or `renamed`; `old_path` is
   set only for `renamed`. A file moved in from another folder is
@@ -463,15 +465,109 @@ http-request: func(request: web-request) -> result<web-response, string>;
 
 Without `net`, `http-request` answers `err` and makes no request.
 
+## Asking the core: `core:request` and `core-request`
+
+A plugin may ask the core to run a request as if a client had sent it: to
+read what the window shows, to propose changes as a preview, to apply a
+preview, to undo a job, to search. The manifest lists the request types,
+and the review dialog shows the list under the capability's reason:
+
+```json
+{
+  "name": "core:request",
+  "requests": ["get_window_state", "preview_listing", "preview_apply", "preview_cancel", "undo_job", "search"],
+  "reason": "Proposes the changes you asked for and shows them before anything changes."
+}
+```
+
+```wit
+core-request: func(json: string) -> result<string, string>;
+```
+
+- **The request** is one JSON object in the protocol's own form
+  ([ipc.md](ipc.md)), `{ "type": "preview_listing", "title": …, "rows": … }`,
+  without `id` and `trace`: the core sets both, and the trace is the one of
+  the action the plugin's call belongs to, so `cabinetos-cli log trace`
+  shows what the plugin asked inside the user's action. An `id` or `trace`
+  the plugin writes is dropped. At most 1 MiB.
+- **Only listed types pass.** `requests` needs at least one entry, each a
+  request type this core has, each once. A type the manifest does not list
+  is refused with an error that names it. These are never allowed,
+  whatever the manifest lists (the list is `NEVER_ALLOWED` in
+  `cabinetos-plugins/src/policy.rs`, with a test):
+
+  | Request | Why never |
+  |---|---|
+  | `hello`, `window_state` | They make a plugin a window |
+  | `shutdown` | Ends the core |
+  | `set_value`, `grant_capabilities` | They write the settings, which include the grants: a plugin could give itself what the user did not |
+  | `secret_set`, `secret_get`, `secret_delete`, `secret_list` | A plugin never sees a secret; `net` lets the core use one for it |
+  | `save_log_bundle` | Writes the user's logs into a zip |
+  | `execute_command` | Runs any command; one of the plugin's own would wait for the plugin's thread, which waits for the answer |
+  | `install_extension`, `uninstall_extension` | Change the code the core runs |
+
+  A manifest that lists one of these still loads (the core logs a warning),
+  and the request is refused when the plugin sends it.
+- **The core runs it in the plugin's name.** The client is `plugin:<id>`;
+  previews are counted per client (at most 20 alive), and a preview a plugin
+  proposes belongs to it. The plugin does not need `hello`.
+- **The answer** is the core's reply as JSON, as a client would read it,
+  `id` and `trace` included. An `error` reply is an answer, like an HTTP
+  status: `{"type":"error","code":"no_window",…}`. `err` means the request
+  was refused, was not valid, or did not finish (the core answers within
+  30 s), with the reason as text.
+- **A reply that carries a shared-memory listing** (`preview_opened`,
+  `listing_opened`) comes back with its description only, `section_handle`
+  0: the plugin cannot map the section and does not need to; the window
+  opens a preview with `open_preview` when it sees the preview's ID.
+  `list_directory` from a plugin never watches.
+- **Waiting counts against no deadline**, like waiting for the network in
+  `http-request`: a search may take seconds. Fuel is not used meanwhile.
+- **Heavy mode** logs each call as a `core-request` host call at
+  `heavy::plugins`, with the request (secrets masked).
+
+Without `core:request`, `core-request` answers `err` and asks nothing.
+
+## Settings
+
+A plugin's entry in the `plugins` section of `cabinetos.json` has an open
+object, `settings`, for what the plugin wants the user to set
+([config.md](config.md)):
+
+```json
+"plugins": { "agent": { "granted": ["cmd:register", "config:read"], "settings": { "provider": "anthropic", "tier": 2 } } }
+```
+
+- **The core does not know the keys.** It checks only that `settings` is an
+  object. The schema says so (`additionalProperties: true`); `enabled` and
+  `granted` keep their strict checks.
+- **The plugin reads them with `config-get`** (capability `config:read`):
+  `plugins.<its id>.settings` answers the object (`{}` when there is none)
+  and `plugins.<its id>.settings.provider` one value, as JSON. Nothing else
+  of the `plugins` section is readable to a plugin: not its own `granted`
+  or `enabled`, and not another plugin's entry (`policy::may_read_config`).
+  A list is one value; there is no path into it by index.
+- **The user writes them** by hand, in the settings screen, or with
+  `cabinetos-cli config set plugins.agent.settings.provider anthropic`.
+  `set_value` makes what is missing on the way: the plugin's entry, its
+  `settings` and objects under it. Nowhere else may a path be new.
+- **A change is told to the plugin.** When only `settings` changed, the
+  running plugin keeps running (its state stays) and gets
+  `on-event("settings-changed", "{}")`; it reads what it needs again. A
+  change to `enabled` or `granted` starts, stops or restarts it as before.
+- A plugin cannot write its settings (`set_value` is never allowed for it).
+  What it wants to keep, it keeps in its own folder.
+
 ## Host functions
 
 | Function | Needs | What it does |
 |---|---|---|
 | `register-command(id, title, category, default-keys)` | `cmd:register` | Registers a declared command; only during `activate` |
 | `log(level, message)` | — | Writes a line to the core's log with the plugin's ID |
-| `config-get(path)` | `config:read` | A setting as JSON by dotted path, such as `ui.theme`; none for a path that does not exist, and for the `plugins` section |
+| `config-get(path)` | `config:read` | A setting as JSON by dotted path, such as `ui.theme`; none for a path that does not exist, and for the `plugins` section except the plugin's own `settings` (see "Settings") |
 | `emit(name, payload)` | `events:emit` | Sends `plugin_event` with the plugin's ID to every client that said `hello` |
 | `http-request(request)` | `net` | Makes a web request to a host the manifest names, and answers with its status, headers and body (see "The network") |
+| `core-request(json)` | `core:request` | Runs one request as if a client had sent it, in the plugin's name; only the types the manifest lists (see "Asking the core") |
 | `watch-folder(path)` | `fs:watch` | Starts watching a folder under the plugin's roots; changes come to `on-event` (see "Watching folders") |
 | `unwatch-folder(path)` | `fs:watch` | Stops watching a folder |
 
@@ -480,7 +576,7 @@ Without `net`, `http-request` answers `err` and makes no request.
 | Version | What changed |
 |---|---|
 | `0.1.0` | The first interface: commands, `log`, `config-get`, `emit`, `before-job`, `on-listing-opened` |
-| `0.2.0` | The manifest's `input` for commands (no WIT change). `http-request` and its records; `watch-folder`, `unwatch-folder`, `watch-roots` in `activation`, and the export `on-event`, which every plugin now implements (an empty body is fine). A `0.1` plugin is refused with `apiVersion 0.1.0 does not match this core's plugin interface 0.2.0`; rebuild it against `sdk/wit` and set `apiVersion` to `0.2.0`. |
+| `0.2.0` | The manifest's `input` for commands (no WIT change). `core-request` and the capability `core:request`, and the event `settings-changed`, were added to `0.2.0` after it first shipped: a function added to the host interface is compatible, since a component built before does not import it and still loads, so the version stayed (checked: the fixtures built before it run on this core unchanged). A plugin that imports `core-request` needs a core that has it; `minCoreVersion` says so. `http-request` and its records; `watch-folder`, `unwatch-folder`, `watch-roots` in `activation`, and the export `on-event`, which every plugin now implements (an empty body is fine). A `0.1` plugin is refused with `apiVersion 0.1.0 does not match this core's plugin interface 0.2.0`; rebuild it against `sdk/wit` and set `apiVersion` to `0.2.0`. |
 
 ## The protocol
 

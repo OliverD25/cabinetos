@@ -141,6 +141,13 @@
           "description": "The plugin's own plain-language reason.",
           "type": "string"
         },
+        "requests": {
+          "description": "The request types the plugin may send the core, for `core:request`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "roots": {
           "description": "The folders it concerns, for `fs:read` and `fs:write`.",
           "type": "array",

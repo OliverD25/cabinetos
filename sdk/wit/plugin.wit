@@ -77,7 +77,9 @@ interface host {
 
     /// A setting of cabinetos.json as JSON, by dotted path such as
     /// `ui.theme` (capability `config:read`). None without the capability
-    /// or for a path that does not exist.
+    /// or for a path that does not exist. Of the `plugins` section a plugin
+    /// reads only its own `settings`: `plugins.<its id>.settings` and the
+    /// paths under it.
     config-get: func(path: string) -> option<string>;
 
     /// Sends an event to every connected client as `plugin_event`
@@ -128,6 +130,20 @@ interface host {
 
     /// Stops watching the folder; nothing happens when it is not watched.
     unwatch-folder: func(path: string);
+
+    /// Asks the core to run one request as if a client had sent it, in the
+    /// plugin's name (capability `core:request`). `json` is the request as
+    /// the protocol writes it, `{ "type": "preview_listing", ... }`, without
+    /// `id`: the core adds the id and the plugin's trace. Only the request
+    /// types the manifest lists pass, and never `hello`, `shutdown`,
+    /// `set_value`, `secret_*`, `save_log_bundle` and `window_state`. The
+    /// answer is the core's reply as JSON; an `error` reply is an answer
+    /// too, and `err` means the request was refused or did not finish. A
+    /// reply that carries a shared-memory listing (`preview_opened`,
+    /// `listing_opened`) comes back with its description only; the plugin
+    /// cannot map it. The time it waits does not count against the call's
+    /// deadline.
+    core-request: func(json: string) -> result<string, string>;
 }
 
 /// A Core Plugin.
@@ -153,6 +169,8 @@ world core-plugin {
     /// Something the plugin asked to hear about happened: `name` says
     /// what, `payload` is JSON. `folder-changed` for a folder it watches,
     /// `folder-unwatched` when a watch ended by itself (docs/plugins.md,
-    /// "Watching folders"). A notification: nothing is returned.
+    /// "Watching folders"), `settings-changed` when its `settings` in
+    /// cabinetos.json changed (docs/plugins.md, "Settings"). A
+    /// notification: nothing is returned.
     export on-event: func(name: string, payload: string);
 }

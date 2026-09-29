@@ -16,7 +16,7 @@ Dock in Phase 5; there is no template for them yet.
   so no `cargo-component` or `wasm-tools` is needed.
   - `hello` — **the template.** One command, `hello.say`, that answers with
     JSON, prints a line (the core logs it) and sends an event.
-  - `crashy`, `spinner`, `hog`, `reader`, `vetoer`, `fetcher`, `watcher` —
+  - `crashy`, `spinner`, `hog`, `reader`, `vetoer`, `fetcher`, `watcher`, `requester` —
     test fixtures. Each one breaks a rule on purpose, or uses one capability, so
     the tests can prove the host contains it.
 - `build-fixtures.ps1` — builds every plugin in `plugins/` and copies the
@@ -31,6 +31,7 @@ Dock in Phase 5; there is no template for them yet.
 | `reader` | `reader.size`, `reader.write` | `cmd:register`, `fs:read` | Files are reachable only under granted folders, and only as granted |
 | `vetoer` | none | `jobs:intercept` | `before-job` stops a job whose destination contains `forbidden` |
 | `fetcher` | `fetcher.get` | `cmd:register`, `net` | `http-request` reaches only the named host, and the core adds the secret to the header without the plugin seeing it; the command asks for text (`input`), which it takes as the URL |
+| `requester` | `requester.ask`, `requester.setting` | `cmd:register`, `config:read`, `events:emit`, `core:request` | `core-request` passes only the request types its manifest lists (it lists `hello` and `secret_get` on purpose: refused whatever a manifest says), and `config-get` shows only the plugin's own `settings` |
 | `watcher` | `watcher.watch`, `watcher.unwatch` | `cmd:register`, `events:emit`, `fs:watch` | `watch-folder` works only under its roots; each `on-event` goes on through `emit`, so a test sees the changes as `plugin_event` |
 
 The `reader` fixture reads `%TEMP%\cabinetos-plugins-test\reader`; the tests

@@ -276,7 +276,38 @@ impl host::Host for State {
             tracing::debug!(path = %path, "config-get without config:read: none");
             return Ok(None);
         }
+        if !crate::policy::may_read_config(&self.plugin.id, &path) {
+            tracing::debug!(path = %path, "config-get of another part of the plugins section: none");
+            return Ok(None);
+        }
         Ok(self.plugin.services.config_value(&path))
+    }
+
+    fn core_request(&mut self, json: String) -> wasmtime::Result<Result<String, String>> {
+        let _call = HostCall::start("core-request", || {
+            // As JSON when it is, so heavy mode masks a field named like a
+            // secret at any depth.
+            serde_json::json!({ "request": serde_json::from_str::<serde_json::Value>(&json)
+                .unwrap_or_else(|_| serde_json::Value::String(json.clone())) })
+        });
+        if !self.plugin.granted.contains(&Capability::CoreRequest) {
+            return Ok(Err(
+                "core-request needs the core:request capability".to_owned()
+            ));
+        }
+        let request = match crate::policy::check_request(&self.plugin.core_requests, &json) {
+            Ok(request) => request.to_string(),
+            Err(refusal) => {
+                tracing::info!(error = %refusal, "a plugin's core request was refused");
+                return Ok(Err(refusal));
+            }
+        };
+        // Waiting for the core counts against no deadline, like waiting for
+        // the network: a search may take seconds.
+        self.activity.network_started();
+        let result = self.plugin.services.core_request(&self.plugin.id, &request);
+        self.network_credit += self.activity.network_ended();
+        Ok(result)
     }
 
     fn http_request(

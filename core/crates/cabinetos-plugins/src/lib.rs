@@ -31,6 +31,7 @@ mod bindings {
 }
 pub mod manifest;
 mod net;
+pub mod policy;
 mod sandbox;
 mod watch;
 mod worker;
@@ -126,7 +127,8 @@ const MAX_QUEUED_NOTIFICATIONS: usize = 64;
 
 /// What the host needs from the core.
 pub trait HostServices: Send + Sync {
-    /// A setting of `cabinetos.json` as JSON, by dotted path.
+    /// A setting of `cabinetos.json` as JSON, by dotted path. The host has
+    /// decided already that the plugin may see it ([`policy::may_read_config`]).
     fn config_value(&self, path: &str) -> Option<String>;
     /// Sends an event to the connected clients.
     fn publish(&self, event: Event);
@@ -138,6 +140,16 @@ pub trait HostServices: Send + Sync {
     fn secret(&self, name: &str) -> Option<String> {
         let _ = name;
         None
+    }
+    /// Runs one request as if a client had sent it, in the name of the
+    /// plugin `plugin_id`, and answers with the reply as JSON. The host has
+    /// checked the request against the plugin's manifest already
+    /// ([`policy::check_request`]): it is a JSON object with a `type` and no
+    /// `id`. Blocking: up to the core's own limit. In a core without
+    /// requests for plugins it is an error.
+    fn core_request(&self, plugin_id: &str, request: &str) -> Result<String, String> {
+        let _ = (plugin_id, request);
+        Err("this core does not run requests for plugins".to_owned())
     }
 }
 
@@ -238,6 +250,9 @@ pub(crate) struct Loaded {
     pub(crate) services: Arc<dyn HostServices>,
     /// What `http-request` may reach (capability `net`).
     pub(crate) net: net::NetRules,
+    /// The request types `core-request` may send (capability
+    /// `core:request`).
+    pub(crate) core_requests: Vec<String>,
     /// The HTTP client every plugin shares.
     pub(crate) http: Arc<net::Net>,
 }
@@ -346,6 +361,11 @@ impl HostInner {
         else {
             return;
         };
+        Self::queue_event(id, worker, name, payload);
+    }
+
+    /// Queues an event for a worker whose slot the caller holds.
+    fn queue_event(id: &str, worker: &Worker, name: &str, payload: String) {
         if worker.activity.queued.load(Ordering::Relaxed) >= MAX_QUEUED_NOTIFICATIONS {
             tracing::warn!(
                 plugin_id = id,
@@ -560,6 +580,7 @@ impl HostInner {
         let mut write_roots = Vec::new();
         let mut watch_roots = Vec::new();
         let mut net_rules = net::NetRules::default();
+        let mut core_requests = Vec::new();
         for request in &manifest.capabilities {
             let Some(capability) = Capability::parse(&request.name) else {
                 continue;
@@ -570,6 +591,20 @@ impl HostInner {
                     net_rules.hosts.push(manifest::HostRule::parse(host)?);
                 }
                 net_rules.secrets.clone_from(&request.secrets);
+            }
+            if capability == Capability::CoreRequest {
+                for kind in request
+                    .requests
+                    .iter()
+                    .filter(|kind| policy::never_allowed(kind))
+                {
+                    tracing::warn!(
+                        plugin_id = %manifest.id,
+                        request = %kind,
+                        "the manifest lists a request type no plugin may send; it is refused when sent"
+                    );
+                }
+                core_requests.clone_from(&request.requests);
             }
             let roots = match capability {
                 Capability::FsRead => &mut read_roots,
@@ -602,6 +637,7 @@ impl HostInner {
             },
             services: Arc::clone(&self.services),
             net: net_rules,
+            core_requests,
             http: Arc::clone(&self.net),
         })
     }
@@ -745,8 +781,24 @@ impl PluginHost {
         let mut slots = lock(&self.inner.slots);
         for (id, slot) in slots.iter_mut() {
             let plugin_settings = settings.get(id).cloned().unwrap_or_default();
-            if slot.applied.as_ref() != Some(&plugin_settings) {
-                tracing::info!(plugin_id = %id, "plugin settings changed");
+            let Some(before) = slot.applied.as_ref() else {
+                self.inner.evaluate(id, slot, &plugin_settings);
+                continue;
+            };
+            if *before == plugin_settings {
+                continue;
+            }
+            tracing::info!(plugin_id = %id, "plugin settings changed");
+            if before.enabled == plugin_settings.enabled
+                && before.granted == plugin_settings.granted
+            {
+                // Only the plugin's own `settings` changed: it keeps running
+                // and is told, so a rule or a state it holds survives.
+                slot.applied = Some(plugin_settings);
+                if let Some(worker) = &slot.worker {
+                    HostInner::queue_event(id, worker, "settings-changed", "{}".to_owned());
+                }
+            } else {
                 self.inner.evaluate(id, slot, &plugin_settings);
             }
         }
@@ -783,6 +835,7 @@ impl PluginHost {
                                 roots: request.roots.clone(),
                                 hosts: request.hosts.clone(),
                                 secrets: request.secrets.clone(),
+                                requests: request.requests.clone(),
                             })
                             .collect(),
                     ),

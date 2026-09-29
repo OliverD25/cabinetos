@@ -867,7 +867,10 @@ file's own format.
 `get_value` and `set_value` read and change one setting, named by the
 dotted path that `config_changed` uses: object keys only, such as
 `ui.lastPaths` or `panes.sort` (an array is one setting and is replaced
-whole). The value has the file's own format. `set_value` goes through the
+whole). The value has the file's own format. The path must exist, with one
+exception: in a plugin's own settings, `plugins.<id>.settings.<key>`, the
+plugin's entry, its `settings` and the objects on the way are made when
+they are missing ([plugins.md](plugins.md), "Settings"). `set_value` goes through the
 same steps as a keybinding change ("When the core writes the file" in
 [config.md](config.md)): the core reads the file as it is on disk, checks
 the new value as it checks a saved file (the type, the version, the
@@ -1085,7 +1088,11 @@ components that do only what the user granted.
   only for `fs:read` and `fs:write`, as the manifest wrote them. For
   `net`, `hosts` lists the hosts the plugin may reach and `secrets` the
   stored secrets the core may send for it; each appears only when not
-  empty ([plugins.md](plugins.md), "The network").
+  empty ([plugins.md](plugins.md), "The network"). For `core:request`,
+  `requests` lists the request types the plugin may send the core, shown
+  under the reason ([plugins.md](plugins.md), "Asking the core"); it
+  appears only when not empty. The list is what the manifest says: it may
+  name a type no plugin can ever send, which the core refuses when sent.
 - `commands` holds the IDs the plugin registered; it is empty unless the
   plugin is `active`.
 
