@@ -174,7 +174,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(52, checkedTypes.Count);
+        Assert.Equal(53, checkedTypes.Count);
     }
 
     [Fact]
