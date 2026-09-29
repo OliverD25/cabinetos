@@ -449,6 +449,34 @@
     "id"
   ],
   "$defs": {
+    "Chrome": {
+      "description": "The elements of the window a theme shows or hides (`docs/themes.md`,\n\"Metrics and chrome\"). A theme never changes a command, a key or the\nlayout; it may turn these on. Each one left out, like the whole object,\nis as the default theme has it: off.",
+      "type": "object",
+      "properties": {
+        "fkeyBar": {
+          "description": "The function-key bar between the panes and the status bar: F3 View,\nF4 Edit, F5 Copy, F6 Move, F7 Mkdir, F8 Delete, Alt+F1 Drive. Its\nbuttons run the commands those keys run.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "hairlines": {
+          "description": "1 px separators between the window's surfaces instead of floating\ncards; with `gap` and `radiusSurface` at 0 the surfaces meet at the\nhairlines.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "rowStripes": {
+          "description": "Every other row of a file list a shade lighter.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "Color": {
       "description": "A colour, #RRGGBB, or #RRGGBBAA with alpha (00 clear, FF solid).",
       "type": "string",
@@ -1010,6 +1038,469 @@
         "command"
       ]
     },
+    "Metrics": {
+      "description": "The sizes a theme changes, each optional; one left out keeps the default theme's value.",
+      "type": "object",
+      "properties": {
+        "backdropOpacity": {
+          "description": "How much the window's backdrop covers the desktop behind it: 0.86 is plain Mica, the default look; more lets less of the desktop show through behind dense text. A number from 0 to 1; left out, 0.86.",
+          "type": "number",
+          "maximum": 1,
+          "minimum": 0
+        },
+        "bodyPadding": {
+          "description": "The space between the window's edges and its surfaces, at the sides and the bottom. Whole pixels from 0 to 64; left out, 8.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "captionButtonWidth": {
+          "description": "The width of the minimize, maximize and close buttons. Whole pixels from 24 to 96; left out, 46.",
+          "type": "integer",
+          "maximum": 96,
+          "minimum": 24
+        },
+        "columnGap": {
+          "description": "The space between a file list's columns. Whole pixels from 0 to 48; left out, 0.",
+          "type": "integer",
+          "maximum": 48,
+          "minimum": 0
+        },
+        "columnHeaderPaddingX": {
+          "description": "The space at each side of the column headers' row. Whole pixels from 0 to 64; left out, 14.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "columnHeaderPaddingY": {
+          "description": "The space above and below the column headers' text. Whole pixels from 0 to 64; left out, 4.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "commandBarHeight": {
+          "description": "The height of the command bar. Whole pixels from 14 to 80; left out, 48.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "driveRowPaddingX": {
+          "description": "The space at each side of a drive row's content in the sidebar. Whole pixels from 0 to 64; left out, 10.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "driveRowPaddingY": {
+          "description": "The space above and below a drive row's content in the sidebar. Whole pixels from 0 to 64; left out, 6.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "editorTabHeight": {
+          "description": "The height of the editor's tab strip. Whole pixels from 14 to 80; left out, 36.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "fieldHeight": {
+          "description": "The height of the address and search fields. Whole pixels from 14 to 80; left out, 32.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "fkeyBarFontSize": {
+          "description": "The text size of the function-key bar. Whole pixels from 8 to 32; left out, 11.",
+          "type": "integer",
+          "maximum": 32,
+          "minimum": 8
+        },
+        "fkeyBarGap": {
+          "description": "The space between the function-key bar's buttons. Whole pixels from 0 to 48; left out, 1.",
+          "type": "integer",
+          "maximum": 48,
+          "minimum": 0
+        },
+        "fkeyBarHeight": {
+          "description": "The height of the function-key bar, when `chrome.fkeyBar` shows it (the default theme has no bar; the values left out are the handout's). Whole pixels from 14 to 80; left out, 24.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "fkeyButtonRadius": {
+          "description": "The corner radius of a function-key button. Whole pixels from 0 to 16; left out, 2.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "fontSize": {
+          "description": "The base text size of the window. Whole pixels from 8 to 32; left out, 13.",
+          "type": "integer",
+          "maximum": 32,
+          "minimum": 8
+        },
+        "gap": {
+          "description": "The space between the window's surfaces: the sidebar, the panes and the docks. Whole pixels from 0 to 48; left out, 8.",
+          "type": "integer",
+          "maximum": 48,
+          "minimum": 0
+        },
+        "hexColumnGap": {
+          "description": "The space between the hex view's columns. Whole pixels from 0 to 48; left out, 18.",
+          "type": "integer",
+          "maximum": 48,
+          "minimum": 0
+        },
+        "hexRowHeight": {
+          "description": "The height of a row in the hex view. Whole pixels from 14 to 80; left out, 22.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "iconButtonSize": {
+          "description": "The width and height of an icon button in the command bar. Whole pixels from 14 to 80; left out, 32.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "lineHeight": {
+          "description": "The line height of the window's text, as a multiple of its size. A number from 1 to 2.5; left out, 1.4.",
+          "type": "number",
+          "maximum": 2.5,
+          "minimum": 1
+        },
+        "markdownLineHeight": {
+          "description": "The Markdown preview's line height, as a multiple of its text size. A number from 1 to 2.5; left out, 1.6.",
+          "type": "number",
+          "maximum": 2.5,
+          "minimum": 1
+        },
+        "markdownPaddingX": {
+          "description": "The space at each side of the Markdown preview's text. Whole pixels from 0 to 64; left out, 40.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "markdownPaddingY": {
+          "description": "The space above and below the Markdown preview's text. Whole pixels from 0 to 64; left out, 28.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "marketplaceCardGap": {
+          "description": "The space between the marketplace's cards. Whole pixels from 0 to 48; left out, 10.",
+          "type": "integer",
+          "maximum": 48,
+          "minimum": 0
+        },
+        "marketplaceCardPaddingX": {
+          "description": "The space at each side of a marketplace card's content. Whole pixels from 0 to 64; left out, 14.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "marketplaceCardPaddingY": {
+          "description": "The space above and below a marketplace card's content. Whole pixels from 0 to 64; left out, 14.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "marketplaceCardRadius": {
+          "description": "The corner radius of a marketplace card. Whole pixels from 0 to 16; left out, 8.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "marketplaceTabHeight": {
+          "description": "The height of a tab in the marketplace's side list. Whole pixels from 14 to 80; left out, 32.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "marketplaceTabRadius": {
+          "description": "The corner radius of a marketplace tab. Whole pixels from 0 to 16; left out, 4.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "menuRowHeight": {
+          "description": "The height of an item in a context menu. Whole pixels from 14 to 80; left out, 32.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "modifiedColumnWeight": {
+          "description": "The Modified column's share, against the other weighted columns. A number from 0.1 to 10; left out, 0.55.",
+          "type": "number",
+          "maximum": 10,
+          "minimum": 0.1
+        },
+        "nameColumnMinWidth": {
+          "description": "The narrowest the Name column gets. Whole pixels from 0 to 400; left out, 120.",
+          "type": "integer",
+          "maximum": 400,
+          "minimum": 0
+        },
+        "nameColumnWeight": {
+          "description": "The Name column's share of a file list's width, against the other weighted columns. A number from 0.1 to 10; left out, 1.",
+          "type": "number",
+          "maximum": 10,
+          "minimum": 0.1
+        },
+        "paletteRowHeight": {
+          "description": "The height of a row in the command palette. Whole pixels from 14 to 80; left out, 36.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "paneHeaderHeight": {
+          "description": "The height of a pane's header, above its column headers. Whole pixels from 14 to 80; left out, 36.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "radiusControl": {
+          "description": "The corner radius of buttons, fields and other inner controls. Whole pixels from 0 to 16; left out, 4.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "radiusSurface": {
+          "description": "The corner radius of the panes, the sidebar, the terminal and the marketplace. Whole pixels from 0 to 16; left out, 8.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "rowHeight": {
+          "description": "The height of a row in a file list. Whole pixels from 14 to 80; left out, 30.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "rowIconGap": {
+          "description": "The space between a file row's icon and its name. Whole pixels from 0 to 48; left out, 10.",
+          "type": "integer",
+          "maximum": 48,
+          "minimum": 0
+        },
+        "rowPaddingX": {
+          "description": "The space at each side of a file row's content. Whole pixels from 0 to 64; left out, 10.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "rowRadius": {
+          "description": "The corner radius of a file row's selection and hover fill. Whole pixels from 0 to 16; left out, 4.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "secondaryFontSize": {
+          "description": "The text size of a file row's Modified, Type and Size columns. Whole pixels from 8 to 32; left out, 12.",
+          "type": "integer",
+          "maximum": 32,
+          "minimum": 8
+        },
+        "selectionBarWidth": {
+          "description": "The width of the accent bar at the left of a selected row, in the sidebar and in the file lists. Whole pixels from 0 to 8; left out, 3.",
+          "type": "integer",
+          "maximum": 8,
+          "minimum": 0
+        },
+        "sidebarHeaderFontSize": {
+          "description": "The text size of a sidebar section's label. Whole pixels from 8 to 32; left out, 11.",
+          "type": "integer",
+          "maximum": 32,
+          "minimum": 8
+        },
+        "sidebarHeaderPaddingBottom": {
+          "description": "The space below a sidebar section's label. Whole pixels from 0 to 64; left out, 4.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "sidebarHeaderPaddingTop": {
+          "description": "The space above a sidebar section's label. Whole pixels from 0 to 64; left out, 14.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "sidebarHeaderPaddingX": {
+          "description": "The space at each side of a sidebar section's label. Whole pixels from 0 to 64; left out, 12.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "sidebarMaxWidth": {
+          "description": "The widest the sidebar gets. Whole pixels from 100 to 600; left out, 224.",
+          "type": "integer",
+          "maximum": 600,
+          "minimum": 100
+        },
+        "sidebarMinWidth": {
+          "description": "The narrowest the sidebar gets. Whole pixels from 100 to 600; left out, 180.",
+          "type": "integer",
+          "maximum": 600,
+          "minimum": 100
+        },
+        "sidebarRowHeight": {
+          "description": "The height of a workspace row and of a pinned folder's row in the sidebar; left out, a pinned folder's row keeps the default theme's 32. Whole pixels from 14 to 80; left out, 34.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "sidebarRowInset": {
+          "description": "The space between a sidebar row and the sidebar's edges; 0 makes the rows full width. Whole pixels from 0 to 16; left out, 4.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "sidebarRowRadius": {
+          "description": "The corner radius of a sidebar row. Whole pixels from 0 to 16; left out, 4.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "sidebarWidthPercent": {
+          "description": "The sidebar's width as a share of the window's, kept between its narrowest and widest. Percent of the window from 5 to 50; left out, 20.",
+          "type": "number",
+          "maximum": 50,
+          "minimum": 5
+        },
+        "sizeColumnWidth": {
+          "description": "The width of the Size column. Whole pixels from 32 to 160; left out, 64.",
+          "type": "integer",
+          "maximum": 160,
+          "minimum": 32
+        },
+        "statusBarGap": {
+          "description": "The space between the status bar's items. Whole pixels from 0 to 48; left out, 16.",
+          "type": "integer",
+          "maximum": 48,
+          "minimum": 0
+        },
+        "statusBarHeight": {
+          "description": "The height of the status bar. Whole pixels from 14 to 80; left out, 26.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "statusBarPaddingX": {
+          "description": "The space at each side of the status bar's content. Whole pixels from 0 to 64; left out, 14.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "tabFontSize": {
+          "description": "The text size of a workspace tab. Whole pixels from 8 to 32; left out, 12.",
+          "type": "integer",
+          "maximum": 32,
+          "minimum": 8
+        },
+        "tabHeight": {
+          "description": "The height of a workspace tab in the title bar. Whole pixels from 14 to 80; left out, 32.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "tabMinWidth": {
+          "description": "The narrowest a workspace tab gets. Whole pixels from 40 to 240; left out, 96.",
+          "type": "integer",
+          "maximum": 240,
+          "minimum": 40
+        },
+        "tabPaddingX": {
+          "description": "The space at each side of a workspace tab's text. Whole pixels from 0 to 64; left out, 14.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "tabRadius": {
+          "description": "The radius of a workspace tab's two top corners. Whole pixels from 0 to 16; left out, 8.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "tagFontSize": {
+          "description": "The text size of a tag chip. Whole pixels from 8 to 32; left out, 12.",
+          "type": "integer",
+          "maximum": 32,
+          "minimum": 8
+        },
+        "tagRadius": {
+          "description": "The corner radius of a tag chip in the sidebar. Whole pixels from 0 to 16; left out, 12.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
+        },
+        "terminalDockHeightPercent": {
+          "description": "The bottom-docked terminal's height as a share of the window's, kept between its lowest and highest. Percent of the window from 10 to 80; left out, 30.",
+          "type": "number",
+          "maximum": 80,
+          "minimum": 10
+        },
+        "terminalDockMaxHeight": {
+          "description": "The highest the terminal gets when it is docked at the bottom. Whole pixels from 60 to 800; left out, 240.",
+          "type": "integer",
+          "maximum": 800,
+          "minimum": 60
+        },
+        "terminalDockMinHeight": {
+          "description": "The lowest the terminal gets when it is docked at the bottom. Whole pixels from 60 to 800; left out, 120.",
+          "type": "integer",
+          "maximum": 800,
+          "minimum": 60
+        },
+        "terminalHeaderHeight": {
+          "description": "The height of the terminal's header. Whole pixels from 14 to 80; left out, 34.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "terminalLineHeight": {
+          "description": "The terminal's line height, as a multiple of its text size. A number from 1 to 2.5; left out, 1.6.",
+          "type": "number",
+          "maximum": 2.5,
+          "minimum": 1
+        },
+        "terminalPaddingX": {
+          "description": "The space at each side of the terminal's text. Whole pixels from 0 to 64; left out, 12.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "terminalPaddingY": {
+          "description": "The space above and below the terminal's text. Whole pixels from 0 to 64; left out, 10.",
+          "type": "integer",
+          "maximum": 64,
+          "minimum": 0
+        },
+        "terminalTabHeight": {
+          "description": "The height of a terminal session's tab. Whole pixels from 14 to 80; left out, 26.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "titleBarHeight": {
+          "description": "The height of the title bar. Whole pixels from 14 to 80; left out, 40.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "toggleHeight": {
+          "description": "The height of the dual and single pane toggle. Whole pixels from 14 to 80; left out, 32.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "typeColumnWeight": {
+          "description": "The Type column's share, against the other weighted columns. A number from 0.1 to 10; left out, 0.45.",
+          "type": "number",
+          "maximum": 10,
+          "minimum": 0.1
+        }
+      },
+      "additionalProperties": false
+    },
     "MicaTint": {
       "description": "A tint laid over the Mica backdrop.",
       "type": "object",
@@ -1335,6 +1826,17 @@
           "description": "Who made the theme.",
           "type": "string"
         },
+        "chrome": {
+          "description": "The elements of the window this theme shows or hides. Absent: as\nthe default theme has them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Chrome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "id": {
           "description": "Lower case letters, digits and `-`, starting with a letter; also the\nfile's name without `.json`.",
           "type": "string"
@@ -1342,6 +1844,17 @@
         "kind": {
           "description": "Whether the theme is for dark mode, light mode, or follows Windows.",
           "$ref": "#/$defs/ThemeKind"
+        },
+        "metrics": {
+          "description": "The sizes that differ from the default theme's: a density preset\nsuch as Commander Compact. Absent: the default theme's sizes.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "mica": {
           "description": "A tint over the Mica backdrop; `null` shows plain Mica.",

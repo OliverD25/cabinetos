@@ -16,6 +16,10 @@ This is the design handout for CabinetOS, received from the creator on
   views, keybindings, plugin trust model, open questions.
 - `doc-page.js` and `support.js` are the prototype's runtime, not part of the
   design.
+- `compact/` is the Commander Compact handout (received 2026-09-29, unchanged):
+  `COMPACT_THEME.md`, a density preset of the same design, and its reference
+  page `CabinetOS Compact.dc.html`; the theme that ships from it is
+  [../themes.md](../themes.md), "Metrics and chrome".
 
 Where the handout disagrees with the Constitution or the brief, the
 consistency check in [../PLAN.md](../PLAN.md) section 4 records the conflict

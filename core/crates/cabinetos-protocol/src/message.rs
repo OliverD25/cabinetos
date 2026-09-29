@@ -2182,7 +2182,7 @@ mod tests {
         let listed = serde_json::to_value(ThemeInfo::from(&theme())).unwrap();
         assert_eq!(
             listed,
-            json!({"id": "nord", "name": "Nord", "author": "CabinetOS", "version": "1.0.0", "kind": "dark", "accent": "#88C0D0", "mica": {"tint": "#2E3440", "opacity": 0.88}})
+            json!({"id": "nord", "name": "Nord", "author": "CabinetOS", "version": "1.0.0", "kind": "dark", "accent": "#88C0D0", "mica": {"tint": "#2E3440", "opacity": 0.88}, "has_metrics": false})
         );
         let mut plain = theme();
         plain.accent = None;

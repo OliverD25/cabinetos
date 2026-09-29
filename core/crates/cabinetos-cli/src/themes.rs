@@ -6,7 +6,8 @@ use cabinetos_protocol::{Request, Response, Theme, ThemeInfo, ThemeKind};
 
 use crate::{failure, say, send};
 
-/// `themes list`: every valid theme, the one in effect marked with `*`.
+/// `themes list`: every valid theme, the one in effect marked with `*` and
+/// each density preset (a theme that sets metrics) with `compact`.
 pub(crate) async fn list(client: &mut PipeClient) -> anyhow::Result<()> {
     let reply = send(client, Request::ListThemes).await?;
     let Response::Themes { themes } = reply.body else {
@@ -40,8 +41,10 @@ fn line(theme: &ThemeInfo, in_effect: bool) -> String {
         || "plain".to_owned(),
         |mica| format!("{} {}", mica.tint.as_str(), mica.opacity.get()),
     );
+    // A theme that sets sizes is a density preset, such as Commander Compact.
+    let density = if theme.has_metrics { "compact" } else { "" };
     format!(
-        "{} {:<18} {:<18} {kind:<6} accent {accent:<7}  mica {mica:<12}  {} by {}",
+        "{} {:<18} {:<18} {kind:<6} {density:<7}  accent {accent:<7}  mica {mica:<12}  {} by {}",
         if in_effect { '*' } else { ' ' },
         theme.id,
         theme.name,
@@ -84,7 +87,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             line(&theme, true),
-            "* nord               Nord               dark   accent #88C0D0  mica #2E3440 0.88  1.0.0 by CabinetOS"
+            "* nord               Nord               dark            accent #88C0D0  mica #2E3440 0.88  1.0.0 by CabinetOS"
         );
         let plain = ThemeInfo {
             accent: None,
@@ -94,5 +97,14 @@ mod tests {
         assert!(line(&plain, false).starts_with("  nord"));
         assert!(line(&plain, false).contains("accent system "));
         assert!(line(&plain, false).contains("mica plain "));
+        assert!(!line(&plain, false).contains("compact"));
+        let dense = ThemeInfo {
+            has_metrics: true,
+            ..plain
+        };
+        assert_eq!(
+            line(&dense, false),
+            "  nord               Nord               dark   compact  accent system   mica plain         1.0.0 by CabinetOS"
+        );
     }
 }

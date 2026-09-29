@@ -51,8 +51,8 @@ pub use message::{
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 pub use terminal::{TerminalSession, TerminalState};
 pub use theme::{
-    Color, FileTypeColors, MicaTint, Opacity, Palette, Rgb, TerminalColors, Theme, ThemeInfo,
-    ThemeKind,
+    Chrome, Color, Decimal, FileTypeColors, METRICS, MetricSpec, MetricUnit, Metrics, MicaTint,
+    Opacity, Palette, Rgb, THEME_FORMAT, TerminalColors, Theme, ThemeInfo, ThemeKind,
 };
 
 /// Version of the control-channel protocol. The core reports it in

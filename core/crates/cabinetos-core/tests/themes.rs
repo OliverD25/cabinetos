@@ -170,17 +170,32 @@ async fn a_theme_applies_live_and_a_broken_edit_never_applies() {
     let ids: Vec<&str> = themes.iter().map(|theme| theme.id.as_str()).collect();
     assert_eq!(
         ids,
-        ["catppuccin-mocha", "default", "nord", "rose-pine-moon"]
+        [
+            "catppuccin-mocha",
+            "commander-compact",
+            "default",
+            "nord",
+            "rose-pine-moon"
+        ]
     );
-    // The picker gets each tint without asking for the whole theme.
+    // The picker gets each tint without asking for the whole theme, and
+    // which themes are density presets.
     let tints: Vec<Option<&str>> = themes
         .iter()
         .map(|theme| theme.mica.as_ref().map(|mica| mica.tint.as_str()))
         .collect();
     assert_eq!(
         tints,
-        [Some("#1E1E2E"), None, Some("#2E3440"), Some("#232136")]
+        [
+            Some("#1E1E2E"),
+            None,
+            None,
+            Some("#2E3440"),
+            Some("#232136")
+        ]
     );
+    let dense: Vec<bool> = themes.iter().map(|theme| theme.has_metrics).collect();
+    assert_eq!(dense, [false, true, false, false, false]);
     assert!(core.themes_dir().join("theme.schema.json").is_file());
     let default = theme(&mut client, None).await;
     assert_eq!(default.id, "default");
@@ -243,6 +258,47 @@ async fn a_theme_applies_live_and_a_broken_edit_never_applies() {
     let in_effect = theme(&mut client, None).await;
     assert_eq!(in_effect.accent.unwrap().as_str(), "#112233");
     assert_eq!(in_effect.palette.text_primary.as_str(), "#ECEFF4");
+}
+
+/// The fifth shipped theme is a density preset: choosing it brings
+/// `theme_changed` with its metrics and chrome as its file has them.
+#[tokio::test]
+async fn commander_compact_brings_its_metrics_and_chrome() {
+    let core = start_core(&json!({}));
+    let (mut client, mut events) = greeted(&core).await;
+    let reply = ask(
+        &mut client,
+        Request::SetValue {
+            path: "ui.theme".to_owned(),
+            value: json!("commander-compact"),
+        },
+    )
+    .await;
+    assert_eq!(reply, Response::Ok);
+    let changed = next_event(&mut events, EVENT_DEADLINE, |event| {
+        changed_theme(event).is_some()
+    })
+    .await;
+    let compact = changed_theme(&changed).unwrap();
+    assert_eq!(compact.id, "commander-compact");
+    let metrics = compact.metrics.as_ref().unwrap();
+    assert_eq!(metrics.row_height, Some(20));
+    assert_eq!(metrics.font_size, Some(12));
+    assert_eq!(metrics.title_bar_height, Some(30));
+    let chrome = compact.chrome.unwrap();
+    assert_eq!(
+        (chrome.fkey_bar, chrome.row_stripes, chrome.hairlines),
+        (Some(true), Some(true), Some(true))
+    );
+    // get_theme and the file say the same: carried unchanged.
+    assert_eq!(&theme(&mut client, None).await, compact);
+    let file: Value = serde_json::from_str(
+        &fs::read_to_string(core.themes_dir().join("commander-compact.json")).unwrap(),
+    )
+    .unwrap();
+    let sent = serde_json::to_value(compact).unwrap();
+    assert_eq!(sent["metrics"], file["metrics"]);
+    assert_eq!(sent["chrome"], file["chrome"]);
 }
 
 /// An unknown theme never applies: `set_value` refuses it, and a hand edit

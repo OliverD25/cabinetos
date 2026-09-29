@@ -15,7 +15,8 @@
 use schemars::{Schema, schema_for};
 
 use crate::{
-    Envelope, Event, IndexerRequest, IndexerResponse, MarketIndex, Request, Response, Theme,
+    Envelope, Event, IndexerRequest, IndexerResponse, MarketIndex, Request, Response, THEME_FORMAT,
+    Theme,
 };
 
 /// The JSON Schema of a request: an [`Envelope`] around a [`Request`].
@@ -56,10 +57,16 @@ pub fn indexer_response_schema() -> Schema {
     )
 }
 
-/// The JSON Schema of a theme file, `<id>.json` in the themes folder.
+/// The JSON Schema of a theme file, `<id>.json` in the themes folder. Its
+/// `$id` names the format's version, [`THEME_FORMAT`].
 #[must_use]
 pub fn theme_schema() -> Schema {
-    titled(schema_for!(Theme), "CabinetOS theme")
+    let mut schema = titled(schema_for!(Theme), "CabinetOS theme");
+    schema.insert(
+        "$id".to_owned(),
+        format!("urn:cabinetos:theme:{THEME_FORMAT}").into(),
+    );
+    schema
 }
 
 /// The JSON Schema of a marketplace index, `index.json`.
@@ -155,6 +162,38 @@ mod tests {
             (ansi["minItems"].as_u64(), ansi["maxItems"].as_u64()),
             (Some(16), Some(16))
         );
+    }
+
+    #[test]
+    fn the_theme_schema_carries_metrics_and_chrome_with_their_bounds() {
+        let schema = serde_json::to_value(theme_schema()).unwrap();
+        assert_eq!(schema["$id"], "urn:cabinetos:theme:2");
+        let required = schema["required"].as_array().unwrap();
+        for optional in ["metrics", "chrome"] {
+            assert!(schema["properties"][optional].is_object(), "{optional}");
+            assert!(!required.contains(&optional.into()), "{optional}");
+        }
+        let metrics = &schema["$defs"]["Metrics"];
+        assert_eq!(metrics["additionalProperties"], false);
+        assert_eq!(
+            metrics["properties"].as_object().unwrap().len(),
+            crate::METRICS.len()
+        );
+        let row = &metrics["properties"]["rowHeight"];
+        assert_eq!(
+            (&row["type"], &row["minimum"], &row["maximum"]),
+            (&"integer".into(), &14.into(), &80.into())
+        );
+        let line = &metrics["properties"]["lineHeight"];
+        assert_eq!(
+            (&line["type"], &line["minimum"], &line["maximum"]),
+            (&"number".into(), &1.into(), &2.5.into())
+        );
+        let chrome = &schema["$defs"]["Chrome"];
+        assert_eq!(chrome["additionalProperties"], false);
+        let mut keys: Vec<&String> = chrome["properties"].as_object().unwrap().keys().collect();
+        keys.sort();
+        assert_eq!(keys, ["fkeyBar", "hairlines", "rowStripes"]);
     }
 
     #[test]

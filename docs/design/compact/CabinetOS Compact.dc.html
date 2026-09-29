@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;background:#0d1626 radial-gradient(60% 70% at 15% 20%,#2b4a86 0%,transparent 60%),radial-gradient(50% 60% at 85% 80%,#4a2b6e 0%,transparent 60%),radial-gradient(40% 40% at 60% 30%,#1c5f72 0%,transparent 60%);}
+a{color:#60cdff;text-decoration:none}a:hover{text-decoration:underline}
+input,button{font-family:inherit}
+input:focus{outline:none}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+@keyframes ffPulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes ffIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes ffUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+<div style="height:100vh;display:flex;flex-direction:column;font-family:'Open Sans','Segoe UI Variable','Segoe UI',sans-serif;font-size:12px;color:#fff;background:{{ backdrop }};position:relative;overflow:hidden;user-select:none;line-height:1.3" onMouseDown="{{ closeTransient }}">
+
+<!-- Title bar -->
+<div style="height:30px;display:flex;align-items:center;flex:none">
+  <div style="display:flex;align-items:center;gap:10px;padding:0 14px;height:100%">
+    <img src="./icons/cabinetos-16.svg" width="16" height="16" alt="" style="display:block">
+    <span style="font-size:12px;color:rgba(255,255,255,.786)">CabinetOS</span>
+  </div>
+  <div style="display:flex;align-items:flex-end;height:100%;gap:2px;padding-left:6px">
+    <sc-for list="{{ workspaces }}" as="w" hint-placeholder-count="3">
+      <div onClick="{{ w.pick }}" style="height:24px;display:flex;align-items:center;gap:6px;padding:0 10px;border-radius:3px 3px 0 0;background:{{ w.bg }};color:{{ w.color }};font-size:11px;cursor:default;min-width:80px;white-space:nowrap">
+        <span style="width:8px;height:8px;border-radius:50%;background:{{ w.dot }}"></span>{{ w.name }}
+      </div>
+    </sc-for>
+    <div style="height:24px;width:24px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);border-radius:3px;cursor:default" style-hover="background:rgba(255,255,255,.06)">+</div>
+  </div>
+  <div style="flex:1"></div>
+  <div style="display:flex;height:100%">
+    <div style="width:40px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8)" style-hover="background:rgba(255,255,255,.08)"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg></div>
+    <div style="width:40px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8)" style-hover="background:rgba(255,255,255,.08)"><svg width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor"/></svg></div>
+    <div style="width:40px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8)" style-hover="background:#c42b1c;color:#fff"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"/></svg></div>
+  </div>
+</div>
+
+<!-- Command bar -->
+<div style="height:32px;display:flex;align-items:center;gap:2px;padding:0 4px;flex:none;border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03)">
+  <div onClick="{{ goBack }}" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.786);cursor:default" style-hover="background:rgba(255,255,255,.06)"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></div>
+  <div style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.363)"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></div>
+  <div onClick="{{ goUp }}" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.786);cursor:default" style-hover="background:rgba(255,255,255,.06)"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 10l5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></div>
+  <div style="flex:1;height:24px;margin:0 4px;border-radius:2px;background:rgba(255,255,255,.0605);border:1px solid rgba(255,255,255,.0698);border-bottom-color:rgba(255,255,255,.2);display:flex;align-items:center;padding:0 6px 0 10px;gap:2px;overflow:hidden">
+    <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="4">
+      <div onClick="{{ c.go }}" style="display:flex;align-items:center;gap:2px;color:rgba(255,255,255,.9);white-space:nowrap">
+        <span style="padding:2px 6px;border-radius:3px;cursor:default" style-hover="background:rgba(255,255,255,.08)">{{ c.label }}</span>
+        <sc-if value="{{ c.sep }}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/></svg></sc-if>
+      </div>
+    </sc-for>
+  </div>
+  <div style="width:clamp(120px,22%,240px);height:24px;border-radius:2px;background:rgba(255,255,255,.0605);border:1px solid rgba(255,255,255,.0698);border-bottom-color:rgba(255,255,255,.2);display:flex;align-items:center;padding:0 10px;gap:8px;color:rgba(255,255,255,.544)">
+    <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3"/></svg>
+    <span style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search {{ activeFolderName }}</span>
+  </div>
+  <div style="width:1px;height:16px;background:rgba(255,255,255,.1);margin:0 4px"></div>
+  <div onClick="{{ toggleDual }}" title="Toggle dual pane (Ctrl+Shift+D)" style="height:26px;padding:0 8px;border-radius:2px;display:flex;align-items:center;gap:6px;color:{{ dualColor }};cursor:default;font-size:12px" style-hover="background:rgba(255,255,255,.06)">
+    <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg>{{ dualLabel }}
+  </div>
+  <div onClick="{{ toggleTerm }}" title="Toggle terminal (Ctrl+`)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ termColor }};cursor:default" style-hover="background:rgba(255,255,255,.06)">
+    <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6l2 2-2 2M8 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+  </div>
+  <div onClick="{{ toggleMarket }}" title="Marketplace (Ctrl+Shift+X)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ marketColor }};cursor:default" style-hover="background:rgba(255,255,255,.06)">
+    <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6.5l1-3.5h10l1 3.5M2 6.5v7h12v-7M2 6.5h12M6 13.5v-4h4v4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+  </div>
+  <div onClick="{{ openPalette }}" title="Command palette (Ctrl+Shift+P)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.786);cursor:default" style-hover="background:rgba(255,255,255,.06)">
+    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="12.5" r="1.3" fill="currentColor"/></svg>
+  </div>
+</div>
+
+<!-- Body -->
+<div style="flex:1;display:flex;min-height:0;padding:0;gap:0">
+
+  <sc-if value="{{ isRail }}" hint-placeholder-val="{{ false }}">
+    <div style="width:34px;flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding-top:2px;border-right:1px solid rgba(255,255,255,.06)">
+      <sc-for list="{{ railItems }}" as="r" hint-placeholder-count="4">
+        <div onClick="{{ r.pick }}" title="{{ r.name }}" style="width:28px;height:28px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ r.color }};background:{{ r.bg }};cursor:default;position:relative" style-hover="background:rgba(255,255,255,.08)">
+          <span style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:3px;background:{{ r.bar }}"></span>
+          <span style="font-size:11px;font-weight:700;letter-spacing:.02em">{{ r.glyph }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
+    <div style="width:clamp(150px,17%,190px);flex:none;display:flex;flex-direction:column;gap:0;overflow:auto;padding:2px 0;border-right:1px solid rgba(255,255,255,.08)">
+      <div style="padding:4px 8px 2px;font-size:10px;font-weight:600;color:rgba(255,255,255,.544);text-transform:uppercase;letter-spacing:.06em;display:flex;justify-content:space-between;align-items:center">Workspaces<span style="font-weight:400;text-transform:none;letter-spacing:0;color:rgba(255,255,255,.4);white-space:nowrap">Ctrl+K W</span></div>
+      <sc-for list="{{ workspaces }}" as="w" hint-placeholder-count="3">
+        <div onClick="{{ w.pick }}" style="height:22px;margin:0;padding:0 8px;border-radius:0;display:flex;align-items:center;gap:6px;background:{{ w.sideBg }};position:relative;cursor:default" style-hover="background:rgba(255,255,255,.06)">
+          <span style="position:absolute;left:0;top:3px;width:2px;height:16px;border-radius:3px;background:{{ w.bar }}"></span>
+          <span style="width:8px;height:8px;border-radius:50%;background:{{ w.dot }}"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ w.name }}</span>
+          <span style="font-size:11px;color:rgba(255,255,255,.4);font-family:'Fira Code',monospace;white-space:nowrap">{{ w.branch }}</span>
+        </div>
+      </sc-for>
+      <div style="padding:8px 8px 2px;font-size:10px;font-weight:600;color:rgba(255,255,255,.544);text-transform:uppercase;letter-spacing:.06em">Pinned</div>
+      <sc-for list="{{ pinned }}" as="p" hint-placeholder-count="4">
+        <div onClick="{{ p.go }}" style="height:22px;margin:0;padding:0 8px;border-radius:0;display:flex;align-items:center;gap:6px;cursor:default;position:relative;background:{{ p.bg }}" style-hover="background:rgba(255,255,255,.06)">
+          <span style="position:absolute;left:0;top:3px;width:2px;height:16px;border-radius:3px;background:{{ p.bar }}"></span>
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.2l1.5 1.5h5.8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-10.5a1 1 0 0 1-1-1z" fill="#f2c063"/><path d="M1.5 7h13v5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" fill="#f8d98a"/></svg>
+          <span>{{ p.name }}</span>
+        </div>
+      </sc-for>
+      <div style="padding:8px 8px 2px;font-size:10px;font-weight:600;color:rgba(255,255,255,.544);text-transform:uppercase;letter-spacing:.06em">Drives</div>
+      <sc-for list="{{ drives }}" as="d" hint-placeholder-count="2">
+        <div onClick="{{ d.go }}" style="margin:0;padding:3px 8px;border-radius:0;display:flex;flex-direction:column;gap:3px;cursor:default" style-hover="background:rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;gap:6px"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="4.5" width="13" height="7" rx="1.5" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="1.2"/><circle cx="11.5" cy="8" r="1" fill="rgba(255,255,255,.7)"/></svg><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.name }}</span><span style="font-size:11px;color:rgba(255,255,255,.5);white-space:nowrap">{{ d.free }}</span></div>
+          <div style="height:3px;border-radius:3px;background:rgba(255,255,255,.1);margin-left:22px"><div style="height:100%;border-radius:3px;background:{{ d.barColor }};width:{{ d.pct }}"></div></div>
+        </div>
+      </sc-for>
+      <div style="padding:8px 8px 2px;font-size:10px;font-weight:600;color:rgba(255,255,255,.544);text-transform:uppercase;letter-spacing:.06em">Tags</div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;padding:2px 8px">
+        <sc-for list="{{ tags }}" as="t" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:5px;padding:1px 7px;border-radius:2px;background:rgba(255,255,255,.06);font-size:11px;cursor:default" style-hover="background:rgba(255,255,255,.1)"><span style="width:7px;height:7px;border-radius:50%;background:{{ t.color }}"></span>{{ t.name }}<span style="color:rgba(255,255,255,.4)">{{ t.n }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0;gap:0">
+    <sc-if value="{{ isFiles }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;display:flex;min-height:0;gap:0">
+        <div style="flex:1;display:flex;gap:0;min-width:0">
+          <sc-for list="{{ paneList }}" as="pane" hint-placeholder-count="2">
+            <div onMouseDown="{{ pane.focus }}" style="flex:1;min-width:0;display:flex;flex-direction:column;border-radius:0;background:rgba(255,255,255,.0512);border:1px solid {{ pane.border }};margin:0 0 0 -1px;overflow:hidden">
+              <sc-if value="{{ pane.isFiles }}" hint-placeholder-val="{{ true }}">
+                <div style="height:24px;display:flex;align-items:center;padding:0 4px 0 8px;gap:6px;border-bottom:1px solid rgba(255,255,255,.08);background:{{ pane.headBg }}">
+                  <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:{{ pane.titleColor }}">{{ pane.folderName }}</span>
+                  <span style="font-size:11px;color:rgba(255,255,255,.5);font-family:'Fira Code',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%">{{ pane.path }}</span>
+                  <div onClick="{{ pane.openEditorHint }}" style="width:20px;height:20px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6)" style-hover="background:rgba(255,255,255,.08)"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.3"/></svg></div>
+                </div>
+                <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,.9fr) minmax(0,.7fr) 60px;column-gap:8px;padding:2px 8px;font-size:11px;color:rgba(255,255,255,.55);border-bottom:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03)">
+                  <span>Name</span><span>Modified</span><span>Type</span><span style="text-align:right">Size</span>
+                </div>
+                <div style="flex:1;overflow:auto;padding:0">
+                  <sc-for list="{{ pane.rows }}" as="row" hint-placeholder-count="7">
+                    <div onClick="{{ row.select }}" onDoubleClick="{{ row.open }}" onContextMenu="{{ row.ctx }}" style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,.9fr) minmax(0,.7fr) 60px;column-gap:8px;align-items:center;height:20px;padding:0 8px;border-radius:0;background:{{ row.bg }};position:relative;cursor:default" style-hover="background:rgba(255,255,255,.06)">
+                      <span style="position:absolute;left:0;top:2px;width:2px;height:16px;border-radius:2px;background:{{ row.bar }}"></span>
+                      <span style="display:flex;align-items:center;gap:6px;min-width:0">
+                        <sc-if value="{{ row.d }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 16 16" style="flex:none"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.2l1.5 1.5h5.8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-10.5a1 1 0 0 1-1-1z" fill="#f2c063"/><path d="M1.5 7h13v5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" fill="#f8d98a"/></svg></sc-if>
+                        <sc-if value="{{ row.f }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 16 16" style="flex:none"><path d="M3.5 1.5h6l3 3v10h-9z" fill="rgba(255,255,255,.08)" stroke="{{ row.iconColor }}" stroke-width="1.1"/><path d="M9.5 1.5v3h3" fill="none" stroke="{{ row.iconColor }}" stroke-width="1.1"/></svg></sc-if>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:{{ row.color }}">{{ row.n }}</span>
+                        <sc-if value="{{ row.tag }}" hint-placeholder-val="{{ false }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ row.tag }};flex:none"></span></sc-if>
+                      </span>
+                      <span style="font-size:11px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.m }}</span>
+                      <span style="font-size:11px;color:rgba(255,255,255,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.t }}</span>
+                      <span style="font-size:11px;color:rgba(255,255,255,.6);text-align:right;font-variant-numeric:tabular-nums;font-family:'Fira Code',monospace">{{ row.s }}</span>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ pane.empty }}" hint-placeholder-val="{{ false }}"><div style="padding:40px;text-align:center;color:rgba(255,255,255,.4)">This folder is empty.</div></sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ pane.isEditor }}" hint-placeholder-val="{{ false }}">
+                <div style="height:26px;display:flex;align-items:stretch;border-bottom:1px solid rgba(255,255,255,.06)">
+                  <div style="display:flex;align-items:center;gap:8px;padding:0 10px 0 14px;background:rgba(255,255,255,.04);border-right:1px solid rgba(255,255,255,.06);position:relative">
+                    <span style="position:absolute;left:0;right:0;top:0;height:2px;background:{{ accent }}"></span>
+                    <svg width="14" height="14" viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{ pane.editorIconColor }}" stroke-width="1.1"/></svg>
+                    <span style="font-size:12px">{{ pane.editorFile }}</span>
+                    <div onClick="{{ pane.closeEditor }}" style="width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);margin-left:4px" style-hover="background:rgba(255,255,255,.1)"><svg width="9" height="9" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1.2"/></svg></div>
+                  </div>
+                  <div style="flex:1"></div>
+                  <div style="display:flex;align-items:center;gap:4px;padding:0 8px">
+                    <span style="font-size:11px;color:rgba(255,255,255,.45);padding:0 6px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#6ccb5f"></span>{{ pane.editorProvider }}</span>
+                    <div onClick="{{ pane.copyToOther }}" style="height:26px;padding:0 10px;border-radius:4px;display:flex;align-items:center;font-size:12px;color:rgba(255,255,255,.8);background:rgba(255,255,255,.06)" style-hover="background:rgba(255,255,255,.1)">Open in Terminal</div>
+                  </div>
+                </div>
+
+                <sc-if value="{{ pane.isMd }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:1;overflow:auto;padding:14px 20px;user-select:text;line-height:1.5;color:rgba(255,255,255,.86)">
+                    <div style="max-width:680px">
+                      <h1 style="font-size:26px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em">CabinetOS</h1>
+                      <p style="margin:0 0 18px;color:rgba(255,255,255,.6)">A developer-first file manager for Windows 11. Dual panes, workspaces, an integrated terminal and a WebAssembly plugin system, wrapped in Fluent.</p>
+                      <div style="display:flex;gap:6px;margin-bottom:22px">
+                        <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:rgba(96,205,255,.15);color:#9ad9ff;font-family:'Fira Code',monospace">build passing</span>
+                        <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:rgba(108,203,95,.15);color:#a5e29c;font-family:'Fira Code',monospace">v0.9.2</span>
+                        <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-family:'Fira Code',monospace">MIT</span>
+                      </div>
+                      <h2 style="font-size:17px;font-weight:600;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1)">Getting started</h2>
+                      <pre style="margin:0 0 18px;padding:12px 14px;border-radius:6px;background:rgba(0,0,0,.35);font-family:'Fira Code',monospace;font-size:12px;color:#d7e3f4;overflow:auto">winget install CabinetOS.CabinetOS
+cargo run --release -- --workspace .</pre>
+                      <h2 style="font-size:17px;font-weight:600;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1)">Concepts</h2>
+                      <ul style="margin:0 0 18px;padding-left:20px">
+                        <li><strong>Workspaces</strong> group folders, pane state and terminal sessions.</li>
+                        <li><strong>Panes</strong> host a folder list or any editor a plugin provides.</li>
+                        <li><strong>Commands</strong> are everything. Every action has an id and a keybinding.</li>
+                      </ul>
+                      <h2 style="font-size:17px;font-weight:600;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1)">Plugins</h2>
+                      <p style="margin:0">Plugins are sandboxed WebAssembly modules. They declare capabilities up front and are reviewed at install time. See <a href="#">docs/plugins.md</a>.</p>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ pane.isHex }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:1;overflow:auto;padding:10px 14px;font-family:'Fira Code',monospace;font-size:12px;user-select:text">
+                    <div style="display:grid;grid-template-columns:76px 1fr 150px;gap:0 18px;color:rgba(255,255,255,.4);padding:0 0 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:6px"><span>Offset</span><span>00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F</span><span>ASCII</span></div>
+                    <sc-for list="{{ hexRows }}" as="h" hint-placeholder-count="12">
+                      <div style="display:grid;grid-template-columns:76px 1fr 150px;gap:0 14px;height:18px;align-items:center;border-radius:0" style-hover="background:rgba(255,255,255,.05)"><span style="color:{{ accent }}">{{ h.off }}</span><span style="color:rgba(255,255,255,.85);letter-spacing:.02em">{{ h.bytes }}</span><span style="color:rgba(255,255,255,.55)">{{ h.ascii }}</span></div>
+                    </sc-for>
+                  </div>
+                  <div style="height:22px;display:flex;align-items:center;gap:12px;padding:0 8px;font-size:11px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.06);font-family:'Fira Code',monospace">
+                    <span>PE32+ executable</span><span>Offset 0x0000</span><span>Little-endian</span><span style="flex:1"></span><span>Hex Editor Pro · plugin</span>
+                  </div>
+                </sc-if>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ termRight }}" hint-placeholder-val="{{ false }}">
+          <div style="width:clamp(220px,32%,380px);flex:none;display:flex;flex-direction:column;border-radius:0;background:rgba(0,0,0,.35);border-left:1px solid rgba(255,255,255,.1);overflow:hidden">
+            <div style="height:24px;display:flex;align-items:center;padding:0 4px 0 8px;gap:6px;border-bottom:1px solid rgba(255,255,255,.06)">
+              <span style="font-size:12px;font-weight:600">pwsh</span>
+              <span style="font-size:11px;color:rgba(255,255,255,.45);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">synced to {{ termFolderName }}</span>
+              <div onClick="{{ toggleTerm }}" style="width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6)" style-hover="background:rgba(255,255,255,.1)"><svg width="9" height="9" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1.2"/></svg></div>
+            </div>
+            <div style="flex:1;overflow:auto;padding:6px 8px;font-family:'Fira Code',monospace;font-size:12px;line-height:1.45;user-select:text">
+              <sc-for list="{{ termLines }}" as="l" hint-placeholder-count="3"><div style="white-space:pre-wrap;color:{{ l.color }}">{{ l.t }}</div></sc-for>
+              <div style="display:flex;gap:8px"><span style="color:{{ accent }}">{{ prompt }}</span><input value="{{ termInput }}" onChange="{{ onTermInput }}" onKeyDown="{{ onTermKey }}" spellcheck="false" style="flex:1;background:none;border:none;color:#fff;font:inherit;padding:0"></div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ termBottom }}" hint-placeholder-val="{{ false }}">
+        <div style="height:clamp(100px,26%,200px);flex:none;display:flex;flex-direction:column;border-radius:0;background:rgba(0,0,0,.35);border-top:1px solid rgba(255,255,255,.1);overflow:hidden">
+          <div style="height:24px;display:flex;align-items:center;padding:0 4px 0 4px;gap:1px;border-bottom:1px solid rgba(255,255,255,.06)">
+            <div style="height:20px;padding:0 8px;border-radius:2px;display:flex;align-items:center;gap:6px;font-size:11px;background:rgba(255,255,255,.08)"><span style="width:6px;height:6px;border-radius:50%;background:#6ccb5f"></span>pwsh</div>
+            <div style="height:20px;padding:0 8px;border-radius:2px;display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,.6);white-space:nowrap" style-hover="background:rgba(255,255,255,.06)">wsl: Ubuntu</div>
+            <div style="height:20px;width:20px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6)" style-hover="background:rgba(255,255,255,.06)">+</div>
+            <span style="font-size:11px;color:rgba(255,255,255,.45);flex:1;text-align:right;padding-right:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">cwd synced to active pane · {{ termFolderName }}</span>
+            <div onClick="{{ toggleTerm }}" style="width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6)" style-hover="background:rgba(255,255,255,.1)"><svg width="9" height="9" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1.2"/></svg></div>
+          </div>
+          <div style="flex:1;overflow:auto;padding:6px 8px;font-family:'Fira Code',monospace;font-size:12px;line-height:1.45;user-select:text">
+            <sc-for list="{{ termLines }}" as="l" hint-placeholder-count="3"><div style="white-space:pre-wrap;color:{{ l.color }}">{{ l.t }}</div></sc-for>
+            <div style="display:flex;gap:8px"><span style="color:{{ accent }}">{{ prompt }}</span><input value="{{ termInput }}" onChange="{{ onTermInput }}" onKeyDown="{{ onTermKey }}" spellcheck="false" style="flex:1;background:none;border:none;color:#fff;font:inherit;padding:0"></div>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+
+    <!-- Marketplace -->
+    <sc-if value="{{ isMarket }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;min-height:0;border-radius:0;background:rgba(255,255,255,.0512);border:none;overflow:hidden">
+        <div style="width:180px;flex:none;padding:12px 6px;border-right:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:2px">
+          <div style="padding:4px 10px 10px;font-size:15px;font-weight:600">Marketplace</div>
+          <sc-for list="{{ mkTabs }}" as="t" hint-placeholder-count="4">
+            <div onClick="{{ t.pick }}" style="height:24px;padding:0 8px;border-radius:0;display:flex;align-items:center;gap:8px;background:{{ t.bg }};position:relative;cursor:default" style-hover="background:rgba(255,255,255,.06)">
+              <span style="position:absolute;left:0;top:8px;width:3px;height:16px;border-radius:3px;background:{{ t.bar }}"></span>
+              <span style="flex:1">{{ t.name }}</span><span style="font-size:11px;color:rgba(255,255,255,.4)">{{ t.n }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;gap:10px;padding:14px 18px 6px">
+            <div style="flex:1;max-width:420px;height:32px;border-radius:4px;background:rgba(255,255,255,.0605);border:1px solid rgba(255,255,255,.0698);border-bottom-color:rgba(255,255,255,.3);display:flex;align-items:center;padding:0 10px;gap:8px">
+              <svg width="14" height="14" viewBox="0 0 16 16" style="color:rgba(255,255,255,.5)"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3"/></svg>
+              <input value="{{ mkQuery }}" onChange="{{ onMkQuery }}" placeholder="Search plugins and themes" style="flex:1;background:none;border:none;color:#fff;font-size:13px"></div>
+            <span style="font-size:12px;color:rgba(255,255,255,.5)">{{ mkCount }} results · WebAssembly, sandboxed</span>
+          </div>
+          <div style="flex:1;overflow:auto;padding:8px 18px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px;align-content:start">
+            <sc-for list="{{ mkItems }}" as="it" hint-placeholder-count="6">
+              <div onClick="{{ it.pick }}" style="border-radius:2px;background:rgba(255,255,255,.04);border:1px solid {{ it.border }};padding:8px 10px;display:flex;flex-direction:column;gap:6px;cursor:default" style-hover="background:rgba(255,255,255,.07)">
+                <div style="display:flex;gap:12px;align-items:center">
+                  <div style="width:40px;height:40px;border-radius:8px;background:{{ it.iconBg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#111;flex:none">{{ it.glyph }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-weight:600;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.name }}<sc-if value="{{ it.verified }}" hint-placeholder-val="{{ false }}"><svg width="13" height="13" viewBox="0 0 16 16" style="flex:none"><circle cx="8" cy="8" r="7" fill="{{ accent }}"/><path d="M4.5 8.2l2.3 2.3 4.7-4.8" fill="none" stroke="#111" stroke-width="1.6"/></svg></sc-if></div>
+                    <div style="font-size:11px;color:rgba(255,255,255,.55)">{{ it.author }}</div>
+                  </div>
+                </div>
+                <div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.45;min-height:34px">{{ it.desc }}</div>
+                <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,.55)">
+                  <span style="color:#f2c063">★</span><span style="color:#fff">{{ it.rating }}</span><span>({{ it.reviews }})</span><span>·</span><span>{{ it.installs }} installs</span>
+                  <span style="flex:1"></span>
+                  <span style="padding:1px 6px;border-radius:3px;background:rgba(255,255,255,.08)">{{ it.kindLabel }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ mkDetail }}" hint-placeholder-val="{{ false }}">
+          <div style="width:340px;flex:none;border-left:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;overflow:auto;animation:ffIn .18s ease">
+            <div style="padding:18px 18px 12px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;gap:12px;align-items:center">
+                <div style="width:52px;height:52px;border-radius:10px;background:{{ mkDetail.iconBg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:#111">{{ mkDetail.glyph }}</div>
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:16px;font-weight:600">{{ mkDetail.name }}</div>
+                  <div style="font-size:12px;color:rgba(255,255,255,.55)">{{ mkDetail.author }} · v{{ mkDetail.version }}</div>
+                </div>
+                <div onClick="{{ closeDetail }}" style="width:26px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);align-self:flex-start" style-hover="background:rgba(255,255,255,.1)"><svg width="9" height="9" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1.2"/></svg></div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <div onClick="{{ mkDetail.install }}" style="height:32px;padding:0 18px;border-radius:4px;background:{{ mkDetail.btnBg }};color:{{ mkDetail.btnColor }};font-weight:600;display:flex;align-items:center;cursor:default;border:1px solid rgba(255,255,255,.08)" style-hover="opacity:.9">{{ mkDetail.btnLabel }}</div>
+                <div style="height:32px;padding:0 12px;border-radius:4px;background:rgba(255,255,255,.06);display:flex;align-items:center;border:1px solid rgba(255,255,255,.06)" style-hover="background:rgba(255,255,255,.1)">Source</div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px;color:rgba(255,255,255,.55)">
+                <div style="padding:8px 10px;border-radius:6px;background:rgba(255,255,255,.04)"><div style="font-size:15px;color:#fff;font-weight:600">{{ mkDetail.rating }} <span style="color:#f2c063;font-size:12px">★</span></div>{{ mkDetail.reviews }} ratings</div>
+                <div style="padding:8px 10px;border-radius:6px;background:rgba(255,255,255,.04)"><div style="font-size:15px;color:#fff;font-weight:600">{{ mkDetail.installs }}</div>installs</div>
+                <div style="padding:8px 10px;border-radius:6px;background:rgba(255,255,255,.04)"><div style="font-size:15px;color:#fff;font-weight:600">{{ mkDetail.size }}</div>wasm size</div>
+              </div>
+              <div style="font-size:13px;color:rgba(255,255,255,.8);line-height:1.5">{{ mkDetail.long }}</div>
+            </div>
+            <div style="padding:6px 18px 18px;display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,.544);text-transform:uppercase;letter-spacing:.06em">Requested capabilities</div>
+              <sc-for list="{{ mkDetail.perms }}" as="p" hint-placeholder-count="3">
+                <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:6px;background:rgba(255,255,255,.04)">
+                  <span style="width:8px;height:8px;border-radius:50%;background:{{ p.color }};margin-top:5px;flex:none"></span>
+                  <div style="min-width:0"><div style="font-size:12px;font-weight:600">{{ p.name }}</div><div style="font-size:11px;color:rgba(255,255,255,.55)">{{ p.why }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+  </div>
+</div>
+
+<!-- Function key bar -->
+<sc-if value="{{ showFkeys }}" hint-placeholder-val="{{ true }}">
+  <div style="height:24px;display:flex;flex:none;gap:1px;padding:2px 2px 0;border-top:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)">
+    <sc-for list="{{ fkeys }}" as="f" hint-placeholder-count="7">
+      <div onClick="{{ f.run }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:0 4px;background:rgba(255,255,255,.05);border-radius:2px;font-size:11px;cursor:default;white-space:nowrap;overflow:hidden;min-width:0" style-hover="background:rgba(255,255,255,.12)"><span style="font-family:'Fira Code',monospace;color:{{ accent }}">{{ f.key }}</span><span style="color:rgba(255,255,255,.8);overflow:hidden;text-overflow:ellipsis">{{ f.name }}</span></div>
+    </sc-for>
+  </div>
+</sc-if>
+
+<!-- Status bar -->
+<div style="height:22px;display:flex;align-items:center;gap:12px;padding:0 8px;font-size:11px;color:rgba(255,255,255,.6);flex:none;border-top:1px solid rgba(255,255,255,.06);white-space:nowrap;overflow:hidden">
+  <span>{{ statusItems }}</span>
+  <span style="overflow:hidden;text-overflow:ellipsis;min-width:0">{{ statusSel }}</span>
+  <span style="flex:1"></span>
+  <sc-if value="{{ transferPill }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ showTransfer }}" style="display:flex;align-items:center;gap:8px;padding:2px 8px;border-radius:10px;background:rgba(255,255,255,.08);color:#fff;cursor:default">
+      <span style="width:80px;height:4px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden;display:block"><span style="display:block;height:100%;background:{{ accent }};width:{{ transferPct }}%"></span></span>
+      Copying · {{ transferPctLabel }}
+    </div>
+  </sc-if>
+  <span style="display:flex;align-items:center;gap:6px"><svg width="11" height="11" viewBox="0 0 16 16"><circle cx="4" cy="4" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="4" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6v4M12 8c0 3-8 1-8 4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>{{ activeBranch }}</span>
+  <span>UTF-8</span>
+  <span>{{ layoutLabel }}</span>
+  <span onClick="{{ openPalette }}" style="font-family:'Fira Code',monospace;cursor:default;padding:1px 6px;border-radius:3px;background:rgba(255,255,255,.06)">Ctrl+Shift+P</span>
+</div>
+
+<!-- Command palette -->
+<sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;z-index:50" onMouseDown="{{ closePalette }}">
+    <div onMouseDown="{{ stop }}" style="position:absolute;left:50%;top:64px;transform:translateX(-50%);width:640px;max-width:calc(100% - 32px);border-radius:8px;background:rgba(38,38,38,.9);backdrop-filter:blur(40px) saturate(1.6);-webkit-backdrop-filter:blur(40px) saturate(1.6);border:1px solid rgba(255,255,255,.1);box-shadow:0 24px 60px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.3);overflow:hidden;animation:ffIn .16s ease">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 8px">
+        <div style="flex:1;height:34px;border-radius:4px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-bottom:2px solid {{ accent }};display:flex;align-items:center;padding:0 10px;gap:8px">
+          <span style="color:rgba(255,255,255,.5);font-family:'Fira Code',monospace">&gt;</span>
+          <input ref="{{ paletteRef }}" value="{{ paletteQ }}" onChange="{{ onPaletteQ }}" placeholder="Type a command or search" style="flex:1;background:none;border:none;color:#fff;font-size:13px">
+        </div>
+        <span style="font-size:11px;color:rgba(255,255,255,.45)">{{ paletteCount }} commands</span>
+      </div>
+      <div style="max-height:400px;overflow:auto;padding:0 6px 8px">
+        <sc-for list="{{ paletteItems }}" as="cmd" hint-placeholder-count="6">
+          <div onClick="{{ cmd.run }}" onMouseEnter="{{ cmd.hover }}" style="height:28px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:2px;background:{{ cmd.bg }};position:relative;cursor:default">
+            <span style="position:absolute;left:0;top:6px;width:2px;height:16px;border-radius:3px;background:{{ cmd.bar }}"></span>
+            <span style="color:rgba(255,255,255,.5);font-size:12px">{{ cmd.cat }}:</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ cmd.name }}</span>
+            <sc-if value="{{ cmd.plugin }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.6)">{{ cmd.plugin }}</span></sc-if>
+            <sc-if value="{{ cmd.recording }}" hint-placeholder-val="{{ false }}">
+              <span style="display:flex;align-items:center;gap:8px;font-size:12px;color:{{ accent }};animation:ffPulse 1.2s infinite"><span style="font-family:'Fira Code',monospace">{{ cmd.recText }}</span><span style="color:rgba(255,255,255,.5)">Esc to cancel</span></span>
+            </sc-if>
+            <sc-if value="{{ cmd.notRecording }}" hint-placeholder-val="{{ true }}">
+              <span style="display:flex;align-items:center;gap:4px">
+                <sc-for list="{{ cmd.keys }}" as="k" hint-placeholder-count="1">
+                  <span style="font-family:'Fira Code',monospace;font-size:11px;padding:1px 6px;border-radius:3px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-bottom-color:rgba(255,255,255,.22);color:rgba(255,255,255,.9)">{{ k.label }}</span>
+                  <sc-if value="{{ k.sep }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:rgba(255,255,255,.4);padding:0 2px">then</span></sc-if>
+                </sc-for>
+              </span>
+              <div onClick="{{ cmd.edit }}" title="Change keybinding" style="width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.75);opacity:{{ cmd.pencilOpacity }}" style-hover="background:rgba(255,255,255,.12)"><svg width="13" height="13" viewBox="0 0 16 16"><path d="M2.5 13.5l.7-3.2 7.6-7.6a1.2 1.2 0 0 1 1.7 0l.8.8a1.2 1.2 0 0 1 0 1.7l-7.6 7.6z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:16px;padding:6px 14px 8px;font-size:11px;color:rgba(255,255,255,.45);border-top:1px solid rgba(255,255,255,.06)"><span>↑↓ navigate</span><span>↵ run</span><span>hover a row and click the pencil to rebind</span></div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- Context menu -->
+<sc-if value="{{ ctxMenu }}" hint-placeholder-val="{{ false }}">
+  <div onMouseDown="{{ stop }}" style="position:fixed;left:{{ ctxMenu.x }}px;top:{{ ctxMenu.y }}px;width:260px;z-index:60;border-radius:8px;background:rgba(44,44,44,.78);backdrop-filter:blur(40px) saturate(1.6);-webkit-backdrop-filter:blur(40px) saturate(1.6);border:1px solid rgba(255,255,255,.1);box-shadow:0 12px 32px rgba(0,0,0,.5);padding:4px;animation:ffIn .12s ease">
+    <div style="display:flex;justify-content:space-around;padding:4px 4px 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:4px">
+      <sc-for list="{{ ctxIcons }}" as="i" hint-placeholder-count="5">
+        <div onClick="{{ i.run }}" title="{{ i.name }}" style="width:36px;height:32px;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:rgba(255,255,255,.85);font-size:9px" style-hover="background:rgba(255,255,255,.1)"><span style="font-family:'Fira Code',monospace;font-size:11px">{{ i.glyph }}</span></div>
+      </sc-for>
+    </div>
+    <sc-for list="{{ ctxItems }}" as="m" hint-placeholder-count="6">
+      <sc-if value="{{ m.sep }}" hint-placeholder-val="{{ false }}"><div style="height:1px;background:rgba(255,255,255,.08);margin:4px 8px"></div></sc-if>
+      <sc-if value="{{ m.head }}" hint-placeholder-val="{{ false }}"><div style="padding:6px 10px 2px;font-size:10px;font-weight:600;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.06em">{{ m.head }}</div></sc-if>
+      <sc-if value="{{ m.name }}" hint-placeholder-val="{{ true }}">
+        <div onClick="{{ m.run }}" style="height:26px;padding:0 8px;border-radius:2px;display:flex;align-items:center;gap:8px;cursor:default" style-hover="background:rgba(255,255,255,.08)">
+          <span style="width:14px;height:14px;border-radius:3px;background:{{ m.iconBg }};flex:none"></span>
+          <span style="flex:1">{{ m.name }}</span>
+          <sc-if value="{{ m.plugin }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(96,205,255,.15);color:{{ accent }}">{{ m.plugin }}</span></sc-if>
+          <span style="font-size:11px;color:rgba(255,255,255,.45);font-family:'Fira Code',monospace">{{ m.key }}</span>
+        </div>
+      </sc-if>
+    </sc-for>
+  </div>
+</sc-if>
+
+<!-- Transfer flyout -->
+<sc-if value="{{ transferOpen }}" hint-placeholder-val="{{ false }}">
+  <div onMouseDown="{{ stop }}" style="position:absolute;right:16px;bottom:36px;width:380px;z-index:40;border-radius:8px;background:rgba(40,40,40,.82);backdrop-filter:blur(40px) saturate(1.6);-webkit-backdrop-filter:blur(40px) saturate(1.6);border:1px solid rgba(255,255,255,.1);box-shadow:0 16px 40px rgba(0,0,0,.5);padding:14px 16px;display:flex;flex-direction:column;gap:10px;animation:ffUp .2s ease">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0"><div style="font-weight:600">{{ transferTitle }}</div><div style="font-size:11px;color:rgba(255,255,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ transferSub }}</div></div>
+      <div onClick="{{ hideTransfer }}" title="Minimize to status bar" style="width:26px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6)" style-hover="background:rgba(255,255,255,.1)"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg></div>
+    </div>
+    <div style="height:56px;border-radius:6px;background:rgba(0,0,0,.3);overflow:hidden;position:relative">
+      <svg width="100%" height="56" viewBox="0 0 348 56" preserveAspectRatio="none" style="display:block">
+        <polygon points="{{ graphFill }}" fill="{{ accent }}" opacity=".18"></polygon>
+        <polyline points="{{ graphPoints }}" fill="none" stroke="{{ accent }}" stroke-width="1.5"></polyline>
+      </svg>
+      <span style="position:absolute;right:8px;top:6px;font-size:11px;color:rgba(255,255,255,.6);font-family:'Fira Code',monospace">{{ transferSpeed }}</span>
+    </div>
+    <div style="height:4px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden"><div style="height:100%;border-radius:4px;background:{{ accent }};width:{{ transferPct }}%;transition:width .4s linear"></div></div>
+    <div style="display:flex;align-items:center;gap:12px;font-size:11px;color:rgba(255,255,255,.6)">
+      <span style="color:#fff;font-weight:600;font-size:13px">{{ transferPctLabel }}</span><span>{{ transferDone }}</span><span>{{ transferEta }}</span>
+      <span style="flex:1"></span>
+      <div onClick="{{ togglePause }}" style="height:28px;padding:0 12px;border-radius:4px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);color:#fff;display:flex;align-items:center;font-size:12px;cursor:default" style-hover="background:rgba(255,255,255,.12)">{{ pauseLabel }}</div>
+      <div onClick="{{ cancelTransfer }}" style="height:28px;padding:0 12px;border-radius:4px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#fff;display:flex;align-items:center;font-size:12px;cursor:default" style-hover="background:rgba(196,43,28,.6)">{{ cancelLabel }}</div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- Permissions review -->
+<sc-if value="{{ review }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;z-index:70;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center" onMouseDown="{{ closeReview }}">
+    <div onMouseDown="{{ stop }}" style="width:440px;border-radius:8px;background:#2b2b2b;border:1px solid rgba(255,255,255,.1);box-shadow:0 32px 64px rgba(0,0,0,.55);overflow:hidden;animation:ffIn .16s ease">
+      <div style="padding:22px 24px 8px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div style="width:40px;height:40px;border-radius:8px;background:{{ review.iconBg }};display:flex;align-items:center;justify-content:center;font-weight:700;color:#111">{{ review.glyph }}</div>
+          <div><div style="font-size:18px;font-weight:600;line-height:1.2">Review permissions</div><div style="font-size:12px;color:rgba(255,255,255,.6)">{{ review.name }} by {{ review.author }}</div></div>
+        </div>
+        <div style="color:rgba(255,255,255,.8)">This plugin runs in a WebAssembly sandbox. It can only do what you allow here.</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ review.perms }}" as="p" hint-placeholder-count="3">
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06)">
+              <span style="width:8px;height:8px;border-radius:50%;background:{{ p.color }};margin-top:6px;flex:none"></span>
+              <div style="flex:1;min-width:0"><div style="font-weight:600;display:flex;gap:8px;align-items:center">{{ p.name }}<span style="font-size:10px;font-weight:600;color:{{ p.color }};text-transform:uppercase;letter-spacing:.05em">{{ p.level }}</span></div><div style="font-size:12px;color:rgba(255,255,255,.6)">{{ p.why }}</div></div>
+            </div>
+          </sc-for>
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;font-size:12px;color:rgba(255,255,255,.75)"><span style="width:16px;height:16px;border-radius:4px;border:1px solid rgba(255,255,255,.5)"></span>Trust {{ review.author }} for future updates</label>
+      </div>
+      <div style="padding:16px 24px;background:#202020;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;justify-content:flex-end">
+        <div onClick="{{ closeReview }}" style="height:32px;padding:0 20px;border-radius:4px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;cursor:default" style-hover="background:rgba(255,255,255,.1)">Cancel</div>
+        <div onClick="{{ confirmInstall }}" style="height:32px;padding:0 20px;border-radius:4px;background:{{ accent }};color:#111;font-weight:600;display:flex;align-items:center;cursor:default" style-hover="opacity:.9">Allow and install</div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;classic&quot;,&quot;right&quot;,&quot;rail&quot;],&quot;default&quot;:&quot;classic&quot;,&quot;tsType&quot;:&quot;'classic'|'right'|'rail'&quot;,&quot;section&quot;:&quot;Layout takes&quot;,&quot;description&quot;:&quot;classic: sidebar + terminal bottom · right: terminal as a side column · rail: VS Code-style activity rail&quot;},&quot;terminalOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Layout takes&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#60cdff&quot;,&quot;options&quot;:[&quot;#60cdff&quot;,&quot;#88c0d0&quot;,&quot;#cba6f7&quot;,&quot;#6ccb5f&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;},&quot;fkeyBar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Commander&quot;,&quot;description&quot;:&quot;Total Commander style F-key bar above the status bar&quot;},&quot;rowStripes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Commander&quot;}}">
+const FS = {
+  'C:\\': [{n:'Program Files',d:1,m:'12 Aug 2026'},{n:'Users',d:1,m:'3 Jan 2026'},{n:'Windows',d:1,m:'Yesterday 22:10'}],
+  'C:\\Users\\dev': [{n:'Desktop',d:1,m:'Today 08:40'},{n:'Documents',d:1,m:'Mon 14:02'},{n:'Downloads',d:1,m:'Today 09:31'},{n:'Pictures',d:1,m:'20 Sep 2026'},{n:'Projects',d:1,m:'Today 09:12'}],
+  'C:\\Users\\dev\\Projects': [{n:'fileforge',d:1,m:'Today 09:12',tag:'#60cdff'},{n:'blog',d:1,m:'Sat 11:20'},{n:'dotfiles',d:1,m:'2 Sep 2026'},{n:'scratch',d:1,m:'18 Sep 2026'}],
+  'C:\\Users\\dev\\Projects\\fileforge': [
+    {n:'.git',d:1,m:'Today 09:12'},{n:'assets',d:1,m:'Yesterday 17:44'},{n:'docs',d:1,m:'Mon 10:05'},{n:'src',d:1,m:'Today 09:11'},{n:'target',d:1,m:'Today 09:12'},
+    {n:'.gitignore',t:'Text',s:'412 B',m:'2 Sep 2026'},{n:'Cargo.toml',t:'TOML',s:'1.8 KB',m:'Mon 10:05'},{n:'Cargo.lock',t:'Lock file',s:'96 KB',m:'Mon 10:05'},{n:'core.dll',t:'DLL',s:'2.7 MB',m:'Today 09:12'},{n:'cabinetos.exe',t:'Application',s:'14.3 MB',m:'Today 09:12'},{n:'LICENSE',t:'File',s:'1.1 KB',m:'3 Jan 2026'},{n:'README.md',t:'Markdown',s:'6.2 KB',m:'Today 08:58',tag:'#f2c063'}],
+  'C:\\Users\\dev\\Projects\\fileforge\\src': [{n:'ui',d:1,m:'Today 09:11'},{n:'plugins',d:1,m:'Yesterday 16:20'},{n:'commands.rs',t:'Rust',s:'18 KB',m:'Today 09:11'},{n:'fs_watch.rs',t:'Rust',s:'6 KB',m:'Mon 13:40'},{n:'main.rs',t:'Rust',s:'3 KB',m:'Mon 10:05'},{n:'palette.rs',t:'Rust',s:'11 KB',m:'Today 08:20'},{n:'terminal.rs',t:'Rust',s:'9 KB',m:'Yesterday 18:02'}],
+  'C:\\Users\\dev\\Projects\\fileforge\\docs': [{n:'plugins.md',t:'Markdown',s:'12 KB',m:'Mon 10:05'},{n:'themes.md',t:'Markdown',s:'4 KB',m:'Mon 10:05'},{n:'keybindings.md',t:'Markdown',s:'7 KB',m:'Sat 09:00'}],
+  'C:\\Users\\dev\\Downloads': [{n:'setup-wsl.exe',t:'Application',s:'88 MB',m:'Today 09:31'},{n:'font-pack.zip',t:'ZIP archive',s:'12 MB',m:'Yesterday'},{n:'invoice-0926.pdf',t:'PDF',s:'214 KB',m:'Yesterday',tag:'#e0705e'}],
+  'D:\\': [{n:'Backup',d:1,m:'Today 07:00'},{n:'Media',d:1,m:'14 Sep 2026'},{n:'VMs',d:1,m:'1 Sep 2026'}],
+  'D:\\Backup': [{n:'Photos',d:1,m:'Today 07:00'},{n:'Music',d:1,m:'Sun 20:15'},{n:'Projects-2025',d:1,m:'2 Jan 2026'},{n:'archive-2025.zip',t:'ZIP archive',s:'48.6 GB',m:'2 Jan 2026'},{n:'keys.bin',t:'BIN',s:'4 KB',m:'2 Jan 2026'},{n:'notes.md',t:'Markdown',s:'2 KB',m:'Sun 20:20'}],
+};
+const EXT_COLORS = {md:'#60cdff',rs:'#f0906c',toml:'#c9b6ff',exe:'#6ccb5f',dll:'#6ccb5f',bin:'#e0705e',zip:'#f2c063',pdf:'#e0705e',lock:'rgba(255,255,255,.5)'};
+const LEVEL = {low:'#6ccb5f',medium:'#f2c063',high:'#f27a6c'};
+const PLUGINS = [
+  {id:'gitlens',name:'Git Lens for CabinetOS',author:'Ada Reyes',verified:true,kind:'plugin',rating:'4.8',reviews:'2.1K',installs:'128K',size:'1.2 MB',version:'3.4.0',iconBg:'#f0906c',glyph:'GL',desc:'Branch, blame and history inline in your file panes.',long:'Shows the current branch per workspace, colors changed files, and adds history and blame actions to the context menu. Uses the git binary on your PATH.',perms:[{name:'Read workspace files',level:'low',why:'To detect repositories and status.'},{name:'Run processes: git',level:'medium',why:'Executes git commands in the workspace.'}]},
+  {id:'7z',name:'7-Zip Bridge',author:'Archive Tools Collective',verified:false,kind:'plugin',rating:'4.6',reviews:'890',installs:'64K',size:'840 KB',version:'1.9.2',iconBg:'#f2c063',glyph:'7z',desc:'Compress and extract 40+ archive formats from the context menu.',long:'Adds Compress, Extract here and Extract to folder actions. Streams large archives without blocking the UI.',perms:[{name:'Read and write files',level:'medium',why:'To create and extract archives.'},{name:'Run processes: 7z.exe',level:'medium',why:'Uses the 7-Zip CLI when installed.'}]},
+  {id:'hex',name:'Hex Editor Pro',author:'Tomás Weil',verified:true,kind:'plugin',rating:'4.9',reviews:'1.4K',installs:'92K',size:'610 KB',version:'2.1.0',iconBg:'#c9b6ff',glyph:'0x',desc:'Inspect and patch binaries in a pane. PE and ELF aware.',long:'Opens any file as hex in a pane. Structure overlays for PE, ELF and common image headers. Edits are staged until you save.',perms:[{name:'Read files you open',level:'low',why:'Only files opened in the editor.'},{name:'Write files you open',level:'medium',why:'To save patched bytes.'}]},
+  {id:'mdp',name:'Markdown Preview+',author:'CabinetOS Team',verified:true,kind:'plugin',rating:'4.7',reviews:'3.3K',installs:'210K',size:'380 KB',version:'1.12.0',iconBg:'#60cdff',glyph:'M↓',desc:'Rendered markdown with Mermaid, math and a synced outline.',long:'Replaces a pane with a rendered view. Follows the selection in the opposite pane so browsing docs feels like reading.',perms:[{name:'Read files you open',level:'low',why:'Only the markdown file and its images.'}]},
+  {id:'sync',name:'Cloud Sync: S3 & OneDrive',author:'Northwind Labs',verified:false,kind:'plugin',rating:'4.2',reviews:'412',installs:'31K',size:'2.9 MB',version:'0.8.1',iconBg:'#8ad2b8',glyph:'S3',desc:'Mount buckets and OneDrive folders as drives in the sidebar.',long:'Presents remote storage as a drive. Uploads and downloads show up in the transfer flyout like local copies.',perms:[{name:'Network access',level:'high',why:'Talks to storage APIs over HTTPS.'},{name:'Credential store',level:'high',why:'Saves tokens in Windows Credential Manager.'},{name:'Read and write files',level:'medium',why:'To sync selected folders.'}]},
+  {id:'img',name:'Image Toolkit',author:'Priya Natarajan',verified:true,kind:'plugin',rating:'4.5',reviews:'760',installs:'48K',size:'1.6 MB',version:'2.0.3',iconBg:'#f5a8c9',glyph:'IM',desc:'Thumbnails, quick resize and format conversion, all in WASM.',long:'Pure WebAssembly image codecs. No native dependencies, no network.',perms:[{name:'Read files you open',level:'low',why:'To decode images.'}]},
+  {id:'nord',name:'Nord Frost',author:'Arctic Ice Studio',verified:true,kind:'theme',rating:'4.9',reviews:'5.2K',installs:'340K',size:'12 KB',version:'2.3.0',iconBg:'#88c0d0',glyph:'N',desc:'Cool, bluish palette. Calm contrast for long sessions.',long:'Full theme: Mica tint, accent, terminal palette and syntax colors.',accent:'#88c0d0',tint:'rgba(46,52,64,.88)',perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
+  {id:'mocha',name:'Catppuccin Mocha',author:'Catppuccin',verified:true,kind:'theme',rating:'4.9',reviews:'7.8K',installs:'512K',size:'14 KB',version:'1.7.1',iconBg:'#cba6f7',glyph:'C',desc:'Soothing pastel theme for the high-spirited.',long:'Full theme with the Mocha flavor. Accent defaults to Mauve.',accent:'#cba6f7',tint:'rgba(30,30,46,.9)',perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
+  {id:'rose',name:'Rosé Pine Moon',author:'Rosé Pine',verified:false,kind:'theme',rating:'4.8',reviews:'2.6K',installs:'190K',size:'11 KB',version:'1.4.0',iconBg:'#ebbcba',glyph:'R',desc:'All natural pine, faux fur and a bit of soho vibes.',long:'Muted, warm dark theme.',accent:'#ebbcba',tint:'rgba(35,33,54,.9)',perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
+  {id:'default',name:'Windows Default',author:'CabinetOS Team',verified:true,kind:'theme',rating:'4.4',reviews:'1.1K',installs:'1.2M',size:'8 KB',version:'1.0.0',iconBg:'#60cdff',glyph:'W',desc:'System accent, Mica backdrop. The theme you started with.',long:'Follows the Windows accent color.',accent:null,tint:null,perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
+];
+const COMMANDS = [
+  {id:'dual',cat:'View',name:'Toggle Dual Pane',sc:[['Ctrl','Shift','D']]},
+  {id:'term',cat:'View',name:'Toggle Integrated Terminal',sc:[['Ctrl','`']]},
+  {id:'focus',cat:'View',name:'Focus Other Pane',sc:[['Tab']]},
+  {id:'sidebar',cat:'View',name:'Toggle Sidebar',sc:[['Ctrl','B']]},
+  {id:'copy',cat:'File',name:'Copy to Other Pane',sc:[['F5']]},
+  {id:'move',cat:'File',name:'Move to Other Pane',sc:[['F6']]},
+  {id:'newfolder',cat:'File',name:'New Folder',sc:[['F7']]},
+  {id:'goto',cat:'Go',name:'Go to Path…',sc:[['Ctrl','L']]},
+  {id:'md',cat:'Editor',name:'Open Markdown Preview',sc:[['Ctrl','K'],['V']],plugin:'Markdown Preview+'},
+  {id:'hex',cat:'Editor',name:'Open as Hex',sc:[['Ctrl','K'],['H']],plugin:'Hex Editor Pro'},
+  {id:'market',cat:'Marketplace',name:'Browse Plugins and Themes',sc:[['Ctrl','Shift','X']]},
+  {id:'ws',cat:'Workspace',name:'Switch Workspace…',sc:[['Ctrl','K'],['Ctrl','W']]},
+  {id:'gitcommit',cat:'Git',name:'Commit Staged Changes',sc:[['Ctrl','K'],['Ctrl','C']],plugin:'Git Lens'},
+  {id:'gitlog',cat:'Git',name:'Show File History',sc:[['Ctrl','K'],['Ctrl','H']],plugin:'Git Lens'},
+  {id:'theme',cat:'Preferences',name:'Color Theme',sc:[['Ctrl','K'],['Ctrl','T']]},
+  {id:'keys',cat:'Preferences',name:'Open Keyboard Shortcuts',sc:[['Ctrl','K'],['Ctrl','S']]},
+  {id:'task',cat:'Terminal',name:'Run Task…',sc:[['Ctrl','Shift','B']]},
+  {id:'compress',cat:'Archive',name:'Compress Selection',sc:[['Ctrl','Alt','Z']],plugin:'7-Zip Bridge'},
+];
+const WORKSPACES = [{name:'fileforge',path:'C:\\Users\\dev\\Projects\\fileforge',branch:'main',dot:'#60cdff'},{name:'blog',path:'C:\\Users\\dev\\Projects\\blog',branch:'draft/sept',dot:'#f2c063'},{name:'dotfiles',path:'C:\\Users\\dev\\Projects\\dotfiles',branch:'main',dot:'#c9b6ff'}];
+const HEX = Array.from({length:24},(_,i)=>{const off=(i*16).toString(16).toUpperCase().padStart(8,'0');const b=Array.from({length:16},(_,j)=>{const v=i===0&&j<2?[0x4D,0x5A][j]:(i*31+j*17)%256;return v});return {off,bytes:b.map(v=>v.toString(16).toUpperCase().padStart(2,'0')).join(' '),ascii:b.map(v=>v>=32&&v<127?String.fromCharCode(v):'.').join('')}});
+const parentOf = p => { const parts=p.split('\\').filter(Boolean); if(parts.length<=1) return p; parts.pop(); return parts.length===1?parts[0]+'\\':parts.join('\\'); };
+const joinPath = (p,n) => p.endsWith('\\')?p+n:p+'\\'+n;
+const nameOf = p => { const parts=p.split('\\').filter(Boolean); return parts[parts.length-1]||p; };
+
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.paletteRef = React.createRef();
+    this.state = {
+      view:'files', dual:true, termOpen:null, activePane:0, sidebarOpen:true,
+      panes:[{path:'C:\\Users\\dev\\Projects\\fileforge',sel:'README.md',mode:'files',file:null},{path:'D:\\Backup',sel:null,mode:'files',file:null}],
+      palette:{open:false,q:'',idx:0,hover:-1,recording:null,combos:[]}, shortcuts:{},
+      ctx:null, transfer:null, term:{lines:[{t:'CabinetOS terminal · cwd follows the active pane',color:'rgba(255,255,255,.45)'}],input:''},
+      mk:{tab:'discover',selected:null,review:null,installed:{mdp:true,hex:true,gitlens:true},q:''}, themeId:'default', workspace:0,
+    };
+  }
+  componentDidMount(){ this.onKey=e=>this.handleKey(e); window.addEventListener('keydown',this.onKey,true); }
+  componentWillUnmount(){ window.removeEventListener('keydown',this.onKey,true); clearInterval(this.tt); }
+  componentDidUpdate(_,prev){ if(this.state.palette.open&&!prev.palette.open&&this.paletteRef.current) this.paletteRef.current.focus(); }
+
+  get termOpen(){ return this.state.termOpen===null ? (this.props.terminalOpen ?? true) : this.state.termOpen; }
+  get layout(){ return this.props.layout ?? 'classic'; }
+  get theme(){ return PLUGINS.find(p=>p.id===this.state.themeId)||PLUGINS[9]; }
+  get accent(){ return this.theme.accent || this.props.accent || '#60cdff'; }
+
+  setPalette(patch){ this.setState(s=>({palette:{...s.palette,...patch}})); }
+  setPane(i,patch){ this.setState(s=>({panes:s.panes.map((p,j)=>j===i?{...p,...patch}:p)})); }
+  navigate(i,path){ this.setPane(i,{path,sel:null,mode:'files',file:null}); }
+  otherPane(){ return this.state.dual ? 1-this.state.activePane : this.state.activePane; }
+  openFile(item,paneIdx){
+    const ext=item.n.split('.').pop().toLowerCase();
+    const src=this.state.panes[paneIdx];
+    const target=this.state.dual?1-paneIdx:paneIdx;
+    if(ext==='md') this.setPane(target,{mode:'md',file:item.n,path:src.path});
+    else if(['exe','dll','bin'].includes(ext)) this.setPane(target,{mode:'hex',file:item.n,path:src.path});
+    else this.pushTerm(`start "${joinPath(src.path,item.n)}"`,`Opened ${item.n} with the default app.`);
+  }
+  pushTerm(cmd,out){ this.setState(s=>({term:{...s.term,lines:[...s.term.lines,{t:this.promptFor()+' '+cmd,color:'#fff'},...(out?[{t:out,color:'rgba(255,255,255,.7)'}]:[])]}})); }
+  promptFor(){ return `PS ${this.state.panes[this.state.activePane].path}>`; }
+  runTerm(){
+    const {term,panes,activePane}=this.state; const cmd=term.input.trim(); if(!cmd) return;
+    const path=panes[activePane].path; const items=FS[path]||[]; let out='';
+    const [c,...args]=cmd.split(/\s+/);
+    if(c==='clear'||c==='cls'){ this.setState(s=>({term:{lines:[],input:''}})); return; }
+    if(c==='ls'||c==='dir') out=items.map(i=>(i.d?'d  ':'-  ')+i.n.padEnd(22)+(i.s||'')).join('\n');
+    else if(c==='cd'&&args[0]){ const t=args[0]==='..'?parentOf(path):joinPath(path,args[0]); if(FS[t]||args[0]==='..'){ this.navigate(activePane,t); out=''; } else out=`cd: no such directory: ${args[0]}`; }
+    else if(c==='pwd') out=path;
+    else if(c==='cargo') out='   Compiling cabinetos v0.9.2\n    Finished release [optimized] target(s) in 4.21s';
+    else if(c==='git') out='On branch main\nnothing to commit, working tree clean';
+    else out=`${c}: The term '${c}' is not recognized as a name of a cmdlet or program.`;
+    this.setState(s=>({term:{lines:[...s.term.lines,{t:`PS ${path}> ${cmd}`,color:'#fff'},...(out?[{t:out,color:'rgba(255,255,255,.7)'}]:[])],input:''}}));
+  }
+  startTransfer(){
+    if(this.state.transfer&&!this.state.transfer.done) { this.setState(s=>({transfer:{...s.transfer,min:false}})); return; }
+    clearInterval(this.tt);
+    const src=this.state.panes[this.state.activePane]; const dst=this.state.panes[this.otherPane()];
+    this.setState({transfer:{pct:0,speeds:Array(40).fill(0),paused:false,done:false,min:false,from:src.path,to:dst.path,cancelled:false}});
+    this.tt=setInterval(()=>{ this.setState(s=>{ const t=s.transfer; if(!t||t.done) return null; if(t.paused) return {transfer:{...t,speeds:[...t.speeds.slice(1),0]}}; const sp=420+Math.sin(Date.now()/900)*120+Math.random()*90; const pct=Math.min(100,t.pct+sp/48600*100*0.5*6); const done=pct>=100; if(done) clearInterval(this.tt); return {transfer:{...t,pct,speeds:[...t.speeds.slice(1),done?0:sp],done}}; }); },500);
+  }
+  execCommand(id){
+    const acts={
+      dual:()=>this.toggleDual(), term:()=>this.setState({termOpen:!this.termOpen}), focus:()=>this.setState(s=>({activePane:s.dual?1-s.activePane:0})),
+      sidebar:()=>this.setState(s=>({sidebarOpen:!s.sidebarOpen})), copy:()=>this.startTransfer(), move:()=>this.startTransfer(),
+      market:()=>this.setState({view:'market'}), theme:()=>this.setState(s=>({view:'market',mk:{...s.mk,tab:'themes',selected:null}})),
+      md:()=>this.openFile({n:'README.md'},0), hex:()=>this.openFile({n:'cabinetos.exe'},0),
+      newfolder:()=>this.pushTerm('mkdir "New folder"','Created New folder'), gitcommit:()=>this.pushTerm('git commit','[main 3f2a9c1] Update palette keybindings\n 2 files changed, 41 insertions(+)'),
+      gitlog:()=>this.pushTerm('git log --oneline -3 -- README.md','3f2a9c1 Update readme\n9b1d0e4 Add plugin docs\n1c0ffee Initial commit'),
+      compress:()=>this.pushTerm('7z a selection.7z .','Everything is Ok'), task:()=>this.pushTerm('cargo build --release','   Compiling cabinetos v0.9.2\n    Finished release [optimized] in 4.21s'),
+      ws:()=>this.setState(s=>({workspace:(s.workspace+1)%WORKSPACES.length})), goto:()=>this.pushTerm('cd ..',''), keys:()=>this.pushTerm('code keybindings.json','')
+    };
+    this.setPalette({open:false,q:'',idx:0,recording:null,combos:[]});
+    (acts[id]||(()=>{}))();
+  }
+  toggleDual(){ this.setState(s=>({dual:!s.dual,activePane:0,panes:s.panes.map((p,i)=>i===1&&p.mode!=='files'?{...p,mode:'files',file:null}:p)})); }
+  keyLabel(e){ const k=e.key; if(k===' ') return 'Space'; if(k.length===1) return k.toUpperCase(); return k.replace('Arrow',''); }
+  commitRecording(){ const {palette}=this.state; if(!palette.recording||!palette.combos.length) return; this.setState(s=>({shortcuts:{...s.shortcuts,[palette.recording]:palette.combos},palette:{...s.palette,recording:null,combos:[]}})); }
+  handleKey(e){
+    const {palette}=this.state;
+    if(palette.recording){
+      e.preventDefault(); e.stopPropagation();
+      if(e.key==='Escape'){ clearTimeout(this.recT); this.setPalette({recording:null,combos:[]}); return; }
+      if(['Control','Shift','Alt','Meta'].includes(e.key)) return;
+      const combo=[e.ctrlKey&&'Ctrl',e.altKey&&'Alt',e.shiftKey&&'Shift',this.keyLabel(e)].filter(Boolean);
+      const combos=[...palette.combos,combo].slice(0,2);
+      this.setPalette({combos});
+      clearTimeout(this.recT); this.recT=setTimeout(()=>this.commitRecording(),combos.length>=2?0:1000);
+      return;
+    }
+    const k=e.key.toLowerCase();
+    if(e.ctrlKey&&e.shiftKey&&k==='p'){ e.preventDefault(); this.setPalette({open:!palette.open,q:'',idx:0}); return; }
+    if(e.key==='Escape'){ if(this.state.mk.review) this.setState(s=>({mk:{...s.mk,review:null}})); else if(palette.open) this.setPalette({open:false}); else if(this.state.ctx) this.setState({ctx:null}); else if(this.state.mk.selected) this.setState(s=>({mk:{...s.mk,selected:null}})); return; }
+    if(palette.open){
+      const items=this.filteredCommands();
+      if(e.key==='ArrowDown'){ e.preventDefault(); this.setPalette({idx:Math.min(items.length-1,palette.idx+1),hover:-1}); }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); this.setPalette({idx:Math.max(0,palette.idx-1),hover:-1}); }
+      else if(e.key==='Enter'){ e.preventDefault(); const c=items[palette.idx]; if(c) this.execCommand(c.id); }
+      return;
+    }
+    if(e.target&&e.target.tagName==='INPUT') return;
+    if(e.ctrlKey&&e.key==='`'){ e.preventDefault(); this.setState({termOpen:!this.termOpen}); }
+    else if(e.ctrlKey&&e.shiftKey&&k==='d'){ e.preventDefault(); this.toggleDual(); }
+    else if(e.ctrlKey&&e.shiftKey&&k==='x'){ e.preventDefault(); this.setState(s=>({view:s.view==='market'?'files':'market'})); }
+    else if(e.ctrlKey&&k==='b'){ e.preventDefault(); this.setState(s=>({sidebarOpen:!s.sidebarOpen})); }
+    else if(e.key==='F5'){ e.preventDefault(); this.startTransfer(); }
+    else if(e.key==='Tab'&&this.state.view==='files'){ e.preventDefault(); this.setState(s=>({activePane:s.dual?1-s.activePane:0})); }
+  }
+  filteredCommands(){ const q=this.state.palette.q.toLowerCase().trim(); return COMMANDS.filter(c=>!q||(c.cat+': '+c.name+' '+(c.plugin||'')).toLowerCase().includes(q)); }
+
+  renderVals(){
+    const s=this.state, accent=this.accent, layout=this.layout, termOpen=this.termOpen;
+    const active=s.panes[s.activePane];
+    const isFiles=s.view==='files', isMarket=s.view==='market';
+    const stop=e=>e.stopPropagation();
+    const pill=on=>on?accent:'transparent';
+
+    const workspaces=WORKSPACES.map((w,i)=>{const on=i===s.workspace;return {...w,pick:()=>{this.setState({workspace:i,view:'files'});this.navigate(0,w.path);},bg:on?'rgba(255,255,255,.08)':'transparent',color:on?'#fff':'rgba(255,255,255,.6)',sideBg:on?'rgba(255,255,255,.06)':'transparent',bar:pill(on)}});
+    const pinned=['C:\\Users\\dev\\Desktop','C:\\Users\\dev\\Downloads','C:\\Users\\dev\\Documents','C:\\Users\\dev\\Projects'].map(p=>({name:nameOf(p),go:()=>{this.setState({view:'files'});this.navigate(s.activePane,p);},bg:active.path===p?'rgba(255,255,255,.06)':'transparent',bar:pill(active.path===p)}));
+    const drives=[{name:'Local Disk (C:)',path:'C:\\',free:'118 GB',pct:'76%',barColor:accent},{name:'Data (D:)',path:'D:\\',free:'1.4 TB',pct:'31%',barColor:accent}].map(d=>({...d,go:()=>{this.setState({view:'files'});this.navigate(s.activePane,d.path);}}));
+    const tags=[{name:'Design',color:'#f2c063',n:12},{name:'Urgent',color:'#e0705e',n:3},{name:'Review',color:'#60cdff',n:8},{name:'Archive',color:'#c9b6ff',n:41}];
+    const railDefs=[{id:'files',glyph:'FS',name:'Explorer'},{id:'market',glyph:'MK',name:'Marketplace'},{id:'git',glyph:'GT',name:'Git Lens'},{id:'term',glyph:'>_',name:'Terminal'}];
+    const railItems=railDefs.map(r=>{const on=(r.id==='files'&&isFiles&&s.sidebarOpen)||(r.id==='market'&&isMarket)||(r.id==='term'&&termOpen);return {...r,pick:()=>{ if(r.id==='files') this.setState(x=>({view:'files',sidebarOpen:x.view==='files'?!x.sidebarOpen:true})); else if(r.id==='market') this.setState({view:'market'}); else if(r.id==='term') this.setState({termOpen:!termOpen}); else this.execCommand('gitlog'); },color:on?'#fff':'rgba(255,255,255,.55)',bg:'transparent',bar:pill(on)}});
+
+    const crumbs=(()=>{const parts=active.path.split('\\').filter(Boolean);return parts.map((p,i)=>{const target=i===0?parts[0]+'\\':parts.slice(0,i+1).join('\\');return {label:p.replace(/:$/,':'),sep:i<parts.length-1,go:()=>this.navigate(s.activePane,target)}})})();
+
+    const paneCount=s.dual?2:1;
+    const paneList=s.panes.slice(0,paneCount).map((p,i)=>{
+      const on=i===s.activePane&&s.dual;
+      const items=FS[p.path]||[];
+      const stripes=this.props.rowStripes??true;
+      const rows=items.map((it,ri)=>{const ext=it.d?'':it.n.split('.').pop().toLowerCase();const selected=p.sel===it.n;return {...it,d:!!it.d,f:!it.d,tag:it.tag||false,m:it.m||'',t:it.d?'Folder':(it.t||''),s:it.s||'',iconColor:EXT_COLORS[ext]||'rgba(255,255,255,.6)',color:selected?'#fff':'rgba(255,255,255,.9)',bg:selected?'rgba(255,255,255,.12)':(stripes&&ri%2?'rgba(255,255,255,.025)':'transparent'),bar:pill(selected),
+        select:()=>this.setState(x=>({activePane:i,panes:x.panes.map((q,j)=>j===i?{...q,sel:it.n}:q)})),
+        open:()=>{ if(it.d) this.navigate(i,joinPath(p.path,it.n)); else this.openFile(it,i); },
+        ctx:e=>{e.preventDefault();this.setState(x=>({activePane:i,ctx:{x:Math.min(e.clientX,window.innerWidth-270),y:Math.min(e.clientY,window.innerHeight-380),item:it,pane:i},panes:x.panes.map((q,j)=>j===i?{...q,sel:it.n}:q)}))}}});
+      return {path:p.path,folderName:nameOf(p.path),isFiles:p.mode==='files',isEditor:p.mode!=='files',isMd:p.mode==='md',isHex:p.mode==='hex',editorFile:p.file||'',editorIconColor:p.mode==='md'?'#60cdff':'#6ccb5f',editorProvider:p.mode==='md'?'Markdown Preview+':'Hex Editor Pro',rows,empty:items.length===0,
+        border:on?'rgba(255,255,255,.18)':'rgba(255,255,255,.08)',headBg:on||!s.dual?'rgba(255,255,255,.06)':'transparent',titleColor:on||!s.dual?'#fff':'rgba(255,255,255,.7)',
+        focus:()=>{ if(s.activePane!==i) this.setState({activePane:i}); },
+        closeEditor:()=>this.setPane(i,{mode:'files',file:null}),
+        openEditorHint:()=>this.setPalette({open:true,q:'editor',idx:0}),
+        copyToOther:()=>this.setState({termOpen:true})};
+    });
+
+    const cmds=this.filteredCommands();
+    const paletteItems=cmds.map((c,i)=>{const groups=s.shortcuts[c.id]||c.sc;const hi=s.palette.hover>=0?s.palette.hover===i:s.palette.idx===i;const rec=s.palette.recording===c.id;return {...c,plugin:c.plugin||false,keys:groups.map((g,gi)=>({label:g.join('+'),sep:gi<groups.length-1})),bg:hi?'rgba(255,255,255,.08)':'transparent',bar:pill(hi),pencilOpacity:hi?1:0.25,recording:rec,notRecording:!rec,recText:s.palette.combos.length?s.palette.combos.map(g=>g.join('+')).join(' then ')+' …':'Press keys…',
+      run:()=>{ if(!rec) this.execCommand(c.id); },hover:()=>this.setPalette({hover:i,idx:i}),edit:e=>{e.stopPropagation();this.setPalette({recording:c.id,combos:[]});}}});
+
+    const ctx=s.ctx; const ctxIcons=ctx?[{glyph:'✂',name:'Cut'},{glyph:'⧉',name:'Copy'},{glyph:'⎘',name:'Paste'},{glyph:'✎',name:'Rename'},{glyph:'⌫',name:'Delete'}].map(i=>({...i,run:()=>{this.setState({ctx:null});if(i.name==='Copy') this.startTransfer();}})):[];
+    const ctxItems=ctx?[
+      {name:'Open',key:'Enter',iconBg:'rgba(255,255,255,.2)',run:()=>{this.setState({ctx:null});ctx.item.d?this.navigate(ctx.pane,joinPath(s.panes[ctx.pane].path,ctx.item.n)):this.openFile(ctx.item,ctx.pane);}},
+      {name:'Open in other pane',key:'Ctrl+Enter',iconBg:'rgba(255,255,255,.2)',run:()=>{this.setState({ctx:null});this.openFile(ctx.item,ctx.pane);}},
+      {name:'Copy to other pane',key:'F5',iconBg:'rgba(255,255,255,.2)',run:()=>{this.setState({ctx:null});this.startTransfer();}},
+      {name:'Open in Terminal',key:'Ctrl+`',iconBg:'rgba(255,255,255,.2)',run:()=>this.setState({ctx:null,termOpen:true})},
+      {sep:true},{head:'From plugins'},
+      {name:'Show file history',key:'Ctrl+K Ctrl+H',plugin:'Git Lens',iconBg:'#f0906c',run:()=>{this.setState({ctx:null});this.execCommand('gitlog');}},
+      {name:'Compress to .7z',key:'',plugin:'7-Zip',iconBg:'#f2c063',run:()=>{this.setState({ctx:null});this.execCommand('compress');}},
+      {name:'Open as hex',key:'Ctrl+K H',plugin:'Hex Pro',iconBg:'#c9b6ff',run:()=>{this.setState({ctx:null});this.setPane(this.state.dual?1-ctx.pane:ctx.pane,{mode:'hex',file:ctx.item.n});}},
+      {sep:true},{name:'Properties',key:'Alt+Enter',iconBg:'rgba(255,255,255,.2)',run:()=>this.setState({ctx:null})},
+    ].map(m=>({sep:m.sep||false,head:m.head||false,name:m.name||false,key:m.key||'',plugin:m.plugin||false,iconBg:m.iconBg||'transparent',run:m.run||(()=>{})})):[];
+
+    const t=s.transfer; let graphPoints='',graphFill='';
+    if(t){ const max=700; const pts=t.speeds.map((v,i)=>`${(i/(t.speeds.length-1))*348},${56-(v/max)*50}`); graphPoints=pts.join(' '); graphFill=`0,56 ${graphPoints} 348,56`; }
+    const speedNow=t?t.speeds[t.speeds.length-1]:0; const remainGB=t?48.6*(1-t.pct/100):0; const eta=t&&speedNow>0?Math.round(remainGB*1024/speedNow):0;
+
+    const mk=s.mk; const mkTabs=[{id:'discover',name:'Discover'},{id:'plugins',name:'Plugins'},{id:'themes',name:'Themes'},{id:'installed',name:'Installed'}].map(tb=>{const on=mk.tab===tb.id;const n=tb.id==='discover'?PLUGINS.length:tb.id==='installed'?Object.keys(mk.installed).length+1:PLUGINS.filter(p=>p.kind===tb.id.slice(0,-1)).length;return {...tb,n,bg:on?'rgba(255,255,255,.06)':'transparent',bar:pill(on),pick:()=>this.setState(x=>({mk:{...x.mk,tab:tb.id,selected:null}}))}});
+    const q=mk.q.toLowerCase(); const mkItems=PLUGINS.filter(p=>(mk.tab==='discover'||(mk.tab==='installed'?(mk.installed[p.id]||p.id===s.themeId):p.kind===mk.tab.slice(0,-1)))&&(!q||(p.name+p.author+p.desc).toLowerCase().includes(q))).map(p=>({...p,kindLabel:p.kind==='theme'?'Theme':'WASM plugin',border:mk.selected===p.id?accent:'rgba(255,255,255,.06)',pick:()=>this.setState(x=>({mk:{...x.mk,selected:p.id}}))}));
+    const sel=PLUGINS.find(p=>p.id===mk.selected); const installed=sel&&(mk.installed[sel.id]||(sel.kind==='theme'&&s.themeId===sel.id));
+    const mkDetail=sel?{...sel,perms:sel.perms.map(p=>({...p,color:LEVEL[p.level]})),btnLabel:installed?(sel.kind==='theme'?'Applied':'Installed'):(sel.kind==='theme'?'Install and apply':'Install'),btnBg:installed?'rgba(255,255,255,.06)':accent,btnColor:installed?'rgba(255,255,255,.7)':'#111',install:()=>{ if(installed) return; this.setState(x=>({mk:{...x.mk,review:sel.id}})); }}:false;
+    const rv=PLUGINS.find(p=>p.id===mk.review); const review=rv?{...rv,perms:rv.perms.map(p=>({...p,color:LEVEL[p.level]}))}:false;
+
+    const totalSize=(FS[active.path]||[]).length;
+    const selItem=(FS[active.path]||[]).find(i=>i.n===active.sel);
+    const fkeys=[
+      {key:'F3',name:'View',run:()=>{ if(selItem&&!selItem.d) this.openFile(selItem,s.activePane); }},
+      {key:'F4',name:'Edit',run:()=>this.pushTerm(`code "${active.sel||''}"`,'')},
+      {key:'F5',name:'Copy',run:()=>this.startTransfer()},
+      {key:'F6',name:'Move',run:()=>this.startTransfer()},
+      {key:'F7',name:'Mkdir',run:()=>this.execCommand('newfolder')},
+      {key:'F8',name:'Delete',run:()=>this.pushTerm(`Remove-Item "${active.sel||''}"`,active.sel?`Moved ${active.sel} to Recycle Bin`:'Nothing selected')},
+      {key:'Alt+F1',name:'Drv',run:()=>this.navigate(s.activePane,active.path.startsWith('C')?'D:\\':'C:\\')},
+      
+    ];
+    return {
+      accent, backdrop:this.theme.tint||'rgba(32,32,32,.94)', fkeys, showFkeys:this.props.fkeyBar??true, stop, closeTransient:()=>{ if(s.ctx) this.setState({ctx:null}); },
+      workspaces,pinned,drives,tags,railItems,crumbs,paneList,hexRows:HEX,
+      activeFolderName:nameOf(active.path), activeBranch:WORKSPACES[s.workspace].branch,
+      isRail:layout==='rail', showSidebar:s.sidebarOpen&&(layout!=='rail'||true)&&s.sidebarOpen, isFiles, isMarket,
+      termRight:isFiles&&termOpen&&layout==='right', termBottom:isFiles&&termOpen&&layout!=='right', termFolderName:nameOf(active.path),
+      termLines:s.term.lines, termInput:s.term.input, prompt:this.promptFor(), onTermInput:e=>this.setState(x=>({term:{...x.term,input:e.target.value}})), onTermKey:e=>{ if(e.key==='Enter') this.runTerm(); },
+      goBack:()=>{}, goUp:()=>this.navigate(s.activePane,parentOf(active.path)),
+      toggleDual:()=>this.toggleDual(), dualLabel:s.dual?'Dual':'Single', dualColor:s.dual?accent:'rgba(255,255,255,.786)',
+      toggleTerm:()=>this.setState({termOpen:!termOpen}), termColor:termOpen?accent:'rgba(255,255,255,.786)',
+      toggleMarket:()=>this.setState(x=>({view:x.view==='market'?'files':'market'})), marketColor:isMarket?accent:'rgba(255,255,255,.786)',
+      openPalette:()=>this.setPalette({open:true,q:'',idx:0,hover:-1}), closePalette:()=>this.setPalette({open:false,recording:null}),
+      paletteOpen:s.palette.open, paletteQ:s.palette.q, onPaletteQ:e=>this.setPalette({q:e.target.value,idx:0,hover:-1}), paletteItems, paletteCount:cmds.length, paletteRef:this.paletteRef,
+      ctxMenu:ctx||false, ctxIcons, ctxItems,
+      statusItems:`${totalSize} items`, statusSel:active.sel?`1 selected · ${active.sel}`:'', layoutLabel:'Commander compact · '+({classic:'Terminal: bottom',right:'Terminal: right',rail:'Activity rail'}[layout]||''),
+      transferOpen:!!t&&!t.min, transferPill:!!t&&t.min&&!t.done, showTransfer:()=>this.setState(x=>({transfer:{...x.transfer,min:false}})), hideTransfer:()=>this.setState(x=>({transfer:x.transfer.done?null:{...x.transfer,min:true}})),
+      transferTitle:t?(t.done?(t.cancelled?'Copy cancelled':'Copy complete'):t.paused?'Copy paused':'Copying 12,480 items'):'', transferSub:t?`${t.from} → ${t.to}`:'',
+      transferPct:t?t.pct.toFixed(1):0, transferPctLabel:t?`${Math.floor(t.pct)}%`:'', transferDone:t?`${(48.6*t.pct/100).toFixed(1)} of 48.6 GB`:'', transferEta:t?(t.done?'':t.paused?'Paused':eta>60?`${Math.floor(eta/60)} min ${eta%60} s left`:`${eta} s left`):'',
+      transferSpeed:t?`${Math.round(speedNow)} MB/s`:'', graphPoints, graphFill, pauseLabel:t&&t.paused?'Resume':'Pause', cancelLabel:t&&t.done?'Close':'Cancel',
+      togglePause:()=>this.setState(x=>x.transfer.done?null:{transfer:{...x.transfer,paused:!x.transfer.paused}}), cancelTransfer:()=>{clearInterval(this.tt);this.setState({transfer:null});},
+      mkTabs, mkItems, mkCount:mkItems.length, mkQuery:mk.q, onMkQuery:e=>this.setState(x=>({mk:{...x.mk,q:e.target.value}})), mkDetail, closeDetail:()=>this.setState(x=>({mk:{...x.mk,selected:null}})),
+      review, closeReview:()=>this.setState(x=>({mk:{...x.mk,review:null}})), confirmInstall:()=>this.setState(x=>{const p=PLUGINS.find(z=>z.id===x.mk.review);return {mk:{...x.mk,review:null,installed:p.kind==='theme'?x.mk.installed:{...x.mk.installed,[p.id]:true}},themeId:p.kind==='theme'?p.id:x.themeId}}),
+    };
+  }
+}
+</script>
+</body>
+</html>

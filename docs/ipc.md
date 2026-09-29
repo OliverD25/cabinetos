@@ -92,9 +92,11 @@ per extension, with `installedVersion`; each theme's `mica` in `themes`;
 and the theme kind `system` (follow Windows' light or dark mode), which
 the shipped `default` theme now has; and `tools_changed` sent again to a
 client that fell behind on events. Later, still version 11:
-`installed_version` in `install_finished`; and `help.about` became a
+`installed_version` in `install_finished`; `help.about` became a
 command of the UI (its About view), so the core answers it with
-`command_routed` instead of a `command_result` with its versions.
+`command_routed` instead of a `command_result` with its versions; the
+listing's link and "not on this disk" flags and its `reparse_tag`; and a
+theme's optional `metrics` and `chrome`, with `has_metrics` in `themes`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -970,7 +972,7 @@ configuration names the theme in effect.
 {"id":"01M…","type":"list_themes"}
 {"id":"01M…","type":"themes","themes":[{"id":"catppuccin-mocha","name":"Catppuccin Mocha",
  "author":"CabinetOS","version":"1.0.0","kind":"dark","accent":"#CBA6F7",
- "mica":{"tint":"#1E1E2E","opacity":0.9}},…]}
+ "mica":{"tint":"#1E1E2E","opacity":0.9},"has_metrics":false},…]}
 {"id":"01M…","type":"get_theme"}
 {"id":"01M…","type":"theme","theme":{"id":"nord","name":"Nord","author":"CabinetOS",…,
  "accent":"#88C0D0","mica":{"tint":"#2E3440","opacity":0.88},"palette":{…},"terminal":{…}}}
@@ -980,11 +982,17 @@ configuration names the theme in effect.
   picker shows of it: its accent and its Mica tint. A file that is not a
   valid theme is left out; the core's log says why. `accent` is `null` for
   a theme that follows the Windows accent colour, and `mica` for one that
-  shows plain Mica.
+  shows plain Mica. `has_metrics` is `true` for a theme that sets any
+  metric: a density preset such as `commander-compact`, which a picker may
+  mark. A core from before the field leaves it out; read that as `false`.
 - `get_theme` without `theme_id` answers the theme in effect; with it, that
   theme's file, read now. An ID with no file is `no_such_theme`; a file that
   is not a valid theme is `config_error` with the reason. `theme` is the
-  file's object without its `$schema` key, with colours in upper case.
+  file's object without its `$schema` key, with colours in upper case. A
+  theme's optional `metrics` and `chrome` come as the file has them, and
+  are left out when it has none ([themes.md](themes.md), "Metrics and
+  chrome"). Both, and `has_metrics`, are optional, so protocol version 11
+  stays ("What changes the version", above).
 
 A client changes the theme with `set_value` on `ui.theme`:
 

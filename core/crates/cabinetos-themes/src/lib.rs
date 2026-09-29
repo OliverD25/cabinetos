@@ -1,11 +1,12 @@
 //! Colour themes (`docs/themes.md`): the JSON theme format, the themes
-//! folder `%LOCALAPPDATA%\CabinetOS\themes`, and the four themes that ship
+//! folder `%LOCALAPPDATA%\CabinetOS\themes`, and the five themes that ship
 //! with the core.
 //!
 //! - [`parse`] reads a theme file strictly: an unknown key, a missing key, a
-//!   colour that is not `#RRGGBB` or `#RRGGBBAA`, or an ID that is not the
-//!   file's name refuses the whole theme with a message that names the
-//!   problem. A theme is never applied half-way.
+//!   colour that is not `#RRGGBB` or `#RRGGBBAA`, a metric outside its
+//!   bounds, or an ID that is not the file's name refuses the whole theme
+//!   with a message that names the problem. A theme is never applied
+//!   half-way.
 //! - [`ThemeFolder`] owns the folder: opening it writes each shipped theme
 //!   whose file is missing, and the schema for editors; it lists and loads
 //!   themes by ID.
@@ -22,7 +23,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use cabinetos_protocol::{Theme, ThemeInfo, extension_id_problem};
+use cabinetos_protocol::{Metrics, Theme, ThemeInfo, extension_id_problem};
 
 /// Environment variable naming the themes folder, when no folder is given
 /// on the command line.
@@ -31,6 +32,10 @@ pub const THEMES_DIR_ENV: &str = "CABINETOS_THEMES_DIR";
 /// The theme `ui.theme` names by default, and the one in effect while the
 /// configured one cannot be used.
 pub const DEFAULT_THEME: &str = "default";
+
+/// The density preset of the default theme (`docs/design/compact/`): the
+/// same colours, Total Commander's sizes.
+pub const COMMANDER_COMPACT: &str = "commander-compact";
 
 /// The file name of the schema kept next to the themes.
 pub const SCHEMA_FILE_NAME: &str = "theme.schema.json";
@@ -43,8 +48,8 @@ pub const SHIPPED_RECORD: &str = ".shipped.json";
 pub const SCHEMA_JSON: &str = include_str!("../../../../sdk/themes/theme.schema.json");
 
 /// The themes that ship with the core: each ID with its file, as
-/// `sdk/themes/` has them.
-pub const SHIPPED: [(&str, &str); 4] = [
+/// `sdk/themes/` has them. The default is first.
+pub const SHIPPED: [(&str, &str); 5] = [
     (
         DEFAULT_THEME,
         include_str!("../../../../sdk/themes/default.json"),
@@ -57,6 +62,10 @@ pub const SHIPPED: [(&str, &str); 4] = [
     (
         "rose-pine-moon",
         include_str!("../../../../sdk/themes/rose-pine-moon.json"),
+    ),
+    (
+        COMMANDER_COMPACT,
+        include_str!("../../../../sdk/themes/commander-compact.json"),
     ),
 ];
 
@@ -163,6 +172,9 @@ fn check(theme: &Theme, expected_id: Option<&str>) -> Result<(), String> {
             "version `{}` is not major.minor.patch",
             theme.version
         ));
+    }
+    if let Some(problem) = theme.metrics.as_ref().and_then(Metrics::problem) {
+        return Err(problem);
     }
     Ok(())
 }
@@ -420,7 +432,7 @@ fn read_text(path: &Path) -> io::Result<String> {
 mod tests {
     use std::fs;
 
-    use cabinetos_protocol::{Opacity, ThemeKind};
+    use cabinetos_protocol::{METRICS, Opacity, ThemeKind};
     use serde_json::{Value, json};
 
     use super::*;
@@ -462,14 +474,17 @@ mod tests {
             let theme = shipped(id);
             assert_eq!(theme.id, id);
             assert_eq!(theme.schema, None, "{id}: $schema is for editors only");
-            // The default follows Windows' light or dark mode; the named
-            // palettes are dark ones.
-            let kind = if id == DEFAULT_THEME {
+            // The default and its compact preset follow Windows' light or
+            // dark mode; the named palettes are dark ones.
+            let kind = if [DEFAULT_THEME, COMMANDER_COMPACT].contains(&id) {
                 ThemeKind::System
             } else {
                 ThemeKind::Dark
             };
             assert_eq!(theme.kind, kind, "{id}");
+            if id != COMMANDER_COMPACT {
+                assert_eq!((theme.metrics, theme.chrome), (None, None), "{id}");
+            }
         }
         let default = default_theme();
         assert_eq!((default.accent, default.mica), (None, None));
@@ -491,6 +506,45 @@ mod tests {
         }
     }
 
+    /// The handout (`docs/design/compact/COMPACT_THEME.md`): the default
+    /// theme's colours and terminal, the acrylic tint of its Overlays line,
+    /// every metric at its compact value, and all three chrome elements.
+    #[test]
+    fn commander_compact_is_the_default_look_made_dense() {
+        let compact = shipped(COMMANDER_COMPACT);
+        let default = default_theme();
+        assert_eq!(compact.name, "Commander Compact");
+        assert_eq!((&compact.accent, &compact.mica), (&None, &None));
+        assert_eq!(compact.terminal, default.terminal);
+        assert_eq!(compact.palette.acrylic_tint.as_str(), "#262626E6");
+        let mut palette = compact.palette.clone();
+        palette.acrylic_tint = default.palette.acrylic_tint.clone();
+        assert_eq!(
+            palette, default.palette,
+            "every other colour is the default's"
+        );
+
+        let metrics = compact.metrics.as_ref().unwrap();
+        let values = metrics.values();
+        assert_eq!(values.len(), METRICS.len(), "every metric is set");
+        for (spec, value) in values {
+            assert!(
+                (value - spec.compact).abs() < 1e-9,
+                "{}: {value}, the handout says {}",
+                spec.name,
+                spec.compact
+            );
+        }
+        assert_eq!(metrics.row_height, Some(20));
+        assert_eq!(metrics.font_size, Some(12));
+        let chrome = compact.chrome.unwrap();
+        assert_eq!(
+            (chrome.fkey_bar, chrome.row_stripes, chrome.hairlines),
+            (Some(true), Some(true), Some(true))
+        );
+        assert!(ThemeInfo::from(&compact).has_metrics);
+    }
+
     #[test]
     fn the_embedded_schema_is_the_generated_one() {
         let mut generated =
@@ -508,7 +562,7 @@ mod tests {
 
     #[test]
     fn a_bad_theme_is_refused_with_its_problem() {
-        let cases: [(&str, String); 8] = [
+        let cases: [(&str, String); 13] = [
             (
                 "unknown field `textPrimry`",
                 changed(|theme| theme["palette"]["textPrimry"] = json!("#FFFFFF")),
@@ -547,6 +601,26 @@ mod tests {
             (
                 "not major.minor.patch",
                 changed(|theme| theme["version"] = json!("1.0")),
+            ),
+            (
+                "unknown field `rowHight`",
+                changed(|theme| theme["metrics"] = json!({"rowHight": 20})),
+            ),
+            (
+                "metrics.rowHeight: 10 is not from 14 to 80",
+                changed(|theme| theme["metrics"] = json!({"rowHeight": 10})),
+            ),
+            (
+                "invalid type: floating point",
+                changed(|theme| theme["metrics"] = json!({"rowHeight": 20.5})),
+            ),
+            (
+                "sidebarMaxWidth",
+                changed(|theme| theme["metrics"] = json!({"sidebarMinWidth": 300})),
+            ),
+            (
+                "unknown field `stripes`",
+                changed(|theme| theme["chrome"] = json!({"stripes": true})),
             ),
         ];
         for (expected, text) in cases {
@@ -587,7 +661,13 @@ mod tests {
         let ids: Vec<String> = folder.list().into_iter().map(|theme| theme.id).collect();
         assert_eq!(
             ids,
-            ["catppuccin-mocha", "default", "nord", "rose-pine-moon"]
+            [
+                "catppuccin-mocha",
+                "commander-compact",
+                "default",
+                "nord",
+                "rose-pine-moon"
+            ]
         );
         assert!(matches!(
             folder.load("broken"),
@@ -611,6 +691,22 @@ mod tests {
     /// `default.json` as the shipped version 1.0.0 was: an older core wrote
     /// this file on every PC it started on.
     const DEFAULT_1_0_0: &str = include_str!("../testdata/default-1.0.0.json");
+
+    /// A theme of the first format, colours only, stays valid: `metrics`
+    /// and `chrome` are optional, and absent means the default look.
+    #[test]
+    fn a_theme_without_metrics_and_chrome_is_still_valid() {
+        let old = parse(DEFAULT_1_0_0, Some(DEFAULT_THEME)).unwrap();
+        assert_eq!((old.metrics, old.chrome), (None, None));
+        assert!(!ThemeInfo::from(&old).has_metrics);
+        let explicit_nothing = changed(|theme| {
+            theme["metrics"] = json!({});
+            theme["chrome"] = json!({});
+        });
+        let theme = parse(&explicit_nothing, Some(DEFAULT_THEME)).unwrap();
+        assert!(theme.metrics.unwrap().is_empty());
+        assert!(!ThemeInfo::from(&theme).has_metrics);
+    }
 
     #[test]
     fn the_earlier_versions_are_the_files_that_shipped() {
@@ -696,7 +792,13 @@ mod tests {
         let ids: Vec<String> = folder.list().into_iter().map(|theme| theme.id).collect();
         assert_eq!(
             ids,
-            ["catppuccin-mocha", "default", "nord", "rose-pine-moon"],
+            [
+                "catppuccin-mocha",
+                "commander-compact",
+                "default",
+                "nord",
+                "rose-pine-moon"
+            ],
             "the record is not a theme"
         );
     }

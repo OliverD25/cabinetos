@@ -11,7 +11,8 @@
 # sdk/themes/collection/marketplace.csv, whose row gives the item's
 # description, license and source link (docs/themes.md, "The collection").
 # Without it the index is what it always was: the fixture plugins and the
-# four shipped themes, which the UI's end-to-end test counts on.
+# shipped themes, five since commander-compact (the UI's end-to-end test
+# counted four until the shell adopts the fifth).
 #
 # Point the core at it with marketplace.index (the folder, or its
 # index.json). Nothing is uploaded or published: the folder stays on this
