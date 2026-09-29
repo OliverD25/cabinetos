@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use cabinetos_fs::{FsError, MeasureError, Tree};
-use cabinetos_protocol::{Envelope, Event, MeasureResult, RequestId};
+use cabinetos_protocol::{Event, MeasureResult};
 
 use crate::connection::Outbox;
 use crate::listing::{self, Failure};
@@ -46,16 +46,13 @@ pub(crate) fn count(measure_id: u64, paths: Vec<String>, stop: &AtomicBool, out:
         let mut report = |tree: &Tree| {
             if last.elapsed() >= PROGRESS_EVERY {
                 last = Instant::now();
-                out.send(&Envelope::new(
-                    RequestId::new(),
-                    Event::MeasureProgress {
-                        measure_id,
-                        path: path.clone(),
-                        files: tree.files,
-                        folders: tree.folders,
-                        bytes: tree.bytes,
-                    },
-                ));
+                out.event(Event::MeasureProgress {
+                    measure_id,
+                    path: path.clone(),
+                    files: tree.files,
+                    folders: tree.folders,
+                    bytes: tree.bytes,
+                });
             }
         };
         let tree = match cabinetos_fs::measure_tree(&path, &stopped, &mut report) {
@@ -85,12 +82,9 @@ pub(crate) fn count(measure_id: u64, paths: Vec<String>, stop: &AtomicBool, out:
         cancelled,
         "measure finished"
     );
-    out.send(&Envelope::new(
-        RequestId::new(),
-        Event::MeasureFinished {
-            measure_id,
-            results,
-            cancelled,
-        },
-    ));
+    out.event(Event::MeasureFinished {
+        measure_id,
+        results,
+        cancelled,
+    });
 }

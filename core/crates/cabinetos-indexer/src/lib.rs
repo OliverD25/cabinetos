@@ -17,7 +17,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use cabinetos_diag::span_for_request;
+use cabinetos_diag::span_for_action;
 use cabinetos_index::{Indexes, Matcher, SearchError, VolumeReport, VolumeState};
 use cabinetos_ipc::{IpcError, PipeConnection, PipeName, PipeServer};
 use cabinetos_protocol::{
@@ -180,8 +180,9 @@ async fn answer(frame: &[u8], source: &Arc<dyn IndexSource>) -> Envelope<Indexer
         .get("type")
         .and_then(Value::as_str)
         .map(|kind| kind.chars().take(64).collect::<String>());
-    let Envelope { id, body, .. } = match serde_json::from_value::<Envelope<IndexerRequest>>(value)
-    {
+    let Envelope { id, trace, body } = match serde_json::from_value::<Envelope<IndexerRequest>>(
+        value,
+    ) {
         Ok(envelope) => envelope,
         Err(error) => {
             let (code, message) = match kind {
@@ -202,7 +203,7 @@ async fn answer(frame: &[u8], source: &Arc<dyn IndexSource>) -> Envelope<Indexer
             );
         }
     };
-    let span = span_for_request(&id);
+    let span = span_for_action(&id, trace.as_ref().unwrap_or(&id));
     let kind = body.type_tag();
     let started = Instant::now();
     let source = Arc::clone(source);

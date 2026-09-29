@@ -38,6 +38,8 @@ pub struct PipeClient {
     shared: Arc<Mutex<Shared>>,
     events: Option<mpsc::UnboundedReceiver<Envelope<Event>>>,
     reader: JoinHandle<()>,
+    /// The trace every request of this client carries, if any.
+    trace: Option<RequestId>,
 }
 
 /// What the client and its reader task share.
@@ -85,7 +87,21 @@ impl PipeClient {
             shared,
             events: Some(events_rx),
             reader,
+            trace: None,
         })
+    }
+
+    /// Makes every later request carry `trace`: the user action they belong
+    /// to (the CLI uses one per run). `None` sends none, and the core treats
+    /// each request as an action of its own.
+    pub fn set_trace(&mut self, trace: Option<RequestId>) {
+        self.trace = trace;
+    }
+
+    /// The trace later requests carry.
+    #[must_use]
+    pub fn trace(&self) -> Option<&RequestId> {
+        self.trace.as_ref()
     }
 
     /// Sends `request` with a fresh [`RequestId`] and waits for the reply.
@@ -111,8 +127,8 @@ impl PipeClient {
             }
             shared.pending.insert(id.clone(), reply_tx);
         }
-        if let Err(error) = codec::send(&mut self.writer, &Envelope::new(id.clone(), request)).await
-        {
+        let envelope = Envelope::traced(id.clone(), self.trace.clone(), request);
+        if let Err(error) = codec::send(&mut self.writer, &envelope).await {
             lock(&self.shared).pending.remove(&id);
             return Err(error);
         }

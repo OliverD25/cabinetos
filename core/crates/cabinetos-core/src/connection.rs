@@ -28,7 +28,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use cabinetos_diag::span_for_request;
+use cabinetos_diag::{current_trace, span_for_action, span_for_request};
 use cabinetos_fs::{DirectoryWatcher, ListOptions};
 use cabinetos_ipc::{IpcError, PipeConnection};
 use cabinetos_protocol::{
@@ -80,8 +80,16 @@ impl Outbox {
         }
     }
 
+    /// Queues the reply to request `id`. It carries the trace of the span it
+    /// is sent in: the request's own.
     pub(crate) fn reply(&self, id: RequestId, response: Response) {
-        self.send(&Envelope::new(id, response));
+        self.send(&Envelope::traced(id, current_trace(), response));
+    }
+
+    /// Queues an event that the request being handled caused (a measure's
+    /// progress), with that request's trace.
+    pub(crate) fn event(&self, event: Event) {
+        self.send(&Envelope::traced(RequestId::new(), current_trace(), event));
     }
 }
 
@@ -110,6 +118,7 @@ enum TaskDone {
     /// A `list_directory` request has its result.
     ListingReady {
         request_id: RequestId,
+        trace: RequestId,
         listing_id: u64,
         started: Instant,
         result: Result<Opened, Failure>,
@@ -278,8 +287,9 @@ impl Session {
                 return;
             }
         };
+        let trace = envelope.trace_or_id().clone();
         let (id, request) = (envelope.id, envelope.body);
-        let span = span_for_request(&id);
+        let span = span_for_action(&id, &trace);
         let kind = request.type_tag();
         let reply = {
             let _entered = span.enter();
@@ -377,7 +387,8 @@ impl Session {
     /// Answers a frame that is not a valid request.
     fn reject(&self, rejection: Rejection) {
         let id = rejection.id.unwrap_or_else(RequestId::new);
-        let _entered = span_for_request(&id).entered();
+        let trace = rejection.trace.unwrap_or_else(|| id.clone());
+        let _entered = span_for_action(&id, &trace).entered();
         tracing::warn!(code = ?rejection.code, error = %rejection.message, "request rejected");
         self.out.reply(
             id,
@@ -608,12 +619,14 @@ impl Session {
             ..ListOptions::default()
         };
         let request_id = id.clone();
+        let trace = current_trace().unwrap_or_else(|| id.clone());
         let started = Instant::now();
         self.tasks.spawn(
             async move {
                 let result = open_listing(listing_id, path, options, watch).await;
                 TaskDone::ListingReady {
                     request_id,
+                    trace,
                     listing_id,
                     started,
                     result,
@@ -1378,10 +1391,11 @@ impl Session {
         match done {
             TaskDone::ListingReady {
                 request_id,
+                trace,
                 listing_id,
                 started,
                 result,
-            } => self.listing_ready(request_id, listing_id, started, result),
+            } => self.listing_ready((request_id, trace), listing_id, started, result),
             TaskDone::RefreshEnded { listing_id } => {
                 if let Some(slot) = self.listings.get_mut(&listing_id) {
                     slot.refresh = None;
@@ -1396,12 +1410,12 @@ impl Session {
 
     fn listing_ready(
         &mut self,
-        request_id: RequestId,
+        (request_id, trace): (RequestId, RequestId),
         listing_id: u64,
         started: Instant,
         result: Result<Opened, Failure>,
     ) {
-        let span = span_for_request(&request_id);
+        let span = span_for_action(&request_id, &trace);
         let _entered = span.enter();
         let opened = match result {
             Ok(opened) => opened,
@@ -1467,7 +1481,9 @@ impl Session {
                 _watcher: directory_watcher,
                 out: self.out.clone(),
             };
-            let span = tracing::info_span!("listing", listing_id);
+            // A root span: what the watcher reports later is nobody's
+            // action, so its lines carry no trace.
+            let span = tracing::info_span!(parent: None, "listing", listing_id);
             self.tasks.spawn(
                 async move {
                     let listing_id = listing::refresh_loop(listing).await;

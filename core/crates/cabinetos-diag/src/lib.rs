@@ -7,9 +7,12 @@
 //!   file that rolls over daily; the newest [`KEPT_LOG_FILES`] files are kept.
 //!   The calling thread never waits for the disk, and never takes a lock: the
 //!   ring buffer of recent events is a lock-free queue.
-//! - Every event carries the process's [`Boundary`], and the `request_id` of
-//!   the request it belongs to ([`span_for_request`]), so one action can be
-//!   followed from the UI through the pipe into the core.
+//! - Every event carries the process's [`Boundary`], the `request_id` of the
+//!   request it belongs to, and the `trace_id` of the user action that
+//!   request is part of ([`span_for_action`]), so one action can be followed
+//!   from the UI through the pipe into the core, its jobs and its plugin
+//!   calls. [`current_trace`] reads the trace back, for the messages the
+//!   core sends.
 //! - On a panic, the hook writes `crash-<timestamp>.json` with the backtrace and
 //!   the last events from the ring buffer, then flushes and closes the log
 //!   writer: the process is expected to end. [`on_panic`] lets it start its
@@ -34,12 +37,13 @@ use std::sync::{Mutex, OnceLock};
 
 use cabinetos_protocol::RequestId;
 use serde::Serialize;
+use tracing::Subscriber;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::Layer;
-use tracing_subscriber::filter::{LevelFilter, Targets};
+use tracing_subscriber::filter::{LevelFilter, Targets, filter_fn};
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::registry::Registry;
+use tracing_subscriber::registry::{LookupSpan, Registry};
 use tracing_subscriber::reload;
 
 pub use panic::on_panic;
@@ -187,7 +191,7 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Changes the filter after [`init`]. Unset when `CABINETOS_LOG` chose the
 /// filter: the environment wins over the configuration file.
-static LEVEL: OnceLock<reload::Handle<Targets, Registry>> = OnceLock::new();
+static LEVEL: OnceLock<Box<dyn Fn(tracing::Level) -> bool + Send + Sync>> = OnceLock::new();
 
 /// Sets up diagnostics for this process. Call it once, first thing in `main`,
 /// and keep the returned guard until the process exits.
@@ -213,7 +217,7 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
         .as_deref()
         .is_some_and(|text| !text.trim().is_empty())
         && bad_filter.is_none();
-    let (filter, level_handle) = reload::Layer::new(filter);
+    let (level_filter, level_handle) = reload::Layer::new(filter);
 
     let (file_layer, worker_guard) = if log_file {
         // The appender prunes old files before it creates the directory, and
@@ -261,18 +265,28 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
             .with_filter(stderr_level)
     });
 
+    // Every layer has its own filter. The span IDs are kept for every span
+    // that declares one, whatever the level: the trace they carry goes out
+    // on the pipe even when nothing is logged. The file, stderr and the ring
+    // buffer follow the level.
+    let logged = Layer::and_then(file_layer, stderr_layer)
+        .and_then(ring::RingLayer::new(boundary))
+        .with_filter(level_filter);
     let subscriber = Registry::default()
-        .with(filter)
-        .with(format::SpanIdsLayer)
-        .with(file_layer)
-        .with(stderr_layer)
-        .with(ring::RingLayer::new(boundary));
+        .with(format::SpanIdsLayer.with_filter(filter_fn(format::is_id_span)))
+        .with(logged);
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|_| DiagError::SubscriberAlreadySet)?;
 
     let _ = WORKER.set(Mutex::new(worker_guard));
     if !filter_from_env {
-        let _ = LEVEL.set(level_handle);
+        let _ = LEVEL.set(Box::new(move |level| {
+            // `modify` also recomputes which log statements are enabled, so
+            // a disabled statement stays a single cached check (Article 1).
+            level_handle
+                .modify(|filter| *filter = Targets::new().with_default(level))
+                .is_ok()
+        }));
     }
     let _ = PROCESS.set(ProcessInfo {
         process,
@@ -295,20 +309,54 @@ pub fn init(config: DiagConfig) -> Result<DiagGuard, DiagError> {
 /// before [`init`] or when `CABINETOS_LOG` set the filter: a filter given
 /// for one run wins over the configuration file.
 pub fn set_level(level: tracing::Level) -> bool {
-    let Some(handle) = LEVEL.get() else {
-        return false;
-    };
-    // `modify` also recomputes which log statements are enabled, so a
-    // disabled statement stays a single cached check (Article 1).
-    handle
-        .modify(|filter| *filter = Targets::new().with_default(level))
-        .is_ok()
+    LEVEL.get().is_some_and(|set| set(level))
 }
 
-/// A span for one request. Everything logged inside it carries the request's
-/// ID as `request_id`, in this process's log and in the crash trace.
+/// A span for one request that is an action of its own (no trace came with
+/// it): the request's ID is also its trace. Everything logged inside it
+/// carries the ID as `request_id` and as `trace_id`, in this process's log
+/// and in the crash trace.
 pub fn span_for_request(id: &RequestId) -> tracing::Span {
-    tracing::info_span!("request", request_id = %id)
+    span_for_action(id, id)
+}
+
+/// A span for one request of a user action. Everything logged inside it
+/// carries the request's ID as `request_id` and the action's trace as
+/// `trace_id`; a job or plugin call started inside it carries the trace
+/// on, and [`current_trace`] finds it for the messages sent inside it.
+pub fn span_for_action(id: &RequestId, trace: &RequestId) -> tracing::Span {
+    tracing::info_span!("request", trace_id = %trace, request_id = %id)
+}
+
+/// The trace of the user action the calling code works for: the
+/// `trace_id` of the innermost span around it that has one. `None` outside
+/// every traced span (a watcher, a timer: nobody's action) and before
+/// [`init`].
+#[must_use]
+pub fn current_trace() -> Option<RequestId> {
+    let text = tracing::dispatcher::get_default(|dispatch| {
+        let registry = dispatch.downcast_ref::<Registry>()?;
+        let current = registry.current_span();
+        let span = registry.span(current.id()?)?;
+        span.scope().find_map(|span| {
+            span.extensions()
+                .get::<format::SpanIds>()
+                .and_then(|ids| ids.trace_id.clone())
+        })
+    })?;
+    text.parse().ok()
+}
+
+/// The log directory of this machine's processes: `explicit` when given,
+/// else `CABINETOS_LOG_DIR`, else `%LOCALAPPDATA%\CabinetOS\logs`. For
+/// tools that read the logs, such as `cabinetos-cli log trace`.
+#[must_use]
+pub fn log_dir(explicit: Option<PathBuf>) -> PathBuf {
+    resolve_log_dir(
+        explicit,
+        std::env::var_os(LOG_DIR_ENV),
+        std::env::var_os("LOCALAPPDATA"),
+    )
 }
 
 /// Picks the log directory: an explicit directory wins, then the

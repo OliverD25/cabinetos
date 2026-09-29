@@ -7,8 +7,9 @@
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
 //! search (`search`, `index status`), the terminal sessions (`term`), the
-//! colour themes (`themes`), the marketplace (`market`), and what the
-//! window shows (`state`).
+//! colour themes (`themes`), the marketplace (`market`), what the window
+//! shows (`state`), and the log folder (`log trace`, `log tail`: these read
+//! files and need no core).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
 //! Without `--log-dir` it writes no log file and reports only to stderr;
@@ -22,6 +23,7 @@
 
 mod describe;
 mod jobs;
+mod logs;
 mod ls;
 mod market;
 mod measure;
@@ -39,7 +41,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, anyhow, bail};
-use cabinetos_diag::{Boundary, DiagConfig, span_for_request};
+use cabinetos_diag::{Boundary, DiagConfig, span_for_action};
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
     ConflictPolicy, Envelope, ExtensionKind, JobAction, JobKind, JobOptions, JobRequest, Request,
@@ -80,6 +82,12 @@ enum Command {
     },
     /// Ask the core to exit cleanly.
     Shutdown,
+    /// Read the log folder: one action through every process (`log trace`),
+    /// or the newest lines of one process's file (`log tail`).
+    Log {
+        #[command(subcommand)]
+        action: LogAction,
+    },
     /// List a directory: the core reads it into shared memory, this client
     /// maps it and prints it.
     Ls {
@@ -600,6 +608,45 @@ fn transfer_job(kind: JobKind, arguments: &TransferArgs) -> anyhow::Result<jobs:
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
+enum LogAction {
+    /// Print every line of one user action (its trace ID) or one request
+    /// (its request ID), from every process's normal and heavy files,
+    /// oldest first.
+    Trace {
+        /// The trace or request ID, a ULID.
+        id: String,
+        /// The log folder. Without it: `CABINETOS_LOG_DIR`, else
+        /// `%LOCALAPPDATA%\CabinetOS\logs`.
+        #[arg(long, value_name = "PATH")]
+        dir: Option<PathBuf>,
+        /// Print the lines as they are in the files.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print the newest lines of one process's newest log file.
+    Tail {
+        /// The process: core, ui, indexer or cli.
+        #[arg(long, default_value = "core")]
+        process: String,
+        /// Its heavy file, heavy-<process>.<date>.jsonl, instead.
+        #[arg(long)]
+        heavy: bool,
+        /// How many lines.
+        #[arg(short = 'n', long, default_value_t = 20)]
+        lines: usize,
+        /// Keep printing the lines added to the file, until Ctrl+C.
+        #[arg(long)]
+        follow: bool,
+        /// Print the lines as they are in the file.
+        #[arg(long)]
+        json: bool,
+        /// The log folder, as for `log trace`.
+        #[arg(long, value_name = "PATH")]
+        dir: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Subcommand)]
 enum ConfigAction {
     /// Print the path of the configuration file the core reads.
     Path,
@@ -735,6 +782,9 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
     {
         return settings::config_validate(file.as_deref());
     }
+    if let Command::Log { action } = &cli.command {
+        return log_command(action);
+    }
     let pipe = PipeName::new(&cli.pipe);
     let mut client = PipeClient::connect(&pipe, CONNECT_TIMEOUT)
         .await
@@ -744,6 +794,8 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
                 pipe.token()
             )
         })?;
+    // One trace per run: every request of this run is one action.
+    client.set_trace(Some(RequestId::new()));
 
     match &cli.command {
         Command::Ping { count } => ping(&mut client, *count).await?,
@@ -754,6 +806,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             }
             say(format_args!("shutdown acknowledged id={}", reply.id));
         }
+        Command::Log { .. } => unreachable!("the log commands return before connecting"),
         Command::Ls {
             path,
             long,
@@ -823,6 +876,35 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// The `log` commands, which read the log folder and need no core.
+fn log_command(action: &LogAction) -> anyhow::Result<()> {
+    match action {
+        LogAction::Trace { id, dir, json } => {
+            if id.parse::<RequestId>().is_err() {
+                bail!("{id} is not a trace or request ID: those are ULIDs, 26 characters");
+            }
+            logs::trace(&cabinetos_diag::log_dir(dir.clone()), id, *json)
+        }
+        LogAction::Tail {
+            process,
+            heavy,
+            lines,
+            follow,
+            json,
+            dir,
+        } => logs::tail(
+            &cabinetos_diag::log_dir(dir.clone()),
+            &logs::Tail {
+                process: process.clone(),
+                heavy: *heavy,
+                lines: *lines,
+                follow: *follow,
+                json: *json,
+            },
+        ),
+    }
 }
 
 /// `ping`: `count` pings, one after another, each printed with its round
@@ -1285,6 +1367,7 @@ pub(crate) async fn send(
     request: Request,
 ) -> anyhow::Result<Envelope<Response>> {
     let id = RequestId::new();
+    let trace = client.trace().cloned().unwrap_or_else(|| id.clone());
     let kind = request.type_tag();
     let exchange = async {
         tracing::debug!(request = kind, "sending request");
@@ -1303,7 +1386,7 @@ pub(crate) async fn send(
         );
         Ok(reply)
     };
-    exchange.instrument(span_for_request(&id)).await
+    exchange.instrument(span_for_action(&id, &trace)).await
 }
 
 #[cfg(test)]

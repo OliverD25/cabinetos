@@ -5,7 +5,10 @@
 
 use std::fs;
 
-use cabinetos_diag::{Boundary, DiagConfig, LOG_FILTER_ENV, init, set_level};
+use cabinetos_diag::{
+    Boundary, DiagConfig, LOG_FILTER_ENV, current_trace, init, set_level, span_for_action,
+};
+use cabinetos_protocol::RequestId;
 use serde_json::Value;
 
 #[test]
@@ -34,6 +37,12 @@ fn set_level_changes_what_is_written() {
     assert!(set_level(tracing::Level::WARN));
     tracing::info!("info while warn");
     tracing::warn!("warn while warn");
+    // The request span is not logged at warn, but its trace still reaches
+    // the messages the core sends inside it.
+    let id = RequestId::new();
+    let trace = RequestId::new();
+    let span = span_for_action(&id, &trace);
+    assert_eq!(span.in_scope(current_trace), Some(trace));
     drop(guard);
 
     let mut messages = Vec::new();

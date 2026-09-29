@@ -3,8 +3,8 @@
 //! One event becomes one JSON object on one line, with a fixed set of keys in
 //! a fixed order (documented in `docs/diagnostics.md`):
 //!
-//! `ts`, `level`, `boundary`, `target`, `message`, `request_id`, `plugin_id`,
-//! `span`, `fields`, `thread`.
+//! `ts`, `level`, `boundary`, `target`, `message`, `trace_id`, `request_id`,
+//! `plugin_id`, `span`, `fields`, `thread`.
 
 use std::fmt;
 
@@ -20,6 +20,8 @@ use tracing_subscriber::registry::{LookupSpan, Scope};
 
 use crate::{Boundary, clock};
 
+/// Span field copied into every event inside the span.
+const TRACE_ID: &str = "trace_id";
 /// Span field copied into every event inside the span.
 const REQUEST_ID: &str = "request_id";
 /// Span field copied into every event inside the span.
@@ -62,6 +64,8 @@ struct Line<'a> {
     target: &'a str,
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    trace_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     request_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_id: Option<String>,
@@ -75,7 +79,8 @@ struct Line<'a> {
 /// Renders one event as a JSON line, without the trailing newline.
 ///
 /// `scope` is the event's span scope, innermost span first. The innermost span
-/// that carries `request_id` (or `plugin_id`) provides that key. Outside a
+/// that carries `trace_id` (or `request_id`, or `plugin_id`) provides that
+/// key. Outside a
 /// plugin's span, an event's own `plugin_id` field provides it: the core
 /// names the plugin a line is about. An event with a `plugin_id` is about a
 /// plugin: its boundary is `plugin`, whatever the process's own boundary
@@ -93,11 +98,15 @@ where
     event.record(&mut visitor);
 
     let mut span = None;
+    let mut trace_id = None;
     let mut request_id = None;
     let mut plugin_id = None;
     for span_ref in scope.into_iter().flatten() {
         span.get_or_insert(span_ref.name());
         if let Some(ids) = span_ref.extensions().get::<SpanIds>() {
+            if trace_id.is_none() {
+                trace_id.clone_from(&ids.trace_id);
+            }
             if request_id.is_none() {
                 request_id.clone_from(&ids.request_id);
             }
@@ -105,7 +114,7 @@ where
                 plugin_id.clone_from(&ids.plugin_id);
             }
         }
-        if request_id.is_some() && plugin_id.is_some() {
+        if trace_id.is_some() && request_id.is_some() && plugin_id.is_some() {
             break;
         }
     }
@@ -128,6 +137,7 @@ where
         },
         target: metadata.target(),
         message: visitor.message,
+        trace_id,
         request_id,
         plugin_id,
         span,
@@ -201,24 +211,41 @@ impl Visit for EventVisitor {
 
 /// The IDs a span carries, stored in the span's extensions.
 #[derive(Default)]
-struct SpanIds {
+#[expect(
+    clippy::struct_field_names,
+    reason = "the fields are named after the log keys they fill"
+)]
+pub(crate) struct SpanIds {
+    pub(crate) trace_id: Option<String>,
     request_id: Option<String>,
     plugin_id: Option<String>,
 }
 
 impl SpanIds {
     fn is_empty(&self) -> bool {
-        self.request_id.is_none() && self.plugin_id.is_none()
+        self.trace_id.is_none() && self.request_id.is_none() && self.plugin_id.is_none()
     }
 }
 
-/// Reads `request_id` and `plugin_id` from span fields. Record them with `%`
-/// (`request_id = %id`) or as strings, so the value is the plain text.
+/// Whether `metadata` is a span that declares one of the ID fields. Such
+/// spans are created whatever the log level, so the trace they carry
+/// reaches the pipe even when nothing is logged.
+pub(crate) fn is_id_span(metadata: &tracing::Metadata<'_>) -> bool {
+    metadata.is_span()
+        && [TRACE_ID, REQUEST_ID, PLUGIN_ID]
+            .iter()
+            .any(|name| metadata.fields().field(name).is_some())
+}
+
+/// Reads `trace_id`, `request_id` and `plugin_id` from span fields. Record
+/// them with `%` (`request_id = %id`) or as strings, so the value is the
+/// plain text.
 struct SpanIdsVisitor<'a>(&'a mut SpanIds);
 
 impl SpanIdsVisitor<'_> {
     fn put(&mut self, field: &Field, text: String) {
         match field.name() {
+            TRACE_ID => self.0.trace_id = Some(text),
             REQUEST_ID => self.0.request_id = Some(text),
             PLUGIN_ID => self.0.plugin_id = Some(text),
             _ => {}
@@ -232,14 +259,15 @@ impl Visit for SpanIdsVisitor<'_> {
     }
 
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        if matches!(field.name(), REQUEST_ID | PLUGIN_ID) {
+        if matches!(field.name(), TRACE_ID | REQUEST_ID | PLUGIN_ID) {
             self.put(field, format!("{value:?}"));
         }
     }
 }
 
-/// Copies `request_id` and `plugin_id` from span fields into the span's
-/// extensions, where [`render_line`] finds them for every event in the span.
+/// Copies `trace_id`, `request_id` and `plugin_id` from span fields into the
+/// span's extensions, where [`render_line`] finds them for every event in
+/// the span.
 pub(crate) struct SpanIdsLayer;
 
 impl<S> tracing_subscriber::Layer<S> for SpanIdsLayer
@@ -268,6 +296,9 @@ where
         let mut extensions = span.extensions_mut();
         match extensions.get_mut::<SpanIds>() {
             Some(ids) => {
+                if update.trace_id.is_some() {
+                    ids.trace_id = update.trace_id;
+                }
                 if update.request_id.is_some() {
                     ids.request_id = update.request_id;
                 }
@@ -368,7 +399,12 @@ mod tests {
     #[test]
     fn keys_come_in_the_documented_order() {
         let lines = capture_raw(|| {
-            let span = tracing::info_span!("plugin", plugin_id = "md-preview", request_id = "R1");
+            let span = tracing::info_span!(
+                "plugin",
+                plugin_id = "md-preview",
+                request_id = "R1",
+                trace_id = "T1"
+            );
             let _entered = span.enter();
             tracing::info!(extra = 1, "hello");
         });
@@ -379,6 +415,7 @@ mod tests {
             "\"boundary\"",
             "\"target\"",
             "\"message\"",
+            "\"trace_id\"",
             "\"request_id\"",
             "\"plugin_id\"",
             "\"span\"",
@@ -456,6 +493,110 @@ mod tests {
             tracing::info!("after record");
         });
         assert_eq!(lines[0]["request_id"], "LATE");
+    }
+
+    #[test]
+    fn a_request_span_carries_its_trace_and_what_it_starts_inherits_it() {
+        let id: cabinetos_protocol::RequestId = "01J9ZQ4X7K3M5N8P2R6S0T1V4W".parse().unwrap();
+        let trace: cabinetos_protocol::RequestId = "01J9ZQ4X7K3M5N8P2R6S0T1V4V".parse().unwrap();
+        let lines = capture(|| {
+            tracing::info!("before");
+            let span = crate::span_for_action(&id, &trace);
+            let _entered = span.enter();
+            tracing::info!("in the request");
+            let job = tracing::info_span!("job", job_id = 3);
+            let _job = job.enter();
+            tracing::info!("in the job");
+        });
+        assert!(lines[0].get("trace_id").is_none());
+        assert_eq!(lines[1]["trace_id"], trace.as_str());
+        assert_eq!(lines[1]["request_id"], id.as_str());
+        assert_eq!(lines[2]["trace_id"], trace.as_str());
+        assert_eq!(lines[2]["span"], "job");
+
+        let own: cabinetos_protocol::RequestId = "01J9ZQ4X7K3M5N8P2R6S0T1V4T".parse().unwrap();
+        let lines = capture(|| {
+            let span = crate::span_for_request(&own);
+            let _entered = span.enter();
+            tracing::info!("its own action");
+        });
+        assert_eq!(lines[0]["trace_id"], own.as_str());
+        assert_eq!(lines[0]["request_id"], own.as_str());
+    }
+
+    #[test]
+    fn current_trace_is_the_innermost_trace_around_the_caller() {
+        let id: cabinetos_protocol::RequestId = "01J9ZQ4X7K3M5N8P2R6S0T1V4W".parse().unwrap();
+        let trace: cabinetos_protocol::RequestId = "01J9ZQ4X7K3M5N8P2R6S0T1V4V".parse().unwrap();
+        let subscriber = tracing_subscriber::registry().with(SpanIdsLayer);
+        tracing::subscriber::with_default(subscriber, || {
+            assert_eq!(crate::current_trace(), None);
+            let request = crate::span_for_action(&id, &trace);
+            let job = tracing::info_span!(parent: &request, "job", job_id = 1);
+            // Entered on another thread, as a job's thread enters its cause.
+            let dispatch = tracing::dispatcher::get_default(Clone::clone);
+            let seen = std::thread::scope(|scope| {
+                scope
+                    .spawn(|| {
+                        tracing::dispatcher::with_default(&dispatch, || {
+                            let _entered = job.enter();
+                            crate::current_trace()
+                        })
+                    })
+                    .join()
+                    .unwrap()
+            });
+            assert_eq!(seen, Some(trace.clone()));
+            let _entered = request.enter();
+            assert_eq!(crate::current_trace(), Some(trace.clone()));
+            let unrelated = tracing::info_span!(parent: None, "listing", listing_id = 4);
+            let _unrelated = unrelated.enter();
+            assert_eq!(crate::current_trace(), None, "a watcher is nobody's action");
+        });
+    }
+
+    #[test]
+    fn only_spans_that_declare_an_id_are_id_spans() {
+        let subscriber = tracing_subscriber::registry().with(Probe);
+        tracing::subscriber::with_default(subscriber, || {
+            let _ = tracing::info_span!("request", request_id = "R");
+            let _ = tracing::trace_span!("plugin", plugin_id = "p");
+            let _ = tracing::info_span!("anything", trace_id = tracing::field::Empty);
+            let _ = tracing::info_span!("listing", listing_id = 1);
+            tracing::info!(request_id = "R", "an event is never an id span");
+        });
+        assert_eq!(
+            PROBED.lock().unwrap().clone(),
+            vec![
+                ("request", true),
+                ("plugin", true),
+                ("anything", true),
+                ("listing", false),
+                ("event", false)
+            ]
+        );
+    }
+
+    static PROBED: Mutex<Vec<(&'static str, bool)>> = Mutex::new(Vec::new());
+
+    /// Records what [`is_id_span`] says about each span and event.
+    struct Probe;
+
+    impl<S: Subscriber> tracing_subscriber::Layer<S> for Probe {
+        fn on_new_span(&self, attrs: &Attributes<'_>, _: &Id, _: Context<'_, S>) {
+            let metadata = attrs.metadata();
+            PROBED
+                .lock()
+                .unwrap()
+                .push((metadata.name(), is_id_span(metadata)));
+        }
+
+        fn on_event(&self, event: &Event<'_>, _: Context<'_, S>) {
+            PROBED
+                .lock()
+                .unwrap()
+                .push(("event", is_id_span(event.metadata())));
+        }
     }
 
     #[test]

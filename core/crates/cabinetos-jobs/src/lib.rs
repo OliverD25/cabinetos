@@ -175,8 +175,9 @@ struct PublisherState {
 }
 
 impl Engine {
-    pub(crate) fn emit(&self, event: Event) {
-        (self.sink)(event);
+    /// Sends an event of `job`, inside the span that started it.
+    pub(crate) fn emit(&self, job: &Job, event: Event) {
+        job.cause.in_scope(|| (self.sink)(event));
     }
 
     /// Sends `job_state_changed` if the state clients see has changed.
@@ -186,10 +187,13 @@ impl Engine {
         if announced.as_ref() != Some(&state) {
             *announced = Some(state.clone());
             tracing::debug!(job_id = job.id, state = ?state, "job state");
-            self.emit(Event::JobStateChanged {
-                job_id: job.id,
-                state,
-            });
+            self.emit(
+                job,
+                Event::JobStateChanged {
+                    job_id: job.id,
+                    state,
+                },
+            );
         }
     }
 
@@ -223,6 +227,7 @@ impl Engine {
                 .name(format!("job-{id}"))
                 .spawn(move || {
                     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let _cause = running.cause.enter();
                         run::run(&engine, &running);
                     }));
                     if outcome.is_err() {

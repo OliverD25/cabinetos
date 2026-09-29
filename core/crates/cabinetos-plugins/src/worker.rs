@@ -19,23 +19,42 @@ use crate::manifest::Capability;
 use crate::sandbox::{self, Limiter, LineLog, Mounts, Stream};
 use crate::{HostInner, Loaded, PluginCommand};
 
-/// A call for the instance.
+/// A call for the instance. `cause` is the caller's span: the call runs
+/// inside a span of its own under it, so what the plugin logs and emits
+/// during the call carries the caller's trace.
 pub(crate) enum Call {
     /// Run a command; the reply is its JSON result or its error text.
     Command {
         id: String,
         args: String,
         reply: SyncSender<Reply<Result<String, String>>>,
+        cause: tracing::Span,
     },
     /// Judge a job about to start.
     BeforeJob {
         job: JobSummary,
         reply: SyncSender<Reply<JobVerdict>>,
+        cause: tracing::Span,
     },
     /// A folder the plugin may read was opened (no reply).
-    Listing { path: String, entries: u32 },
+    Listing {
+        path: String,
+        entries: u32,
+        cause: tracing::Span,
+    },
     /// Say goodbye (`deactivate`) and end.
     Stop,
+}
+
+impl Call {
+    fn cause(&self) -> Option<&tracing::Span> {
+        match self {
+            Self::Command { cause, .. }
+            | Self::BeforeJob { cause, .. }
+            | Self::Listing { cause, .. } => Some(cause),
+            Self::Stop => None,
+        }
+    }
 }
 
 /// The answer to a call.
@@ -195,6 +214,8 @@ struct Instance {
 
 /// The thread's body: start the instance, then serve calls until a trap,
 /// `Stop`, or the host goes away.
+// One short arm per kind of call; splitting them would scatter the loop.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run(
     host: &Weak<HostInner>,
     plugin: &Arc<Loaded>,
@@ -220,8 +241,13 @@ pub(crate) fn run(
 
     while let Ok(call) = calls.recv() {
         let Some(inner) = host.upgrade() else { return };
+        let _in_call = call.cause().map(|cause| {
+            tracing::info_span!(parent: cause, "plugin", plugin_id = %plugin.id).entered()
+        });
         match call {
-            Call::Command { id, args, reply } => {
+            Call::Command {
+                id, args, reply, ..
+            } => {
                 let result = timed(&inner, activity, || {
                     prepare(&mut instance.store, plugin, plugin.limits.call_timeout);
                     instance
@@ -246,7 +272,7 @@ pub(crate) fn run(
                     }
                 }
             }
-            Call::BeforeJob { job, reply } => {
+            Call::BeforeJob { job, reply, .. } => {
                 let result = timed(&inner, activity, || {
                     prepare(
                         &mut instance.store,
@@ -273,7 +299,7 @@ pub(crate) fn run(
                     }
                 }
             }
-            Call::Listing { path, entries } => {
+            Call::Listing { path, entries, .. } => {
                 activity.queued.fetch_sub(1, Ordering::Relaxed);
                 let result = timed(&inner, activity, || {
                     prepare(&mut instance.store, plugin, plugin.limits.call_timeout);

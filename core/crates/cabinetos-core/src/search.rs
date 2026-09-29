@@ -104,7 +104,7 @@ impl IndexerLink {
         {
             return None;
         }
-        let envelope = Envelope::new(id.clone(), request);
+        let envelope = Envelope::traced(id.clone(), cabinetos_diag::current_trace(), request);
         match exchange::<_, Envelope<IndexerResponse>>(&self.pipe, &envelope, INDEXER_TIMEOUT).await
         {
             Ok(reply) => {

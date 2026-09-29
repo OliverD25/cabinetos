@@ -238,6 +238,10 @@ pub(crate) struct Job {
     pub(crate) emitter: Mutex<Emitter>,
     /// The last state announced with `job_state_changed`.
     pub(crate) announced: Mutex<Option<JobState>>,
+    /// The span the job was started in: the request's, with the trace of
+    /// the user action. The job's threads enter it and its events are sent
+    /// inside it, so its log lines and events carry that trace.
+    pub(crate) cause: tracing::Span,
 }
 
 impl Job {
@@ -264,6 +268,7 @@ impl Job {
             work_ready: Condvar::new(),
             emitter: Mutex::new(Emitter::default()),
             announced: Mutex::new(None),
+            cause: tracing::Span::current(),
         }
     }
 

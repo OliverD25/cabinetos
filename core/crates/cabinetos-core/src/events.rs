@@ -32,10 +32,16 @@ impl EventHub {
         Arc::new(Self { sender })
     }
 
-    /// Sends `event` to every connection that listens. Never blocks.
+    /// Sends `event` to every connection that listens. Never blocks. The
+    /// event carries the trace of the action it belongs to: the one whose
+    /// span it is published in (a request, a job, a plugin call), none for
+    /// a watcher's.
     pub(crate) fn publish(&self, event: Event) {
+        let trace = cabinetos_diag::current_trace();
         // An error means no connection is listening, which is fine.
-        let _ = self.sender.send(Envelope::new(RequestId::new(), event));
+        let _ = self
+            .sender
+            .send(Envelope::traced(RequestId::new(), trace, event));
     }
 
     /// The events from now on, for a connection that said `hello`.

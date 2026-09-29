@@ -341,7 +341,10 @@ impl Run<'_> {
             for number in 1..workers {
                 let spawned = std::thread::Builder::new()
                     .name(format!("job-{}-{number}", self.job.id))
-                    .spawn_scoped(scope, || self.worker(None));
+                    .spawn_scoped(scope, || {
+                        let _cause = self.job.cause.enter();
+                        self.worker(None);
+                    });
                 if let Err(error) = spawned {
                     tracing::warn!(%error, "cannot start a job worker; going on with fewer");
                 }
@@ -505,7 +508,7 @@ impl Run<'_> {
             source = %conflict.source,
             "file set aside for a decision"
         );
-        self.engine.emit(Event::JobConflict(conflict));
+        self.engine.emit(self.job, Event::JobConflict(conflict));
         if disk_full {
             // Every other file would fail the same way: stop until the user
             // makes room and says retry.

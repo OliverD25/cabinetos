@@ -130,7 +130,7 @@ pub(crate) fn publish(job: &Job, sink: &EventSink, gap: Duration, last: bool) {
         emitter.last_emit = Some(now);
         emitter.last_sent = Some(progress.clone());
         emitter.finished = last;
-        sink(Event::JobProgress(progress));
+        job.cause.in_scope(|| sink(Event::JobProgress(progress)));
     }
 }
 

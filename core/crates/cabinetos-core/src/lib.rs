@@ -392,6 +392,9 @@ async fn serve(
 pub(crate) struct Rejection {
     /// The frame's ID, when it had a valid one; the reply echoes it.
     pub(crate) id: Option<RequestId>,
+    /// The frame's trace, when it had a valid one; the rejection is logged
+    /// under it.
+    pub(crate) trace: Option<RequestId>,
     pub(crate) code: ErrorCode,
     pub(crate) message: String,
 }
@@ -402,11 +405,16 @@ pub(crate) struct Rejection {
 pub(crate) fn decode_request(frame: &[u8]) -> Result<Envelope<Request>, Rejection> {
     let value: Value = serde_json::from_slice(frame).map_err(|error| Rejection {
         id: None,
+        trace: None,
         code: ErrorCode::ProtocolError,
         message: format!("the frame is not valid JSON: {error}"),
     })?;
     let id = value
         .get("id")
+        .and_then(Value::as_str)
+        .and_then(|text| text.parse::<RequestId>().ok());
+    let trace = value
+        .get("trace")
         .and_then(Value::as_str)
         .and_then(|text| text.parse::<RequestId>().ok());
     let kind = value
@@ -417,11 +425,13 @@ pub(crate) fn decode_request(frame: &[u8]) -> Result<Envelope<Request>, Rejectio
     serde_json::from_value(value).map_err(|error| match kind {
         Some(kind) if id.is_some() && !Request::TYPES.contains(&kind.as_str()) => Rejection {
             id,
+            trace,
             code: ErrorCode::UnknownRequest,
             message: format!("unknown request type `{kind}`"),
         },
         _ => Rejection {
             id,
+            trace,
             code: ErrorCode::ProtocolError,
             message: format!("not a valid request envelope: {error}"),
         },

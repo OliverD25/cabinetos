@@ -119,6 +119,11 @@ fn writes_json_lines_and_flushes_on_drop() {
         .expect("the event inside the request span was not written");
     assert_eq!(inside["boundary"], "engine");
     assert_eq!(inside["request_id"], id.as_str());
+    assert_eq!(
+        inside["trace_id"],
+        id.as_str(),
+        "a request without a trace is its own"
+    );
     assert_eq!(inside["level"], "INFO");
     assert_eq!(inside["span"], "request");
     assert_eq!(inside["fields"]["answer"], 42);
@@ -135,6 +140,7 @@ fn writes_json_lines_and_flushes_on_drop() {
         .find(|line| line["message"] == "outside any request")
         .expect("the event outside the span was not written");
     assert!(outside.get("request_id").is_none());
+    assert!(outside.get("trace_id").is_none());
 
     let recent = recent_events();
     assert!(recent.len() >= 2);

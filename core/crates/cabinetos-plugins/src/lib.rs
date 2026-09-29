@@ -817,6 +817,7 @@ impl PluginHost {
                 id: command.to_owned(),
                 args: args.to_owned(),
                 reply,
+                cause: tracing::Span::current(),
             },
         )?;
         match self.wait(plugin_id, &activity, &answer) {
@@ -956,6 +957,7 @@ impl PluginHost {
                         .send(Call::BeforeJob {
                             job: summary.clone(),
                             reply,
+                            cause: tracing::Span::current(),
                         })
                         .is_ok()
                     {
@@ -1011,6 +1013,7 @@ impl PluginHost {
                 let _ = worker.calls.send(Call::Listing {
                     path: sandbox::guest_path(Path::new(path)),
                     entries,
+                    cause: tracing::Span::current(),
                 });
             }
         }
