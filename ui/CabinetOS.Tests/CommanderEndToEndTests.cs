@@ -47,4 +47,40 @@ public class CommanderEndToEndTests
             Repo.RemoveTempFolder(root);
         }
     }
+
+    [Fact]
+    public async Task Shift_f4_makes_an_empty_file_once_and_f4_never_falls_back_from_a_missing_editor()
+    {
+        var coreExe = EndToEndTests.FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-files");
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root, "files")).FullName;
+            Directory.CreateDirectory(Path.Combine(folder, "notes"));
+            Directory.CreateDirectory(Path.Combine(root, "config"));
+            // An editor found nowhere: edit_path must say so and try nothing else, so no Notepad opens here.
+            File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"),
+                """{"version":1,"files":{"editor":{"command":"cabinetos-no-such-editor.exe","args":["--wait"]}}}""");
+            await using var core = await EndToEndTests.StartCoreAsync(coreExe, root);
+            await core.Client.HelloAsync();
+
+            var path = Path.Combine(folder, "New Text Document.txt");
+            Assert.IsType<OkReply>(await core.Client.RequestAsync(new CreateFileRequest(path)));
+            Assert.Equal(0, new FileInfo(path).Length);
+            // A taken name, a folder's too, is already_exists: the window then opens what has the name.
+            Assert.Equal(ErrorCodes.AlreadyExists, Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new CreateFileRequest(path))).Code);
+            Assert.Equal(ErrorCodes.AlreadyExists, Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new CreateFileRequest(Path.Combine(folder, "notes")))).Code);
+
+            Assert.Equal(ErrorCodes.SpawnFailed, Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new EditPathRequest(path))).Code);
+            // A folder or a missing file is never edited. (This core looks for the editor first,
+            // so with this setting both say spawn_failed rather than invalid_path and not_found.)
+            Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new EditPathRequest(Path.Combine(folder, "notes"))));
+            Assert.IsType<ErrorReply>(await core.Client.RequestAsync(new EditPathRequest(Path.Combine(folder, "gone.txt"))));
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
 }

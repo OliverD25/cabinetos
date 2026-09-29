@@ -46,6 +46,7 @@ public sealed partial class FilePane : UserControl
     private TaskCompletionSource<string?>? _rename;
     private bool _clearButtonHidden;
     private int _renameIndex = -1;
+    private bool _newRow;
     private string _renameOriginal = "";
     private int _noteIndex = -1;
     private bool _searchShown;
@@ -140,6 +141,32 @@ public sealed partial class FilePane : UserControl
         PositionEditors();
         RenameBox.Focus(FocusState.Programmatic);
         RenameBox.Select(0, DisplayFormat.RenameStem(name, isFolder: !selectStem));
+        return pending.Task;
+    }
+
+    /// <summary>
+    /// New Text File (Shift+F4): a name box over a row the listing does not
+    /// have yet, at the top of the rows on screen, with the part of
+    /// <paramref name="name"/> before its extension selected. Returns the name
+    /// typed (the suggestion too), or null when the user cancelled.
+    /// </summary>
+    public Task<string?> BeginNewNameAsync(string name)
+    {
+        EndRename(commit: false);
+        var pending = new TaskCompletionSource<string?>();
+        _rename = pending;
+        _renameIndex = -1;
+        _newRow = true;
+        // Nothing to compare with: the suggestion itself is a name to take.
+        _renameOriginal = "";
+        NewRow.Visibility = Visibility.Visible;
+        RenameBox.Text = name;
+        RenameBox.Visibility = Visibility.Visible;
+        HideClearButton();
+        UpdateLayout();
+        PositionEditors();
+        RenameBox.Focus(FocusState.Programmatic);
+        RenameBox.Select(0, DisplayFormat.RenameStem(name, isFolder: false));
         return pending.Task;
     }
 
@@ -382,7 +409,7 @@ public sealed partial class FilePane : UserControl
                 ScrollIntoView(model.FocusIndex);
             }
         }
-        else if (IsRenaming)
+        else if (IsRenaming && !_newRow)
         {
             // A refresh while editing: the row may have moved, or gone.
             var index = _model?.View?.IndexOfName(_renameOriginal) ?? -1;
@@ -745,6 +772,8 @@ public sealed partial class FilePane : UserControl
             Focus(FocusState.Programmatic);
         }
         RenameBox.Visibility = Visibility.Collapsed;
+        NewRow.Visibility = Visibility.Collapsed;
+        _newRow = false;
         pending.TrySetResult(result);
     }
 
@@ -757,7 +786,18 @@ public sealed partial class FilePane : UserControl
 
     private void PositionEditors()
     {
-        if (_rename is not null && _renameIndex >= 0)
+        if (_rename is not null && _newRow)
+        {
+            // Where the first row on screen is; its name starts after the row's margin and the icon.
+            var width = Math.Max(0, EditLayer.ActualWidth - (2 * ListPadding));
+            Canvas.SetLeft(NewRow, ListPadding);
+            Canvas.SetTop(NewRow, ListPadding);
+            NewRow.Width = width;
+            Canvas.SetLeft(RenameBox, ListPadding + 36 - 7);
+            Canvas.SetTop(RenameBox, ListPadding + 2);
+            RenameBox.Width = Math.Max(160, (width - 84) / 2);
+        }
+        else if (_rename is not null && _renameIndex >= 0)
         {
             var (left, top, width) = NameBox(_renameIndex);
             Canvas.SetLeft(RenameBox, left - 7);

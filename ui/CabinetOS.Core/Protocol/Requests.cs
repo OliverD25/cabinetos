@@ -275,6 +275,33 @@ public sealed class CreateDirectoryRequest(string path) : CoreRequest("create_di
     public string Path { get; } = path;
 }
 
+/// <summary>
+/// Creates one empty file (version 12, New Text File); the reply is <c>ok</c>.
+/// It never opens or replaces a file: a taken name is <c>already_exists</c>.
+/// </summary>
+public sealed class CreateFileRequest(string path) : CoreRequest("create_file")
+{
+    /// <summary>The new file, as an absolute path.</summary>
+    public string Path { get; } = path;
+}
+
+/// <summary>
+/// Opens a file for editing, never running it (version 12, F4): the reply is
+/// <c>ok</c>. The core picks <c>files.editor</c>, else the type's edit verb, else Notepad.
+/// </summary>
+public sealed class EditPathRequest(string path) : CoreRequest("edit_path")
+{
+    /// <summary>The file, as an absolute path.</summary>
+    public string Path { get; } = path;
+}
+
+/// <summary>Shows Windows' own property sheet for files and folders (version 12); the reply is <c>ok</c>.</summary>
+public sealed class ShowPropertiesRequest(IReadOnlyList<string> paths) : CoreRequest("show_properties")
+{
+    /// <summary>Absolute paths; several get the shell's combined sheet.</summary>
+    public IReadOnlyList<string> Paths { get; } = paths;
+}
+
 /// <summary>Opens a shell in a pseudo-console (docs/terminal.md); the reply is <c>terminal_opened</c>.</summary>
 public sealed class TerminalOpenRequest(ushort cols, ushort rows) : CoreRequest("terminal_open")
 {

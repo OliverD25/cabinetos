@@ -64,6 +64,12 @@ internal static class CommandArgs
     public static bool Bool(JsonElement? args, string name) =>
         Field(args, name) is { ValueKind: JsonValueKind.True };
 
+    /// <summary>The list-of-text field <paramref name="name"/>, if present; items that are not text are left out.</summary>
+    public static IReadOnlyList<string>? Texts(JsonElement? args, string name) =>
+        Field(args, name) is { ValueKind: JsonValueKind.Array } field
+            ? [.. field.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => item.GetString()!)]
+            : null;
+
     /// <summary>The whole-number field <paramref name="name"/>, if present.</summary>
     public static ulong? Number(JsonElement? args, string name) =>
         Field(args, name) is { ValueKind: JsonValueKind.Number } field && field.TryGetUInt64(out var value) ? value : null;

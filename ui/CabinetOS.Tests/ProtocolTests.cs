@@ -72,6 +72,9 @@ public class ProtocolTests
             new InstallExtensionRequest("hello"),
             new InstallExtensionRequest("hello") { Version = "0.1.0" },
             new UninstallExtensionRequest("hello"),
+            new ListDirectoryRequest(@"C:\photos") { Sort = new SortSpec("extension", false) },
+            new CreateFileRequest(@"C:\data\New Text Document.txt"),
+            new EditPathRequest(@"C:\data\build.cmd"),
         ];
     }
 
@@ -90,6 +93,8 @@ public class ProtocolTests
         (new OpenPathRequest(@"C:\data\report.pdf"), $$$"""{"id":"{{{Id}}}","type":"open_path","path":"C:\\data\\report.pdf"}"""),
         (new CreateDirectoryRequest(@"C:\data\New folder"), $$$"""{"id":"{{{Id}}}","type":"create_directory","path":"C:\\data\\New folder"}"""),
         (new RenameRequest(@"C:\data\a.txt", "b.txt"), $$$"""{"id":"{{{Id}}}","type":"rename","path":"C:\\data\\a.txt","new_name":"b.txt"}"""),
+        // Protocol 12, as docs/research/total-commander.md, Part 3 (b), gives them, until the core's schema has them.
+        (new ShowPropertiesRequest([@"C:\data\a.txt", @"C:\data\photos"]), $$$"""{"id":"{{{Id}}}","type":"show_properties","paths":["C:\\data\\a.txt","C:\\data\\photos"]}"""),
     ];
 
     [Fact]
@@ -111,7 +116,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(40, checkedTypes.Count);
+        Assert.Equal(42, checkedTypes.Count);
     }
 
     [Fact]

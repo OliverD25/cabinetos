@@ -206,6 +206,23 @@
 
             <!-- Inline rename: one text box over the row's name, and a note under the row for an error. -->
             <Canvas x:Name="EditLayer" Grid.Row="3">
+                <!-- New Text File (Shift+F4): a row the listing does not have yet, the name box over it. -->
+                <Border
+                    x:Name="NewRow"
+                    Height="{StaticResource CbRowHeight}"
+                    Background="{ThemeResource CbDialogFillBrush}"
+                    BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Visibility="Collapsed">
+                    <FontIcon
+                        Margin="10,0,0,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="16"
+                        Foreground="{ThemeResource CbRowMetaBrush}"
+                        Glyph="&#xE8A5;" />
+                </Border>
                 <TextBox
                     x:Name="RenameBox"
                     Height="26"

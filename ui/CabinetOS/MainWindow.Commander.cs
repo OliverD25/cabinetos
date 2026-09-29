@@ -1,8 +1,11 @@
 using CabinetOS.Core.Commands;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Listing;
+using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
+using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
+using CabinetOS.Services;
 using CabinetOS.ViewModels;
 using Microsoft.UI.Xaml;
 using Windows.ApplicationModel.DataTransfer;
@@ -36,6 +39,153 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("edit.copyFullPath", ListingOnly(_ => CopyLines([.. Active.Targets().Select(t => t.Path)], "path", "paths")));
         _router.RegisterUiHandler("edit.copyName", ListingOnly(_ => CopyLines([.. Active.Targets().Select(t => t.Name)], "name", "names")));
         _router.RegisterUiHandler("edit.copyFolderPath", _ => CopyLines(Active.Path.Length > 0 ? [Active.Path] : [], "folder path", "folder paths"));
+        _router.RegisterUiHandler("file.view", ListingOnly(ViewAsync));
+        _router.RegisterUiHandler("file.edit", ListingOnly(EditAsync));
+        _router.RegisterUiHandler("file.newTextFile", ListingOnly(NewTextFileAsync));
+        // The Properties dialog's button passes its paths; from a key or the palette, the targets.
+        _router.RegisterUiHandler("file.windowsProperties", invocation =>
+            CommandArgs.Texts(invocation.Args, "paths") is not null ? WindowsPropertiesAsync(invocation) : ListingOnly(WindowsPropertiesAsync)(invocation));
+    }
+
+    // F3: the cursor file in the first installed tool that shows it. Never its default
+    // application, which for a program would run it (the note's decision D5).
+    private async Task ViewAsync(CommandInvocation invocation)
+    {
+        if (Active.EntryAt(Active.FocusIndex) is not { } entry)
+        {
+            return;
+        }
+        if (entry.IsFolder)
+        {
+            ShowNotice($"F3 shows files; {entry.Name} is a folder: Enter opens it.");
+            return;
+        }
+        if (await ToolForAsync(entry.Name) is { } tool)
+        {
+            await OpenInToolAsync(tool, entry.Path);
+            return;
+        }
+        ShowNotice($"No installed tool shows {entry.Name}. Viewers are opt-in: find one in the marketplace (Ctrl+Shift+X).");
+    }
+
+    // F4: the cursor file opens for editing in files.editor, the type's edit verb, or Notepad (the core picks).
+    private async Task EditAsync(CommandInvocation invocation)
+    {
+        if (Active.EntryAt(Active.FocusIndex) is not { } entry)
+        {
+            return;
+        }
+        if (entry.IsFolder)
+        {
+            ShowNotice($"F4 edits files; {entry.Name} is a folder.");
+            return;
+        }
+        await EditPathAsync(entry.Path, entry.Name, invocation.RequestId);
+    }
+
+    private async Task EditPathAsync(string path, string name, string? requestId)
+    {
+        if (_unavailable.Contains("edit_path"))
+        {
+            ShowNotice("Editing files needs a newer core.");
+            return;
+        }
+        // The editor starts from the core, a background process: let it come to the front.
+        if (_session.CoreProcessId is { } corePid)
+        {
+            WindowsPlatform.AllowForeground(corePid);
+        }
+        switch (await RequestSafelyAsync(new EditPathRequest(path) { Id = requestId ?? "" }))
+        {
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                Unavailable("edit_path", "Editing files needs a newer core.");
+                break;
+            case ErrorReply error:
+                ShowNotice($"Cannot edit {name}: {error.Message}", isError: true);
+                break;
+        }
+    }
+
+    // Shift+F4: a name box over a new row; the core creates the empty file, and it opens for
+    // editing. A name that is taken opens that file instead, as in Total Commander.
+    private async Task NewTextFileAsync(CommandInvocation invocation)
+    {
+        var pane = Active;
+        if (pane.Path.Length == 0 || pane.View is null)
+        {
+            return;
+        }
+        if (_unavailable.Contains("create_file"))
+        {
+            ShowNotice("New text files need a newer core.");
+            return;
+        }
+        var name = await _paneViews[pane.Index].BeginNewNameAsync("New Text Document.txt");
+        if (name is null)
+        {
+            return;
+        }
+        var path = DisplayFormat.Join(pane.Path, name);
+        switch (await RequestSafelyAsync(new CreateFileRequest(path) { Id = invocation.RequestId }))
+        {
+            case OkReply:
+                await pane.SelectWhenListedAsync(name, TimeSpan.FromSeconds(2));
+                _paneViews[pane.Index].ScrollToFocus();
+                await EditPathAsync(path, name, requestId: null);
+                break;
+            case ErrorReply { Code: ErrorCodes.AlreadyExists }:
+                var existing = pane.View?.IndexOfName(name) ?? -1;
+                if (existing >= 0 && pane.View!.IsFolder(existing))
+                {
+                    ShowNotice($"{name} is a folder: a text file cannot take its name.", isError: true);
+                    break;
+                }
+                if (existing >= 0)
+                {
+                    pane.Selection.MoveTo(existing, pane.Selection.KeyMode(shift: false, ctrl: false));
+                    _paneViews[pane.Index].ScrollToFocus();
+                }
+                await EditPathAsync(path, name, requestId: null);
+                break;
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                Unavailable("create_file", "New text files need a newer core.");
+                break;
+            case ErrorReply error:
+                ShowNotice($"New text file: {error.Message}", isError: true);
+                break;
+        }
+    }
+
+    // Windows' own property sheet (the core's process shows it): the targets, else the folder.
+    private async Task WindowsPropertiesAsync(CommandInvocation invocation)
+    {
+        IReadOnlyList<string> paths = CommandArgs.Texts(invocation.Args, "paths") ?? [.. Active.Targets().Select(t => t.Path)];
+        if (paths.Count == 0 && Active.Path.Length > 0)
+        {
+            paths = [Active.Path];
+        }
+        if (paths.Count == 0)
+        {
+            return;
+        }
+        if (_unavailable.Contains("show_properties"))
+        {
+            ShowNotice("Windows' property sheet needs a newer core.");
+            return;
+        }
+        if (_session.CoreProcessId is { } corePid)
+        {
+            WindowsPlatform.AllowForeground(corePid);
+        }
+        switch (await RequestSafelyAsync(new ShowPropertiesRequest(paths) { Id = invocation.RequestId }))
+        {
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                Unavailable("show_properties", "Windows' property sheet needs a newer core.");
+                break;
+            case ErrorReply error:
+                ShowNotice($"Windows Properties: {error.Message}", isError: true);
+                break;
+        }
     }
 
     // Ctrl+Shift+C, Ctrl+K Ctrl+N, Ctrl+K Ctrl+P: text on Windows' clipboard, one per line and

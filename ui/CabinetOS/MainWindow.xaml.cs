@@ -1684,7 +1684,10 @@ public sealed partial class MainWindow : Window
         var rows = new List<(string Label, string Value)>();
         string title;
         var targets = pane.Targets();
-        if (CommandArgs.Text(invocation.Args, "scope") == "folder" || targets.Count == 0)
+        var folderScope = CommandArgs.Text(invocation.Args, "scope") == "folder" || targets.Count == 0;
+        // What the "Windows Properties" button hands Windows' own sheet (file.windowsProperties).
+        List<string> paths = folderScope ? [pane.Path] : [.. targets.Select(t => t.Path)];
+        if (folderScope)
         {
             title = pane.FolderName;
             var (files, folders, bytes) = PropertiesText.Tally(view, Enumerable.Range(0, view.Count));
@@ -1727,11 +1730,18 @@ public sealed partial class MainWindow : Window
             RequestedTheme = RootGrid.ActualTheme,
             Title = title,
             Content = grid,
+            // Windows' own sheet has what this one leaves out (security, versions, sharing); a core
+            // that cannot show it gets no button.
+            SecondaryButtonText = _unavailable.Contains("show_properties") ? "" : "Windows Properties",
             CloseButtonText = "Close",
             DefaultButton = ContentDialogButton.Close,
         };
-        await ShowDialogAsync(dialog);
+        var result = await ShowDialogAsync(dialog);
         FocusActivePane();
+        if (result == ContentDialogResult.Secondary)
+        {
+            await _router.ExecuteAsync("file.windowsProperties", CommandArgs.Object(("paths", paths)), "button");
+        }
     }
 
     private async Task ControlShownAsync(string action, CommandInvocation invocation)
