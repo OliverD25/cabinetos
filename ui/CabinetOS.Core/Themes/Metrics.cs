@@ -107,6 +107,7 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
 
     // ----- Panes -----
     public double PaneHeaderHeight => this["paneHeaderHeight"];
+    public double TabRow => this["tabRow"];
     public double ColumnHeaderPaddingY => this["columnHeaderPaddingY"];
     public double ColumnHeaderPaddingX => this["columnHeaderPaddingX"];
     public double NameColumnWeight => this["nameColumnWeight"];
@@ -248,6 +249,7 @@ public static class MetricsMapper
         Px("tagFontSize", 8, 32, 12),
         // Panes
         Px("paneHeaderHeight", 14, 80, 36),
+        Px("tabRow", 14, 80, 32),
         Px("columnHeaderPaddingY", 0, 64, 4),
         Px("columnHeaderPaddingX", 0, 64, 14),
         Num("nameColumnWeight", 0.1, 10, 1),

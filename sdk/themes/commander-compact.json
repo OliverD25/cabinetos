@@ -93,6 +93,7 @@
     "tagRadius": 2,
     "tagFontSize": 11,
     "paneHeaderHeight": 24,
+    "tabRow": 26,
     "columnHeaderPaddingY": 2,
     "columnHeaderPaddingX": 8,
     "nameColumnWeight": 1.6,

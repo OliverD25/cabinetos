@@ -569,6 +569,12 @@
           "maximum": 16,
           "minimum": 0
         },
+        "tabRow": {
+          "description": "The height of a pane's tab row, which shows while the pane has more than one tab. Whole pixels from 14 to 80; left out, 32.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
         "tagFontSize": {
           "description": "The text size of a tag chip. Whole pixels from 8 to 32; left out, 12.",
           "type": "integer",

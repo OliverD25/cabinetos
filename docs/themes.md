@@ -236,6 +236,7 @@ brackets are the handout's, for any theme that shows the bar.
 | `tagRadius` | px | 0 | 16 | 12 | 2 | The corner radius of a tag chip in the sidebar. |
 | `tagFontSize` | px | 8 | 32 | 12 | 11 | The text size of a tag chip. |
 | `paneHeaderHeight` | px | 14 | 80 | 36 | 24 | The height of a pane's header, above its column headers. |
+| `tabRow` | px | 14 | 80 | 32 | 26 | The height of a pane's tab row, which shows while the pane has more than one tab. |
 | `columnHeaderPaddingY` | px | 0 | 64 | 4 | 2 | The space above and below the column headers' text. |
 | `columnHeaderPaddingX` | px | 0 | 64 | 14 | 8 | The space at each side of the column headers' row. |
 | `nameColumnWeight` | number | 0.1 | 10 | 1 | 1.6 | The Name column's share of a file list's width, against the other weighted columns. |

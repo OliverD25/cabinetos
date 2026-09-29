@@ -436,6 +436,8 @@ metrics! {
     // Panes
     pane_header_height "paneHeaderHeight" Px [14.0, 80.0] 36.0 => 24.0,
         "The height of a pane's header, above its column headers.";
+    tab_row "tabRow" Px [14.0, 80.0] 32.0 => 26.0,
+        "The height of a pane's tab row, which shows while the pane has more than one tab.";
     column_header_padding_y "columnHeaderPaddingY" Px [0.0, 64.0] 4.0 => 2.0,
         "The space above and below the column headers' text.";
     column_header_padding_x "columnHeaderPaddingX" Px [0.0, 64.0] 14.0 => 8.0,

@@ -30,7 +30,7 @@ public partial class MetricsTests
         using var schema = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo.Root, "sdk", "themes", "theme.schema.json")));
         var properties = schema.RootElement.GetProperty("$defs").GetProperty("Metrics").GetProperty("properties");
         var names = properties.EnumerateObject().Select(p => p.Name).ToList();
-        Assert.Equal(76, names.Count);
+        Assert.Equal(77, names.Count);
         Assert.Equal(names.Order(StringComparer.Ordinal), MetricsMapper.Specs.Select(s => s.Name).Order(StringComparer.Ordinal));
 
         var defaults = MetricsMapper.Map(null);
@@ -62,7 +62,7 @@ public partial class MetricsTests
     {
         var compact = Shipped("commander-compact");
         Assert.NotNull(compact.Metrics);
-        Assert.Equal(76, compact.Metrics.Count);
+        Assert.Equal(77, compact.Metrics.Count);
 
         var look = ThemeMapper.Map(compact, DesignAccent);
         var metrics = look.Metrics;

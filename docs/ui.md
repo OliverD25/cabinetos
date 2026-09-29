@@ -1359,7 +1359,7 @@ the Commander Compact handout
 - **How.** `MetricsMapper` (in `CabinetOS.Core`, tested) is one table:
   every metric's name, unit and bounds, and the default look's value. A
   test holds the table equal to `sdk/themes/theme.schema.json`: the same
-  76 names, the same bounds, and the default that each name's description
+  77 names, the same bounds, and the default that each name's description
   gives. Another test checks every value of Commander Compact. The mapper
   gives one value for each name: the theme's, held to its bounds and
   rounded to whole pixels, or else the default look's. A name that is not
