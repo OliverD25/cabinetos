@@ -73,7 +73,7 @@ public class CoreClientTests
 
         await core.SendAsync("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"config_changed","changed":["ui.sidebar"]}""");
         await core.SendAsync("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4X","type":"a_future_event","x":1}""");
-        await core.SendAsync("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4Y","type":"plugin_event","plugin_id":"hello","name":"n","payload":"{}"}""");
+        await core.SendAsync("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4Y","type":"plugin_event","plugin_id":7,"name":"n","payload":"{}"}""");
         await core.SendAsync("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4Z","type":"listing_lost","listing_id":3,"message":"gone"}""");
 
         using var timeout = new CancellationTokenSource(Step);

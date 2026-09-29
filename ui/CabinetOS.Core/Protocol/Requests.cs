@@ -450,6 +450,27 @@ public sealed class SetPluginEnabledRequest(string pluginId, bool enabled) : Cor
     public bool Enabled { get; } = enabled;
 }
 
+/// <summary>Opens the listing of a preview that exists (protocol 13); the reply is <c>preview_opened</c>.</summary>
+public sealed class OpenPreviewRequest(string preview) : CoreRequest("open_preview")
+{
+    /// <summary>The preview, as a plugin or <c>preview_listing</c> named it.</summary>
+    public string Preview { get; } = preview;
+}
+
+/// <summary>Runs the rows of a preview as jobs (protocol 13); the reply is <c>jobs_started</c>.</summary>
+public sealed class PreviewApplyRequest(string preview) : CoreRequest("preview_apply")
+{
+    /// <summary>The preview.</summary>
+    public string Preview { get; } = preview;
+}
+
+/// <summary>Drops a preview without running it (protocol 13); the reply is <c>ok</c>.</summary>
+public sealed class PreviewCancelRequest(string preview) : CoreRequest("preview_cancel")
+{
+    /// <summary>The preview.</summary>
+    public string Preview { get; } = preview;
+}
+
 /// <summary>Grants capabilities to a plugin (the review dialog's "Allow"); the reply is <c>ok</c>.</summary>
 public sealed class GrantCapabilitiesRequest(string pluginId, IReadOnlyList<string> capabilities) : CoreRequest("grant_capabilities")
 {

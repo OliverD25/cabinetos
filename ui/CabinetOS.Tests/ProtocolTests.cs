@@ -84,6 +84,9 @@ public class ProtocolTests
             new WindowStateRequest("left", new WindowPanesState(
                 new WindowPaneState([new WindowTabState(@"C:\Users\me", false, null), new WindowTabState(@"E:\work\README.md", true, "md-preview")], 1, @"C:\Users\me\a.txt", [@"C:\Users\me\a.txt"]),
                 new WindowPaneState([new WindowTabState(@"D:\", false, null)], 0, null, []))),
+            new OpenPreviewRequest("preview-3"),
+            new PreviewApplyRequest("preview-3"),
+            new PreviewCancelRequest("preview-3"),
         ];
     }
 
@@ -164,7 +167,7 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(48, checkedTypes.Count);
+        Assert.Equal(51, checkedTypes.Count);
     }
 
     [Fact]
@@ -390,6 +393,16 @@ public class ProtocolTests
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"tools","tools":[{"id":"markdown-preview","name":"Markdown Preview","version":"1.0.0","author":"CabinetOS","description":"Shows Markdown.","dir":"C:\\Users\\me\\AppData\\Local\\CabinetOS\\tools\\markdown-preview"}]}""",
                 b => Assert.Equal(("markdown-preview", "1.0.0"), (Assert.IsType<ToolsReply>(b).Tools.Single().Id, ((ToolsReply)b).Tools.Single().Version))),
+            ($$$"""{"id":"{{{Id}}}","type":"preview_opened","preview":"preview-3","title":"Sort the photos","listing":{"listing_id":9,"section_handle":0,"section_size":736,"entry_count":3,"generation":1,"elapsed_us":210}}""",
+                b =>
+                {
+                    var opened = Assert.IsType<PreviewOpenedReply>(b);
+                    Assert.Equal(("preview-3", "Sort the photos", 3U, 736UL), (opened.Preview, opened.Title, opened.Listing.EntryCount, opened.SectionSize));
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"jobs_started","jobs":[12,13]}""",
+                b => Assert.Equal([12UL, 13UL], Assert.IsType<JobsStartedReply>(b).Jobs)),
+            ($$$"""{"id":"{{{Id}}}","type":"plugins","plugins":[{"id":"agent","name":"Agent","version":"0.1.0","author":"CabinetOS","description":"Works next to you.","state":{"type":"needs_review","missing":["net"]},"capabilities":[{"name":"net","level":"high","granted":false,"reason":"Asks the model provider.","hosts":["api.anthropic.com","localhost:11434"]}],"commands":[]}]}""",
+                b => Assert.Equal(["api.anthropic.com", "localhost:11434"], Assert.IsType<PluginsReply>(b).Plugins.Single().Capabilities.Single().Hosts)),
         };
         foreach (var (json, check) in samples)
         {
@@ -472,6 +485,12 @@ public class ProtocolTests
                 b => Assert.Equal(new InstallFinishedEvent("hello", false, "hash mismatch", "0.1.0"), b)),
             ($$$"""{"id":"{{{Id}}}","type":"tools_changed","tools":[]}""",
                 b => Assert.Empty(Assert.IsType<ToolsChangedEvent>(b).Tools)),
+            ($$$"""{"id":"{{{Id}}}","type":"plugin_event","plugin_id":"agent","name":"agent.notice","payload":"{\"text\":\"Renamed 3 files\"}"}""",
+                b => Assert.Equal(new PluginEventEvent("agent", "agent.notice", """{"text":"Renamed 3 files"}"""), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"preview_applied","preview":"preview-3","jobs":[12,13]}""",
+                b => Assert.Equal([12UL, 13UL], Assert.IsType<PreviewAppliedEvent>(b).Jobs)),
+            ($$$"""{"id":"{{{Id}}}","type":"preview_cancelled","preview":"preview-4"}""",
+                b => Assert.Equal(new PreviewCancelledEvent("preview-4"), b)),
         };
         foreach (var (json, check) in samples)
         {
@@ -497,9 +516,11 @@ public class ProtocolTests
     [Fact]
     public void Unknown_types_are_ignored_not_fatal()
     {
-        var unknownEvent = MessageCodec.Decode("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"plugin_event","plugin_id":"x","name":"n","payload":"{}"}"""u8);
-        Assert.True(unknownEvent.IsEvent);
-        Assert.Null(unknownEvent.Body);
+        // A plugin's event is known since Phase 14; one whose fields do not fit is an event without a body.
+        var badEvent = MessageCodec.Decode("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"plugin_event","plugin_id":7,"name":"n","payload":"{}"}"""u8);
+        Assert.True(badEvent.IsEvent);
+        Assert.Null(badEvent.Body);
+        Assert.NotNull(badEvent.Error);
 
         var newer = MessageCodec.Decode("""{"type":"listing_exploded","id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","extra":[1,{"a":2}]}"""u8);
         Assert.False(newer.IsEvent);

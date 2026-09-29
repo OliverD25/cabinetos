@@ -100,6 +100,19 @@ public sealed record JobConflictEvent(ulong ConflictId, ulong JobId, ConflictKin
 /// <summary>A plugin changed state; its commands may have changed with it.</summary>
 public sealed record PluginStateChangedEvent(string PluginId, PluginState State) : CoreEvent;
 
+/// <summary>
+/// What a plugin sent with <c>emit</c>. <see cref="Payload"/> is the text the
+/// plugin wrote, usually JSON (the core does not read it); see
+/// <c>PluginEvents</c> for reading it.
+/// </summary>
+public sealed record PluginEventEvent(string PluginId, string Name, string Payload) : CoreEvent;
+
+/// <summary>A preview was applied: its rows run as these jobs.</summary>
+public sealed record PreviewAppliedEvent(string Preview, IReadOnlyList<ulong> Jobs) : CoreEvent;
+
+/// <summary>A preview was dropped: cancelled, or not applied within ten minutes.</summary>
+public sealed record PreviewCancelledEvent(string Preview) : CoreEvent;
+
 /// <summary>A plugin trapped; its commands are gone.</summary>
 public sealed record PluginCrashedEvent(string PluginId, string Message) : CoreEvent;
 

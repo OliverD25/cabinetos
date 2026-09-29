@@ -36,6 +36,31 @@ public static class SectionCarrierExtensions
     }
 }
 
+/// <summary>The listing a reply hands over in shared memory, as <c>listing_opened</c> describes one.</summary>
+public sealed record OpenedListing(ulong ListingId, ulong SectionHandle, ulong SectionSize, uint EntryCount, uint Generation, ulong ElapsedUs);
+
+/// <summary>
+/// Reply to <c>open_preview</c> (and <c>preview_listing</c>): proposed changes
+/// as a listing whose header has the preview flag (docs/ipc.md, "Previews").
+/// </summary>
+public sealed record PreviewOpenedReply(string Preview, string Title, OpenedListing Listing) : CoreReply, ICarriesSection
+{
+    /// <inheritdoc/>
+    [JsonIgnore]
+    public ulong SectionHandle => Listing.SectionHandle;
+
+    /// <inheritdoc/>
+    [JsonIgnore]
+    public ulong SectionSize => Listing.SectionSize;
+
+    /// <inheritdoc/>
+    [JsonIgnore]
+    public SafeHandle? Section { get; set; }
+}
+
+/// <summary>Reply to <c>preview_apply</c>: the jobs that run the rows, in order.</summary>
+public sealed record JobsStartedReply(IReadOnlyList<ulong> Jobs) : CoreReply;
+
 /// <summary>Reply to <c>ping</c>.</summary>
 public sealed record PongReply(uint ProtocolVersion, string CoreVersion) : CoreReply;
 
@@ -197,7 +222,7 @@ public sealed record IndexVolumeStatus(string Letter, IndexState State, ulong En
 public sealed record IndexStatusReply(bool Available, IReadOnlyList<IndexVolumeStatus> Volumes) : CoreReply;
 
 /// <summary>One capability a plugin asks for, for the review dialog.</summary>
-public sealed record CapabilityInfo(string Name, string Level, bool Granted, string Reason, IReadOnlyList<string>? Roots = null);
+public sealed record CapabilityInfo(string Name, string Level, bool Granted, string Reason, IReadOnlyList<string>? Roots = null, IReadOnlyList<string>? Hosts = null);
 
 /// <summary>
 /// Where a plugin is: <c>loading</c>, <c>active</c>, <c>disabled</c>,
@@ -244,6 +269,13 @@ public sealed record KeymapReply(uint ChordWindowMs, IReadOnlyList<KeymapBinding
 /// <summary>Who provides a command: <c>core</c>, or <c>plugin</c> with its ID and name.</summary>
 public sealed record CommandSource(string Kind, string? Id, string? Name);
 
+/// <summary>
+/// What a plugin command asks the user for before it runs (protocol 13,
+/// <c>list_commands</c>): the window shows a prompt with this title and
+/// placeholder and passes the text as <c>input</c>.
+/// </summary>
+public sealed record CommandInput(string? Title = null, string? Placeholder = null);
+
 /// <summary>A command, as the palette shows it.</summary>
 public sealed record CommandInfo(
     string Id,
@@ -254,7 +286,8 @@ public sealed record CommandInfo(
     CommandSource Source,
     string Target,
     string? When,
-    bool Immutable);
+    bool Immutable,
+    CommandInput? Input = null);
 
 /// <summary>Reply to <c>list_commands</c>, in registry order.</summary>
 public sealed record CommandsReply(IReadOnlyList<CommandInfo> Commands) : CoreReply;
@@ -420,7 +453,7 @@ public sealed record MarketRating(double Average, ulong Count);
 public sealed record MarketDownload(string Url, string Sha256);
 
 /// <summary>A capability a plugin asks for, as the index lists it; the core adds the level.</summary>
-public sealed record MarketCapability(string Name, string Reason, string? Level = null, IReadOnlyList<string>? Roots = null);
+public sealed record MarketCapability(string Name, string Reason, string? Level = null, IReadOnlyList<string>? Roots = null, IReadOnlyList<string>? Hosts = null);
 
 /// <summary>
 /// One extension as the core offers it (docs/marketplace.md, "The index"):
