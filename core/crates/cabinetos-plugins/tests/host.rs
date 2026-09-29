@@ -304,10 +304,13 @@ fn a_missing_component_or_a_stranger_in_the_configuration_is_reported() {
 #[test]
 fn capabilities_gate_the_file_system() {
     let setup = Setup::new(&["reader"]);
-    // The fixture's fs:read root.
+    // The fixture's fs:read root: fixed by its manifest, so two test runs at the same time
+    // (two worktrees building at once) share it. Nothing here deletes it, or the other run
+    // loses its file under its feet; only a stale new.txt from a failed run is cleared.
     let root = PathBuf::from(std::env::var("TEMP").unwrap()).join(r"cabinetos-plugins-test\reader");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("inside.txt"), "12345").unwrap();
+    let _ = std::fs::remove_file(root.join("new.txt"));
     let outside = setup.temp.path().join("outside.txt");
     std::fs::write(&outside, "123").unwrap();
 
@@ -329,7 +332,6 @@ fn capabilities_gate_the_file_system() {
     let write_root = host.execute("reader", "reader.write", &args(&root.join("new.txt")));
     // Its own data folder is always writable.
     let write_data = host.execute("reader", "reader.write", r#"{"path":"data/note.txt"}"#);
-    let _ = std::fs::remove_dir_all(root.parent().unwrap());
 
     assert_eq!(inside.unwrap(), r#"{"size":5}"#);
     let beyond = beyond.unwrap_err();
