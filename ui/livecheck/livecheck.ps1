@@ -6,12 +6,17 @@
 # and the edge-case fixture in %TEMP%\cabinetos-edge-live (sdk\fixtures\edge-fixture.ps1).
 # Needs the release builds of the window and the core, and the 100,000-entry folder that
 # `cargo bench -p cabinetos-fs --bench list_directory` makes in %TEMP%\cabinetos-bench.
+# It prints the frame table of the 5 s PageDown in that folder and the line "scroll goal (no frame
+# over 33 ms, under 5 % over 20 ms) met: yes|no", with the machine's CPU load during those seconds.
+# With -Strict it exits 1 when the goal was not met (off by default: the numbers depend on the
+# machine being quiet). docs/ui.md, "Scrolling".
 param(
   [string]$Exe = "$PSScriptRoot\..\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64\CabinetOS.exe",
   [string]$Core = "$PSScriptRoot\..\..\core\target\release\cabinetos-core.exe",
   [string]$ShotDir = "$env:TEMP\cabinetos-ui-test\live-shots",
   [string]$Run = "live",
-  [string]$Tools = "$PSScriptRoot\..\..\sdk\tools"
+  [string]$Tools = "$PSScriptRoot\..\..\sdk\tools",
+  [switch]$Strict
 )
 $ErrorActionPreference = 'Stop'
 $Exe = [System.IO.Path]::GetFullPath($Exe)
@@ -52,6 +57,9 @@ public static class Live {
     Send(down); Thread.Sleep(40); Send(up);
   }
   public static void Front(IntPtr h) { Send(Key(0x12, false), Key(0x12, true)); ShowWindow(h, 9); SetForegroundWindow(h); }
+  [DllImport("kernel32.dll")] static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
+  // Busy and all processor time of the machine so far, over all logical processors (kernel time includes idle).
+  public static long[] CpuTimes() { long idle, kernel, user; GetSystemTimes(out idle, out kernel, out user); return new long[] { kernel + user - idle, kernel + user }; }
 }
 "@
 [void][Live]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
@@ -165,14 +173,38 @@ Step "go to the bench folder"
 Step "enter 100000"
 [Live]::Press($VK.Enter); Start-Sleep -Seconds 2
 Step "pagedown held for 5 s"
+$others = @{}
+foreach ($proc in Get-Process) { try { $others[$proc.Id] = @($proc.ProcessName, $proc.TotalProcessorTime.Ticks) } catch { } }
+$cpuBefore = [Live]::CpuTimes()
+$holdStart = (Get-Date).ToUniversalTime()
 $stop = (Get-Date).AddSeconds(5)
 while ((Get-Date) -lt $stop) {
   if ([Live]::GetForegroundWindow() -ne $h) { Step "pagedown interrupted" }
   [Live]::Press($VK.PgDn); Start-Sleep -Milliseconds 33
 }
+$holdEnd = (Get-Date).ToUniversalTime()
+$cpuAfter = [Live]::CpuTimes()
+$allTicks = [double]($cpuAfter[1] - $cpuBefore[1])
+$loads = foreach ($proc in Get-Process) { try { if ($others.ContainsKey($proc.Id)) { [pscustomobject]@{ Name = $proc.ProcessName; Id = $proc.Id; Percent = 100 * ($proc.TotalProcessorTime.Ticks - $others[$proc.Id][1]) / $allTicks } } } catch { } }
 Step "pagedown done"
 Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\scrolled.png"
+# The frame table of the hold: the window's per-second lines that ended while the key was held.
+$seconds = @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | ForEach-Object { $_ | ConvertFrom-Json } |
+  Where-Object { $_.message -eq 'frame stats' -and $_.ts.ToUniversalTime() -gt $holdStart.AddSeconds(1) -and $_.ts.ToUniversalTime() -le $holdEnd.AddSeconds(1) })
+"| second (UTC) | frames | worst | over 20 ms | over 33 ms | UI work over 16.7 ms | UI work | rows' measure |"
+"|---|---|---|---|---|---|---|---|"
+foreach ($s in $seconds) { "| {0:HH:mm:ss} | {1} | {2} ms | {3} | {4} | {5} | {6} ms | {7} ms |" -f $s.ts.ToUniversalTime(), $s.fields.frames, $s.fields.worst_ms, $s.fields.gaps_over_20ms, $s.fields.gaps_over_33ms, $s.fields.busy_over_16ms, $s.fields.busy_ms, $s.fields.measure_ms }
+$frames = ($seconds | ForEach-Object { $_.fields.frames } | Measure-Object -Sum).Sum
+$over20 = ($seconds | ForEach-Object { $_.fields.gaps_over_20ms } | Measure-Object -Sum).Sum
+$over33 = ($seconds | ForEach-Object { $_.fields.gaps_over_33ms } | Measure-Object -Sum).Sum
+$worst = ($seconds | ForEach-Object { $_.fields.worst_ms } | Measure-Object -Maximum).Maximum
+$share = if ($frames -gt 0) { 100.0 * $over20 / $frames } else { 100 }
+$script:scrollGoal = $frames -gt 0 -and $over33 -eq 0 -and $share -lt 5
+$mine = ($loads | Where-Object { $_.Id -eq $p.Id } | ForEach-Object { $_.Percent } | Measure-Object -Sum).Sum
+$busiest = $loads | Where-Object { $_.Id -ne $p.Id -and $_.Name -ne 'Idle' } | Sort-Object Percent -Descending | Select-Object -First 3
+"scroll goal (no frame over 33 ms, under 5 % over 20 ms) met: {0}; {1} frames in {2} s, {3} over 20 ms ({4:N1} %), {5} over 33 ms, worst {6} ms; CPU during the hold: machine {7:N1} %, this window {8:N1} %, busiest others: {9}" -f `
+  $(if ($script:scrollGoal) { 'yes' } else { 'no' }), $frames, $seconds.Count, $over20, $share, $over33, $worst, (100 * ($cpuAfter[0] - $cpuBefore[0]) / $allTicks), $mine, (($busiest | ForEach-Object { '{0} {1:N1} %' -f $_.Name, $_.Percent }) -join ', ')
 
 # ----- Phase 5b: the file keys, with real key presses, checked on disk -----
 $files = "$root\files"; $src = "$files\src"; $dst = "$files\dst"
@@ -364,3 +396,4 @@ if ($job) {
   "and in the core log:"; Get-Content "$root\logs\core.*.jsonl" | Where-Object { $_ -match $id }
 }
 Step "done"
+if ($Strict -and -not $script:scrollGoal) { "STRICT: the scroll goal was not met"; exit 1 }

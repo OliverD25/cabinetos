@@ -26,7 +26,7 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 |---|---|
 | Start of `Main` to both panes shown (profile and Documents) | 0.82–0.87 s |
 | Going to a folder of 100,000 entries, until its first rows are drawn | 82 ms: the core lists it in 38 ms, the reply arrives at 39 ms, the first row is made at 61 ms |
-| Scrolling that folder with PageDown held for 5 s | not measured yet: it needs an unlocked screen |
+| Scrolling that folder with PageDown held for 5 s | measured on 2026-09-29 without keys, the display asleep: about 15 ms of UI-thread work per page of 30 rows, 19 to 24 ms before; the frame gaps need an awake display ("Scrolling") |
 | Closing the window, until the core has exited | 0.4 s |
 
 ## The solution
@@ -113,7 +113,8 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
 
 - `livecheck.ps1`: the broad check. The palette, single and dual pane,
   rebinding through the pencil, PageDown held for 5 s in the
-  100,000-entry folder (with `CABINETOS_UI_FRAMESTATS=1`), F7, F2, Delete
+  100,000-entry folder (with `CABINETOS_UI_FRAMESTATS=1`; it prints the
+  frame table of those seconds and the scroll goal's line, "Scrolling"), F7, F2, Delete
   and F5 with a conflict answered Skip through UI Automation, the context
   menu, Properties with Esc and a key that must not run under it, the
   terminal typed with Unicode key events, the palette from the terminal,
@@ -136,9 +137,13 @@ Bin, `cabinetos-live-check-delete-me.txt` (the Delete check).
 
 ```text
 # PowerShell: the scripts use Windows' SendInput and UI Automation
-powershell -ExecutionPolicy Bypass -File <repo>\ui\livecheck\livecheck.ps1
+powershell -ExecutionPolicy Bypass -File <repo>\ui\livecheck\livecheck.ps1 [-Strict]
 powershell -ExecutionPolicy Bypass -File <repo>\ui\livecheck\livecheck2.ps1
 ```
+
+With `-Strict`, `livecheck.ps1` exits 1 when the scroll goal was not met;
+it is off by default, because the number depends on the machine being
+quiet.
 
 The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/live-check.md).
 
@@ -152,9 +157,9 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_CONFIG` | Not read by the UI; the core it starts inherits it and uses that `cabinetos.json` |
 | `CABINETOS_THEMES_DIR` | Not read by the UI; the core it starts inherits it and reads the themes there ([themes.md](themes.md)) |
 | `CABINETOS_PLUGINS_DIR`, `CABINETOS_MARKETPLACE_DIR` | Not read by the UI, except the plugins folder for the empty plugin list's hint; the core it starts inherits them and installs there ([marketplace.md](marketplace.md), "Folders"). Set both to a scratch folder to try installs without touching `%LOCALAPPDATA%\CabinetOS` |
-| `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn and the longest gap between two |
+| `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part ("Scrolling"). The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load, and a `slow frame` line for each frame of 33 ms or more |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -1237,6 +1242,117 @@ replaces its files."; Uninstall was offered. Update installed 1.1.0
 without applying it, the card and the button went back to "Installed",
 and the status bar said "Paper is updated to version 1.1.0.". The
 snapshot step `click:Installed` showed the tab.
+
+## Scrolling
+
+Phase 5's goal: while PageDown is held in the 100,000-entry folder, no
+frame takes more than 33 ms, and fewer than 5 % take more than 20 ms, on
+a quiet machine. A held key repeats about 30 times a second, and each
+PageDown shows a new page of rows (30 at the default window size).
+
+### How it is measured
+
+With `CABINETOS_UI_FRAMESTATS=1` the window times the parts of the UI
+thread's work a scroll causes (`FrameParts`): the rows' measure and
+arrange passes (`RowLayout`, WinUI's `StackLayout` with its passes timed),
+and inside the measure pass the rows bound to their entries and the rows'
+own measure; outside it, the core's type-name pages applied
+(`describe_entries`) and asked for, icons, the selection marks and the
+status bar. Each frame is recorded with the gap before it, WinUI's own
+time for it (`RenderedEventArgs.FrameDuration`), and how much of the
+rows' layout ran inside that frame: WinUI also runs layout outside a
+frame when the thread is otherwise idle. A frame's UI-thread work is
+WinUI's frame time, the layout that ran outside it, and the other parts.
+
+The snapshot aid's `scroll:150` presses PageDown 150 times, 30 a second;
+a press that falls due during a slow frame is made at the next frame, as
+queued key messages are. `scroll:150/2` presses once every second frame.
+The run's frame table goes to the log (`scroll run`), with the machine's
+CPU load during the run (all of it, this window, its core and the rest,
+from `GetSystemTimes`). `ui/livecheck/scroll-bench.ps1` repeats the run
+on the bench folder in a fresh window, waits while the machine is busier
+than 30 %, and prints each run's table and the best and worst run:
+
+```text
+# PowerShell
+powershell -ExecutionPolicy Bypass -File <repo>\ui\livecheck\scroll-bench.ps1 -Runs 3 [-Rhythm 2] [-Folder <folder>]
+```
+
+**The display must be awake for the gaps to mean anything.** When it
+sleeps (15 minutes without input on this PC) or the screen is locked,
+Windows asks for frames about 33 times a second, so a window that keeps
+up shows gaps of about 31 to 33 ms, and every one counts as over 20 ms.
+Each run therefore reports the window's idle frame clock (33 a second
+asleep, 60 awake), and the frames whose UI-thread work passed 16.7 ms
+(one frame at 60 Hz), which do not depend on the display. `-Rhythm 2`
+presses once every second frame: on the 33-a-second clock that is the
+rhythm of 30 presses a second on a 60 Hz display, one frame with a new
+page and one without.
+
+### Where the time goes
+
+Measured on 2026-09-29 on the bench folder (`%TEMP%\cabinetos-bench\100000`,
+five file types), release builds, 150 pages of 30 rows, the display
+asleep. "Before" is the row as it was; the machine was at 16 to 37 % for
+those runs and at 14 % for the runs after:
+
+| | before (3 runs) | after (3 runs) |
+|---|---|---|
+| UI-thread work per second of scrolling | 576, 656, 731 ms | 436, 439, 439 ms |
+| per page of 30 rows | 19 to 24 ms | 15 ms |
+| frames whose work passed 16.7 ms | 54 %, 67 %, 71 % | 20 %, 21 %, 22 % |
+| the same at one press every second frame | 36.5 % | 3.7 % |
+| the busiest frame | 53 to 56 ms | 47 to 51 ms (the first press) |
+
+The frame of the quietest run after the change, in milliseconds per
+frame (all 154 frames): the UI-thread work 14.2, of it WinUI's frame 14.0
+(the rows' measure pass 8.6, of which binding rows 0.7, the arrange pass
+0.4, and the drawing), selection marks 0.12, the status bar 0.03,
+type-name pages 0.01, requests 0.03, icons 0. The rows made: 4,432 for
+4,500 rows scrolled, each once.
+
+In `C:\Windows\System32` (4,930 entries, 629 programs, each with its own
+icon), 140 pages: 593 ms of work per second of scrolling; icons took
+0.70 ms per frame, 0.59 ms after their PNGs were decoded off the UI thread.
+
+### What changed
+
+- **A row sets only the values that changed** (`Shown<T>` in `FileRow`):
+  a text, a visibility, the icon, its brush and the visual state. WinUI
+  lays a text out again even when it gets the same string, and a
+  recycled row usually shows the same time, type or size as before. This
+  cut about a quarter of the work (the quietest runs: 576 to 437 ms per
+  second). How much depends on the folder: the bench folder's files
+  share their time and size.
+- **An icon's PNG is decoded off the UI thread** (`IconBytes`): the base64
+  text becomes a stream on a worker thread; the UI thread only makes the
+  bitmap.
+
+Tried and dropped, each measured the same way:
+
+- A layout of fixed-height rows that made the page ahead in the idle
+  frame, so a held PageDown would find its page ready. It cost more:
+  WinUI draws rows only when they come into view, so the drawing, the
+  larger part, stays in the frame that shows them, and the extra rows
+  kept made added work of their own.
+- Text trimming off (no change beyond noise once equal texts are
+  skipped), another font, the reading order detected from the text (no
+  change).
+- Asking for type-name pages only after the scroll settles: not needed,
+  they cost 0.01 to 0.06 ms per frame. The icons were already kept per
+  key; the bench folder's 100,000 rows share five.
+
+### What remains
+
+About 15 ms of UI-thread work per page of 30 rows, nearly all of it in
+WinUI: making or recycling a row costs about 100 µs, laying out a text
+that changed about 38 µs (timed on the name), and drawing the rows that
+came into view about 5 ms per page. At one press every second frame,
+3.7 % of the frames' work passed 16.7 ms. The first PageDown after the
+window starts makes rows from the template (the pool is empty), a frame
+of 35 to 50 ms once. Whether no frame passes 33 ms and fewer than 5 %
+pass 20 ms with the display awake is `livecheck.ps1`'s line, run with
+real keys on a watched screen.
 
 ## Edge cases
 
