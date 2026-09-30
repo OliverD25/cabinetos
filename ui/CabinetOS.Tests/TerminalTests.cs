@@ -116,6 +116,25 @@ public class TerminalTests
     }
 
     [Fact]
+    public void A_profile_that_does_not_follow_the_pane_gets_no_cd_line()
+    {
+        var typing = new TypingTracker();
+        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing, followsPane: false));
+        // The default is a shell that follows.
+        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing));
+        // Not running and same folder are told first: the session is over, or nothing would be typed anyway.
+        Assert.Equal(CwdSyncDecision.SkipNotRunning, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", false, typing, followsPane: false));
+        Assert.Equal(CwdSyncDecision.SkipSameFolder, CwdSyncRule.Decide(@"D:\docs\", @"d:\DOCS", true, typing, followsPane: false));
+        // The profile is told before the screen and the half-typed line.
+        typing.FullScreen = true;
+        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", true, typing, followsPane: false));
+        Assert.Equal(CwdSyncDecision.SkipFullScreen, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", true, typing));
+        typing.FullScreen = false;
+        typing.OnInput("hello");
+        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", true, typing, followsPane: false));
+    }
+
+    [Fact]
     public void Paths_typed_by_ctrl_p_hold_the_line_until_the_user_presses_enter()
     {
         var typing = new TypingTracker();
@@ -210,6 +229,34 @@ public class TerminalTests
         Assert.Equal(["pwsh", "cmd"], profiles.Names);
         using var empty = JsonDocument.Parse("{}");
         Assert.Same(TerminalProfiles.Defaults, TerminalProfiles.FromConfig(empty.RootElement));
+        // The defaults mirror the core's: the fourth profile is Claude Code, which is not a shell.
+        Assert.Equal(["pwsh", "cmd", "wsl", "claude"], TerminalProfiles.Defaults.Names);
+        Assert.True(TerminalProfiles.Defaults.FollowsPane("wsl"));
+        Assert.False(TerminalProfiles.Defaults.FollowsPane("claude"));
+    }
+
+    [Fact]
+    public void A_profile_follows_the_pane_unless_the_config_says_false()
+    {
+        using var config = JsonDocument.Parse("""
+            {"terminal":{"defaultProfile":"pwsh","profiles":[
+              {"name":"pwsh","followsPane":true},
+              {"name":"claude","followsPane":false},
+              {"name":"missing"},
+              {"name":"wrong","followsPane":"no"},
+              {"name":"number","followsPane":0},
+              {"name":"empty","followsPane":null}
+            ]}}
+            """);
+        var profiles = TerminalProfiles.FromConfig(config.RootElement);
+        Assert.Equal(["pwsh", "claude", "missing", "wrong", "number", "empty"], profiles.Names);
+        Assert.False(profiles.FollowsPane("claude"));
+        // A missing key or a key of the wrong type is the default: the profile follows.
+        Assert.All(new[] { "pwsh", "missing", "wrong", "number", "empty" }, name => Assert.True(profiles.FollowsPane(name), name));
+        // A name the config does not list follows too.
+        Assert.True(profiles.FollowsPane("nu"));
+        // Names are compared exactly, as the core does.
+        Assert.True(profiles.FollowsPane("Claude"));
     }
 
     [Fact]

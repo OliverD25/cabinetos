@@ -17,6 +17,9 @@ public enum CwdSyncDecision
 
     /// <summary>The shell has exited.</summary>
     SkipNotRunning,
+
+    /// <summary>The profile does not follow the pane: the program in it is not a shell, and the line would be its input.</summary>
+    SkipProfile,
 }
 
 /// <summary>
@@ -60,7 +63,7 @@ public sealed class TypingTracker
 public static class CwdSyncRule
 {
     /// <summary>Decides for <paramref name="folder"/>, the active pane's folder after the wait.</summary>
-    public static CwdSyncDecision Decide(string folder, string? lastSynced, bool running, TypingTracker typing)
+    public static CwdSyncDecision Decide(string folder, string? lastSynced, bool running, TypingTracker typing, bool followsPane = true)
     {
         if (!running)
         {
@@ -69,6 +72,10 @@ public static class CwdSyncRule
         if (string.Equals(folder.TrimEnd('\\'), lastSynced?.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
         {
             return CwdSyncDecision.SkipSameFolder;
+        }
+        if (!followsPane)
+        {
+            return CwdSyncDecision.SkipProfile;
         }
         if (typing.FullScreen)
         {

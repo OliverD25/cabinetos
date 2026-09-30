@@ -154,6 +154,7 @@ internal sealed class TerminalController
             { Running: false } tab => $"{tab.Profile} exited with code {tab.ExitCode}",
             { LastDecision: CwdSyncDecision.SkipTyping } => placement == DockPlacement.Bottom ? "cwd not synced: a command is being typed" : "not synced: typing",
             { LastDecision: CwdSyncDecision.SkipFullScreen } => placement == DockPlacement.Bottom ? "cwd not synced: a full-screen program runs" : "not synced: a program runs",
+            { LastDecision: CwdSyncDecision.SkipProfile } => placement == DockPlacement.Bottom ? "cwd not synced: the profile does not follow the pane" : "not synced: profile",
             _ => placement == DockPlacement.Bottom ? $"cwd synced to active pane · {folder}" : $"synced to {folder}",
         };
     }
@@ -617,7 +618,7 @@ internal sealed class TerminalController
         {
             return;
         }
-        var decision = CwdSyncRule.Decide(folder, tab.LastSynced, tab.Running, tab.Typing);
+        var decision = CwdSyncRule.Decide(folder, tab.LastSynced, tab.Running, tab.Typing, Profiles.FollowsPane(tab.Profile));
         Diag.Debug(Target, "cwd sync", new LogField("session_id", tab.SessionId), new LogField("path", folder),
             new LogField("decision", decision.ToString()));
         if (decision != CwdSyncDecision.SkipSameFolder)
