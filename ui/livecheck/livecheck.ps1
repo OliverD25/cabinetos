@@ -46,7 +46,10 @@ public static class Live {
   [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
-  static INPUT Key(ushort vk, bool up) { var i = new INPUT { type = 1 }; i.u.ki.wVk = vk; i.u.ki.dwFlags = up ? 2u : 0u; return i; }
+  // The keys of the cursor block (Page Up to Down, Insert, Delete) are sent as the extended keys they are: without the flag
+  // they are the numeric keypad's, and with Num Lock on Windows takes Shift away from Shift+Down (and drops it from the key's message).
+  static bool Extended(ushort vk) { return (vk >= 0x21 && vk <= 0x28) || vk == 0x2D || vk == 0x2E; }
+  static INPUT Key(ushort vk, bool up) { var i = new INPUT { type = 1 }; i.u.ki.wVk = vk; i.u.ki.dwFlags = (up ? 2u : 0u) | (Extended(vk) ? 1u : 0u); return i; }
   static INPUT Unicode(char c, bool up) { var i = new INPUT { type = 1 }; i.u.ki.wScan = c; i.u.ki.dwFlags = 4u | (up ? 2u : 0u); return i; }
   static void Send(params INPUT[] inputs) { SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT))); }
   public static void Press(params ushort[] vks) {
@@ -91,7 +94,7 @@ public static class Live {
 $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L = 0x4C; Esc = 0x1B; Tab = 0x09; Enter = 0x0D; Back = 0x08; Down = 0x28; PgDn = 0x22; F2 = 0x71;
   F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56;
   F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A;
-  T = 0x54; Up = 0x26; End = 0x23; W = 0x57; X = 0x58; A = 0x41 }
+  T = 0x54; Up = 0x26; End = 0x23; W = 0x57; X = 0x58; A = 0x41; E = 0x45; Left = 0x25; Right = 0x27 }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   # A flyout (the drive list) is a window of its own, so the test is the process, not the window.
@@ -183,8 +186,14 @@ $env:CABINETOS_THEMES_DIR = "$root\themes"
 $env:CABINETOS_UNDO_DIR = "$root\undo"
 # WebView2's user data (the terminal, the tools) into this run's folder too, not the real app data.
 $env:CABINETOS_WEBVIEW2_DIR = "$root\webview2"
-# Tool Extensions from the repository (Markdown Preview), as --tools-dir would give them.
-$env:CABINETOS_TOOLS_DIR = [System.IO.Path]::GetFullPath($Tools)
+# Tool Extensions from the repository (Markdown Preview), as --tools-dir would give them, and Quick Notes: a test
+# tool with a sidebar page (fixtures\quick-notes), which section 13 needs and no other section notices. A copy in
+# this run's folder, so the repository's tools folder stays as it is.
+$runTools = "$root\tools"
+New-Item -ItemType Directory -Force $runTools | Out-Null
+Get-ChildItem -LiteralPath ([System.IO.Path]::GetFullPath($Tools)) -Directory | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $runTools -Recurse }
+Copy-Item -LiteralPath "$PSScriptRoot\fixtures\quick-notes" -Destination $runTools -Recurse
+$env:CABINETOS_TOOLS_DIR = $runTools
 "tools dir: $env:CABINETOS_TOOLS_DIR (exists: $(Test-Path -LiteralPath $env:CABINETOS_TOOLS_DIR))"
 Remove-Item Env:CABINETOS_UI_SNAPSHOT -ErrorAction SilentlyContinue
 Remove-Item Env:CABINETOS_UI_SNAPSHOT_STEPS -ErrorAction SilentlyContinue
@@ -780,6 +789,222 @@ if (-not ((Test-Path -LiteralPath $agentDir) -and $hasExtensions)) {
   "14: ask: Enter renamed the files on disk: $(@(Get-ChildItem -LiteralPath $ask | Where-Object { $_.Name -like 'vacation_*' }).Count -eq 3)"
   "14: ask: the preview closed: $([bool](PluginLog '"preview applied"'))"
 }
+
+# ----- 13: the activity rail and the modular sidebar (docs/ui.md, "The activity rail and the sidebar") -----
+# Every section before this one runs in the classic layout. This one writes ui.layout: rail into the run's
+# configuration (the core sends the change on, as it does for an edit of the file by hand), drives the rail, the
+# folder tree, the Search view, a tool's page (Quick Notes, fixtures\quick-notes) and the divider with real keys and
+# the mouse, and writes classic back, so the sections after it find what they expect. The window's log says what
+# happened: "the sidebar shows a view" (view, open, the width the divider sits at), "the tree shows a folder",
+# "a rail button was pressed" and "a sidebar page started". Toggle Sidebar is on Ctrl+Alt+B here: the first section
+# of this script rebound it.
+function UiLines([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match $pattern }) }
+function LastFields([string]$pattern) {
+  $line = UiLines $pattern | Select-Object -Last 1
+  if ($line) { ($line | ConvertFrom-Json).fields }
+}
+function ConfigUi { (Get-Content "$root\config\cabinetos.json" -Raw -Encoding UTF8 | ConvertFrom-Json).ui }
+function SetUiConfig([hashtable]$values) {
+  $cfgPath = "$root\config\cabinetos.json"
+  $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  foreach ($key in $values.Keys) { $cfg.ui | Add-Member -NotePropertyName $key -NotePropertyValue $values[$key] -Force }
+  [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
+}
+# A rail button, by its accessible name. The rail is the leftmost column: a folder or a hit of the same name lies to its right.
+function RailButtonElement([string]$name) {
+  $all = [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants,
+    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $name)))
+  @($all | Sort-Object { $_.Current.BoundingRectangle.Left })[0]
+}
+$railRects = @{}
+function ClickRail([string]$name) {
+  $r = $railRects[$name]
+  [Live]::Click([int]($r.Left + $r.Width / 2), [int]($r.Top + $r.Height / 2))
+}
+function LockTreeFromPalette {
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  [Live]::Type("lock folder tree"); Start-Sleep -Milliseconds 900
+  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 900
+}
+
+$rl = "$files\rail13"
+New-Item -ItemType Directory -Force "$rl\alpha\inner", "$rl\beta\sub", "$rl\gamma" | Out-Null
+Set-Content -LiteralPath "$rl\alpha\zzreport13.txt" -Value "found" -NoNewline
+Set-Content -LiteralPath "$rl\note.txt" -Value "note" -NoNewline
+$origUi = ConfigUi
+$origSidebar = if ($null -ne $origUi.sidebar) { [bool]$origUi.sidebar } else { $true }
+$warnBefore = (UiLines '"level":"(WARN|WARNING|ERROR)"').Count
+
+Step "13: the configuration says ui.layout: rail; the rail and the folder tree appear"
+$before = (UiLines '"the rail layout is on"').Count
+SetUiConfig @{ layout = 'rail'; sidebar = $true }
+Start-Sleep -Milliseconds 2500
+"13: the window switched to the rail layout: $((UiLines '"the rail layout is on"').Count -gt $before)"
+ClickLeftPane
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type($rl); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1800
+$f = LastFields '"the tree shows a folder"'
+"13: the tree followed the left pane to rail13: $($f.path -eq $rl)"
+$f = LastFields '"the sidebar shows a view"'
+"13: the sidebar is open on the Explorer: $($f.view -eq 'explorer' -and $f.open -eq $true)"
+Shot $h "$ShotDir\rail13-explorer-live.png"
+
+Step "13: the rail's five buttons, found by UI Automation"
+$names = 'Explorer', 'Search', 'Marketplace', 'Terminal', 'Quick Notes'
+$buttons = @{}
+foreach ($n in $names) { $buttons[$n] = RailButtonElement $n; if ($buttons[$n]) { $railRects[$n] = $buttons[$n].Current.BoundingRectangle } }
+"13: the rail has its five buttons: $(@($names | Where-Object { $buttons[$_] }).Count -eq 5)"
+if ($buttons['Explorer'] -and $buttons['Search']) {
+  $wr = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$wr, 16)
+  $e = $buttons['Explorer'].Current.BoundingRectangle; $s = $buttons['Search'].Current.BoundingRectangle
+  "13: a button is 36 px square: $([math]::Abs($e.Width - 36 * $scale) -le 2 -and [math]::Abs($e.Height - 36 * $scale) -le 2)"
+  "13: the buttons are 40 px apart, top to top: $([math]::Abs(($s.Top - $e.Top) - 40 * $scale) -le 2)"
+  "13: the column is 12 px in from the window's edge (8 px gutter, 4 px centring): $([math]::Abs($e.Left - ($wr.Left + 12 * $scale)) -le 3)"
+}
+
+Step "13: Ctrl+Shift+F: the Search view; 'zzreport13'; Down to the hit; Enter"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.F); Start-Sleep -Milliseconds 700
+$f = LastFields '"the sidebar shows a view"'
+"13: the sidebar shows the Search view: $($f.view -eq 'search')"
+[Live]::Type("zzreport13"); Start-Sleep -Milliseconds 2000
+Shot $h "$ShotDir\rail13-search-live.png"
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 400
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1800
+$f = LastFields '"listing shown"'
+"13: Enter on the hit took the left pane to alpha: $($f.path -eq "$rl\alpha")"
+
+Step "13: Ctrl+Shift+E: the tree opens alpha, where the pane is, and has the keyboard; Down, Enter: the pane goes to beta"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 800
+$f = LastFields '"the sidebar shows a view"'
+"13: the sidebar shows the Explorer: $($f.view -eq 'explorer')"
+$f = LastFields '"the tree shows a folder"'
+"13: the tree, shown again, followed the pane to alpha (it follows only while it shows): $($f.path -eq "$rl\alpha")"
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+$f = LastFields '"listing shown"'
+"13: Enter in the tree took the left pane to beta: $($f.path -eq "$rl\beta")"
+
+Step "13: Right opens beta, Right again goes to sub, Enter takes the pane there"
+[Live]::Press($VK.Right); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Right); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+$f = LastFields '"listing shown"'
+"13: the pane shows beta\sub: $($f.path -eq "$rl\beta\sub")"
+Shot $h "$ShotDir\rail13-tree-keys-live.png"
+
+Step "13: Esc gives the keyboard back to the pane; Backspace goes up"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+[Live]::Press($VK.Back); Start-Sleep -Milliseconds 1500
+$f = LastFields '"listing shown"'
+"13: the keyboard was in the pane: Backspace went up to beta: $($f.path -eq "$rl\beta")"
+
+Step "13: the palette, Lock Folder Tree; the pane goes to gamma; the tree stays; Alt+Shift+L finds gamma"
+$locked = NoticeCount 'folder tree is locked'
+LockTreeFromPalette
+"13: the tree is locked, the status bar said so: $((NoticeCount 'folder tree is locked') -eq $locked + 1)"
+ClickLeftPane
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type("$rl\gamma"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1800
+"13: the locked tree did not follow to gamma: $(@(UiLines '"the tree shows a folder"' | Where-Object { $_ -match 'gamma' }).Count -eq 0)"
+[Live]::Press($VK.Alt, $VK.Shift, $VK.L); Start-Sleep -Milliseconds 1500
+"13: Alt+Shift+L showed gamma in the tree: $(@(UiLines '"the tree shows a folder"' | Where-Object { $_ -match 'gamma' }).Count -eq 1)"
+Shot $h "$ShotDir\rail13-locate-live.png"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+$follows = NoticeCount 'follows the active folder again'
+LockTreeFromPalette
+"13: the tree is unlocked, the status bar said so: $((NoticeCount 'follows the active folder again') -eq $follows + 1)"
+
+Step "13: the mouse on the Quick Notes button: the tool's own page shows in the sidebar"
+$started = (UiLines '"a sidebar page started"').Count
+ClickRail 'Quick Notes'
+Start-Sleep -Milliseconds 5000
+"13: the page started (once): $((UiLines '"a sidebar page started"').Count -eq $started + 1)"
+$f = LastFields '"the sidebar shows a view"'
+"13: the sidebar shows quick-notes: $($f.view -eq 'quick-notes')"
+$f = LastFields '"a rail button was pressed"'
+"13: the click reached the rail as ShowView on quick-notes: $($f.button -eq 'quick-notes' -and $f.action -eq 'ShowView')"
+Shot $h "$ShotDir\rail13-tool-page-live.png"
+
+Step "13: Ctrl+Shift+F from inside the page: the page passes the key to the window"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.F); Start-Sleep -Milliseconds 900
+$f = LastFields '"the sidebar shows a view"'
+"13: the Search view shows again: $($f.view -eq 'search')"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 900
+$f = LastFields '"the sidebar shows a view"'
+"13: Esc left the search field, and Ctrl+Shift+E shows the Explorer (a text box keeps every key but the immutable tier's): $($f.view -eq 'explorer')"
+
+Step "13: the page again; Ctrl+Alt+B from inside it closes the sidebar and the keyboard is in the pane (Backspace goes up)"
+ClickRail 'Quick Notes'; Start-Sleep -Milliseconds 1500
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.B); Start-Sleep -Milliseconds 900
+$f = LastFields '"the sidebar shows a view"'
+"13: the sidebar is closed: $($f.open -eq $false)"
+[Live]::Press($VK.Back); Start-Sleep -Milliseconds 1500
+$f = LastFields '"listing shown"'
+"13: the pane had the keyboard: Backspace went up to rail13: $($f.path -eq $rl)"
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.B); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 900
+$f = LastFields '"the sidebar shows a view"'
+"13: the sidebar is open on the Explorer again: $($f.view -eq 'explorer' -and $f.open -eq $true)"
+
+Step "13: the mouse on the Marketplace button opens it; a second click closes it"
+$shown = (UiLines '"marketplace shown"').Count
+$closed = (UiLines '"marketplace closed"').Count
+ClickRail 'Marketplace'; Start-Sleep -Milliseconds 2500
+"13: the marketplace opened: $((UiLines '"marketplace shown"').Count -eq $shown + 1)"
+Shot $h "$ShotDir\rail13-marketplace-live.png"
+ClickRail 'Marketplace'; Start-Sleep -Milliseconds 1500
+"13: the second click closed it: $((UiLines '"marketplace closed"').Count -eq $closed + 1)"
+
+Step "13: the mouse on the active Explorer button closes the sidebar; Ctrl+Alt+B opens it"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 900
+ClickRail 'Explorer'; Start-Sleep -Milliseconds 900
+$f = LastFields '"a rail button was pressed"'
+"13: the click on the active view was CloseSidebar: $($f.button -eq 'explorer' -and $f.action -eq 'CloseSidebar')"
+$f = LastFields '"the sidebar shows a view"'
+"13: the sidebar is closed: $($f.open -eq $false)"
+Shot $h "$ShotDir\rail13-closed-live.png"
+
+# The mouse press left the keyboard on the Explorer button: Shift+Down moves it below Search, Shift+Up back.
+Step "13: Shift+Down on the Explorer button moves it; Shift+Up moves it back (ui.rail)"
+[Live]::Press($VK.Shift, $VK.Down); Start-Sleep -Milliseconds 1800
+$order = @((ConfigUi).rail)
+"13: ui.rail holds the new order: $(($order -join ',') -eq 'search,explorer,marketplace,terminal,quick-notes')"
+Shot $h "$ShotDir\rail13-moved-live.png"
+[Live]::Press($VK.Shift, $VK.Up); Start-Sleep -Milliseconds 1800
+"13: ui.rail is empty again (the default order): $(@((ConfigUi).rail).Count -eq 0)"
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.B); Start-Sleep -Milliseconds 900
+$f = LastFields '"the sidebar shows a view"'
+"13: Ctrl+Alt+B opened it again: $($f.open -eq $true)"
+
+Step "13: the divider: drag it to 300 px; drag it under 150 px (it snaps shut and remembers 300)"
+$f = LastFields '"the sidebar shows a view"'
+$w0 = [int]$f.width
+$dr = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$dr, 16)
+$dy = [int](($dr.Top + $dr.Bottom) / 2)
+# The divider is the 8 px strip at the sidebar's right edge: 8 px gutter + 44 px rail + 8 px gap, then the width, then 4 px to its middle.
+[Live]::Drag([int]($dr.Left + (64 + $w0) * $scale), $dy, [int]($dr.Left + (64 + 300) * $scale), $dy)
+Start-Sleep -Milliseconds 1800
+"13: ui.sidebarWidth is near 300 (was $w0): $([math]::Abs([double](ConfigUi).sidebarWidth - 300) -le 4)"
+Shot $h "$ShotDir\rail13-divider-live.png"
+$f = LastFields '"the sidebar shows a view"'
+$w1 = [int](ConfigUi).sidebarWidth
+[Live]::Drag([int]($dr.Left + (64 + $w1) * $scale), $dy, [int]($dr.Left + (64 + 100) * $scale), $dy)
+Start-Sleep -Milliseconds 1800
+"13: ui.sidebar is false, the drag under 150 px closed it: $((ConfigUi).sidebar -eq $false)"
+"13: ui.sidebarWidth still near 300: $([math]::Abs([double](ConfigUi).sidebarWidth - 300) -le 4)"
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.B); Start-Sleep -Milliseconds 900
+$f = LastFields '"the sidebar shows a view"'
+"13: Ctrl+Alt+B opened it at the remembered width: $($f.open -eq $true -and [math]::Abs([int]$f.width - 300) -le 4)"
+
+Step "13: the configuration says ui.layout: classic again; the rail goes"
+$off = (UiLines '"the rail layout is off"').Count
+SetUiConfig @{ layout = 'classic'; sidebar = $origSidebar; sidebarWidth = $null; sidebarView = 'explorer' }
+Start-Sleep -Milliseconds 2500
+"13: the window is back in the classic layout: $((UiLines '"the rail layout is off"').Count -gt $off)"
+Shot $h "$ShotDir\rail13-classic-back-live.png"
+ClickLeftPane
+"13: no warning or error line in the window's log during this section: $((UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warnBefore)"
 
 # ----- Edge cases (docs/ui.md, "Edge cases"): the shared fixture, with real keys -----
 # The fixture has links, so it lives outside $root: only its own script removes it (rmdir, which
