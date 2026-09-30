@@ -421,7 +421,8 @@ on a file system without file IDs the ID is a hash of the name and changes
 with it. `listing_lost` moves the pane to the nearest parent the core can
 list.
 
-The core sorts; the columns are fixed in this version. `panes.showHidden`
+The core sorts. The user sets the columns' widths with the mouse
+("Column widths"). `panes.showHidden`
 and `panes.sort` apply because the UI leaves them out of `list_directory`;
 when either changes in `cabinetos.json`, both folders are listed again.
 
@@ -1462,6 +1463,100 @@ from A to Z (smallest, oldest), down the other way; the design's plain
 headings stay for its default, name from A to Z. The status bar says the
 order: "Sorted by size, largest first."
 
+### Column widths
+
+A file list has four columns: Name, Modified, Type and Size. Modified,
+Type and Size have a width in pixels each. Name takes what is left of the
+list's width, and never less than the theme's `nameColumnMinWidth`.
+Until the user changes a width, the theme sets them: its weights
+(`nameColumnWeight`, `modifiedColumnWeight`, `typeColumnWeight`) share the
+space that Size (`sizeColumnWidth`) and the gaps leave, as before this
+change. Once the user drags or fits a column, the three pixel widths are
+the user's, and they win over every theme's weights and Size width. The
+theme's `columnGap`, paddings and fonts still apply (`ColumnLayout`).
+
+**The grips.** Each pane's column headers have a grip at each of the
+three dividers: Name|Modified, Modified|Type and Type|Size. There is none
+after Size, which ends at the pane's edge. A grip is 8 px wide and centred
+on its divider. Over it the pointer is the resize cursor, and a 1 px line
+in the divider colour shows while the pointer is over it or drags it.
+
+**A drag.** The divider follows the pointer, and only the two columns
+beside it change:
+
+| Grip | Right | Left |
+|---|---|---|
+| Name\|Modified | Name wider, Modified narrower; Modified's right edge stays | Modified wider, Name narrower |
+| Modified\|Type | Modified wider, Type narrower; Modified's left edge stays | Modified narrower, Type wider |
+| Type\|Size | Type wider, Size narrower; Size keeps the pane's edge | Type narrower, Size wider |
+
+Modified, Type and Size keep at least 40 px each; a column that is
+narrower already (a hand edit may set 24) keeps what it has. Name keeps
+at least its minimum, so a drag that would cut Name under it stops there.
+While the pointer moves, the header and every row on screen follow at
+once, in both panes; nothing is measured and nothing is written. When the
+button is released, the widths are saved once. A press and release that
+moved nothing changes nothing.
+
+**A double-click.** On a grip, it fits the column at the grip's left:
+Modified for the first two grips, Type for the third. On a heading's
+text, it fits that heading's column. The Name heading fits Modified, Type
+and Size together, so Name gets the most room; Name has no width of its
+own. A fit makes a column as wide as the widest text of that column among
+the rows on screen, plus the room its cell keeps beside the text (the
+default look's 8 px after the Modified and Type texts), or as wide as its
+heading with the room of the sort chevron, whichever is wider; never less
+than 40 px. "The rows on screen" are the rows the pane has made, which
+are the rows in view and a few beyond: the pane makes only those, and
+measuring every row of a folder of 100,000 entries would stall the
+window. The texts are measured in the fonts the cells use (the Size
+column's fixed-width figures under hairlines). A fit never leaves Name
+under its minimum either: a column that would, gets what leaves Name its
+minimum, and its text is cut short with "…". The Name heading's fit gives
+each of the three the same share of the shortfall. A single click on a
+heading does nothing yet: sorting by it comes later, and only the
+double-click is taken.
+
+**Saved and shared.** The widths are one set for both panes: a drag or a
+fit in one pane changes the other at once. The window saves them in
+`cabinetos.json` as `ui.columns`, `{ "modified", "type", "size" }` in
+whole pixels, through `set_value`, when a drag ends or a fit happens
+(Article 6; [config.md](config.md)). An edit of the file by hand applies
+at the next `config_changed`, live, as the other `ui.*` settings do, and
+so does another window's save. `null` or no `ui.columns` gives the
+theme's widths. The core refuses a width that is not a whole number from
+24 to 2000. When a save is refused, the widths stay on screen and the log
+says why. A theme change keeps the user's widths.
+
+**Commands.** `view.fitColumns` ("View: Fit Columns to Content") fits
+the active pane's Modified, Type and Size, as the Name heading's
+double-click does. `view.resetColumns` ("View: Reset Column Widths")
+gives the theme's widths back and writes `ui.columns: null`. Both run in
+the window, in the file panes (`filesView`), and have no keys: the
+palette is their place (Article 7).
+
+**Logs.** The target is `cabinetos_ui::columns`. "columns changed" says
+`how` (`drag`, `fit`, `reset`, `config` or `theme`), the `modified`,
+`type` and `size` widths, `name` (the Name width they leave in the active
+pane) and `user` (whether the widths are the user's). A drag logs it once,
+when the button is released. "columns fitted" says what a fit measured
+for each column: the widest text (`<column>_text`), its width, the cell's
+room, the heading's width, the fit, and the widths it gives. "columns
+saved" follows a write the core made; "columns not saved" is a warning
+with the core's reason.
+
+**Snapshot steps.** `columns:<label>` logs "columns shown": each pane's
+four column widths as laid out, the width they share, the first row's
+four widths (the rows must follow the header) and how far the grips are
+from the dividers. `column-drag:<divider>|<pixels>` drags a grip of the
+active pane (1 is Name|Modified, 2 Modified|Type, 3 Type|Size) by that
+many pixels through the grip's own drag steps, and lets go.
+`column-fit:<column>` fits as a double-click on that heading does
+(`name`, `modified`, `type` or `size`). The last two do not wait, so an
+`until:config` right after them sees the save. The end-to-end test
+`ColumnsEndToEndTests` uses them; section 19 of the live check drags and
+double-clicks with the real mouse.
+
 ### Folder sizes
 
 A folder's Size is empty until it is measured: Space on a folder,
@@ -2479,7 +2574,7 @@ the Commander Compact handout
 | `driveRowPaddingY`, `driveRowPaddingX` | The drive rows. The pinned rows take the same side padding. |
 | `tagRadius`, `tagFontSize` | Nothing yet: the sidebar has no tags. |
 | `columnHeaderPaddingY`, `columnHeaderPaddingX` | A pane's column headers. |
-| `nameColumnWeight`, `modifiedColumnWeight`, `typeColumnWeight`, `nameColumnMinWidth`, `sizeColumnWidth`, `columnGap` | The columns, in the column headers and in every row alike. The default look keeps 8 px after the Modified and Type texts; a theme that sets `columnGap` spaces the columns by it instead. |
+| `nameColumnWeight`, `modifiedColumnWeight`, `typeColumnWeight`, `nameColumnMinWidth`, `sizeColumnWidth`, `columnGap` | The columns, in the column headers and in every row alike. The default look keeps 8 px after the Modified and Type texts; a theme that sets `columnGap` spaces the columns by it instead. Once the user drags or fits a column, the user's widths (`ui.columns`) win over the three weights and `sizeColumnWidth`; `nameColumnMinWidth` and `columnGap` still apply ("Column widths"). |
 | `rowHeight`, `rowPaddingX`, `rowRadius`, `rowIconGap`, `secondaryFontSize` | A file row; the scrolling arithmetic (PageDown, keeping the focused row in view); and the rename box over a row, as high as the row allows but never lower than its text. |
 | `editorTabHeight` | A pane's editor tab strip. |
 | `markdownPaddingY`, `markdownPaddingX`, `markdownLineHeight` | Nothing yet: the Markdown Preview is a Tool Extension page, and the tool messages carry no sizes ([tool-extensions.md](tool-extensions.md)). |
@@ -3320,7 +3415,7 @@ planning session's, on a screen someone watches.
 | Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
 | Light-mode tokens from the design | The design has none yet; a `system` theme in light mode uses Windows 11's own light colours ("Themes") |
 | Workspaces (the pill's list, a sidebar section) and Tags | One "Default" workspace, the active folder's repository; both sidebar sections stay hidden (Article 4) |
-| Sorting by a click on a column heading | The headings are static; Ctrl+F3 to Ctrl+F6 sort a pane ("A pane's order"), and sub-phase 11c brings the headings |
+| Sorting by a click on a column heading | A single click on a heading does nothing yet (a double-click fits its column, "Column widths"); Ctrl+F3 to Ctrl+F6 sort a pane ("A pane's order"), and sub-phase 11c brings the headings |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
 | Dragging tabs to reorder them or to the other pane | `tab.moveToOtherPane` does the work, and the keyboard is complete (Article 7); the "+" came with Phase 16 |
 | Rows that plugins add to the top row's menu | The registry has no mark for "in this menu" yet ("The shell") |

@@ -248,7 +248,7 @@ brackets are the handout's, for any theme that shows the bar.
 | `navButtonSize` | px | 14 | 80 | 20 | 20 | The width and height of the breadcrumb row's Back, Forward and Up. |
 | `columnHeaderPaddingY` | px | 0 | 64 | 4 | 2 | The space above and below the column headers' text. |
 | `columnHeaderPaddingX` | px | 0 | 64 | 14 | 8 | The space at each side of the column headers' row. |
-| `nameColumnWeight` | number | 0.1 | 10 | 1 | 1.6 | The Name column's share of a file list's width, against the other weighted columns. |
+| `nameColumnWeight` | number | 0.1 | 10 | 1 | 1.6 | The Name column's share of a file list's width, against the other weighted columns. Once the user drags or fits a column, the user's saved widths (`ui.columns`) override the three weights and `sizeColumnWidth` in every theme ([ui.md](ui.md), "Column widths"). |
 | `modifiedColumnWeight` | number | 0.1 | 10 | 0.55 | 0.9 | The Modified column's share, against the other weighted columns. |
 | `typeColumnWeight` | number | 0.1 | 10 | 0.45 | 0.7 | The Type column's share, against the other weighted columns. |
 | `nameColumnMinWidth` | px | 0 | 400 | 120 | 0 | The narrowest the Name column gets. |
