@@ -32,9 +32,12 @@ internal sealed class ContextMenuFlyout
     private Built? _front;
 
     // The flyout WinUI has: asked to show, its Closed not come yet. WinUI drops a ShowAt on a flyout that is still
-    // closing, and holds another flyout's back until then, so a new menu waits here for that Closed (_pending).
+    // closing, and holds another flyout's back until then, so a new menu waits here for that Closed (_pending). It
+    // also drops a ShowAt made inside the flyout's own Closed when the flyout is shown again at the place it had (the
+    // same menu on the same row), so the waiting menu goes on screen one dispatcher turn after the Closed (_turnQueued).
     private CommandBarFlyout? _shown;
     private (FrameworkElement Target, Point At)? _pending;
+    private bool _turnQueued;
 
     // The flyout WinUI says is open (its Opened came, its Closed not yet): a ShowAt WinUI dropped never gets here.
     private CommandBarFlyout? _onScreen;
@@ -105,7 +108,7 @@ internal sealed class ContextMenuFlyout
         ChosenBounds = null;
         var origin = target.TransformToVisual(null).TransformPoint(new Point(0, 0));
         var position = new Point(at.X - origin.X, at.Y - origin.Y);
-        if (_shown is null)
+        if (_shown is null && !_turnQueued)
         {
             ShowNow(built, target, position);
         }
@@ -237,15 +240,29 @@ internal sealed class ContextMenuFlyout
             return;
         }
         _shown = null;
-        if (_pending is { } pending && _front is { } front)
+        if (_pending is not null && _front is not null)
         {
-            // A newer menu replaced this one while it was closing: it goes on screen now.
-            _pending = null;
-            ShowNow(front, pending.Target, pending.At);
+            // A newer menu replaced this one while it was closing: it goes on screen at the next turn, the newest one if
+            // another comes first; a Close before then ends it unseen (_pending).
+            if (!_turnQueued)
+            {
+                _turnQueued = true;
+                flyout.DispatcherQueue.TryEnqueue(ShowPending);
+            }
         }
         else if (_front is { } closed && ReferenceEquals(closed.Flyout, flyout))
         {
             Finish();
+        }
+    }
+
+    private void ShowPending()
+    {
+        _turnQueued = false;
+        if (_shown is null && _pending is { } pending && _front is { } front)
+        {
+            _pending = null;
+            ShowNow(front, pending.Target, pending.At);
         }
     }
 

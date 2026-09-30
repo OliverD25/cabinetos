@@ -820,7 +820,12 @@ up to six shapes. The same shape again only has its entries' enabled state
 set: about 6 ms, with no frame over 33 ms. The first opening of a shape in
 a window's run still costs one long frame, about 45 to 60 ms. A menu asked
 for while the previous one is still closing waits for it to be gone,
-because WinUI ignores a flyout that is shown again while it is closing.
+because WinUI ignores a flyout that is shown again while it is closing,
+and then one turn of the window's dispatcher more: shown again from
+inside its own `Closed`, at the place it had (the same menu on the same
+row, as after Esc and a quick right-click), the flyout never came back,
+and every later menu of that shape waited for it. The log says "context
+menu opened" when WinUI has the menu on screen, not only asked for.
 
 #### Windows' own menu
 
@@ -930,7 +935,10 @@ edits the file menu on a real window and core: an X, Insert with the
 prompt, Alt+Up, Delete, two drags and Done, then the file and the next
 menu; a save
 refused while the file has an error (the mode stays open, the notice
-shows); Esc; and `menu.edit` from the palette. With the frame tests, it
+shows); Esc; and `menu.edit` from the palette. A third test closes the
+file menu and asks for it again on the same row at once, twice: each
+comes on screen (WinUI's `Opened`, `context_menu_on_screen` in the shell
+state) within 1 s. With the frame tests, it
 enters the edit mode over 100,000 selected rows: no frame over 33 ms. The
 live check's section 18 does the same with the real mouse and keys, and
 runs Windows' Copy.

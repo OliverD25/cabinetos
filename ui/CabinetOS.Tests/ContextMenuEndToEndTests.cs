@@ -263,13 +263,10 @@ public class ContextMenuEndToEndTests
                 "until:config",
                 "wait:300",
                 "shell:saved",
-                // Each menu gets its time on screen, and its time to close: the same menu asked for again while it is
-                // still closing does not come back (step 1's flyout; see the Phase 18 step 2 report).
                 "menu:alpha.txt",
-                "wait:600",
                 "shell:after",
+                // The same menu at once, while this one closes (A_menu_asked_for_while_the_same_menu_closes_comes_on_screen).
                 "cmd:overlay.close",
-                "wait:600",
                 // The file gets an error while the list is edited: the core refuses the save.
                 "menu:alpha.txt",
                 "wait:600",
