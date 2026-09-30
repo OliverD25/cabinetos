@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::System::Ole::OleFlushClipboard;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
@@ -281,7 +282,9 @@ fn menu_thread(
     ready: &Sender<Ready>,
     invoke: &Receiver<Invoke>,
 ) {
-    let _apartment = Apartment::enter();
+    // OLE, not COM alone: Cut and Copy put their data object on the
+    // clipboard, which only an OLE apartment can do.
+    let _apartment = Apartment::enter_ole();
     // A message queue before the thread's ID is handed out, so a wake-up
     // posted to it is never lost.
     let mut message = MSG::default();
@@ -306,7 +309,9 @@ fn menu_thread(
         pump_messages();
         match invoke.try_recv() {
             Ok((item, reply)) => {
-                let _ = reply.send(menu.invoke(item));
+                let result = menu.invoke(item);
+                keep_clipboard();
+                let _ = reply.send(result);
                 return;
             }
             Err(TryRecvError::Disconnected) => return,
@@ -321,6 +326,15 @@ fn menu_thread(
         // the time is up.
         unsafe { MsgWaitForMultipleObjectsEx(None, millis, QS_ALLINPUT, MWMO_INPUTAVAILABLE) };
     }
+}
+
+/// Renders what an item put on the clipboard (Cut, Copy) and lets go of
+/// its data object: that object lives in this thread's apartment, which
+/// ends with the menu, and the clipboard would be empty then.
+fn keep_clipboard() {
+    // SAFETY: a plain call; with nothing of this thread's on the clipboard
+    // it does nothing.
+    let _ = unsafe { OleFlushClipboard() };
 }
 
 /// Hands this thread's messages to their windows: a shell handler may have
@@ -774,6 +788,62 @@ mod tests {
         while menus.open_count() > 0 {
             assert!(Instant::now() < deadline, "menus left open");
             std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Copy leaves the file on the clipboard after the menu's thread has
+    /// ended: the thread was in a COM apartment without OLE once, and Copy
+    /// then changed nothing.
+    #[test]
+    #[ignore = "replaces what the clipboard holds; run with --ignored"]
+    fn copy_leaves_the_file_on_the_clipboard() {
+        let dir = scratch("shell-menu-copy");
+        let file = dir.path().join("copied.txt");
+        std::fs::write(&file, "c").unwrap();
+        let menus = ShellMenus::new();
+        let menu = menus.open(1, &[text(&file)]).unwrap();
+        let copy = menu
+            .items
+            .iter()
+            .find(|item| item.verb.as_deref() == Some("copy"))
+            .unwrap_or_else(|| panic!("no copy verb: {:?}", menu.items));
+        menus.invoke(1, menu.menu_id, copy.id).unwrap();
+        // The thread ends right after it answers; its apartment with it.
+        std::thread::sleep(Duration::from_millis(500));
+        let files = clipboard_files();
+        assert!(
+            files.len() == 1 && files[0].eq_ignore_ascii_case(&text(&file)),
+            "{files:?}"
+        );
+    }
+
+    fn clipboard_files() -> Vec<String> {
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::System::DataExchange::{
+            CloseClipboard, GetClipboardData, OpenClipboard,
+        };
+        use windows::Win32::System::Ole::CF_HDROP;
+        use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
+
+        // SAFETY: the clipboard is opened, read and closed on this thread;
+        // its handle is read only while it is open, and each buffer is
+        // larger than the name written into it.
+        unsafe {
+            OpenClipboard(None).unwrap();
+            let files = GetClipboardData(u32::from(CF_HDROP.0))
+                .map(|HANDLE(handle)| {
+                    let drop = HDROP(handle);
+                    (0..DragQueryFileW(drop, u32::MAX, None))
+                        .map(|index| {
+                            let mut name = [0u16; 1024];
+                            let length = DragQueryFileW(drop, index, Some(&mut name));
+                            String::from_utf16_lossy(&name[..length as usize])
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let _ = CloseClipboard();
+            files
         }
     }
 }

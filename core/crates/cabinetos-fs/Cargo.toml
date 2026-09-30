@@ -25,6 +25,7 @@ windows = { workspace = true, features = [
   "Win32_System_IO",
   "Win32_System_Ioctl",
   "Win32_System_LibraryLoader",
+  "Win32_System_Ole",
   "Win32_System_Registry",
   "Win32_System_SystemInformation",
   "Win32_System_Threading",
@@ -40,6 +41,8 @@ windows = { workspace = true, features = [
 cabinetos-ipc.workspace = true
 criterion.workspace = true
 tempfile.workspace = true
+# The shell menu's clipboard test reads the clipboard.
+windows = { workspace = true, features = ["Win32_System_DataExchange"] }
 
 [[bench]]
 name = "list_directory"
