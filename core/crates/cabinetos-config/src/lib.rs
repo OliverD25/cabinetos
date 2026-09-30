@@ -22,6 +22,7 @@
 
 mod diff;
 mod locate;
+mod menu;
 mod model;
 mod parse;
 #[cfg(feature = "schema")]
@@ -30,6 +31,10 @@ mod store;
 mod watch;
 
 pub use diff::changed_paths;
+pub use menu::{
+    ArgPart, BackgroundMenu, ContextMenuConfig, FileMenu, FolderMenu, MenuItem, MultiSelectMenu,
+    PROGRAM_PREFIX, PROGRAM_TOKENS, ProgramEntry, is_program_name, parse_arg,
+};
 pub use model::{
     Config, DEFAULT_MARKETPLACE_INDEX, DockSize, EditorProgram, FORMAT_VERSION, FilesConfig,
     KeybindingEntry, Keys, Layout, LogLevel, LoggingConfig, MarketplaceConfig, PaneTabs,

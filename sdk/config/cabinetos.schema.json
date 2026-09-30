@@ -11,6 +11,96 @@
         "null"
       ]
     },
+    "contextMenu": {
+      "description": "The right-click menu of a file pane: its icon row and its rows for a\nfile, a folder, several rows and the pane's empty space, and whether\nShift+right-click shows Windows' own menu.",
+      "$ref": "#/$defs/ContextMenuConfig",
+      "default": {
+        "background": {
+          "items": [
+            {
+              "command": "edit.paste"
+            },
+            {
+              "command": "file.newFolder"
+            },
+            {
+              "command": "sidebar.pin"
+            }
+          ],
+          "quickActions": []
+        },
+        "file": {
+          "items": [
+            {
+              "command": "pane.openSelected"
+            },
+            {
+              "command": "file.openInOtherPane"
+            },
+            {
+              "command": "file.copyToOtherPane"
+            },
+            {
+              "command": "terminal.new"
+            }
+          ],
+          "quickActions": [
+            "edit.cut",
+            "edit.copy",
+            "edit.paste",
+            "file.rename",
+            "file.delete"
+          ]
+        },
+        "folder": {
+          "items": [
+            {
+              "command": "pane.openSelected"
+            },
+            {
+              "command": "file.openInOtherPane"
+            },
+            {
+              "command": "file.copyToOtherPane"
+            },
+            {
+              "command": "terminal.new"
+            }
+          ],
+          "quickActions": [
+            "edit.cut",
+            "edit.copy",
+            "edit.paste",
+            "file.rename",
+            "file.delete"
+          ]
+        },
+        "multiSelect": {
+          "items": [
+            {
+              "command": "pane.openSelected"
+            },
+            {
+              "command": "file.openInOtherPane"
+            },
+            {
+              "command": "file.copyToOtherPane"
+            },
+            {
+              "command": "terminal.new"
+            }
+          ],
+          "quickActions": [
+            "edit.cut",
+            "edit.copy",
+            "edit.paste",
+            "file.rename",
+            "file.delete"
+          ]
+        },
+        "shellMenu": false
+      }
+    },
     "files": {
       "description": "What happens to files: the editor that opens them.",
       "$ref": "#/$defs/FilesConfig",
@@ -61,6 +151,14 @@
         "$ref": "#/$defs/PluginSettings"
       },
       "default": {}
+    },
+    "programs": {
+      "description": "The user's programs, each the command `program.<name>`, which the\nmenu, a key or the palette runs. A menu entry can start no program\nthat is not listed here.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ProgramEntry"
+      }
     },
     "terminal": {
       "description": "The integrated terminal.",
@@ -150,6 +248,150 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "BackgroundMenu": {
+      "description": "The menu of a pane's empty space: Paste, New folder, Pin this folder\nto the sidebar (while it is not pinned), then Properties of the folder.",
+      "type": "object",
+      "properties": {
+        "items": {
+          "description": "The rows, top to bottom: `{\"command\": \"<id>\"}`, optionally\nwith `\"extensions\": [\".md\", \".txt\"]` to show it only for\nsuch files, or `{\"separator\": true}`. The window adds the\nplugins' commands, Properties and \"Edit Menu…\" after them.",
+          "type": "array",
+          "default": [
+            {
+              "command": "edit.paste"
+            },
+            {
+              "command": "file.newFolder"
+            },
+            {
+              "command": "sidebar.pin"
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/MenuItem"
+          }
+        },
+        "quickActions": {
+          "description": "The icon row at the top of the menu: command IDs, left to\nright. Each shows its icon, with its title and keys as a\ntooltip.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContextMenuConfig": {
+      "description": "The right-click menu of a file pane: one list for each kind of target,\nand whether Shift+right-click shows Windows' own menu.",
+      "type": "object",
+      "properties": {
+        "background": {
+          "description": "The menu of a pane's empty space.",
+          "$ref": "#/$defs/BackgroundMenu",
+          "default": {
+            "items": [
+              {
+                "command": "edit.paste"
+              },
+              {
+                "command": "file.newFolder"
+              },
+              {
+                "command": "sidebar.pin"
+              }
+            ],
+            "quickActions": []
+          }
+        },
+        "file": {
+          "description": "The menu of one file.",
+          "$ref": "#/$defs/FileMenu",
+          "default": {
+            "items": [
+              {
+                "command": "pane.openSelected"
+              },
+              {
+                "command": "file.openInOtherPane"
+              },
+              {
+                "command": "file.copyToOtherPane"
+              },
+              {
+                "command": "terminal.new"
+              }
+            ],
+            "quickActions": [
+              "edit.cut",
+              "edit.copy",
+              "edit.paste",
+              "file.rename",
+              "file.delete"
+            ]
+          }
+        },
+        "folder": {
+          "description": "The menu of one folder.",
+          "$ref": "#/$defs/FolderMenu",
+          "default": {
+            "items": [
+              {
+                "command": "pane.openSelected"
+              },
+              {
+                "command": "file.openInOtherPane"
+              },
+              {
+                "command": "file.copyToOtherPane"
+              },
+              {
+                "command": "terminal.new"
+              }
+            ],
+            "quickActions": [
+              "edit.cut",
+              "edit.copy",
+              "edit.paste",
+              "file.rename",
+              "file.delete"
+            ]
+          }
+        },
+        "multiSelect": {
+          "description": "The menu of a row inside a selection of several rows.",
+          "$ref": "#/$defs/MultiSelectMenu",
+          "default": {
+            "items": [
+              {
+                "command": "pane.openSelected"
+              },
+              {
+                "command": "file.openInOtherPane"
+              },
+              {
+                "command": "file.copyToOtherPane"
+              },
+              {
+                "command": "terminal.new"
+              }
+            ],
+            "quickActions": [
+              "edit.cut",
+              "edit.copy",
+              "edit.paste",
+              "file.rename",
+              "file.delete"
+            ]
+          }
+        },
+        "shellMenu": {
+          "description": "Shift+right-click and `menu.showShell` (Ctrl+Shift+F10) show\nWindows' own menu of the file (Open with, Send to, the menus other\nprograms add). The core builds it on a background thread. Off: both\nopen this menu.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
     "DockSize": {
       "description": "The Tool Dock's size, in pixels, for each place it can sit. `null`: the\ndesign's size, within the design's limits.",
       "type": "object",
@@ -199,6 +441,48 @@
         "command"
       ]
     },
+    "FileMenu": {
+      "description": "The menu of one file.",
+      "type": "object",
+      "properties": {
+        "items": {
+          "description": "The rows, top to bottom: `{\"command\": \"<id>\"}`, optionally\nwith `\"extensions\": [\".md\", \".txt\"]` to show it only for\nsuch files, or `{\"separator\": true}`. The window adds the\nplugins' commands, Properties and \"Edit Menu…\" after them.",
+          "type": "array",
+          "default": [
+            {
+              "command": "pane.openSelected"
+            },
+            {
+              "command": "file.openInOtherPane"
+            },
+            {
+              "command": "file.copyToOtherPane"
+            },
+            {
+              "command": "terminal.new"
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/MenuItem"
+          }
+        },
+        "quickActions": {
+          "description": "The icon row at the top of the menu: command IDs, left to\nright. Each shows its icon, with its title and keys as a\ntooltip.",
+          "type": "array",
+          "default": [
+            "edit.cut",
+            "edit.copy",
+            "edit.paste",
+            "file.rename",
+            "file.delete"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "FilesConfig": {
       "description": "What happens to files.",
       "type": "object",
@@ -214,6 +498,48 @@
             }
           ],
           "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "FolderMenu": {
+      "description": "The menu of one folder.",
+      "type": "object",
+      "properties": {
+        "items": {
+          "description": "The rows, top to bottom: `{\"command\": \"<id>\"}`, optionally\nwith `\"extensions\": [\".md\", \".txt\"]` to show it only for\nsuch files, or `{\"separator\": true}`. The window adds the\nplugins' commands, Properties and \"Edit Menu…\" after them.",
+          "type": "array",
+          "default": [
+            {
+              "command": "pane.openSelected"
+            },
+            {
+              "command": "file.openInOtherPane"
+            },
+            {
+              "command": "file.copyToOtherPane"
+            },
+            {
+              "command": "terminal.new"
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/MenuItem"
+          }
+        },
+        "quickActions": {
+          "description": "The icon row at the top of the menu: command IDs, left to\nright. Each shows its icon, with its title and keys as a\ntooltip.",
+          "type": "array",
+          "default": [
+            "edit.cut",
+            "edit.copy",
+            "edit.paste",
+            "file.rename",
+            "file.delete"
+          ],
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false
@@ -332,6 +658,76 @@
       },
       "additionalProperties": false
     },
+    "MenuItem": {
+      "description": "A menu row as the file writes it.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "The command's ID, such as `pane.openSelected` or `program.code`. An\nID no command has (a plugin that is off) is left out of the menu.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extensions": {
+          "description": "Show the command only for files with one of these extensions, each\nwith its dot (`.md`); case does not matter. With several rows\nselected, every selected file must have one.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "separator": {
+          "description": "`true`: a divider line instead of a command.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MultiSelectMenu": {
+      "description": "The menu of a row inside a selection of several rows.",
+      "type": "object",
+      "properties": {
+        "items": {
+          "description": "The rows, top to bottom: `{\"command\": \"<id>\"}`, optionally\nwith `\"extensions\": [\".md\", \".txt\"]` to show it only for\nsuch files, or `{\"separator\": true}`. The window adds the\nplugins' commands, Properties and \"Edit Menu…\" after them.",
+          "type": "array",
+          "default": [
+            {
+              "command": "pane.openSelected"
+            },
+            {
+              "command": "file.openInOtherPane"
+            },
+            {
+              "command": "file.copyToOtherPane"
+            },
+            {
+              "command": "terminal.new"
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/MenuItem"
+          }
+        },
+        "quickActions": {
+          "description": "The icon row at the top of the menu: command IDs, left to\nright. Each shows its icon, with its title and keys as a\ntooltip.",
+          "type": "array",
+          "default": [
+            "edit.cut",
+            "edit.copy",
+            "edit.paste",
+            "file.rename",
+            "file.delete"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "PaneTabs": {
       "description": "One pane's tabs, left to right, and which one is in front.",
       "type": "object",
@@ -403,6 +799,40 @@
         }
       },
       "additionalProperties": false
+    },
+    "ProgramEntry": {
+      "description": "A program a menu entry, a key or the palette may start: the command\n`program.<name>`. Nothing else can be started from the menu.",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Its arguments. `{path}` is the focused file or folder, `{cwd}` the\nactive pane's folder, and `{selection}`, which must be an argument\nof its own, becomes one argument per selected path (the focused one\nwhen nothing is marked). No other `{token}` is allowed.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "description": "The program: a full path, or a name found on the PATH, as for\n`files.editor`; never the current folder.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of its command, `program.<name>`: lowercase letters, digits\nand `-`, starting with a letter; unique.",
+          "type": "string"
+        },
+        "title": {
+          "description": "What the menu and the palette show; without it, the name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "command"
+      ]
     },
     "SelectionMode": {
       "description": "How the keyboard marks rows in a file pane (`docs/config.md`).",

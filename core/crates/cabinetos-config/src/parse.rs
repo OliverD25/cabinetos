@@ -6,7 +6,8 @@ use std::fmt;
 use cabinetos_commands::KeymapError;
 
 use crate::locate::{Segment, locate, position};
-use crate::{Config, FORMAT_VERSION};
+use crate::menu::check_extension;
+use crate::{Config, FORMAT_VERSION, MenuItem, is_program_name, parse_arg};
 
 /// A configuration file that cannot be used. The settings in effect stay as
 /// they were.
@@ -199,6 +200,8 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
             ));
         }
     }
+    check_programs(text, config)?;
+    check_menu_extensions(text, config)?;
     let profiles = &config.terminal.profiles;
     for (index, profile) in profiles.iter().enumerate() {
         if profiles[..index]
@@ -229,6 +232,101 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
                 config.terminal.default_profile
             ),
         ));
+    }
+    Ok(())
+}
+
+/// The `programs` list: each name follows the pattern and is unique, each
+/// program is named, and the arguments hold only the three tokens. Whether
+/// the program exists is checked when it runs, as for `files.editor`: a
+/// program on a drive that is not there yet must not make the file invalid.
+fn check_programs(text: &str, config: &Config) -> Result<(), ConfigError> {
+    let programs = &config.programs;
+    for (index, program) in programs.iter().enumerate() {
+        let at = |key: &'static str| {
+            [
+                Segment::Key("programs"),
+                Segment::Index(index),
+                Segment::Key(key),
+            ]
+        };
+        if !is_program_name(&program.name) {
+            return Err(ConfigError::at(
+                text,
+                &at("name"),
+                format!(
+                    "programs[{index}].name is `{}`; a program's name is lowercase letters, digits and `-`, starting with a letter",
+                    program.name
+                ),
+            ));
+        }
+        if programs[..index]
+            .iter()
+            .any(|earlier| earlier.name == program.name)
+        {
+            return Err(ConfigError::at(
+                text,
+                &at("name"),
+                format!("two programs are named `{}`", program.name),
+            ));
+        }
+        if program.command.trim().is_empty() {
+            return Err(ConfigError::at(
+                text,
+                &at("command"),
+                format!(
+                    "programs[{index}].command is empty; name the program `{}` starts",
+                    program.name
+                ),
+            ));
+        }
+        for (arg_index, arg) in program.args.iter().enumerate() {
+            if let Err(message) = parse_arg(arg) {
+                return Err(ConfigError::at(
+                    text,
+                    &[
+                        Segment::Key("programs"),
+                        Segment::Index(index),
+                        Segment::Key("args"),
+                        Segment::Index(arg_index),
+                    ],
+                    format!("programs[{index}].args[{arg_index}]: {message}"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Every `extensions` filter of the menu: a dot and a name, as a file's
+/// extension starts at its last dot.
+fn check_menu_extensions(text: &str, config: &Config) -> Result<(), ConfigError> {
+    for (target, _, items) in config.context_menu.targets() {
+        for (index, item) in items.iter().enumerate() {
+            let MenuItem::Command {
+                extensions: Some(extensions),
+                ..
+            } = item
+            else {
+                continue;
+            };
+            for (at, extension) in extensions.iter().enumerate() {
+                if let Err(message) = check_extension(extension) {
+                    return Err(ConfigError::at(
+                        text,
+                        &[
+                            Segment::Key("contextMenu"),
+                            Segment::Key(target),
+                            Segment::Key("items"),
+                            Segment::Index(index),
+                            Segment::Key("extensions"),
+                            Segment::Index(at),
+                        ],
+                        format!("contextMenu.{target}.items[{index}]: {message}"),
+                    ));
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -328,6 +426,68 @@ mod tests {
         );
         assert_eq!(error.line, Some(1), "{error}");
         assert!(parse(r#"{"files": {"editor": {"command": "notepad++.exe"}}}"#).is_ok());
+    }
+
+    #[test]
+    fn programs_are_checked_and_errors_point_at_their_line() {
+        let config = parse(
+            r#"{"programs": [{"name": "code", "title": "Open in Code", "command": "code", "args": ["--goto", "{path}", "{selection}", "{cwd}"]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(config.programs[0].command_id(), "program.code");
+        for (bad, line, expected) in [
+            (
+                "{\"programs\": [\n{\"name\": \"Code\", \"command\": \"code\"}]}",
+                2,
+                "programs[0].name is `Code`",
+            ),
+            (
+                "{\"programs\": [{\"name\": \"a\", \"command\": \"a\"},\n{\"name\": \"a\", \"command\": \"b\"}]}",
+                2,
+                "two programs are named `a`",
+            ),
+            (
+                "{\"programs\": [\n{\"name\": \"a\", \"command\": \" \"}]}",
+                2,
+                "programs[0].command is empty",
+            ),
+            (
+                "{\"programs\": [{\"name\": \"a\", \"command\": \"a\",\n\"args\": [\"x\",\n\"{file}\"]}]}",
+                3,
+                "programs[0].args[1]: `{file}`",
+            ),
+            (
+                "{\"programs\": [{\"name\": \"a\", \"command\": \"a\", \"args\": [\"-f={selection}\"]}]}",
+                1,
+                "an argument of its own",
+            ),
+        ] {
+            let error = parse(bad).unwrap_err();
+            assert!(error.message.contains(expected), "{bad}: {error}");
+            assert_eq!(error.line, Some(line), "{bad}: {error}");
+        }
+    }
+
+    #[test]
+    fn a_bad_menu_item_names_its_line() {
+        let text = "{\"contextMenu\": {\"file\": {\"items\": [\n{\"command\": \"pane.openSelected\"},\n{\"command\": \"program.x\", \"extensions\": [\"md\"]}\n]}}}";
+        let error = parse(text).unwrap_err();
+        assert!(
+            error
+                .message
+                .contains("contextMenu.file.items[1]: `md` is not an extension"),
+            "{error}"
+        );
+        assert_eq!(error.line, Some(3), "{error}");
+        let error = parse("{\"contextMenu\": {\"folder\": {\"items\": [\n{\"separator\": true, \"command\": \"x\"}\n]}}}").unwrap_err();
+        assert!(error.message.contains("not both"), "{error}");
+        // An ID no command has is not an error: a plugin may be off.
+        let config = parse(
+            r#"{"contextMenu": {"shellMenu": true, "background": {"items": [{"command": "no.such"}, {"separator": true}]}}}"#,
+        )
+        .unwrap();
+        assert!(config.context_menu.shell_menu);
+        assert_eq!(config.context_menu.background.items.len(), 2);
     }
 
     #[test]

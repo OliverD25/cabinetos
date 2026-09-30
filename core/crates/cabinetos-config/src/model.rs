@@ -8,6 +8,8 @@ use cabinetos_commands::{KeySequence, Override};
 use cabinetos_protocol::{DEFAULT_UPDATE_SOURCE, SortKey, SortSpec, UpdateChannel};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::menu::{ContextMenuConfig, ProgramEntry};
+
 /// The `$schema` value in files the core creates: the schema file it writes
 /// next to the configuration, so editors can complete and check keys.
 pub const SCHEMA_REFERENCE: &str = "./cabinetos.schema.json";
@@ -37,6 +39,14 @@ pub struct Config {
     pub panes: PanesConfig,
     /// What happens to files: the editor that opens them.
     pub files: FilesConfig,
+    /// The right-click menu of a file pane: its icon row and its rows for a
+    /// file, a folder, several rows and the pane's empty space, and whether
+    /// Shift+right-click shows Windows' own menu.
+    pub context_menu: ContextMenuConfig,
+    /// The user's programs, each the command `program.<name>`, which the
+    /// menu, a key or the palette runs. A menu entry can start no program
+    /// that is not listed here.
+    pub programs: Vec<ProgramEntry>,
     /// The integrated terminal.
     pub terminal: TerminalConfig,
     /// The user's changes to key bindings. The defaults live in the command
@@ -61,6 +71,8 @@ impl Default for Config {
             ui: UiConfig::default(),
             panes: PanesConfig::default(),
             files: FilesConfig::default(),
+            context_menu: ContextMenuConfig::default(),
+            programs: Vec::new(),
             terminal: TerminalConfig::default(),
             keybindings: Vec::new(),
             logging: LoggingConfig::default(),
@@ -752,6 +764,8 @@ mod tests {
             "\"ui\"",
             "\"panes\"",
             "\"files\"",
+            "\"contextMenu\"",
+            "\"programs\"",
             "\"terminal\"",
             "\"keybindings\"",
             "\"logging\"",
