@@ -3,82 +3,117 @@
     x:Class="CabinetOS.Views.PaneTabs"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AllowFocusOnInteraction="False"
     IsTabStop="False">
     <!--
-      A pane's tab strip (Phases 12 and 16; docs/ui.md, "Tabs"): WinUI's TabView used as the strip only, at the top of
-      the pane, with one tab or more. The keyboard never rests on it: the pane keeps it, so the keys stay the pane's
-      (IsTabStop, AllowFocusOnInteraction); Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+1 to Ctrl+9 do what its clicks do. The
-      height is the theme's tabRow; the 2 px bar over the tab in front is drawn here, in the accent in the active pane.
+      A pane's tab strip (Phases 12 and 16; docs/ui.md, "Tabs"): the window's own strip, drawn as the design draws it, not
+      WinUI's TabView. The tabs are built in code (PaneTabs.xaml.cs) and lie in a row that scrolls sideways when they do
+      not fit, with the "+" after the last one; the "Open with…" button stays outside the scroller, at the right end.
+      The keyboard never rests on the strip: the pane keeps it, so the keys stay the pane's (IsTabStop,
+      AllowFocusOnInteraction on every element that could take it); Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+1 to Ctrl+9 do what
+      its clicks do. The height is the theme's tabRow.
     -->
+    <UserControl.Resources>
+        <!-- A glyph as a button, with no box: the tab's × and the strip's "+". It rests at white 50 % and turns white on hover. -->
+        <Style x:Key="TabGlyphButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="{ThemeResource CbTextTertiaryBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="AllowFocusOnInteraction" Value="False" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid x:Name="Root" Background="Transparent">
+                            <ContentPresenter
+                                x:Name="Presenter"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Content="{TemplateBinding Content}"
+                                Foreground="{TemplateBinding Foreground}" />
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Presenter.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Presenter.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
     <Border
         x:Name="Frame"
         Background="{ThemeResource CbBarFillBrush}"
         BorderBrush="{ThemeResource CbShellHairlineBrush}"
         BorderThickness="0,0,0,1">
         <Grid x:Name="Root">
-            <TabView
-                x:Name="Strip"
-                VerticalAlignment="Top"
-                AllowDropTabs="False"
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ScrollViewer
+                x:Name="Scroller"
                 AllowFocusOnInteraction="False"
-                Background="Transparent"
-                CanDragTabs="False"
-                CanReorderTabs="False"
-                CloseButtonOverlayMode="Always"
-                IsAddTabButtonVisible="True"
+                HorizontalScrollBarVisibility="Hidden"
+                HorizontalScrollMode="Enabled"
                 IsTabStop="False"
-                TabWidthMode="SizeToContent">
-                <TabView.Resources>
-                    <!-- WinUI keeps 8 px above the strip and 3 px inside a tab; the row's height is the theme's, so none. -->
-                    <Thickness x:Key="TabViewHeaderPadding">0</Thickness>
-                    <x:Double x:Key="TabViewItemMaxWidth">160</x:Double>
-                    <x:Double x:Key="TabViewItemMinWidth">60</x:Double>
-                    <!-- The window's own tokens, so a theme's colours reach the strip: the same brush objects, changed in place. -->
-                    <StaticResource x:Key="TabViewItemHeaderBackgroundSelected" ResourceKey="CbTabActiveFillBrush" />
-                    <StaticResource x:Key="TabViewItemHeaderBackgroundPointerOver" ResourceKey="CbHoverFillBrush" />
-                    <StaticResource x:Key="TabViewItemHeaderForegroundSelected" ResourceKey="CbTextPrimaryBrush" />
-                    <StaticResource x:Key="TabViewItemHeaderForeground" ResourceKey="CbTabInactiveTextBrush" />
-                    <StaticResource x:Key="TabViewItemHeaderForegroundPointerOver" ResourceKey="CbTextPrimaryBrush" />
-                    <StaticResource x:Key="TabViewItemSeparator" ResourceKey="CbShellHairlineBrush" />
-                    <StaticResource x:Key="TabViewBorderBrush" ResourceKey="CbShellHairlineBrush" />
-                </TabView.Resources>
-                <TabView.TabStripFooter>
-                    <!-- The editors a file may open in: the palette, filtered to them (the design's editor hint), at the strip's right end.
-                         Hidden since 2026-09-30 by the creator: with Markdown Preview as the only editor the list it opens is thin.
-                         Shown again when a second editor exists; the Editor commands stay in the palette meanwhile. -->
+                VerticalScrollBarVisibility="Disabled"
+                VerticalScrollMode="Disabled">
+                <StackPanel x:Name="TabList" Orientation="Horizontal">
+                    <!-- The tabs come before it, in code. -->
                     <Button
-                        x:Name="OpenWithButton"
-                        Height="24"
-                        MinWidth="0"
-                        Margin="4,0,4,0"
-                        Padding="8,0"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Visibility="Collapsed"
+                        x:Name="AddButton"
+                        Width="24"
                         AllowFocusOnInteraction="False"
-                        AutomationProperties.Name="Open with…"
+                        AutomationProperties.Name="New tab"
                         IsTabStop="False"
-                        Style="{StaticResource CbSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Open with… (the editors, in the command palette)">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon FontSize="12" Glyph="&#xE7AC;" />
-                            <TextBlock
-                                x:Name="OpenWithText"
-                                VerticalAlignment="Center"
-                                FontSize="11"
-                                Text="Open with…" />
-                        </StackPanel>
+                        Style="{StaticResource TabGlyphButtonStyle}">
+                        <FontIcon FontSize="12" Glyph="&#xE710;" />
                     </Button>
-                </TabView.TabStripFooter>
-            </TabView>
-            <Rectangle
-                x:Name="AccentLine"
-                Height="2"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Top"
-                Fill="{ThemeResource CbAccentBrush}"
-                IsHitTestVisible="False"
-                Visibility="Collapsed" />
+                </StackPanel>
+            </ScrollViewer>
+            <!-- The editors a file may open in: the palette, filtered to them (the design's editor hint), at the strip's right end.
+                 Hidden since 2026-09-30 by the creator: with Markdown Preview as the only editor the list it opens is thin.
+                 Shown again when a second editor exists; the Editor commands stay in the palette meanwhile. -->
+            <Button
+                x:Name="OpenWithButton"
+                Grid.Column="1"
+                Height="24"
+                MinWidth="0"
+                Margin="4,0,4,0"
+                Padding="8,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Visibility="Collapsed"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Open with…"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Open with… (the editors, in the command palette)">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon FontSize="12" Glyph="&#xE7AC;" />
+                    <TextBlock
+                        x:Name="OpenWithText"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Text="Open with…" />
+                </StackPanel>
+            </Button>
         </Grid>
     </Border>
 </UserControl>
