@@ -39,6 +39,7 @@ The core's commands, in palette order:
 | `view.toggleTerminal` | View: Toggle Integrated Terminal | `ctrl+backquote` | | UI |
 | `view.focusOtherPane` | View: Focus Other Pane | `tab` | `filesView` | UI |
 | `view.toggleSidebar` | View: Toggle Sidebar | `ctrl+b` | | UI |
+| `view.toggleCompactOverlay` | View: Toggle Compact Overlay | `ctrl+alt+up` | | UI |
 | `view.showExplorer` | View: Show Explorer | `ctrl+shift+e` | | UI |
 | `view.showSearch` | View: Show Search | `ctrl+shift+f` | | UI |
 | `sidebar.locate` | Sidebar: Locate Active Folder | `shift+alt+l` | | UI |
@@ -161,6 +162,10 @@ The core's commands, in palette order:
 - The four `update.*` commands (Phase 17) have no default keys either:
   the palette, the top row's menu and the status bar's update pill are
   their places ([ui.md](ui.md), "Updates").
+- `view.toggleCompactOverlay` (Phase 19c) makes the window a small
+  always-on-top drawer with one pane, and back ([ui.md](ui.md),
+  "Compact overlay"). Its key, `ctrl+alt+up`, is the one the Files app
+  uses; no other command has it in any context.
 - `view.fitColumns` and `view.resetColumns` set the file panes' column
   widths (`ui.columns`, [ui.md](ui.md), "Column widths"). The first makes
   Modified, Type and Size as wide as their texts on screen, as a
