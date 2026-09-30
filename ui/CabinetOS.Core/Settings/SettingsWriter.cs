@@ -23,11 +23,20 @@ public sealed class SettingsWriter(ICoreChannel core)
     public void Reset() => IsAvailable = true;
 
     /// <summary>Sets <paramref name="path"/> to <paramref name="value"/>; returns whether the core wrote it.</summary>
-    public async Task<bool> SetAsync(string path, JsonElement value, CancellationToken cancellationToken = default)
+    public async Task<bool> SetAsync(string path, JsonElement value, CancellationToken cancellationToken = default) =>
+        await SetOrRefusalAsync(path, value, cancellationToken) is null;
+
+    /// <summary>
+    /// Sets <paramref name="path"/> to <paramref name="value"/>; returns null
+    /// when the core wrote it, else why not: the core's own message, or that
+    /// the core could not be asked.
+    /// </summary>
+    public async Task<string?> SetOrRefusalAsync(string path, JsonElement value, CancellationToken cancellationToken = default)
     {
+        const string CannotWrite = "the core cannot write settings (set_value)";
         if (!IsAvailable)
         {
-            return false;
+            return CannotWrite;
         }
         var request = new SetValueRequest(path, value);
         CoreReply reply;
@@ -38,22 +47,22 @@ public sealed class SettingsWriter(ICoreChannel core)
         catch (Exception error) when (error is IOException or OperationCanceledException)
         {
             Diag.Info(Target, "cannot write a setting", new LogField("path", path), new LogField("error", error.Message));
-            return false;
+            return error.Message;
         }
         switch (reply)
         {
             case OkReply:
-                return true;
+                return null;
             case ErrorReply { Code: ErrorCodes.UnknownRequest }:
                 IsAvailable = false;
                 Diag.Info(Target, "the core cannot write settings yet (set_value); the window's state stays in memory");
-                return false;
+                return CannotWrite;
             case ErrorReply error:
                 Diag.Request(LogLevel.Info, request.Id, Target, "setting refused",
                     new LogField("path", path), new LogField("code", error.Code), new LogField("error", error.Message));
-                return false;
+                return error.Message;
             default:
-                return false;
+                return $"the core answered {reply.GetType().Name}";
         }
     }
 

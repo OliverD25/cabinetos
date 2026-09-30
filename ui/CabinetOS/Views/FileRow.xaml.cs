@@ -28,6 +28,7 @@ public sealed partial class FileRow : UserControl
     private readonly Brush _plainIconBrush;
     private readonly Brush _plainSizeBrush;
     private int _metricsVersion = -1;
+    private int _columnsVersion = -1;
     private Shown<bool> _striped;
     private Shown<bool> _sizeCounting;
     private Shown<string> _name;
@@ -55,10 +56,14 @@ public sealed partial class FileRow : UserControl
     public void Show(object? data)
     {
         var started = FrameParts.Start();
-        // A recycled row built with the sizes of the theme before.
+        // A recycled row built with the sizes of the theme before, or with the column widths before.
         if (_metricsVersion != WindowMetrics.Version)
         {
             ApplyMetrics();
+        }
+        else if (_columnsVersion != WindowMetrics.ColumnsVersion)
+        {
+            ApplyColumns();
         }
         if (data is SearchRowItem hit)
         {
@@ -163,7 +168,7 @@ public sealed partial class FileRow : UserControl
         Pill.Height = Math.Clamp(m.RowHeight - 4, 0, 16);
         Columns.Margin = WindowMetrics.Pad(m.RowPaddingX);
         Columns.ColumnSpacing = m.ColumnGap;
-        WindowMetrics.SetColumns(NameColumn, ModifiedColumn, TypeColumn, SizeColumn);
+        ApplyColumns();
         ModifiedText.Margin = TypeText.Margin = WindowMetrics.TextGap;
         NameCell.ColumnSpacing = m.RowIconGap;
         NameText.FontSize = m.FontSize;
@@ -189,6 +194,30 @@ public sealed partial class FileRow : UserControl
             BindHit(hit);
         }
     }
+
+    /// <summary>
+    /// Lays the four columns out with the widths in effect (docs/ui.md,
+    /// "Column widths"): the window calls it for every row on screen while a
+    /// grip is dragged, so it sets the column definitions and nothing else.
+    /// </summary>
+    public void ApplyColumns()
+    {
+        _columnsVersion = WindowMetrics.ColumnsVersion;
+        WindowMetrics.SetColumns(NameColumn, ModifiedColumn, TypeColumn, SizeColumn);
+    }
+
+    /// <summary>The four columns' widths as laid out (the snapshot aid's <c>columns:</c> step).</summary>
+    public (double Name, double Modified, double Type, double Size) ColumnActualWidths() =>
+        (NameColumn.ActualWidth, ModifiedColumn.ActualWidth, TypeColumn.ActualWidth, SizeColumn.ActualWidth);
+
+    /// <summary>The text the row shows in <paramref name="column"/>, which a fit measures.</summary>
+    public string ColumnText(ListColumn column) => column switch
+    {
+        ListColumn.Name => NameText.Text,
+        ListColumn.Modified => ModifiedText.Text,
+        ListColumn.Type => TypeText.Text,
+        _ => SizeText.Text,
+    };
 
     /// <summary>The row's name, date, type and size texts that are cut short with "…" now (the snapshot aid's check).</summary>
     public IEnumerable<string> TrimmedTexts()

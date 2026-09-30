@@ -162,6 +162,7 @@ public sealed partial class MainWindow : Window
         SetUpPreview();
         SetUpMarket();
         SetUpRail();
+        SetUpColumns();
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
@@ -562,6 +563,9 @@ public sealed partial class MainWindow : Window
                 case "rail" or "rail-move" or "rail-state" or "divider" or "tree":
                     await RunRailStepAsync(step.Kind, step.Argument);
                     break;
+                case "columns" or "column-drag" or "column-fit":
+                    RunColumnStep(step.Kind, step.Argument);
+                    break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
                     var shown = Active.View?.IndexOfName(step.Argument) ?? -1;
@@ -952,6 +956,7 @@ public sealed partial class MainWindow : Window
         }
         ApplyStoredDockSize(settings);
         ApplyRailSettings(settings, previous, firstStart);
+        ApplyColumnSettings(settings);
         if (firstStart || settings.Selection != previous.Selection)
         {
             // panes.selection applies at once: the marks stay, only the keys mark differently.
@@ -1401,6 +1406,7 @@ public sealed partial class MainWindow : Window
         RegisterThemeCommands();
         RegisterMarketCommands();
         RegisterRailCommands();
+        RegisterColumnCommands();
         RegisterAboutCommand();
 
         _router.Completed += OnCommandCompleted;

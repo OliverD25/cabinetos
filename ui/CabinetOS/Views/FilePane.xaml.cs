@@ -85,6 +85,7 @@ public sealed partial class FilePane : UserControl
         _noteTimer.IsRepeating = false;
         _noteTimer.Interval = TimeSpan.FromSeconds(3);
         _noteTimer.Tick += (_, _) => HideRowNote();
+        SetUpColumnGrips();
         ApplyMetrics();
     }
 
@@ -109,6 +110,12 @@ public sealed partial class FilePane : UserControl
         ColumnGrid.Padding = WindowMetrics.Pad(m.ColumnHeaderPaddingX, m.ColumnHeaderPaddingY);
         ColumnGrid.ColumnSpacing = m.ColumnGap;
         WindowMetrics.SetColumns(HeadNameColumn, HeadModifiedColumn, HeadTypeColumn, HeadSizeColumn);
+        // Centred on the divider, in the gap before the column: the header's full height, the padding included.
+        var gripMargin = new Thickness(-(m.ColumnGap / 2) - (ColumnGrip.HitWidth / 2), -m.ColumnHeaderPaddingY, 0, -m.ColumnHeaderPaddingY);
+        foreach (var grip in Grips)
+        {
+            grip.Margin = gripMargin;
+        }
         Scroller.Padding = new Thickness(_listPadding);
         MessageText.LineHeight = m.FontSize * m.LineHeight;
         NewRow.Height = m.RowHeight;
@@ -1032,4 +1039,214 @@ public sealed partial class FilePane : UserControl
 
     private static bool IsDown(VirtualKey key) =>
         (InputKeyboardSource.GetKeyStateForCurrentThread(key) & CoreVirtualKeyStates.Down) != 0;
+
+    // ----- Column widths (docs/ui.md, "Column widths") -----
+
+    private const string ColumnsTarget = "cabinetos_ui::columns";
+
+    private ColumnSplit _dragStart;
+    private ColumnWidths? _dragWidths;
+
+    /// <summary>
+    /// A grip is being dragged: the widths it makes, shared by both panes
+    /// (<paramref name="done"/> false while the pointer moves, true once when
+    /// the button is released). The window applies them and saves the last.
+    /// </summary>
+    public event Action<FilePane, ColumnWidths, bool>? ColumnsDragged;
+
+    /// <summary>A double-click on a heading or a grip (or <c>view.fitColumns</c>) fitted columns to the texts on screen: the widths it makes.</summary>
+    public event Action<FilePane, ColumnWidths>? ColumnsFit;
+
+    private ColumnGrip[] Grips => [NameModifiedGrip, ModifiedTypeGrip, TypeSizeGrip];
+
+    /// <summary>The width the header's four columns and their gaps share: its grid inside its padding.</summary>
+    public double ColumnsAvailable => Math.Max(0, ColumnGrid.ActualWidth - ColumnGrid.Padding.Left - ColumnGrid.Padding.Right);
+
+    private void SetUpColumnGrips()
+    {
+        NameModifiedGrip.Divider = ColumnDivider.NameModified;
+        ModifiedTypeGrip.Divider = ColumnDivider.ModifiedType;
+        TypeSizeGrip.Divider = ColumnDivider.TypeSize;
+        foreach (var grip in Grips)
+        {
+            grip.DragStarted += OnGripDragStarted;
+            grip.Dragged += OnGripDragged;
+            grip.DragCompleted += OnGripDragCompleted;
+            // The column at the grip's left; the first grip's is Modified, as Name has no width of its own.
+            grip.FitRequested += g => FitColumns(g.Divider == ColumnDivider.TypeSize ? ListColumn.Type : ListColumn.Modified);
+        }
+        // DoubleTapped only: a single click on a heading is left for sorting by it.
+        NameHeading.DoubleTapped += (_, e) => FitFromHeading(e, ListColumn.Name);
+        ModifiedHeading.DoubleTapped += (_, e) => FitFromHeading(e, ListColumn.Modified);
+        TypeHeading.DoubleTapped += (_, e) => FitFromHeading(e, ListColumn.Type);
+        SizeHeading.DoubleTapped += (_, e) => FitFromHeading(e, ListColumn.Size);
+    }
+
+    private void FitFromHeading(DoubleTappedRoutedEventArgs e, ListColumn column)
+    {
+        e.Handled = true;
+        FitColumns(column);
+    }
+
+    /// <summary>
+    /// Lays the header and every row on screen out with the column widths in
+    /// effect, and nothing else: a drag calls it at each pointer move.
+    /// </summary>
+    public void ApplyColumns()
+    {
+        WindowMetrics.SetColumns(HeadNameColumn, HeadModifiedColumn, HeadTypeColumn, HeadSizeColumn);
+        foreach (var row in _realized)
+        {
+            row.ApplyColumns();
+        }
+    }
+
+    private void OnGripDragStarted(ColumnGrip grip)
+    {
+        _dragStart = WindowMetrics.Columns.Resolve(ColumnsAvailable);
+        _dragWidths = null;
+    }
+
+    private void OnGripDragged(ColumnGrip grip, double dx)
+    {
+        var widths = WindowMetrics.Columns.Drag(grip.Divider, _dragStart, dx);
+        if (widths == (_dragWidths ?? WindowMetrics.UserColumns))
+        {
+            return;
+        }
+        _dragWidths = widths;
+        ColumnsDragged?.Invoke(this, widths, false);
+    }
+
+    // A press and a release that moved nothing (half of a double-click) changes nothing and saves nothing.
+    private void OnGripDragCompleted(ColumnGrip grip)
+    {
+        if (_dragWidths is { } widths)
+        {
+            _dragWidths = null;
+            ColumnsDragged?.Invoke(this, widths, true);
+        }
+    }
+
+    /// <summary>
+    /// Fits <paramref name="column"/> to its widest text among the rows on
+    /// screen (the realized rows: measuring every row of a large folder would
+    /// stall the window), its cell's room and its heading with the chevron's;
+    /// <see cref="ListColumn.Name"/> fits Modified, Type and Size together.
+    /// Logs what it measured ("columns fitted") and raises <see cref="ColumnsFit"/>.
+    /// </summary>
+    public void FitColumns(ListColumn column)
+    {
+        var available = ColumnsAvailable;
+        if (available <= 0)
+        {
+            Diag.Info(ColumnsTarget, "columns not fitted: the pane is not laid out", new LogField("column", Lower(column)));
+            return;
+        }
+        var layout = WindowMetrics.Columns;
+        var fields = new List<LogField> { new("column", Lower(column)), new("rows", _realized.Count), new("list", Math.Round(available, 1)) };
+        ColumnWidths widths;
+        if (column == ListColumn.Name)
+        {
+            var modified = MeasureColumn(ListColumn.Modified, fields);
+            var type = MeasureColumn(ListColumn.Type, fields);
+            var size = MeasureColumn(ListColumn.Size, fields);
+            widths = layout.FitAll(available, modified, type, size);
+        }
+        else
+        {
+            widths = layout.Fit(layout.Resolve(available), available, column, MeasureColumn(column, fields));
+        }
+        // What the fit gives; less than a column's "_fit" where that would leave Name under its minimum.
+        fields.Add(new("modified", widths.Modified));
+        fields.Add(new("type", widths.Type));
+        fields.Add(new("size", widths.Size));
+        Diag.Info(ColumnsTarget, "columns fitted", [.. fields]);
+        ColumnsFit?.Invoke(this, widths);
+    }
+
+    // The column's widest text among the rows on screen, measured in the fonts its cells use, with the room the cell keeps
+    // beside it and the heading's text with the chevron's room (shown or not, so a later sort by it does not cut the heading).
+    private ColumnMeasure MeasureColumn(ListColumn column, List<LogField> fields)
+    {
+        var m = WindowMetrics.Current;
+        var figures = column == ListColumn.Size ? WindowMetrics.FiguresFont : null;
+        var widest = 0.0;
+        var widestText = "";
+        foreach (var row in _realized)
+        {
+            var text = row.Index >= 0 ? row.ColumnText(column) : "";
+            if (text.Length > 0 && TextWidth(text, m.SecondaryFontSize, figures) is var width && width > widest)
+            {
+                (widest, widestText) = (width, text);
+            }
+        }
+        var (heading, glyph, panel) = column switch
+        {
+            ListColumn.Modified => (SecondHeading, ModifiedSortGlyph, ModifiedHeading),
+            ListColumn.Type => (TypeHeadingText, TypeSortGlyph, TypeHeading),
+            _ => (SizeHeadingText, SizeSortGlyph, SizeHeading),
+        };
+        var measure = new ColumnMeasure(widest, column == ListColumn.Size ? 0 : WindowMetrics.TextGap.Right,
+            TextWidth(heading.Text, heading.FontSize, null) + panel.Spacing + glyph.FontSize);
+        MeasureText.Text = "";
+        var name = Lower(column);
+        fields.Add(new($"{name}_text", widestText));
+        fields.Add(new($"{name}_text_width", Math.Round(widest, 2)));
+        fields.Add(new($"{name}_extra", measure.CellExtra));
+        fields.Add(new($"{name}_heading", Math.Round(measure.Heading, 2)));
+        fields.Add(new($"{name}_fit", measure.Width));
+        return measure;
+    }
+
+    private double TextWidth(string text, double fontSize, FontFamily? family)
+    {
+        MeasureText.FontSize = fontSize;
+        if (family is not null)
+        {
+            MeasureText.FontFamily = family;
+        }
+        else
+        {
+            MeasureText.ClearValue(TextBlock.FontFamilyProperty);
+        }
+        MeasureText.Text = text;
+        MeasureText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return MeasureText.DesiredSize.Width;
+    }
+
+    private static string Lower(ListColumn column) => column.ToString().ToLowerInvariant();
+
+    /// <summary>The snapshot aid's <c>column-drag:</c> step: drags a grip by <paramref name="dx"/> pixels through its own drag steps.</summary>
+    internal void DragGripForSnapshot(ColumnDivider divider, double dx)
+    {
+        var grip = Grips[(int)divider - 1];
+        grip.BeginDrag();
+        grip.DragBy(dx);
+        grip.EndDrag();
+    }
+
+    /// <summary>
+    /// The snapshot aid's <c>columns:</c> step: the header's four column widths
+    /// as laid out, the width they share, the first row on screen's four, and
+    /// how far the grips' centres are from the dividers.
+    /// </summary>
+    internal (double Name, double Modified, double Type, double Size, double List, string Row, double GripOffset) ColumnsShown()
+    {
+        var row = _realized.Where(r => r.Index >= 0).OrderBy(r => r.Index).FirstOrDefault();
+        var rowWidths = row?.ColumnActualWidths() is { } w
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{w.Name:0.#}/{w.Modified:0.#}/{w.Type:0.#}/{w.Size:0.#}")
+            : "";
+        var gap = ColumnGrid.ColumnSpacing;
+        var divider = ColumnGrid.Padding.Left + HeadNameColumn.ActualWidth + (gap / 2);
+        var offset = 0.0;
+        foreach (var (grip, width) in new[] { (NameModifiedGrip, 0.0), (ModifiedTypeGrip, HeadModifiedColumn.ActualWidth + gap), (TypeSizeGrip, HeadTypeColumn.ActualWidth + gap) })
+        {
+            divider += width;
+            var centre = grip.TransformToVisual(ColumnGrid).TransformPoint(new Point(grip.ActualWidth / 2, 0)).X;
+            offset = Math.Max(offset, Math.Abs(centre - divider));
+        }
+        return (HeadNameColumn.ActualWidth, HeadModifiedColumn.ActualWidth, HeadTypeColumn.ActualWidth, HeadSizeColumn.ActualWidth, ColumnsAvailable,
+            rowWidths, offset);
+    }
 }

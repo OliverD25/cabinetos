@@ -34,6 +34,8 @@ public sealed partial class MainWindow
             new LogField("breadcrumb_row_height", m.BreadcrumbRowHeight), new LogField("tab_row", m.TabRow),
             new LogField("fkey_bar", look.Chrome.FkeyBar), new LogField("row_stripes", look.Chrome.RowStripes), new LogField("hairlines", look.Chrome.Hairlines),
             new LogField("ignored", m.Ignored.Count == 0 ? null : string.Join(",", m.Ignored)));
+        // The user's column widths stay; the theme's gap and Name's minimum, or its weights when there are none, apply.
+        LogColumnsAfterLayout("theme");
     }
 
     // Every size of the window's own elements from the metrics in effect, then every view's.

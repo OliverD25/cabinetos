@@ -98,9 +98,16 @@
                         <ColumnDefinition x:Name="HeadTypeColumn" Width="0.45*" />
                         <ColumnDefinition x:Name="HeadSizeColumn" Width="64" />
                     </Grid.ColumnDefinitions>
-                    <!-- The column the listing is sorted by carries a chevron (the pane's own order, Ctrl+F3 to Ctrl+F6). -->
-                    <StackPanel Orientation="Horizontal" Spacing="4">
+                    <!--
+                      The column the listing is sorted by carries a chevron (the pane's own order, Ctrl+F3 to Ctrl+F6). A
+                      double-click on a heading fits its column; Name's fits the other three (FilePane.FitColumns).
+                    -->
+                    <StackPanel
+                        x:Name="NameHeading"
+                        Orientation="Horizontal"
+                        Spacing="4">
                         <TextBlock
+                            x:Name="NameHeadingText"
                             FontSize="11"
                             Foreground="{ThemeResource CbTextTertiaryBrush}"
                             Text="Name" />
@@ -112,6 +119,7 @@
                             Visibility="Collapsed" />
                     </StackPanel>
                     <StackPanel
+                        x:Name="ModifiedHeading"
                         Grid.Column="1"
                         Orientation="Horizontal"
                         Spacing="4">
@@ -128,10 +136,12 @@
                             Visibility="Collapsed" />
                     </StackPanel>
                     <StackPanel
+                        x:Name="TypeHeading"
                         Grid.Column="2"
                         Orientation="Horizontal"
                         Spacing="4">
                         <TextBlock
+                            x:Name="TypeHeadingText"
                             FontSize="11"
                             Foreground="{ThemeResource CbTextTertiaryBrush}"
                             Text="Type" />
@@ -143,6 +153,7 @@
                             Visibility="Collapsed" />
                     </StackPanel>
                     <StackPanel
+                        x:Name="SizeHeading"
                         Grid.Column="3"
                         HorizontalAlignment="Right"
                         Orientation="Horizontal"
@@ -154,10 +165,27 @@
                             Foreground="{ThemeResource CbTextTertiaryBrush}"
                             Visibility="Collapsed" />
                         <TextBlock
+                            x:Name="SizeHeadingText"
                             FontSize="11"
                             Foreground="{ThemeResource CbTextTertiaryBrush}"
                             Text="Size" />
                     </StackPanel>
+                    <!--
+                      The grips at the three dividers, over the headings: each sits at the left edge of the column to its
+                      right, moved left by half the gap and half its own width (FilePane.ApplyMetrics). None after Size.
+                    -->
+                    <views:ColumnGrip
+                        x:Name="NameModifiedGrip"
+                        Grid.Column="1"
+                        HorizontalAlignment="Left" />
+                    <views:ColumnGrip
+                        x:Name="ModifiedTypeGrip"
+                        Grid.Column="2"
+                        HorizontalAlignment="Left" />
+                    <views:ColumnGrip
+                        x:Name="TypeSizeGrip"
+                        Grid.Column="3"
+                        HorizontalAlignment="Left" />
                 </Grid>
             </Border>
 
@@ -189,6 +217,13 @@
 
             <!-- Inline rename: one text box over the row's name, and a note under the row for an error. -->
             <Canvas x:Name="EditLayer" Grid.Row="2">
+                <!-- Never seen: a fit measures the texts on screen with it, in the fonts the rows inherit (FilePane.MeasureColumn). -->
+                <TextBlock
+                    x:Name="MeasureText"
+                    AutomationProperties.AccessibilityView="Raw"
+                    IsHitTestVisible="False"
+                    Opacity="0"
+                    TextWrapping="NoWrap" />
                 <!-- New Text File (Shift+F4): a row the listing does not have yet, the name box over it. -->
                 <Border
                     x:Name="NewRow"

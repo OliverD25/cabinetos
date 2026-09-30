@@ -1,3 +1,4 @@
+using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Themes;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -36,6 +37,29 @@ internal static class WindowMetrics
         Current = metrics;
         Chrome = chrome;
         Version++;
+        _columns = null;
+        return true;
+    }
+
+    /// <summary>The widths the user gave Modified, Type and Size (<c>ui.columns</c>), shared by both panes; null for the theme's.</summary>
+    public static ColumnWidths? UserColumns { get; private set; }
+
+    /// <summary>Counts the changes of <see cref="UserColumns"/>, so a row the repeater recycles can tell its columns are older.</summary>
+    public static int ColumnsVersion { get; private set; }
+
+    /// <summary>The file lists' column widths now: the theme's sizes with the user's widths.</summary>
+    public static ColumnLayout Columns => _columns ??= new ColumnLayout(Current, UserColumns);
+
+    /// <summary>Takes the user's column widths (null: the theme's); false when they are the ones in effect.</summary>
+    public static bool TakeColumns(ColumnWidths? widths)
+    {
+        if (widths == UserColumns)
+        {
+            return false;
+        }
+        UserColumns = widths;
+        ColumnsVersion++;
+        _columns = null;
         return true;
     }
 
@@ -58,18 +82,24 @@ internal static class WindowMetrics
     public static Thickness Pad(double x, double y = 0) => new(x, y, x, y);
 
     /// <summary>
-    /// A file list's four columns, the column headers' and every row's alike:
-    /// the weights of Name, Modified and Type, the narrowest Name, and Size's width.
+    /// A file list's four columns, the column headers' and every row's alike
+    /// (docs/ui.md, "Column widths"): the theme's weights of Name, Modified and
+    /// Type and Size's width, or the user's widths of Modified, Type and Size
+    /// with Name taking the rest; and the narrowest Name.
     /// </summary>
     public static void SetColumns(ColumnDefinition name, ColumnDefinition modified, ColumnDefinition type, ColumnDefinition size)
     {
-        var m = Current;
-        name.Width = new GridLength(m.NameColumnWeight, GridUnitType.Star);
-        name.MinWidth = m.NameColumnMinWidth;
-        modified.Width = new GridLength(m.ModifiedColumnWeight, GridUnitType.Star);
-        type.Width = new GridLength(m.TypeColumnWeight, GridUnitType.Star);
-        size.Width = new GridLength(m.SizeColumnWidth);
+        var sizes = Columns.GridSizes();
+        name.Width = Length(sizes.Name);
+        name.MinWidth = sizes.NameMin;
+        modified.Width = Length(sizes.Modified);
+        type.Width = Length(sizes.Type);
+        size.Width = Length(sizes.Size);
+
+        static GridLength Length(ColumnSize column) => new(column.Value, column.IsStar ? GridUnitType.Star : GridUnitType.Pixel);
     }
+
+    private static ColumnLayout? _columns;
 
     /// <summary>
     /// The space after the Modified and Type texts: the default look keeps 8 px

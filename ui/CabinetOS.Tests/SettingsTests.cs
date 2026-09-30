@@ -87,4 +87,20 @@ public class SettingsTests
         Assert.False(await writer.SetAsync(ShellState.PinnedKey, [@"C:\x"]));
         Assert.True(writer.IsAvailable);
     }
+
+    [Fact]
+    public async Task A_refusal_says_why_in_the_core_s_words_and_a_write_says_nothing()
+    {
+        using var columns = JsonDocument.Parse("""{"modified":150,"type":97,"size":70}""");
+        var refusing = new SettingsWriter(new FakeChannel(_ => new ErrorReply(ErrorCodes.ConfigError, "ui.columns.size is 2400; a column is from 24 to 2000 pixels wide")));
+        Assert.Equal("ui.columns.size is 2400; a column is from 24 to 2000 pixels wide", await refusing.SetOrRefusalAsync("ui.columns", columns.RootElement));
+
+        var writing = new SettingsWriter(new FakeChannel(_ => new OkReply()));
+        Assert.Null(await writing.SetOrRefusalAsync("ui.columns", columns.RootElement));
+
+        var old = new SettingsWriter(new FakeChannel(request => new ErrorReply(ErrorCodes.UnknownRequest, $"unknown request type `{request.Type}`")));
+        Assert.NotNull(await old.SetOrRefusalAsync("ui.columns", columns.RootElement));
+        Assert.NotNull(await old.SetOrRefusalAsync("ui.columns", columns.RootElement));
+        Assert.False(old.IsAvailable);
+    }
 }
