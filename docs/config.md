@@ -76,6 +76,12 @@ file itself shows everything that can be set:
   "marketplace": {
     "index": "https://oliverd25.github.io/cabinetos-marketplace/index.json",
     "allowInsecure": false
+  },
+  "update": {
+    "check": true,
+    "channel": "stable",
+    "source": "https://oliverd25.github.io/cabinetos-marketplace/update",
+    "allowInsecure": false
   }
 }
 ```
@@ -138,6 +144,10 @@ while you type.
 | `plugins.<id>.granted` | list of capability names | empty | The capabilities the user granted it, such as `fs:read`. It runs only when it has every capability it asks for. Installing the plugin from the marketplace clears them. |
 | `marketplace.index` | an `https:` URL, a `file:` URL, or the path of an `index.json` or of its folder | `https://oliverd25.github.io/cabinetos-marketplace/index.json`, the public index ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)) | Where the marketplace index is ([marketplace.md](marketplace.md)). The core reads it only when a client asks. A file written before 2026-09-30 may still hold the old placeholder `https://marketplace.cabinetos.invalid/index.json`, which never resolves; remove the line and the public index is used. |
 | `marketplace.allowInsecure` | `true`, `false` | `false` | Also accept a plain `http:` index and downloads, which anyone on the network could change on the way. For testing only. |
+| `update.check` | `true`, `false` | `true` | Look for a newer CabinetOS once a day (10 seconds after the start, then hourly whether a day has passed) and download it in the background ([release.md](release.md), "Updates"). The update command checks at any time either way. Only a per-user install of a release updates itself; a development build and an all-users install never check |
+| `update.channel` | `stable`, `preview` | `stable` | Which releases: `stable`, or `preview`, which also offers versions with a pre-release tag such as `0.2.0-preview.1` |
+| `update.source` | an `https:` URL, a `file:` URL, or a folder path | `https://oliverd25.github.io/cabinetos-marketplace/update` | The folder that holds one folder per channel, each with its `latest.json` ([sdk/update/latest.schema.json](../sdk/update/latest.schema.json)) |
+| `update.allowInsecure` | `true`, `false` | `false` | Also accept a plain `http:` source and download, which anyone on the network could change on the way. For testing only |
 
 A pane with tabs, as the window saves it:
 

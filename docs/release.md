@@ -48,7 +48,9 @@ It writes, into `dist\` (ignored by git):
 - `dist\CabinetOS-<version>-win-x64\`, the release folder;
 - `dist\CabinetOS-<version>-win-x64.zip` and its `.zip.sha256`;
 - `dist\winget\<version>\`, the winget manifests with this version and the
-  zip's SHA-256, checked with `winget validate` when winget is installed.
+  zip's SHA-256, checked with `winget validate` when winget is installed;
+- `dist\update\<channel>\latest.json` and `notes-<version>.md`, what the
+  in-app updater reads ("Updates", below).
 
 What it runs, in order:
 
@@ -74,6 +76,18 @@ What it runs, in order:
    and the bundled JavaScript, with their license files. It stops when a
    component has no license text.
 5. Zips the folder, writes the hash, fills the winget manifests.
+6. Writes the in-app update's two files for the channel (`-Channel`,
+   `stable` unless it says `preview`): `latest.json`, with the zip's
+   address on the GitHub Release
+   (`https://github.com/OliverD25/cabinetos/releases/download/v<version>/CabinetOS-<version>-win-x64.zip`),
+   its SHA-256 and size, the notes' address on the marketplace site, and
+   the runtimes `release.json` names (major.minor), checked against
+   [sdk/update/latest.schema.json](../sdk/update/latest.schema.json); and
+   `notes-<version>.md`, the text of the version's section in
+   `CHANGELOG.md` (between `## [<version>]` and the next `## [`). While the
+   version has no section yet, the notes are the `## [Unreleased]` section,
+   and the script says so. The stable channel refuses a version with a
+   pre-release tag.
 
 Switches:
 
@@ -81,7 +95,11 @@ Switches:
   without this switch the script stops when they differ, with this switch it
   writes the Cargo version there first (commit that change).
 - `-PackageOnly`: builds nothing; zips the existing release folder again and
-  writes a new hash and new manifests. For after signing (below).
+  writes a new hash, new manifests and new update files. For after signing
+  (below).
+- `-Channel stable|preview`: which channel's `latest.json` to write;
+  `stable` by default. A version such as `0.2.0-preview.1` needs
+  `preview`.
 
 The build warns when `core`, `ui`, `sdk` or `build` hold uncommitted
 changes or new files, and `release.json` records the commit and whether
@@ -149,9 +167,13 @@ in a PowerShell started with `-ExecutionPolicy Bypass`):
 | `-SkipPrerequisiteCheck` | Installs even when a prerequisite looks missing |
 | `-WhatIf` | Shows every step and changes nothing |
 
-The script asks nothing. It records what it did in
-`.cabinetos-install.json` in the install folder: the files, the shortcut,
-the PATH entry, the service. Running it again over the same folder is an
+The script asks nothing. It lists CabinetOS in Settings > Apps, with its
+version, `CabinetOS` as the publisher, its size, and an Uninstall button
+that runs `uninstall.ps1`: under the user's registry hive
+(`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\CabinetOS`),
+or with `-AllUsers` under the machine's (`HKLM\…`). It records what it did
+in `.cabinetos-install.json` in the install folder: the files, the
+shortcut, the PATH entry, the service, the Apps entry. Running it again over the same folder is an
 update: it copies the new files and removes the ones the old version had
 and the new one lacks. It refuses a folder that holds other files, a
 folder that overlaps the release folder, and a folder with CabinetOS still
@@ -172,8 +194,10 @@ powershell -ExecutionPolicy Bypass -File "$env:TEMP\CabinetOS-0.1.0\install.ps1"
 powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Programs\CabinetOS\uninstall.ps1"
 ```
 
-It removes exactly what the record lists: the files, the shortcut, the
-PATH entry, and the service (stopped first). Files someone else put into
+Settings > Apps > CabinetOS > Uninstall runs the same script. It removes
+exactly what the record lists: the files, the shortcut, the PATH entry,
+the service (stopped first) and the Apps entry; and the in-app updater's
+copies in the install folder, `previous\` and `previous-old\`. Files someone else put into
 the install folder stay, and so does the folder then. Settings, plugins,
 themes and logs stay in `%APPDATA%\CabinetOS` and `%LOCALAPPDATA%\CabinetOS`;
 `-RemoveData` deletes those two folders too, and `%ProgramData%\CabinetOS`
@@ -182,8 +206,41 @@ stays. An all-users install needs "Run as administrator" to remove.
 `-Destination <folder>` names the install folder when the script runs from
 somewhere else.
 
-CabinetOS does not appear in Settings > Apps: that needs a registry entry
-or a real installer (ADR 0009).
+## Updates
+
+A per-user install updates itself from inside the app
+([ADR 0014](decisions/0014-in-app-updates.md)); the protocol is in
+[ipc.md](ipc.md), "Updates", and the settings, `update.*`, in
+[config.md](config.md).
+
+- **The check.** Once a day (10 seconds after the start, then hourly
+  whether a day has passed) the core reads
+  `<update.source>/<channel>/latest.json`, by default
+  `https://oliverd25.github.io/cabinetos-marketplace/update/stable/latest.json`.
+  "Update: Check for Updates" in the palette checks at any time. With
+  `update.check: false` only the command checks.
+- **The download.** A newer version downloads in the background, with a
+  status-bar pill. Its SHA-256 must be the one `latest.json` gives; it is
+  unpacked into `%LOCALAPPDATA%\CabinetOS\update\staging\<version>\`
+  (`CABINETOS_UPDATE_DIR` or the core's `--update-dir` name another
+  folder), and its `release.json` must name the same version.
+- **The swap.** The dialog shows the version and its release notes, with
+  Restart now and Later. Restart now moves the install's files into
+  `previous\` inside it, copies the new ones in, updates the Apps entry,
+  starts the new `CabinetOS.exe` and closes the window. A copy that fails
+  half way puts everything back. Later waits a day.
+- **The rollback.** "Update: Roll Back to the Previous Version" brings
+  `previous\` back the same way, until the next update replaces it.
+- **Who updates.** Only a release with `release.json` next to the core
+  that the user may change without administrator rights: the per-user
+  install. An all-users install says to use the installer or winget, and a
+  development build never checks.
+- **The state** lives in `%LOCALAPPDATA%\CabinetOS\update\state.json`: the
+  last check, the `ETag`, the snooze, the staged version, and the last swap
+  with the start that confirmed it.
+- **From a terminal:** `cabinetos-cli update` prints the state; `update
+  check`, `download`, `apply`, `rollback` and `snooze` run the steps;
+  `--json` prints the core's reply.
 
 ## Sign (not done yet)
 
@@ -231,15 +288,31 @@ creator's.
 2. **Build and sign** as above.
 3. **Make the repository public.** The release asset's address must work
    for strangers and for winget.
-4. **Tag and publish the release** with the zip and its hash:
+4. **Tag and publish the release** with the zip and its hash. The notes
+   are the version's section of `CHANGELOG.md`, which the build wrote as
+   `dist/update/stable/notes-0.1.0.md`:
 
    ```bash
-   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git tag v0.1.0 && git push origin v0.1.0 && gh release create v0.1.0 dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 --verify-tag --title "CabinetOS 0.1.0" --notes-file CHANGELOG.md
+   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git tag v0.1.0 && git push origin v0.1.0 && gh release create v0.1.0 dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 --verify-tag --title "CabinetOS 0.1.0" --notes-file dist/update/stable/notes-0.1.0.md
    ```
 
-   A shorter notes file with only the version's section of `CHANGELOG.md`
-   reads better than the whole file.
-5. **Submit to winget.** The manifests in `dist\winget\0.1.0\` carry the
+   For a preview (a version such as `0.2.0-preview.1`, built with
+   `-Channel preview`), add `--prerelease` and use `dist/update/preview/`.
+5. **Tell the installed copies.** Copy `latest.json` and the notes into a
+   checkout of the marketplace repository under `update/<channel>/`, and
+   push; GitHub Pages serves them within a minute or two, and every
+   per-user install finds the version at its next daily check. Publish the
+   GitHub Release first: `latest.json` points at its zip.
+
+   ```bash
+   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager && test -d cabinetos-marketplace/.git && mkdir -p cabinetos-marketplace/update/stable && cp cabinetos/dist/update/stable/latest.json cabinetos/dist/update/stable/notes-0.1.0.md cabinetos-marketplace/update/stable/ && cd cabinetos-marketplace && git add update/stable && git commit -m "update: CabinetOS 0.1.0 on the stable channel" && git push
+   ```
+
+   The first command stops the block when the marketplace checkout is not
+   there (`gh repo clone OliverD25/cabinetos-marketplace` makes it). A
+   wrong `latest.json` is taken back by pushing the previous one: installs
+   that already downloaded the bad version keep it until they roll back.
+6. **Submit to winget.** The manifests in `dist\winget\0.1.0\` carry the
    zip's address and hash. They go to the community repository
    `microsoft/winget-pkgs` as a pull request, under
    `manifests/o/OliverD25/CabinetOS/0.1.0/`, for example with
@@ -264,7 +337,9 @@ them (checked 2026-09-28 with winget 1.29.380).
 
 ## Known gaps
 
-- No automatic updates and no Settings > Apps entry (ADR 0009).
+- An all-users install does not update itself: it keeps the installer or
+  winget (ADR 0014). The in-app update replaces the files, not the indexer
+  service, which only an all-users install has.
 - The indexer service starts manually, so it is off after each restart of
   Windows until started again.
 - x64 only; ARM64 is untested.

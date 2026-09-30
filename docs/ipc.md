@@ -139,7 +139,11 @@ command's optional `input` in `list_commands`. Phase 15 added to it
 optional `trace` of every message ("The pipe"), which older peers
 ignore. Phase 16 added `workspace_info` with its reply `workspace_info`
 ("What the window shows"); a window that meets an older core's
-`unknown_request` shows no branch.
+`unknown_request` shows no branch. Version 14 (Phase 17, in-app updates)
+added `update_status`, `update_check`, `update_download`, `update_apply`,
+`update_rollback` and `update_snooze` with the reply `update_state`, the
+events `update_state_changed` and `update_progress`, and the error code
+`update_error` ("Updates").
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -255,6 +259,7 @@ Any request can instead get `error` with a `code` and a `message`:
 | `no_such_secret` | No secret has that name. |
 | `secret_error` | The secret's name is not 1 to 128 letters, digits, `-`, `_` and `.`; its value is empty or longer than 2,560 bytes; or the Credential Manager refused. |
 | `not_undoable` | `undo_job`: the job deleted (to the Recycle Bin or for good), was undone already, still runs, or did nothing that can be reversed; the message says which and what to do instead. |
+| `update_error` | An update step cannot run or failed: this install does not update itself (a development build, an all-users install, a folder the user cannot change), nothing is downloaded or no newer version is known, no previous version to roll back to, another step runs (in this core or another window's), or the step failed; the message says which. `hash_mismatch` is the download whose SHA-256 is not the one `latest.json` gives. |
 
 Requests on one connection are independent: `list_directory`,
 `describe_entries`, `match_entries`, `get_icon`, `volume_info`, `list_volumes`, `open_path`, `edit_path`,
@@ -264,8 +269,8 @@ Requests on one connection are independent: `list_directory`,
 `execute_command` for a plugin's command, `search`, `index_status`,
 `terminal_open`, `terminal_close`, `terminal_sync_cwd`, `list_themes`,
 `get_theme` of a named theme, `list_tools`, the marketplace requests,
-`preview_listing`, `open_preview`, `preview_apply` and the secret requests
-run in the background, so a slow directory, plugin, search or shell does not hold up
+`preview_listing`, `open_preview`, `preview_apply`, the secret requests and
+the update steps run in the background, so a slow directory, plugin, search or shell does not hold up
 the next request, and their replies may come in any order. Match replies to
 requests by `id`.
 
@@ -1389,6 +1394,95 @@ configuration says where it is; the core reads it only when a client asks.
   a tool install or uninstall. A client that fell behind on events gets a
   `tools_changed` with the tools as they are, after the other events sent
   again.
+
+## Updates
+
+The core updates its own install: it reads a channel's `latest.json`,
+downloads the release's zip, checks its SHA-256, unpacks it, and at the
+user's word swaps it into the install folder, keeping the version before
+for a rollback ([release.md](release.md), "Updates";
+[ADR 0014](decisions/0014-in-app-updates.md)). The settings are `update.*`
+in the configuration ([config.md](config.md)).
+
+```json
+{"id":"01M…","type":"update_status"}
+{"id":"01M…","type":"update_state","state":"downloaded","current":"0.1.0","channel":"stable",
+ "latest":{"schemaVersion":1,"channel":"stable","version":"0.2.0","published":"2026-10-01",
+   "zip":{"url":"https://github.com/OliverD25/cabinetos/releases/download/v0.2.0/CabinetOS-0.2.0-win-x64.zip",
+          "sha256":"8818…cac3","size":80123456},
+   "notes":{"url":"https://oliverd25.github.io/cabinetos-marketplace/update/stable/notes-0.2.0.md"},
+   "requires":{"windowsAppRuntime":"2.5","dotnet":"10.0"}},
+ "notes_url":"https://oliverd25.github.io/cabinetos-marketplace/update/stable/notes-0.2.0.md",
+ "notes":"### Added\n\n- …","checked_at_ms":1790000000000,"previous":"0.0.9",
+ "install_dir":"C:\\Users\\me\\AppData\\Local\\Programs\\CabinetOS"}
+```
+
+`update_state` is the reply to every update request, and
+`update_state_changed` the event of the same shape:
+
+| Field | What it is |
+|---|---|
+| `state` | `not_updatable`, `unchecked` (no check yet), `up_to_date`, `checking`, `available`, `downloading`, `downloaded`, `applying`, `ready` (another version is in place; a restart runs it), `failed` |
+| `reason` | With `not_updatable`: why, and what to do instead (the installer or winget, with the release page's address) |
+| `message` | With `failed`: what went wrong |
+| `current` | The version running |
+| `channel` | `update.channel` |
+| `latest` | The channel's `latest.json` as the last check read it, in the file's own camelCase keys ([sdk/update/latest.schema.json](../sdk/update/latest.schema.json)) |
+| `notes_url`, `notes` | Where the release notes of `latest` are, and their Markdown text when the core could read it (at most 256 KiB); the window renders it, and does no network or file work of its own |
+| `checked_at_ms` | When the last check that worked ended, in milliseconds since 1970-01-01 UTC |
+| `snoozed_until_ms` | Until when the user said Later |
+| `previous` | The version kept in `previous\`, which `update_rollback` brings back |
+| `installed` | With `ready`: the version the install folder holds now |
+| `install_dir` | The install folder, where the window starts the new `CabinetOS.exe`; absent for a development build |
+
+```json
+{"id":"01N…","type":"update_check"}
+{"id":"01N…","type":"update_state_changed","state":"checking",…}
+{"id":"01N…","type":"update_state_changed","state":"available",…}
+{"id":"01N…","type":"update_state","state":"available",…}
+{"id":"01P…","type":"update_download"}
+{"id":"01P…","type":"update_progress","version":"0.2.0","bytes":4194304,"total":80123456,"bytes_per_second":2097152}
+{"id":"01P…","type":"update_state","state":"downloaded",…}
+{"id":"01Q…","type":"update_apply"}
+{"id":"01Q…","type":"update_state","state":"ready","installed":"0.2.0","previous":"0.1.0",…}
+```
+
+- `update_status` answers at once from what the core keeps in memory; the
+  other requests run on the blocking pool and answer when their step
+  ended. Every step sends `update_state_changed` to every client that said
+  `hello`, the daily check's too; a client that fell behind on events gets
+  the state again.
+- `update_check` reads `<update.source>/<channel>/latest.json`, with the
+  `ETag` of the last read (`If-None-Match`), and compares its version with
+  the running one as semantic versions: `0.2.0-preview.1` is older than
+  `0.2.0`. The stable channel never offers a pre-release; a file that does
+  is refused. When the version is newer, the core also reads its notes.
+- `update_download` downloads the newer version the last check found into
+  the update folder (`staging\<version>\`), with `update_progress` at most 4
+  times a second and always once when it is complete; checks its SHA-256
+  (a mismatch deletes it: `hash_mismatch`); unpacks it; and checks that
+  its `release.json` names the same version and that `CabinetOS.exe` and
+  `cabinetos-core.exe` are there.
+- `update_apply` moves every file of the install folder into `previous\`
+  inside it (a running program's files can be renamed), copies the new
+  ones in, carries the installer's record over and updates the Settings >
+  Apps entry. When a move or a copy fails half way, everything goes back
+  and the state is `failed` with the reason; the old version runs on. The
+  window then starts the new `CabinetOS.exe` from `install_dir` and
+  closes; its new core confirms the swap in the state file at its start.
+- `update_rollback` is the same swap from `previous\`, which is then gone.
+- `update_snooze` records "not before a day from now"; the window opens no
+  update dialog before `snoozed_until_ms`.
+- A development build (no `release.json` next to the core), an all-users
+  install and a folder the user cannot change are `not_updatable`: the
+  core checks nothing, writes nothing, and answers every step but
+  `update_status` with `update_error`.
+- One step runs at a time, among all the cores that share the update
+  folder (two windows): a second gets `update_error`. A core that finds
+  another version in place than the one it runs (another window updated)
+  answers `ready` with that version.
+- `cabinetos-cli update [status|check|download|apply|rollback|snooze]`
+  prints the state in words, or the reply with `--json`.
 
 ## Previews
 

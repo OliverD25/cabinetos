@@ -22,6 +22,7 @@ The Constitution outranks every record here. A record may refine the brief
 | [0011](0011-search-without-per-user-filtering.md) | Version 1 answers file names to any logged-on user, regardless of folder rights | 2026-09-28 | accepted |
 | [0012](0012-marketplace-index-on-github-pages.md) | The marketplace index is served from GitHub Pages of a separate public repository | 2026-09-28 | accepted |
 | [0013](0013-heavy-logging-may-wait.md) | In heavy logging mode only, the core's operations may wait for the log writer; the UI thread and the pipe never do | 2026-09-29 | accepted |
+| [0014](0014-in-app-updates.md) | A per-user install updates itself from inside the app, with a swap it can roll back | 2026-09-30 | accepted |
 
 ## Template
 

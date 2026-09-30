@@ -1,6 +1,7 @@
 # ADR 0009: Version 1 ships unpackaged, as a zip with an install script
 
-- Status: accepted
+- Status: accepted; its consequences "no automatic updates" and "not in
+  Settings > Apps" are replaced by [ADR 0014](0014-in-app-updates.md)
 - Date: 2026-09-28
 - Decided by: the architect, as a default (the creator was asleep; the
   coordinating session recommended it). It settles open question 6 of
