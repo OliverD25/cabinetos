@@ -164,6 +164,28 @@ public sealed partial class ContextMenuEditor : UserControl
         FocusRow(FocusState.Programmatic);
     }
 
+    /// <summary>
+    /// The snapshot aid's drag: the row titled <paramref name="from"/> dropped on the row titled
+    /// <paramref name="onto"/>, through the same steps the pointer takes. Whether both rows were there.
+    /// </summary>
+    public bool DragForSnapshot(string from, string onto)
+    {
+        if (_model is not { } model || _rows.Count == 0)
+        {
+            return false;
+        }
+        var titles = model.Rows.Select(r => r.Title).ToList();
+        var (start, end) = (titles.IndexOf(from), titles.IndexOf(onto));
+        if (start < 0 || end < 0)
+        {
+            return false;
+        }
+        _drag = new Drag(start, 0);
+        DragTo(start, (end - start) * _rows[0].ActualHeight);
+        EndDrag(commit: true);
+        return true;
+    }
+
     /// <summary>Puts the keyboard back on the focused row (or "Add Command…" when there is none).</summary>
     public void TakeKeyboard() => FocusRow(FocusState.Keyboard);
 
@@ -458,12 +480,16 @@ public sealed partial class ContextMenuEditor : UserControl
         host.PointerExited += (_, _) => MarkFocus();
         host.PointerPressed += (_, e) => OnRowPressed(host, index, e);
         host.PointerMoved += (_, e) => OnRowMoved(index, e);
-        host.PointerReleased += (_, e) =>
+        // Windows ends the capture when the button goes up, and the drop rebuilds the rows: whichever of the two events
+        // comes first ends the drag, a drop when the button is up, a cancel when the capture was taken away.
+        host.PointerReleased += (_, _) => EndDrag(commit: true);
+        host.PointerCaptureLost += (_, e) =>
         {
-            EndDrag(commit: true);
-            host.ReleasePointerCapture(e.Pointer);
+            if (_drag is not null)
+            {
+                EndDrag(commit: !e.GetCurrentPoint(null).Properties.IsLeftButtonPressed);
+            }
         };
-        host.PointerCaptureLost += (_, _) => EndDrag(commit: false);
         return host;
     }
 
@@ -513,14 +539,21 @@ public sealed partial class ContextMenuEditor : UserControl
         }
     }
 
-    // The dragged row follows the pointer; the rows it passes make room, so the drop place shows before the release.
     private void OnRowMoved(int index, PointerRoutedEventArgs e)
+    {
+        if (_drag is { } drag && drag.From == index)
+        {
+            DragTo(index, e.GetCurrentPoint(Rows).Position.Y - drag.StartY);
+        }
+    }
+
+    // The dragged row follows the pointer; the rows it passes make room, so the drop place shows before the release.
+    private void DragTo(int index, double dy)
     {
         if (_drag is not { } drag || drag.From != index || _rows.Count == 0)
         {
             return;
         }
-        var dy = e.GetCurrentPoint(Rows).Position.Y - drag.StartY;
         if (!drag.Moving && Math.Abs(dy) < DragThreshold)
         {
             return;

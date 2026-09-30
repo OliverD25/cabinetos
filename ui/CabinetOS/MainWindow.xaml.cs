@@ -434,6 +434,15 @@ public sealed partial class MainWindow : Window
                     OnShellMenuRequested(_paneViews[_active], MenuRowForStep(step.Argument), null);
                     await Task.Delay(1500);
                     break;
+                case "menu-edit-drag":
+                    // A row dragged onto another in the menu's edit mode, by their titles: "menu-edit-drag:Open|Copy to other pane".
+                    var dragRows = step.Argument.Split('|');
+                    if (dragRows.Length != 2 || !MenuEditorView.DragForSnapshot(dragRows[0], dragRows[1]))
+                    {
+                        Diag.Info("cabinetos_ui::snapshot", "no such rows to drag in the menu's edit mode", new LogField("rows", step.Argument));
+                    }
+                    await Task.Delay(300);
+                    break;
                 case "menu-edit-key":
                     // A key in the menu's edit mode, as the window passes a real one: "alt+down", "delete", "insert".
                     if (KeyCombo.TryParse(step.Argument, out var editKey))

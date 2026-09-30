@@ -192,6 +192,11 @@ public class ContextMenuEndToEndTests
                 "shell:moved",
                 "menu-edit-key:delete",
                 "shell:deleted",
+                // The drag's own steps, as the pointer takes them: down to the first row and back.
+                "menu-edit-drag:Copy to other pane|Open",
+                "shell:dragged",
+                "menu-edit-drag:Copy to other pane|Open in other pane",
+                "shell:dragged-back",
                 "click:Done",
                 "until:config",
                 "wait:300",
@@ -258,6 +263,9 @@ public class ContextMenuEndToEndTests
             State(logs, "added", state => Assert.Equal("Open|Open in other pane|Copy to other pane|New folder", state.GetProperty("menu_edit").GetString()));
             State(logs, "moved", state => Assert.Equal("Open|Open in other pane|New folder|Copy to other pane", state.GetProperty("menu_edit").GetString()));
             State(logs, "deleted", state => Assert.Equal("Open|Open in other pane|Copy to other pane", state.GetProperty("menu_edit").GetString()));
+            State(logs, "dragged", state => Assert.Equal("Copy to other pane|Open|Open in other pane", state.GetProperty("menu_edit").GetString()));
+            State(logs, "dragged-back", state => Assert.Equal("Open|Open in other pane|Copy to other pane", state.GetProperty("menu_edit").GetString()));
+            Assert.Equal(2, logs.Count(l => Message(l) == "menu edit step" && Field(l, "step").GetString() == "drag"));
             State(logs, "saved", state => Assert.Equal("", state.GetProperty("menu_edit").GetString()));
             State(logs, "after", state => Assert.Equal("Open|Open in other pane|Copy to other pane|Properties|Edit Menu…", state.GetProperty("context_menu").GetString()));
 
