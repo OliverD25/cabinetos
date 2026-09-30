@@ -672,6 +672,52 @@ the preview's Enter and Esc, the review dialog's hosts and secrets lines.
 22 new UI tests, 767 in all. Guide: [ui.md](ui.md), "What plugins ask of
 the window".
 
+**14b to 14e, the extension, built 2026-09-30 (3887a4c, 99b83c0,
+21d414a, 85a2870, bf5c0b1, aaa1fce, 9e8d8e5).** First the two core
+additions decided the same night: the capability `core:request` (high),
+whose manifest lists the request types a plugin may send through the
+host function `core-request`, with a fixed list of requests no manifest
+can allow (`hello`, `shutdown`, `set_value`, the secrets, the bundle,
+`window_state`), and `plugins.<id>.settings`, an open object a plugin may
+read through `config-get`, nothing else of the `plugins` section. Then
+the extension. `sdk/extensions/agent/plugin` is a Core Plugin (Article
+11, the engine layer): it reaches the core only through `core-request`
+and a model only through `http-request`, holds no key, runs no shell and
+writes no file itself except its audit log in its own data folder. The
+model writes `cab` command lines, which the plugin parses with the
+command line's own definitions, now the library crate `cabinetos-cli-args`
+shared with `cabinetos-cli`; `ls` and `describe` are answered from the
+plugin's own reads under its roots, `search` and `state` through the
+core, and the write commands become a preview (tier 2, the default) or
+run at once (tier 3). Providers: Anthropic, an OpenAI-compatible endpoint
+(a local Ollama by default) and a fake for tests; settings under
+`plugins.agent.settings`. `agent.ask` (Ctrl+K Ctrl+A) asks through the
+window's prompt box and answers with a preview in the other pane;
+`agent.undo` reverses the last applied preview's jobs in reverse order.
+The chat page `sdk/tools/agent-chat` is a Tool Extension with tier
+buttons, Undo, the audit Log and a Rules panel; it follows the plugin's
+events and takes dropped rows. Watch folders: a rule per folder from the
+settings or `agent.rule.add` (kept in `rules.json` in the plugin's data
+folder, since a plugin cannot change the configuration), one model call
+and one round per new file, temporary files skipped, the tier deciding
+what follows, a rule paused after 3 failures in a row, at most 10 files a
+minute, and the agent's own changes ignored so a renaming rule cannot
+loop. Both parts install from the marketplace as `agent` and
+`agent-chat` (`build-index.ps1 -Extensions`; the default index leaves
+them out on purpose, and publishing them is the creator's step). The
+built plugin is committed as the fixture `sdk/fixtures/plugins/agent`
+(about 1 MB, a new copy in the history at each rebuild), so the host
+tests load the real component without a WASM toolchain. Tests: 722 core
+(two host tests run the built component with the fake provider through
+`agent.ask` to a preview, `agent.undo` after an apply, and a rule on a
+real watched folder) and the plugin's own suite of 90, which the five
+checks do not run. No real model was called; the first real conversation
+waits for the creator to store a key (`cabinetos-cli secret set
+anthropic`). Left for the shell: a tool page may run the commands of a
+plugin it follows (a general rule, so the chat page can send `agent.*`),
+and the live check's "ask" step with the real settings key and a
+canned-reply file. Guide: [extensions/agent.md](extensions/agent.md).
+
 ### Phase 15 — Heavy logging mode and trace ids (the creator's idea, 2026-09-29 late evening; built in the sleep-mode run of 2026-09-29/30)
 
 Goal: a switch that makes CabinetOS record every operation, even at the
