@@ -111,3 +111,38 @@ Decisions (what — because — undo; the core's defaults are also listed in
 Other notes from the coder: PLAN.md and the desk card were left to the
 planning session; an early scratch file `msg1.txt` may have overwritten
 one of the planning session's (later ones carry the `p17-` prefix).
+
+## The planning session's checks
+
+Main pulled at beb95db on the main checkout, then: the five core checks
+green (772 tests passed, 5 ignored, three minutes); the release core, CLI
+and indexer built; the window's Debug build with warnings as errors (0
+warnings); 913 of 913 window tests with `CABINETOS_UI_E2E=1`, the eleven
+end-to-end tests included, against the release core (49 s). A first run
+without that variable skipped those eleven and finished in 8 s: a
+"913 total, 11 skipped" summary in a few seconds means the window tests
+did not run, not that they passed. The CHANGELOG's Unreleased section
+became `## [0.1.0] - 2026-09-30` (4b102b6), and the window test that
+renders it takes the newest section with content, as the release script
+does.
+
+The release script then ran once more, on the main checkout:
+`dist\update\stable\latest.json` (0.1.0, the zip 72,048,969 bytes,
+SHA-256 61c9ceff…d089e, requires the Windows App Runtime 2.5 and .NET
+10), `notes-0.1.0.md` from the version's section with no warning and the
+link definitions stripped, the release folder 70 files (230.1 MB), the
+zip 68.7 MB, `winget validate` passed. The live check with real keys on
+that Release window: exit code 0, 127 True, 0 False
+(`run-2026-09-30-1542.txt`), which covers the redesigned shell with the
+update code inside it. The pill and the dialog show only when a channel
+offers a newer version, so they were checked by the coder's snapshot aid
+and the window tests, not with real keys.
+
+Left to the creator, each outward-facing: sign the release folder and zip
+it again (`release.ps1 -PackageOnly`), make the repository public, tag
+`v0.1.0` and publish the GitHub Release with the zip, its hash and the
+notes, copy `latest.json` and the notes into the marketplace repository
+under `update/stable/` and push, and push the marketplace clone that
+already holds the Agent extension and Commander Compact 1.1.0. The
+commands are in [release.md](../../release.md), "Publish". Until then
+the dist folder is unsigned and nothing is uploaded.

@@ -217,3 +217,14 @@ alpha" could be late in the same way; and the earlier "Quick Open showed:
 False" has no explanation yet, since the line was in the log and the file
 is unbuffered. If it fails again with the fixture fixed, that read is the
 place to look.
+
+## The live check after the fixes (15:42, `run-2026-09-30-1542.txt`)
+
+Main at 4b102b6, the release core of 15:37 and the Release window the
+release script built at 15:42 (Phase 17 inside): exit code 0, 127 checks
+True, 0 False; section 16 all nineteen True, the new branch check
+included ("the workspace pill shows the branch, live-16"); the scroll
+goal met with no frame over 20 ms (worst 17.5 ms). Every section of the
+old shell and the new one passed on one build, so Phase 16 is done. The
+"Quick Open showed" check that had no explanation passed with the wait
+in place.

@@ -276,9 +276,13 @@ Produces: MSIX or unpackaged decision; `winget` manifest; code signing; the inde
 `b7acc12`, `b4dafb2` to `1c30c6f`) and checked again with a real install on
 2026-09-29; nothing is signed or published. The history also holds hardening
 steps 2 and 3; step 3, the scroll, was resolved 2026-09-30 (`61f044d`,
-`58fa975`, `c5ed4c8`): 0 of 1,207 frames over 20 ms in a 20 s hold. Last counts:
-848 UI and 554 core tests. Open for the creator: a code-signing certificate, a
-public repository, `gh release create`, the winget submission, and whether the
+`58fa975`, `c5ed4c8`): 0 of 1,207 frames over 20 ms in a 20 s hold. The first
+release, 0.1.0, was built on 2026-09-30 with the in-app updater inside (Phase
+17): `dist\CabinetOS-0.1.0-win-x64.zip` with its hash, `dist\update\stable\latest.json`
+and `notes-0.1.0.md`, all unsigned, and the CHANGELOG section is named
+(`4b102b6`). Last counts: 913 UI and 772 core tests. Open for the creator: a
+code-signing certificate, a public repository, `gh release create`, the
+marketplace's `update/stable/` files, the winget submission, and whether the
 `.pdb` files stay in the zip. Open for the scroll: a blocking collection WinUI
 asks for, and Commander Compact (11.6 to 18.8 % of gaps over 20 ms). History:
 [plan/phase-10-packaging-release.md](plan/phase-10-packaging-release.md)
@@ -698,7 +702,7 @@ The creator accepted the sentence on 2026-09-30, in chat, as that exact
 text, and Article 12 carries it since that day: the one edit of the
 Constitution so far, made with the per-change approval CLAUDE.md asks for.
 
-### Phase 16 — Shell redesign: one top row, per-pane breadcrumbs, find in pane, Quick Open (the creator's handout `_io/SHELL_REDESIGN.md`, 2026-09-30; started the same day)
+### Phase 16 — Shell redesign: one top row, per-pane breadcrumbs, find in pane, Quick Open (the creator's handout `_io/SHELL_REDESIGN.md`, 2026-09-30; started the same day) — done 2026-09-30
 
 The creator's specification of 2026-09-30 changes the shell's structure,
 for every theme. The title bar and the command bar merge into one 40 px
@@ -737,7 +741,24 @@ keys; the guides (ui.md, keybindings.md, config.md, the themes) and the
 CHANGELOG. Handed to a coder on Opus on 2026-09-30; the first release
 (Phase 10) waits for it.
 
-### Phase 17 — In-app updates (the creator's request of 2026-09-30, the desk card "In-app updates"; started the same day)
+**Status (2026-09-30, afternoon): done.** Landed as ffcdea3..ff2f84d by a
+coder on Opus. The window's own read of `.git\HEAD` (its decision 2)
+broke the first Prime Directive and moved into the core the same
+afternoon as `workspace_info` (2656e01); Commander Compact is 1.1.0 for
+the eleven new metrics (508eeba); the live check's section 16 had six
+evidence faults of its own (a wrong field, log lines read before the
+writer's thread had written them, a fixture that was no workspace), fixed
+by a coder on Sonnet (7fdd634). The checks: the five core checks green
+(735 tests), 890 then 913 window tests, the Claude Code probe every check
+True, and the live check with real keys on the Release build of 15:42
+with Phase 17 inside: 127 True, 0 False, section 16 all nineteen True.
+The thirteen decisions the handout did not cover, with their undo, are in
+[log/2026-09-30/phase-16-shell-redesign-report.md](log/2026-09-30/phase-16-shell-redesign-report.md);
+the one to know: the workspace is the git repository holding the active
+folder, else that folder, until a workspace model exists. Ctrl+P is
+Quick Open and the terminal's path key is Ctrl+Alt+P.
+
+### Phase 17 — In-app updates (the creator's request of 2026-09-30, the desk card "In-app updates"; started the same day) — done 2026-09-30 (publishing waits for the creator)
 
 The creator asked for updates from inside the app: an Update button, the
 update running in the app with progress shown, the release notes of the
@@ -798,6 +819,35 @@ disappears with install and uninstall; ADR 0014 and the guides
 (release.md with the publish steps, config.md, ipc.md, ui.md) are
 written. Handed to a coder on Opus on 2026-09-30, the window's part last,
 after Phase 16 lands.
+
+**Status (2026-09-30, afternoon): done; publishing waits for the
+creator.** Landed as 4e236f4..beb95db by a coder on Opus: the
+`cabinetos-update` crate (check, download with progress, SHA-256,
+rename-first swap, rollback, snooze, the Apps entry in the user's hive),
+protocol 14 with six `update_*` requests and two events, `cabinetos-cli
+update`, the `update.*` settings, `release.ps1 -Channel` writing
+`latest.json` and the notes, the pill, the dot, the dialog with natively
+rendered notes and the restart in the window, ADR 0014 and the guides.
+The sixteen unattended decisions with their undo are in
+[log/2026-09-30/phase-17-in-app-updates-report.md](log/2026-09-30/phase-17-in-app-updates-report.md);
+the ones to know: the core sends the notes' text, so the window does no
+file or network work; plugins may only ask for the update status; a
+running transfer blocks the restart; rollback asks first; the dialog
+opens by itself only once per downloaded version. Checked on the main
+checkout: the five core checks (772 tests), 913 of 913 window tests with
+the end-to-end tests on, the release script (0.1.0: the zip 68.7 MB,
+`latest.json`, `notes-0.1.0.md` from the version's section, winget
+validation), and the live check with real keys, 127 True, 0 False. The
+CHANGELOG's Unreleased section became `## [0.1.0] - 2026-09-30`
+(4b102b6), so the first release is built, unsigned, in `dist\`. Not
+verified: a restart into a truly newer build, since every build is
+0.1.0; the first real update, 0.1.0 to 0.1.1, is that proof. Needs the
+creator, each step outward-facing, the commands in [release.md](release.md)
+under "Publish": sign, make the repository public, tag `v0.1.0` and
+publish the GitHub Release, copy `latest.json` and the notes into the
+marketplace repository's `update/stable/` and push, and push the
+marketplace clone that holds the Agent extension and Commander Compact
+1.1.0.
 
 
 ## 6. Phase 1 in detail — the Rust core scaffold
