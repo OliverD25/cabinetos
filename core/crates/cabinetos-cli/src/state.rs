@@ -94,7 +94,7 @@ fn pane_lines(pane: &PaneState) -> Vec<String> {
 }
 
 /// `2026-09-30 01:02:03`, local time.
-fn when(sent_at_ms: u64) -> String {
+pub(crate) fn when(sent_at_ms: u64) -> String {
     let ticks = i64::try_from(sent_at_ms)
         .ok()
         .and_then(|ms| ms.checked_mul(10_000))

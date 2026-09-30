@@ -41,9 +41,10 @@ mod swap;
 mod version;
 
 use std::ffi::OsString;
-use std::fs;
+use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError, TryLockError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -222,6 +223,23 @@ struct Live {
     saved: Saved,
 }
 
+/// The file whose lock one update step holds, among every core that shares
+/// the update folder (two windows): two downloads into one staging folder,
+/// or two swaps at once, would break each other.
+const STEP_LOCK: &str = ".step.lock";
+
+/// The file whose lock a read, change and write of `state.json` holds, so
+/// two cores never write over each other's change.
+const STATE_LOCK: &str = ".state.lock";
+
+/// The locks one step holds until it is dropped.
+struct Step<'a> {
+    _process: MutexGuard<'a, ()>,
+    /// `None` when the lock file could not be opened: the step goes on,
+    /// as it would with one core.
+    _cores: Option<File>,
+}
+
 /// The updater of one install.
 pub struct Updater {
     paths: Paths,
@@ -232,8 +250,10 @@ pub struct Updater {
     release: bool,
     http: Http,
     live: Mutex<Live>,
-    /// One step at a time.
+    /// One step at a time in this process.
     busy: Mutex<()>,
+    /// Set when the core stops: a download in progress ends.
+    stopping: AtomicBool,
     notify: Box<dyn Fn(Notice) + Send + Sync>,
 }
 
@@ -251,8 +271,8 @@ impl Updater {
     /// The updater of the install in `paths.install`, running `current`.
     /// For an install that can update itself, it removes what an earlier
     /// swap left, confirms a swap that this start runs, and forgets a
-    /// download that is gone or no longer newer. Blocking: it reads the
-    /// state and the folders.
+    /// download that is gone or no longer newer (unless another core is in
+    /// the middle of a step). Blocking: it reads the state and the folders.
     pub fn open(
         paths: Paths,
         current: &str,
@@ -261,66 +281,83 @@ impl Updater {
     ) -> Self {
         let blocked = not_updatable(&paths.install);
         let release = paths.install.join(RELEASE_FILE).is_file();
-        let mut live = Live {
-            phase: UpdatePhase::NotUpdatable,
-            message: None,
-            channel: settings.channel,
-            notes_url: None,
-            notes: None,
-            previous: None,
-            installed: None,
-            saved: Saved::default(),
+        let updater = Self {
+            current: current.to_owned(),
+            blocked,
+            release,
+            http: Http::default(),
+            live: Mutex::new(Live {
+                phase: UpdatePhase::NotUpdatable,
+                message: None,
+                channel: settings.channel,
+                notes_url: None,
+                notes: None,
+                previous: None,
+                installed: None,
+                saved: Saved::default(),
+            }),
+            busy: Mutex::new(()),
+            stopping: AtomicBool::new(false),
+            notify: Box::new(notify),
+            paths,
         };
-        if let Some(reason) = &blocked {
-            tracing::info!(install = %paths.install.display(), reason, "this install does not update itself");
-        } else {
-            swap::clean_up(&paths.install);
-            let mut saved = state::load(&paths.dir);
-            let mut changed = confirm_swap(&mut saved, current);
-            changed |= tidy(&paths.dir, &mut saved, current);
-            if changed && let Err(error) = state::save(&paths.dir, &saved) {
-                tracing::warn!(%error, "cannot save the updater's state");
+        if let Some(reason) = &updater.blocked {
+            tracing::info!(install = %updater.paths.install.display(), reason, "this install does not update itself");
+            return updater;
+        }
+        match updater.try_step_lock() {
+            Ok(Some(_step)) => {
+                swap::clean_up(&updater.paths.install);
+                let (dir, current) = (&updater.paths.dir, updater.current.as_str());
+                updater.edit_saved(|saved| {
+                    confirm_swap(saved, current);
+                    tidy(dir, saved, current);
+                });
             }
-            live.previous = read_release(&paths.install.join(PREVIOUS_DIR))
-                .ok()
-                .map(|facts| facts.version);
-            if let Some(latest) = saved
+            _ => {
+                tracing::info!(
+                    "another core is in an update step; the leftovers stay until the next start"
+                );
+            }
+        }
+        updater.reload();
+        {
+            let mut live = updater.lock();
+            if let Some(latest) = live
+                .saved
                 .latest
-                .as_ref()
+                .clone()
                 .filter(|latest| latest.channel == settings.channel)
             {
                 live.notes_url = source::locate_latest(&settings.source, settings.channel, true)
                     .and_then(|file| source::locate(&file, &latest.notes.url, true))
                     .ok()
                     .map(|location| source::address_of(&location));
-                live.notes = fs::read_to_string(notes_file(&paths.dir, &latest.version)).ok();
+                live.notes =
+                    fs::read_to_string(notes_file(&updater.paths.dir, &latest.version)).ok();
             }
-            live.saved = saved;
-            live.phase = resting_phase(&live, current, &paths.dir);
+            live.phase = resting_phase(&live, current, &updater.paths.dir);
             tracing::info!(
-                install = %paths.install.display(),
+                install = %updater.paths.install.display(),
                 current,
                 state = ?live.phase,
                 previous = live.previous.as_deref(),
                 "the updater is ready"
             );
         }
-        Self {
-            paths,
-            current: current.to_owned(),
-            blocked,
-            release,
-            http: Http::default(),
-            live: Mutex::new(live),
-            busy: Mutex::new(()),
-            notify: Box::new(notify),
-        }
+        updater
     }
 
     /// Whether this install can update itself.
     #[must_use]
     pub fn updatable(&self) -> bool {
         self.blocked.is_none()
+    }
+
+    /// Ends a download in progress, and refuses the steps after it: the
+    /// core is stopping. What the download left is removed.
+    pub fn stop(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
     }
 
     /// The state now. Not blocking: it reads only what the updater keeps in
@@ -356,7 +393,7 @@ impl Updater {
     /// install can update itself, and no check has worked in the last day.
     #[must_use]
     pub fn due(&self, settings: &Settings, now_ms: u64) -> bool {
-        if !settings.check || self.blocked.is_some() {
+        if !settings.check || self.blocked.is_some() || self.stopping.load(Ordering::SeqCst) {
             return false;
         }
         let live = self.lock();
@@ -381,6 +418,7 @@ impl Updater {
 
     /// Follows a change of `update.channel`: what was read for the other
     /// channel is forgotten, and the next daily check is due at once.
+    /// Blocking: it writes the state.
     pub fn set_channel(&self, channel: UpdateChannel) {
         {
             let mut live = self.lock();
@@ -391,21 +429,26 @@ impl Updater {
             if self.blocked.is_some() {
                 return;
             }
-            live.saved.latest = None;
-            live.saved.etag = None;
-            live.saved.latest_source = None;
-            live.saved.last_check_ms = None;
             live.notes = None;
             live.notes_url = None;
+        }
+        self.edit_saved(|saved| {
+            saved.latest = None;
+            saved.etag = None;
+            saved.latest_source = None;
+            saved.last_check_ms = None;
+        });
+        {
+            let mut live = self.lock();
             if matches!(
                 live.phase,
-                UpdatePhase::UpToDate | UpdatePhase::Available | UpdatePhase::Failed
+                UpdatePhase::Unchecked
+                    | UpdatePhase::UpToDate
+                    | UpdatePhase::Available
+                    | UpdatePhase::Failed
             ) {
                 live.phase = resting_phase(&live, &self.current, &self.paths.dir);
                 live.message = None;
-            }
-            if let Err(error) = state::save(&self.paths.dir, &live.saved) {
-                tracing::warn!(%error, "cannot save the updater's state");
             }
         }
         tracing::info!(channel = channel.name(), "the update channel changed");
@@ -415,8 +458,7 @@ impl Updater {
     /// Reads the channel's `latest.json` and compares its version with the
     /// running one. Blocking: it may wait for the network.
     pub fn check(&self, settings: &Settings) -> Result<UpdateStatus, UpdateError> {
-        self.refuse_if_blocked()?;
-        let _busy = self.try_busy()?;
+        let _step = self.begin(true)?;
         self.lock().channel = settings.channel;
         self.enter(UpdatePhase::Checking);
         match self.try_check(settings) {
@@ -498,26 +540,24 @@ impl Updater {
             newer,
             "update check done"
         );
+        self.edit_saved(|saved| {
+            saved.last_check_ms = Some(now_ms());
+            saved.latest_source = Some(address);
+            saved.etag = etag;
+            saved.latest = Some(release);
+        });
         let mut live = self.lock();
-        live.saved.last_check_ms = Some(now_ms());
-        live.saved.latest_source = Some(address);
-        live.saved.etag = etag;
-        live.saved.latest = Some(release);
         live.notes_url = notes_url;
         live.notes = notes;
         live.message = None;
         live.phase = resting_phase(&live, &self.current, &self.paths.dir);
-        if let Err(error) = state::save(&self.paths.dir, &live.saved) {
-            tracing::warn!(%error, "cannot save the updater's state");
-        }
         Ok(())
     }
 
     /// Downloads the newer version the last check found, checks its
     /// SHA-256, and unpacks it into the staging folder. Blocking.
     pub fn download(&self, settings: &Settings) -> Result<UpdateStatus, UpdateError> {
-        self.refuse_if_blocked()?;
-        let _busy = self.try_busy()?;
+        let _step = self.begin(true)?;
         let release = {
             let live = self.lock();
             let Some(release) = live
@@ -550,14 +590,12 @@ impl Updater {
         let folder = staging_dir(&self.paths.dir, &release.version);
         match self.try_download(settings, &release, &folder) {
             Ok(()) => {
+                let version = release.version.clone();
+                self.edit_saved(|saved| saved.staged = Some(version));
                 {
                     let mut live = self.lock();
-                    live.saved.staged = Some(release.version.clone());
                     live.phase = UpdatePhase::Downloaded;
                     live.message = None;
-                    if let Err(error) = state::save(&self.paths.dir, &live.saved) {
-                        tracing::warn!(%error, "cannot save the updater's state");
-                    }
                 }
                 tracing::info!(version = %release.version, folder = %folder.display(), "the update is downloaded, checked and unpacked");
                 self.publish();
@@ -615,7 +653,10 @@ impl Updater {
             total.min(MAX_DOWNLOAD),
             settings.allow_insecure,
             Client::Update,
-            &mut |bytes| tell(bytes, false),
+            &mut |bytes| {
+                tell(bytes, false);
+                !self.stopping.load(Ordering::SeqCst)
+            },
         )
         .map_err(|error| match error {
             DownloadError::TooLarge => failed(format!(
@@ -668,46 +709,43 @@ impl Updater {
 
     /// Swaps the downloaded version into the install folder. Blocking.
     pub fn apply(&self) -> Result<UpdateStatus, UpdateError> {
-        self.refuse_if_blocked()?;
-        let _busy = self.try_busy()?;
+        let _step = self.begin(true)?;
         let Some(version) = self.lock().saved.staged.clone() else {
             return Err(UpdateError::refused(
                 "nothing is downloaded; download the update first",
             ));
         };
         let Some(files) = staged_release(&self.paths.dir, &version) else {
+            self.edit_saved(|saved| saved.staged = None);
             let mut live = self.lock();
-            live.saved.staged = None;
             live.phase = resting_phase(&live, &self.current, &self.paths.dir);
-            let _ = state::save(&self.paths.dir, &live.saved);
             return Err(UpdateError::refused(format!(
                 "the downloaded files of CabinetOS {version} are gone; download it again"
             )));
         };
-        let from = read_release(&self.paths.install)
-            .map_or_else(|_| self.current.clone(), |facts| facts.version);
+        let from = self.installed_version();
         self.enter(UpdatePhase::Applying);
         tracing::info!(from, to = %version, install = %self.paths.install.display(), "swapping the update into the install folder");
         match swap::apply(&self.paths.install, &files) {
             Ok(placed) => {
                 self.refresh_apps_entry(&version, placed.bytes);
+                let swapped = Swap {
+                    kind: SwapKind::Apply,
+                    from: from.clone(),
+                    to: version.clone(),
+                    at_ms: now_ms(),
+                    confirmed_at_ms: None,
+                };
+                self.edit_saved(|saved| {
+                    saved.staged = None;
+                    saved.swap = Some(swapped);
+                });
                 {
                     let mut live = self.lock();
-                    live.saved.staged = None;
-                    live.saved.swap = Some(Swap {
-                        kind: SwapKind::Apply,
-                        from: from.clone(),
-                        to: version.clone(),
-                        at_ms: now_ms(),
-                        confirmed_at_ms: None,
-                    });
                     live.previous = Some(from);
                     live.installed = Some(version.clone());
                     live.phase = UpdatePhase::Ready;
                     live.message = None;
-                    if let Err(error) = state::save(&self.paths.dir, &live.saved) {
-                        tracing::warn!(%error, "cannot save the updater's state");
-                    }
                 }
                 remove_folder(&staging_dir(&self.paths.dir, &version));
                 self.publish();
@@ -719,37 +757,38 @@ impl Updater {
 
     /// Brings the version in `previous\` back. Blocking.
     pub fn rollback(&self) -> Result<UpdateStatus, UpdateError> {
-        self.refuse_if_blocked()?;
-        let _busy = self.try_busy()?;
+        let _step = self.begin(false)?;
         if self.lock().previous.is_none() {
             return Err(UpdateError::refused(format!(
                 "there is no previous version to go back to in {}",
                 self.paths.install.join(PREVIOUS_DIR).display()
             )));
         }
-        let from = read_release(&self.paths.install)
-            .map_or_else(|_| self.current.clone(), |facts| facts.version);
+        let from = self.installed_version();
         self.enter(UpdatePhase::Applying);
         tracing::info!(from, install = %self.paths.install.display(), "rolling back to the previous version");
         match swap::rollback(&self.paths.install) {
             Ok(version) => {
                 self.refresh_apps_entry(&version, swap::install_size(&self.paths.install));
+                let swapped = Swap {
+                    kind: SwapKind::Rollback,
+                    from,
+                    to: version.clone(),
+                    at_ms: now_ms(),
+                    confirmed_at_ms: None,
+                };
+                self.edit_saved(|saved| saved.swap = Some(swapped));
                 {
                     let mut live = self.lock();
-                    live.saved.swap = Some(Swap {
-                        kind: SwapKind::Rollback,
-                        from,
-                        to: version.clone(),
-                        at_ms: now_ms(),
-                        confirmed_at_ms: None,
-                    });
                     live.previous = None;
-                    live.installed = Some(version);
-                    live.phase = UpdatePhase::Ready;
+                    live.phase = if version == self.current {
+                        live.installed = None;
+                        resting_phase(&live, &self.current, &self.paths.dir)
+                    } else {
+                        live.installed = Some(version);
+                        UpdatePhase::Ready
+                    };
                     live.message = None;
-                    if let Err(error) = state::save(&self.paths.dir, &live.saved) {
-                        tracing::warn!(%error, "cannot save the updater's state");
-                    }
                 }
                 self.publish();
                 Ok(self.status())
@@ -763,17 +802,136 @@ impl Updater {
     pub fn snooze(&self) -> Result<UpdateStatus, UpdateError> {
         self.refuse_if_blocked()?;
         let until = now_ms().saturating_add(DAY_MS);
-        {
-            let mut live = self.lock();
-            live.saved.snoozed_until_ms = Some(until);
-            state::save(&self.paths.dir, &live.saved).map_err(|error| UpdateError {
-                kind: ErrorKind::Failed,
-                message: format!("cannot save the snooze: {error}"),
-            })?;
-        }
+        let _state = self.state_lock();
+        let mut saved = state::load(&self.paths.dir);
+        saved.snoozed_until_ms = Some(until);
+        state::save(&self.paths.dir, &saved).map_err(|error| UpdateError {
+            kind: ErrorKind::Failed,
+            message: format!("cannot save the snooze: {error}"),
+        })?;
+        self.lock().saved = saved;
         tracing::info!(until_ms = until, "the update waits: Later");
         self.publish();
         Ok(self.status())
+    }
+
+    /// The locks of one step, after the checks every step makes: the
+    /// install can update itself, the core is not stopping, no other step
+    /// runs (here or in another core). What another core wrote is read
+    /// again. With `needs_current`, a step that another core's swap made
+    /// pointless (the install folder holds another version than the one
+    /// running) is refused: a restart runs that version.
+    fn begin(&self, needs_current: bool) -> Result<Step<'_>, UpdateError> {
+        self.refuse_if_blocked()?;
+        if self.stopping.load(Ordering::SeqCst) {
+            return Err(UpdateError::refused("CabinetOS is closing"));
+        }
+        let step = match self.try_step_lock() {
+            Ok(Some(step)) => step,
+            Ok(None) => {
+                return Err(UpdateError::refused(
+                    "another CabinetOS window is in an update step now; wait until it ends",
+                ));
+            }
+            Err(error) => return Err(error),
+        };
+        self.reload();
+        let installed = self.installed_version();
+        if needs_current && installed != self.current {
+            {
+                let mut live = self.lock();
+                live.installed = Some(installed.clone());
+                live.phase = UpdatePhase::Ready;
+                live.message = None;
+            }
+            self.publish();
+            return Err(UpdateError::refused(format!(
+                "CabinetOS {installed} is in place already; restart CabinetOS to run it"
+            )));
+        }
+        Ok(step)
+    }
+
+    /// Takes this process's step lock and the step lock file, or answers
+    /// `Ok(None)` when another step holds either.
+    fn try_step_lock(&self) -> Result<Option<Step<'_>>, UpdateError> {
+        let process = match self.busy.try_lock() {
+            Ok(guard) => guard,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                return Err(UpdateError::refused(
+                    "another update step is running; wait until it ends",
+                ));
+            }
+        };
+        let cores = match lock_file(&self.paths.dir, STEP_LOCK) {
+            Ok(file) => match file.try_lock() {
+                Ok(()) => Some(file),
+                Err(fs::TryLockError::WouldBlock) => return Ok(None),
+                Err(fs::TryLockError::Error(error)) => {
+                    tracing::warn!(%error, "cannot lock the update folder; another core may update at the same time");
+                    None
+                }
+            },
+            Err(error) => {
+                tracing::warn!(%error, "cannot lock the update folder; another core may update at the same time");
+                None
+            }
+        };
+        Ok(Some(Step {
+            _process: process,
+            _cores: cores,
+        }))
+    }
+
+    /// Waits for the state lock file: a read, change and write of
+    /// `state.json` is short.
+    fn state_lock(&self) -> Option<File> {
+        let locked = lock_file(&self.paths.dir, STATE_LOCK).and_then(|file| {
+            file.lock()?;
+            Ok(file)
+        });
+        match locked {
+            Ok(file) => Some(file),
+            Err(error) => {
+                tracing::warn!(%error, "cannot lock the updater's state; another core may write it at the same time");
+                None
+            }
+        }
+    }
+
+    /// Reads `state.json` again and applies `change` to it, then writes it;
+    /// what this updater keeps follows. Another core's changes stay.
+    fn edit_saved(&self, change: impl FnOnce(&mut Saved)) {
+        let _state = self.state_lock();
+        let mut saved = state::load(&self.paths.dir);
+        change(&mut saved);
+        if let Err(error) = state::save(&self.paths.dir, &saved) {
+            tracing::warn!(%error, "cannot save the updater's state");
+        }
+        self.lock().saved = saved;
+    }
+
+    /// Reads `state.json` and the previous version again: another core
+    /// may have changed them.
+    fn reload(&self) {
+        let saved = {
+            let _state = self.state_lock();
+            state::load(&self.paths.dir)
+        };
+        let previous = read_release(&self.paths.install.join(PREVIOUS_DIR))
+            .ok()
+            .map(|facts| facts.version);
+        let mut live = self.lock();
+        live.saved = saved;
+        live.previous = previous;
+    }
+
+    /// The version the install folder holds, as its `release.json` says;
+    /// the running one when that cannot be read.
+    fn installed_version(&self) -> String {
+        read_release(&self.paths.install)
+            .map_or_else(|_| self.current.clone(), |facts| facts.version)
     }
 
     fn refresh_apps_entry(&self, version: &str, bytes: u64) {
@@ -790,16 +948,6 @@ impl Updater {
         match &self.blocked {
             Some(reason) => Err(UpdateError::refused(reason.clone())),
             None => Ok(()),
-        }
-    }
-
-    fn try_busy(&self) -> Result<MutexGuard<'_, ()>, UpdateError> {
-        match self.busy.try_lock() {
-            Ok(guard) => Ok(guard),
-            Err(TryLockError::Poisoned(poisoned)) => Ok(poisoned.into_inner()),
-            Err(TryLockError::WouldBlock) => Err(UpdateError::refused(
-                "another update step is running; wait until it ends",
-            )),
         }
     }
 
@@ -833,6 +981,18 @@ impl Updater {
     fn publish(&self) {
         (self.notify)(Notice::State(Box::new(self.status())));
     }
+}
+
+/// Opens (creating it and its folder) a lock file in `dir`. The file stays,
+/// empty: removing it could race a core that is about to lock it.
+fn lock_file(dir: &Path, name: &str) -> io::Result<File> {
+    fs::create_dir_all(dir)?;
+    fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(dir.join(name))
 }
 
 /// Whether `version` is newer than `current`; an unreadable one never is.

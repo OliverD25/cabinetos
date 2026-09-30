@@ -381,7 +381,10 @@ impl Market {
             limit,
             allow_insecure,
             Client::Market,
-            &mut |done| progress(done, item.size, false),
+            &mut |done| {
+                progress(done, item.size, false);
+                true
+            },
         )
         .map_err(|error| match error {
             DownloadError::TooLarge => MarketError::market(format!(

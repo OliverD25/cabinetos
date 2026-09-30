@@ -8,8 +8,8 @@
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
 //! search (`search`, `index status`), the terminal sessions (`term`), the
 //! colour themes (`themes`), the marketplace (`market`), what the window
-//! shows (`state`), secrets in the Credential Manager (`secret`), and the
-//! log folder (`log trace`, `log tail`: these read
+//! shows (`state`), secrets in the Credential Manager (`secret`), in-app
+//! updates (`update`), and the log folder (`log trace`, `log tail`: these read
 //! files and need no core; `log bundle` asks the core for a zip).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
@@ -37,6 +37,7 @@ mod state;
 mod term;
 mod themes;
 mod undo;
+mod update;
 
 use std::io::Write;
 use std::process::ExitCode;
@@ -286,6 +287,7 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         }
         Command::Secret { action } => secret_command(&mut client, action).await?,
         Command::Undo { job, .. } => undo::undo(&mut client, *job).await?,
+        Command::Update { action, json } => update::run(&mut client, *action, *json).await?,
     }
     Ok(())
 }
@@ -789,19 +791,26 @@ pub(crate) async fn send(
     client: &mut PipeClient,
     request: Request,
 ) -> anyhow::Result<Envelope<Response>> {
+    send_waiting(client, request, REQUEST_TIMEOUT).await
+}
+
+/// [`send`], waiting up to `timeout` for the reply: a download may take
+/// minutes.
+pub(crate) async fn send_waiting(
+    client: &mut PipeClient,
+    request: Request,
+    timeout: Duration,
+) -> anyhow::Result<Envelope<Response>> {
     let id = RequestId::new();
     let trace = client.trace().cloned().unwrap_or_else(|| id.clone());
     let kind = request.type_tag();
     let exchange = async {
         tracing::debug!(request = kind, "sending request");
         let started = Instant::now();
-        let reply =
-            tokio::time::timeout(REQUEST_TIMEOUT, client.request_with_id(id.clone(), request))
-                .await
-                .with_context(|| {
-                    format!("no reply to {kind} within {REQUEST_TIMEOUT:?} (id={id})")
-                })?
-                .with_context(|| format!("{kind} failed (id={id})"))?;
+        let reply = tokio::time::timeout(timeout, client.request_with_id(id.clone(), request))
+            .await
+            .with_context(|| format!("no reply to {kind} within {timeout:?} (id={id})"))?
+            .with_context(|| format!("{kind} failed (id={id})"))?;
         tracing::info!(
             request = kind,
             rtt_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),

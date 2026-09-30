@@ -61,8 +61,8 @@ pub use theme::{
     Opacity, Palette, Rgb, THEME_FORMAT, TerminalColors, Theme, ThemeInfo, ThemeKind,
 };
 pub use update::{
-    DEFAULT_UPDATE_SOURCE, UPDATE_SCHEMA_VERSION, UpdateChannel, UpdateNotes, UpdatePhase, UpdateRelease, UpdateRequires,
-    UpdateStatus, UpdateZip,
+    DEFAULT_UPDATE_SOURCE, UPDATE_SCHEMA_VERSION, UpdateChannel, UpdateNotes, UpdatePhase,
+    UpdateRelease, UpdateRequires, UpdateStatus, UpdateZip,
 };
 pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 
@@ -107,5 +107,10 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// kind `steps`; secrets in the Windows Credential Manager (`secret_set`,
 /// `secret_get` with the reply `secret`, `secret_delete`, `secret_list`
 /// with the reply `secret_names`, the error codes `no_such_secret` and
-/// `secret_error`); and `save_log_bundle` with the reply `log_bundle`.
-pub const PROTOCOL_VERSION: u32 = 13;
+/// `secret_error`); and `save_log_bundle` with the reply `log_bundle`;
+/// version 14 in-app updates: `update_status`, `update_check`,
+/// `update_download`, `update_apply`, `update_rollback` and
+/// `update_snooze` with the reply `update_state`, the events
+/// `update_state_changed` and `update_progress`, and the error code
+/// `update_error`.
+pub const PROTOCOL_VERSION: u32 = 14;

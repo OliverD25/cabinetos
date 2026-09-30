@@ -324,7 +324,8 @@ pub struct Downloaded {
 
 /// Copies (from disk) or downloads (from the web) `location` into `to`,
 /// with at most `limit` bytes, and computes its SHA-256 on the way.
-/// `progress` hears the bytes done after each piece. Blocking.
+/// `progress` hears the bytes done after each piece, and answers whether to
+/// go on: `false` stops the download (the caller is stopping). Blocking.
 pub fn download(
     http: &Http,
     location: &Location,
@@ -332,7 +333,7 @@ pub fn download(
     limit: u64,
     allow_insecure: bool,
     client: Client,
-    progress: &mut dyn FnMut(u64),
+    progress: &mut dyn FnMut(u64) -> bool,
 ) -> Result<Downloaded, DownloadError> {
     let failed = DownloadError::Failed;
     let started = Instant::now();
@@ -379,7 +380,9 @@ pub fn download(
         hasher.update(&buffer[..read]);
         file.write_all(&buffer[..read])
             .map_err(|error| failed(format!("{}: {error}", to.display())))?;
-        progress(done);
+        if !progress(done) {
+            return Err(failed("the download was stopped".to_owned()));
+        }
     }
     file.flush()
         .map_err(|error| failed(format!("{}: {error}", to.display())))?;

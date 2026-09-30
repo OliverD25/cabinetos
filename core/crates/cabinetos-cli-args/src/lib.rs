@@ -284,6 +284,35 @@ pub enum Command {
         #[arg(long)]
         last: bool,
     },
+    /// See whether a newer CabinetOS is out, download it, put it in place,
+    /// or go back to the version before. Only a per-user install of a
+    /// release updates itself. Without an action: status.
+    Update {
+        #[command(subcommand)]
+        action: Option<UpdateAction>,
+        /// Print the core's reply as JSON.
+        #[arg(long, global = true)]
+        json: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
+pub enum UpdateAction {
+    /// Print where the updater is: the version running, the newest of the
+    /// channel, what is downloaded, the version kept for a rollback.
+    Status,
+    /// Read the channel's latest.json now.
+    Check,
+    /// Download the newer version, check its SHA-256 and unpack it, with a
+    /// progress line.
+    Download,
+    /// Put the downloaded version in place; the running version goes into
+    /// previous\ in the install folder. Restart CabinetOS to run it.
+    Apply,
+    /// Bring the version in previous\ back. Restart CabinetOS to run it.
+    Rollback,
+    /// Open no update dialog for a day, as Later does.
+    Snooze,
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -1329,6 +1358,51 @@ mod tests {
         );
         assert_eq!(parse(&["tools"]), MarketAction::Tools);
         assert!(Cli::try_parse_from(["cabinetos-cli", "market", "install"]).is_err());
+    }
+
+    #[test]
+    fn parses_update() {
+        let parse = |args: &[&str]| {
+            let mut all = vec!["cabinetos-cli", "update"];
+            all.extend_from_slice(args);
+            Cli::try_parse_from(all).unwrap().command
+        };
+        assert_eq!(
+            parse(&[]),
+            Command::Update {
+                action: None,
+                json: false
+            }
+        );
+        assert_eq!(
+            parse(&["check", "--json"]),
+            Command::Update {
+                action: Some(UpdateAction::Check),
+                json: true
+            }
+        );
+        assert_eq!(
+            parse(&["--json", "rollback"]),
+            Command::Update {
+                action: Some(UpdateAction::Rollback),
+                json: true
+            }
+        );
+        for (word, action) in [
+            ("status", UpdateAction::Status),
+            ("download", UpdateAction::Download),
+            ("apply", UpdateAction::Apply),
+            ("snooze", UpdateAction::Snooze),
+        ] {
+            assert_eq!(
+                parse(&[word]),
+                Command::Update {
+                    action: Some(action),
+                    json: false
+                }
+            );
+        }
+        assert!(Cli::try_parse_from(["cabinetos-cli", "update", "now"]).is_err());
     }
 
     #[test]

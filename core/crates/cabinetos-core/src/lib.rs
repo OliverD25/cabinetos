@@ -6,8 +6,9 @@
 //! keeps watched listings current with events, reports volumes and disks,
 //! owns the configuration file, the commands, the keymap and the colour
 //! themes, runs the jobs, the Core Plugins and the terminal sessions,
-//! installs extensions from the marketplace, logs every request with its
-//! ID, and exits with its parent process. The protocol is in
+//! installs extensions from the marketplace, updates its own install (a
+//! per-user release), logs every request with its ID, and exits with its
+//! parent process. The protocol is in
 //! `docs/ipc.md`.
 //!
 //! Serves Constitution Article 1 (Zero-Compromise Performance: every
@@ -36,6 +37,7 @@ mod secrets;
 mod settings;
 mod terminal;
 mod themes;
+mod update;
 mod volumes;
 mod window;
 mod workspace;
@@ -132,6 +134,9 @@ pub struct CoreConfig {
     /// of installs); `None` uses `CABINETOS_MARKETPLACE_DIR` or
     /// `%LOCALAPPDATA%\CabinetOS\marketplace`.
     pub marketplace_dir: Option<PathBuf>,
+    /// The updater's own folder (its state, the staged download); `None`
+    /// uses `CABINETOS_UPDATE_DIR` or `%LOCALAPPDATA%\CabinetOS\update`.
+    pub update_dir: Option<PathBuf>,
 }
 
 /// Why the core stopped with an error.
@@ -193,6 +198,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         themes_dir,
         tools_dir,
         marketplace_dir,
+        update_dir,
     } = config;
     let diag = cabinetos_diag::init(diag_config(log_dir))?;
     prepare_diagnostics();
@@ -250,6 +256,20 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         plugins.clone(),
         Arc::clone(&themes),
     ));
+    let update_settings = Arc::clone(&settings);
+    let update_events = Arc::clone(&events);
+    let updates = match tokio::task::spawn_blocking(move || {
+        update::open(update_dir, &update_settings, &update_events)
+    })
+    .await
+    {
+        Ok(updates) => updates,
+        Err(error) => std::panic::resume_unwind(error.into_panic()),
+    };
+    tokio::spawn(update::run_daily(
+        Arc::clone(&updates),
+        settings.subscribe(),
+    ));
     let terminals = terminal::start(&events);
     let previews = preview::Previews::start(&events);
     // Dropping the watcher at the end stops it.
@@ -267,12 +287,15 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         windows: window::WindowStates::default(),
         previews,
         secrets,
+        updates,
     });
     plugin_link.set(&services);
     let mut result = serve(&pipe, parent_pid, &shutdown, diag.log_dir(), &services).await;
     if result.is_ok() && panicked.load(Ordering::SeqCst) {
         result = Err(CoreError::Panicked);
     }
+    // A download in progress ends, so it does not keep the core alive.
+    services.updates.stop();
     // The shells get their hang-up; together they may take up to 2 s to end.
     let closing = Arc::clone(&services.terminals);
     let _ = tokio::task::spawn_blocking(move || closing.shutdown()).await;

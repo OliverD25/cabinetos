@@ -71,6 +71,13 @@ struct Args {
     #[arg(long, value_name = "PATH")]
     marketplace_dir: Option<PathBuf>,
 
+    /// Keep the updater's own files (its state, the release downloaded for
+    /// the next swap) in this folder instead of
+    /// %LOCALAPPDATA%\CabinetOS\update (or the `CABINETOS_UPDATE_DIR`
+    /// variable).
+    #[arg(long, value_name = "PATH")]
+    update_dir: Option<PathBuf>,
+
     /// Log one event, then panic: tests crash traces.
     #[arg(long, hide = true)]
     self_test_panic: bool,
@@ -120,6 +127,7 @@ fn main() -> ExitCode {
         themes_dir: args.themes_dir,
         tools_dir: args.tools_dir,
         marketplace_dir: args.marketplace_dir,
+        update_dir: args.update_dir,
     };
     match runtime.block_on(run(config, CancellationToken::new())) {
         Ok(()) => ExitCode::SUCCESS,
@@ -202,6 +210,8 @@ mod tests {
             r"E:\tools",
             "--marketplace-dir",
             r"E:\marketplace",
+            "--update-dir",
+            r"E:\update",
             "--self-test-panic",
             "--self-test-thread-panic",
         ])
@@ -218,6 +228,7 @@ mod tests {
         assert_eq!(args.themes_dir, Some(PathBuf::from(r"E:\themes")));
         assert_eq!(args.tools_dir, Some(PathBuf::from(r"E:\tools")));
         assert_eq!(args.marketplace_dir, Some(PathBuf::from(r"E:\marketplace")));
+        assert_eq!(args.update_dir, Some(PathBuf::from(r"E:\update")));
         assert!(args.self_test_panic);
         assert!(args.self_test_thread_panic);
     }

@@ -17,7 +17,9 @@ use serde_json::Value;
 /// - `execute_command` would run any command, and one of the plugin's own
 ///   would wait for the plugin's thread, which is waiting for the answer.
 /// - `install_extension` and `uninstall_extension` change the code the core
-///   runs.
+///   runs; so do `update_download`, `update_apply` and `update_rollback`,
+///   and `update_check` and `update_snooze` steer them. `update_status`
+///   only reads.
 pub const NEVER_ALLOWED: &[&str] = &[
     "hello",
     "shutdown",
@@ -32,6 +34,11 @@ pub const NEVER_ALLOWED: &[&str] = &[
     "execute_command",
     "install_extension",
     "uninstall_extension",
+    "update_check",
+    "update_download",
+    "update_apply",
+    "update_rollback",
+    "update_snooze",
 ];
 
 /// The largest request a plugin may send with `core-request`, in bytes.
@@ -143,7 +150,7 @@ mod tests {
     fn what_no_manifest_can_allow_stays_refused_and_is_a_real_request_type() {
         assert_eq!(
             NEVER_ALLOWED.len(),
-            13,
+            18,
             "adding to the list is a decision: update the docs and the count"
         );
         for kind in NEVER_ALLOWED {

@@ -363,7 +363,9 @@ fn versions_compare_as_semantic_versions_on_each_channel() {
     setup.install_version("0.1.0");
     let stable = setup.settings(UpdateChannel::Stable);
     let preview = setup.settings(UpdateChannel::Preview);
+    // The install folder holds the version that runs.
     let state = |current: &str, settings: &Settings| {
+        setup.install_version(current);
         let updater = setup.open(current, settings);
         updater.check(settings).map(|status| status.state)
     };
@@ -876,4 +878,121 @@ fn a_web_feed_is_read_with_its_etag_and_refused_over_plain_http_unless_allowed()
             .contains("if-none-match: \"v1\"")
     );
     assert!(seen[3].contains("/update/stable/files/CabinetOS-0.2.0-win-x64.zip"));
+}
+
+#[test]
+fn a_step_waits_for_another_core_and_sees_its_swap() {
+    let setup = Setup::new("cores");
+    setup.install_version("0.1.0");
+    setup.publish("stable", "0.2.0", b"zip", None);
+    let settings = setup.settings(UpdateChannel::Stable);
+    let updater = setup.open("0.1.0", &settings);
+
+    // Another core in the middle of a step holds the step lock.
+    let other = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(setup.dir().join(".step.lock"))
+        .unwrap();
+    other.lock().unwrap();
+    let refused = updater.check(&settings).unwrap_err();
+    assert_eq!(refused.kind, ErrorKind::Refused);
+    assert!(
+        refused.message.contains("another CabinetOS window"),
+        "{refused}"
+    );
+    drop(other);
+    assert_eq!(
+        updater.check(&settings).unwrap().state,
+        UpdatePhase::Available
+    );
+
+    // Another core swapped 0.2.0 in: this one, still 0.1.0, says restart.
+    setup.install_version("0.2.0");
+    let refused = updater.download(&settings).unwrap_err();
+    assert!(
+        refused.message.contains("0.2.0 is in place already"),
+        "{refused}"
+    );
+    let status = updater.status();
+    assert_eq!(status.state, UpdatePhase::Ready);
+    assert_eq!(status.installed.as_deref(), Some("0.2.0"));
+}
+
+#[test]
+fn stopping_ends_a_download_and_leaves_nothing() {
+    let setup = Setup::new("stop");
+    setup.install_version("0.1.0");
+    let size = 2 * 1024 * 1024;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut head = Vec::new();
+        let mut byte = [0; 1];
+        while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap() == 1 {
+            head.push(byte[0]);
+        }
+        let header =
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {size}\r\nConnection: close\r\n\r\n");
+        let _ = stream.write_all(header.as_bytes());
+        // Slowly: 64 KiB every 50 ms, until the client hangs up.
+        let piece = vec![7; 65_536];
+        for _ in 0..size / 65_536 {
+            if stream.write_all(&piece).is_err() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    });
+    let folder = setup.feed().join("stable");
+    fs::create_dir_all(&folder).unwrap();
+    let latest = json!({
+        "schemaVersion": 1, "channel": "stable", "version": "0.2.0", "published": "2026-09-30",
+        "zip": {"url": format!("http://127.0.0.1:{port}/zip"), "sha256": "0".repeat(64), "size": size},
+        "notes": {"url": "notes.md"}
+    });
+    fs::write(folder.join("latest.json"), latest.to_string()).unwrap();
+    let settings = Settings {
+        allow_insecure: true,
+        ..setup.settings(UpdateChannel::Stable)
+    };
+
+    let started = Arc::new(Mutex::new(false));
+    let seen = Arc::clone(&started);
+    let updater = Arc::new(Updater::open(
+        Paths {
+            install: setup.install(),
+            dir: setup.dir(),
+            apps_key: setup.apps_key.clone(),
+        },
+        "0.1.0",
+        &settings,
+        move |notice| {
+            if matches!(notice, Notice::Progress(ref progress) if progress.bytes > 0) {
+                *seen.lock().unwrap() = true;
+            }
+        },
+    ));
+    updater.check(&settings).unwrap();
+    let stopper = Arc::clone(&updater);
+    let watcher = std::thread::spawn(move || {
+        while !*started.lock().unwrap() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        stopper.stop();
+    });
+    let error = updater.download(&settings).unwrap_err();
+    watcher.join().unwrap();
+    assert!(
+        error.message.contains("the download was stopped"),
+        "{error}"
+    );
+    assert!(!setup.dir().join("staging").join("0.2.0").exists());
+    assert_eq!(
+        updater.check(&settings).unwrap_err().kind,
+        ErrorKind::Refused
+    );
 }

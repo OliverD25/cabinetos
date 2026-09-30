@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use cabinetos_commands::{KeySequence, Override};
-use cabinetos_protocol::{SortKey, SortSpec};
+use cabinetos_protocol::{DEFAULT_UPDATE_SOURCE, SortKey, SortSpec, UpdateChannel};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// The `$schema` value in files the core creates: the schema file it writes
@@ -49,6 +49,8 @@ pub struct Config {
     pub plugins: BTreeMap<String, PluginSettings>,
     /// Where extensions and themes come from.
     pub marketplace: MarketplaceConfig,
+    /// In-app updates.
+    pub update: UpdateConfig,
 }
 
 impl Default for Config {
@@ -64,6 +66,7 @@ impl Default for Config {
             logging: LoggingConfig::default(),
             plugins: BTreeMap::new(),
             marketplace: MarketplaceConfig::default(),
+            update: UpdateConfig::default(),
         }
     }
 }
@@ -465,6 +468,38 @@ impl Default for MarketplaceConfig {
     }
 }
 
+/// In-app updates (docs/config.md, ADR 0014). Only a per-user install of a
+/// release updates itself; a development build and an all-users install
+/// never check.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default, rename_all = "camelCase")]
+pub struct UpdateConfig {
+    /// Look for a newer version once a day, at start, and download it in the
+    /// background. The update command checks at any time either way.
+    pub check: bool,
+    /// Which releases: `stable`, or `preview`, which also offers versions
+    /// with a pre-release tag.
+    pub channel: UpdateChannel,
+    /// The folder that holds one folder per channel, each with its
+    /// `latest.json`: an `https:` URL, a `file:` URL, or a path.
+    pub source: String,
+    /// Also accept a plain `http:` source and download, which anyone on the
+    /// network could change on the way. For testing only.
+    pub allow_insecure: bool,
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        Self {
+            check: true,
+            channel: UpdateChannel::Stable,
+            source: DEFAULT_UPDATE_SOURCE.to_owned(),
+            allow_insecure: false,
+        }
+    }
+}
+
 /// Diagnostics.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -566,6 +601,28 @@ mod tests {
         assert_eq!(config.logging.level, LogLevel::Info);
         assert_eq!(config.marketplace.index, DEFAULT_MARKETPLACE_INDEX);
         assert!(!config.marketplace.allow_insecure);
+        assert!(config.update.check && !config.update.allow_insecure);
+        assert_eq!(config.update.channel, UpdateChannel::Stable);
+        assert_eq!(config.update.source, DEFAULT_UPDATE_SOURCE);
+    }
+
+    #[test]
+    fn the_update_section_is_read_and_unknown_keys_refused() {
+        let config: Config =
+            serde_json::from_str(r#"{"update": {"channel": "preview", "check": false}}"#).unwrap();
+        assert_eq!(config.update.channel, UpdateChannel::Preview);
+        assert!(!config.update.check);
+        assert_eq!(config.update.source, DEFAULT_UPDATE_SOURCE);
+        for (bad, expected) in [
+            (
+                r#"{"update": {"channel": "nightly"}}"#,
+                "unknown variant `nightly`",
+            ),
+            (r#"{"update": {"auto": true}}"#, "unknown field `auto`"),
+        ] {
+            let error = serde_json::from_str::<Config>(bad).unwrap_err().to_string();
+            assert!(error.contains(expected), "{bad}: {error}");
+        }
     }
 
     #[test]
@@ -699,6 +756,7 @@ mod tests {
             "\"keybindings\"",
             "\"logging\"",
             "\"marketplace\"",
+            "\"update\"",
         ];
         let positions: Vec<usize> = order.iter().map(|key| text.find(key).unwrap()).collect();
         assert!(positions.is_sorted(), "{text}");

@@ -1341,6 +1341,84 @@
         "type",
         "path"
       ]
+    },
+    {
+      "description": "Asks where the updater is. The core answers `update_state` at once,\nfrom what it keeps in memory.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "update_status"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Reads the channel's `latest.json` now and compares its version with\nthe running one. The core answers `update_state` once the check\nended; `update_error` when this install cannot update itself.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "update_check"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Downloads the newer version the last check found, checks its\nSHA-256 and unpacks it. `update_progress` tells how far; the core\nanswers `update_state` (`downloaded`), or `hash_mismatch`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "update_download"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Swaps the downloaded version into the install folder; the running\nversion goes into `previous\\`. The core answers `update_state`\n(`ready`); the window then starts the new `CabinetOS.exe` and closes.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "update_apply"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Brings the version in `previous\\` back, the same way. The core\nanswers `update_state` (`ready`).",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "update_rollback"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Records \"not before a day from now\": the window opens no update\ndialog until then (the user said Later). The core answers\n`update_state`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "update_snooze"
+        }
+      },
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [

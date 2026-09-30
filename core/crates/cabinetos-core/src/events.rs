@@ -76,4 +76,6 @@ pub(crate) struct Services {
     pub(crate) previews: Arc<Previews>,
     /// The secrets in the Windows Credential Manager.
     pub(crate) secrets: cabinetos_secrets::Secrets,
+    /// The updater of the install this core runs from.
+    pub(crate) updates: Arc<cabinetos_update::Updater>,
 }

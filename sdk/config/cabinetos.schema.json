@@ -130,6 +130,16 @@
         "theme": "default"
       }
     },
+    "update": {
+      "description": "In-app updates.",
+      "$ref": "#/$defs/UpdateConfig",
+      "default": {
+        "allowInsecure": false,
+        "channel": "stable",
+        "check": true,
+        "source": "https://oliverd25.github.io/cabinetos-marketplace/update"
+      }
+    },
     "version": {
       "description": "The file format version; always 1 for now.",
       "type": "integer",
@@ -669,6 +679,48 @@
           "description": "The color theme's ID.",
           "type": "string",
           "default": "default"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UpdateChannel": {
+      "description": "A release channel: which `latest.json` the updater reads\n(`<update.source>/<channel>/latest.json`).",
+      "oneOf": [
+        {
+          "description": "Releases only; never a version with a pre-release tag.",
+          "type": "string",
+          "const": "stable"
+        },
+        {
+          "description": "Releases and previews, such as `0.2.0-preview.1`.",
+          "type": "string",
+          "const": "preview"
+        }
+      ]
+    },
+    "UpdateConfig": {
+      "description": "In-app updates (docs/config.md, ADR 0014). Only a per-user install of a\nrelease updates itself; a development build and an all-users install\nnever check.",
+      "type": "object",
+      "properties": {
+        "allowInsecure": {
+          "description": "Also accept a plain `http:` source and download, which anyone on the\nnetwork could change on the way. For testing only.",
+          "type": "boolean",
+          "default": false
+        },
+        "channel": {
+          "description": "Which releases: `stable`, or `preview`, which also offers versions\nwith a pre-release tag.",
+          "$ref": "#/$defs/UpdateChannel",
+          "default": "stable"
+        },
+        "check": {
+          "description": "Look for a newer version once a day, at start, and download it in the\nbackground. The update command checks at any time either way.",
+          "type": "boolean",
+          "default": true
+        },
+        "source": {
+          "description": "The folder that holds one folder per channel, each with its\n`latest.json`: an `https:` URL, a `file:` URL, or a path.",
+          "type": "string",
+          "default": "https://oliverd25.github.io/cabinetos-marketplace/update"
         }
       },
       "additionalProperties": false

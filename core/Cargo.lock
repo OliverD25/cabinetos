@@ -190,9 +190,11 @@ dependencies = [
  "cabinetos-terminal",
  "clap",
  "serde_json",
+ "sha2",
  "tempfile",
  "tokio",
  "tracing",
+ "zip",
 ]
 
 [[package]]
@@ -244,6 +246,7 @@ dependencies = [
  "cabinetos-secrets",
  "cabinetos-terminal",
  "cabinetos-themes",
+ "cabinetos-update",
  "clap",
  "png",
  "rand",

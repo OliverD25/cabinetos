@@ -433,6 +433,17 @@ impl Session {
                 Request::GetWindowState { client } => {
                     Some(self.services.windows.get(client.as_deref()))
                 }
+                Request::UpdateStatus => Some(Response::UpdateState(Box::new(
+                    self.services.updates.status(),
+                ))),
+                request @ (Request::UpdateCheck
+                | Request::UpdateDownload
+                | Request::UpdateApply
+                | Request::UpdateRollback
+                | Request::UpdateSnooze) => {
+                    self.update_request(&id, &span, kind, request);
+                    None
+                }
             }
         };
         // Requests handled right here are done; the others log when they end.
@@ -1113,6 +1124,28 @@ impl Session {
         }
     }
 
+    /// The update steps, on the blocking pool: each may read and write the
+    /// update folder, wait for the network, or move the install's files.
+    fn update_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) {
+        let updates = Arc::clone(&self.services.updates);
+        let settings = crate::update::settings_of(&self.services.settings.snapshot());
+        self.spawn_reply(id, span, kind, move || {
+            crate::update::reply(match request {
+                Request::UpdateCheck => updates.check(&settings),
+                Request::UpdateDownload => updates.download(&settings),
+                Request::UpdateApply => updates.apply(),
+                Request::UpdateRollback => updates.rollback(),
+                _ => updates.snooze(),
+            })
+        });
+    }
+
     /// The marketplace requests and `list_tools`, on the blocking pool: each
     /// reads folders, and a refresh, a search or an install may wait for
     /// the network.
@@ -1594,6 +1627,10 @@ impl Session {
                     Event::ThemeChanged {
                         theme: Box::new(self.services.themes.applied()),
                     },
+                ));
+                self.out.send(&Envelope::new(
+                    RequestId::new(),
+                    Event::UpdateStateChanged(Box::new(self.services.updates.status())),
                 ));
                 for job in self.services.jobs.list() {
                     self.out.send(&Envelope::new(

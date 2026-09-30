@@ -12,6 +12,7 @@ use crate::preview::{OpenedListing, PreviewRow};
 use crate::secret::SecretText;
 use crate::terminal::TerminalSession;
 use crate::theme::{Theme, ThemeInfo};
+use crate::update::UpdateStatus;
 use crate::window::WindowState;
 
 /// One message on the control channel: a request ID, the trace of the user
@@ -535,6 +536,28 @@ pub enum Request {
         /// An absolute folder; it need not exist.
         path: String,
     },
+    /// Asks where the updater is. The core answers `update_state` at once,
+    /// from what it keeps in memory.
+    UpdateStatus,
+    /// Reads the channel's `latest.json` now and compares its version with
+    /// the running one. The core answers `update_state` once the check
+    /// ended; `update_error` when this install cannot update itself.
+    UpdateCheck,
+    /// Downloads the newer version the last check found, checks its
+    /// SHA-256 and unpacks it. `update_progress` tells how far; the core
+    /// answers `update_state` (`downloaded`), or `hash_mismatch`.
+    UpdateDownload,
+    /// Swaps the downloaded version into the install folder; the running
+    /// version goes into `previous\`. The core answers `update_state`
+    /// (`ready`); the window then starts the new `CabinetOS.exe` and closes.
+    UpdateApply,
+    /// Brings the version in `previous\` back, the same way. The core
+    /// answers `update_state` (`ready`).
+    UpdateRollback,
+    /// Records "not before a day from now": the window opens no update
+    /// dialog until then (the user said Later). The core answers
+    /// `update_state`.
+    UpdateSnooze,
 }
 
 fn default_bundle_minutes() -> u32 {
@@ -612,6 +635,12 @@ impl Request {
         "save_log_bundle",
         "undo_job",
         "workspace_info",
+        "update_status",
+        "update_check",
+        "update_download",
+        "update_apply",
+        "update_rollback",
+        "update_snooze",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -681,6 +710,12 @@ impl Request {
             Self::SaveLogBundle { .. } => "save_log_bundle",
             Self::UndoJob { .. } => "undo_job",
             Self::WorkspaceInfo { .. } => "workspace_info",
+            Self::UpdateStatus => "update_status",
+            Self::UpdateCheck => "update_check",
+            Self::UpdateDownload => "update_download",
+            Self::UpdateApply => "update_apply",
+            Self::UpdateRollback => "update_rollback",
+            Self::UpdateSnooze => "update_snooze",
         }
     }
 }
@@ -987,6 +1022,8 @@ pub enum Response {
         /// cannot be read or names neither.
         branch: Option<String>,
     },
+    /// Reply to the `update_*` requests: where the updater is now.
+    UpdateState(Box<UpdateStatus>),
 }
 
 impl Response {
@@ -1029,6 +1066,7 @@ impl Response {
         "log_bundle",
         "undo_started",
         "workspace_info",
+        "update_state",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -1072,6 +1110,7 @@ impl Response {
             Self::LogBundle { .. } => "log_bundle",
             Self::UndoStarted { .. } => "undo_started",
             Self::WorkspaceInfo { .. } => "workspace_info",
+            Self::UpdateState(_) => "update_state",
         }
     }
 }
@@ -1447,6 +1486,22 @@ pub enum Event {
         /// The preview.
         preview: String,
     },
+    /// The updater moved on: a check, a download, a swap or a snooze, the
+    /// daily check included. The same shape as `update_state`. Sent to
+    /// every connection that said `hello`.
+    UpdateStateChanged(Box<UpdateStatus>),
+    /// How far an update's download has come: at most 4 a second, and
+    /// always one when it is complete.
+    UpdateProgress {
+        /// The version downloading.
+        version: String,
+        /// Bytes so far.
+        bytes: u64,
+        /// The zip's size, as `latest.json` gives it.
+        total: u64,
+        /// The speed since the download began.
+        bytes_per_second: u64,
+    },
 }
 
 impl Event {
@@ -1474,6 +1529,8 @@ impl Event {
         "tools_changed",
         "preview_applied",
         "preview_cancelled",
+        "update_state_changed",
+        "update_progress",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -1501,6 +1558,8 @@ impl Event {
             Self::ToolsChanged { .. } => "tools_changed",
             Self::PreviewApplied { .. } => "preview_applied",
             Self::PreviewCancelled { .. } => "preview_cancelled",
+            Self::UpdateStateChanged(_) => "update_state_changed",
+            Self::UpdateProgress { .. } => "update_progress",
         }
     }
 }
@@ -1628,6 +1687,11 @@ pub enum ErrorCode {
     /// good), it was undone already, it still runs, or nothing it did can
     /// be reversed. The message says which, and what to do instead.
     NotUndoable,
+    /// The updater cannot do it: this install cannot update itself (a
+    /// development build, an all-users install), there is nothing to
+    /// download or to apply, no previous version to roll back to, another
+    /// update step is running, or the step failed (the message says why).
+    UpdateError,
 }
 
 #[cfg(test)]
@@ -1967,7 +2031,48 @@ mod tests {
             Request::WorkspaceInfo {
                 path: r"C:\repo\src".to_owned(),
             },
+            Request::UpdateStatus,
+            Request::UpdateCheck,
+            Request::UpdateDownload,
+            Request::UpdateApply,
+            Request::UpdateRollback,
+            Request::UpdateSnooze,
         ]
+    }
+
+    fn update_status() -> UpdateStatus {
+        UpdateStatus {
+            state: crate::UpdatePhase::Downloaded,
+            reason: None,
+            message: None,
+            current: "0.1.0".to_owned(),
+            channel: crate::UpdateChannel::Stable,
+            latest: Some(crate::UpdateRelease {
+                schema_version: 1,
+                channel: crate::UpdateChannel::Stable,
+                version: "0.2.0".to_owned(),
+                published: "2026-10-01".to_owned(),
+                zip: crate::UpdateZip {
+                    url: "https://github.com/OliverD25/cabinetos/releases/download/v0.2.0/CabinetOS-0.2.0-win-x64.zip".to_owned(),
+                    sha256: "ab".repeat(32),
+                    size: 80_000_000,
+                },
+                notes: crate::UpdateNotes {
+                    url: "https://oliverd25.github.io/cabinetos-marketplace/update/stable/notes-0.2.0.md".to_owned(),
+                },
+                requires: crate::UpdateRequires {
+                    windows_app_runtime: Some("2.5".to_owned()),
+                    dotnet: Some("10.0".to_owned()),
+                },
+            }),
+            notes_url: Some("https://oliverd25.github.io/cabinetos-marketplace/update/stable/notes-0.2.0.md".to_owned()),
+            notes: Some("## [0.2.0] - 2026-10-01\n\n- In-app updates.\n".to_owned()),
+            checked_at_ms: Some(1_790_000_000_000),
+            snoozed_until_ms: None,
+            previous: Some("0.0.9".to_owned()),
+            installed: None,
+            install_dir: Some(r"C:\Users\me\AppData\Local\Programs\CabinetOS".to_owned()),
+        }
     }
 
     fn window_state() -> WindowState {
@@ -2264,6 +2369,7 @@ mod tests {
                 root: r"C:\repo".to_owned(),
                 branch: Some("main".to_owned()),
             },
+            Response::UpdateState(Box::new(update_status())),
         ]
     }
 
@@ -2375,7 +2481,58 @@ mod tests {
             Event::PreviewCancelled {
                 preview: "preview-4".to_owned(),
             },
+            Event::UpdateStateChanged(Box::new(update_status())),
+            Event::UpdateProgress {
+                version: "0.2.0".to_owned(),
+                bytes: 4_000_000,
+                total: 80_000_000,
+                bytes_per_second: 2_000_000,
+            },
         ]
+    }
+
+    #[test]
+    fn update_messages_have_the_documented_wire_form() {
+        let value = serde_json::to_value(Envelope::new(
+            id(),
+            Response::UpdateState(Box::new(update_status())),
+        ))
+        .unwrap();
+        assert_eq!(value["type"], "update_state");
+        assert_eq!(value["state"], "downloaded");
+        assert_eq!(value["current"], "0.1.0");
+        assert_eq!(value["channel"], "stable");
+        assert_eq!(value["latest"]["schemaVersion"], 1);
+        assert_eq!(value["latest"]["zip"]["size"], 80_000_000);
+        assert_eq!(value["latest"]["requires"]["windowsAppRuntime"], "2.5");
+        assert_eq!(value["previous"], "0.0.9");
+        for absent in ["reason", "message", "snoozed_until_ms", "installed"] {
+            assert!(value.get(absent).is_none(), "{absent}");
+        }
+        let bare: Response = serde_json::from_value(json!({
+            "type": "update_state", "state": "not_updatable",
+            "reason": "a development build", "current": "0.1.0", "channel": "stable"
+        }))
+        .unwrap();
+        let Response::UpdateState(status) = bare else {
+            panic!("expected update_state");
+        };
+        assert_eq!(status.state, crate::UpdatePhase::NotUpdatable);
+        assert_eq!(status.latest, None);
+        let request = json!({"id": ID, "type": "update_snooze"});
+        let envelope: Envelope<Request> = serde_json::from_value(request).unwrap();
+        assert_eq!(envelope.body, Request::UpdateSnooze);
+        let progress = serde_json::to_value(Event::UpdateProgress {
+            version: "0.2.0".to_owned(),
+            bytes: 1,
+            total: 2,
+            bytes_per_second: 3,
+        })
+        .unwrap();
+        assert_eq!(
+            progress,
+            json!({"type": "update_progress", "version": "0.2.0", "bytes": 1, "total": 2, "bytes_per_second": 3})
+        );
     }
 
     #[test]
@@ -2708,6 +2865,7 @@ mod tests {
             (ErrorCode::NoSuchSecret, "no_such_secret"),
             (ErrorCode::SecretError, "secret_error"),
             (ErrorCode::NotUndoable, "not_undoable"),
+            (ErrorCode::UpdateError, "update_error"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));

@@ -930,6 +930,20 @@
         "type",
         "root"
       ]
+    },
+    {
+      "description": "Reply to the `update_*` requests: where the updater is now.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "update_state"
+        }
+      },
+      "$ref": "#/$defs/UpdateStatus",
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [
@@ -1466,6 +1480,11 @@
           "description": "The job cannot be undone: it deleted (to the Recycle Bin or for\ngood), it was undone already, it still runs, or nothing it did can\nbe reversed. The message says which, and what to do instead.",
           "type": "string",
           "const": "not_undoable"
+        },
+        {
+          "description": "The updater cannot do it: this install cannot update itself (a\ndevelopment build, an all-users install), there is nothing to\ndownload or to apply, no previous version to roll back to, another\nupdate step is running, or the step failed (the message says why).",
+          "type": "string",
+          "const": "update_error"
         }
       ]
     },
@@ -3671,6 +3690,280 @@
           "type": "string",
           "const": "put_back"
         }
+      ]
+    },
+    "UpdateChannel": {
+      "description": "A release channel: which `latest.json` the updater reads\n(`<update.source>/<channel>/latest.json`).",
+      "oneOf": [
+        {
+          "description": "Releases only; never a version with a pre-release tag.",
+          "type": "string",
+          "const": "stable"
+        },
+        {
+          "description": "Releases and previews, such as `0.2.0-preview.1`.",
+          "type": "string",
+          "const": "preview"
+        }
+      ]
+    },
+    "UpdateNotes": {
+      "description": "Where a release's notes are.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "A Markdown file: an absolute URL, or a path relative to\n`latest.json`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "UpdatePhase": {
+      "description": "Where the updater is.",
+      "oneOf": [
+        {
+          "description": "This install cannot update itself: a development build, an\nall-users install, or a folder the user cannot write. `reason`\nsays which, and what to do instead.",
+          "type": "string",
+          "const": "not_updatable"
+        },
+        {
+          "description": "No check has run yet.",
+          "type": "string",
+          "const": "unchecked"
+        },
+        {
+          "description": "The newest version of the channel is the one running (or older).",
+          "type": "string",
+          "const": "up_to_date"
+        },
+        {
+          "description": "Reading `latest.json` now.",
+          "type": "string",
+          "const": "checking"
+        },
+        {
+          "description": "A newer version is there; nothing is downloaded yet.",
+          "type": "string",
+          "const": "available"
+        },
+        {
+          "description": "Downloading the newer version now; `update_progress` tells how far.",
+          "type": "string",
+          "const": "downloading"
+        },
+        {
+          "description": "The newer version is downloaded, checked and unpacked; `update_apply`\nputs it in place.",
+          "type": "string",
+          "const": "downloaded"
+        },
+        {
+          "description": "Moving the files: a swap or a rollback.",
+          "type": "string",
+          "const": "applying"
+        },
+        {
+          "description": "Another version is in place (`installed`); a restart runs it.",
+          "type": "string",
+          "const": "ready"
+        },
+        {
+          "description": "The last step failed; `message` says why.",
+          "type": "string",
+          "const": "failed"
+        }
+      ]
+    },
+    "UpdateRelease": {
+      "description": "`latest.json`: the newest version of one channel, where its zip is, how\nto check it, and where its release notes are.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The channel this file belongs to.",
+          "$ref": "#/$defs/UpdateChannel"
+        },
+        "notes": {
+          "description": "The release notes: the CHANGELOG section of the version.",
+          "$ref": "#/$defs/UpdateNotes"
+        },
+        "published": {
+          "description": "The day it was published, `YYYY-MM-DD`.",
+          "type": "string"
+        },
+        "requires": {
+          "description": "The runtimes the version needs, `major.minor`, for the user to see.",
+          "$ref": "#/$defs/UpdateRequires",
+          "default": {}
+        },
+        "schemaVersion": {
+          "description": "The format of this file; always 1 for now.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "version": {
+          "description": "The version, as semantic versioning writes it: `0.2.0`, or with a\npre-release tag on the preview channel, `0.2.0-preview.1`.",
+          "type": "string"
+        },
+        "zip": {
+          "description": "The release's zip.",
+          "$ref": "#/$defs/UpdateZip"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "channel",
+        "version",
+        "published",
+        "zip",
+        "notes"
+      ]
+    },
+    "UpdateRequires": {
+      "description": "The runtimes a release needs.",
+      "type": "object",
+      "properties": {
+        "dotnet": {
+          "description": "The .NET runtime, `major.minor`, such as `10.0`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "windowsAppRuntime": {
+          "description": "The Windows App Runtime, `major.minor`, such as `2.5`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "UpdateStatus": {
+      "description": "The updater's state: the reply `update_state` and the event\n`update_state_changed`.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "The channel `update.channel` names.",
+          "$ref": "#/$defs/UpdateChannel"
+        },
+        "checked_at_ms": {
+          "description": "When the last check ended, in milliseconds since 1970-01-01 UTC.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "current": {
+          "description": "The version running now.",
+          "type": "string"
+        },
+        "install_dir": {
+          "description": "The install folder, where the window starts the new `CabinetOS.exe`\nafter a swap. Absent for a development build.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "installed": {
+          "description": "With `ready`: the version the install folder holds now, which the\nnext start runs.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "latest": {
+          "description": "The channel's `latest.json` as the last check read it, in the file's\nown format (camelCase keys).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UpdateRelease"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "description": "With `failed`: what went wrong.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "description": "The release notes of `latest`, Markdown, when the core could read\nthem (at most 256 KiB).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes_url": {
+          "description": "Where the release notes of `latest` are.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous": {
+          "description": "The version kept in `previous\\`, which `update_rollback` brings back.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "With `not_updatable`: why, and what to do instead.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "snoozed_until_ms": {
+          "description": "Until when the user said Later: the window opens no dialog before\nit, in milliseconds since 1970-01-01 UTC.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "Where the updater is.",
+          "$ref": "#/$defs/UpdatePhase"
+        }
+      },
+      "required": [
+        "state",
+        "current",
+        "channel"
+      ]
+    },
+    "UpdateZip": {
+      "description": "Where a release's zip is and how to check it.",
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "description": "The zip's SHA-256, 64 hex digits. A download with another hash is\ndeleted.",
+          "type": "string"
+        },
+        "size": {
+          "description": "The zip's size in bytes, more than 0. A download that grows beyond\nit is stopped and deleted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "url": {
+          "description": "An absolute URL (the GitHub Release asset), or a path relative to\n`latest.json`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "sha256",
+        "size"
       ]
     },
     "VolumeDetails": {
