@@ -13,11 +13,11 @@ public class ContextMenuTests
 {
     private static readonly CommandSource Core = new("core", null, null);
 
-    private static CommandInfo Command(string id, string title, string? keys = null, CommandSource? source = null, string target = "ui", string? when = "filesView") =>
+    internal static CommandInfo Command(string id, string title, string? keys = null, CommandSource? source = null, string target = "ui", string? when = "filesView") =>
         new(id, id.Split('.')[0], title, keys is null ? [] : [keys], keys is null ? [] : [keys], source ?? Core, target, when, false);
 
     /// <summary>The registry's commands the menus use, with their default keys, as the core lists them.</summary>
-    private static List<CommandInfo> Registry() =>
+    internal static List<CommandInfo> Registry() =>
     [
         Command("edit.cut", "Cut", "ctrl+x"),
         Command("edit.copy", "Copy", "ctrl+c"),
@@ -36,9 +36,9 @@ public class ContextMenuTests
     ];
 
     // The window shows a binding as "Ctrl+V"; the model only passes it on.
-    private static string? Keys(string id) => Registry().Find(c => c.Id == id)?.Keys is [var first, ..] ? first.ToUpperInvariant() : null;
+    internal static string? Keys(string id) => Registry().Find(c => c.Id == id)?.Keys is [var first, ..] ? first.ToUpperInvariant() : null;
 
-    private static ContextMenuFacts FileFacts(string name = "notes.md") =>
+    internal static ContextMenuFacts FileFacts(string name = "notes.md") =>
         new(MenuTargetKind.File, @"C:\work", @"C:\work\" + name, EntryIsFolder: false, SelectedCount: 1);
 
     private static string Shape(IEnumerable<ContextMenuEntry> entries) => string.Join("|", entries.Select(e => e.Kind switch

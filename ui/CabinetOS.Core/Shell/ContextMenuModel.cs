@@ -64,6 +64,15 @@ public sealed record ContextMenuConfig(
         _ => MultiSelect,
     };
 
+    /// <summary>The same menus with <paramref name="kind"/>'s lists replaced by <paramref name="target"/>.</summary>
+    public ContextMenuConfig With(MenuTargetKind kind, MenuTargetConfig target) => kind switch
+    {
+        MenuTargetKind.Background => this with { Background = target },
+        MenuTargetKind.File => this with { File = target },
+        MenuTargetKind.Folder => this with { Folder = target },
+        _ => this with { MultiSelect = target },
+    };
+
     /// <summary>Reads <c>contextMenu</c> from the <c>config</c> reply; what is missing or of the wrong kind keeps its default.</summary>
     public static ContextMenuConfig FromConfig(JsonElement config)
     {
@@ -349,13 +358,13 @@ public static class ContextMenuModel
         return dot < 0 || dot == name.Length - 1 ? "" : name[dot..].ToString().ToLowerInvariant();
     }
 
-    private static string TitleOf(CommandInfo command) => Titles.GetValueOrDefault(command.Id) ?? command.Title;
+    internal static string TitleOf(CommandInfo command) => Titles.GetValueOrDefault(command.Id) ?? command.Title;
 
-    private static string? Badge(CommandInfo command) =>
+    internal static string? Badge(CommandInfo command) =>
         command.Source.Kind == "plugin" ? command.Source.Name ?? command.Source.Id ?? "plugin" : null;
 
     // "Open in Terminal" shows no keys: Ctrl+` toggles the terminal pane, which is not a new shell here.
-    private static bool ShowsKeys(string id) => id != "terminal.new";
+    internal static bool ShowsKeys(string id) => id != "terminal.new";
 
     private static bool Hidden(string id, ContextMenuFacts facts) =>
         id == "sidebar.pin" && (facts.PanePath.Length == 0 || facts.PanePinned);
