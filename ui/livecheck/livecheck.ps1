@@ -1076,8 +1076,12 @@ $f = LastFields '"the sidebar shows a view"'
 "13: the sidebar is closed: $($f.open -eq $false)"
 Shot $h "$ShotDir\rail13-closed-live.png"
 
-# The mouse press left the keyboard on the Explorer button: Shift+Down moves it below Search, Shift+Up back.
+# A mouse press no longer leaves the keyboard on a chrome button (docs/ui.md, "The top row"); the rail's buttons stay tab stops,
+# so UI Automation's SetFocus, as assistive technology does it, puts the keyboard on the Explorer button. Shift+Down moves it
+# below Search, Shift+Up back.
 Step "13: Shift+Down on the Explorer button moves it; Shift+Up moves it back (ui.rail)"
+try { (RailButtonElement 'Explorer').SetFocus() } catch { "13: SetFocus on the Explorer button failed: $($_.Exception.Message)" }
+Start-Sleep -Milliseconds 400
 [Live]::Press($VK.Shift, $VK.Down); Start-Sleep -Milliseconds 1800
 $order = @((ConfigUi).rail)
 "13: ui.rail holds the new order: $(($order -join ',') -eq 'search,explorer,marketplace,terminal,quick-notes')"
