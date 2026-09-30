@@ -136,6 +136,7 @@
       "description": "The file panes.",
       "$ref": "#/$defs/PanesConfig",
       "default": {
+        "folderSizes": false,
         "selection": "windows",
         "showHidden": false,
         "sort": {
@@ -814,6 +815,11 @@
       "description": "The file panes. These are the defaults for `list_directory` requests that\ndo not say otherwise.",
       "type": "object",
       "properties": {
+        "folderSizes": {
+          "description": "Measure every folder of a listing when it opens, so the Size column\nshows their sizes without a key. Off by default: the walk costs disk\ntime.",
+          "type": "boolean",
+          "default": false
+        },
         "selection": {
           "description": "How the keyboard marks rows: as Windows does, or as Total Commander\ndoes.",
           "$ref": "#/$defs/SelectionMode",

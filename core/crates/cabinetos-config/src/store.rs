@@ -836,6 +836,26 @@ mod tests {
     }
 
     #[test]
+    fn set_value_turns_folder_sizes_on_and_off() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        let changed = store
+            .set_value("panes.folderSizes", Value::from(true), accept)
+            .unwrap();
+        assert_eq!(changed, ["panes.folderSizes"]);
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["panes"]["folderSizes"], true);
+        store
+            .set_value("panes.folderSizes", Value::from(false), accept)
+            .unwrap();
+        assert!(!store.config().panes.folder_sizes);
+        assert!(matches!(
+            store.set_value("panes.folderSizes", Value::from("on"), accept),
+            Err(UpdateError::Rejected(_))
+        ));
+    }
+
+    #[test]
     fn set_value_keeps_the_file_readable() {
         let (_dir, path) = temp_config();
         let (mut store, _) = ConfigStore::open(path.clone(), accept);

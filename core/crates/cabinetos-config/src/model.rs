@@ -292,6 +292,10 @@ pub struct PanesConfig {
     /// How the keyboard marks rows: as Windows does, or as Total Commander
     /// does.
     pub selection: SelectionMode,
+    /// Measure every folder of a listing when it opens, so the Size column
+    /// shows their sizes without a key. Off by default: the walk costs disk
+    /// time.
+    pub folder_sizes: bool,
 }
 
 /// How the keyboard marks rows in a file pane (`docs/config.md`).
@@ -644,6 +648,8 @@ mod tests {
         assert_eq!(SortSpec::from(config.panes.sort), SortSpec::default());
         // Article 4: the first run marks files as Windows does.
         assert_eq!(config.panes.selection, SelectionMode::Windows);
+        // Article 4: a folder is measured when the user asks, until they turn it on.
+        assert!(!config.panes.folder_sizes);
         assert_eq!(config.files.editor, None);
         assert_eq!(config.terminal.default_profile, "pwsh");
         let names: Vec<&str> = config
@@ -718,6 +724,23 @@ mod tests {
         )
         .unwrap_err()
         .to_string();
+        assert!(error.contains("invalid type: string"), "{error}");
+    }
+
+    #[test]
+    fn folder_sizes_is_read_written_and_checked() {
+        let config: Config = serde_json::from_str(r#"{"panes": {"folderSizes": true}}"#).unwrap();
+        assert!(config.panes.folder_sizes);
+        assert!(
+            !config.panes.show_hidden,
+            "the other panes settings keep their defaults"
+        );
+        let text = serde_json::to_string(&config).unwrap();
+        assert!(text.contains("\"folderSizes\":true"), "{text}");
+        assert_eq!(serde_json::from_str::<Config>(&text).unwrap(), config);
+        let error = serde_json::from_str::<Config>(r#"{"panes": {"folderSizes": "yes"}}"#)
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("invalid type: string"), "{error}");
     }
 
@@ -877,6 +900,7 @@ mod tests {
         );
         assert!(text.contains("\"showHidden\":false"));
         assert!(text.contains("\"selection\":\"windows\""), "{text}");
+        assert!(text.contains("\"folderSizes\":false"), "{text}");
         assert!(text.contains("\"files\":{\"editor\":null}"), "{text}");
         assert!(text.contains("\"defaultProfile\":\"pwsh\""));
         assert!(text.contains("\"allowInsecure\":false"));

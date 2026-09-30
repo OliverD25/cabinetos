@@ -737,6 +737,16 @@ const SEED: [Seed; 110] = [
         UI,
         FILES,
     ),
+    // panes.folderSizes from the palette (Phase 19b): the window writes the
+    // setting through set_value, so the file and the window agree. No key.
+    seed(
+        "view.toggleFolderSizes",
+        "View",
+        "Toggle Folder Sizes",
+        &[],
+        UI,
+        None,
+    ),
 ];
 
 /// The command a seed row describes.
@@ -959,6 +969,20 @@ mod tests {
             .map(|other| other.id.as_str())
             .collect();
         assert_eq!(sharing, ["view.toggleCompactOverlay"]);
+    }
+
+    #[test]
+    fn folder_sizes_has_a_toggle_for_the_palette_and_no_key() {
+        let registry = CommandRegistry::core();
+        let toggle = registry.get("view.toggleFolderSizes").unwrap();
+        assert_eq!(toggle.target, CommandTarget::Ui);
+        assert_eq!(
+            (toggle.category.as_str(), toggle.title.as_str()),
+            ("View", "Toggle Folder Sizes")
+        );
+        // A setting's switch works from anywhere, not only over a file pane.
+        assert_eq!(toggle.when, None);
+        assert!(toggle.default_keys.is_empty());
     }
 
     #[test]
@@ -1308,6 +1332,7 @@ mod tests {
             "help.about",
             "view.fitColumns",
             "view.resetColumns",
+            "view.toggleFolderSizes",
         ] {
             let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
             assert_eq!(command.target, CommandTarget::Ui, "{id}");
