@@ -79,7 +79,8 @@ jobs:
           echo "core=$(touches '^(core/|sdk/(protocol|config|wit|fixtures|themes|marketplace|extensions)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           # The shell's theme tests map the shipped themes of sdk/themes.
           echo "ui=$(touches '^(ui/|sdk/(protocol|config|tools|themes)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
-          echo "scripts=$(touches '^(build/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          # The live-check scripts are parsed with the build scripts, so a real-key run never meets a syntax error.
+          echo "scripts=$(touches '^(build/|ui/livecheck/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
   core:
@@ -219,7 +220,7 @@ jobs:
           command-arguments: --warn unmaintained
 
   scripts:
-    name: PowerShell scripts parse (build/)
+    name: PowerShell scripts parse (build/, ui/livecheck/)
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
     concurrency:
