@@ -17,6 +17,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The file panes' column widths are yours, in any theme: drag the grip at a divider of the column headers, or double-click a heading (or a grip) to fit its column to the texts on screen; the Name heading fits the other three. Both panes share the widths, and they are saved in `cabinetos.json` as `ui.columns`. "Reset Column Widths" in the palette gives the theme's widths back.
 
 - Folder sizes for every folder of a listing: turn on `panes.folderSizes` in `cabinetos.json`, or run "Toggle Folder Sizes" from the palette, and each folder's Size is counted when a listing opens, with no key. It is off by default, because counting costs disk time. A pane that leaves a folder stops its count.
+- The column view: Ctrl+Alt+C ("Toggle Column View") shows a pane's tab as columns of names, as Finder does. Enter, Right or a click on a folder opens it in a column to the right, Left goes back up, the whole path stays on screen, and the tab keeps the mode across a restart.
 
 ### Changed
 

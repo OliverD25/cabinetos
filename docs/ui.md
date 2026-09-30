@@ -140,7 +140,9 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   "Editing the menu"). Section 19, the column widths: the left pane's
   Modified|Type grip dragged 40 px with the real mouse, a real double-click
   on its Type heading, and the palette's Reset Column Widths ("Column
-  widths"). Step 19b sits with Total Commander's keys: the palette's
+  widths"). Section 20, the column view: Ctrl+Alt+C, Enter on two
+  folder rows, Left twice and Ctrl+Alt+C back, read from the window's
+  "column view changed" lines ("The column view"). Step 19b sits with Total Commander's keys: the palette's
   Toggle Folder Sizes turns folder sizes on, a folder with two folders is
   opened and its count read from the window's log, and the same command
   turns them off ("Folder sizes"). Then the compact overlay: Ctrl+Alt+Up
@@ -245,7 +247,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_WEBVIEW2_DIR` | Where WebView2 keeps its user data (its cache and storage) for the terminal and the tool pages, one subfolder per host; by default `%LOCALAPPDATA%\CabinetOS\WebView2`. The two-window test and the live checks set it to their scratch folder, so they never write into the real one |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part, with the garbage collector's pauses and collections in the second ("Scrolling"). A `slow frame` line for each frame of 33 ms or more, with the collector's pause in it. The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row), as the keyboard opens it, under the row; `menu-at:<name>|<x>,<y>` opens it as a right-click at that point does, in the window's content DIPs (`menu-at:alpha.txt|300,200`); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits 1.5 s for the core, and `shellmenu-at:<name>|<x>,<y>` does it at a point; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`), and `menu-edit-drag:<title>|<title>` drops the first row on the second through the drag's own steps (not the pointer's events); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>`, `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `pick:<index>` puts the open theme picker's highlight on that row, as the pointer or a key moves it (its preview follows); `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it when the button takes the keyboard (the window's chrome buttons refuse it, as under a real click), then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label, the element's type, accessible name and `x:Name`); `key:<keys>` presses keys the way a real press arrives: key messages to the window's input window, which WinUI routes as it routes a real key (the window's `PreviewKeyDown`, the focused control, Tab's move between controls, a dialog's buttons), with the modifiers down in the UI thread's key state while they are handled, so the window need not be in front and no key reaches another program (`key:tab`, `key:shift+delete`, `key:ctrl+k ctrl+t` for a chord's two halves); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `columns:<label>` logs each pane's four column widths as laid out, the width they share, the first row's widths and how far the grips are from the dividers ("columns shown"), `column-drag:<divider>|<pixels>` drags a grip of the active pane (1 Name|Modified, 2 Modified|Type, 3 Type|Size) by that many pixels through the grip's own drag steps and lets go, and `column-fit:<column>` fits as a double-click on that heading does (`name`, `modified`, `type` or `size`); the last two do not wait, so an `until:config` right after them sees the save ("Column widths"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the next reading of the configuration (after an edit of the file) or the core's next report of an error in the file; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row), as the keyboard opens it, under the row; `menu-at:<name>|<x>,<y>` opens it as a right-click at that point does, in the window's content DIPs (`menu-at:alpha.txt|300,200`); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits 1.5 s for the core, and `shellmenu-at:<name>|<x>,<y>` does it at a point; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`), and `menu-edit-drag:<title>|<title>` drops the first row on the second through the drag's own steps (not the pointer's events); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>`, `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `pick:<index>` puts the open theme picker's highlight on that row, as the pointer or a key moves it (its preview follows); `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it when the button takes the keyboard (the window's chrome buttons refuse it, as under a real click), then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label, the element's type, accessible name and `x:Name`); `key:<keys>` presses keys the way a real press arrives: key messages to the window's input window, which WinUI routes as it routes a real key (the window's `PreviewKeyDown`, the focused control, Tab's move between controls, a dialog's buttons), with the modifiers down in the UI thread's key state while they are handled, so the window need not be in front and no key reaches another program (`key:tab`, `key:shift+delete`, `key:ctrl+k ctrl+t` for a chord's two halves); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `columns:<label>` logs each pane's four column widths as laid out, the width they share, the first row's widths and how far the grips are from the dividers ("columns shown"), `column-drag:<divider>|<pixels>` drags a grip of the active pane (1 Name|Modified, 2 Modified|Type, 3 Type|Size) by that many pixels through the grip's own drag steps and lets go, and `column-fit:<column>` fits as a double-click on that heading does (`name`, `modified`, `type` or `size`); the last two do not wait, so an `until:config` right after them sees the save ("Column widths"); `column-view:<label>` logs what the active pane shows ("column view shown": the mode, the columns' folders and cursors, the keyboard's column, its rows, the rows each column has on screen and the listings), `column-open:<name>` opens that row of the keyboard's column as Enter does, `column-key:<key>` presses `left`, `right`, `up`, `down`, `home`, `end` or `backspace` in the active pane, and `column-click:<depth>|<name>` clicks that row of that column, 1 being the first ("The column view"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the next reading of the configuration (after an edit of the file) or the core's next report of an error in the file; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -1351,6 +1353,99 @@ returns when a second editor exists; the commands stay in the palette.
 Ctrl+1 to Ctrl+9 run `tab.select` for the tab at that place ("Tabs"). A
 tab keeps, besides its folder, history, order, cursor and marks, its
 list's scroll position and its find text.
+
+### The column view
+
+Since Phase 19f a pane's folder tab has a mode: `files`, the list, or
+`columns`, the column view of macOS Finder
+([ADR 0016](decisions/0016-column-view.md)). The dual pane stays the base
+(Article 5): either pane may show columns.
+
+- **Switching.** `view.toggleColumns` (Ctrl+Alt+C; "Toggle Column View" in
+  the palette) switches the active pane's front tab. A tab that shows a
+  tool has no mode. The mode is saved with the tab in `ui.tabs` as
+  `"mode": "columns"` ([config.md](config.md)), so the tab starts in
+  columns after a restart. A new tab (Ctrl+T, or the new tab of a locked
+  tab) starts in the mode of the tab in front.
+- **A column** is one folder's listing, names only: the icon, the name,
+  and a chevron at the right of a folder row. It is `columnViewWidth`
+  wide: 220 px, 180 in Commander Compact. The widths cannot be dragged in
+  this version. When the view starts, its one column is the tab's folder.
+- **Opening.** Enter, Right or a click on a folder row lists that folder
+  in a new column right of the row's column. The columns that were right
+  of it go. The keyboard moves into the new column, onto its first row.
+- **Moving.** Left moves the keyboard to the parent column. The columns
+  right of it stay on screen until another row opens. Right moves the
+  keyboard into the column on the right when that column shows the cursor
+  row's folder; on another folder row it opens it, as Enter does. Up,
+  Down, PageUp, PageDown, Home and End move the cursor in the keyboard's
+  column. Backspace (and Alt+Up, and the Up button) in a column past the
+  first is Left. In the first column it lists the parent as the new first
+  column, with the cursor on the folder it came from; the other columns
+  stay.
+- **The path.** The deepest column's folder is the tab's path: the
+  breadcrumb row, the tab's title and the saved tab show it. Going to a
+  folder another way (a crumb, Back, the sidebar, Ctrl+L, another tab)
+  starts the view over, with that folder as the one column. Ctrl+R and a
+  new order list the keyboard's column again and keep the columns.
+  Leaving the mode shows the deepest folder in the list.
+- **Cursor, marks and commands.** Each column keeps its own cursor and
+  marks. The keyboard is in one column at a time. There a selected row
+  has the list's fill and accent bar. A column the keyboard left keeps its
+  cursor row lit with a quieter fill, so the path shows at a glance. The
+  file commands (F5, F6, F7, F8, F2, Properties, the context menu, the
+  marks, find in pane, quick search, the order) act on the keyboard's
+  column as they act on the list. A copy or move from the other pane goes
+  to this pane's keyboard column's folder, which is the deepest one except
+  after Left. `window_state` reports the keyboard column's folder, cursor
+  and marks for the tab in front, so a program's `{cwd}`, `{path}` and
+  `{selection}` name that column.
+- **The mouse.** A click moves the keyboard to the clicked column and
+  selects the row as in the list: Ctrl toggles it, Shift extends to it. A
+  plain click on a folder opens it. A double-click on a file opens it. A
+  right-click opens the context menu for the row, or for the column's
+  folder on its empty space. A row of the column view cannot be dragged
+  in this version.
+- **Scrolling.** The columns sit side by side and do not wrap. The strip
+  scrolls sideways, and the keyboard's column is kept whole on screen, so
+  a new column comes into view. Over a column whose rows are longer than
+  it, the wheel scrolls those rows. Over a column whose rows fit, or with
+  Shift, the wheel scrolls the strip sideways.
+- **No preview.** The last column holds a folder. A viewer of the
+  selected file is an extension's job (Article 10).
+- **Listings.** Each column is one `list_directory` with `watch`. The
+  keyboard's column is the pane's own listing. It trades places with the
+  column the keyboard moves to, and nothing is listed again. A column that
+  goes releases its listing at once (`close_listing`), so the core
+  watches only what is shown. A change in one folder refreshes that
+  column only. A search in the pane shows its hits in the list, and the
+  columns come back when it ends. After a restart of the core the view
+  starts over with the keyboard's folder.
+- **The log** (Article 12), target `cabinetos_ui::columns`: "column view
+  entered" and "column view left" (the pane, the path); "column opened"
+  (the pane, the depth, the path, the listing ID, the entries, the time);
+  "column released" (the pane, the depth, the path, the listing ID);
+  "column view started over" (another way to a folder); "column lost";
+  and "column view changed" at every change of the columns or of the
+  keyboard's column (the pane, the depth, the keyboard's column, the
+  folders, each column's cursor, the deepest folder, the listings). The
+  "shell state" line has `pane<i>_listings` (the listings the pane holds)
+  and `pane<i>_columns`. "tabs saved" counts the tabs in the columns mode.
+- **The code.** `ColumnStack` (in `CabinetOS.Core`) holds the columns'
+  rules without a window. `PaneColumns` runs the moves and holds the other
+  columns' listings (`ColumnListing`); `PaneModel.SwapListing` trades the
+  pane's listing with a column's. `ColumnView`, `ColumnList` and
+  `ColumnRow` draw them in `FilePane`, in the list's place.
+- **Checks.** `ColumnViewTests` (Core): the column stack (open, drop, Left
+  and Right, the deepest folder, what goes), a tab's mode in `ui.tabs`
+  both ways, and the folder `window_state` reports.
+  `ColumnViewEndToEndTests` (with `CABINETOS_UI_E2E=1`): three levels
+  opened by Enter and by clicks, Left twice, a row opened again, the list
+  back, every released listing closed in the core's log, and a second
+  window that starts in columns. It uses the snapshot steps
+  `column-view:`, `column-open:`, `column-key:` and `column-click:`
+  (`CABINETOS_UI_SNAPSHOT_STEPS` above). The live check's section 20 does
+  the keys for real.
 
 ### Find in pane
 
@@ -2690,7 +2785,7 @@ the Commander Compact handout
 - **How.** `MetricsMapper` (in `CabinetOS.Core`, tested) is one table:
   every metric's name, unit and bounds, and the default look's value. A
   test holds the table equal to `sdk/themes/theme.schema.json`: the same
-  87 names, the same bounds, and the default that each name's description
+  88 names, the same bounds, and the default that each name's description
   gives. Another test checks every value of Commander Compact. The mapper
   gives one value for each name: the theme's, held to its bounds and
   rounded to whole pixels, or else the default look's. A name that is not
@@ -2732,6 +2827,7 @@ the Commander Compact handout
 | `tagRadius`, `tagFontSize` | Nothing yet: the sidebar has no tags. |
 | `columnHeaderPaddingY`, `columnHeaderPaddingX` | A pane's column headers. |
 | `nameColumnWeight`, `modifiedColumnWeight`, `typeColumnWeight`, `nameColumnMinWidth`, `sizeColumnWidth`, `columnGap` | The columns, in the column headers and in every row alike. The default look keeps 8 px after the Modified and Type texts; a theme that sets `columnGap` spaces the columns by it instead. Once the user drags or fits a column, the user's widths (`ui.columns`) win over the three weights and `sizeColumnWidth`; `nameColumnMinWidth` and `columnGap` still apply ("Column widths"). |
+| `columnViewWidth` | Each column of the column view ("The column view"). |
 | `rowHeight`, `rowPaddingX`, `rowRadius`, `rowIconGap`, `secondaryFontSize` | A file row; the scrolling arithmetic (PageDown, keeping the focused row in view); and the rename box over a row, as high as the row allows but never lower than its text. |
 | `editorTabHeight` | A pane's editor tab strip. |
 | `markdownPaddingY`, `markdownPaddingX`, `markdownLineHeight` | Nothing yet: the Markdown Preview is a Tool Extension page, and the tool messages carry no sizes ([tool-extensions.md](tool-extensions.md)). |

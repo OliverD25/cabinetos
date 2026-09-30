@@ -1674,6 +1674,10 @@ at. The core only stores it.
   row (`cursor`, `null` when there is none) and the full paths of the
   marked rows (`marked`, in the pane's order). `locked`, `tool`, `cursor`
   and `marked` may be left out.
+- A tab in front that shows its folder as columns ([ui.md](ui.md), "The
+  column view") reports the folder of the column with the keyboard as its
+  `path`: the cursor and the marks are that column's rows. The saved tab
+  (`ui.tabs`) keeps the deepest column's folder.
 - It needs `hello`: the core keeps the last state per client, named by
   its `hello` name and a number the core gives the connection, such as
   `CabinetOS#2`. When the connection ends, its state goes.

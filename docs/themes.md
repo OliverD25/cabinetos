@@ -259,6 +259,7 @@ brackets are the handout's, for any theme that shows the bar.
 | `rowRadius` | px | 0 | 16 | 4 | 0 | The corner radius of a file row's selection and hover fill. |
 | `rowIconGap` | px | 0 | 48 | 10 | 6 | The space between a file row's icon and its name. |
 | `secondaryFontSize` | px | 8 | 32 | 12 | 11 | The text size of a file row's Modified, Type and Size columns. |
+| `columnViewWidth` | px | 120 | 600 | 220 | 180 | The width of each column of a pane's column view (a tab in the columns mode). |
 | `editorTabHeight` | px | 14 | 80 | 36 | 26 | The height of the editor's tab strip. |
 | `markdownPaddingY` | px | 0 | 64 | 28 | 14 | The space above and below the Markdown preview's text. |
 | `markdownPaddingX` | px | 0 | 64 | 40 | 20 | The space at each side of the Markdown preview's text. |

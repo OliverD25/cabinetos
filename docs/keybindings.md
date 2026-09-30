@@ -142,6 +142,7 @@ The core's commands, in palette order:
 | `view.fitColumns` | View: Fit Columns to Content | | `filesView` | UI |
 | `view.resetColumns` | View: Reset Column Widths | | `filesView` | UI |
 | `view.toggleFolderSizes` | View: Toggle Folder Sizes | | | UI |
+| `view.toggleColumns` | View: Toggle Column View | `ctrl+alt+c` | `filesView` | UI |
 
 - The list is the design's `COMMANDS` array without its plugin commands
   (hex view, Git, compression), and the shell's own commands: moving
@@ -177,6 +178,12 @@ The core's commands, in palette order:
   measured when the listing opens ([ui.md](ui.md), "Folder sizes"). It has
   no default key: the palette is its place. It works from anywhere, so its
   context is empty.
+- `view.toggleColumns` (Phase 19f) shows the active pane's front tab as
+  columns, or as the list again ([ui.md](ui.md), "The column view"). Its
+  key, `ctrl+alt+c`, is the one ADR 0016 names; no other command has it by
+  default. Inside the column view Left and Right are the pane's own keys,
+  not commands, as Up and Down are: Left goes to the parent column, Right
+  into the column of the cursor's folder.
 - The rows from `go.root` to `terminal.insertSelectedPaths` are Total
   Commander's small commands (sub-phase 11a): their titles, keys and
   contexts are the research note's
@@ -226,7 +233,7 @@ The core's commands, in palette order:
   "Programs") adds the command `program.<name>`: category `Programs`, its
   `title`, no default keys, context `filesView`, run by the core. A binding
   in `keybindings` gives it keys like any other command:
-  `{"command": "program.code", "keys": "ctrl+alt+c"}`. When the entry
+  `{"command": "program.code", "keys": "ctrl+alt+e"}`. When the entry
   goes, its command goes, and a binding to it is left out with a warning.
 - In the rail layout ([ui.md](ui.md), "The activity rail and the sidebar")
   `view.showExplorer` (`ctrl+shift+e`) and `view.showSearch`
