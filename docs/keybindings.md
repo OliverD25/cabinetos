@@ -196,8 +196,14 @@ The core's commands, in palette order:
   opens Windows' own menu of the focused row when `contextMenu.shellMenu` is
   on, and CabinetOS's menu when it is off, as Shift+right-click does;
   `ctrl+shift+f10` was bound to nothing before. `menu.edit` is the menu's
-  last row, "Edit Menu…", and opens `cabinetos.json` as `settings.open`
-  does; it has no key.
+  last row, "Edit Menu…", and turns the menu into its edit mode (Phase 18,
+  step 2; [ui.md](ui.md), "Editing the menu"); from the palette it edits the
+  focused row's menu. It has no key; `settings.open` (Ctrl+,) still opens
+  the file. Inside the edit mode the keys are its own, not the keymap's:
+  Up and Down, Alt+Up and Alt+Down (move the row), Delete, Insert (Add
+  Command…), Ctrl+S (Done) and Esc (Cancel). The mode holds the keyboard as
+  a dialog does, so no binding runs under it: Alt+Up is not `go.up` there,
+  and Delete is not `file.delete`.
 - Each entry of `programs` in the configuration ([config.md](config.md),
   "Programs") adds the command `program.<name>`: category `Programs`, its
   `title`, no default keys, context `filesView`, run by the core. A binding

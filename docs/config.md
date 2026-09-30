@@ -246,8 +246,16 @@ are the menus of Phase 5:
 
 `folder` and `multiSelect` have the same lists as `file`. After the rows the
 window always adds the plugins' file commands (on rows only), Properties,
-and "Edit Menu…" (`menu.edit`, which opens this file), so a menu cannot
-lose them. A command ID is not checked against the commands when the file
+and "Edit Menu…" (`menu.edit`), so a menu cannot lose them.
+
+"Edit Menu…" edits a target's `items` inside the menu ([ui.md](ui.md),
+"Editing the menu"): rows are moved, removed and added, then "Done" has the
+core set `contextMenu.<target>.items` to the new list, the same as
+`cabinetos-cli config set` would. It writes only that list, in the shape
+above: `{"command": "<id>"}`, `{"command": "<id>", "extensions": […]}` with
+the row's own extensions untouched, or `{"separator": true}`. The icon row
+(`quickActions`), the `extensions` of a row and `programs` are edited here,
+in the file. A command ID is not checked against the commands when the file
 is read, because a plugin's commands come and go with the plugin: an ID no
 command has is left out of the menu, with a warning in the window's log.
 The core checks the shape: each row is a command or a divider, not both;

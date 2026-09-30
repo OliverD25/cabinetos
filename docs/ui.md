@@ -131,9 +131,13 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   the rail layout (below), the edge cases, section 16, the shell of
   Phase 16 ("The shell"), and section 18, the context menu: a program and a
   file menu written into the run's configuration, a right-click, a click on
-  the program (the path it got is checked), Shift+F10 and Esc,
-  Shift+right-click with Windows' Copy (the clipboard is read back), and the
-  empty space's menu ("The context menu").
+  the program (the path it got is checked), Shift+F10 and Esc, the file
+  menu edited inside the menu (a click outside, the program's X, Done, the
+  core's log line and the file checked, then a second edit that puts the
+  program back with Insert, the prompt, a drag with the real mouse,
+  Alt+Down, Alt+Up and Ctrl+S), Shift+right-click with Windows' Copy (the
+  clipboard is read back), and the empty space's menu ("The context menu",
+  "Editing the menu").
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
@@ -220,7 +224,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_WEBVIEW2_DIR` | Where WebView2 keeps its user data (its cache and storage) for the terminal and the tool pages, one subfolder per host; by default `%LOCALAPPDATA%\CabinetOS\WebView2`. The two-window test and the live checks set it to their scratch folder, so they never write into the real one |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part, with the garbage collector's pauses and collections in the second ("Scrolling"). A `slow frame` line for each frame of 33 ms or more, with the collector's pause in it. The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits 1.5 s for the core; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>`, `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool` or `until:config` waits for a job, a shell, an answer, a tool page (a sidebar page too) or the next reading of the configuration (after an edit of the file); `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits 1.5 s for the core; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>`, `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the next reading of the configuration (after an edit of the file) or the core's next report of an error in the file; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -779,8 +783,9 @@ commands whose `when` is `filesView`, under "FROM PLUGINS" (rows only; a
 plugin command the file lists already stays where the file put it), each
 with the plugin's name after its title and the plugin's coloured square as
 its icon; Properties (Alt+Enter; on the empty space, the folder's
-Properties); and "Edit Menu…" (`menu.edit`), which opens `cabinetos.json`
-as Ctrl+, does. A list item may name `extensions`: the item shows only for
+Properties); and "Edit Menu…" (`menu.edit`), which turns the menu into its
+edit mode ("Editing the menu", below). Ctrl+, still opens `cabinetos.json`.
+A list item may name `extensions`: the item shows only for
 files with one of those extensions. With several rows selected, every
 selected row must be a file with one of them.
 
@@ -839,6 +844,67 @@ files from Windows' clipboard yet ("The clipboard"). A dialog that an item
 opens (Properties, Open with) belongs to the core and has no owner window,
 so it can open behind CabinetOS.
 
+#### Editing the menu
+
+"Edit Menu…" turns the open menu into its edit mode, for the target the
+menu was opened for: the file, folder, empty space or selection menu.
+The edit mode appears where the menu was, as wide (at least 280 px, since
+each row gains a handle and an X), under a line such as "Editing: File
+menu". It edits the target's `items`, the list:
+
+- each row as the menu shows it, with a drag handle at the left and a red
+  X at the right. A command no command has shows its ID, greyed, so it can
+  be taken out; a row with `extensions` shows them on the right;
+- drag a row to move it (the rows it passes make room); Alt+Up and
+  Alt+Down move the focused row;
+- the X or Delete removes a row;
+- "Add Command…" or Insert opens the palette's prompt with the commands
+  that may sit in a file pane's menu: the registry's with `when`
+  `filesView`, the programs (`program.<name>`) and the plugins' commands,
+  without the ones the list has and without Properties and "Edit Menu…".
+  Typing narrows them; Enter adds the chosen one after the focused row, Esc
+  goes back to the edit mode;
+- "Add separator" adds a divider after the focused row.
+
+The icon row, the `extensions` filters and `programs` are edited in the
+file in this version: the edit mode shows the icon row as it is, with the
+line "The icon row is edited in the file.", keeps a row's `extensions`
+through every move, and has an "Open the file" link. The link leaves the
+edit mode without saving and opens `cabinetos.json` (Ctrl+,), because the
+file and the edit mode must not both change the list. The plugins' group,
+Properties and "Edit Menu…" stay after the list, greyed: the window adds
+them to every menu.
+
+**Done** (or Ctrl+S) sends the list to the core as `set_value
+contextMenu.<target>.items` (`file`, `folder`, `background` or
+`multiSelect`), in the shape of the defaults: `{"command": …}`, with its
+`extensions` when it has them, or `{"separator": true}`. The window writes
+no file (brief §1). The core writes `cabinetos.json` and announces
+`config_changed`, the status bar says "File menu saved.", and the next
+right-click shows the new menu. When nothing changed, Done only closes.
+When the core refuses (the file has an error to fix first, or the core
+cannot write), the status bar says why and the edit mode stays open, so
+nothing is lost. **Cancel** and Esc leave without saving.
+
+The edit mode stays until Done, Cancel or Esc: a click outside it does
+nothing. It is part of the window, not a flyout, so the click can be
+swallowed, the palette's prompt can open over it, and the snapshot aid can
+draw it. While it is open it holds the keyboard as a dialog does: no key
+binding of the window runs, so Delete can never reach `file.delete`. The
+keys (Article 7): Up and Down move between rows, Alt+Up and Alt+Down move
+the row, Delete removes, Insert adds, Tab reaches every button, Enter on a
+button presses it, Ctrl+S saves, Esc cancels. `menu.edit` from the palette,
+or a key bound to it, edits the focused row's menu where Shift+F10 would
+open it, since no menu is open then.
+
+The log says what happened: "menu edit shown" (the target, whether it took
+the menu's place, `build_ms`), "menu edit step" (remove, move, drag, add,
+separator; the row and the rows after it), "menu edit saved", "menu edit
+refused" (warn level, with the core's code) and "menu edit closed"
+(saved or not). The surface is built at the first "Edit Menu…"; entering
+it over the 100,000 selected rows of the bench folder adds no frame over
+33 ms.
+
 **Checks.** `ContextMenuTests` (Core): the defaults (the same as the core's
 schema), the enabled states, a folder's Open in other pane and terminal
 folder, several rows, the empty space, an unknown ID and its divider, the
@@ -854,8 +920,19 @@ the `.md` file's path, and the same command from the palette the cursor
 row's; `program.nosuch` is refused (`unknown_program`); the warning comes
 once, though the menu opened twice; and Windows' menu shows. A second test
 opens the menu over 100,000 selected rows of the bench folder: no frame over
-33 ms. The live check's section 18 does the same with the real mouse and
-keys, and runs Windows' Copy.
+33 ms. `ContextMenuEditTests` (Core): the edit model's names and settings per
+target, the rows as the menu shows them, a move that keeps a row's
+`extensions`, removal and insertion and where the focus goes, the value
+`set_value` gets (valid against the schema, and the core's defaults for an
+unchanged list), what "Add Command…" offers, the keys, and what stays
+around the list. `ContextMenuEndToEndTests` (with `CABINETOS_UI_E2E=1`) also
+edits the file menu on a real window and core: an X, Insert with the
+prompt, Alt+Up, Delete and Done, then the file and the next menu; a save
+refused while the file has an error (the mode stays open, the notice
+shows); Esc; and `menu.edit` from the palette. With the frame tests, it
+enters the edit mode over 100,000 selected rows: no frame over 33 ms. The
+live check's section 18 does the same with the real mouse and keys, and
+runs Windows' Copy.
 
 ### New folder and rename
 
