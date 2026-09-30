@@ -1305,7 +1305,7 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
 - **The header, 34 px.** One tab per shell: a green dot while it runs,
   the profile's name, and × to end it. "+" starts the default profile
   (`terminal.defaultProfile`); the arrow next to it lists every profile of
-  `terminal.profiles`. The caption says whether the shell follows the
+  `terminal.profiles` (by default pwsh, cmd, wsl and claude). The caption says whether the shell follows the
   active pane: "cwd synced to active pane · {folder}", "cwd not synced: a
   command is being typed", "cwd not synced: a full-screen program runs",
   "cwd not synced: the profile does not follow the pane", or "pwsh
@@ -1331,8 +1331,9 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   Claude Code does not use the alternate screen, so the rule before would
   not catch it; the caption says "cwd not synced: the profile does not
   follow the pane"), when the shell is in that folder already, or when it
-  ended. Ctrl+P and Ctrl+Shift+Enter still type paths at such a prompt:
-  that is the user's own request. A skipped sync is not tried
+  ended. A new tab of such a profile starts with that caption, not with
+  "synced", since it will never sync. Ctrl+P and Ctrl+Shift+Enter still
+  type paths at such a prompt: that is the user's own request. A skipped sync is not tried
   again when the line is finished, because that line may be the user's own
   `cd`; the next change of the pane's folder tries again. Only the shown
   tab follows, and only while the dock is shown; when it is shown again,
