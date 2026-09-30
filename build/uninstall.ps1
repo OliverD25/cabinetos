@@ -5,7 +5,9 @@ Removes CabinetOS.
 .DESCRIPTION
 Removes what install.ps1 put in place, as its record
 .cabinetos-install.json in the install folder lists it: the program
-files, the Start Menu shortcut, the PATH entry and the indexer service.
+files, the Start Menu shortcut, the PATH entry, the indexer service and
+the Settings > Apps entry; and the in-app updater's copies in the install
+folder (previous\, the version kept for a rollback, and previous-old\).
 Settings, plugins, themes and logs stay (%APPDATA%\CabinetOS and
 %LOCALAPPDATA%\CabinetOS) unless -RemoveData is given. It asks nothing.
 
@@ -33,6 +35,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3.0
 
 $markerName = '.cabinetos-install.json'
+$appsKeyPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\CabinetOS'
 $serviceName = 'cabinetos-indexer'
 $programNames = 'CabinetOS', 'cabinetos-core', 'cabinetos-cli', 'cab', 'cabinetos-indexer'
 
@@ -161,6 +164,17 @@ if ($record.path -and $PSCmdlet.ShouldProcess("the $($record.path.scope) PATH", 
     Remove-PathEntry $record.path.scope $record.path.entry
 }
 
+# The Settings > Apps entry: the one the record names, and only while it
+# still names this folder (a later install elsewhere owns it then).
+$appsEntry = $null
+if ($record.PSObject.Properties['appsEntry']) { $appsEntry = [string] $record.appsEntry }
+if ($appsEntry -and $appsEntry -match "^(HKCU|HKLM):\\$([regex]::Escape($appsKeyPath))$" -and (Test-Path -LiteralPath $appsEntry)) {
+    $location = [string] (Get-Item -LiteralPath $appsEntry).GetValue('InstallLocation')
+    if ($location.TrimEnd('\') -eq $target -and $PSCmdlet.ShouldProcess($appsEntry, 'Remove CabinetOS from Settings > Apps')) {
+        Remove-Item -LiteralPath $appsEntry -Recurse -Force
+    }
+}
+
 # A folder that is some program's current directory cannot be removed.
 if ((Get-Location).Provider.Name -eq 'FileSystem' -and (Test-Inside (Get-Location).ProviderPath $target)) {
     Set-Location -LiteralPath $env:USERPROFILE
@@ -169,6 +183,15 @@ foreach ($relative in $files) {
     $path = Join-Path $target $relative
     if (Test-Path -LiteralPath $path) {
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $path) { [void]$failed.Add($path) }
+    }
+}
+# What the in-app updater keeps in the install folder: the version before
+# the last update (previous\), and what a swap replaced (previous-old\).
+foreach ($kept in 'previous', 'previous-old') {
+    $path = Join-Path $target $kept
+    if ((Test-Path -LiteralPath $path) -and $PSCmdlet.ShouldProcess($path, 'Remove the copy the in-app updater kept')) {
+        Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $path) { [void]$failed.Add($path) }
     }
 }

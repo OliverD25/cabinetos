@@ -6,6 +6,8 @@
 #   dist\CabinetOS-<version>-win-x64.zip         that folder's contents, zipped
 #   dist\CabinetOS-<version>-win-x64.zip.sha256  the zip's SHA-256
 #   dist\winget\<version>\                       winget manifests with that hash
+#   dist\update\<channel>\latest.json            what the in-app updater reads
+#   dist\update\<channel>\notes-<version>.md     the release notes it shows
 #
 # The version has one source: `version` in [workspace.package] of
 # core\Cargo.toml. ui\Directory.Build.props must carry the same <Version>
@@ -30,16 +32,24 @@
 #     runtimes the build needs, which install.ps1 checks.
 #  6. The zip, its SHA-256, and the winget manifests of build\winget with
 #     this version, URL and hash.
+#  7. The in-app update's files for -Channel (stable unless it says
+#     preview): latest.json with the zip's address on the GitHub Release,
+#     its hash and size, the notes' address on the marketplace site and the
+#     runtimes release.json names; and the notes, the CHANGELOG.md section
+#     of this version (or the Unreleased section, with a warning, while the
+#     version has none). docs\release.md, "Publish", says where they go.
 #
 # -PackageOnly skips steps 1-5 and zips the existing folder again, for
 # example after signing its programs (docs\release.md).
 #
 # Run from anywhere, in PowerShell 7:
-#   pwsh -File <repo>\build\release.ps1 [-SyncVersion] [-PackageOnly]
+#   pwsh -File <repo>\build\release.ps1 [-SyncVersion] [-PackageOnly] [-Channel stable|preview]
 
 param(
     [switch] $SyncVersion,
-    [switch] $PackageOnly
+    [switch] $PackageOnly,
+    [ValidateSet('stable', 'preview')]
+    [string] $Channel = 'stable'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -75,6 +85,9 @@ function Get-WorkspaceValue([string] $Key) {
 
 $version = Get-WorkspaceValue 'version'
 if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "core\Cargo.toml's version '$version' is not x.y.z or x.y.z-tag" }
+if ($Channel -eq 'stable' -and $version.Contains('-')) {
+    throw "The stable channel never offers a pre-release, and $version is one. Build it with -Channel preview."
+}
 $propsText = [System.IO.File]::ReadAllText($props)
 $propsVersions = [regex]::Matches($propsText, '<Version>([^<]*)</Version>')
 if ($propsVersions.Count -ne 1) { throw 'ui\Directory.Build.props must hold exactly one <Version>' }
@@ -199,9 +212,62 @@ else {
     Write-Host 'winget is not installed here; the manifests were not validated.'
 }
 
+# --- 7. The in-app update: latest.json and the notes ------------------
+
+$updateOut = Join-Path $dist "update\$Channel"
+New-Item -ItemType Directory -Force -Path $updateOut | Out-Null
+$site = 'https://oliverd25.github.io/cabinetos-marketplace/update'
+$notesName = "notes-$version.md"
+
+# The notes: the CHANGELOG.md text under "## [<version>]", up to the next
+# "## [" heading; while the version has no section yet, the Unreleased one.
+$changelog = [System.IO.File]::ReadAllText((Join-Path $repo 'CHANGELOG.md')).Replace("`r`n", "`n")
+function Get-ChangelogSection([string] $Heading) {
+    $match = [regex]::Match($changelog, "(?ms)^## \[$([regex]::Escape($Heading))\][^\n]*\n(.*?)(?=^## \[|\z)")
+    if ($match.Success) { $match.Groups[1].Value.Trim() } else { $null }
+}
+$notes = Get-ChangelogSection $version
+if (-not $notes) {
+    $notes = Get-ChangelogSection 'Unreleased'
+    if (-not $notes) { throw "CHANGELOG.md has neither a ## [$version] nor a ## [Unreleased] section to publish as the release notes" }
+    Write-Warning "CHANGELOG.md has no ## [$version] section yet, so the notes are the Unreleased section. Rename it to ## [$version] - <date> before publishing (docs\release.md, Publish)."
+}
+# The link definitions of the version headings ("[0.1.0]: https://…") belong
+# to the whole file, not to the section.
+$notes = ($notes -replace '(?m)^\[(Unreleased|\d+\.\d+\.\d+[^\]]*)\]:[ \t]+\S+[ \t]*$', '').Trim()
+[System.IO.File]::WriteAllText((Join-Path $updateOut $notesName), $notes + "`n", $utf8)
+
+# The runtimes, major.minor, from the release's own facts.
+$requires = (Get-Content -Raw -LiteralPath (Join-Path $folder 'release.json') | ConvertFrom-Json).requires
+$majorMinor = { param($Text) $parsed = [version] ($Text -split '-')[0]; "$($parsed.Major).$($parsed.Minor)" }
+$dotnet = @($requires.dotnet | Where-Object { $_.name -eq 'Microsoft.NETCore.App' }) + @($requires.dotnet) | Select-Object -First 1
+$latest = [ordered]@{
+    schemaVersion = 1
+    channel       = $Channel
+    version       = $version
+    published     = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
+    zip           = [ordered]@{
+        url    = "$repository/releases/download/v$version/$name.zip"
+        sha256 = $hash.ToLowerInvariant()
+        size   = (Get-Item -LiteralPath $zip).Length
+    }
+    notes         = [ordered]@{ url = "$site/$Channel/$notesName" }
+    requires      = [ordered]@{
+        windowsAppRuntime = (& $majorMinor $requires.windowsAppRuntime.version)
+        dotnet            = (& $majorMinor $dotnet.version)
+    }
+}
+$latestPath = Join-Path $updateOut 'latest.json'
+[System.IO.File]::WriteAllText($latestPath, ($latest | ConvertTo-Json -Depth 4) + "`n", $utf8)
+$schema = Join-Path $repo 'sdk\update\latest.schema.json'
+if (-not (Test-Json -LiteralPath $latestPath -SchemaFile $schema)) {
+    throw "$latestPath does not follow $schema"
+}
+
 $files = @(Get-ChildItem -LiteralPath $folder -Recurse -File)
 Write-Host ''
 Write-Host ("Release folder: {0} ({1} files, {2:N1} MB)" -f $folder, $files.Count, (($files | Measure-Object Length -Sum).Sum / 1MB))
 Write-Host ("Zip:            {0} ({1:N1} MB)" -f $zip, ((Get-Item -LiteralPath $zip).Length / 1MB))
 Write-Host "SHA-256:        $($hash.ToLowerInvariant())"
 Write-Host "winget:         $wingetOut"
+Write-Host "Update ($Channel): $latestPath and $notesName"

@@ -14,6 +14,11 @@ uninstall.ps1 there removes exactly that. Settings, plugins, themes and
 logs live in %APPDATA%\CabinetOS and %LOCALAPPDATA%\CabinetOS; the
 install does not touch them.
 
+CabinetOS appears in Settings > Apps, with its version and an Uninstall
+button that runs uninstall.ps1: for the current user, or with -AllUsers
+for every user. A per-user install then updates itself from inside the
+app, which keeps that version current.
+
 .PARAMETER AllUsers
 Install for every user of this PC, into %ProgramFiles%\CabinetOS. Needs
 a PowerShell started with "Run as administrator".
@@ -61,6 +66,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3.0
 
 $markerName = '.cabinetos-install.json'
+$appsKeyPath = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\CabinetOS'
 $serviceName = 'cabinetos-indexer'
 $programNames = 'CabinetOS', 'cabinetos-core', 'cabinetos-cli', 'cab', 'cabinetos-indexer'
 
@@ -309,7 +315,7 @@ $files = @(Get-ChildItem -LiteralPath $source -Recurse -File -Force |
 $previousFiles = @()
 if ($previous) { $previousFiles = @($previous.files) }
 
-function Save-Record([string[]] $Files, $Shortcut, $PathEntry, [bool] $WithIndexer) {
+function Save-Record([string[]] $Files, $Shortcut, $PathEntry, [bool] $WithIndexer, $AppsEntry) {
     $record = [ordered]@{
         product           = 'CabinetOS'
         version           = $release.version
@@ -319,6 +325,7 @@ function Save-Record([string[]] $Files, $Shortcut, $PathEntry, [bool] $WithIndex
         startMenuShortcut = $Shortcut
         path              = $PathEntry
         indexer           = $WithIndexer
+        appsEntry         = $AppsEntry
     }
     Set-Content -LiteralPath $markerPath -Value ($record | ConvertTo-Json -Depth 4) -Encoding UTF8
 }
@@ -326,16 +333,18 @@ function Save-Record([string[]] $Files, $Shortcut, $PathEntry, [bool] $WithIndex
 $shortcut = $null
 $pathEntry = $null
 $withIndexer = $false
+$appsEntry = $null
 if ($previous) {
     $shortcut = $previous.startMenuShortcut
     $pathEntry = $previous.path
     $withIndexer = [bool] $previous.indexer
+    if ($previous.PSObject.Properties['appsEntry']) { $appsEntry = $previous.appsEntry }
 }
 
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 # Recorded before copying: an interrupted copy leaves a folder that the
 # next install and uninstall.ps1 still recognize.
-Save-Record (@($files) + @($previousFiles | Where-Object { $files -notcontains $_ })) $shortcut $pathEntry $withIndexer
+Save-Record (@($files) + @($previousFiles | Where-Object { $files -notcontains $_ })) $shortcut $pathEntry $withIndexer $appsEntry
 foreach ($relative in $files) {
     $to = Join-Path $target $relative
     $parent = Split-Path $to -Parent
@@ -379,7 +388,33 @@ if ($Indexer) {
     $withIndexer = $true
 }
 
-Save-Record $files $shortcut $pathEntry $withIndexer
+# Settings > Apps: the entry Windows lists, with the uninstaller as its
+# Uninstall button. Under the user's own hive for a per-user install (no
+# administrator rights needed), under the machine's for -AllUsers.
+$appsHive = if ($AllUsers) { 'HKLM:' } else { 'HKCU:' }
+$appsKey = "$appsHive\$appsKeyPath"
+if ($PSCmdlet.ShouldProcess($appsKey, 'List CabinetOS in Settings > Apps')) {
+    $bytes = ($files | ForEach-Object { (Get-Item -LiteralPath (Join-Path $source $_) -Force).Length } | Measure-Object -Sum).Sum
+    New-Item -Path $appsKey -Force | Out-Null
+    $texts = [ordered]@{
+        DisplayName     = 'CabinetOS'
+        DisplayVersion  = [string] $release.version
+        Publisher       = 'CabinetOS'
+        InstallLocation = $target
+        DisplayIcon     = Join-Path $target 'CabinetOS.exe'
+        UninstallString = "powershell -ExecutionPolicy Bypass -File `"$(Join-Path $target 'uninstall.ps1')`""
+    }
+    foreach ($entry in $texts.GetEnumerator()) {
+        New-ItemProperty -LiteralPath $appsKey -Name $entry.Key -Value $entry.Value -PropertyType String -Force | Out-Null
+    }
+    $numbers = [ordered]@{ NoModify = 1; NoRepair = 1; EstimatedSize = [int] [math]::Ceiling($bytes / 1KB) }
+    foreach ($entry in $numbers.GetEnumerator()) {
+        New-ItemProperty -LiteralPath $appsKey -Name $entry.Key -Value $entry.Value -PropertyType DWord -Force | Out-Null
+    }
+    $appsEntry = $appsKey
+}
+
+Save-Record $files $shortcut $pathEntry $withIndexer $appsEntry
 
 # --- Report -----------------------------------------------------------
 
@@ -392,7 +427,7 @@ Write-Host "CabinetOS $($release.version) is installed for $who in $target"
 Write-Host "  Start it:  & '$(Join-Path $target 'CabinetOS.exe')'$(if ($shortcut) { ', or from the Start Menu' })"
 if ($pathEntry) { Write-Host '  cabinetos-cli, and cab for short, are on the PATH of terminals opened from now on.' }
 if ($Indexer) { Write-Host "  The indexer service runs now. It starts manually: after a restart of Windows, run Start-Service $serviceName as administrator." }
-Write-Host "  Remove it: powershell -ExecutionPolicy Bypass -File '$(Join-Path $target 'uninstall.ps1')'"
+Write-Host "  Remove it: Settings > Apps, or powershell -ExecutionPolicy Bypass -File '$(Join-Path $target 'uninstall.ps1')'"
 if (Get-Item -LiteralPath (Join-Path $source 'CabinetOS.exe') -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue) {
     Write-Host ''
     Write-Host 'These files carry the mark Windows gives downloads, and CabinetOS is not signed yet,'
