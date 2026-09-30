@@ -526,6 +526,10 @@ public sealed partial class MainWindow : Window
                 case "theme":
                     await SwitchThemeForSnapshotAsync(step.Argument);
                     break;
+                case "pick" when int.TryParse(step.Argument, out var pick):
+                    // The open theme picker's highlight on that row, as the pointer or a key moves it.
+                    _picker.SetHighlight(pick);
+                    break;
                 case "layout":
                     LogLayoutForSnapshot(step.Argument);
                     break;

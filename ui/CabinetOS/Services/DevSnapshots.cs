@@ -37,6 +37,7 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// <c>size:&lt;width&gt;x&lt;height&gt;</c> sizes the window's content in device-independent pixels,
 /// <c>fit:&lt;pixels&gt;</c> makes the window as high as gives the active pane's list that height,
 /// <c>theme:&lt;id&gt;</c> sets <c>ui.theme</c> as the picker does and waits until the theme is applied,
+/// <c>pick:&lt;index&gt;</c> puts the open theme picker's highlight on that row (its preview follows),
 /// <c>layout:&lt;label&gt;</c> logs "layout measured": each pane's whole rows, their height and the texts cut
 /// short, the function keys, every corner radius over 3 px outside the overlays, the sizes the metrics set,
 /// and the keymap's fingerprint (docs/ui.md, "Metrics and chrome"),
