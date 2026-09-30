@@ -47,6 +47,9 @@ public static class Live {
   [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
+  [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
+  // WS_EX_TOPMOST (0x8) of the extended style: the window is always on top.
+  public static bool Topmost(IntPtr h) { return (GetWindowLongPtr(h, -20).ToInt64() & 0x8) != 0; }
   // The keys of the cursor block (Page Up to Down, Insert, Delete) are sent as the extended keys they are: without the flag
   // they are the numeric keypad's, and with Num Lock on Windows takes Shift away from Shift+Down (and drops it from the key's message).
   static bool Extended(ushort vk) { return (vk >= 0x21 && vk <= 0x28) || vk == 0x2D || vk == 0x2E; }
@@ -1699,6 +1702,43 @@ $reset = ColumnsChanged 'reset' $changes
 $saved = WaitShellLines 'columns saved' $saves
 "19: the reset ran ($($reset.fields.modified)/$($reset.fields.type)/$($reset.fields.size)), and the file has no widths: $([bool]$reset -and [bool]$saved -and $null -eq (ConfigUi).columns)"
 Shot $h "$ShotDir\19-reset-live.png"
+
+# ----- compact overlay (docs/ui.md, "Compact overlay") -----
+# Ctrl+Alt+Up with real keys makes the window a small always-on-top drawer, and the same key brings it back. The window's
+# own rectangle comes from DWM (extended frame bounds, in pixels), its topmost style from Windows (WS_EX_TOPMOST), and its
+# log says what it decided ("compact overlay entered" and "left", in DIPs). The run's configuration has no saved size, so
+# the drawer is 480 by 640 DIPs, or the work area if that is smaller. Nothing after this depends on the window's size.
+function WindowRect { $r = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$r, 16); $r }
+
+Step "compact overlay: Ctrl+Alt+Up makes the window a small always-on-top drawer"
+$full = WindowRect
+$configBefore = ConfigUi
+$enteredBefore = (ShellLines 'compact overlay entered').Count
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.Up); Start-Sleep -Milliseconds 800
+$entered = WaitShellLines 'compact overlay entered' $enteredBefore
+$small = WindowRect
+$smallWidth = ($small.Right - $small.Left) / $scale; $smallHeight = ($small.Bottom - $small.Top) / $scale
+$topmost = [Live]::Topmost($script:h)
+Shot $h "$ShotDir\compact-overlay-live.png"
+# The frame bounds leave out the invisible resize borders (about 8 px a side): a few DIPs under the window's own size.
+$isSmall = [bool]$entered -and $smallWidth -lt 600 -and [Math]::Abs($smallWidth - $entered.fields.width) -le 20 -and [Math]::Abs($smallHeight - $entered.fields.height) -le 20
+"compact overlay: the window is small and topmost: $($isSmall -and $topmost) ($([Math]::Round($smallWidth)) x $([Math]::Round($smallHeight)) DIPs from $([Math]::Round(($full.Right - $full.Left) / $scale)) x $([Math]::Round(($full.Bottom - $full.Top) / $scale)), topmost $topmost; the log says $($entered.fields.width) x $($entered.fields.height), saved $($entered.fields.saved))"
+$modeText = @([System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.Name -like 'Compact overlay*' } | ForEach-Object { $_.Current.Name })
+"compact overlay: the status bar names the mode and the key to leave it ('$($modeText -join ' | ')'): $($modeText.Count -ge 1 -and $modeText[0] -like '*Ctrl+Alt+Up*')"
+
+Step "compact overlay: Ctrl+Alt+Up again brings the window back"
+$leftBefore = (ShellLines 'compact overlay left').Count
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.Up); Start-Sleep -Milliseconds 800
+$left = WaitShellLines 'compact overlay left' $leftBefore
+$back = WindowRect
+$topmostAfter = [Live]::Topmost($script:h)
+Shot $h "$ShotDir\compact-overlay-back-live.png"
+$sameSize = [Math]::Abs(($back.Right - $back.Left) - ($full.Right - $full.Left)) -le 2 -and [Math]::Abs(($back.Bottom - $back.Top) - ($full.Bottom - $full.Top)) -le 2
+$samePlace = [Math]::Abs($back.Left - $full.Left) -le 2 -and [Math]::Abs($back.Top - $full.Top) -le 2
+"compact overlay: the window came back to its size: $([bool]$left -and $sameSize -and $samePlace -and -not $topmostAfter) ($([Math]::Round(($back.Right - $back.Left) / $scale)) x $([Math]::Round(($back.Bottom - $back.Top) / $scale)) DIPs at $($back.Left),$($back.Top), topmost $topmostAfter)"
+"compact overlay: the dual pane, the sidebar and the dock came back as they were (dual $($left.fields.dual), sidebar $($left.fields.sidebar), dock $($left.fields.dock)): $([bool]$left -and $left.fields.dual -eq $entered.fields.dual -and $left.fields.sidebar -eq $entered.fields.sidebar -and $left.fields.dock -eq $entered.fields.dock)"
+$configAfter = ConfigUi
+"compact overlay: the file's ui.dualPane and ui.sidebar are as they were ($($configAfter.dualPane), $($configAfter.sidebar)): $($configAfter.dualPane -eq $configBefore.dualPane -and $configAfter.sidebar -eq $configBefore.sidebar)"
 
 Step "close"
 $script:h = $null
