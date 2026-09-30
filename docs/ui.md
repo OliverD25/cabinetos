@@ -140,7 +140,10 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   "Editing the menu"). Last, section 19, the column widths: the left pane's
   Modified|Type grip dragged 40 px with the real mouse, a real double-click
   on its Type heading, and the palette's Reset Column Widths ("Column
-  widths").
+  widths"). Step 19b sits with Total Commander's keys: the palette's
+  Toggle Folder Sizes turns folder sizes on, a folder with two folders is
+  opened and its count read from the window's log, and the same command
+  turns them off ("Folder sizes").
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
