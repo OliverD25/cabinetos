@@ -1,12 +1,13 @@
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Tabs;
 using CabinetOS.Tests.Support;
 
 namespace CabinetOS.Tests;
 
-/// <summary>Tabs per pane (Phase 12; docs/ui.md, "Tabs"): the tab model, its saved form, and the window's state message.</summary>
+/// <summary>Tabs per pane (Phase 12; docs/ui.md, "Tabs"): the tab model, its saved form, the window's state message, and what the strip's markup may hold.</summary>
 public class TabTests
 {
     private static TabStrip Strip(params string[] folders) => new(folders.Select(f => new PaneTab(f)), 0);
@@ -316,6 +317,40 @@ public class TabTests
         Assert.Equal(WindowStateBuilder.MaxMarked, request.Panes.Left.Marked.Count);
         Assert.Equal(marked[0], request.Panes.Left.Marked[0]);
         AssertValid(Encode(request));
+    }
+
+    [Fact]
+    public void The_strip_is_the_windows_own_row_and_nothing_in_its_markup_can_take_the_keyboard()
+    {
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        var markup = XDocument.Load(Path.Combine(Repo.Root, "ui", "CabinetOS", "Views", "PaneTabs.xaml"));
+
+        // WinUI's TabView drew the grey rounded block with a bar floating over it; the design has a flat tab.
+        Assert.DoesNotContain(markup.Descendants(), e => e.Name.LocalName is "TabView" or "TabViewItem");
+
+        // The pane keeps the keys: a control of the strip is out of the tab order and takes no focus from a click.
+        HashSet<string> focusable = ["UserControl", "ScrollViewer", "Button", "ToggleButton", "RepeatButton", "HyperlinkButton", "TextBox", "ComboBox", "ListView", "GridView", "CheckBox", "RadioButton", "Slider"];
+        var controls = markup.Descendants().Where(e => e.Name.Namespace == xaml && focusable.Contains(e.Name.LocalName)).ToList();
+        Assert.Contains(controls, e => e.Name.LocalName == "ScrollViewer");
+        Assert.Contains(controls, e => (string?)e.Attribute(x + "Name") == "AddButton");
+        foreach (var control in controls)
+        {
+            var who = (string?)control.Attribute(x + "Name") ?? control.Name.LocalName;
+            Assert.Equal((who, "False"), (who, (string?)control.Attribute("IsTabStop")));
+            Assert.Equal((who, "False"), (who, (string?)control.Attribute("AllowFocusOnInteraction")));
+        }
+
+        // The buttons the code builds (the tab's x) take their style, so the style says the same.
+        foreach (var style in markup.Descendants(xaml + "Style").Where(s => focusable.Contains((string?)s.Attribute("TargetType") ?? "")))
+        {
+            var who = (string?)style.Attribute(x + "Key") ?? "a style";
+            foreach (var property in new[] { "IsTabStop", "AllowFocusOnInteraction" })
+            {
+                var setter = style.Elements(xaml + "Setter").SingleOrDefault(s => (string?)s.Attribute("Property") == property);
+                Assert.Equal((who, property, "False"), (who, property, (string?)setter?.Attribute("Value")));
+            }
+        }
     }
 
     private static void AssertValid(string json)
