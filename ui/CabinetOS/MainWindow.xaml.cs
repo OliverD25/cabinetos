@@ -1041,6 +1041,10 @@ public sealed partial class MainWindow : Window
                 break;
             case ThemeChangedEvent changed:
                 _themes.Apply(changed.Theme);
+                if (ThemesView.IsOpen)
+                {
+                    _picker.MarkCurrent(changed.Theme.Id);
+                }
                 return;
             case VolumesChangedEvent volumes:
                 // A USB stick or a mapped share came or went: the Drives section follows.
@@ -1531,7 +1535,7 @@ public sealed partial class MainWindow : Window
             // the picker come back from the palette.
             ReviewView.Close();
             PluginsView.Close();
-            ThemesView.Close();
+            HideThemePicker(restore: true);
         }
     }
 

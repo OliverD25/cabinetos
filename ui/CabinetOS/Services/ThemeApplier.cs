@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Plugins;
 using CabinetOS.Core.Protocol;
@@ -18,7 +19,8 @@ namespace CabinetOS.Services;
 /// are changed the same way. The theme's kind switches the content between
 /// dark and light (kind <c>system</c>: as Windows is set, again whenever
 /// that changes), the Mica tint goes to the backdrop, and the terminal gets
-/// its colours through <see cref="Applied"/>.
+/// its colours through <see cref="Applied"/>. The theme picker's preview is
+/// painted the same way, while <see cref="Theme"/> stays the theme in effect.
 /// </summary>
 internal sealed class ThemeApplier
 {
@@ -50,13 +52,19 @@ internal sealed class ThemeApplier
         _system.ColorValuesChanged += (_, _) => root.DispatcherQueue.TryEnqueue(SystemColorsChanged);
     }
 
-    /// <summary>A theme was applied: the terminal and anything else that paints outside the brushes follow.</summary>
+    /// <summary>
+    /// A theme was painted (applied, previewed, or restored after a preview):
+    /// the terminal and anything else that paints outside the brushes follow.
+    /// </summary>
     public event Action<ThemeLook>? Applied;
 
     /// <summary>The theme in effect, or null before the core sent one.</summary>
     public ColorTheme? Theme { get; private set; }
 
-    /// <summary>What it mapped to.</summary>
+    /// <summary>The theme the picker shows in its place, or null when the theme in effect is shown.</summary>
+    public ColorTheme? Previewing { get; private set; }
+
+    /// <summary>What the theme shown maps to: the preview's look while there is one.</summary>
     public ThemeLook? Current { get; private set; }
 
     /// <summary>
@@ -84,24 +92,82 @@ internal sealed class ThemeApplier
     public bool? ModeOverride { get; set; }
 
     /// <summary>
-    /// Windows' colours changed: a theme that follows its accent, or its mode
-    /// when the mode is now another, is applied again.
+    /// Windows' colours changed: the theme shown (a preview, else the theme in
+    /// effect), when it follows Windows' accent, or its mode and the mode is
+    /// now another, is painted again.
     /// </summary>
     public void SystemColorsChanged()
     {
-        if (Theme is { } theme && Current is { } look && (look.FollowsSystemAccent || (look.FollowsSystemMode && look.IsLight != SystemIsLight)))
+        if (Current is not { } look || !(look.FollowsSystemAccent || (look.FollowsSystemMode && look.IsLight != SystemIsLight)))
+        {
+            return;
+        }
+        if (Previewing is { } previewing)
+        {
+            Preview(previewing);
+        }
+        else if (Theme is { } theme)
         {
             Apply(theme);
         }
     }
 
     /// <summary>
-    /// Applies <paramref name="theme"/>. A theme with a colour that is not one
-    /// is not applied, not even in part (as the core does); the log says why.
+    /// Applies <paramref name="theme"/> as the theme in effect; a preview on
+    /// screen ends with it. A theme with a colour that is not one is not
+    /// applied, not even in part (as the core does); the log says why.
     /// </summary>
     public bool Apply(ColorTheme theme)
     {
-        ThemeLook look;
+        if (!Paint(theme, out var look))
+        {
+            return false;
+        }
+        Theme = theme;
+        Previewing = null;
+        Current = look;
+        Diag.Info(Target, "theme applied", new LogField("theme", look.Id), new LogField("kind", theme.Kind),
+            new LogField("mode", look.IsLight ? "light" : "dark"),
+            new LogField("accent", look.FollowsSystemAccent ? "system" : look.Accent.ToString()),
+            new LogField("mica", look.Mica is { } mica ? $"{mica.Tint} at {mica.Opacity}" : "plain"));
+        Applied?.Invoke(look);
+        return true;
+    }
+
+    /// <summary>
+    /// Paints <paramref name="theme"/> in place of the theme in effect, which
+    /// stays <see cref="Theme"/>: the theme picker's preview of its highlight.
+    /// </summary>
+    public bool Preview(ColorTheme theme)
+    {
+        if (!Paint(theme, out var look))
+        {
+            return false;
+        }
+        Previewing = theme;
+        Current = look;
+        Diag.Info(Target, "theme previewed", new LogField("theme", look.Id), new LogField("mode", look.IsLight ? "light" : "dark"));
+        Applied?.Invoke(look);
+        return true;
+    }
+
+    /// <summary>Paints the theme in effect again after a preview; nothing when none is shown.</summary>
+    public void EndPreview()
+    {
+        if (Previewing is null || Theme is not { } theme || !Paint(theme, out var look))
+        {
+            return;
+        }
+        Previewing = null;
+        Current = look;
+        Diag.Info(Target, "theme restored", new LogField("theme", look.Id), new LogField("mode", look.IsLight ? "light" : "dark"));
+        Applied?.Invoke(look);
+    }
+
+    // Maps the theme and sets every brush; the callers say what it now is and raise Applied, whose
+    // handlers read Theme and Current.
+    private bool Paint(ColorTheme theme, [NotNullWhen(true)] out ThemeLook? look)
+    {
         try
         {
             var light = SystemIsLight;
@@ -110,6 +176,7 @@ internal sealed class ThemeApplier
         catch (ThemeFormatException error)
         {
             Diag.Warn(Target, "a theme was not applied", new LogField("theme", theme.Id), new LogField("error", error.Message));
+            look = null;
             return false;
         }
         var resources = Application.Current.Resources;
@@ -144,14 +211,6 @@ internal sealed class ThemeApplier
         _backdrop.SetTint(look.Mica);
         // WinUI's own controls in the theme's mode; the tokens above are the same objects in both.
         _root.RequestedTheme = look.IsLight ? ElementTheme.Light : ElementTheme.Dark;
-
-        Theme = theme;
-        Current = look;
-        Diag.Info(Target, "theme applied", new LogField("theme", look.Id), new LogField("kind", theme.Kind),
-            new LogField("mode", look.IsLight ? "light" : "dark"),
-            new LogField("accent", look.FollowsSystemAccent ? "system" : look.Accent.ToString()),
-            new LogField("mica", look.Mica is { } mica ? $"{mica.Tint} at {mica.Opacity}" : "plain"));
-        Applied?.Invoke(look);
         return true;
     }
 

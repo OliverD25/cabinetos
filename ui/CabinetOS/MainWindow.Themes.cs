@@ -30,6 +30,17 @@ public sealed partial class MainWindow
             ThemesView.Repaint();
         };
         _picker = new ThemePickerModel(_session);
+        _picker.Preview += theme =>
+        {
+            if (theme is null)
+            {
+                _themes.EndPreview();
+            }
+            else
+            {
+                _themes.Preview(theme);
+            }
+        };
         ThemesView.Model = _picker;
         ThemesView.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         ThemesView.SystemAccent = () =>
@@ -63,6 +74,7 @@ public sealed partial class MainWindow
     private async Task OpenThemePickerAsync()
     {
         FileMenu.Close();
+        _picker.BeginPreviews();
         ThemesView.Open();
         await _picker.LoadAsync(_themes.Theme?.Id);
     }
@@ -72,16 +84,25 @@ public sealed partial class MainWindow
         var index = CommandArgs.Number(invocation.Args, "index") is { } chosen ? (int)chosen : (int?)null;
         if (await _picker.ApplyAsync(index, invocation.RequestId))
         {
-            // theme_changed follows and repaints the window; the picker's job is done.
-            CloseThemePicker();
+            // theme_changed follows and makes the preview on screen the theme in effect: painting
+            // the old theme back in between would flash it.
+            CloseThemePicker(restore: false);
         }
     }
 
-    private void CloseThemePicker()
+    private void CloseThemePicker(bool restore = true)
     {
         // The pane takes the keyboard before the picker collapses (see the palette).
         FocusActivePane();
+        HideThemePicker(restore);
+    }
+
+    // Every way the picker goes away ends its previews here: restore paints the theme in effect again.
+    private void HideThemePicker(bool restore)
+    {
+        // Closed first, so the repaint of the restore does not build the picker's rows again.
         ThemesView.Close();
+        _picker.EndPreviews(restore);
     }
 
     // The snapshot aid's stand-in for Mica, which is not part of the window's content:
