@@ -132,7 +132,7 @@ public static class Live {
 $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L = 0x4C; Esc = 0x1B; Tab = 0x09; Enter = 0x0D; Back = 0x08; Down = 0x28; PgDn = 0x22; F2 = 0x71;
   F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56;
   F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A;
-  T = 0x54; Up = 0x26; End = 0x23; W = 0x57; X = 0x58; A = 0x41; E = 0x45; Left = 0x25; Right = 0x27 }
+  T = 0x54; Up = 0x26; End = 0x23; W = 0x57; X = 0x58; A = 0x41; E = 0x45; Left = 0x25; Right = 0x27; C = 0x43 }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   # A flyout (the drive list) is a window of its own, so the test is the process, not the window.
@@ -1727,6 +1727,54 @@ $reset = ColumnsChanged 'reset' $changes
 $saved = WaitShellLines 'columns saved' $saves
 "19: the reset ran ($($reset.fields.modified)/$($reset.fields.type)/$($reset.fields.size)), and the file has no widths: $([bool]$reset -and [bool]$saved -and $null -eq (ConfigUi).columns)"
 Shot $h "$ShotDir\19-reset-live.png"
+
+# ----- 20: the column view (docs/ui.md, "The column view") -----
+# The left pane in a folder three levels deep (a\b\c, a file in each). Ctrl+Alt+C with real keys shows the pane's tab as
+# columns; Enter on the folder row a, then on b, opens two columns to the right (folders sort first, so the cursor is on a
+# folder each time); Left twice takes the keyboard back to the first column, the columns staying; Ctrl+Alt+C again shows
+# the list of the deepest folder, and the other two columns' listings are released. The window logs every change ("column
+# view changed": the depth, the keyboard's column, the listings), which is how the run reads the depth without the snapshot
+# aid. The section leaves the pane in the list mode.
+$c20 = "$files\columns20"
+New-Item -ItemType Directory -Force "$c20\a\b\c" | Out-Null
+foreach ($file in "$c20\top.txt", "$c20\a\a.txt", "$c20\a\b\b.txt", "$c20\a\b\c\c.txt") { Set-Content -LiteralPath $file -Value "x" -NoNewline }
+
+Step "20: the left pane in a folder three levels deep; Ctrl+Alt+C shows its tab as columns"
+GoLeftPane $c20
+$entered = (ShellLines 'column view entered').Count
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.C)
+$in = WaitShellLines 'column view entered' $entered
+"20: Ctrl+Alt+C entered the column view at the folder ($($in.fields.path)): $([bool]$in -and $in.fields.path -eq $c20)"
+
+Step "20: Enter on the folder row a, then on b: two columns open to the right"
+$opened = (ShellLines 'column opened').Count
+[Live]::Press($VK.Enter)
+$first20 = WaitShellLines 'column opened' $opened
+[Live]::Press($VK.Enter)
+$second20 = WaitShellLines 'column opened' ($opened + 1)
+$three20 = WaitShellLines 'column view changed' 0 5 { param($line) $line.fields.depth -eq 3 }
+"20: Enter opened a, then b ($($first20.fields.path) at depth $($first20.fields.depth), $($second20.fields.path) at depth $($second20.fields.depth)): $([bool]$second20 -and $first20.fields.path -eq "$c20\a" -and $second20.fields.path -eq "$c20\a\b")"
+"20: three columns, the keyboard in the third, three listings ($($three20.fields.folders); keyboard $($three20.fields.keyboard), listings $($three20.fields.listings)): $($three20.fields.depth -eq 3 -and $three20.fields.keyboard -eq 3 -and $three20.fields.listings -eq 3)"
+Shot $h "$ShotDir\columns-live.png"
+
+Step "20: Left twice: the keyboard goes back to the first column; the three columns stay"
+$changes = (ShellLines 'column view changed').Count
+[Live]::Press($VK.Left)
+[void](WaitShellLines 'column view changed' $changes)
+[Live]::Press($VK.Left)
+$back20 = WaitShellLines 'column view changed' ($changes + 1) 5 { param($line) $line.fields.keyboard -eq 1 }
+"20: the keyboard is in the first column, three columns still shown, the tab still at b (keyboard $($back20.fields.keyboard), depth $($back20.fields.depth), path $($back20.fields.path)): $($back20.fields.keyboard -eq 1 -and $back20.fields.depth -eq 3 -and $back20.fields.path -eq "$c20\a\b")"
+
+Step "20: Ctrl+Alt+C again: the list of the deepest folder, the other columns' listings released"
+$left20 = (ShellLines 'column view left').Count
+$released = (ShellLines 'column released').Count
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.C)
+$out20 = WaitShellLines 'column view left' $left20
+Start-Sleep -Milliseconds 500
+$gone = @(ShellLines 'column released' | Select-Object -Skip $released)
+"20: the list shows the deepest folder ($($out20.fields.path)): $($out20.fields.path -eq "$c20\a\b")"
+"20: the two other columns were released ($(($gone | ForEach-Object { "$($_.fields.depth):$($_.fields.path)" }) -join ', ')): $($gone.Count -eq 2)"
+Shot $h "$ShotDir\20-list-live.png"
 
 # ----- compact overlay (docs/ui.md, "Compact overlay") -----
 # Ctrl+Alt+Up with real keys makes the window a small always-on-top drawer, and the same key brings it back. The window's
