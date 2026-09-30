@@ -322,3 +322,14 @@ The shells run only `echo`, `cd`, `mode con`, `Get-Location`, `pwd` and
 `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which the tests
 remove. Paths typed with `terminal_type_paths` are never run: no Enter
 follows them.
+
+The `claude` profile was checked with the real program on 2026-09-30, two
+ways: headless, through `cabinetos-cli term --profile claude` driven by a
+script that reads the output as it grows (at its prompt in 1 s, the note
+of the profile named in its reply, alive after Esc, ended by `/exit` with
+exit code 0), and with real keys in the window (`ui/livecheck/claude-terminal.ps1`,
+[ui.md](ui.md), "The live check"). Both clear every `CLAUDE*` variable
+before the core starts: Claude Code refuses to start inside another
+Claude Code session, which it tells by `CLAUDECODE`; a user's window
+never has it. Report:
+[log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md).

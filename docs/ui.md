@@ -133,6 +133,20 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
   preview.
+- `claude-terminal.ps1`: Claude Code in the terminal's `claude` profile
+  ([terminal.md](terminal.md), "Profiles"). A fresh window on the
+  repository folder with `terminal.defaultProfile: claude`; Ctrl+` starts
+  Claude Code in the pane's folder; a long answer cut short with Esc; a
+  prompt that makes it write a file, its permission question answered
+  with Enter; Backspace in the pane, whose folder change the sync must
+  skip (decision `SkipProfile`); Ctrl+P from the pane, which types the
+  path into its input; `/exit`. Two short prompts go to the Claude login
+  of whoever runs it. It waits until nobody has touched the PC for 12 s
+  before it takes the keyboard, stops when another window comes in front,
+  clears every `CLAUDE*` variable first (Claude Code refuses to start
+  inside another Claude Code session), and opens `DONE.md` at the end.
+  Every check True on 2026-09-30
+  ([log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md)).
 
 `run-livecheck.ps1` runs `livecheck.ps1 -Strict`, keeps the output in
 `_io\live-check\run-<time>.txt` next to the repository (`-Io <folder>`

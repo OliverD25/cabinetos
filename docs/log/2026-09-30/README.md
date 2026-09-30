@@ -33,6 +33,7 @@ is a plan paragraph with its commits.
 | [phase-13-rail-report.md](phase-13-rail-report.md) | shell, Sonnet | Phase 13: the activity rail and the modular sidebar; a tool page runs its plugin's commands; the live check's "ask" step | 68ee1f0 to 1a05a5c; 839 UI tests; whole-script live check 105 True, 0 False |
 | [scroll-item5-report.md](scroll-item5-report.md) | shell, Opus | the scroll-gap investigation; the heavy-logging window and the crash offer seen with real keys | 61f044d, 58fa975, c5ed4c8; 848 UI tests; the default theme at 0 % of frames over 20 ms; the report [scroll-gaps.md](scroll-gaps.md) |
 | [rail-tree-at-start-report.md](rail-tree-at-start-report.md) | shell, Sonnet | the follow-up: the rail's folder tree empty at start | ca72efc; 849 UI tests; the whole live check with real keys exit 0, 106 True, 0 False, the scroll goal met |
+| [claude-code-in-the-terminal.md](claude-code-in-the-terminal.md) | daytime: a coder on Sonnet, the planning session's checks | the `claude` terminal profile, `followsPane`, the core's folder on every session's `PATH`; Claude Code checked headless and with real keys; the Agent extension against a local model | 2f0af70 to 72a4bbc; 726 core, 852 window; the probe `claude-terminal.ps1` every check True |
 
 The extension agent's earlier per-item reports (item 2b, item 3) never
 reached the planning session; its final hand-back above carries the run's

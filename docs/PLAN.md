@@ -805,6 +805,45 @@ plugin it follows (a general rule, so the chat page can send `agent.*`),
 and the live check's "ask" step with the real settings key and a
 canned-reply file. Guide: [extensions/agent.md](extensions/agent.md).
 
+**Claude Code in the terminal, 2026-09-30 (2f0af70, f48c04c, 9be0f5b,
+8ed8a48, 72a4bbc; coder on Sonnet).** The creator asked whether the
+subscription Claude Code, the command-line program, can run in CabinetOS's
+terminal with no API key. It can: it is a console program, and a profile
+starts it. Built the same day: the fourth default profile `claude`
+(`claude.exe` with `--append-system-prompt` and a 60-word note that names
+`cabinetos-cli state --json`, its copy, move and delete as jobs, and `undo
+--last`); `followsPane` on every profile (`false` for `claude`), so the
+window's folder sync never types a change-directory line into a program
+that is not a shell, which would have reached Claude Code's prompt as a
+message (a new decision `SkipProfile` with its caption, from the tab's
+first moment; the user's own Ctrl+P still types paths there); and the
+core's own folder at the end of every session's `PATH`, so `cabinetos-cli`
+(and `cab` in a release) run from any CabinetOS terminal. A file that
+already lists profiles keeps its list; the docs give the JSON to add. Esc
+needed no change: the page passes only its ways out to the window, so Esc
+reaches the program, as the live check had shown for pwsh. Checked three
+ways the same day, all recorded in
+[log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md):
+headless through the CLI's `term` (at its prompt in 1 s; its reply named
+`state --json`, so the note reached it; alive after Esc; `/exit` ended
+the session with code 0), with real keys in the window
+(`ui/livecheck/claude-terminal.ps1`: Ctrl+` with `terminal.defaultProfile:
+claude`, Esc cutting an answer short, a file written after Enter answered
+its permission question, the sync skipping the tab on a folder change,
+Ctrl+P from the pane, `/exit`; every check True), and the Agent
+extension's first real model call, with a local model (Ollama, gemma3:27b
+on the development PC): the chain worked end to end, the model did not
+keep to the command format, and the agent refused every bad line and
+changed nothing, so the first Claude conversation still waits for the
+creator's key. Learned: Claude Code refuses to start with `CLAUDECODE` in
+its environment (a run started from inside a Claude Code session clears
+those variables; a user's window never has them), and the Windows build's
+first start ran its login, which landed on the creator's Console
+organization by the look of its status line, for the creator to check
+with `/status`. Tests: 726 core, 852 window. Guides:
+[terminal.md](terminal.md), "Profiles"; [extensions/agent.md](extensions/agent.md),
+"Claude Code in the terminal".
+
 ### Phase 15 — Heavy logging mode and trace ids (the creator's idea, 2026-09-29 late evening; built in the sleep-mode run of 2026-09-29/30)
 
 Goal: a switch that makes CabinetOS record every operation, even at the
@@ -976,6 +1015,45 @@ Article 12 after "or the UI thread", for the creator to accept or refuse:
 "The one exception is the opt-in heavy mode, where a thread of the core
 may wait for the log writer so that no operation goes unrecorded (ADR
 0013)." [ARCHITECTURE.md](ARCHITECTURE.md) gained the row for its §8.
+
+### Phase 16 — Shell redesign: one top row, per-pane breadcrumbs, find in pane, Quick Open (the creator's handout `_io/SHELL_REDESIGN.md`, 2026-09-30; started the same day)
+
+The creator's specification of 2026-09-30 changes the shell's structure,
+for every theme. The title bar and the command bar merge into one 40 px
+top row (32 in Commander Compact): a hamburger menu of common commands
+from the registry, the app icon, a workspace pill, a centered command
+center that opens Quick Open, and the right cluster (Dual/Single,
+Terminal, Marketplace, Palette, Settings) before the caption buttons. The
+global address bar, search field and nav buttons go, and so does the pane
+header row. Each pane gets, under its tab strip, a breadcrumb row with
+Back, Forward and Up, long paths collapsed to `Drive › … › parent ›
+current`, and Ctrl+L to edit the path in place. Find becomes a per-pane
+widget on Ctrl+F that filters the current tab live; Quick Open on Ctrl+P
+finds files and folders of the workspace in the palette's surface, `>`
+switching to commands. Tabs per pane (Phase 12) stay and carry the rest of
+the tab state (selection, scroll position, find query). Themes may set the
+new metrics and may not remove the new elements. Reference build:
+`_io/design/Compact_Theme/CabinetOS Compact.dc.html`.
+
+Consistency: Article 3 (the single top row is the Windows 11 shape),
+Article 4 (find and Quick Open appear on demand), Article 5 (the panes are
+untouched), Article 7 (every new control is a command with a key; the
+immutable tier stays), Article 10 (Quick Open is a view over the core's
+existing `search`; the branch in the pill is one read of `.git\HEAD`, no
+git process). Decisions made where the handout was silent: Ctrl+P moves
+from `terminal.insertPath` (Total Commander's key) to Quick Open, as the
+handout asks, and the terminal's path key becomes Ctrl+Alt+P
+(Ctrl+Shift+Enter for the selected paths stays); Ctrl+F stays
+`search.focus`, which opens the pane's find widget; the window keeps its
+one workspace, no workspace model is built; a key of the handout's table
+already taken by another command stays with that command and is reported.
+Done when the handout's §7 acceptance list passes: window tests for the
+collapse rule, the tab state restore, the find filter's scope, Quick Open,
+the hamburger, the keys, the 640 px rule and the nav buttons; the live
+check updated for the removed elements, with a section 16 for the new
+keys; the guides (ui.md, keybindings.md, config.md, the themes) and the
+CHANGELOG. Handed to a coder on Opus on 2026-09-30; the first release
+(Phase 10) waits for it.
 
 
 ## 6. Phase 1 in detail — the Rust core scaffold
