@@ -320,14 +320,32 @@ public sealed partial class FilePane : UserControl
         _noteTimer.Start();
     }
 
-    /// <summary>Where a context menu opened from the keyboard goes: under the row's name, in the window's coordinates.</summary>
+    /// <summary>
+    /// Where a context menu opened from the keyboard hangs: the row's bottom-left, at the name column's left edge, in the
+    /// window's coordinates. The menu's top-left corner goes there, as Explorer's does under the pointer.
+    /// </summary>
     public Point RowAnchor(int index)
+    {
+        var (left, _, bottom) = RowEdges(index);
+        return new Point(left, bottom);
+    }
+
+    /// <summary>
+    /// The row's name column's left edge, and the row's top and bottom, in the window's coordinates, for a menu opened from
+    /// the keyboard. A row that is not on screen gives a point near the top of the pane, twice.
+    /// </summary>
+    public (double Left, double Top, double Bottom) RowEdges(int index)
     {
         if (index >= 0 && PositionOf(index) is >= 0 and var position && Repeater.TryGetElement(position) is FileRow row)
         {
-            return row.TransformToVisual(null).TransformPoint(new Point(40, _rowHeight));
+            var top = row.TransformToVisual(null).TransformPoint(new Point(0, 0));
+            var name = row.NameElement.ActualWidth > 0
+                ? row.NameElement.TransformToVisual(null).TransformPoint(new Point(0, 0)).X
+                : top.X + 40;
+            return (name, top.Y, top.Y + _rowHeight);
         }
-        return Frame.TransformToVisual(null).TransformPoint(new Point(40, 80));
+        var fallback = Frame.TransformToVisual(null).TransformPoint(new Point(40, 80));
+        return (fallback.X, fallback.Y, fallback.Y);
     }
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e)

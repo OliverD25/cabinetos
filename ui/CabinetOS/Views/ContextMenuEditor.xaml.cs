@@ -98,7 +98,8 @@ public sealed partial class ContextMenuEditor : UserControl
 
     /// <summary>
     /// Shows <paramref name="model"/> where the menu was (<paramref name="menu"/>, the window's
-    /// coordinates), else at <paramref name="at"/>, kept inside the window. <paramref name="around"/>
+    /// coordinates), else where a menu would open for <paramref name="at"/> (<see cref="MenuPlacement"/>:
+    /// the corner at the point, above or to its left when it would not fit). <paramref name="around"/>
     /// is the menu built without the target's rows: its icon row, and what follows the rows.
     /// </summary>
     public void Show(ContextMenuEditModel model, ContextMenuView around, Rect? menu, Point at, bool fromKeyboard)
@@ -118,8 +119,17 @@ public sealed partial class ContextMenuEditor : UserControl
         Panel.Width = width;
         Panel.MaxHeight = Math.Max(200, window.Height - 16);
         Panel.Measure(new Size(width, Panel.MaxHeight));
-        var x = Math.Max(4, Math.Min(menu?.X ?? at.X, window.Width - width - 4));
-        var y = Math.Max(4, Math.Min(menu?.Y ?? at.Y, window.Height - Panel.DesiredSize.Height - 8));
+        double x, y;
+        if (menu is { } place)
+        {
+            x = Math.Max(4, Math.Min(place.X, window.Width - width - 4));
+            y = Math.Max(4, Math.Min(place.Y, window.Height - Panel.DesiredSize.Height - 8));
+        }
+        else
+        {
+            // Where the menu would have opened: the corner at the point, above or to the left of it when it does not fit.
+            (x, y) = MenuPlacement.Corner(at.X, at.Y, width, Panel.DesiredSize.Height, window.Width, window.Height);
+        }
         Canvas.SetLeft(Panel, x);
         Canvas.SetTop(Panel, y);
         _entrance.Begin();

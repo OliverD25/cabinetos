@@ -31,6 +31,9 @@ internal sealed class ContextMenuFlyout
     // The menu in front: shown, or waiting for the one before it to be gone.
     private Built? _front;
 
+    // The corner the front menu was given (the window's coordinates): its measured size runs from here.
+    private Point _corner;
+
     // The flyout WinUI has: asked to show, its Closed not come yet. WinUI drops a ShowAt on a flyout that is still
     // closing, and holds another flyout's back until then, so a new menu waits here for that Closed (_pending). It
     // also drops a ShowAt made inside the flyout's own Closed when the flyout is shown again at the place it had (the
@@ -45,7 +48,11 @@ internal sealed class ContextMenuFlyout
     private ContextMenuEntry? _chosen;
 
     /// <summary>A flyout built for one shape, with its buttons and the entries they stand for.</summary>
-    private sealed record Built(CommandBarFlyout Flyout, List<(AppBarButton Button, bool Quick, int Index)> Buttons);
+    private sealed record Built(CommandBarFlyout Flyout, List<(AppBarButton Button, bool Quick, int Index)> Buttons)
+    {
+        /// <summary>The menu's size as WinUI drew it the last time, once known: where it goes near an edge follows it.</summary>
+        public Size? Measured { get; set; }
+    }
 
     /// <summary>Runs a chosen entry, once the menu is closed.</summary>
     public Action<ContextMenuEntry>? Run { get; set; }
@@ -55,6 +62,12 @@ internal sealed class ContextMenuFlyout
 
     /// <summary>Raised when WinUI has put the menu on screen (its <c>Opened</c>), not only been asked to.</summary>
     public event Action? Opened;
+
+    /// <summary>
+    /// Raised once the menu's buttons are laid out after <see cref="Opened"/>: where the menu is (the window's
+    /// coordinates), for the log that shows where it landed against the point it was asked for (Article 12).
+    /// </summary>
+    public event Action<Rect>? Placed;
 
     /// <summary>Whether WinUI has the menu on screen now: for the snapshot aid's log.</summary>
     public bool IsOnScreen => _onScreen is not null;
@@ -107,7 +120,11 @@ internal sealed class ContextMenuFlyout
         _chosen = null;
         ChosenBounds = null;
         var origin = target.TransformToVisual(null).TransformPoint(new Point(0, 0));
-        var position = new Point(at.X - origin.X, at.Y - origin.Y);
+        var window = target.XamlRoot?.Size ?? new Size(double.PositiveInfinity, double.PositiveInfinity);
+        var size = built.Measured ?? Estimate(view);
+        var (x, y) = MenuPlacement.Corner(at.X, at.Y, size.Width, size.Height, window.Width, window.Height);
+        _corner = new Point(x, y);
+        var position = new Point(x - origin.X, y - origin.Y);
         if (_shown is null && !_turnQueued)
         {
             ShowNow(built, target, position);
@@ -121,7 +138,89 @@ internal sealed class ContextMenuFlyout
     private void ShowNow(Built built, FrameworkElement target, Point position)
     {
         _shown = built.Flyout;
-        built.Flyout.ShowAt(target, new FlyoutShowOptions { Position = position, ShowMode = FlyoutShowMode.Standard });
+        built.Flyout.ShowAt(target, MenuShowOptions.At(position));
+    }
+
+    // The icon row's popup and the list's popup are laid out a turn or two after Opened: the report waits until every
+    // button has a size (at most ten turns), and keeps the size for the next showing of this shape.
+    private void ReportPlaced(CommandBarFlyout flyout, int attempt)
+    {
+        if (!ReferenceEquals(flyout, _onScreen) || _front is not { } built || !ReferenceEquals(built.Flyout, flyout))
+        {
+            return;
+        }
+        var bounds = PopupBounds(built, out var complete);
+        if (!complete && attempt < 10)
+        {
+            flyout.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ReportPlaced(flyout, attempt + 1));
+            return;
+        }
+        if (bounds is { } placed)
+        {
+            if (complete)
+            {
+                // From the corner the flyout was given, not the list's own edge: without an icon row the list starts 2.7 below it.
+                built.Measured = new Size(placed.Right - _corner.X, placed.Bottom - _corner.Y);
+            }
+            Placed?.Invoke(placed);
+        }
+    }
+
+    // The menu's box: the popups that hold its buttons, joined. The icon row and the list are two popups of WinUI's.
+    private static Rect? PopupBounds(Built built, out bool complete)
+    {
+        complete = false;
+        if (built.Buttons.Count == 0 || built.Buttons[0].Button.XamlRoot is not { } root)
+        {
+            return null;
+        }
+        complete = built.Buttons.All(b => b.Button.ActualWidth > 0);
+        Rect? union = null;
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+        {
+            if (popup.Child is not FrameworkElement child || !built.Buttons.Any(b => IsInside(b.Button, child)))
+            {
+                continue;
+            }
+            var bounds = child.TransformToVisual(null).TransformBounds(new Rect(0, 0, child.ActualWidth, child.ActualHeight));
+            union = union is not { } known ? bounds : new Rect(
+                new Point(Math.Min(known.Left, bounds.Left), Math.Min(known.Top, bounds.Top)),
+                new Point(Math.Max(known.Right, bounds.Right), Math.Max(known.Bottom, bounds.Bottom)));
+        }
+        complete &= union is not null;
+        return union;
+    }
+
+    private static bool IsInside(DependencyObject element, DependencyObject ancestor)
+    {
+        for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current == ancestor)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // What a shape's first showing has not measured yet, from what WinUI drew in the default theme (2026-09-30): the icon
+    // row is 60.7 high with its border, a list row 32, a divider 9.3, a header about 28, and the list adds 7.3 of padding;
+    // without an icon row the list starts 2.7 below the point. The width is the icon row's (60 a button and 9.3) or 306.
+    // Only the first showing of a shape near an edge relies on it: after that the measured size is used.
+    private static Size Estimate(ContextMenuView view)
+    {
+        var list = 0.0;
+        foreach (var entry in view.Items)
+        {
+            list += entry.Kind switch
+            {
+                ContextMenuEntryKind.Separator => 9.33,
+                ContextMenuEntryKind.Header => 28,
+                _ => 32,
+            };
+        }
+        var top = view.QuickActions.Count > 0 ? 60.67 : 2.67;
+        return new Size(Math.Max((view.QuickActions.Count * 60) + 9.33, 306), top + (view.Items.Count > 0 ? list + 7.33 : 0));
     }
 
     // Everything a button shows but its enabled state; a click reads its entry from the view in front.
@@ -137,6 +236,7 @@ internal sealed class ContextMenuFlyout
             {
                 _onScreen = flyout;
                 Opened?.Invoke();
+                ReportPlaced(flyout, 0);
             }
         };
         flyout.Closed += (_, _) => OnClosed(flyout);
@@ -358,6 +458,20 @@ internal sealed class ContextMenuFlyout
 }
 
 /// <summary>
+/// The options of a menu shown at the corner the window worked out (<see cref="MenuPlacement"/>): its top-left
+/// corner there. WinUI only keeps it there; it neither flips nor shifts a flyout for the window's edges.
+/// </summary>
+internal static class MenuShowOptions
+{
+    public static FlyoutShowOptions At(Point corner) => new()
+    {
+        Position = corner,
+        Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
+        ShowMode = FlyoutShowMode.Standard,
+    };
+}
+
+/// <summary>
 /// Windows' own context menu (Shift+right-click, <c>menu.showShell</c>; Phase 18) as the core built
 /// it (<c>shell_menu</c>): a <see cref="MenuFlyout"/>, whose submenus fit the shell's "Send to" and
 /// "Give access to". A click runs the item in the core (<c>shell_menu_invoke</c>) once the menu has
@@ -376,12 +490,16 @@ internal sealed class ShellMenuFlyout
     // reason: WinUI drops a ShowAt on a flyout that is still closing).
     private ShellMenuReply? _menu;
     private bool _shown;
+    private FrameworkElement? _target;
     private (FrameworkElement Target, Point At)? _pending;
     private uint? _chosen;
     private (int Items, int Separators, int Submenus) _used;
 
     /// <summary>Runs a chosen item: (menu, item).</summary>
     public Action<ulong, uint>? Invoke { get; set; }
+
+    /// <summary>Raised when the menu is on screen: where it is (the window's coordinates), for the log.</summary>
+    public event Action<Rect>? Placed;
 
     /// <summary>Raised when the menu closed, chosen or not, before the chosen item runs.</summary>
     public event Action? Closed;
@@ -405,6 +523,7 @@ internal sealed class ShellMenuFlyout
         _menu = menu;
         _chosen = null;
         var origin = target.TransformToVisual(null).TransformPoint(new Point(0, 0));
+        // Windows' menu is long (20 to 40 rows) and never fits a small window, so WinUI keeps it on the screen, as the shell's own.
         var position = new Point(at.X - origin.X, at.Y - origin.Y);
         if (_shown)
         {
@@ -422,6 +541,7 @@ internal sealed class ShellMenuFlyout
         {
             _flyout = new MenuFlyout();
             _flyout.Closed += (_, _) => OnClosed();
+            _flyout.Opened += (_, _) => ReportPlaced();
         }
         var flyout = _flyout;
         // Each kept item leaves its parent before it may be added again.
@@ -436,7 +556,25 @@ internal sealed class ShellMenuFlyout
             flyout.Items.Add(Element(item));
         }
         _shown = true;
-        flyout.ShowAt(target, new FlyoutShowOptions { Position = position, ShowMode = FlyoutShowMode.Standard });
+        _target = target;
+        flyout.ShowAt(target, MenuShowOptions.At(position));
+    }
+
+    // The presenter is the content of the popup that holds the menu.
+    private void ReportPlaced()
+    {
+        if (_target?.XamlRoot is not { } root)
+        {
+            return;
+        }
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+        {
+            if (popup.Child is MenuFlyoutPresenter { ActualWidth: > 0 } presenter)
+            {
+                Placed?.Invoke(presenter.TransformToVisual(null).TransformBounds(new Rect(0, 0, presenter.ActualWidth, presenter.ActualHeight)));
+                return;
+            }
+        }
     }
 
     /// <summary>Closes the menu without running anything; the core releases it after 30 s.</summary>

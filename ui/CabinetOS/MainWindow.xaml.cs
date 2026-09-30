@@ -429,9 +429,17 @@ public sealed partial class MainWindow : Window
                     // the selection is selected first, as a right-click does.
                     OnContextMenuRequested(_paneViews[_active], MenuRowForStep(step.Argument), null);
                     break;
+                case "menu-at" when TryParseMenuAt(step.Argument, out var menuRow, out var menuPoint):
+                    // A right-click's point: the window's content DIPs, "menu-at:alpha.txt|300,200".
+                    OnContextMenuRequested(_paneViews[_active], MenuRowForStep(menuRow), menuPoint);
+                    break;
                 case "shellmenu":
                     // Shift+right-click on the same rows; Windows' menu comes when the core answers.
                     OnShellMenuRequested(_paneViews[_active], MenuRowForStep(step.Argument), null);
+                    await Task.Delay(1500);
+                    break;
+                case "shellmenu-at" when TryParseMenuAt(step.Argument, out var shellRow, out var shellPoint):
+                    OnShellMenuRequested(_paneViews[_active], MenuRowForStep(shellRow), shellPoint);
                     await Task.Delay(1500);
                     break;
                 case "menu-edit-drag":

@@ -51,7 +51,9 @@ public sealed partial class MainWindow
             FocusActivePane();
         };
         _contextMenu.Opened += () => Diag.Info(MenuTarget, "context menu opened");
+        _contextMenu.Placed += bounds => Diag.Info(MenuTarget, "context menu placed", PlacedFields(bounds));
         _contextMenu.Run = RunMenuEntry;
+        _windowsMenu.Placed += bounds => Diag.Info(MenuTarget, "windows menu placed", PlacedFields(bounds));
         _windowsMenu.Closed += () =>
         {
             Diag.Info(MenuTarget, "windows menu closed");
@@ -128,13 +130,33 @@ public sealed partial class MainWindow
         _menuFor = (paneIndex, facts);
         _menuAt = (position, at is null);
         _contextMenu.Show(view, position, menu);
-        Diag.Info(MenuTarget, "context menu shown",
-            new LogField("target", facts.Kind.ToString()),
-            new LogField("quick_actions", menu.QuickActions.Count),
-            new LogField("items", menu.Items.Count(i => i.Kind == ContextMenuEntryKind.Item)),
-            new LogField("keyboard", at is null),
-            new LogField("build_ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2)));
+        // The point asked, and for the keyboard the row it hangs under, against "context menu placed" (where WinUI put it).
+        List<LogField> fields =
+        [
+            new("target", facts.Kind.ToString()),
+            new("quick_actions", menu.QuickActions.Count),
+            new("items", menu.Items.Count(i => i.Kind == ContextMenuEntryKind.Item)),
+            new("keyboard", at is null),
+            new("x", Math.Round(position.X, 1)),
+            new("y", Math.Round(position.Y, 1)),
+            new("build_ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2)),
+        ];
+        if (at is null)
+        {
+            var (left, top, bottom) = view.RowEdges(index);
+            fields.AddRange([new("row_left", Math.Round(left, 1)), new("row_top", Math.Round(top, 1)), new("row_bottom", Math.Round(bottom, 1))]);
+        }
+        Diag.Info(MenuTarget, "context menu shown", [.. fields]);
     }
+
+    // Where the menu's content lies, in the window's content coordinates (what the point asked for is in the same ones).
+    private static LogField[] PlacedFields(Rect bounds) =>
+    [
+        new("left", Math.Round(bounds.Left, 1)),
+        new("top", Math.Round(bounds.Top, 1)),
+        new("width", Math.Round(bounds.Width, 1)),
+        new("height", Math.Round(bounds.Height, 1)),
+    ];
 
     // "Edit Menu…" (menu.edit): the menu it was chosen from turns into its edit mode, in its place (docs/ui.md, "Editing
     // the menu"). From the palette or a key there is no open menu: the focused row's menu is edited, where Shift+F10
@@ -338,8 +360,10 @@ public sealed partial class MainWindow
         {
             case ShellMenuReply menu:
                 var replied = Stopwatch.GetTimestamp();
-                _windowsMenu.Show(view, at ?? view.RowAnchor(index), menu);
+                var position = at ?? view.RowAnchor(index);
+                _windowsMenu.Show(view, position, menu);
                 Diag.Info(MenuTarget, "windows menu shown", new LogField("paths", paths.Count), new LogField("items", menu.Items.Count),
+                    new LogField("x", Math.Round(position.X, 1)), new LogField("y", Math.Round(position.Y, 1)),
                     new LogField("reply_ms", Math.Round(Stopwatch.GetElapsedTime(started, replied).TotalMilliseconds, 1)),
                     new LogField("build_ms", Math.Round(Stopwatch.GetElapsedTime(replied).TotalMilliseconds, 2)));
                 break;
@@ -374,6 +398,24 @@ public sealed partial class MainWindow
                 ShowNotice($"Windows' menu: {error.Message}", isError: true);
                 break;
         }
+    }
+
+    // "menu-at:<row>|<x>,<y>": the row as "menu:" names it, and the point a pointer would give (the window's content DIPs).
+    private static bool TryParseMenuAt(string argument, out string row, out Point at)
+    {
+        at = default;
+        var bar = argument.LastIndexOf('|');
+        row = bar < 0 ? "" : argument[..bar];
+        var parts = bar < 0 ? [] : argument[(bar + 1)..].Split(',');
+        if (parts.Length != 2
+            || !double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x)
+            || !double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y))
+        {
+            Diag.Info("cabinetos_ui::snapshot", "menu-at needs <row>|<x>,<y>", new LogField("argument", argument));
+            return false;
+        }
+        at = new Point(x, y);
+        return true;
     }
 
     // The snapshot aid's menu steps: "*" is the pane's empty space; "" the focused row; else a row by name, selected first.
