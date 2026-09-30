@@ -450,10 +450,7 @@ impl<'a> ListingReader<'a> {
         let malformed = || LayoutError(format!("entry {index} is malformed"));
         let at = self.header.entries_offset as usize + index * ENTRY_SIZE;
         let id = read_u64(bytes, at + offset_of!(ListingEntry, id)).ok_or_else(malformed)?;
-        let name_offset =
-            read_u32(bytes, at + offset_of!(ListingEntry, name_offset)).ok_or_else(malformed)?;
-        let name_len =
-            read_u16(bytes, at + offset_of!(ListingEntry, name_len)).ok_or_else(malformed)?;
+        let name_bytes = self.name_bytes(index, at)?;
         let kind = *bytes
             .get(at + offset_of!(ListingEntry, kind))
             .ok_or_else(malformed)?;
@@ -476,18 +473,6 @@ impl<'a> ListingReader<'a> {
                 .ok_or_else(malformed)?,
         };
 
-        // u32 offset plus twice a u16 length cannot overflow usize on 64 bits.
-        let name_start = name_offset as usize;
-        let name_end = name_start + usize::from(name_len) * 2;
-        if name_end > self.header.name_arena_len as usize {
-            return Err(LayoutError(format!(
-                "the name of entry {index} lies outside the arena"
-            )));
-        }
-        let arena = self.header.name_arena_offset as usize;
-        let name_bytes = bytes
-            .get(arena + name_start..arena + name_end)
-            .ok_or_else(malformed)?;
         let units: Vec<u16> = name_bytes
             .as_chunks::<2>()
             .0
@@ -502,6 +487,46 @@ impl<'a> ListingReader<'a> {
             name: String::from_utf16_lossy(&units),
             meta,
         })
+    }
+
+    /// Entry `index`'s name as UTF-16 little-endian bytes, and its
+    /// attributes, without decoding the rest or allocating: for a pass over
+    /// every name of a listing, as `match_entries` makes.
+    pub fn name_and_attributes(&self, index: usize) -> Result<(&'a [u8], u32), LayoutError> {
+        if index >= self.len() {
+            return Err(LayoutError(format!("no entry {index} in {}", self.len())));
+        }
+        let at = self.header.entries_offset as usize + index * ENTRY_SIZE;
+        let name = self.name_bytes(index, at)?;
+        let attributes = read_u32(
+            self.bytes,
+            self.header.meta_offset as usize
+                + index * META_SIZE
+                + offset_of!(ListingMeta, attributes),
+        )
+        .ok_or_else(|| LayoutError(format!("entry {index} is malformed")))?;
+        Ok((name, attributes))
+    }
+
+    // The name bytes of the entry whose record starts at `at`, checked to lie in the arena.
+    fn name_bytes(&self, index: usize, at: usize) -> Result<&'a [u8], LayoutError> {
+        let malformed = || LayoutError(format!("entry {index} is malformed"));
+        let name_offset = read_u32(self.bytes, at + offset_of!(ListingEntry, name_offset))
+            .ok_or_else(malformed)?;
+        let name_len =
+            read_u16(self.bytes, at + offset_of!(ListingEntry, name_len)).ok_or_else(malformed)?;
+        // u32 offset plus twice a u16 length cannot overflow usize on 64 bits.
+        let name_start = name_offset as usize;
+        let name_end = name_start + usize::from(name_len) * 2;
+        if name_end > self.header.name_arena_len as usize {
+            return Err(LayoutError(format!(
+                "the name of entry {index} lies outside the arena"
+            )));
+        }
+        let arena = self.header.name_arena_offset as usize;
+        self.bytes
+            .get(arena + name_start..arena + name_end)
+            .ok_or_else(malformed)
     }
 
     /// Every entry, in listing order.

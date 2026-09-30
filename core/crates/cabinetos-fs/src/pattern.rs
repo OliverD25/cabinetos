@@ -51,9 +51,12 @@ impl NamePatterns {
     /// Whether `name` matches.
     #[must_use]
     pub fn matches(&self, name: &str) -> bool {
-        let name = fold(name);
-        (self.include.is_empty() || self.include.iter().any(|pattern| pattern.matches(&name)))
-            && !self.exclude.iter().any(|pattern| pattern.matches(&name))
+        self.matches_folded(&fold(name))
+    }
+
+    fn matches_folded(&self, name: &[char]) -> bool {
+        (self.include.is_empty() || self.include.iter().any(|pattern| pattern.matches(name)))
+            && !self.exclude.iter().any(|pattern| pattern.matches(name))
     }
 }
 
@@ -93,15 +96,33 @@ impl Pattern {
 /// `text` as characters with the case folded: each one that has a single
 /// upper-case form gets it, as Windows compares names.
 fn fold(text: &str) -> Vec<char> {
-    text.chars()
-        .map(|c| {
-            let mut upper = c.to_uppercase();
-            match (upper.next(), upper.next()) {
-                (Some(single), None) => single,
-                _ => c,
-            }
-        })
-        .collect()
+    text.chars().map(fold_char).collect()
+}
+
+/// A name as a section holds it (UTF-16 little-endian bytes) into `out`,
+/// decoded as `String::from_utf16_lossy` decodes it and folded as [`fold`]
+/// folds it. `out` is reused from name to name: a pass over 100,000 names
+/// spent most of its 40 ms making three new buffers per name (the speed
+/// review of 2026-10-01).
+fn fold_utf16_into(name: &[u8], out: &mut Vec<char>) {
+    out.clear();
+    let units = name
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair));
+    out.extend(
+        char::decode_utf16(units)
+            .map(|unit| fold_char(unit.unwrap_or(char::REPLACEMENT_CHARACTER))),
+    );
+}
+
+fn fold_char(c: char) -> char {
+    let mut upper = c.to_uppercase();
+    match (upper.next(), upper.next()) {
+        (Some(single), None) => single,
+        _ => c,
+    }
 }
 
 /// Whether `name` matches `pattern` of `*` and `?`: a walk that remembers
@@ -146,12 +167,14 @@ pub fn match_entries(
     let reader = ListingReader::new(section)?;
     let generation = reader.header().generation;
     let count = reader.len();
-    let matching = |index: usize| -> Result<bool, LayoutError> {
-        let entry = reader.entry(index)?;
-        Ok(
-            !(files_only && entry.meta.attributes & attributes::DIRECTORY != 0)
-                && patterns.matches(&entry.name),
-        )
+    let mut folded = Vec::new();
+    let mut matching = |index: usize| -> Result<bool, LayoutError> {
+        let (name, bits) = reader.name_and_attributes(index)?;
+        if files_only && bits & attributes::DIRECTORY != 0 {
+            return Ok(false);
+        }
+        fold_utf16_into(name, &mut folded);
+        Ok(patterns.matches_folded(&folded))
     };
     // A section's entry count is a u32, so every index fits.
     let at = |index: usize| u32::try_from(index).unwrap_or(u32::MAX);
@@ -289,6 +312,61 @@ mod tests {
         assert_eq!(found("r*", false, Some(0)), [[6, 1]]);
         assert!(found("zzz*", false, None).is_empty());
         assert!(found("zzz*", false, Some(3)).is_empty());
+    }
+
+    /// The pass over a section decodes and folds each name into one reused
+    /// buffer: it must match exactly the names that `matches` matches on the
+    /// decoded entries, beyond ASCII and in any case.
+    #[test]
+    fn a_section_matches_the_names_its_entries_decode_to() {
+        let root = std::env::temp_dir().join("cabinetos-fs-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("match-decoded")
+            .tempdir_in(root)
+            .unwrap();
+        std::fs::create_dir(dir.path().join("Звіти")).unwrap();
+        for name in NAMES
+            .iter()
+            .chain(&["ÄRGER.txt", "straße.md", "資料 1.txt", "IMG_7716.JPG"])
+        {
+            std::fs::write(dir.path().join(name), name).unwrap();
+        }
+        let listing =
+            crate::list_directory(dir.path().to_str().unwrap(), &crate::ListOptions::default())
+                .unwrap();
+        let writer = crate::ListingWriter::new(&listing).unwrap();
+        let mut section = vec![0u8; writer.section_size()];
+        writer.write(&mut section, 1).unwrap();
+        let reader = ListingReader::new(&section).unwrap();
+        for text in [
+            "*.txt",
+            "*звіт*",
+            "ärger*",
+            "STRASSE*",
+            "straße*",
+            "*1*",
+            "img*|*.jpg",
+            "*.",
+            "",
+        ] {
+            let patterns = NamePatterns::parse(text);
+            for files_only in [false, true] {
+                let (_, ranges) = match_entries(&section, &patterns, files_only, None).unwrap();
+                let found: Vec<usize> = ranges
+                    .iter()
+                    .flat_map(|&[start, length]| start as usize..(start + length) as usize)
+                    .collect();
+                let expected: Vec<usize> = (0..reader.len())
+                    .filter(|&index| {
+                        let entry = reader.entry(index).unwrap();
+                        !(files_only && entry.meta.attributes & attributes::DIRECTORY != 0)
+                            && patterns.matches(&entry.name)
+                    })
+                    .collect();
+                assert_eq!(found, expected, "{text:?}, files only {files_only}");
+            }
+        }
     }
 
     #[test]
