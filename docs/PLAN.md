@@ -943,6 +943,131 @@ put on the clipboard; a dialog that one of Windows' items opens may
 open behind the window.
 
 
+### Phase 19 — Files Type Sprint, the keys audit and the speed review (the creator's card "New features I want to build Files Type Sprint" and two requests of 2026-10-01 00:35; built in the sleep-mode run of 2026-10-01)
+
+The card lists five features of the Files app and asks for what CabinetOS
+does not have. The creator went to sleep with "go on with Files Type
+Sprint", then added two requests: "double check the shortcuts, I felt like
+they don't work all the time", and "double check the speed of the app, and
+where it could be improved". The planning session decided the order alone
+(the creator's rule for the night: decide and record): the audits first,
+because a shortcut that sometimes does nothing and a slow spot touch every
+feature; the two small items of the card next; the column view after them;
+the tags planned now and built only if the night has room, because their
+storage format is a decision the creator will live with. Item 4 needs no
+work.
+
+- **19a, item 4, real-time filtering: done by Phase 16.** Find in pane
+  (Ctrl+F) filters the current tab live as the user types, through the
+  core's `match_entries`, with no index ("Find in pane" in ui.md). Closed
+  on the card with that reference.
+- **19b, item 6, folder sizes for every folder of a listing.** Today a
+  folder is measured on demand (Space, Calculate Folder Size, Calculate
+  All Folder Sizes; Phase 11a). New: the setting `panes.folderSizes`
+  (default `false`, Article 6) and the command `view.toggleFolderSizes`
+  (Article 7, no default key). While it is on, every folder of a listing
+  is measured when the listing opens or is listed again, through the same
+  `measure_paths` path, in the listing's order, folders counted already
+  skipped; the Size column shows the running totals and the status bar
+  the sum, as today. A pane that leaves the folder cancels its running
+  measure (`cancel_measure`), so a walk of a large tree does not go on for
+  a folder nobody looks at. The core does the walking on its blocking
+  threads (Article 1); the setting is opt-in because the walk costs disk
+  time (Article 4). Done when: with the setting on, a fresh listing shows
+  every folder's size without a key; the toggle writes the file and a
+  hand edit applies live; leaving the folder cancels; the core's checks,
+  the window's tests with the end-to-end tests, and a live check step
+  pass; config.md, ui.md ("Folder sizes"), keybindings.md and the
+  CHANGELOG say it.
+- **19c, item 5, compact overlay.** The command `view.toggleCompactOverlay`
+  ("Toggle Compact Overlay", Ctrl+Alt+Up as Files binds it, unless the key
+  is taken) makes the window a small always-on-top drawer: the overlapped
+  presenter's always-on-top flag, one pane, no sidebar, no dock, the size
+  saved as `ui.compactOverlay` (`width`, `height`, default 480 by 640
+  DIPs) when the user resizes it in that mode, the minimum width lowered
+  to 360 for the mode. Toggling back restores the previous size and place
+  and the sidebar, dual pane and dock as they were, without writing those
+  three to the file: the mode is not a setting. The status bar names the
+  mode and the key to leave it. Not the `CompactOverlay` presenter kind:
+  it keeps a video-like aspect and its own caption, which does not fit a
+  file drawer. Articles 4 (opt-in), 6 (the size in the file), 7 (a
+  command with a key). Done when: the command toggles both ways with the
+  size, place and layout restored; the saved size returns at the next
+  entry; the end-to-end test reads the window's "compact overlay entered"
+  and "left" lines and the topmost flag; a live check step presses the
+  key with real keys and reads the window's size and topmost style.
+- **19d, the keys audit.** The creator's report: shortcuts do not always
+  work. A coder on Opus reads the whole key path (MainWindow.Keyboard.cs,
+  the chord machine, the keymap's contexts `filesView`, `textInput`,
+  `terminalFocus`, `paletteOpen`), lists every place the keyboard can be
+  (the list, a breadcrumb box, the find widget, Quick Open, the palette,
+  a prompt, the theme picker, the plugin list, the review, the
+  marketplace, an open context menu and the edit mode, the terminal, a
+  tool page, the sidebar's tree and rows, the rail, a dialog, a rename
+  box, a quick search, the drive list, the moment after a menu, flyout or
+  dialog closes, after Alt+Tab, and a WebView2 page), and for each says
+  which keys of the four kinds (pane keys, global keys, chords, the
+  Immutable System Tier) reach their command, by reading and by driving a
+  real window with real keys. Every fault found is ranked by how often a
+  user meets it; the clear ones are fixed with a test that failed first;
+  the rest are proposals. A second input language is tried, because the
+  creator types Ukrainian: a key named after a Latin letter must work on
+  the Ukrainian layout. Produces the report in the build log, the fixes,
+  and live check steps for the states that were wrong.
+- **19e, the speed review.** A coder on Opus measures, on the release
+  build, with the window's own log and frame statistics: the start (the
+  process start to the first "listing shown"), listing a folder of 100,000
+  files and one of 10,000 folders, scrolling both, a tab switch, a theme
+  change, the first and later opening of the context menu, Quick Open and
+  Find in pane on a large tree, the marketplace's first view, the core's
+  request latencies by type from a real session's log, the idle CPU of
+  the window and the core over a minute, and the working set after the
+  above. Produces `speed-review.md` in the build log: a table of numbers
+  with the method for each, the findings ranked by what a user feels,
+  the fixes that are safe now implemented with tests (for example a
+  pre-built context menu while the window is idle, the known 45 to 60 ms
+  first frame), and the larger ones as proposals with an estimate.
+- **19f, item 2, the column view (Miller columns).** A pane's tab gets a
+  second mode, `columns`: the folder's entries in a narrow name-only
+  column; opening a folder (Enter, Right, a click) adds a column to its
+  right with that folder, the earlier columns staying, so the whole path
+  is on screen; Left goes to the parent column; the breadcrumb row and
+  the tab's path follow the deepest column; columns scroll sideways and
+  the newest is kept in view; each column is one `list_directory` with
+  `watch`, released when its column goes; marks and the cursor are per
+  column, and the commands act on the deepest column with the keyboard.
+  The last column shows no preview: a viewer is an extension (Article
+  10). The dual pane stays the base (Article 5): either pane may be in
+  columns. `view.toggleColumns` (Ctrl+Alt+C unless taken) switches the
+  active pane's tab; the mode is saved with the tab (`ui.tabs`). Column
+  width is the theme metric `columnViewWidth` (220 px default, 180 in
+  Commander Compact). Done when: the modes switch both ways with the path
+  kept; three levels open and close with the keys and the mouse; the
+  watch of a released column ends (the core's listing count); the tests
+  and a live check section with real keys pass; ADR 0016 records it.
+  Handed out after 19b lands, because both change the pane.
+- **19g, item 3, native file tagging: planned, built last if the night
+  has room.** The decisions the planning session would take: a tag is a
+  name and a colour from a small fixed set; the tags of a file live in an
+  NTFS alternate data stream `:CabinetOS.tags` (UTF-8 JSON) so they travel
+  with the file when the core's own copy and move keep streams, and in a
+  catalog in `%LOCALAPPDATA%\CabinetOS\tags\` keyed by path, so "every
+  file with this tag" answers at once without the indexer; the catalog
+  drops a path that no longer exists when it is read; the sidebar gets a
+  Tags section (the design's `tagRadius` and `tagFontSize` metrics finally
+  apply) whose click lists the tagged files in the pane as search results
+  do; commands `tags.add`, `tags.remove`, `tags.manage` through prompts in
+  the palette's frame, and the context menu's file target gets "Tags…";
+  the Properties dialog shows the tags. Open for the creator: whether
+  tags belong in the core at all or in a core plugin plus a tool pane
+  (Article 10), and the colour set. Built only after 19a to 19f, with
+  ADR 0017.
+
+Consistency: Articles 1, 4, 5, 6, 7 and 10 as named above. Coders: 19b
+and 19c on Sonnet (concrete plans), 19d, 19e and 19f on Opus (faults that
+hide; a new component). One live check with real keys at the end covers
+all of it, and one after 19f.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
