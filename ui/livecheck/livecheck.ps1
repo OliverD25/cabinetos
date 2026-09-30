@@ -1320,7 +1320,11 @@ $cfg | Add-Member -NotePropertyName contextMenu -NotePropertyValue @{
 [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
 "18: the window read the change: $([bool](WaitShellLines 'configuration changed' $changes))"
 GoLeftPane $m18
-"18: the left pane is in menu18: $((SelectionText) -match 'row-\d+\.txt')"
+# The listing arrives a moment after the path is typed; the selection's text says when. The cursor lands on the first
+# row, which is the folder bg18 (folders sort first), not a row-NN.txt file.
+$deadline = (Get-Date).AddSeconds(3)
+while (-not ((SelectionText) -match 'bg18|row-\d+\.txt') -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+"18: the left pane is in menu18: $((SelectionText) -match 'bg18|row-\d+\.txt')"
 
 Step "18: a right-click on a row: the file menu, the program in it; a click on the program runs it with the row's path"
 $x, $y = LeftPanePoint
@@ -1342,10 +1346,15 @@ if ($entry) {
   $closes = (ShellLines 'context menu closed').Count
   ClickElement $entry
   "18: the menu closed: $([bool](WaitShellLines 'context menu closed' $closes))"
+  # The recorder writes its line a moment after the menu closes, and the file exists before the line is complete: the
+  # check reads until the row's path is in it, or 5 s have passed.
   $deadline = (Get-Date).AddSeconds(5)
-  while (-not (Test-Path -LiteralPath "$recorder.log") -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
-  Start-Sleep -Milliseconds 300
-  $ran = if (Test-Path -LiteralPath "$recorder.log") { @(Get-Content -LiteralPath "$recorder.log" -Encoding Unicode) } else { @() }
+  $ran = @()
+  while ((Get-Date) -lt $deadline) {
+    if (Test-Path -LiteralPath "$recorder.log") { $ran = @(Get-Content -LiteralPath "$recorder.log" -Encoding Unicode | Where-Object { $_ -ne '' }) }
+    if (@($ran | Where-Object { $_ -like "*\menu18\$row" }).Count -ge 1) { break }
+    Start-Sleep -Milliseconds 200
+  }
   "18: the program got the row's path ($($ran -join ' | ')): $($ran.Count -eq 1 -and $ran[0] -like "*\menu18\$row")"
   "18: the status bar says it started: $((NoticeCount 'Live 18 Recorder: started') -gt 0)"
 }
