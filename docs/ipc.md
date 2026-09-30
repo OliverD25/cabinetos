@@ -1253,7 +1253,7 @@ change-directory command, followed by Enter, so the terminal follows the
 active pane; the path must be an absolute path to a folder (`invalid_path`
 or `not_found` otherwise). `terminal_type_paths` types paths at the
 prompt without Enter, each quoted as `terminal_sync_cwd` quotes its
-folder, separated by spaces (the window's Ctrl+P and Ctrl+Shift+Enter;
+folder, separated by spaces (the window's Ctrl+Alt+P and Ctrl+Shift+Enter;
 [terminal.md](terminal.md), "Typing paths"); a path with a control
 character is `invalid_path`. `terminal_close` closes the pseudo-console,
 which the shell sees as a hang-up, and forgets the session; the reply

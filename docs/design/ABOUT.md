@@ -21,6 +21,12 @@ This is the design handout for CabinetOS, received from the creator on
   page `CabinetOS Compact.dc.html`; the theme that ships from it is
   [../themes.md](../themes.md), "Metrics and chrome".
 
+- The shell redesign of Phase 16 (the creator's `SHELL_REDESIGN.md`,
+  received 2026-09-30 and kept in `_io` next to the repository) replaces
+  this handout's title bar, command bar and pane header with one top row
+  and a tab strip and a breadcrumb row per pane. Where the window differs
+  from the redesign: [../ui.md](../ui.md), "The shell".
+
 Where the handout disagrees with the Constitution or the brief, the
 consistency check in [../PLAN.md](../PLAN.md) section 4 records the conflict
 and the phase where it is decided.

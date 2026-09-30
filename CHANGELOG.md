@@ -32,5 +32,21 @@ The first version, built on 2026-09-28 and not released yet. It becomes
 - `cabinetos-cli`, which reaches the core's functions from a terminal.
 - One JSON Lines log per program and day, in which a request ID follows each action from the window through the core. A crash writes a trace that names where it happened: the window, the core or a plugin.
 - A release zip with an install script (per user without administrator rights, or for all users; the Start Menu entry, the PATH entry and the indexer service only when asked), an uninstall script, and the license text of every third-party component.
+- One top row that is also the window's drag area: a menu of common commands, the workspace pill with the git branch of the active folder, a command center, and the view and Settings buttons.
+- Each pane has its own tab strip and breadcrumb row with Back, Forward and Up; long paths collapse to `Drive › … › parent › current`, and Ctrl+L types a path.
+- Find in Pane (Ctrl+F): filters the active pane's list by name as you type, and Esc shows every row again.
+- Quick Open (Ctrl+P): the files and folders of the workspace on the command palette's surface; `>` switches to the commands. Enter opens a row in the active pane, Ctrl+Enter in the other one.
+- Ctrl+1 to Ctrl+9 bring a pane's tabs to the front, and Ctrl+, opens `cabinetos.json` for editing.
+
+### Changed
+
+- Total Commander's "path to the command line" (Insert Folder Path) moves from Ctrl+P to Ctrl+Alt+P, because Ctrl+P is Quick Open.
+- Ctrl+F and Alt+F7 open the pane's find widget. The search through subfolders is the Search view (Ctrl+Shift+F), which the classic and right layouts show in the sidebar's place.
+- A pane's tab strip shows from the first tab, with a "+" button; a middle click closes any tab.
+- Ctrl+K Ctrl+W opens the workspace pill's dropdown.
+
+### Removed
+
+- The title bar with its workspace tab, the command bar, the global address bar and the global search field, and the pane's header: the top row and each pane's tab strip and breadcrumb row replace them. No setting of `cabinetos.json` served only these parts; the theme metrics that sized them are still accepted and size nothing.
 
 [Unreleased]: https://github.com/OliverD25/cabinetos/commits/main

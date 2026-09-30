@@ -59,7 +59,7 @@ three. The `claude` profile's note is quoted below.)
   program that is not a shell: the window never types that line into it,
   because the program would take the line as its input. The client's own
   `terminal_sync_cwd` (`cabinetos-cli term cd`) still works on such a
-  session, and so does typing paths at the prompt (Ctrl+P): that is the
+  session, and so does typing paths at the prompt (Ctrl+Alt+P): that is the
   user's own request. The key is read by the window only; the core starts
   every profile the same way.
 - The `claude` profile starts Claude Code (`claude.exe`, the
@@ -200,9 +200,10 @@ in a session whose profile has `followsPane: false` ("Profiles" above).
 ## Typing paths
 
 `terminal_type_paths` types paths at the prompt for the user to go on
-typing around them (the window's Ctrl+P, the active pane's folder, and
-Ctrl+Shift+Enter, the selected paths; Total Commander's command line has
-the same keys). Each path is quoted as the shell reads it literally, by
+typing around them (the window's Ctrl+Alt+P, the active pane's folder, and
+Ctrl+Shift+Enter, the selected paths). Total Commander's command line has
+Ctrl+P and Ctrl+Shift+Enter; the window's Ctrl+P went to Quick Open in
+Phase 16. Each path is quoted as the shell reads it literally, by
 the rules of "Following the active pane" above; the paths are separated
 by one space, and no Enter follows. For `D:\it's here` and `D:\100%x`:
 

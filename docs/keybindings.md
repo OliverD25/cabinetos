@@ -63,7 +63,7 @@ The core's commands, in palette order:
 | `go.forward` | Go: Forward | `alt+right` | | UI |
 | `go.up` | Go: Up One Level | `alt+up` | | UI |
 | `go.toPath` | Go: Go to Path… | `ctrl+l` | | UI |
-| `search.focus` | Search: Find Files… | `ctrl+f`, `alt+f7` | | UI |
+| `search.focus` | Search: Find in Pane | `ctrl+f`, `alt+f7` | | UI |
 | `search.scope` | Search: Whole Volume | | | UI |
 | `editor.openMarkdownPreview` | Editor: Open Markdown Preview | `ctrl+k v` | `filesView` | UI |
 | `editor.close` | Editor: Close Editor | | | UI |
@@ -114,7 +114,7 @@ The core's commands, in palette order:
 | `file.windowsProperties` | File: Windows Properties | | `filesView` | UI |
 | `file.calculateFolderSize` | File: Calculate Folder Size | | `filesView` | UI |
 | `file.calculateAllFolderSizes` | File: Calculate All Folder Sizes | `shift+alt+enter` | `filesView` | UI |
-| `terminal.insertPath` | Terminal: Insert Folder Path | `ctrl+p` | `filesView` | UI |
+| `terminal.insertPath` | Terminal: Insert Folder Path | `ctrl+alt+p` | `filesView` | UI |
 | `terminal.insertSelectedPaths` | Terminal: Insert Selected Paths | `ctrl+shift+enter` | `filesView` | UI |
 | `tab.new` | Tab: New Tab | `ctrl+t` | `filesView` | UI |
 | `tab.close` | Tab: Close Tab | `ctrl+w` | `filesView` | UI |
@@ -123,6 +123,10 @@ The core's commands, in palette order:
 | `tab.toggleLock` | Tab: Toggle Tab Lock | | `filesView` | UI |
 | `tab.openFolderInNewTab` | Tab: Open Folder in New Tab | `ctrl+up` | `filesView` | UI |
 | `tab.moveToOtherPane` | Tab: Move Tab to Other Pane | `ctrl+k ctrl+right`, `ctrl+k ctrl+left` | `filesView` | UI |
+| `tab.select` | Tab: Go to Tab | `ctrl+1` to `ctrl+9` | `filesView` | UI |
+| `quickOpen.show` | Go: Quick Open… | `ctrl+p` | | UI |
+| `menu.show` | View: Show Menu | | | UI |
+| `settings.open` | Preferences: Open Settings | `ctrl+comma` | | UI |
 | `window.new` | Window: New Window | `ctrl+n` | | UI |
 | `help.about` | Help: About CabinetOS | | | UI |
 | `diagnostics.toggleHeavy` | Diagnostics: Toggle Heavy Logging | | | UI |
@@ -166,13 +170,26 @@ The core's commands, in palette order:
   pane. A tab that has a tool (Markdown Preview) in it is a tab like the
   others. Tab and Alt+Left / Alt+Right keep their old jobs: the pane switch,
   Back and Forward.
+- The rows from `tab.select` to `settings.open` are Phase 16's, the shell
+  redesign ([ui.md](ui.md), "The shell"). `tab.select` has nine keys and one
+  command: the key's digit names the tab's place (`ctrl+1` the first), and a
+  place past the last tab does nothing; the tab strip's clicks run it with
+  the tab's index. `quickOpen.show` takes `ctrl+p`, so Total Commander's
+  `terminal.insertPath` moved to `ctrl+alt+p`. `search.focus` keeps
+  `ctrl+f` and `alt+f7` and now opens the pane's find widget; its title is
+  "Find in Pane". `settings.open` opens `cabinetos.json` with the program
+  F4 uses, and `menu.show` (the top row's hamburger) has no key. The ID
+  test allows a camelCase category, as `quickOpen` is one. None of these
+  keys was bound before in the same context, and the Immutable System Tier
+  is unchanged.
 - In the rail layout ([ui.md](ui.md), "The activity rail and the sidebar")
   `view.showExplorer` (`ctrl+shift+e`) and `view.showSearch`
   (`ctrl+shift+f`) show the views of the sidebar and put the keyboard in
   them, and `sidebar.locate` (`shift+alt+l`, the design's Alt+Shift+L) reveals
   the active folder in the tree; `sidebar.lock` has no key. In the classic
-  and right layouts the first two open the sidebar and search, and the other
-  two say that the tree belongs to the rail layout. Inside a view the keys
+  and right layouts the first opens the sidebar, the second shows the Search
+  view in the sidebar's place until the search is left, and the other two
+  say that the tree belongs to the rail layout. Inside a view the keys
   are the view's own and are not commands: in the tree Up, Down, PageUp,
   PageDown, Home, End, Right, Left, Space, Enter and Esc; on a rail button
   Up and Down walk the buttons and Shift+Up / Shift+Down move the button
@@ -198,7 +215,8 @@ The core's commands, in palette order:
 - The design wrote the workspace switcher as "Ctrl+K W" in one place and
   "Ctrl+K then Ctrl+W" in another (PLAN.md, conflict E). The registry uses
   `ctrl+k ctrl+w`: Ctrl stays held for the second key, like every other chord
-  here. The UI shows it as "Ctrl+K Ctrl+W".
+  here. The UI shows it as "Ctrl+K Ctrl+W". Since Phase 16 it opens the
+  workspace pill's dropdown ([ui.md](ui.md), "The shell").
 - `f2` has two commands in two contexts: in a file pane it renames
   (`file.rename`), in the open palette it records new keys for the chosen
   command (`keys.rebind`). Two commands may share keys only this way

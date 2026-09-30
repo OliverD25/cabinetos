@@ -120,7 +120,7 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   terminal typed with Unicode key events, the palette from the terminal,
   search, and Markdown Preview with Enter and then Ctrl+K V. Then Total
   Commander's keys, with the preview still open in the other pane until
-  Ctrl+P has shown the terminal (whose page must then have the keyboard:
+  Ctrl+Alt+P has shown the terminal (whose page must then have the keyboard:
   "The terminal", "Handing the keyboard to the page"), Commander Compact chosen in the theme picker with its
   keys (the window's log must say 20 px rows; Tab must never land on a
   function key; F5 pressed through the bar's button by its accessible name
@@ -128,7 +128,8 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   the window (a row dragged onto a tool's page; the Agent installed through
   the marketplace with its fake provider, asked to rename three files, the
   preview applied with Enter: "What plugins ask of the window"), section 13,
-  the rail layout (below), and the edge cases.
+  the rail layout (below), the edge cases, and section 16, the shell of
+  Phase 16 ("The shell").
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
@@ -214,7 +215,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_WEBVIEW2_DIR` | Where WebView2 keeps its user data (its cache and storage) for the terminal and the tool pages, one subfolder per host; by default `%LOCALAPPDATA%\CabinetOS\WebView2`. The two-window test and the live checks set it to their scratch folder, so they never write into the real one |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part, with the garbage collector's pauses and collections in the second ("Scrolling"). A `slow frame` line for each frame of 33 ms or more, with the collector's pause in it. The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page (a sidebar page too); `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>`, `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page (a sidebar page too); `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -526,17 +527,19 @@ search hit. From the context menu it gets the menu's rows
 
 | Command | In this version |
 |---|---|
-| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, the theme picker, the plugin review, the plugin list, the marketplace (its detail column first), the context menu, a rename, the address box, the search results, and last folds the transfer flyout into the pill |
-| `search.focus` | Puts the keyboard in the search field ("Search") |
+| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, Quick Open, the prompt, the theme picker, the plugin review, the plugin list, the marketplace (its detail column first), the context menu and the top row's dropdowns, a rename, a quick search, a breadcrumb row's text box, the rail layout's or the Search view's focus, the find widget, the search results, and last folds the transfer flyout into the pill |
+| `search.focus` | Opens the active pane's find widget ("Find in pane") |
+| `quickOpen.show`, `menu.show`, `settings.open` | Quick Open, the top row's menu, and `cabinetos.json` in the editor ("The shell") |
 | `keys.open` | Opens the palette: it lists every command with its keys and edits them |
 | `view.toggleDualPane`, `view.toggleSidebar`, `view.focusOtherPane` | As named; the first two are saved in `cabinetos.json` |
-| `go.toPath` | With `{"path": …}` goes there; without, turns the crumbs into a text box |
+| `go.toPath` | With `{"path": …}` goes there; without, turns the active pane's breadcrumb row into a text box (`{"pane": 0 or 1}` names the pane) |
 | `help.about` | The window's command (target `ui`): its handler shows About CabinetOS ("About", below). An older core that ran it itself answered `command_result`; the window shows the same view for that |
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
 | `view.toggleTerminal` | Shows the terminal, gives the keyboard back to the pane, or hides it ("The terminal") |
 | `marketplace.browse`, `preferences.selectColorTheme` | Open the marketplace and the theme picker ("The marketplace", "Themes") |
 | `go.root` to `terminal.insertSelectedPaths` | Total Commander's small commands, 31 of them, run in the window ("Total Commander's keys") |
-| `workspace.switch`, `terminal.runTask` | "arrives in a later version" in the status bar |
+| `workspace.switch` | The workspace pill's dropdown ("The shell"); its "Open folder as workspace…" says that workspaces arrive in a later version |
+| `terminal.runTask` | "arrives in a later version" in the status bar |
 
 ### Dialogs
 
@@ -820,6 +823,217 @@ when they open for a button that is not shown (`OpenToolTips.Set`).
 Checked with the snapshot step `tooltip:Change keybinding`: open with the
 palette shown, and closed at once after the palette closed.
 
+## The shell
+
+Phase 16 gave the window the shell of the creator's redesign
+(`SHELL_REDESIGN.md`, received 2026-09-30): one top row instead of the
+title bar and the command bar, and in each pane a tab strip and a
+breadcrumb row instead of the pane's header. The global address bar and
+the global search field are gone: each pane has its own path, finding a
+name in the folder on screen is the pane's find widget (Ctrl+F), and
+finding a file anywhere in the workspace is Quick Open (Ctrl+P).
+Constitution Articles 3, 4, 5 and 7. What the shell decides without a
+window is in `CabinetOS.Core/Shell` and tested there (`ShellTests`); the
+window's part is `MainWindow.Shell.cs`, `MainWindow.Find.cs` and
+`MainWindow.QuickOpen.cs`.
+
+### The top row
+
+One row, `topRowHeight` high (40 px; 32 in Commander Compact, never lower
+than the 32 px Windows draws its caption buttons at). It is filled with the
+bar colour and has a 1 px line under it. The whole row is the window's
+drag area, except over its controls: those rectangles are handed to
+Windows as pass-through regions (`InputNonClientPointerSource`), so a
+click on them reaches the control and a drag anywhere else moves the
+window. Left to right:
+
+- **The menu** (the hamburger, `topRowButtonSize`, 36 px): `menu.show`.
+  Its dropdown lists New Tab, New Folder, Find in Pane, Go to Path…,
+  Toggle Sidebar, the marketplace and Keyboard Shortcuts, each with the
+  title and the first key the registry has now (`ShellMenu`), so a
+  rebinding shows at once.
+- **The app icon**, 16 px.
+- **The workspace pill** (`workspacePillHeight` 24 px, `workspacePillRadius`
+  4 px, the accent at 18 %): a dot, the workspace's name ("Default" until
+  workspaces exist) and, in the mono font at 10 px, the branch of the git
+  repository that holds the active pane's folder (below). A click, or
+  Ctrl+K Ctrl+W (`workspace.switch`), opens its dropdown: the workspace
+  with its branch, a line, and "Open folder as workspace…", which says that
+  workspaces arrive in a later version.
+- **The command center**, centred in the window: clamp(200 px, 34 %,
+  380 px) wide, `commandCenterHeight` 24 px, with a search glyph, the
+  workspace's name and "Ctrl+P". A click opens Quick Open. It never lies
+  over the clusters beside it: where the centred place would, it moves and
+  narrows into the room between them, down to 120 px, and hides below that
+  and whenever the window is narrower than 640 px (`TopRowLayout`). Ctrl+P
+  works when it is hidden. The window's least width is 600 px, so the
+  640 px rule can show.
+- **The view buttons**: Dual/Single, Terminal, Marketplace, the command
+  palette and Settings. The first four are in the accent colour while
+  what they show is on. Settings runs `settings.open` (Ctrl+,): the core
+  says where `cabinetos.json` is (`get_config`), and the file opens with
+  the program F4 uses (`edit_path`: `files.editor`, the type's edit verb,
+  else Notepad). Then a 1 px divider and the space Windows' caption
+  buttons take (`AppWindow.TitleBar.RightInset`).
+
+The dropdowns use the context menu's acrylic surface under their trigger,
+with `dropdownRowHeight` rows (26 px); a click outside or Esc closes them.
+Opened from a key, the keyboard is on their first row.
+
+**The branch.** Until workspaces exist, the workspace is the git
+repository that holds the active pane's folder: the nearest folder at or
+above it with a `.git` folder or file (`GitBranch.FindRepository`). The
+branch is the name in its `.git\HEAD` ("ref: refs/heads/…"); a detached
+HEAD or a worktree's `.git` file shows none. This is the one file the
+window reads itself besides the tools' manifests (docs/ARCHITECTURE.md,
+change log of 2026-09-30): at most 1 KB, on a background thread, when the
+active folder changes and when the window comes to the front, so a branch
+switched in a terminal shows. Outside a repository the pill shows the name
+alone, and Quick Open searches the active folder.
+
+### The breadcrumb row
+
+Every pane has, top to bottom: its tab strip (`tabRow`, 32 px), its
+breadcrumb row (`breadcrumbRowHeight`, 28 px), the column headers and the
+list (or a tool). The pane's old header, with the folder's name and path,
+is gone.
+
+- **Back, Forward and Up** first, as `navButtonSize` (20 px) buttons.
+  They run `go.back`, `go.forward` and `go.up` with the pane's index
+  (`{"pane": 0 or 1}`), so a click acts on that pane and makes it the
+  active one; a key or the palette acts on the active pane. A button with
+  nowhere to go is drawn at 30 % and does nothing (`NavState`).
+- **The crumbs**, in the mono font at 11 px, `›` between them at 35 %
+  white; the last one white, the others at 70 %. A click goes there.
+  Segments never shrink one by one: a path of more than 3 parts in dual
+  mode (5 in single) collapses to `Drive › … › parent › current`
+  (`Breadcrumbs`); the `…` goes to the folder it stands for, the deepest
+  one it hides, and its tooltip is that path. A row still too narrow
+  scrolls to its end.
+- **Ctrl+L** (`go.toPath`) turns the active pane's row into a text box
+  with the path selected; Enter goes there, Esc puts the crumbs back.
+- The active pane's row has an accent-tinted fill (6 %); the other pane's
+  has none. The drive list (Alt+F1, Alt+F2) and the prompts open under the
+  row.
+
+### Tabs in the shell
+
+Since Phase 16 the strip shows from the first tab (the handout's rule: a
+theme may not remove it). The tab in front has a 2 px bar over it, in the
+accent in the active pane and white at 30 % in the other, a white 8 %
+fill, weight 600 and its ×; the others are at 65 % and close with a middle
+click. A tab is at most 160 px wide and its tooltip is the full path. The
+"+" after the last tab runs `tab.new` for that pane, and "Open with…" at
+the strip's right end opens the palette on the editors. Ctrl+1 to Ctrl+9
+run `tab.select` for the tab at that place ("Tabs"). A tab keeps, besides
+its folder, history, order, cursor and marks, its list's scroll position
+and its find text.
+
+### Find in pane
+
+Ctrl+F (and Alt+F7, Total Commander's key; `search.focus`) opens the find
+widget of the active pane's tab: an acrylic box that drops from the right
+end of the breadcrumb row, with a search glyph, a 150 px box ("Find in
+{folder}"), the count "n of m" and a close button.
+
+- **Typing filters the pane's list** to the names that hold the text, case
+  ignored. The core matches (`match_entries` with `*text*`), as for the
+  pattern box, so the window scans no names; `PaneFind` asks and drops
+  answers that came too late. The other pane is not touched.
+- **Enter** puts the cursor on the first match and keeps the widget and
+  the keyboard; Down gives the keyboard to the list. **Esc** closes the
+  widget: every row shows again.
+- **The selection survives.** Marks the filter hides are kept aside, out of
+  every count and command, and come back when it ends (`SelectionModel`).
+  A text with no match leaves the cursor nowhere; when the find ends, it
+  comes back to the row it was on under the text before.
+- "This folder is empty." does not show while a filter shows no row: the
+  count says "0 of 0".
+- Another folder closes the find; a refresh of the same folder asks again.
+  A tab keeps its find text, and a tool tab in front hides the widget until
+  the folder tab comes back. In search results, and over a tool, Ctrl+F
+  says why it cannot find there.
+
+### Quick Open
+
+Ctrl+P (`quickOpen.show`) or a click on the command center lists the
+workspace's files and folders on the command palette's surface. The core
+finds and ranks them (`search` under the workspace, 50 names, from its
+index or a walk); `QuickOpenModel` asks after 80 ms without a key, drops
+late answers and keeps the highlight. A row shows the name and, in the
+mono font, its folder from the workspace's own name down.
+
+- Up, Down, PageUp and PageDown move the highlight. **Enter** opens the
+  row in the active pane: a folder is listed, a file's folder is listed
+  with the file under the cursor. **Ctrl+Enter** opens it in the other pane
+  (dual mode is turned on first when needed), which becomes the active
+  one. A click does the same.
+- **`>`** typed first switches to the commands: the command palette opens
+  with the rest of the text. **Backspace** in the palette's empty box comes
+  back to Quick Open (`PaletteInput`). Ctrl+Shift+P still opens the
+  commands at once.
+- Esc or a click outside closes it, and the keyboard goes back to the pane.
+  Its box is a text box, so of the keys without a context only the
+  Immutable System Tier's work there ("Keys, contexts and commands"):
+  Ctrl+Shift+P shows the commands instead, and Ctrl+P does nothing.
+
+### The shell's snapshot steps and checks
+
+The snapshot aid's steps for the shell: `shell:<label>` writes "shell
+state" into the log (the window's size, the top row's height, the command
+center's place or `hidden`, the clusters' edges, the workspace and its
+root and branch, whether Quick Open and the palette are open and Quick
+Open's rows, an open menu's rows, the active pane, and for each pane its
+path, crumbs, the nav buttons' state, whether its row is a text box, its
+shown and listed rows, marks, cursor, scroll position, find text and count,
+tabs, and the tab strip's and breadcrumb row's heights); `find:<text>`
+opens the active pane's find and types; `find-key:enter|down|esc`;
+`quick-open:<text>` opens Quick Open and types; `quick-open-key:enter|
+ctrl+enter|down|esc`.
+
+- `ShellTests` (Core): the breadcrumb collapse (the handout's path at 380 px
+  in dual and single mode, one part, a drive's root, a trailing
+  backslash), the 640 px rule and the command center between the
+  clusters, the nav buttons' state, the find filter (one pane only, marks
+  kept aside and back, no match, Esc), the tab state, Quick Open (`>`,
+  Backspace, the request, late answers), the hamburger's content from the
+  registry, the branch from `.git\HEAD` and its absence, and the new
+  default keys.
+- `ShellEndToEndTests` (with `CABINETOS_UI_E2E=1`): the top row at 924 px
+  (all controls, the command center at least 200 px, no overlap) and at
+  620 px (hidden); Ctrl+F filtering one pane, Enter, a text with no match,
+  Esc; a second tab going elsewhere and the first one's folder, cursor and
+  scroll coming back; closing the last tab; Ctrl+9 with one tab; the
+  collapsed crumbs; Quick Open in a repository with Enter, Ctrl+Enter and
+  `>`; the pill's branch and its absence; the hamburger by its accessible
+  name and Esc; the pill's dropdown by a click and by Ctrl+K Ctrl+W; a
+  click on a crumb, Back, Ctrl+L and Esc; and Settings with an editor that
+  is not there.
+- The live check's section 16 presses the keys and clicks for real: Ctrl+L
+  and Enter, Ctrl+F with a text, Enter and Esc, Ctrl+P with Esc and with
+  Enter, Alt+Left, the hamburger found by its accessible name and closed by
+  a click outside and by Esc, and a click on a crumb.
+
+### Where the shell differs from the handout
+
+- **The hamburger's rows are the registry's titles:** "Browse Plugins and
+  Themes" and "Open Keyboard Shortcuts" where the handout says
+  "Marketplace" and "Keyboard Shortcuts", so a rename in the registry shows
+  in both places. Plugins cannot add rows yet: the registry has no mark
+  for "in this menu", and the handout changes nothing in the plugin model.
+- **Workspaces do not exist yet.** The pill and the command center say
+  "Default", the workspace is the active folder's repository (above), and
+  "Open folder as workspace…" says so.
+- **The top row is the drag area only where Windows gets the pointer.** A
+  click on its empty part while a dropdown is open moves the window and
+  leaves the dropdown open; a click anywhere else closes it.
+- **The command center moves off the centre** when the clusters leave less
+  room there than its width, as at 924 px with the sidebar shown: it keeps
+  at least 200 px between them instead of lying over the pill or the view
+  buttons.
+- **Ctrl+9** goes to the ninth tab and does nothing with fewer, as the
+  handout's "tab n" says; browsers make it the last tab.
+
 ## Total Commander's keys
 
 Sub-phase 11a gives Total Commander users the keys their hands know
@@ -827,7 +1041,7 @@ Sub-phase 11a gives Total Commander users the keys their hands know
 The core lists 31 new commands with target `ui` and their keys (protocol
 12, [keybindings.md](keybindings.md)), and gave five existing commands a
 Total Commander key next to their own: F8 and Shift+F8 delete, Shift+F6
-renames, Alt+F7 finds files, Ctrl+Num + marks every row. The window's
+renames, Alt+F7 finds (in the pane since Phase 16), Ctrl+Num + marks every row. The window's
 handlers are in `MainWindow.Commander.cs`; what they share without a
 window is in `CabinetOS.Core` and tested there.
 
@@ -852,7 +1066,7 @@ window is in `CabinetOS.Core` and tested there.
 | Shift+F4 | `file.newTextFile` | A name box over a new row ("New text file") |
 | (none) | `file.windowsProperties` | Windows' own property sheet for the targets, or the folder (`show_properties`); also the "Windows Properties" button of the Properties dialog |
 | (none), Shift+Alt+Enter | `file.calculateFolderSize`, `file.calculateAllFolderSizes` | The marked folders, or the cursor folder; or every folder of the listing: measured ("Folder sizes") |
-| Ctrl+P, Ctrl+Shift+Enter | `terminal.insertPath`, `terminal.insertSelectedPaths` | The terminal shows, its default shell started when none runs, with the pane's folder, or the targets' paths, typed at the prompt, quoted for that shell and without Enter (`terminal_type_paths`); the terminal gets the keyboard |
+| Ctrl+Alt+P, Ctrl+Shift+Enter | `terminal.insertPath`, `terminal.insertSelectedPaths` | The terminal shows, its default shell started when none runs, with the pane's folder, or the targets' paths, typed at the prompt, quoted for that shell and without Enter (`terminal_type_paths`); the terminal gets the keyboard |
 
 Snapshots of 2026-09-29 in [log/2026-09-28/](log/2026-09-28/):
 `11a-drive-list.png`, `11a-pattern-box.png`, `11a-pinned-folders.png`,
@@ -914,7 +1128,7 @@ cancels, and the keyboard goes back to the pane.
   by name or path, Enter goes there in the active pane, and the last row
   pins the pane's folder when it is not pinned yet.
 - **The drive list** (Alt+F1, Alt+F2) has no box: it opens under that
-  pane's header with the sidebar's `list_volumes` data (name, free space),
+  pane's breadcrumb row with the sidebar's `list_volumes` data (name, free space),
   the pane's own drive highlighted. A drive's letter picks it at once, as
   in Total Commander; the arrows and Enter, or a click, too. A drive goes
   to the folder this pane last showed on it in this session, else to its
@@ -998,18 +1212,18 @@ syntax reads them.
 - `ui/livecheck/livecheck.ps1` presses the keys for real: Num *, Ctrl+Num
   -, Num + with `*.txt`, Space on a folder, Shift+Alt+Enter, F3 on a
   program, F4 and Shift+F4 with its own stand-in editor, a quick search
-  and F8, Shift+F8, Ctrl+P, Ctrl+\, Alt+F1, Ctrl+U; the planning session
+  and F8, Shift+F8, Ctrl+Alt+P (Ctrl+P until Phase 16), Ctrl+\, Alt+F1, Ctrl+U; the planning session
   runs it.
 
 ## Tabs
 
 Each pane can hold several tabs (Phase 12, Article 5: the dual pane stays
-the base, and a tab is a second folder in one of its panes). The row sits
-above the pane's list. It is hidden while the pane has one tab (Article
-4), so a new user sees no change. With two tabs or more the row is
-`tabRow` high (32 px; 26 px in Commander Compact). It is a WinUI
-`TabView` with the add button, drag and reorder turned off, so every
-change goes through a command.
+the base, and a tab is a second folder in one of its panes). The strip sits
+at the top of the pane. Until Phase 16 it was hidden while the pane had one
+tab; the shell redesign shows it from the first tab, `tabRow` high (32 px;
+24 px in Commander Compact), with a "+" and "Open with…" ("The shell",
+"Tabs in the shell"). It is a WinUI `TabView` with drag and reorder turned
+off, so every change goes through a command.
 
 - **What a tab holds:** a folder with its own history, order, cursor and
   marks, and a lock. Or a Tool Extension (a Markdown Preview, say). A
@@ -1018,8 +1232,8 @@ change goes through a command.
   behind holds its own state (`PaneTab`) and gives it back when it comes
   to the front. The window makes the pane match the front tab in one
   queue per pane (`QueueShow`), so two fast changes cannot cross each other.
-- **The front tab of the active pane has a 2 px accent line.** The
-  inactive pane has none. Nothing is dimmed (the handout's decision: the
+- **The front tab has a 2 px bar**: the accent in the active pane, white
+  at 30 % in the other. Nothing is dimmed (the handout's decision: the
   design has no Acrylic on the inactive pane).
 - **Tab is still the pane switch, and Alt+Left and Alt+Right are still
   Back and Forward.** In a locked tab, Back and Forward stay on the
@@ -1038,10 +1252,12 @@ change goes through a command.
 | `tab.toggleLock` | (palette) | Locks or unlocks the front tab |
 | `tab.openFolderInNewTab` | Ctrl+Up | The folder under the cursor opens in a new tab (the current folder when the cursor is on a file) |
 | `tab.moveToOtherPane` | Ctrl+K Ctrl+Right, Ctrl+K Ctrl+Left | Sends the front tab to the right or to the left pane, with its history and marks |
+| `tab.select` | Ctrl+1 to Ctrl+9 | The tab at that place comes to the front; a place past the last tab does nothing. The strip's clicks run it with the tab's index. From the palette, without a place, it says which keys to press |
 
 All of them are in the palette in the category "Tab" and work while a
-pane's list has the keyboard (`filesView`). The tab row's own clicks use
-`tab.select`, which is a window command and not in the registry. A tool tab
+pane's list has the keyboard (`filesView`). `tab.select` is in the registry
+since Phase 16; one command has the nine keys, and the key's digit names
+the tab. A tool tab
 cannot move to the other pane (its process belongs to its pane's page),
 and Ctrl+U (`view.swapPanes`) says "Close the tool tabs first" while one
 is open.
@@ -1090,7 +1306,7 @@ check has a section "12: tabs" with real keys.
 
 ## Search
 
-The field in the command bar (Ctrl+F, `search.focus`; placeholder
+The Search view's field (Ctrl+Shift+F, `view.showSearch`; placeholder
 "Search {folder}") finds files and folders by name through the core
 ([ipc.md](ipc.md), "Search"; [indexer.md](indexer.md)). The core searches
 and ranks; the window shows the hits in the core's order and filters
@@ -1098,17 +1314,18 @@ nothing.
 
 - Typing sends `search` with the text, `limit: 100` and `root`: the
   active pane's folder. It goes out once 150 ms pass without another key.
-  Enter sends it at once and moves the keyboard to the hits; Down moves the
-  keyboard there without waiting.
+  Enter sends it at once; Down moves the keyboard to the view's first hit
+  (until Phase 16 the command bar's field sent the keyboard to the pane's
+  hits).
 - The hits replace the folder in the active pane, in the same rows: the
   name with its type's icon, the folder the hit is in (where a listing
   shows "Modified"; from the searched folder's name down, `docs\log`, so
   the part that tells hits apart is not cut off; the whole path for a
   whole-volume search), and the type name. The reply has paths only, so the
   type and icon are what the core said about that extension in a listing
-  before, and there is no size or time. The pane's title reads
-  "Search: {query} · {n} hits · {index or walk} · {time}", and its right
-  side names what was searched.
+  before, and there is no size or time. The bar above the hits reads
+  "Search: {query} · {n} hits · {index or walk} · {time}", and its tooltip
+  names what was searched.
 - Under the title, a note says whether the answer is complete: complete,
   or incomplete because a walk stopped at its limit (2 s or 20,000
   entries) or a volume is still being indexed. With 100 hits it adds that
@@ -1132,7 +1349,7 @@ nothing.
   Ctrl+Shift+C, Ctrl+K Ctrl+N, F3, F4, Shift+F4, Windows Properties from
   a key, Calculate Folder Size, Shift+Alt+Enter, Ctrl+Left, Ctrl+Right and
   Ctrl+Shift+Enter. Ctrl+R runs the search again; Ctrl+\, Ctrl+U, Ctrl+D,
-  Alt+F1, Alt+F2, Ctrl+K Ctrl+P and Ctrl+P act on the pane, not the hits,
+  Alt+F1, Alt+F2, Ctrl+K Ctrl+P and Ctrl+Alt+P act on the pane, not the hits,
   and work. Hits have no context menu and no quick search.
 - An answer to an older request, or one that arrives after the search was
   left, is dropped (`SearchModel`, tested). The status bar counts the hits
@@ -1289,7 +1506,7 @@ rows, open by ID, apply and cancel against the real core, and
 
 ## The terminal
 
-Ctrl+` (`view.toggleTerminal`), the terminal button in the command bar,
+Ctrl+` (`view.toggleTerminal`), the terminal button in the top row,
 and "Open in Terminal" in a row's context menu open the terminal: the
 first occupant of the Tool Dock (Constitution Articles 9 and 11). The core
 runs the shells ([terminal.md](terminal.md)); the window draws them with
@@ -1633,11 +1850,12 @@ under each the folders the user opened.
 
 ### Search
 
-The view holds the field of the command bar, its "Whole volume" box and the
-hits ([Search](#search) above). It drives the same model as the command
-bar's box: the two fields' texts are kept equal, typing in either searches
-(the same 150 ms wait), the pane shows the same hits, Esc in either leaves
-the search. The list shows each hit's name and folder; a click or Enter on
+The view holds the search field, its "Whole volume" box and the hits
+([Search](#search) above); since Phase 16 removed the command bar's field it
+is the only one. Typing searches (a 150 ms wait), the pane shows the same
+hits, Esc leaves the search. The classic and right layouts have no rail:
+there Ctrl+Shift+F shows the view in the sidebar's place until the search
+is left (Esc, a hit chosen, or Ctrl+Shift+E). The list shows each hit's name and folder; a click or Enter on
 one goes to it in the active pane with the hit selected, as Enter on a hit in
 the pane does. Down in the field moves to the first hit.
 
@@ -1879,7 +2097,7 @@ the Commander Compact handout
 - **How.** `MetricsMapper` (in `CabinetOS.Core`, tested) is one table:
   every metric's name, unit and bounds, and the default look's value. A
   test holds the table equal to `sdk/themes/theme.schema.json`: the same
-  77 names, the same bounds, and the default that each name's description
+  87 names, the same bounds, and the default that each name's description
   gives. Another test checks every value of Commander Compact. The mapper
   gives one value for each name: the theme's, held to its bounds and
   rounded to whole pixels, or else the default look's. A name that is not
@@ -1890,31 +2108,36 @@ the Commander Compact handout
   whether the sizes changed since it was made.
 - **The log.** Target `cabinetos_ui::theme`: "metrics applied" with the
   theme, whether it is a density preset (`preset`: it sets any metric),
-  the row height, the text size, the pane header's height, the three
-  chrome switches, and the names it ignored.
+  the row height, the text size, the top row's, the breadcrumb row's and
+  the tab strip's heights, the three chrome switches, and the names it
+  ignored.
 
 ### Where each metric goes
 
 | Metrics | What they size in the window |
 |---|---|
-| `fontSize` | The base text: names in the file lists, pane titles, the sidebar's rows, the crumbs, the address and search fields, the rows of the palette, the menus and the prompts, and the rename box. The default look draws the design's 13 px; before this, these texts were WinUI's own 14 px. |
+| `fontSize` | The base text: names in the file lists, the sidebar's rows, the breadcrumb row's text box, the Search view's field, the rows of the palette, the menus and the prompts, and the rename box. The default look draws the design's 13 px; before this, these texts were WinUI's own 14 px. |
 | `lineHeight` | Wrapped text: a pane's message ("This folder is empty.") and the search note. Single lines sit in rows of a fixed height, so it does not change them. |
 | `backdropOpacity` | Mica. At 0.86 and below, plain Mica (the default look). Above it, Mica's own base colour is laid over Mica, up to opaque at 1: Commander Compact's 0.94 is a tint opacity of 0.91 in dark mode. A theme with a `mica` tint of its own keeps it. |
 | `radiusControl` | Buttons, fields, the rows of the palette and the menus, the terminal's and the editor's buttons, and the marketplace's search field and buttons. WinUI's own controls made from then on take it too (`ControlCornerRadius`). |
 | `radiusSurface` | The panes, the editor, the terminal and the marketplace. Icon tiles and info boxes (the app tile, the marketplace's tiles and stat boxes) keep the design's radius in proportion to it, and never less than `radiusControl`. |
 | `gap`, `bodyPadding` | The space between the sidebar and the panes, between the two panes, and between the panes and the terminal, which is also the splitter; with no gap, the splitter keeps a 6 px handle laid over the edges it joins. The space at the window's sides and bottom. |
-| `titleBarHeight` | The title bar, never lower than 32 px: Windows draws the minimize, maximize and close buttons that high. |
-| `tabHeight`, `tabPaddingX`, `tabMinWidth`, `tabFontSize`, `tabRadius` | The workspace tab in the title bar. The tabs of a pane's row take `tabFontSize` and `tabRadius` too. |
-| `tabRow` | The height of a pane's tab row (32 px; 26 px in Commander Compact). The row is hidden while the pane has one tab ("Tabs"). |
+| `topRowHeight`, `topRowButtonSize` | The top row, never lower than 32 px: Windows draws the minimize, maximize and close buttons that high; its menu and view buttons ("The shell"). |
+| `workspacePillHeight`, `workspacePillRadius`, `commandCenterHeight`, `commandCenterRadius` | The workspace pill and the command center. |
+| `hairlineOpacity` | The 1 px lines under the top row, the tab strips and the breadcrumb rows, and between tabs. |
+| `tabFontSize`, `tabRadius` | The tabs of a pane's strip. |
+| `tabRow` | The height of a pane's tab strip (32 px; 24 px in Commander Compact). It shows from the first tab ("Tabs"). |
+| `breadcrumbRowHeight`, `navButtonSize` | A pane's breadcrumb row and its Back, Forward and Up. |
+| `dropdownRowHeight` | The rows of the top row's menu and the workspace dropdown. |
+| `titleBarHeight`, `tabHeight`, `tabPaddingX`, `tabMinWidth`, `commandBarHeight`, `iconButtonSize`, `fieldHeight`, `toggleHeight`, `paneHeaderHeight` | Nothing since Phase 16: the title bar, its workspace tab, the command bar and the pane's header are gone. A theme may still set them, so themes written before stay valid. |
 | `captionButtonWidth` | Nothing: Windows draws the caption buttons 46 px wide, and a window cannot change that. |
-| `commandBarHeight`, `iconButtonSize`, `fieldHeight`, `toggleHeight` | The command bar; its icon buttons; the address and search fields (the crumbs inside are at most 4 px lower than the field); the Dual/Single toggle. |
 | `sidebarMinWidth`, `sidebarWidthPercent`, `sidebarMaxWidth` | The sidebar's width. |
 | `sidebarHeaderFontSize`, `sidebarHeaderPaddingTop`, `sidebarHeaderPaddingX`, `sidebarHeaderPaddingBottom` | The PINNED and DRIVES labels. The first label sits 8 px higher, as the design's first one does. |
 | `sidebarRowHeight`, `sidebarRowInset`, `sidebarRowRadius` | The pinned folders' rows, and the inset and corners of every sidebar row. The default look's pinned rows are 32 px; its 34 px are for workspace rows, which do not exist yet. Between the rows, and above and below the sections, the space follows the inset. |
 | `selectionBarWidth` | The accent bar of a selected or highlighted row: in the sidebar, the file lists, the palette, the prompts and the theme picker. |
 | `driveRowPaddingY`, `driveRowPaddingX` | The drive rows. The pinned rows take the same side padding. |
 | `tagRadius`, `tagFontSize` | Nothing yet: the sidebar has no tags. |
-| `paneHeaderHeight`, `columnHeaderPaddingY`, `columnHeaderPaddingX` | A pane's header and its column headers. The header's sides take the column headers' padding. |
+| `columnHeaderPaddingY`, `columnHeaderPaddingX` | A pane's column headers. |
 | `nameColumnWeight`, `modifiedColumnWeight`, `typeColumnWeight`, `nameColumnMinWidth`, `sizeColumnWidth`, `columnGap` | The columns, in the column headers and in every row alike. The default look keeps 8 px after the Modified and Type texts; a theme that sets `columnGap` spaces the columns by it instead. |
 | `rowHeight`, `rowPaddingX`, `rowRadius`, `rowIconGap`, `secondaryFontSize` | A file row; the scrolling arithmetic (PageDown, keeping the focused row in view); and the rename box over a row, as high as the row allows but never lower than its text. |
 | `editorTabHeight` | A pane's editor tab strip. |
@@ -1947,10 +2170,10 @@ the Commander Compact handout
 - **`rowStripes`**: every other row of a file list at .025 white, and a
   selected row at .12 over the stripes (.08 without them).
 - **`hairlines`**: 1 px lines between the surfaces instead of floating
-  cards. The command bar is filled (.03) with a line above and below it
-  (.06). The sidebar has a line on its right (.08). With no gap, the two
-  panes' borders overlap into one line. The active pane's header is filled
-  (.06; a single pane's always is) over a line (.08). The column headers
+  cards. (The top row, the tab strips and the breadcrumb rows always have
+  their fill and their line, at `hairlineOpacity`, since Phase 16.) The
+  sidebar has a line on its right (.08). With no gap, the two
+  panes' borders overlap into one line. The column headers
   are filled (.03) over a line (.10). The list has no 4 px inset inside
   its pane: a card's inset goes with the card. The terminal dock has a line
   only on the edge that meets the panes (.10). The marketplace has no frame
@@ -2021,9 +2244,10 @@ name ("The live check").
 
 ### Where the window differs from the handout's page
 
-- The title bar is 32 px high, not 30, and its caption buttons are 46 px
-  wide, not 40: Windows draws them.
-- The title bar has the app tile and one "Default" tab; the page has three
+- Since Phase 16 the top row takes the place of the page's title bar and
+  command bar: 32 px high in Commander Compact, not 30, and its caption
+  buttons are 46 px wide, not 40: Windows draws them.
+- The workspace pill shows one workspace, "Default"; the page has three
   workspace tabs and "+". The sidebar has no Workspaces and no Tags. Those
   features do not exist yet.
 - Types are extensions ("MD", "LOCK", "EXE") where the page has words
@@ -2034,7 +2258,7 @@ name ("The live check").
   and Fira Code are web fonts. Fira Code is used where it is installed.
 - The status bar's prefix is the theme's name, "Commander Compact", with
   a capital C, and there is no git branch item.
-- A pane's header has no list button at its right end.
+- A pane has no header since Phase 16, so no list button at its right end.
 - The terminal's padding and line height scale xterm.js's own values
   (about 5, 3, 2 and 8 px around the text, and a line height of 1.13)
   rather than the page's CSS (6 by 8 px, 1.45).
@@ -2056,7 +2280,7 @@ download, hash check and file operation; the view only asks and follows
 the core's events.
 
 - **Opening.** "Marketplace: Browse Plugins and Themes"
-  (`marketplace.browse`, Ctrl+Shift+X) or the command bar's store button
+  (`marketplace.browse`, Ctrl+Shift+X) or the top row's store button
   puts the view in place of the main column. The sidebar and the status
   bar stay, and the button turns to the accent colour. The same keys or
   button close the view.
@@ -2485,20 +2709,20 @@ until the path passes 300 characters, with `deep file.txt` (and
 files 339; the first snapshots used a fixture with a 333-character
 folder.
 
-- **The crumbs keep the drive, a "…", and the last folders that fit**
-  (`CrumbFit`, in pixels), so the bar never grows and the folder shown is
-  always there. The "…" opens a menu of the folders left out, the drive's
-  end first; each goes there. A single name wider than the bar ends in a
-  "…" of its own. The fit is made again when the window changes size.
-  Before, the bar scrolled to its end: the drive and the start of the path
-  were cut off with no sign.
-- **The pane header's path and the transfer flyout's line keep the drive
-  and the last names around "…"** (`DisplayFormat.ShortPath`), never
+- **The crumbs keep the drive, a "…", and the last folders** (checked
+  2026-09-29 with the address bar's pixel fit, `CrumbFit`). Since Phase 16
+  each pane's breadcrumb row counts parts instead (`Breadcrumbs`: 3 whole
+  in dual mode, 5 in single), its "…" goes to the deepest folder it hides,
+  and a row still too narrow scrolls to its end ("The breadcrumb row").
+- **The transfer flyout's line keeps the drive (and until Phase 16 the
+  pane header's path kept it too) and the last names around "…"**
+  (`DisplayFormat.ShortPath`), never
   cutting a name: `C:\…\deep file.txt → C:\…\edge\names\Ґанок`. Before,
   the flyout cut the line's end, which lost the file and the destination.
   The whole text is in the tooltip. The crumbs and `ShortPath` read
   `\\?\C:\…` as the drive and `\\?\UNC\server\share\…` as the share.
-- The address box shows the whole path, selected and scrolled to its end.
+- A breadcrumb row's text box (Ctrl+L) shows the whole path, selected and
+  scrolled to its end, as the address box did.
   Properties wraps the Location. The status bar names the selected row,
   not its path. The search's note wraps the searched folder, and the
   hits' Folder column starts at the searched folder's name. All unchanged.
@@ -2664,11 +2888,12 @@ planning session's, on a screen someone watches.
 | Tools in the Tool Dock; a tool opened without a file, except its sidebar page | The dock holds the terminal; tools open as editor tabs, and a tool with a sidebar page ("The activity rail and the sidebar") has that one page without a file ([tool-extensions.md](tool-extensions.md), "Not yet") |
 | Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
 | Light-mode tokens from the design | The design has none yet; a `system` theme in light mode uses Windows 11's own light colours ("Themes") |
-| Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |
+| Workspaces (the pill's list, a sidebar section) and Tags | One "Default" workspace, the active folder's repository; both sidebar sections stay hidden (Article 4) |
 | Sorting by a click on a column heading | The headings are static; Ctrl+F3 to Ctrl+F6 sort a pane ("A pane's order"), and sub-phase 11c brings the headings |
 | Pasting files copied in Explorer, drag and drop | The in-app clipboard only |
-| A "+" button in the tab row, dragging tabs to reorder them or to the other pane | The row hides with one tab, so a button there would have nothing to sit on; `tab.new` and `tab.moveToOtherPane` do the work, and the keyboard is complete (Article 7) |
-| The metrics `captionButtonWidth`, `tagRadius`, `tagFontSize`, `markdownPaddingY`, `markdownPaddingX`, `markdownLineHeight`, `hexRowHeight` and `hexColumnGap` | Windows draws the caption buttons; there are no tags yet, the tool messages carry no sizes, and there is no hex view ("Metrics and chrome") |
+| Dragging tabs to reorder them or to the other pane | `tab.moveToOtherPane` does the work, and the keyboard is complete (Article 7); the "+" came with Phase 16 |
+| Rows that plugins add to the top row's menu | The registry has no mark for "in this menu" yet ("The shell") |
+| The metrics `captionButtonWidth`, `tagRadius`, `tagFontSize`, `markdownPaddingY`, `markdownPaddingX`, `markdownLineHeight`, `hexRowHeight` and `hexColumnGap`, and the nine of the shell before Phase 16 | Windows draws the caption buttons; there are no tags yet, the tool messages carry no sizes, there is no hex view, and the title bar, the command bar and the pane's header are gone ("Metrics and chrome") |
 
 ## Known gaps
 
@@ -2695,8 +2920,10 @@ the protocol 11 work that night:
 - **The icon cache has no limit.** Every icon the core sent stays until
   the window closes. They are 16 to 32 px bitmaps, so a session that shows
   thousands of program icons holds a few MB.
-- **WinUI's clear button (×).** The palette's input and the search fields
-  show it while they have the keyboard; the design has none there. The
-  rename box hides it, since a click on it would end the edit.
+- **WinUI's clear button (×).** The palette's input, Quick Open's box and
+  the Search view's field show it while they have the keyboard; the design
+  has none there. The rename box hides it, since a click on it would end
+  the edit, and so does the find widget's box, whose own close button
+  stands beside it.
 - **Esc and the transfer flyout.** The flyout never takes the keyboard, so
   Esc reaches it only last, after everything else Esc closes.
