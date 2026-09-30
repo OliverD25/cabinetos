@@ -1,0 +1,34 @@
+[package]
+name = "agent"
+description = "CabinetOS Agent: a Core Plugin that works the file manager through the same command line the user has, with a preview before every change."
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+# `cdylib` is the WebAssembly component; `rlib` lets `cargo test` run the
+# plugin's logic on this machine.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The command line's own argument definitions: what the model may type is
+# parsed by the same code as what a person types.
+cabinetos-cli-args = { path = "../../../../core/crates/cabinetos-cli-args" }
+serde_json = "1.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wit-bindgen = "0.61.1"
+
+[profile.release]
+# Small components: size matters more than speed here.
+opt-level = "s"
+lto = true
+codegen-units = 1
+# Drop the debug info but keep the function names: the core's crash log
+# then shows a backtrace with names instead of bare function numbers.
+strip = "debuginfo"
+
+# Its own workspace, apart from the core's: the plugin is built for
+# WebAssembly with its own toolchain file and lock file.
+[workspace]

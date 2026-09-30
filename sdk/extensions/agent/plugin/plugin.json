@@ -1,0 +1,96 @@
+{
+  "id": "agent",
+  "name": "CabinetOS Agent",
+  "version": "0.1.0",
+  "author": "CabinetOS",
+  "description": "Works the file manager for you through the same command line you have, and shows every change as a preview before it happens.",
+  "apiVersion": "0.2.0",
+  "minCoreVersion": "0.1.0",
+  "capabilities": [
+    {
+      "name": "cmd:register",
+      "reason": "Adds the Agent commands to the palette."
+    },
+    {
+      "name": "config:read",
+      "reason": "Reads its own settings: which model to ask, and how much it may do."
+    },
+    {
+      "name": "events:emit",
+      "reason": "Tells the chat page and the window what it answered and what it did."
+    },
+    {
+      "name": "fs:read",
+      "roots": [
+        "%USERPROFILE%"
+      ],
+      "reason": "Lists the folders you ask about: names, sizes and dates. It reads no file contents. It never changes a file itself: changes go through the core as a preview."
+    },
+    {
+      "name": "net",
+      "hosts": [
+        "api.anthropic.com",
+        "localhost:11434"
+      ],
+      "secrets": [
+        "anthropic",
+        "openai"
+      ],
+      "reason": "Sends your request and the folder listings it needs to the model you chose. Your key stays in the Windows Credential Manager: the core adds it, and the agent never sees it."
+    },
+    {
+      "name": "core:request",
+      "requests": [
+        "get_window_state",
+        "preview_listing",
+        "preview_apply",
+        "preview_cancel",
+        "undo_job",
+        "search"
+      ],
+      "reason": "Asks what the window shows, proposes changes as a preview, applies one only in the Autonomous tier, undoes what it applied, and searches by name. It cannot read secrets or change settings."
+    }
+  ],
+  "commands": [
+    {
+      "id": "agent.ask",
+      "title": "Agent: Ask",
+      "category": "Agent",
+      "defaultKeys": [
+        "ctrl+k ctrl+a"
+      ],
+      "input": {
+        "title": "Agent: Ask",
+        "placeholder": "What should the agent do?"
+      }
+    },
+    {
+      "id": "agent.chat",
+      "title": "Agent: Chat Message",
+      "category": "Agent",
+      "defaultKeys": []
+    },
+    {
+      "id": "agent.tier",
+      "title": "Agent: Set Tier",
+      "category": "Agent",
+      "defaultKeys": [],
+      "input": {
+        "title": "Agent: Set Tier",
+        "placeholder": "1 Advisor, 2 Diff and approve, 3 Autonomous"
+      }
+    },
+    {
+      "id": "agent.undo",
+      "title": "Agent: Undo the Last Changes",
+      "category": "Agent",
+      "defaultKeys": []
+    },
+    {
+      "id": "agent.audit",
+      "title": "Agent: Show the Audit Log",
+      "category": "Agent",
+      "defaultKeys": []
+    }
+  ]
+}

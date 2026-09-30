@@ -1,8 +1,10 @@
 //! The plugin host against the committed fixture plugins
 //! (`sdk/fixtures/plugins`, built by `sdk/templates/build-fixtures.ps1`):
 //! manifests, capability gating, crashes, deadlines, fuel, memory, job
-//! judging, web requests to a test server on this computer, and folder
-//! watching. No WebAssembly toolchain is needed to run these.
+//! judging, web requests to a test server on this computer, folder
+//! watching, and the Agent extension's plugin (`sdk/extensions/agent`, built
+//! by `sdk/extensions/build-extensions.ps1`) run with its fake provider. No
+//! WebAssembly toolchain is needed to run these.
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -22,6 +24,38 @@ struct Recorder {
     /// The requests plugins sent with `core-request`: the plugin and the
     /// JSON the core would have run.
     core_requests: Mutex<Vec<(String, String)>>,
+    /// What `plugins.agent.settings` answers, as JSON text.
+    agent_settings: Mutex<Option<String>>,
+    /// How many previews the pretend core has opened for the agent.
+    previews: Mutex<u64>,
+}
+
+/// What the real core answers the agent's requests with, in the forms the
+/// protocol gives them; a window state is "no window", as it is with none.
+fn agent_reply(request: &str, previews: &mut u64) -> String {
+    let request: serde_json::Value = serde_json::from_str(request).unwrap();
+    let reply = match request["type"].as_str().unwrap_or_default() {
+        "preview_listing" => {
+            *previews += 1;
+            serde_json::json!({
+                "type": "preview_opened",
+                "preview": format!("preview-{previews}"),
+                "title": request["title"],
+                "listing": { "listing_id": previews, "section_handle": 0, "section_size": 100,
+                             "entry_count": request["rows"].as_array().map_or(0, Vec::len),
+                             "generation": 1, "elapsed_us": 5 },
+            })
+        }
+        "preview_apply" => serde_json::json!({ "type": "jobs_started", "jobs": [11, 12] }),
+        "undo_job" => {
+            serde_json::json!({ "type": "undo_started", "job_id": 40, "undoes": request["job"], "left": [] })
+        }
+        "get_window_state" => {
+            serde_json::json!({ "type": "error", "code": "no_window", "message": "no window has said what it shows" })
+        }
+        _ => serde_json::json!({ "type": "ok" }),
+    };
+    reply.to_string()
 }
 
 impl HostServices for Recorder {
@@ -34,6 +68,7 @@ impl HostServices for Recorder {
             "plugins.other.settings.provider" => Some("\"leak\"".to_owned()),
             "plugins.requester.granted" => Some("[\"core:request\"]".to_owned()),
             "plugins" => Some("{\"other\":{}}".to_owned()),
+            "plugins.agent.settings" => self.agent_settings.lock().unwrap().clone(),
             _ => None,
         }
     }
@@ -45,6 +80,9 @@ impl HostServices for Recorder {
             .push((plugin_id.to_owned(), request.to_owned()));
         if request.contains("no_window") {
             return Err("the core says no".to_owned());
+        }
+        if plugin_id == "agent" {
+            return Ok(agent_reply(request, &mut self.previews.lock().unwrap()));
         }
         Ok(r#"{"id":"reply","type":"ok"}"#.to_owned())
     }
@@ -1110,5 +1148,254 @@ fn a_change_of_a_plugin_s_settings_is_told_to_it_and_does_not_restart_it() {
         PluginState::NeedsReview {
             missing: vec!["core:request".to_owned()]
         }
+    );
+}
+
+// ----- The Agent extension's plugin -----
+
+/// The Agent's plugin as WebAssembly, with the fake provider that gives
+/// `replies` one after the other, and `files` as the one folder it may
+/// read. Its data folder gets the replies before it starts.
+fn agent(setup: &Setup, files: &Path, replies: &[String], tier: u8) -> PluginHost {
+    let root = files.display().to_string();
+    setup.edit_manifest("agent", |manifest| {
+        for capability in manifest["capabilities"].as_array_mut().unwrap() {
+            if capability["name"] == "fs:read" {
+                capability["roots"] = serde_json::json!([root]);
+            }
+        }
+    });
+    let data = setup.data().join("agent");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(
+        data.join("fake-replies.json"),
+        serde_json::to_string(replies).unwrap(),
+    )
+    .unwrap();
+    *setup.recorder.agent_settings.lock().unwrap() =
+        Some(serde_json::json!({ "provider": "fake", "tier": tier }).to_string());
+    let host = setup.host(|_| {});
+    host.load_all(&grants(&[(
+        "agent",
+        &[
+            "cmd:register",
+            "config:read",
+            "events:emit",
+            "fs:read",
+            "net",
+            "core:request",
+        ],
+    )]));
+    wait_until(&host, "agent", active);
+    host
+}
+
+/// An Agent command's answer, or the error text.
+fn agent_command(
+    host: &PluginHost,
+    command: &str,
+    args: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    host.execute("agent", command, &args.to_string())
+        .map(|answer| serde_json::from_str(&answer).unwrap())
+        .map_err(|error| error.message)
+}
+
+/// The requests the agent sent the core, in order, as JSON.
+fn agent_requests(recorder: &Recorder) -> Vec<serde_json::Value> {
+    recorder
+        .core_requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(plugin, _)| plugin == "agent")
+        .map(|(_, request)| serde_json::from_str(request).unwrap())
+        .collect()
+}
+
+/// The agent's own folder: the lines of its files, by name.
+fn agent_lines(setup: &Setup, prefix: &str) -> Vec<String> {
+    let data = setup.data().join("agent");
+    let mut names: Vec<_> = std::fs::read_dir(&data)
+        .unwrap()
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(prefix))
+        .collect();
+    names.sort();
+    names
+        .iter()
+        .flat_map(|name| {
+            std::fs::read_to_string(data.join(name))
+                .unwrap()
+                .lines()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// A folder with two files in it for the agent to look at.
+fn agent_files(setup: &Setup) -> PathBuf {
+    let files = setup.temp.path().join("files");
+    std::fs::create_dir_all(&files).unwrap();
+    std::fs::write(files.join("old.txt"), "x").unwrap();
+    std::fs::write(files.join("notes.md"), "y").unwrap();
+    files
+}
+
+#[test]
+fn the_agent_looks_by_fs_read_proposes_a_preview_and_undoes_it_once_the_window_applied_it() {
+    let setup = Setup::new(&["agent"]);
+    let files = agent_files(&setup);
+    let root = files.display().to_string();
+    let replies = [
+        format!("First I look.\n```\nls \"{root}\"\n```"),
+        format!("Renaming it.\n```\nrename \"{root}\\old.txt\" new.txt\n```"),
+    ];
+    let host = agent(&setup, &files, &replies, 2);
+
+    let answer = agent_command(
+        &host,
+        "agent.ask",
+        &serde_json::json!({ "input": "rename old.txt to new.txt" }),
+    )
+    .unwrap();
+    assert_eq!(answer["preview"], "preview-1");
+    assert_eq!(answer["text"], "Renaming it.");
+    assert_eq!(answer["tier"], 2);
+    let commands = answer["commands"].as_array().unwrap();
+    assert_eq!(
+        (commands[0]["kind"].as_str(), commands[0]["status"].as_str()),
+        (Some("read"), Some("ok"))
+    );
+    assert_eq!(
+        (commands[1]["kind"].as_str(), commands[1]["status"].as_str()),
+        (Some("write"), Some("proposed"))
+    );
+
+    // The change is a preview of one row, and nothing else went to the core.
+    let requests = agent_requests(&setup.recorder);
+    let listing: Vec<_> = requests
+        .iter()
+        .filter(|request| request["type"] == "preview_listing")
+        .collect();
+    assert_eq!(listing.len(), 1, "{requests:?}");
+    assert_eq!(
+        listing[0]["rows"],
+        serde_json::json!([{
+            "path": format!("{root}\\old.txt"),
+            "kind": "rename",
+            "to": "new.txt",
+        }])
+    );
+    assert!(
+        requests
+            .iter()
+            .all(|request| request["type"] != "preview_apply"),
+        "tier 2 leaves applying to the user"
+    );
+    // It changed nothing itself: it has no right to write there.
+    assert!(files.join("old.txt").exists() && !files.join("new.txt").exists());
+
+    // The listing it gave the model was read by the plugin from the disk.
+    let asked = agent_lines(&setup, "fake-requests");
+    assert_eq!(asked.len(), 2);
+    assert!(
+        asked[1].contains("old.txt") && asked[1].contains("notes.md"),
+        "{}",
+        asked[1]
+    );
+    // The audit log has the interaction, with what became of it.
+    let audit = agent_lines(&setup, "audit.");
+    assert_eq!(audit.len(), 1);
+    let entry: serde_json::Value = serde_json::from_str(&audit[0]).unwrap();
+    assert_eq!(
+        (
+            entry["source"].as_str(),
+            entry["provider"].as_str(),
+            entry["preview"].as_str()
+        ),
+        (Some("ask"), Some("fake"), Some("preview-1"))
+    );
+    assert!(
+        setup.recorder.events().iter().any(|event| matches!(event,
+            Event::PluginEvent { plugin_id, name, .. } if plugin_id == "agent" && name == "agent.reply"))
+    );
+
+    // The user applies the preview: the core tells the agent which jobs
+    // started, and `agent.undo` reverses them.
+    host.send_event(
+        "agent",
+        "preview-applied",
+        serde_json::json!({ "preview": "preview-1", "jobs": [11] }).to_string(),
+    );
+    let undone = agent_command(&host, "agent.undo", &serde_json::json!({})).unwrap();
+    assert_eq!(undone["undoes"], serde_json::json!([11]));
+    let undo: Vec<_> = agent_requests(&setup.recorder)
+        .into_iter()
+        .filter(|request| request["type"] == "undo_job")
+        .collect();
+    assert_eq!(undo, [serde_json::json!({ "type": "undo_job", "job": 11 })]);
+    assert!(active(&state(&host, "agent")));
+}
+
+#[test]
+fn at_tier_three_the_agent_applies_at_once_and_undoes_the_last_job_first() {
+    let setup = Setup::new(&["agent"]);
+    let files = agent_files(&setup);
+    let root = files.display().to_string();
+    let replies = [format!(
+        "Done.\n```\nrename \"{root}\\old.txt\" new.txt\n```"
+    )];
+    let host = agent(&setup, &files, &replies, 3);
+
+    let answer = agent_command(
+        &host,
+        "agent.chat",
+        &serde_json::json!({ "message": "rename old.txt to new.txt" }),
+    )
+    .unwrap();
+    assert_eq!(answer["commands"][0]["status"], "applied");
+    let types: Vec<_> = agent_requests(&setup.recorder)
+        .iter()
+        .map(|request| request["type"].as_str().unwrap().to_owned())
+        .collect();
+    let opened = types.iter().position(|kind| kind == "preview_listing");
+    let applied = types.iter().position(|kind| kind == "preview_apply");
+    assert!(
+        opened.is_some() && applied > opened,
+        "a preview, then its apply: {types:?}"
+    );
+    // A chat names its preview in an event, and a status-bar notice says what was done.
+    let events = setup.recorder.events();
+    let named = |wanted: &str| {
+        events.iter().find_map(|event| match event {
+            Event::PluginEvent {
+                plugin_id,
+                name,
+                payload,
+            } if plugin_id == "agent" && name == wanted => {
+                Some(serde_json::from_str::<serde_json::Value>(payload).unwrap())
+            }
+            _ => None,
+        })
+    };
+    assert_eq!(
+        named("agent.preview").unwrap(),
+        serde_json::json!({ "preview": "preview-1" })
+    );
+    assert!(named("agent.notice").unwrap()["notice"].is_string());
+
+    agent_command(&host, "agent.undo", &serde_json::json!({})).unwrap();
+    let undone: Vec<_> = agent_requests(&setup.recorder)
+        .iter()
+        .filter(|request| request["type"] == "undo_job")
+        .map(|request| request["job"].as_u64().unwrap())
+        .collect();
+    assert_eq!(
+        undone,
+        [12, 11],
+        "the job that started last is undone first"
     );
 }
