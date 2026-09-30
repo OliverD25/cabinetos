@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.FindWidget"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <!--
+      The find widget of a pane's tab (Phase 16, Ctrl+F; docs/ui.md, "Find in pane"): an Acrylic box that drops from the
+      breadcrumb row's right edge, as VS Code's find does. It filters the pane's list by name while the text is typed;
+      Enter selects the first match and keeps the box, Esc closes it and every row shows again.
+    -->
+    <Border
+        x:Name="Frame"
+        Margin="0,0,8,0"
+        Padding="8,3,4,4"
+        Background="{ThemeResource CbMenuAcrylicBrush}"
+        BorderBrush="{ThemeResource CbFindStrokeBrush}"
+        BorderThickness="1,0,1,1"
+        CornerRadius="0,0,4,4"
+        Translation="0,0,16">
+        <Border.Shadow>
+            <ThemeShadow />
+        </Border.Shadow>
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <FontIcon
+                VerticalAlignment="Center"
+                FontSize="12"
+                Foreground="{ThemeResource CbTextTertiaryBrush}"
+                Glyph="&#xE721;" />
+            <TextBox
+                x:Name="Input"
+                Width="150"
+                MinHeight="0"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Find in pane"
+                FontSize="12" />
+            <TextBlock
+                x:Name="CountText"
+                MinWidth="48"
+                VerticalAlignment="Center"
+                AutomationProperties.LiveSetting="Polite"
+                AutomationProperties.Name="Matches"
+                FontSize="11"
+                Foreground="{ThemeResource CbTextSecondaryBrush}" />
+            <Button
+                x:Name="CloseButton"
+                Width="22"
+                Height="22"
+                MinWidth="0"
+                AutomationProperties.Name="Close find"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Close (Esc)">
+                <FontIcon FontSize="10" Glyph="&#xE711;" />
+            </Button>
+        </StackPanel>
+    </Border>
+</UserControl>

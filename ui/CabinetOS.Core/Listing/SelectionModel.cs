@@ -55,6 +55,7 @@ public sealed class SelectionModel
     // Selected rows a filter hides: out of every count and command until the filter ends.
     private readonly HashSet<int> _parked = [];
     private int[]? _visible;
+    // The cursor's row before a filter with no match took it away: where it comes back when the filter ends.
     private int _focusBeforeFilter = -1;
 
     /// <summary>Raised after every change.</summary>
@@ -128,7 +129,8 @@ public sealed class SelectionModel
     /// every count and command, and come back when it ends. A hidden cursor
     /// moves to the nearest shown row; in the Windows style the cursor's own
     /// selection (the row selected alone, no mark) goes with it. A filter
-    /// that showed no row gives the cursor back where it was.
+    /// that showed no row gives the cursor back where it last was: before the
+    /// filter, or on the row it was moved to under an earlier text.
     /// </summary>
     public void SetVisible(IEnumerable<int>? visible)
     {
@@ -152,7 +154,7 @@ public sealed class SelectionModel
             Raise();
             return;
         }
-        if (_visible is null)
+        if (_visible is null || Focus >= 0)
         {
             _focusBeforeFilter = Focus;
         }

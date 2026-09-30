@@ -295,6 +295,11 @@
                             <views:PaneCrumbs x:Name="LeftCrumbs" Grid.Row="1" />
                             <views:FilePane x:Name="LeftPane" Grid.Row="2" />
                             <views:EditorPane x:Name="LeftEditor" Grid.Row="2" />
+                            <views:FindWidget
+                                x:Name="LeftFind"
+                                Grid.Row="2"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top" />
                             <views:PreviewPane x:Name="LeftPreview" Grid.Row="2" />
                         </Grid>
                         <Grid
@@ -310,6 +315,11 @@
                             <views:PaneCrumbs x:Name="RightCrumbs" Grid.Row="1" />
                             <views:FilePane x:Name="RightPane" Grid.Row="2" />
                             <views:EditorPane x:Name="RightEditor" Grid.Row="2" />
+                            <views:FindWidget
+                                x:Name="RightFind"
+                                Grid.Row="2"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top" />
                             <views:PreviewPane x:Name="RightPreview" Grid.Row="2" />
                         </Grid>
                     </Grid>

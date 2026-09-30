@@ -338,7 +338,7 @@ public sealed partial class FilePane : UserControl
                 UpdateActivity();
                 MarkSelection();
                 break;
-            case nameof(PaneModel.Message):
+            case nameof(PaneModel.Message) or nameof(PaneModel.Find):
                 UpdateMessage();
                 break;
             case nameof(PaneModel.Search):

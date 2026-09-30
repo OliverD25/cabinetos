@@ -212,7 +212,9 @@ public sealed partial class MainWindow
             fields.Add(new($"pane{i}_all_selected", string.Join("|", pane.AllSelectedNames().Take(20))));
             fields.Add(new($"pane{i}_cursor", pane.FocusName ?? ""));
             fields.Add(new($"pane{i}_scroll", Math.Round(_paneViews[i].ScrollOffset, 1)));
-            fields.Add(new($"pane{i}_find", pane.Find.Query));
+            fields.Add(new($"pane{i}_find", pane.Find.Query ?? ""));
+            fields.Add(new($"pane{i}_find_open", _findViews[i].IsOpen));
+            fields.Add(new($"pane{i}_find_count", _findViews[i].Count));
             fields.Add(new($"pane{i}_tabs", _tabViews[i].Describe()));
             fields.Add(new($"pane{i}_tab_row", Math.Round(_tabViews[i].RowHeight, 1)));
             fields.Add(new($"pane{i}_crumb_row", Math.Round(_crumbViews[i].ActualHeight, 1)));

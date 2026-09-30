@@ -31,7 +31,6 @@ public sealed partial class MainWindow
 
     private void RegisterSearchCommands()
     {
-        _router.RegisterUiHandler("search.focus", _ => ShowNotice("Find in Pane arrives in a later version."));
         // The pane's "Whole volume" box passes its state; from the palette or a key it toggles.
         _router.RegisterUiHandler("search.scope", invocation =>
         {
@@ -124,6 +123,7 @@ public sealed partial class MainWindow
         _settingSearchText = false;
         _searchTimer.Stop();
         _search.Clear();
+        LeaveSidebarSearch();
         if (focusPane)
         {
             _paneViews[pane >= 0 ? pane : _active].Focus(FocusState.Programmatic);

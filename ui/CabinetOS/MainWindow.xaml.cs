@@ -151,6 +151,7 @@ public sealed partial class MainWindow : Window
         SetUpTools();
         SetUpTabs();
         SetUpShell();
+        SetUpFind();
         SetUpPreview();
         SetUpMarket();
         SetUpRail();
@@ -444,6 +445,9 @@ public sealed partial class MainWindow : Window
                     break;
                 case "shell":
                     LogShellState(step.Argument);
+                    break;
+                case "find" or "find-key":
+                    await RunFindStepAsync(step.Kind, step.Argument);
                     break;
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
@@ -1305,6 +1309,7 @@ public sealed partial class MainWindow : Window
         RegisterTabCommands();
         RegisterTerminalCommands();
         RegisterSearchCommands();
+        RegisterFindCommands();
         RegisterPluginCommands();
         RegisterToolCommands();
         RegisterThemeCommands();
@@ -1516,8 +1521,9 @@ public sealed partial class MainWindow : Window
             FocusActivePane();
             EndAddressEdit();
         }
-        else if (_railLayout && (IsFocusWithin(Rail) || (_sidebarOpen && IsFocusWithin(SidebarHost))))
+        else if ((_railLayout || _searchInSidebar) && (IsFocusWithin(Rail) || (_sidebarOpen && IsFocusWithin(SidebarHost))))
         {
+            LeaveSidebarSearch();
             // Esc in the rail layout's rail or sidebar (a button, the tree, the search field or one of its hits) gives the
             // keyboard back to the pane, and a search ends as it does anywhere. The window's key handler takes Esc
             // before the tree's and the field's own handlers see it (it runs first, as the tunnelling PreviewKeyDown).
@@ -1527,7 +1533,7 @@ public sealed partial class MainWindow : Window
             }
             Diag.Info(Target, "Esc gave the keyboard from the rail layout's sidebar back to the pane");
         }
-        else if (!EndSearch(focusPane: true) && _transfers.IsFlyoutOpen)
+        else if (!CloseFindForEscape() && !EndSearch(focusPane: true) && _transfers.IsFlyoutOpen)
         {
             // What the flyout's minimize button does: a running job folds into the pill, an ended one closes.
             _transfers.Minimize();

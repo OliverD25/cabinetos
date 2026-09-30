@@ -63,6 +63,10 @@ public sealed partial class MainWindow
         {
             crumbs.ApplyMetrics();
         }
+        foreach (var find in _findViews)
+        {
+            find.ApplyMetrics();
+        }
 
         // Body: the space at its edges, between the sidebar and the panes, and between the panes; under the top
         // row the space between surfaces, as the top row is one.

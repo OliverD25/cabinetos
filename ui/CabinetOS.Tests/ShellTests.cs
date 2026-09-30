@@ -311,6 +311,21 @@ public class ShellTests
     }
 
     [Fact]
+    public void A_filter_that_ends_on_no_match_gives_back_the_row_the_cursor_was_moved_to_under_it()
+    {
+        // Find "alpha", Enter on its first match, then a text with no match and Esc: the cursor stays on the match.
+        var selection = Selection(10, focus: 0);
+        selection.SetVisible([2, 4]);
+        selection.MoveTo(4, SelectMode.Single);
+        selection.SetVisible([]);
+        Assert.Equal(-1, selection.Focus);
+
+        selection.SetVisible(null);
+        Assert.Equal(4, selection.Focus);
+        Assert.Equal([4], selection.Selected);
+    }
+
+    [Fact]
     public void A_new_listing_ends_the_filter()
     {
         var selection = Selection(10);

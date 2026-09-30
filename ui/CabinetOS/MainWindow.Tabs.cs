@@ -171,7 +171,10 @@ public sealed partial class MainWindow
                 // The tool could not open the file: its tab goes, and the folder tab beside it shows.
                 strip.Remove(strip.IndexOf(tab));
                 await ShowFrontTabAsync(pane, giveKeys, requestId);
+                return;
             }
+            // The folder tab's find waits behind the tool.
+            UpdateFind(pane);
             return;
         }
         var covered = _editorViews[pane].IsOpen;
@@ -201,6 +204,7 @@ public sealed partial class MainWindow
                 new LogField("tabs", strip.Count), new LogField("locked", tab.Locked));
         }
         UpdateNavigationButtons();
+        UpdateFind(pane);
         ScheduleToolContext();
         if (hadKeys)
         {
