@@ -234,6 +234,17 @@ public sealed class ThemePickerModel(ICoreChannel core)
             {
                 case OkReply:
                     Diag.Info(Target, "theme chosen", new LogField("theme", id));
+                    if (Rows.Any(r => r.IsCurrent && r.Info.Id == id))
+                    {
+                        // The theme in effect again: the core sends no theme_changed, so a preview
+                        // still on screen (a restore not yet due) would stay there.
+                        _preview++;
+                        if (IsPreviewShown)
+                        {
+                            IsPreviewShown = false;
+                            Preview?.Invoke(null);
+                        }
+                    }
                     return true;
                 case ErrorReply error:
                     return Fail(error.Code == ErrorCodes.UnknownRequest ? "This core cannot change settings yet (set_value)." : error.Message);

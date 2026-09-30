@@ -246,6 +246,27 @@ public class ThemePickerTests
     }
 
     [Fact]
+    public async Task Choosing_the_theme_in_effect_before_its_repaint_was_due_paints_it_back()
+    {
+        // The core sends no theme_changed for the theme it has, so nothing else would end the preview.
+        var core = Core();
+        var picker = new ThemePickerModel(core) { PreviewDelay = TimeSpan.FromMilliseconds(40) };
+        var painted = new ConcurrentQueue<string?>();
+        picker.Preview += theme => painted.Enqueue(theme?.Id);
+        picker.BeginPreviews();
+        await picker.LoadAsync("default");
+        picker.Move(1);
+        await UntilAsync(() => !painted.IsEmpty);
+
+        picker.Move(-1);
+        Assert.True(await picker.ApplyAsync());
+        picker.EndPreviews(restore: false);
+        await Task.Delay(200);
+
+        Assert.Equal(["nord", null], painted);
+    }
+
+    [Fact]
     public async Task Quick_moves_fetch_only_the_row_the_highlight_rests_on()
     {
         var core = Core();
