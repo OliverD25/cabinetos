@@ -592,6 +592,25 @@ ClickLeftPane
 [Live]::Type("$cc\dst"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 
+# The picker previews its highlight live (docs/ui.md, "Themes"): "theme previewed" when the window paints
+# the highlighted theme, "theme restored" when Esc paints the theme in effect back. Nothing is written.
+function ThemeLog { Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"target":"cabinetos_ui::theme"' } | ForEach-Object { $_ | ConvertFrom-Json } }
+Step "theme preview: Ctrl+K Ctrl+T, Down previews the next theme, Esc paints the theme in effect back"
+$themeBefore = (ThemeLog | Where-Object { $_.message -eq 'theme applied' -or $_.message -eq 'theme restored' } | Select-Object -Last 1).fields.theme
+[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
+[Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 1500
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 500
+Shot $h "$ShotDir\theme-preview-live.png"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 800
+$themeLines = @(ThemeLog)
+$lastPreview = -1
+for ($i = 0; $i -lt $themeLines.Count; $i++) { if ($themeLines[$i].message -eq 'theme previewed') { $lastPreview = $i } }
+$previewed = if ($lastPreview -ge 0) { $themeLines[$lastPreview].fields.theme } else { '(nothing previewed)' }
+$restored = if ($lastPreview -ge 0) { $themeLines | Select-Object -Skip ($lastPreview + 1) | Where-Object { $_.message -eq 'theme restored' } | Select-Object -First 1 } else { $null }
+"theme preview: Down previewed $previewed, not the theme in effect ($themeBefore): $([bool]($lastPreview -ge 0 -and $previewed -ne $themeBefore))"
+"theme preview: Esc painted $(if ($restored) { $restored.fields.theme } else { '(nothing)' }) back after it ($themeBefore expected): $([bool]($restored -and $restored.fields.theme -eq $themeBefore))"
+
 Step "compact: Ctrl+K Ctrl+T, the theme picker; Home, Down to Commander Compact, Enter"
 # The mouse goes to the corner first: a pointer left over the list would pull the highlight to its row.
 [void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
