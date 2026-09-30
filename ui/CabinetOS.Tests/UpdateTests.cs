@@ -41,50 +41,61 @@ public class UpdateTests
     // ----- The release notes -----
 
     /// <summary>
-    /// The newest section of CHANGELOG.md that has content, as build/release.ps1 cuts one for notes-&lt;version&gt;.md:
-    /// Unreleased while it holds anything, else the newest version's (Unreleased is empty right after a release).
+    /// The sections of CHANGELOG.md, newest first, each by its name ("Unreleased", "0.1.0") and without the heading
+    /// links at the end of the file, as build/release.ps1 cuts one for notes-&lt;version&gt;.md.
     /// </summary>
-    private static string NewestSection()
+    private static List<(string Name, string Text)> Sections()
     {
         var changelog = File.ReadAllText(Path.Combine(Repo.Root, "CHANGELOG.md")).Replace("\r\n", "\n", StringComparison.Ordinal);
-        var section = Regex.Matches(changelog, @"(?ms)^## \[(?:Unreleased|\d+\.\d+\.\d+[^\]]*)\][^\n]*\n(.*?)(?=^## \[|\z)")
-            .Select(m => Regex.Replace(m.Groups[1].Value.Trim(), @"(?m)^\[(Unreleased|\d+\.\d+\.\d+[^\]]*)\]:[ \t]+\S+[ \t]*$", "").Trim())
-            .FirstOrDefault(s => s.Length > 0);
-        Assert.True(section is not null, "CHANGELOG.md has no section with content");
-        return section!;
+        return [.. Regex.Matches(changelog, @"(?ms)^## \[(Unreleased|\d+\.\d+\.\d+[^\]]*)\][^\n]*\n(.*?)(?=^## \[|\z)")
+            .Select(m => (m.Groups[1].Value,
+                Regex.Replace(m.Groups[2].Value.Trim(), @"(?m)^\[(Unreleased|\d+\.\d+\.\d+[^\]]*)\]:[ \t]+\S+[ \t]*$", "").Trim()))];
     }
 
+    /// <summary>
+    /// The notes the next release would publish, and those of 0.1.0: every heading, item, link and code span of each
+    /// renders. The newest section with content is Unreleased while it holds anything, else the newest version's.
+    /// </summary>
     [Fact]
     public void The_changelog_s_own_section_renders_with_every_heading_item_link_and_code_span()
     {
-        var section = NewestSection();
-        var blocks = ReleaseNotes.Parse(section, ReleaseNotes.BaseFor("0.1.0"));
-        var spans = blocks.SelectMany(b => b.Spans).ToList();
-        var lines = section.Split('\n');
-
-        // Each "### " line is a level-3 heading, each "- " line one item of the outer list, in order.
-        Assert.Equal(lines.Where(l => l.StartsWith("### ", StringComparison.Ordinal)).Select(l => l[4..]),
-            blocks.Where(b => b.Kind == NoteBlockKind.Heading).Select(b => b.PlainText));
-        Assert.All(blocks.Where(b => b.Kind == NoteBlockKind.Heading), b => Assert.Equal(3, b.Level));
-        Assert.Equal(lines.Count(l => l.StartsWith("- ", StringComparison.Ordinal)),
-            blocks.Count(b => b.Kind == NoteBlockKind.ListItem && b.Level == 0 && b.Marker == "•"));
-        Assert.Equal(NoteBlockKind.Paragraph, blocks[0].Kind);
-
-        // The relative link of the first paragraph points into the repository at the version's tag.
-        Assert.Contains(spans, s => s is { Kind: NoteSpanKind.Link, Text: "docs/release.md", Url: "https://github.com/OliverD25/cabinetos/blob/v0.1.0/docs/release.md" });
-        Assert.Contains(spans, s => s is { Kind: NoteSpanKind.Code, Text: "cabinetos.json" });
-        Assert.Contains(spans, s => s is { Kind: NoteSpanKind.Code, Text: "followsPane: false" });
-        Assert.All(spans.Where(s => s.Kind == NoteSpanKind.Link), s => Assert.StartsWith("https://", s.Url));
-        // No markup is left in the text: a backtick only where the section escapes one ("Ctrl+\`"), and the heading
-        // links at the end of the file are no block.
-        var text = spans.Where(s => s.Kind is NoteSpanKind.Text or NoteSpanKind.Bold).ToList();
-        Assert.Equal(Regex.Count(section, @"\\`"), text.Sum(s => s.Text.Count(c => c == '`')));
-        Assert.All(text, s =>
+        var sections = Sections();
+        var newest = sections.FirstOrDefault(s => s.Text.Length > 0);
+        Assert.True(newest.Text is not null, "CHANGELOG.md has no section with content");
+        var first = sections.Single(s => s.Name == "0.1.0");
+        foreach (var (name, section) in new[] { newest, first }.Distinct())
         {
-            Assert.DoesNotContain("](", s.Text, StringComparison.Ordinal);
-            Assert.DoesNotContain("**", s.Text, StringComparison.Ordinal);
-        });
-        Assert.DoesNotContain(blocks, b => b.PlainText.StartsWith("[Unreleased]", StringComparison.Ordinal));
+            var blocks = ReleaseNotes.Parse(section, ReleaseNotes.BaseFor(name == "Unreleased" ? "0.1.0" : name));
+            var spans = blocks.SelectMany(b => b.Spans).ToList();
+            var lines = section.Split('\n');
+
+            // Each "### " line is a level-3 heading, each "- " line one item of the outer list, in order.
+            Assert.Equal(lines.Where(l => l.StartsWith("### ", StringComparison.Ordinal)).Select(l => l[4..]),
+                blocks.Where(b => b.Kind == NoteBlockKind.Heading).Select(b => b.PlainText));
+            Assert.All(blocks.Where(b => b.Kind == NoteBlockKind.Heading), b => Assert.Equal(3, b.Level));
+            Assert.Equal(lines.Count(l => l.StartsWith("- ", StringComparison.Ordinal)),
+                blocks.Count(b => b.Kind == NoteBlockKind.ListItem && b.Level == 0 && b.Marker == "•"));
+            Assert.All(spans.Where(s => s.Kind == NoteSpanKind.Link), s => Assert.StartsWith("https://", s.Url));
+            // No markup is left in the text: a backtick only where the section escapes one ("Ctrl+\`"), and the heading
+            // links at the end of the file are no block.
+            var text = spans.Where(s => s.Kind is NoteSpanKind.Text or NoteSpanKind.Bold).ToList();
+            Assert.Equal(Regex.Count(section, @"\\`"), text.Sum(s => s.Text.Count(c => c == '`')));
+            Assert.All(text, s =>
+            {
+                Assert.DoesNotContain("](", s.Text, StringComparison.Ordinal);
+                Assert.DoesNotContain("**", s.Text, StringComparison.Ordinal);
+            });
+            Assert.DoesNotContain(blocks, b => b.PlainText.StartsWith("[Unreleased]", StringComparison.Ordinal));
+            if (name != "0.1.0")
+            {
+                continue;
+            }
+            // 0.1.0 opens with a paragraph whose relative link points into the repository at the version's tag.
+            Assert.Equal(NoteBlockKind.Paragraph, blocks[0].Kind);
+            Assert.Contains(spans, s => s is { Kind: NoteSpanKind.Link, Text: "docs/release.md", Url: "https://github.com/OliverD25/cabinetos/blob/v0.1.0/docs/release.md" });
+            Assert.Contains(spans, s => s is { Kind: NoteSpanKind.Code, Text: "cabinetos.json" });
+            Assert.Contains(spans, s => s is { Kind: NoteSpanKind.Code, Text: "followsPane: false" });
+        }
     }
 
     [Fact]

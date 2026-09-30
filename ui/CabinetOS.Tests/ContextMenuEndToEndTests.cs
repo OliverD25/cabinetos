@@ -13,6 +13,16 @@ namespace CabinetOS.Tests;
 /// it (<c>menu:</c>, <c>menu-click:</c>, <c>shellmenu:</c>) and its log line "shell state" says what
 /// the open menus show.
 /// </summary>
+/// <summary>
+/// Tests that measure the window's frames run alone, after the tests that run in parallel: a frame
+/// goal says nothing about a window that shares the machine with other test windows.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class FrameTests
+{
+    public const string Name = "frame measurements";
+}
+
 public class ContextMenuEndToEndTests
 {
     private const string OptIn = "CABINETOS_UI_E2E";
@@ -142,59 +152,68 @@ public class ContextMenuEndToEndTests
     }
 
     /// <summary>
-    /// The menu over every row of the 100,000-entry bench folder, all selected: no frame with more
-    /// than 33 ms of UI-thread work while it opens (docs/ui.md, "Scrolling", measures the same way).
-    /// The first opening of the process is timed too, and logged, since WinUI loads the flyout's
-    /// template then.
+    /// The frame measurement, alone: another test's window on the same desktop takes the processor and
+    /// the GPU, and its load shows in this window's frames (one 35 ms frame in the full run of
+    /// 2026-09-30, none when the test ran by itself).
     /// </summary>
-    [Fact]
-    public async Task Opening_the_menu_over_100000_selected_rows_adds_no_slow_frame()
+    [Collection(FrameTests.Name)]
+    public class Alone
     {
-        var bench = Path.Combine(Path.GetTempPath(), "cabinetos-bench", "100000");
-        if (!File.Exists(bench + ".complete"))
+        /// <summary>
+        /// The menu over every row of the 100,000-entry bench folder, all selected: no frame with more
+        /// than 33 ms of UI-thread work while it opens (docs/ui.md, "Scrolling", measures the same way).
+        /// The first opening of the process is timed too, and logged, since WinUI loads the flyout's
+        /// template then.
+        /// </summary>
+        [Fact]
+        public async Task Opening_the_menu_over_100000_selected_rows_adds_no_slow_frame()
         {
-            Assert.Skip($"Needs the bench folder {bench}: cargo bench -p cabinetos-fs --bench list_directory makes it.");
-        }
-        var (run, root, data) = Prepare("menu-bench");
-        try
-        {
-            var process = run.Start("bench", string.Join(';',
-                "size:1200x700",
-                "pane:0",
-                $"path:{data}",
-                "wait:500",
-                "menu:alpha.txt",
-                "wait:800",
-                "shell:warm",
-                "cmd:overlay.close",
-                $"path:{bench}",
-                "wait:3000",
-                "selectall",
-                "wait:1500",
-                "shell:before",
-                "menu:",
-                "wait:1500",
-                "shell:open",
-                "cmd:overlay.close",
-                "wait:500",
-                "shot:done"), frameStats: true);
-            var logs = await run.FinishAsync("bench", process, "done");
+            var bench = Path.Combine(Path.GetTempPath(), "cabinetos-bench", "100000");
+            if (!File.Exists(bench + ".complete"))
+            {
+                Assert.Skip($"Needs the bench folder {bench}: cargo bench -p cabinetos-fs --bench list_directory makes it.");
+            }
+            var (run, root, data) = Prepare("menu-bench");
+            try
+            {
+                var process = run.Start("bench", string.Join(';',
+                    "size:1200x700",
+                    "pane:0",
+                    $"path:{data}",
+                    "wait:500",
+                    "menu:alpha.txt",
+                    "wait:800",
+                    "shell:warm",
+                    "cmd:overlay.close",
+                    $"path:{bench}",
+                    "wait:3000",
+                    "selectall",
+                    "wait:1500",
+                    "shell:before",
+                    "menu:",
+                    "wait:1500",
+                    "shell:open",
+                    "cmd:overlay.close",
+                    "wait:500",
+                    "shot:done"), frameStats: true);
+                var logs = await run.FinishAsync("bench", process, "done");
 
-            DateTime At(string label) => Timestamp(logs.Single(l => Message(l) == "shell state" && Field(l, "label").GetString() == label));
-            var (before, open) = (At("before"), At("open"));
-            State(logs, "open", state => Assert.StartsWith("Open|", state.GetProperty("context_menu").GetString()));
-            var shown = logs.Where(l => Message(l) == "context menu shown").ToList();
-            Assert.Equal(2, shown.Count);
-            Assert.Equal("MultiSelect", Field(shown[1], "target").GetString());
-            var slow = logs.Where(l => Message(l) == "slow frame" && Timestamp(l) > before && Timestamp(l) <= open
-                && Field(l, "busy_ms").GetDouble() > 33).ToList();
-            Assert.True(slow.Count == 0, $"frames with over 33 ms of UI-thread work while the menu opened:\n{string.Join('\n', slow)}\n"
-                + string.Join('\n', logs.Where(l => Timestamp(l) > before && Timestamp(l) <= open)));
-        }
-        finally
-        {
-            run.Stop();
-            Repo.RemoveTempFolder(root);
+                DateTime At(string label) => Timestamp(logs.Single(l => Message(l) == "shell state" && Field(l, "label").GetString() == label));
+                var (before, open) = (At("before"), At("open"));
+                State(logs, "open", state => Assert.StartsWith("Open|", state.GetProperty("context_menu").GetString()));
+                var shown = logs.Where(l => Message(l) == "context menu shown").ToList();
+                Assert.Equal(2, shown.Count);
+                Assert.Equal("MultiSelect", Field(shown[1], "target").GetString());
+                var slow = logs.Where(l => Message(l) == "slow frame" && Timestamp(l) > before && Timestamp(l) <= open
+                    && Field(l, "busy_ms").GetDouble() > 33).ToList();
+                Assert.True(slow.Count == 0, $"frames with over 33 ms of UI-thread work while the menu opened:\n{string.Join('\n', slow)}\n"
+                    + string.Join('\n', logs.Where(l => Timestamp(l) > before && Timestamp(l) <= open)));
+            }
+            finally
+            {
+                run.Stop();
+                Repo.RemoveTempFolder(root);
+            }
         }
     }
 
