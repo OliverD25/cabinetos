@@ -496,3 +496,48 @@ async fn editing_a_file_with_an_editor_found_nowhere_is_spawn_failed() {
         "{message}"
     );
 }
+
+/// `workspace_info` (Phase 16): the window's pill asks the core for the
+/// repository of the active folder, since the window reads no files. A
+/// relative path is refused before anything is read.
+#[tokio::test]
+async fn the_workspace_is_the_repository_that_holds_the_folder() {
+    let core = start_core();
+    let repo = core.files().join("repo");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    std::fs::write(repo.join(".git").join("HEAD"), "ref: refs/heads/phase-16\n").unwrap();
+    let deep = repo.join("src").join("ui");
+    std::fs::create_dir_all(&deep).unwrap();
+    let plain = core.files().join("plain");
+    std::fs::create_dir_all(&plain).unwrap();
+    let mut client = connect(&core.pipe).await;
+
+    let reply = ask(&mut client, Request::WorkspaceInfo { path: text(&deep) }).await;
+    assert_eq!(
+        reply,
+        Response::WorkspaceInfo {
+            root: text(&repo),
+            branch: Some("phase-16".to_owned())
+        }
+    );
+    let reply = ask(&mut client, Request::WorkspaceInfo { path: text(&plain) }).await;
+    assert_eq!(
+        reply,
+        Response::WorkspaceInfo {
+            root: text(&plain),
+            branch: None
+        }
+    );
+    let reply = ask(
+        &mut client,
+        Request::WorkspaceInfo {
+            path: r"repo\src".to_owned(),
+        },
+    )
+    .await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::InvalidPath),
+        "{reply:?}"
+    );
+}

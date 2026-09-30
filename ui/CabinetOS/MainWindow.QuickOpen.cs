@@ -57,7 +57,7 @@ public sealed partial class MainWindow
         var root = WorkspaceRoot();
         _quickOpen.Open(root);
         QuickOpenView.Show();
-        Diag.Info(QuickOpenTarget, "quick open shown", new LogField("root", root), new LogField("repository", _repository is not null));
+        Diag.Info(QuickOpenTarget, "quick open shown", new LogField("root", root), new LogField("branch", _workspace?.Branch ?? ""));
     }
 
     /// <summary>Hides Quick Open; the keyboard goes back to the active pane first, unless something else takes it.</summary>

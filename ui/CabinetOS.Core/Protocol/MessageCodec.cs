@@ -74,6 +74,7 @@ public static class MessageCodec
         ["tools"] = ProtocolJson.Default.ToolsReply,
         ["marketplace_index"] = ProtocolJson.Default.MarketplaceIndexReply,
         ["log_bundle"] = ProtocolJson.Default.LogBundleReply,
+        ["workspace_info"] = ProtocolJson.Default.WorkspaceInfoReply,
         ["listing_refreshed"] = ProtocolJson.Default.ListingRefreshedEvent,
         ["listing_lost"] = ProtocolJson.Default.ListingLostEvent,
         ["config_changed"] = ProtocolJson.Default.ConfigChangedEvent,

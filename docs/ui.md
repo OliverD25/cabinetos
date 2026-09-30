@@ -882,14 +882,14 @@ Opened from a key, the keyboard is on their first row.
 
 **The branch.** Until workspaces exist, the workspace is the git
 repository that holds the active pane's folder: the nearest folder at or
-above it with a `.git` folder or file (`GitBranch.FindRepository`). The
-branch is the name in its `.git\HEAD` ("ref: refs/heads/…"); a detached
-HEAD or a worktree's `.git` file shows none. This is the one file the
-window reads itself besides the tools' manifests (docs/ARCHITECTURE.md,
-change log of 2026-09-30): at most 1 KB, on a background thread, when the
-active folder changes and when the window comes to the front, so a branch
-switched in a terminal shows. Outside a repository the pill shows the name
-alone, and Quick Open searches the active folder.
+above it with a `.git` folder or file. The window reads no files (brief §1),
+so it asks the core (`workspace_info`, [ipc.md](ipc.md), "The workspace of
+a folder") when the active folder changes and when the window comes to the
+front, so a branch switched in a terminal shows. The branch is the name in
+the repository's `HEAD`; a detached `HEAD` shows the commit's first 7
+characters, and a worktree's `.git` file is followed to its own `HEAD`.
+Outside a repository, or with a core that does not know the request, the
+pill shows the name alone, and Quick Open searches the active folder.
 
 ### The breadcrumb row
 
@@ -997,8 +997,9 @@ ctrl+enter|down|esc`.
   clusters, the nav buttons' state, the find filter (one pane only, marks
   kept aside and back, no match, Esc), the tab state, Quick Open (`>`,
   Backspace, the request, late answers), the hamburger's content from the
-  registry, the branch from `.git\HEAD` and its absence, and the new
-  default keys.
+  registry, and the new default keys. The branch is the core's
+  (`workspace_info`): its tests read a branch ref, a detached `HEAD`, a
+  worktree's and a submodule's `gitdir:` file, and no `.git`.
 - `ShellEndToEndTests` (with `CABINETOS_UI_E2E=1`): the top row at 924 px
   (all controls, the command center at least 200 px, no overlap) and at
   620 px (hidden); Ctrl+F filtering one pane, Enter, a text with no match,

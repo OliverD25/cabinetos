@@ -27,10 +27,10 @@ public sealed partial class MainWindow
     private string _dragRegions = "";
 
     // The workspace until workspaces exist (docs/ui.md, "The top row"): the repository that holds the active folder, for
-    // the pill's branch and Quick Open's folder. Looked up off the UI thread whenever the active folder changes.
-    private GitRepository? _repository;
-    private string _repositoryFor = "";
-    private int _repositoryAsked;
+    // the pill's branch and Quick Open's folder. The core finds it (workspace_info) whenever the active folder changes.
+    private WorkspaceInfoReply? _workspace;
+    private string _workspaceFor = "";
+    private int _workspaceAsked;
 
     private void SetUpShell()
     {
@@ -192,13 +192,13 @@ public sealed partial class MainWindow
         }
         var items = new List<MenuEntry>
         {
-            new(MenuEntryKind.Item, WorkspaceName.Text, "\uE73E", Keys: _repository?.Branch,
-                Tooltip: _repository is { } repository ? repository.Root : "The only workspace until workspaces arrive"),
+            new(MenuEntryKind.Item, WorkspaceName.Text, "\uE73E", Keys: _workspace?.Branch,
+                Tooltip: _workspace is { Branch: not null } workspace ? workspace.Root : "The only workspace until workspaces arrive"),
             MenuEntry.Separator,
             new(MenuEntryKind.Item, "Open folder as workspace…", "\uE8DA", "workspace.openFolder"),
         };
         FileMenu.Show(Below(WorkspacePillFrame), [], items, fromKeyboard, WindowMetrics.Current.DropdownRowHeight);
-        Diag.Info(ShellTarget, "workspace menu shown", new LogField("branch", _repository?.Branch ?? ""));
+        Diag.Info(ShellTarget, "workspace menu shown", new LogField("branch", _workspace?.Branch ?? ""));
     }
 
     // The point under a top-row control's left edge, in the window's coordinates: where its dropdown opens.
@@ -229,46 +229,71 @@ public sealed partial class MainWindow
     private string WorkspaceRoot()
     {
         var folder = Active.Path;
-        return _repository is { } repository && string.Equals(_repositoryFor, folder, StringComparison.OrdinalIgnoreCase)
-            ? repository.Root
+        return _workspace is { } workspace && string.Equals(_workspaceFor, folder, StringComparison.OrdinalIgnoreCase)
+            ? workspace.Root
             : folder;
     }
 
     /// <summary>
-    /// Looks for the repository of the active folder on a background thread
-    /// (one small file read, a few existence checks) and shows its branch in
-    /// the pill. Runs when the active folder changes and when the window
-    /// comes to the front, so a branch switched in a terminal shows.
+    /// Asks the core which repository holds the active folder
+    /// (<c>workspace_info</c>: the core reads the repository's small files,
+    /// the window none, brief §1) and shows its branch in the pill. Runs when
+    /// the active folder changes and when the window comes to the front, so a
+    /// branch switched in a terminal shows. An older core, or a lost pipe,
+    /// leaves the pill without a branch.
     /// </summary>
     private async Task UpdateWorkspaceAsync()
     {
         var folder = Active.Path;
-        var asked = ++_repositoryAsked;
-        var repository = folder.Length == 0 ? null : await Task.Run(() => GitBranch.FindRepository(folder));
-        if (asked != _repositoryAsked)
+        var asked = ++_workspaceAsked;
+        WorkspaceInfoReply? workspace = null;
+        if (folder.Length > 0 && !_unavailable.Contains("workspace_info"))
+        {
+            try
+            {
+                switch (await _session.RequestAsync(new WorkspaceInfoRequest(folder)))
+                {
+                    case WorkspaceInfoReply reply:
+                        workspace = reply;
+                        break;
+                    case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                        _unavailable.Add("workspace_info");
+                        Diag.Info(ShellTarget, "the core does not answer workspace_info; the pill shows no branch");
+                        break;
+                    case ErrorReply error:
+                        Diag.Debug(ShellTarget, "workspace_info refused", new LogField("code", error.Code));
+                        break;
+                }
+            }
+            catch (IOException error)
+            {
+                Diag.Debug(ShellTarget, "cannot ask for the workspace", new LogField("error", error.Message));
+            }
+        }
+        if (asked != _workspaceAsked)
         {
             return;
         }
-        var changed = repository != _repository;
-        _repositoryFor = folder;
-        _repository = repository;
+        var changed = workspace != _workspace;
+        _workspaceFor = folder;
+        _workspace = workspace;
         if (changed)
         {
             ShowBranch();
-            Diag.Info(ShellTarget, "workspace pill shows a branch", new LogField("repository", repository is not null),
-                new LogField("branch", repository?.Branch ?? ""));
+            Diag.Info(ShellTarget, "workspace pill shows a branch", new LogField("root", workspace?.Root ?? folder),
+                new LogField("branch", workspace?.Branch ?? ""));
         }
     }
 
     // The pill: the workspace's name, and the branch in the mono font when the active folder is in a repository on one.
     private void ShowBranch()
     {
-        var branch = _repository?.Branch;
+        var branch = _workspace?.Branch;
         WorkspaceBranch.Text = branch ?? "";
         WorkspaceBranch.Visibility = branch is null ? Visibility.Collapsed : Visibility.Visible;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(WorkspacePill,
             branch is null ? $"Workspace {WorkspaceName.Text}" : $"Workspace {WorkspaceName.Text}, branch {branch}");
-        ToolTipService.SetToolTip(WorkspacePill, _repository is { } repository ? $"{WorkspaceName.Text} · {repository.Root}" : WorkspaceName.Text);
+        ToolTipService.SetToolTip(WorkspacePill, _workspace is { Branch: not null } workspace ? $"{WorkspaceName.Text} · {workspace.Root}" : WorkspaceName.Text);
     }
 
     // ----- The breadcrumb rows -----

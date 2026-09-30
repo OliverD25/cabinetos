@@ -525,6 +525,16 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         job: Option<u64>,
     },
+    /// Asks which workspace a folder belongs to, for the window's workspace
+    /// pill and Quick Open (Phase 16). Until workspaces exist it is the git
+    /// repository that holds the folder. The core looks for the nearest
+    /// `.git` at or above the folder and reads at most 1 KB of that
+    /// repository's files (`HEAD`, and a worktree's `.git` file); it never
+    /// runs git. The core answers `workspace_info`.
+    WorkspaceInfo {
+        /// An absolute folder; it need not exist.
+        path: String,
+    },
 }
 
 fn default_bundle_minutes() -> u32 {
@@ -601,6 +611,7 @@ impl Request {
         "secret_list",
         "save_log_bundle",
         "undo_job",
+        "workspace_info",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -669,6 +680,7 @@ impl Request {
             Self::SecretList => "secret_list",
             Self::SaveLogBundle { .. } => "save_log_bundle",
             Self::UndoJob { .. } => "undo_job",
+            Self::WorkspaceInfo { .. } => "workspace_info",
         }
     }
 }
@@ -963,6 +975,18 @@ pub enum Response {
         /// everything.
         left: Vec<UndoLeft>,
     },
+    /// Reply to `workspace_info`.
+    WorkspaceInfo {
+        /// The nearest folder at or above the asked folder that holds a
+        /// `.git` folder or file; the asked folder itself (without a
+        /// trailing backslash) when none does.
+        root: String,
+        /// The branch the repository's `HEAD` names (`ref: refs/heads/<name>`
+        /// gives the name); the first 7 characters of the commit for a
+        /// detached `HEAD`; null outside a repository, or when `HEAD`
+        /// cannot be read or names neither.
+        branch: Option<String>,
+    },
 }
 
 impl Response {
@@ -1004,6 +1028,7 @@ impl Response {
         "secret_names",
         "log_bundle",
         "undo_started",
+        "workspace_info",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -1046,6 +1071,7 @@ impl Response {
             Self::SecretNames { .. } => "secret_names",
             Self::LogBundle { .. } => "log_bundle",
             Self::UndoStarted { .. } => "undo_started",
+            Self::WorkspaceInfo { .. } => "workspace_info",
         }
     }
 }
@@ -1938,6 +1964,9 @@ mod tests {
             Request::SecretList,
             Request::SaveLogBundle { minutes: 5 },
             Request::UndoJob { job: Some(12) },
+            Request::WorkspaceInfo {
+                path: r"C:\repo\src".to_owned(),
+            },
         ]
     }
 
@@ -2231,6 +2260,10 @@ mod tests {
                     reason: crate::job::UndoLeftReason::InRecycleBin,
                 }],
             },
+            Response::WorkspaceInfo {
+                root: r"C:\repo".to_owned(),
+                branch: Some("main".to_owned()),
+            },
         ]
     }
 
@@ -2463,6 +2496,33 @@ mod tests {
         assert_eq!(
             value,
             json!({"id": ID, "type": "log_bundle", "path": r"C:\logs\bundle-20260930T010203004Z.zip"})
+        );
+    }
+
+    #[test]
+    fn workspace_info_always_has_its_branch_field() {
+        let asked: Envelope<Request> = serde_json::from_value(
+            json!({"id": ID, "type": "workspace_info", "path": r"C:\repo\src"}),
+        )
+        .unwrap();
+        assert_eq!(
+            asked.body,
+            Request::WorkspaceInfo {
+                path: r"C:\repo\src".to_owned()
+            }
+        );
+        // Outside a repository the branch is null, not left out.
+        let value = serde_json::to_value(Envelope::new(
+            id(),
+            Response::WorkspaceInfo {
+                root: r"C:\notes".to_owned(),
+                branch: None,
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            value,
+            json!({"id": ID, "type": "workspace_info", "root": r"C:\notes", "branch": null})
         );
     }
 

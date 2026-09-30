@@ -75,6 +75,8 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(UninstallExtensionRequest))]
 [JsonSerializable(typeof(SaveLogBundleRequest))]
 [JsonSerializable(typeof(LogBundleReply))]
+[JsonSerializable(typeof(WorkspaceInfoReply))]
+[JsonSerializable(typeof(WorkspaceInfoRequest))]
 [JsonSerializable(typeof(PongReply))]
 [JsonSerializable(typeof(OkReply))]
 [JsonSerializable(typeof(ErrorReply))]

@@ -1323,6 +1323,24 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Asks which workspace a folder belongs to, for the window's workspace\npill and Quick Open (Phase 16). Until workspaces exist it is the git\nrepository that holds the folder. The core looks for the nearest\n`.git` at or above the folder and reads at most 1 KB of that\nrepository's files (`HEAD`, and a worktree's `.git` file); it never\nruns git. The core answers `workspace_info`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "An absolute folder; it need not exist.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "workspace_info"
+        }
+      },
+      "required": [
+        "type",
+        "path"
+      ]
     }
   ],
   "required": [

@@ -353,7 +353,8 @@ impl Session {
                 | Request::ShowProperties { .. }
                 | Request::CreateDirectory { .. }
                 | Request::CreateFile { .. }
-                | Request::Rename { .. }) => self.file_request(&id, &span, kind, request),
+                | Request::Rename { .. }
+                | Request::WorkspaceInfo { .. }) => self.file_request(&id, &span, kind, request),
                 request @ (Request::MeasurePaths { .. } | Request::CancelMeasure { .. }) => {
                     self.measure_request(&id, &span, kind, request)
                 }
@@ -942,6 +943,15 @@ impl Session {
                 }
                 self.spawn_reply(id, span, kind, move || {
                     answer_fs(cabinetos_fs::rename(&path, &new_name))
+                });
+            }
+            // Here, not in the window: the window reads no files (brief §1).
+            Request::WorkspaceInfo { path } => {
+                if let Some(refusal) = not_absolute(&path) {
+                    return Some(refusal);
+                }
+                self.spawn_reply(id, span, kind, move || {
+                    crate::workspace::workspace_info(&path)
                 });
             }
             _ => {}

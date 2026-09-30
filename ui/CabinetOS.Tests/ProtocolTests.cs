@@ -94,6 +94,7 @@ public class ProtocolTests
             new PreviewApplyRequest("preview-3"),
             new PreviewCancelRequest("preview-3"),
             new SaveLogBundleRequest(10),
+            new WorkspaceInfoRequest(@"C:\repo\src"),
         ];
     }
 
@@ -174,7 +175,8 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        Assert.Equal(53, checkedTypes.Count);
+        // 54 since Phase 16's workspace_info.
+        Assert.Equal(54, checkedTypes.Count);
     }
 
     [Fact]
@@ -380,6 +382,10 @@ public class ProtocolTests
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"log_bundle","path":"C:\\logs\\bundle-20260930T010203004Z.zip"}""",
                 b => Assert.Equal(new LogBundleReply(@"C:\logs\bundle-20260930T010203004Z.zip"), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"workspace_info","root":"C:\\repo","branch":"phase-16"}""",
+                b => Assert.Equal(new WorkspaceInfoReply(@"C:\repo", "phase-16"), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"workspace_info","root":"C:\\notes","branch":null}""",
+                b => Assert.Equal(new WorkspaceInfoReply(@"C:\notes", null), b)),
             ($$$"""{"id":"{{{Id}}}","type":"marketplace_index","source":"C:\\market\\index.json","fetched_at_ms":1790000000000,"items":[{{{HelloItem}}},{{{NordItem}}}]}""",
                 b =>
                 {

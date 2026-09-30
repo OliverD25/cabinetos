@@ -596,3 +596,15 @@ public sealed class SaveLogBundleRequest(uint minutes) : CoreRequest("save_log_b
     /// <summary>How many minutes back, 1 to 1,440; the core takes 10 when the field is left out.</summary>
     public uint Minutes { get; } = minutes;
 }
+
+/// <summary>
+/// Asks which workspace a folder belongs to (Phase 16): until workspaces exist, the git
+/// repository that holds it, and its branch, for the top row's pill and Quick Open. The core
+/// reads the repository's small files; the window reads none (brief §1). The reply is
+/// <c>workspace_info</c>; an older core answers <c>unknown_request</c>, and the pill shows no branch.
+/// </summary>
+public sealed class WorkspaceInfoRequest(string path) : CoreRequest("workspace_info")
+{
+    /// <summary>An absolute folder.</summary>
+    public string Path { get; } = path;
+}

@@ -144,6 +144,14 @@ public sealed record MeasureStartedReply(ulong MeasureId) : CoreReply;
 /// <summary>Reply to <c>save_log_bundle</c>: the zip's full path, in the log folder.</summary>
 public sealed record LogBundleReply(string Path) : CoreReply;
 
+/// <summary>
+/// Reply to <c>workspace_info</c>: the nearest folder at or above the asked one that holds a
+/// <c>.git</c> folder or file (the asked folder itself outside a repository), and the branch its
+/// <c>HEAD</c> names: a detached <c>HEAD</c> gives the commit's first 7 characters, and no
+/// repository gives null.
+/// </summary>
+public sealed record WorkspaceInfoReply(string Root, string? Branch) : CoreReply;
+
 /// <summary>Reply to <c>start_job</c>: the paths were checked and the job is queued.</summary>
 public sealed record JobStartedReply(ulong JobId) : CoreReply;
 

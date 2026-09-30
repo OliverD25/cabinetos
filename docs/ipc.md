@@ -137,7 +137,9 @@ rows ("Previews"); the job kind `steps` ("Jobs"); and secrets:
 command's optional `input` in `list_commands`. Phase 15 added to it
 `save_log_bundle` with the reply `log_bundle` ("Log bundles"), and the
 optional `trace` of every message ("The pipe"), which older peers
-ignore.
+ignore. Phase 16 added `workspace_info` with its reply `workspace_info`
+("What the window shows"); a window that meets an older core's
+`unknown_request` shows no branch.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -212,6 +214,7 @@ as absent from an older core.
 | `secret_list` | — | `secret_names` (`names`) |
 | `save_log_bundle` | `minutes` (1 to 1,440; default 10) | `log_bundle` (`path`), once the zip is written ([diagnostics.md](diagnostics.md), "Bundles") |
 | `undo_job` | `job` (optional: the newest job not undone yet) | `undo_started` (`job_id`, `undoes`, `left`) |
+| `workspace_info` | `path` (absolute; need not exist) | `workspace_info` (`root`, `branch`) ("What the window shows") |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -1566,6 +1569,33 @@ It needs no `hello`.
 pane with its tabs, the tab in front marked `*`, the cursor and the number
 of marked rows); `--json` prints the state as it was received, and
 `--client <id>` asks for another window than the newest.
+
+### The workspace of a folder
+
+The window's top row shows the workspace and its git branch, and Quick
+Open searches the workspace (Phase 16; [ui.md](ui.md), "The shell").
+Workspaces do not exist yet, so the workspace is the git repository that
+holds the active folder. The window may not read files (brief §1, the
+Dumb UI Rule), so it asks the core:
+
+```json
+{"id":"01P…","type":"workspace_info","path":"C:\repo\src\ui"}
+{"id":"01P…","type":"workspace_info","root":"C:\repo","branch":"main"}
+```
+
+- `root` is the nearest folder at or above `path` that holds a `.git`
+  folder or file. Outside a repository it is `path` itself, without a
+  trailing backslash.
+- `branch` comes from the repository's `HEAD`: `ref: refs/heads/<name>`
+  gives the name, a detached `HEAD` (a commit's 40 or 64 hex digits) gives
+  its first 7 characters. A worktree's or a submodule's `.git` is a file
+  (`gitdir: <folder>`, relative to the file's folder or absolute); the core
+  follows it to that folder's `HEAD`. Outside a repository, or when `HEAD`
+  cannot be read or names neither, `branch` is `null`; it is never left out.
+- The core reads at most 1 KB for one answer, the `.git` file and `HEAD`
+  together, on its blocking pool; it never runs git. A folder that is not
+  there is walked up like any other.
+- A path that is not absolute is `invalid_path`. It needs no `hello`.
 
 ## Trying it by hand
 

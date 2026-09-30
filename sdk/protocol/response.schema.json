@@ -905,6 +905,31 @@
         "undoes",
         "left"
       ]
+    },
+    {
+      "description": "Reply to `workspace_info`.",
+      "type": "object",
+      "properties": {
+        "branch": {
+          "description": "The branch the repository's `HEAD` names (`ref: refs/heads/<name>`\ngives the name); the first 7 characters of the commit for a\ndetached `HEAD`; null outside a repository, or when `HEAD`\ncannot be read or names neither.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root": {
+          "description": "The nearest folder at or above the asked folder that holds a\n`.git` folder or file; the asked folder itself (without a\ntrailing backslash) when none does.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "workspace_info"
+        }
+      },
+      "required": [
+        "type",
+        "root"
+      ]
     }
   ],
   "required": [

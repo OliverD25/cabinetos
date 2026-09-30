@@ -38,6 +38,7 @@ mod terminal;
 mod themes;
 mod volumes;
 mod window;
+mod workspace;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
