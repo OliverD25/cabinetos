@@ -342,8 +342,9 @@ machine works like this:
    - otherwise nothing runs, and the key is not passed on. The status bar
      says the chord is not bound; when the two keys are bound in another
      context, it says where they work instead: "Ctrl+K V works only in a
-     file list", or "Ctrl+K Ctrl+T does not work while you type in a box.
-     Esc leaves the box." (a chord without `when`, pressed in a text box).
+     file list", or "G G does not work while you type in a box. Esc
+     leaves the box." (a chord without `when` whose first key types in
+     the text box that has the keyboard, "Contexts" below).
      Until 2026-10-01 it called such a chord not bound.
    If no combination comes within `chord_window_ms`, the wait ends and
    nothing runs.
@@ -365,6 +366,39 @@ keys, the one with the `when` wins: it is the more specific. The core treats
 hold. The names in use: `filesView` (a file pane has focus), `paletteOpen`
 (the command palette is open), `textInput` (a text box has focus),
 `terminalFocus` (the terminal has focus).
+
+**Text boxes.** While a text box has the keyboard (`textInput`), the box
+keeps the keys that type or edit. A key that types nothing there runs its
+binding. This is the rule since 2026-10-01; before it, only the Immutable
+System Tier worked in a box.
+
+- **The box keeps these keys.** Letters, digits and the other characters,
+  alone or with Shift. Space, Enter, Esc, Backspace, Delete, Insert, Home,
+  End, PageUp, PageDown, the arrows and Tab, alone or with Shift. The
+  box's own editing keys: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+Y,
+  Ctrl+Insert, Ctrl+Backspace, Ctrl+Delete, Ctrl+Left, Ctrl+Right,
+  Ctrl+Home and Ctrl+End, each also with Shift. Ctrl+Alt with a character
+  key, because Ctrl+Alt is AltGr, and many layouts type characters with it.
+  Alt with a digit, because Alt with the keypad's digits types a character
+  by its code, and the grammar names those digits like the top row's.
+- **Every other key runs its binding.** These are the function keys, with
+  any modifiers, and the other combinations with Ctrl, Alt or Win: Ctrl+B,
+  Ctrl+T, Ctrl+Tab, Ctrl+Enter, Ctrl+Up, Alt+Left, Alt+Enter, Ctrl+Alt+Up.
+  A text box types nothing with them.
+- **The pane's own boxes count as the pane.** The active pane's find box
+  (Ctrl+F) and its address box (Ctrl+L) are `filesView` as well as
+  `textInput`. So the pane's keys that type nothing act on the pane from
+  there: F5 copies the cursor row to the other pane, Ctrl+F3 sorts, Ctrl+T
+  opens a tab. The other boxes are text input only: a name typed in place
+  (F2), the palette's field, Quick Open, the prompts, the Search view's
+  field, the marketplace's search and the other pane's boxes. F5 there
+  does nothing.
+- A binding for another context that holds around a box (`paletteOpen`,
+  F2 in the palette) runs as it always did.
+- **A chord goes by its first half.** Ctrl+K types nothing, so Ctrl+K
+  Ctrl+T works in any box, and Ctrl+K V in the find box. The second half
+  belongs to the chord once the wait has started.
+- The Immutable System Tier works everywhere, as before.
 
 ## The Immutable System Tier
 
@@ -407,7 +441,8 @@ only what differs from the defaults:
   one command give it several bindings.
 - `"keys": ""` leaves the command without keys.
 - Without `when`, the entry keeps the command's own context. So rebinding
-  `file.copyToOtherPane` does not make it fire inside a text box.
+  `file.copyToOtherPane` does not make it fire in a name typed in place or
+  in the palette's field ("Text boxes" under "Contexts").
 - An entry for a command nobody registered is ignored, with a warning in the
   core's log: the plugin that registered it may have been removed.
 

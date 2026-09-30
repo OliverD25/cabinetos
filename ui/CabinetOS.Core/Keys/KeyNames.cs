@@ -124,6 +124,15 @@ public static class KeyNames
     /// <summary>Every virtual-key code the grammar names, and its name (for the pages' key scripts).</summary>
     public static IReadOnlyDictionary<int, string> VirtualKeyNames => VirtualKeys;
 
+    /// <summary>
+    /// Whether the key named <paramref name="name"/> types a character when pressed alone or with Shift:
+    /// a letter, a digit, the space, a punctuation key or a keypad operator.
+    /// </summary>
+    public static bool IsCharacter(string name) =>
+        name.Length == 1 || name is "space" or "backquote" or "comma" or "period" or "slash" or "minus" or "equal"
+            or "bracketleft" or "bracketright" or "backslash" or "semicolon" or "quote"
+            or "numpadadd" or "numpadsubtract" or "numpadmultiply" or "numpaddivide" or "numpaddecimal";
+
     /// <summary>Whether the virtual key is Ctrl, Shift, Alt or Win (either side).</summary>
     public static bool IsModifier(int virtualKey) =>
         virtualKey is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C or (>= 0xA0 and <= 0xA5);

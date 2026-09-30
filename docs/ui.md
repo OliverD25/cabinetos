@@ -154,8 +154,11 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   into a Markdown Preview in the other pane (its page must have the
   keyboard), Tab and Enter in the theme picker (the theme applies, nothing
   opens in the pane), Ctrl+K held until Windows repeats it and then Ctrl+T
-  (the picker opens), and Ctrl+K Ctrl+T in the find box (the notice says
-  where the chord works). Then the window's own keyboard layout goes to
+  (the picker opens). Then the find box, with the other pane on a folder
+  of the fixture: a letter filters, Enter finds, F5 copies the cursor row
+  (the file must be in the other folder), Ctrl+A selects the box's text
+  (the next letter replaces it), Ctrl+T and Ctrl+W open and close a tab,
+  and Ctrl+K Ctrl+T opens the theme picker. Then the window's own keyboard layout goes to
   Ukrainian (`WM_INPUTLANGCHANGEREQUEST` to the window, never the
   system's default), Ctrl+T and Ctrl+W go as physical keys (scan codes,
   so the layout decides the virtual key) and must run `tab.new` and
@@ -464,12 +467,17 @@ Every key press goes first to the window (`PreviewKeyDown`), then to the
 - Contexts: `filesView` (a file pane has the focus), `paletteOpen`,
   `textInput` (a text box has the focus). A binding with a `when` that holds
   wins over one without.
-- Text boxes come first: while one has the focus, a binding without `when`
-  applies only if it is in the Immutable System Tier (`palette.show`,
-  `overlay.close`, `keys.open`). So typing is never taken over by a
-  shortcut, and Esc and Ctrl+Shift+P always work. A text box inside a pane
-  (the rename box) is text input, not `filesView`: F5 does not start a
-  copy while a name is being typed.
+- A text box keeps the keys that type or edit: characters, Space, Enter,
+  Esc, Backspace, Delete, the arrows, Tab, Ctrl+A, Ctrl+C, Ctrl+V and the
+  other editing keys (the full list: [keybindings.md](keybindings.md),
+  "Contexts"). A key that types nothing runs its binding there: Ctrl+B,
+  Ctrl+Tab, Alt+Left, the function keys (`TextInputKeys`). So typing is
+  never taken over by a shortcut, and a shortcut still works while a box
+  has the keyboard. The Immutable System Tier works everywhere.
+- The active pane's find box and address box are `filesView` as well as
+  `textInput`, so F5 or Ctrl+T there acts on the pane. The rename box sits
+  inside the pane but is text input only: F5 does not start a copy while a
+  name is being typed.
 - A key nobody bound goes on to the focused control. In a pane, that is
   the list keys every Windows list has (the rows marked "the pane" below);
   they are not commands.
@@ -1116,8 +1124,9 @@ What the drawer is:
   text and the palette's keycap are hidden, the gaps are narrower, and the
   selection text is cut to 90 px (and hidden under 420 px).
 
-Like every ordinary shortcut, the key does nothing while a text box has the
-keyboard: press Esc first. Some Intel graphics drivers use Ctrl+Alt with an
+The key works while a text box has the keyboard too: AltGr with an arrow
+types nothing there (keybindings.md, "Contexts"). Until 2026-10-01 it did
+nothing in a box. Some Intel graphics drivers use Ctrl+Alt with an
 arrow key to turn the screen. If that happens, turn the driver's hotkeys off
 or rebind the command in the palette.
 
@@ -1300,6 +1309,9 @@ is gone.
   scrolls to its end.
 - **Ctrl+L** (`go.toPath`) turns the active pane's row into a text box
   with the path selected; Enter goes there, Esc puts the crumbs back.
+  The box is the pane's: the pane's keys that type nothing (F5, Ctrl+T,
+  Ctrl+Tab) act on the pane from it, and the box keeps its typing and
+  editing keys (keybindings.md, "Contexts").
 - The active pane's row has an accent-tinted fill (6 %); the other pane's
   has none. The drive list (Alt+F1, Alt+F2) and the prompts open under the
   row.
@@ -1461,6 +1473,12 @@ end of the breadcrumb row, with a search glyph, a 150 px box ("Find in
 - **Enter** puts the cursor on the first match and keeps the widget and
   the keyboard; Down gives the keyboard to the list. **Esc** closes the
   widget: every row shows again.
+- **The pane's keys work from the box.** The box is the pane's: a key that
+  types nothing runs the pane's binding, so F5 copies the cursor row to
+  the other pane, Ctrl+F3 sorts, Ctrl+T opens a tab and Ctrl+W closes it.
+  The box keeps its typing and editing keys: Ctrl+A selects its text, not
+  the rows (keybindings.md, "Contexts"). Until 2026-10-01 only the
+  Immutable System Tier worked in the box.
 - **The selection survives.** Marks the filter hides are kept aside, out of
   every count and command, and come back when it ends (`SelectionModel`).
   A text with no match leaves the cursor nowhere; when the find ends, it
@@ -1491,9 +1509,11 @@ mono font, its folder from the workspace's own name down.
   back to Quick Open (`PaletteInput`). Ctrl+Shift+P still opens the
   commands at once.
 - Esc or a click outside closes it, and the keyboard goes back to the pane.
-  Its box is a text box, so of the keys without a context only the
-  Immutable System Tier's work there ("Keys, contexts and commands"):
-  Ctrl+Shift+P shows the commands instead, and Ctrl+P does nothing.
+  Its box is a text box, so it keeps the keys that type or edit, and a key
+  without a context that types nothing runs ("Keys, contexts and
+  commands"): Ctrl+Shift+P shows the commands instead, and Ctrl+P closes
+  Quick Open (`quickOpen.show` toggles it). Until 2026-10-01 Ctrl+P did
+  nothing there.
 
 ### The shell's snapshot steps and checks
 
@@ -2525,9 +2545,10 @@ is left (Esc, a hit chosen, or Ctrl+Shift+E). The list shows each hit's name and
 one goes to it in the active pane with the hit selected, as Enter on a hit in
 the pane does. Down in the field moves to the first hit.
 
-The field is a text box, so it keeps every key but the ones of the immutable
-tier ([keybindings.md](keybindings.md), "Contexts"): Ctrl+Shift+E does not
-show the Explorer while the field has the keyboard. Esc leaves it. The
+The field is a text box, so it keeps the keys that type or edit, and a key
+that types nothing runs its binding ([keybindings.md](keybindings.md),
+"Contexts"): Ctrl+Shift+E shows the Explorer from the field. Until
+2026-10-01 it did nothing there. Esc leaves the field. The
 window takes Esc before the field's own handler sees it, so `overlay.close`
 does the work: in the rail or in the sidebar (a rail button, the tree, the
 field, a hit) it gives the keyboard to the pane and ends a search that is
@@ -2616,9 +2637,9 @@ the run's own tools folder. Real keys and the mouse then check:
   it at 300;
 - the log has no warning or error line during the section.
 
-In the Search view's field a key of the window does not run (a text box keeps every
-key but the immutable tier's), so the check leaves the field with Esc before
-Ctrl+Shift+E.
+The check leaves the Search view's field with Esc before Ctrl+Shift+E. It
+was written when a text box kept every key but the immutable tier's; Ctrl+Shift+E
+works from the field since 2026-10-01, and the Esc does no harm.
 
 ## Themes
 

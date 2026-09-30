@@ -49,10 +49,7 @@ public static class KeyLog
         {
             return false;
         }
-        return KeyNames.FromVirtualKey(virtualKey) is { } name
-            && (name.Length == 1 || name is "space" or "backquote" or "comma" or "period" or "slash" or "minus" or "equal"
-                or "bracketleft" or "bracketright" or "backslash" or "semicolon" or "quote"
-                or "numpadadd" or "numpadsubtract" or "numpadmultiply" or "numpaddivide" or "numpaddecimal");
+        return KeyNames.FromVirtualKey(virtualKey) is { } name && KeyNames.IsCharacter(name);
     }
 
     /// <summary>The key's name in the grammar of docs/keybindings.md, <c>shift</c> and its kin for modifiers, or <c>vk_XX</c> for a key without a name.</summary>

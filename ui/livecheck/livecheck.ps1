@@ -1816,7 +1816,7 @@ $configAfter = ConfigUi
 # ----- keys (docs/log/2026-10-01/keys-audit-report.md) -----
 # The states where a key did nothing or the wrong thing until the keys audit of 2026-10-01, with real keys: Tab and Enter in
 # a dialog, Tab into a tool tab in the other pane, Tab in the theme picker, Ctrl+K held until Windows repeats it before a
-# chord's second half, and a chord pressed in the find box. Then the window's own keyboard layout goes to Ukrainian for
+# chord's second half, and the pane's keys in its find box. Then the window's own keyboard layout goes to Ukrainian for
 # Ctrl+T and Ctrl+W pressed as physical keys, and back. The cursor rests on a folder before each overlay, so a key that
 # escaped one would open a folder, never a file in its program.
 function CommandCount([string]$command) { @(ShellLines 'command executed' | Where-Object { $_.fields.command -eq $command }).Count }
@@ -1880,12 +1880,44 @@ $notBound = NoticeCount 'is not bound'
 "keys: the held Ctrl+K and Ctrl+T ran the picker, and no chord was called not bound: $((CommandCount 'preferences.selectColorTheme') -gt $pickers -and (NoticeCount 'is not bound') -eq $notBound)"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
 
-Step "keys: Ctrl+F, then Ctrl+K Ctrl+T in the find box: the status bar says the chord does not work while typing"
-$typing = NoticeCount 'does not work while you type in a box'
+# The find box is the pane's (keybindings.md, "Contexts"): the pane's keys that type nothing act on the pane from it, and
+# the box keeps its typing and editing keys. The other pane goes to a folder of the fixture first, for F5's copy.
+Step "keys: the find box: a letter filters, Enter finds, F5 copies the cursor row to the other pane"
+$k20other = "$files\keys20-other"
+New-Item -ItemType Directory -Force $k20other | Out-Null
+ClickLeftPane
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type($k20other); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+$copies = CommandCount 'file.copyToOtherPane'
+# Rows: sub, a.txt, notes.md; "a" is only in a.txt.
+[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
+[Live]::Type("a"); Start-Sleep -Milliseconds 600
+$typed = ShellLines 'find filtered' | Select-Object -Last 1
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.F5); Start-Sleep -Milliseconds 2000
+"keys: 'a' in the find box shows $($typed.fields.matches) of $($typed.fields.rows) rows: $($typed.fields.query_length -eq 1 -and $typed.fields.matches -eq 1)"
+"keys: F5 in the find box ran the copy, and a.txt is in the other pane: $((CommandCount 'file.copyToOtherPane') -gt $copies -and (Test-Path -LiteralPath "$k20other\a.txt"))"
+
+Step "keys: the find box: Ctrl+A selects its text, Ctrl+T opens a tab, Ctrl+W closes it, Ctrl+K Ctrl+T opens the theme picker"
+# Ctrl+A in the pane would mark rows; in the box it selects the text, which the next letter replaces ("n": notes.md).
+[Live]::Press($VK.Ctrl, $VK.A); Start-Sleep -Milliseconds 200
+[Live]::Type("n"); Start-Sleep -Milliseconds 600
+$replaced = ShellLines 'find filtered' | Select-Object -Last 1
+"keys: Ctrl+A selected the box's text, and 'n' replaced it ($($replaced.fields.query_length) letter, $($replaced.fields.matches) match): $($replaced.fields.query_length -eq 1 -and $replaced.fields.matches -eq 1)"
+$new = CommandCount 'tab.new'; $close = CommandCount 'tab.close'
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 800
+[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
+[Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 800
+"keys: Ctrl+T and Ctrl+W, each pressed in a find box, opened and closed a tab: $((CommandCount 'tab.new') -gt $new -and (CommandCount 'tab.close') -gt $close)"
+$pickers = CommandCount 'preferences.selectColorTheme'
 [Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 [Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 700
-"keys: the notice names where the chord works: $((NoticeCount 'does not work while you type in a box') -gt $typing)"
+"keys: Ctrl+K Ctrl+T from the find box opened the theme picker: $((CommandCount 'preferences.selectColorTheme') -gt $pickers)"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+# The picker is gone; this Esc closes the find.
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
 
 # The creator types Ukrainian: a key named after a Latin letter must work on that layout. The window matches keys by their

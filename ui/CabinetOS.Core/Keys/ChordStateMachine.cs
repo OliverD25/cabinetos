@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace CabinetOS.Core.Keys;
 
 /// <summary>What the key state machine decided about one key press.</summary>
@@ -36,12 +38,50 @@ public static class ChordNotice
         }
         return binding.When switch
         {
-            // No context of its own: a text box had the keyboard, where only the Immutable System Tier applies.
+            // No context of its own: a text box had the keyboard and kept the chord's first key, which types there.
             null => $"{keys} does not work while you type in a box. Esc leaves the box.",
             KeyContexts.FilesView => $"{keys} works only in a file list.",
             KeyContexts.PaletteOpen => $"{keys} works only in the command palette.",
             KeyContexts.TerminalFocus => $"{keys} works only in the terminal.",
             var context => $"{keys} works only where {context} holds.",
+        };
+    }
+}
+
+/// <summary>
+/// Which keys a text box keeps while it has the keyboard (docs/keybindings.md, "Contexts"): the keys that type
+/// or edit there. Any other key types nothing in a box, so its binding runs.
+/// </summary>
+public static class TextInputKeys
+{
+    // The keys a box edits with while Ctrl is held, and with Shift too (which selects as it goes): select all,
+    // copy (Ctrl+Insert as well), paste, cut, undo, redo, a word back or forward, the start and the end.
+    private static readonly FrozenSet<string> CtrlEditing = FrozenSet.ToFrozenSet(
+        ["a", "c", "v", "x", "z", "y", "insert", "backspace", "delete", "left", "right", "home", "end"]);
+
+    /// <summary>Whether a text box keeps <paramref name="combo"/>: true for a key that types or edits there.</summary>
+    public static bool StaysWithBox(KeyCombo combo)
+    {
+        if (combo.Key.Length > 1 && combo.Key[0] == 'f' && char.IsAsciiDigit(combo.Key[1]))
+        {
+            return false;
+        }
+        if ((combo.Modifiers & KeyModifiers.Win) != 0)
+        {
+            return false;
+        }
+        var ctrl = (combo.Modifiers & KeyModifiers.Ctrl) != 0;
+        var alt = (combo.Modifiers & KeyModifiers.Alt) != 0;
+        return (ctrl, alt) switch
+        {
+            // Alone or with Shift every key types or edits: characters, Space, Enter, Esc, Backspace, Delete, Insert,
+            // Home, End, PageUp, PageDown, the arrows, Tab.
+            (false, false) => true,
+            // Ctrl and Alt together are AltGr, which types characters on many layouts.
+            (true, true) => KeyNames.IsCharacter(combo.Key),
+            (true, false) => CtrlEditing.Contains(combo.Key),
+            // Alt with the keypad's digits types a character by its code, and the grammar names those digits as the row's.
+            (false, true) => combo.Key is [>= '0' and <= '9'],
         };
     }
 }
@@ -54,10 +94,12 @@ public static class ChordNotice
 /// Which bindings apply: one with a <c>when</c> applies while that context
 /// holds, one without applies everywhere, and when both match the same keys
 /// the one with the <c>when</c> wins. While a text box has focus
-/// (<c>textInput</c>), text input takes precedence: a binding without
-/// <c>when</c> then applies only when it belongs to the Immutable System Tier
-/// (the palette, the way out of an overlay, the shortcut editor), so typing
-/// is never swallowed by an ordinary shortcut.
+/// (<c>textInput</c>), the box keeps the keys that type or edit
+/// (<see cref="TextInputKeys"/>), so typing is never swallowed by a shortcut:
+/// a binding without <c>when</c>, or one of <c>filesView</c> (a pane's own
+/// boxes hold both contexts), applies there only to a key that types nothing,
+/// and a chord is judged by its first half. The Immutable System Tier applies
+/// everywhere.
 /// </remarks>
 public sealed class ChordStateMachine(Func<long> nowMilliseconds)
 {
@@ -155,11 +197,18 @@ public sealed class ChordStateMachine(Func<long> nowMilliseconds)
 
     private bool Applies(Binding binding, IReadOnlySet<string> contexts)
     {
-        if (binding.When is not null)
+        if (binding.When is not null && !contexts.Contains(binding.When))
         {
-            return contexts.Contains(binding.When);
+            return false;
         }
-        return !contexts.Contains(KeyContexts.TextInput) || _keymap.Immutable.Contains(binding.Command);
+        if (!contexts.Contains(KeyContexts.TextInput) || _keymap.Immutable.Contains(binding.Command))
+        {
+            return true;
+        }
+        // The box keeps its typing and editing keys from the bindings without a context and from the pane's (its find box
+        // and its address box are the pane's too). A binding of a context that holds only around a box (the palette's F2)
+        // is meant for it. A chord goes by its first half: once that has started the wait, the second belongs to the chord.
+        return binding.When is not (null or KeyContexts.FilesView) || !TextInputKeys.StaysWithBox(binding.Keys.First);
     }
 
     private void ClearPending()

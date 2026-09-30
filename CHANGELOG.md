@@ -25,6 +25,8 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The "Open with…" button at the right end of each pane's tab strip is hidden until a second editor exists; its Editor commands stay in the command palette.
 - The tabs of a pane look as the design draws them: the tab in front is a flat block with a 2 px bar on top (the accent in the active pane), the other tabs are plain text at 65 % white, a folder tab has no icon, and the close mark is a plain ×.
 
+- Shortcuts work while a text box has the keyboard, when they type nothing there: Ctrl+B, Ctrl+Tab, Alt+Left, Ctrl+K Ctrl+T and the function keys run their command. The box keeps the keys that type or edit, such as letters, Enter, Tab, the arrows, Ctrl+A, Ctrl+C and Ctrl+V. In a pane's find box and address box the pane's keys work too: F5 copies the cursor row to the other pane, Ctrl+T opens a tab. Before, only Ctrl+Shift+P, Esc and Ctrl+K Ctrl+S worked in a box.
+
 ### Fixed
 
 - Tab switches panes again after a click on a button of the top row. The click left the keyboard on the button, and Tab walked from button to button. The buttons of the top row, the status bar, the breadcrumbs, the tab strips and the dock no longer take the keyboard from a click.

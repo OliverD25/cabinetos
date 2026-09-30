@@ -110,13 +110,17 @@ public class ChordStateMachineTests
     [Fact]
     public void A_second_half_that_completes_a_chord_bound_elsewhere_says_where_it_works()
     {
-        // In a text box: the chord has no context, and only the Immutable System Tier applies there.
+        // In a text box that is not the pane's (a name typed in place): the chord is bound in filesView.
         Press("ctrl+k", Typing);
-        var typing = Assert.IsType<KeyOutcome.NotBound>(Press("ctrl+w", Typing));
-        Assert.Equal("workspace.switch", typing.Elsewhere?.Command);
-        Assert.Equal("Ctrl+K Ctrl+W does not work while you type in a box. Esc leaves the box.", ChordNotice.Text(typing));
+        var typing = Assert.IsType<KeyOutcome.NotBound>(Press("v", Typing));
+        Assert.Equal("editor.openMarkdownPreview", typing.Elsewhere?.Command);
+        Assert.Equal("Ctrl+K V works only in a file list.", ChordNotice.Text(typing));
 
-        // Outside a file list: the chord is bound in filesView.
+        // A chord without a context misses only where a box keeps its first key, which types there.
+        var boxKept = new KeyOutcome.NotBound(Combo("g"), Combo("g"), new Binding(new KeySequence(Combo("g"), Combo("g")), "test.top", null));
+        Assert.Equal("G G does not work while you type in a box. Esc leaves the box.", ChordNotice.Text(boxKept));
+
+        // Outside a file list.
         Press("ctrl+k");
         var outside = Assert.IsType<KeyOutcome.NotBound>(Press("v"));
         Assert.Equal("editor.openMarkdownPreview", outside.Elsewhere?.Command);
@@ -233,10 +237,10 @@ public class ChordStateMachineTests
     }
 
     [Fact]
-    public void Text_input_takes_precedence_except_for_the_immutable_tier()
+    public void In_a_text_box_a_key_that_types_nothing_runs_and_the_immutable_tier_works_as_everywhere()
     {
-        Assert.IsType<KeyOutcome.PassThrough>(Press("ctrl+b", Typing));
-        Assert.IsType<KeyOutcome.PassThrough>(Press("f2", Typing));
+        Assert.Equal("view.toggleSidebar", Assert.IsType<KeyOutcome.Run>(Press("ctrl+b", Typing)).Command);
+        Assert.Equal("test.everywhere", Assert.IsType<KeyOutcome.Run>(Press("f2", Typing)).Command);
         Assert.Equal("overlay.close", Assert.IsType<KeyOutcome.Run>(Press("escape", Typing)).Command);
         Assert.Equal("palette.show", Assert.IsType<KeyOutcome.Run>(Press("ctrl+shift+p", Palette)).Command);
         Assert.Equal("test.inPalette", Assert.IsType<KeyOutcome.Run>(Press("f2", Palette)).Command);
@@ -244,7 +248,117 @@ public class ChordStateMachineTests
         Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k", Typing));
         Assert.Equal("keys.open", Assert.IsType<KeyOutcome.Run>(Press("ctrl+s", Typing)).Command);
         Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k", Typing));
-        Assert.IsType<KeyOutcome.NotBound>(Press("ctrl+w", Typing));
+        Assert.Equal("workspace.switch", Assert.IsType<KeyOutcome.Run>(Press("ctrl+w", Typing)).Command);
+    }
+
+    [Fact]
+    public void The_pane_s_own_boxes_run_the_pane_s_keys_that_type_nothing_and_other_boxes_do_not()
+    {
+        HashSet<string> paneBox = [KeyContexts.TextInput, KeyContexts.FilesView];
+        Assert.Equal("file.copyToOtherPane", Assert.IsType<KeyOutcome.Run>(Press("f5", paneBox)).Command);
+        // Tab moves on from the box, as in any box; in the list it is the pane's.
+        Assert.IsType<KeyOutcome.PassThrough>(Press("tab", paneBox));
+        Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k", paneBox));
+        Assert.Equal("editor.openMarkdownPreview", Assert.IsType<KeyOutcome.Run>(Press("v", paneBox)).Command);
+
+        // A name typed in place, the palette's field: F5 stays with the box, and the box types no F5, so it passes on.
+        Assert.IsType<KeyOutcome.PassThrough>(Press("f5", Typing));
+        Assert.IsType<KeyOutcome.PassThrough>(Press("f5", Palette));
+    }
+
+    // docs/keybindings.md, "Contexts": which keys a text box keeps (stays) and which run their binding.
+    [Theory]
+    [InlineData("f5", false)]
+    [InlineData("shift+f8", false)]
+    [InlineData("ctrl+f3", false)]
+    [InlineData("alt+f1", false)]
+    [InlineData("f24", false)]
+    [InlineData("ctrl+t", false)]
+    [InlineData("ctrl+w", false)]
+    [InlineData("ctrl+b", false)]
+    [InlineData("ctrl+l", false)]
+    [InlineData("ctrl+1", false)]
+    [InlineData("ctrl+tab", false)]
+    [InlineData("ctrl+shift+tab", false)]
+    [InlineData("ctrl+enter", false)]
+    [InlineData("ctrl+up", false)]
+    [InlineData("ctrl+pagedown", false)]
+    [InlineData("ctrl+space", false)]
+    [InlineData("ctrl+numpadsubtract", false)]
+    [InlineData("ctrl+backquote", false)]
+    [InlineData("ctrl+shift+e", false)]
+    [InlineData("alt+enter", false)]
+    [InlineData("alt+left", false)]
+    [InlineData("alt+up", false)]
+    [InlineData("alt+backspace", false)]
+    [InlineData("shift+alt+l", false)]
+    [InlineData("ctrl+alt+up", false)]
+    [InlineData("win+e", false)]
+    [InlineData("a", true)]
+    [InlineData("shift+a", true)]
+    [InlineData("5", true)]
+    [InlineData("shift+5", true)]
+    [InlineData("space", true)]
+    [InlineData("quote", true)]
+    [InlineData("numpadadd", true)]
+    [InlineData("enter", true)]
+    [InlineData("shift+enter", true)]
+    [InlineData("escape", true)]
+    [InlineData("backspace", true)]
+    [InlineData("delete", true)]
+    [InlineData("shift+delete", true)]
+    [InlineData("insert", true)]
+    [InlineData("shift+insert", true)]
+    [InlineData("home", true)]
+    [InlineData("end", true)]
+    [InlineData("pageup", true)]
+    [InlineData("left", true)]
+    [InlineData("shift+right", true)]
+    [InlineData("up", true)]
+    [InlineData("down", true)]
+    [InlineData("tab", true)]
+    [InlineData("shift+tab", true)]
+    [InlineData("ctrl+a", true)]
+    [InlineData("ctrl+c", true)]
+    [InlineData("ctrl+v", true)]
+    [InlineData("ctrl+x", true)]
+    [InlineData("ctrl+z", true)]
+    [InlineData("ctrl+y", true)]
+    [InlineData("ctrl+insert", true)]
+    [InlineData("ctrl+backspace", true)]
+    [InlineData("ctrl+delete", true)]
+    [InlineData("ctrl+left", true)]
+    [InlineData("ctrl+right", true)]
+    [InlineData("ctrl+home", true)]
+    [InlineData("ctrl+end", true)]
+    [InlineData("ctrl+shift+left", true)]
+    [InlineData("ctrl+shift+right", true)]
+    [InlineData("ctrl+shift+home", true)]
+    [InlineData("ctrl+shift+end", true)]
+    [InlineData("ctrl+shift+z", true)]
+    [InlineData("ctrl+shift+c", true)]
+    [InlineData("ctrl+shift+x", true)]
+    [InlineData("ctrl+alt+p", true)]
+    [InlineData("ctrl+alt+quote", true)]
+    [InlineData("ctrl+alt+shift+4", true)]
+    [InlineData("alt+1", true)]
+    public void A_text_box_keeps_the_keys_that_type_or_edit_and_a_key_that_types_nothing_runs(string keys, bool stays)
+    {
+        Assert.Equal(stays, TextInputKeys.StaysWithBox(Combo(keys)));
+        foreach (var when in new string?[] { null, KeyContexts.FilesView })
+        {
+            var machine = new ChordStateMachine(() => 0);
+            machine.SetKeymap(Keymap.From(new KeymapData(1000, [new KeymapBinding(keys, "test.command", when)], [])));
+            var outcome = machine.OnKey(Combo(keys), new HashSet<string> { KeyContexts.TextInput, KeyContexts.FilesView });
+            if (stays)
+            {
+                Assert.IsType<KeyOutcome.PassThrough>(outcome);
+            }
+            else
+            {
+                Assert.Equal("test.command", Assert.IsType<KeyOutcome.Run>(outcome).Command);
+            }
+        }
     }
 
     [Fact]

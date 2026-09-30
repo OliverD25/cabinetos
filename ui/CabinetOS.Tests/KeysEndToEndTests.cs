@@ -141,6 +141,84 @@ public class KeysEndToEndTests
         }
     }
 
+    [Fact]
+    public async Task The_pane_s_keys_that_type_nothing_act_on_the_pane_from_its_find_box()
+    {
+        var (run, root, data) = Prepare("keys-find-box");
+        var other = Path.Combine(root, "other");
+        Directory.CreateDirectory(other);
+        try
+        {
+            // The keyboard stays in the find box throughout: a letter filters, Enter finds, F5 copies the cursor row,
+            // Ctrl+A selects the box's text (the next letter replaces it), Ctrl+T opens a tab, Ctrl+W closes it.
+            var process = run.Start("find", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{other}",
+                "wait:500",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "cmd:search.focus",
+                "wait:400",
+                "focus:find",
+                "key:e",
+                "wait:600",
+                "shell:typed",
+                "key:enter",
+                "wait:300",
+                "key:f5",
+                "wait:2000",
+                "focus:after-copy",
+                "shell:before-select-all",
+                "key:ctrl+a",
+                "wait:300",
+                "shell:after-ctrl-a",
+                "key:l",
+                "wait:600",
+                "shell:after-select-all",
+                "key:ctrl+t",
+                "wait:1000",
+                "shell:new-tab",
+                "cmd:search.focus",
+                "wait:400",
+                "focus:new-tab-find",
+                "key:ctrl+w",
+                "wait:1000",
+                "shell:closed-tab",
+                "shot:done"));
+            var logs = await run.FinishAsync("find", process, "done");
+
+            var focus = Focus(logs);
+            var shell = logs.Where(l => Message(l) == "shell state").ToDictionary(l => Field(l, "label").GetString()!);
+            string Pane(string label, string field) => Field(shell[label], "pane0_" + field).ToString();
+            bool RanByKey(string command) => logs.Any(l => Message(l) == "command executed"
+                && Field(l, "command").GetString() == command && Field(l, "trigger").GetString() == "key");
+
+            Assert.Equal(("TextBox", "Input"), (Field(focus["find"], "element").GetString(), Field(focus["find"], "x_name").GetString()));
+            // "e" is in beta.txt and readme.md.
+            Assert.Equal(("e", "2"), (Pane("typed", "find"), Pane("typed", "shown")));
+            Assert.True(RanByKey("file.copyToOtherPane"), "F5 in the find box ran the copy");
+            Assert.True(File.Exists(Path.Combine(other, "beta.txt")), "F5 copied the cursor row, beta.txt, to the other pane");
+            Assert.Equal(("TextBox", "Input"), (Field(focus["after-copy"], "element").GetString(), Field(focus["after-copy"], "x_name").GetString()));
+            // Ctrl+A left the pane's selection (the cursor row) as it was: in the pane it would select both rows shown.
+            Assert.Equal("beta.txt", Pane("before-select-all", "all_selected"));
+            Assert.Equal("beta.txt", Pane("after-ctrl-a", "all_selected"));
+            // It selected the box's "e", which "l" replaced: "l" finds alpha.txt, "el" would find nothing.
+            Assert.Equal(("l", "1"), (Pane("after-select-all", "find"), Pane("after-select-all", "shown")));
+            Assert.True(RanByKey("tab.new"), "Ctrl+T in the find box opened a tab");
+            Assert.Equal(2, Pane("new-tab", "tabs").Split(" | ").Length);
+            Assert.Equal("TextBox", Field(focus["new-tab-find"], "element").GetString());
+            Assert.True(RanByKey("tab.close"), "Ctrl+W in the find box closed the tab");
+            Assert.Single(Pane("closed-tab", "tabs").Split(" | "));
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
     private static Dictionary<string, string> Focus(List<string> logs) =>
         logs.Where(l => Message(l) == "keyboard focus").ToDictionary(l => Field(l, "label").GetString()!);
 

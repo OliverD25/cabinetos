@@ -2489,9 +2489,14 @@ public sealed partial class MainWindow : Window
         var focused = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
         if (focused is TextBox or PasswordBox or RichEditBox or AutoSuggestBox)
         {
-            // A text box inside a pane (rename in place) is text input, not the files view:
-            // F5 must not start a copy while a name is being typed (keybindings.md).
             contexts.Add(KeyContexts.TextInput);
+            // The active pane's own boxes, its find box and its address box, are the pane's too: its keys that type
+            // nothing (F5, Ctrl+T) act on it from there (keybindings.md, "Contexts"). A name typed in place is not,
+            // and neither is the other pane's box: F5 there would copy from the active pane.
+            if (_findViews[_active].HasFocus || focused == _crumbViews[_active].AddressBox)
+            {
+                contexts.Add(KeyContexts.FilesView);
+            }
             return contexts;
         }
         for (var element = focused; element is not null; element = VisualTreeHelper.GetParent(element))
