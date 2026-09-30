@@ -79,6 +79,8 @@ The third option, **in heavy mode only, and only for the core's operations**:
   after "or the UI thread" is: "The one exception is the opt-in heavy mode,
   where a thread of the core may wait for the log writer so that no operation
   goes unrecorded (ADR 0013)." It is a proposal, not an edit.
+  Accepted by the creator on 2026-09-30, in chat, as that exact text: Article
+  12 carries the sentence since that day.
 - **Two tests stand behind it.** `cabinetos-diag` shows a deliberately slow
   writer making a thread wait, with no line lost and the wait written; the same
   is shown for the window's `LogWriter`, together with the UI thread dropping

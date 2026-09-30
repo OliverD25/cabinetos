@@ -694,6 +694,9 @@ Article 12 after "or the UI thread", for the creator to accept or refuse:
 "The one exception is the opt-in heavy mode, where a thread of the core
 may wait for the log writer so that no operation goes unrecorded (ADR
 0013)." [ARCHITECTURE.md](ARCHITECTURE.md) gained the row for its §8.
+The creator accepted the sentence on 2026-09-30, in chat, as that exact
+text, and Article 12 carries it since that day: the one edit of the
+Constitution so far, made with the per-change approval CLAUDE.md asks for.
 
 ### Phase 16 — Shell redesign: one top row, per-pane breadcrumbs, find in pane, Quick Open (the creator's handout `_io/SHELL_REDESIGN.md`, 2026-09-30; started the same day)
 
