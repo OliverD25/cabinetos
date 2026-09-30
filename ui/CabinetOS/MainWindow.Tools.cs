@@ -10,6 +10,7 @@ using CabinetOS.Services;
 using CabinetOS.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.Web.WebView2.Core;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
@@ -29,6 +30,10 @@ public sealed partial class MainWindow
 
     // What a tool's page in the sidebar passes back: the ways out of every tool page, and the keys that change the sidebar's view.
     private IReadOnlyDictionary<string, string> _sidebarPageKeys = new Dictionary<string, string>();
+
+    // Ctrl+Shift+P from a tool's page (a pane's tab, the sidebar): the way the keyboard goes back to it when the palette
+    // closes, as it goes back to the terminal (_paletteFromTerminal). Null when the palette came from elsewhere.
+    private Action? _paletteBackToPage;
 
     private void SetUpTools()
     {
@@ -376,6 +381,41 @@ public sealed partial class MainWindow
             return;
         }
         _paneViews[_active].Focus(FocusState.Programmatic);
+    }
+
+    // The way back to the tool page that has the keyboard now, or null when none has it. A page that is gone or hidden
+    // by then (its tab closed, its pane or the sidebar shut) sends the keyboard to the active pane instead.
+    private Action? WayBackToToolPage()
+    {
+        if (RootGrid.XamlRoot is not { } root || FocusManager.GetFocusedElement(root) is not WebView2 view)
+        {
+            return null;
+        }
+        if (Array.FindIndex(_editorViews, v => v.PageView == view) is var pane and >= 0)
+        {
+            return () =>
+            {
+                if (!_editorViews[pane].IsOpen || !FocusEditorPage(pane))
+                {
+                    FocusActivePane();
+                }
+            };
+        }
+        if (_sidebarPages.FirstOrDefault(p => p.Value.Host.Page.View == view).Key is { } id)
+        {
+            return () =>
+            {
+                if (_railLayout && _sidebarOpen && _sidebarView == id)
+                {
+                    FocusSidebarPage(id);
+                }
+                else
+                {
+                    FocusActivePane();
+                }
+            };
+        }
+        return null;
     }
 
     // The editor's page takes the keyboard, and the window checks that Windows sends the keys there (PageKeyboard).

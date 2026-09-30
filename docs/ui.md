@@ -2409,7 +2409,12 @@ variable `CABINETOS_TOOLS_DIR`).
   read by the tool's own page, through a read-only virtual host.
 - **Keys.** A tool's page gets every key; a script of the window in every
   tool page hands back the keys of `palette.show` and
-  `view.toggleTerminal`, as the terminal does.
+  `view.toggleTerminal`, as the terminal does. The palette opened from a
+  tool's page (in a pane's tab or in the sidebar) gives the keyboard back
+  to that page when it closes: on Esc, and after a chosen command that
+  does not take the keyboard itself. A page that is gone or hidden by then
+  sends it to the active pane. Until 2026-10-01 it always went to the
+  active pane, even when the page sat in the other one.
 - **Commands from a tool** run through the router with the trigger
   `tool:<id>`, and only the navigation, view, terminal and preview
   commands of [tool-extensions.md](tool-extensions.md), "Messages"; any

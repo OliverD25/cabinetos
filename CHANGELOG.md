@@ -29,6 +29,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The command palette opened from a tool's page, such as a Markdown Preview, gives the keyboard back to that page when it closes, as it does for the terminal. It used to give it to the active pane's list.
 - Esc while a chord waits for its second key ends the wait, and Ctrl+Shift+P there ends it and opens the command palette. Both used to be reported as a chord that is not bound, and nothing happened.
 - Tab stays inside the permissions review while it is open, as in the plugin list, instead of moving the keyboard to the window under it.
 - A shortcut held down runs once. Holding Ctrl+Shift+P, Ctrl+` or Ctrl+B a moment too long made the palette, the terminal or the sidebar open and close again and again. Ctrl+Tab, Ctrl+Shift+Tab, Insert, Alt+Left, Alt+Right and Alt+Up still repeat while held.

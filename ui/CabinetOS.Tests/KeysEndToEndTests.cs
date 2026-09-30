@@ -96,6 +96,56 @@ public class KeysEndToEndTests
     }
 
     [Fact]
+    public async Task The_palette_opened_from_a_tool_page_gives_the_keyboard_back_to_the_page()
+    {
+        var (run, root, data) = Prepare("keys-palette-page");
+        try
+        {
+            // The preview opens in the other pane, which stays the inactive one: Esc used to give the keyboard to the
+            // active pane's list. Then a command that takes no keyboard, chosen with Enter, leaves it with the page too.
+            var process = run.Start("palette", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "open:readme.md",
+                "until:tool",
+                "wait:800",
+                "key:tab",
+                "wait:800",
+                "focus:page",
+                "cmd:palette.show",
+                "wait:500",
+                "focus:palette",
+                "key:escape",
+                "wait:1000",
+                "focus:after-esc",
+                "cmd:palette.show",
+                "wait:500",
+                "type:toggle sidebar",
+                "wait:600",
+                "key:enter",
+                "wait:1000",
+                "focus:after-command",
+                "shot:done"));
+            var logs = await run.FinishAsync("palette", process, "done");
+
+            var focus = Focus(logs);
+            Assert.Equal("WebView2", Field(focus["page"], "element").GetString());
+            Assert.Equal("TextBox", Field(focus["palette"], "element").GetString());
+            Assert.Equal("WebView2", Field(focus["after-esc"], "element").GetString());
+            Assert.Contains(logs, l => Message(l) == "command executed" && Field(l, "command").GetString() == "view.toggleSidebar"
+                && Field(l, "trigger").GetString() == "palette");
+            Assert.Equal("WebView2", Field(focus["after-command"], "element").GetString());
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    [Fact]
     public async Task Tab_keeps_the_keyboard_in_the_theme_picker_and_in_the_plugin_list()
     {
         var (run, root, data) = Prepare("keys-overlays");

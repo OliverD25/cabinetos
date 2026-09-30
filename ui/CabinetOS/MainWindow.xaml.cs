@@ -1592,8 +1592,9 @@ public sealed partial class MainWindow : Window
             PromptView.Cancel();
             // One overlay at a time: Ctrl+Shift+P from Quick Open shows the commands instead.
             CloseQuickOpen(returnFocus: false);
-            // Ctrl+Shift+P from a shell: the keyboard goes back there when the palette closes.
+            // Ctrl+Shift+P from a shell or a tool's page: the keyboard goes back there when the palette closes.
             _paletteFromTerminal = Dock.HasTerminalFocus;
+            _paletteBackToPage = _paletteFromTerminal ? null : WayBackToToolPage();
             _palette.Open();
             // Once the palette has the keyboard: a review left open is a Cancel; the list and
             // the picker come back from the palette.
@@ -1612,6 +1613,12 @@ public sealed partial class MainWindow : Window
             return;
         }
         _paletteFromTerminal = false;
+        if (_paletteBackToPage is { } backToPage)
+        {
+            _paletteBackToPage = null;
+            backToPage();
+            return;
+        }
         FocusActivePane();
     }
 
