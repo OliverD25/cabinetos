@@ -50,7 +50,7 @@ public sealed partial class FileRow : UserControl
     /// Shows <paramref name="data"/>: a listing's row or a search hit. The pane
     /// calls it when the repeater prepares the row; the row does not listen to
     /// its own DataContextChanged: with it, a held key's scrolling made WinUI
-    /// ask for a blocking garbage collection every 2 to 3 s (docs/ui.md, "Scrolling").
+    /// ask for a full garbage collection every 2 to 3 s (docs/ui.md, "Scrolling").
     /// </summary>
     public void Show(object? data)
     {

@@ -11,7 +11,7 @@ namespace CabinetOS.Views;
 /// go wait here and are handed out again, and rows are made ahead while the
 /// window is idle (<see cref="MakeAhead"/>). Without them the first PageDown
 /// after a folder opened made a page of rows from the template, a frame of
-/// 50 to 65 ms (docs/ui.md, "Scrolling").
+/// 60 to 77 ms (docs/ui.md, "Scrolling").
 /// </summary>
 internal sealed class RowFactory(DataTemplate template, DispatcherQueue queue) : IElementFactory
 {

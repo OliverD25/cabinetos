@@ -550,8 +550,8 @@ public sealed partial class FilePane : UserControl
         if (args.Element is FileRow row)
         {
             // The row is bound here, not in its own DataContextChanged: with that event, a held
-            // PageDown had WinUI ask .NET for a full, blocking garbage collection every 2 to 3 s,
-            // a pause of 17 to 25 ms; without it, none in 20 s (docs/ui.md, "Scrolling").
+            // PageDown had WinUI ask .NET for a full garbage collection every 2 to 3 s, pausing
+            // the UI thread for 17 to 25 ms; without it, none in 20 s (docs/ui.md, "Scrolling").
             row.Show(row.DataContext);
             // Rows for two pages ahead, made while the window is idle (RowFactory).
             var ahead = 2 * (RowsPerPage() + 2);
