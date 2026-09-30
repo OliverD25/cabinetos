@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.ContextMenuEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <UserControl.Resources>
+        <!-- The design's menu entrance, as the Phase 16 dropdowns show it: 120 ms, opacity, 6 px, scale .98. -->
+        <Storyboard x:Key="Entrance">
+            <DoubleAnimation
+                Storyboard.TargetName="Panel"
+                Storyboard.TargetProperty="Opacity"
+                From="0"
+                To="1"
+                Duration="0:0:0.12" />
+            <DoubleAnimation
+                Storyboard.TargetName="PanelTransform"
+                Storyboard.TargetProperty="TranslateY"
+                From="-6"
+                To="0"
+                Duration="0:0:0.12" />
+            <DoubleAnimation
+                Storyboard.TargetName="PanelTransform"
+                Storyboard.TargetProperty="ScaleX"
+                From="0.98"
+                To="1"
+                Duration="0:0:0.12" />
+            <DoubleAnimation
+                Storyboard.TargetName="PanelTransform"
+                Storyboard.TargetProperty="ScaleY"
+                From="0.98"
+                To="1"
+                Duration="0:0:0.12" />
+        </Storyboard>
+    </UserControl.Resources>
+
+    <!-- A transparent scrim that swallows a click outside: the edit mode ends only with Done, Cancel or Esc. -->
+    <Canvas x:Name="Scrim" Background="Transparent">
+        <Border
+            x:Name="Panel"
+            Width="280"
+            Padding="4"
+            Background="{ThemeResource CbMenuAcrylicBrush}"
+            BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Translation="0,0,32">
+            <Border.RenderTransform>
+                <CompositeTransform x:Name="PanelTransform" />
+            </Border.RenderTransform>
+            <Border.Shadow>
+                <ThemeShadow />
+            </Border.Shadow>
+            <Grid TabFocusNavigation="Cycle">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Padding="10,4,10,6" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource CbTextSecondaryBrush}"
+                        Glyph="&#xE70F;" />
+                    <TextBlock
+                        x:Name="HeaderText"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource CbTextSecondaryBrush}"
+                        TextTrimming="CharacterEllipsis" />
+                </Grid>
+
+                <!-- The icon row as it is: it is edited in the file in this version. -->
+                <Border
+                    x:Name="StripBorder"
+                    Grid.Row="1"
+                    Margin="0,0,0,4"
+                    Padding="4,0,4,6"
+                    BorderBrush="{ThemeResource CbDividerBrush}"
+                    BorderThickness="0,0,0,1">
+                    <StackPanel Spacing="2">
+                        <StackPanel x:Name="Strip" Orientation="Horizontal" />
+                        <TextBlock
+                            Padding="6,0,6,0"
+                            FontSize="11"
+                            Foreground="{ThemeResource CbHintTextBrush}"
+                            Text="The icon row is edited in the file."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer
+                    x:Name="RowsScroller"
+                    Grid.Row="2"
+                    HorizontalScrollMode="Disabled"
+                    IsTabStop="False"
+                    VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="Rows" />
+                </ScrollViewer>
+
+                <!-- The plugins' group, Properties and Edit Menu…: not rows of the file, so greyed here. -->
+                <StackPanel x:Name="Tail" Grid.Row="3" />
+
+                <Border
+                    Grid.Row="4"
+                    Margin="0,4,0,0"
+                    Padding="2,6,2,2"
+                    BorderBrush="{ThemeResource CbDividerBrush}"
+                    BorderThickness="0,1,0,0">
+                    <Grid RowSpacing="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Button
+                                x:Name="AddButton"
+                                Height="28"
+                                Padding="8,0"
+                                AutomationProperties.Name="Add Command&#x2026;"
+                                FontSize="12"
+                                Style="{StaticResource CbSubtleButtonStyle}"
+                                ToolTipService.ToolTip="Add a command after the focused row (Insert)">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon FontSize="12" Glyph="&#xE710;" />
+                                    <TextBlock Text="Add Command&#x2026;" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="SeparatorButton"
+                                Height="28"
+                                Padding="8,0"
+                                AutomationProperties.Name="Add separator"
+                                FontSize="12"
+                                Style="{StaticResource CbSubtleButtonStyle}"
+                                ToolTipService.ToolTip="Add a divider line after the focused row">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon FontSize="12" Glyph="&#xE738;" />
+                                    <TextBlock Text="Add separator" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <Grid Grid.Row="1" ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <HyperlinkButton
+                                x:Name="OpenFileButton"
+                                Padding="6,2"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="Open the file"
+                                Content="Open the file"
+                                FontSize="12"
+                                ToolTipService.ToolTip="Leave without saving and open cabinetos.json (Ctrl+,): the icon row, the extension filters and the programs are edited there" />
+                            <Button
+                                x:Name="CancelButton"
+                                Grid.Column="1"
+                                Height="28"
+                                MinWidth="64"
+                                Padding="10,0"
+                                AutomationProperties.Name="Cancel"
+                                Content="Cancel"
+                                FontSize="12"
+                                ToolTipService.ToolTip="Leave without saving (Esc)" />
+                            <Button
+                                x:Name="DoneButton"
+                                Grid.Column="2"
+                                Height="28"
+                                MinWidth="64"
+                                Padding="10,0"
+                                AutomationProperties.Name="Done"
+                                Content="Done"
+                                FontSize="12"
+                                Style="{StaticResource AccentButtonStyle}"
+                                ToolTipService.ToolTip="Save the menu (Ctrl+S)" />
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Canvas>
+</UserControl>

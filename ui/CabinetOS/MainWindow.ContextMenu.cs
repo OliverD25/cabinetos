@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Text.Json;
 using CabinetOS.Core.Diagnostics;
+using CabinetOS.Core.Commands;
 using CabinetOS.Core.Platform;
+using CabinetOS.Core.Prompts;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Shell;
 using CabinetOS.Services;
@@ -12,8 +14,9 @@ using Windows.Foundation;
 namespace CabinetOS;
 
 // The right-click menu of Phase 18 (docs/ui.md, "The context menu"): built from contextMenu of cabinetos.json at
-// every opening (ContextMenuModel, tested without XAML), drawn as WinUI's CommandBarFlyout; and Windows' own menu,
-// which the core builds (shell_menu) when contextMenu.shellMenu is on. The window reads no file for either (brief §1).
+// every opening (ContextMenuModel, tested without XAML), drawn as WinUI's CommandBarFlyout; its edit mode ("Edit
+// Menu…", ContextMenuEditModel), which the core saves (set_value); and Windows' own menu, which the core builds
+// (shell_menu) when contextMenu.shellMenu is on. The window reads and writes no file for any of them (brief §1).
 public sealed partial class MainWindow
 {
     private const string MenuTarget = "cabinetos_ui::context_menu";
@@ -29,6 +32,9 @@ public sealed partial class MainWindow
 
     // The pane the open menu is about, and what it was opened on: a plugin's entry gets that pane's paths when it runs.
     private (int Pane, ContextMenuFacts Facts)? _menuFor;
+
+    // Where the open menu was asked for (the window's coordinates) and whether from the keyboard: its edit mode opens there.
+    private (Point At, bool Keyboard)? _menuAt;
 
     // A Windows menu that answers after a newer gesture is not shown.
     private int _windowsMenuAsked;
@@ -51,8 +57,20 @@ public sealed partial class MainWindow
             FocusActivePane();
         };
         _windowsMenu.Invoke = (menu, item) => _ = InvokeWindowsMenuItemAsync(menu, item);
-        // "Edit Menu…" opens cabinetos.json as Ctrl+, does: the menu is the file's contextMenu.
-        _router.RegisterUiHandler(ContextMenuModel.EditMenu, invocation => OpenSettingsAsync(invocation.RequestId));
+        _router.RegisterUiHandler(ContextMenuModel.EditMenu, EditMenu);
+        MenuEditorView.Save = SaveMenuEditAsync;
+        MenuEditorView.PickCommand = PickMenuCommandAsync;
+        MenuEditorView.OpenFile = () =>
+        {
+            // The file and the edit mode must not both change the list: the edit ends unsaved first.
+            MenuEditorView.Cancel();
+            _ = _router.ExecuteAsync("settings.open", trigger: "menu");
+        };
+        MenuEditorView.Closed += saved =>
+        {
+            Diag.Info(MenuTarget, "menu edit closed", new LogField("saved", saved));
+            FocusActivePane();
+        };
         _router.RegisterUiHandler("menu.showShell", _ =>
         {
             ApplyCursorKeys();
@@ -107,6 +125,7 @@ public sealed partial class MainWindow
             Diag.Warn(MenuTarget, "context menu entry left out: no command has this ID", new LogField("command", id));
         }
         _menuFor = (paneIndex, facts);
+        _menuAt = (position, at is null);
         _contextMenu.Show(view, position, menu);
         Diag.Info(MenuTarget, "context menu shown",
             new LogField("target", facts.Kind.ToString()),
@@ -114,6 +133,82 @@ public sealed partial class MainWindow
             new LogField("items", menu.Items.Count(i => i.Kind == ContextMenuEntryKind.Item)),
             new LogField("keyboard", at is null),
             new LogField("build_ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2)));
+    }
+
+    // "Edit Menu…" (menu.edit): the menu it was chosen from turns into its edit mode, in its place (docs/ui.md, "Editing
+    // the menu"). From the palette or a key there is no open menu: the focused row's menu is edited, where Shift+F10
+    // would open it.
+    private void EditMenu(CommandInvocation invocation)
+    {
+        int paneIndex;
+        ContextMenuFacts facts;
+        Rect? bounds = null;
+        Point at;
+        bool keyboard;
+        if (invocation.Trigger == "menu" && _menuFor is var (menuPane, menuFacts) && _menuAt is var (menuAt, menuKeyboard))
+        {
+            (paneIndex, facts, at, keyboard) = (menuPane, menuFacts, menuAt, menuKeyboard);
+            bounds = _contextMenu.ChosenBounds;
+        }
+        else
+        {
+            ApplyCursorKeys();
+            paneIndex = _active;
+            var index = Active.FocusIndex;
+            facts = MenuFacts(Active, index);
+            at = _paneViews[paneIndex].RowAnchor(index);
+            keyboard = true;
+        }
+        var started = Stopwatch.GetTimestamp();
+        EndAddressEdit();
+        FileMenu.Close();
+        _windowsMenu.Close();
+        _contextMenu.Close();
+        var commands = _router.Commands;
+        var model = new ContextMenuEditModel(facts.Kind, _menuConfig.For(facts.Kind).Items, commands, KeysOf);
+        MenuEditorView.Show(model, ContextMenuEditModel.Fixed(_menuConfig, facts, commands, KeysOf), bounds, at, keyboard);
+        Diag.Info(MenuTarget, "menu edit shown",
+            new LogField("target", facts.Kind.ToString()),
+            new LogField("pane", paneIndex),
+            new LogField("rows", model.Items.Count),
+            new LogField("in_menu_place", bounds is not null),
+            new LogField("keyboard", keyboard),
+            new LogField("build_ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2)));
+    }
+
+    // "Done": the list goes to the core (set_value contextMenu.<target>.items), which writes the file and announces
+    // config_changed; the next opening shows the new menu. A refusal keeps the edit mode open with a notice.
+    private async Task<bool> SaveMenuEditAsync(ContextMenuEditModel model)
+    {
+        var request = new SetValueRequest(model.SettingPath, model.ToValue());
+        switch (await RequestSafelyAsync(request))
+        {
+            case OkReply:
+                Diag.Info(MenuTarget, "menu edit saved", new LogField("path", model.SettingPath), new LogField("rows", model.Describe()));
+                ShowNotice($"{model.TargetName} saved.");
+                return true;
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                ShowNotice("This core cannot change settings (set_value): the menu was not saved.", isError: true);
+                return false;
+            case ErrorReply error:
+                Diag.Request(LogLevel.Warn, request.Id, MenuTarget, "menu edit refused",
+                    new LogField("path", model.SettingPath), new LogField("code", error.Code), new LogField("error", error.Message));
+                ShowNotice($"The menu was not saved: {error.Message}", isError: true);
+                return false;
+            default:
+                // No answer: RequestSafelyAsync showed why.
+                return false;
+        }
+    }
+
+    // "Add Command…" (Insert): the commands that may sit in a file pane's menu, in the palette's frame; typing narrows them.
+    private async Task<string?> PickMenuCommandAsync(ContextMenuEditModel model)
+    {
+        var rows = model.Addable().Select(c => new PromptRow(ContextMenuEditModel.TitleOf(c), c.Id, ContextMenuModel.GlyphOf(c.Id) ?? "")).ToList();
+        var answer = await PromptView.ShowAsync(new PromptRequest("Add", PromptKind.Pick, rows,
+            Placeholder: "Type to narrow the commands",
+            Hint: $"Enter adds the command to the {model.TargetName.ToLowerInvariant()}, after the focused row; Esc goes back to it."));
+        return answer?.Row?.Detail;
     }
 
     // What the window knows about the target now; the selection's extensions only if a row asks for them.

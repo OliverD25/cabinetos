@@ -565,6 +565,9 @@
 
         <views:FileContextMenu x:Name="FileMenu" />
 
+        <!-- The right-click menu's edit mode ("Edit Menu…"); the palette's prompt opens over it (Add Command…). -->
+        <views:ContextMenuEditor x:Name="MenuEditorView" />
+
         <views:CommandPalette x:Name="Palette" Visibility="Collapsed" />
         <views:QuickOpen x:Name="QuickOpenView" />
 

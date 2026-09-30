@@ -1544,6 +1544,10 @@ public sealed partial class MainWindow : Window
         {
             PromptView.Cancel();
         }
+        else if (MenuEditorView.IsOpen)
+        {
+            MenuEditorView.Cancel();
+        }
         else if (ThemesView.IsOpen)
         {
             CloseThemePicker();
@@ -2303,6 +2307,22 @@ public sealed partial class MainWindow : Window
             else
             {
                 FocusDialog(dialog);
+            }
+            return;
+        }
+        if (MenuEditorView.IsOpen && !PromptView.IsOpen)
+        {
+            // The menu's edit mode holds the keyboard as a dialog does: no binding of the window runs under it. Its own
+            // keys (arrows, Alt+Up, Delete, Insert, Ctrl+S, Esc) act there; Tab, Enter and Space go to its buttons.
+            var editKey = KeyNames.ComboFor((int)e.Key, CurrentModifiers());
+            if (!MenuEditorView.HasKeyboard)
+            {
+                MenuEditorView.TakeKeyboard();
+                e.Handled = true;
+            }
+            if (editKey is { } editCombo && MenuEditorView.HandleKey(editCombo))
+            {
+                e.Handled = true;
             }
             return;
         }

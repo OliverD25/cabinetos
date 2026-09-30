@@ -50,6 +50,12 @@ internal sealed class ContextMenuFlyout
     /// <summary>Whether the menu is on screen.</summary>
     public bool IsOpen => _front is not null;
 
+    /// <summary>
+    /// Where the menu's buttons were (the window's coordinates) when an entry was chosen, so "Edit
+    /// Menu…" can put its edit mode in the same place; null when WinUI had not laid them out.
+    /// </summary>
+    public Rect? ChosenBounds { get; private set; }
+
     /// <summary>The list's titles ("|" between them) while open, else empty: for the snapshot aid's log.</summary>
     public string DescribeItems() => IsOpen ? _view!.DescribeItems() : "";
 
@@ -87,6 +93,7 @@ internal sealed class ContextMenuFlyout
         _front = built;
         _view = view;
         _chosen = null;
+        ChosenBounds = null;
         var origin = target.TransformToVisual(null).TransformPoint(new Point(0, 0));
         var position = new Point(at.X - origin.X, at.Y - origin.Y);
         if (_shown is null)
@@ -176,7 +183,30 @@ internal sealed class ContextMenuFlyout
     private void Choose(ContextMenuEntry entry)
     {
         _chosen = entry;
+        ChosenBounds = Bounds();
         Close();
+    }
+
+    // The union of the shown buttons: the list's rows span the menu's width, the icon row starts at its top.
+    private Rect? Bounds()
+    {
+        if (_front is not { } built)
+        {
+            return null;
+        }
+        Rect? union = null;
+        foreach (var (button, _, _) in built.Buttons)
+        {
+            if (button.ActualWidth <= 0 || button.XamlRoot is null)
+            {
+                continue;
+            }
+            var bounds = button.TransformToVisual(null).TransformBounds(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
+            union = union is not { } known ? bounds : new Rect(
+                new Point(Math.Min(known.Left, bounds.Left), Math.Min(known.Top, bounds.Top)),
+                new Point(Math.Max(known.Right, bounds.Right), Math.Max(known.Bottom, bounds.Bottom)));
+        }
+        return union;
     }
 
     private void OnClosed(CommandBarFlyout flyout)
