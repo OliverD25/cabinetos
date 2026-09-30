@@ -849,6 +849,64 @@ marketplace repository's `update/stable/` and push, and push the
 marketplace clone that holds the Agent extension and Commander Compact
 1.1.0.
 
+### Phase 18 — The context menu from the config (the creator's card "High-Performance Context Menu", 2026-09-30; started the same day, after Phases 16 and 17)
+
+Goal: the right-click menu comes from `cabinetos.json`, so a user shapes
+it in the file or, in step 2, inside the menu itself; every entry is a
+command with a name and a key; a user's own programs join the menu from
+a named list; and the Windows shell menu is one opt-in gesture away.
+
+Decided 2026-09-30 with the creator, on the card's open questions: the
+Windows shell menu on Shift+right-click is an opt-in setting, off by
+default, served by the core on a background thread, never an extension
+(a plugin cannot reach the shell interface today; Articles 1 and 10);
+menu entries may start only programs named in a `programs` list of the
+config, with the tokens `{path}`, `{selection}` and `{cwd}`, anything
+else refused and logged (Article 6, and the config is the one place to
+review); the quick-actions icon row sits at the top, as in Windows 11
+Explorer; the default menu is today's menu written into the config
+defaults, so nothing changes on the update; the list order is the
+config's entries, a divider, the FROM PLUGINS group, Properties last;
+the in-menu edit mode is step 2 of the same card, after step 1 is
+verified with real keys. Decided by the planning session: each program
+becomes a command `program.<name>` in the registry (Article 7), so the
+menu has one entry kind; the brief's `{selection_file}` and
+`--selection` tokens are not built, since `window_state` already gives
+a command the marked files; the menu control is WinUI's
+`CommandBarFlyout` as the brief asks (Article 3); the protocol goes to
+15 for `shell_menu` and `shell_menu_invoke`, because 0.1.0 is built with
+14; the Phase 16 dropdowns keep their surface.
+
+Produces, step 1: in the core, `contextMenu` (four targets with
+`quickActions` and `items`, `shellMenu`) and `programs` in the config
+with today's menu as the defaults and the schema regenerated; the
+dynamic `program.<name>` commands, `menu.showShell` (Ctrl+Shift+F10) and
+`menu.edit`; the tokens resolved from the window state and the program
+started through the `ShellExecuteExW` path of `cabinetos-fs`; the shell
+menu built on a COM background thread in `cabinetos-fs` and answered
+within 3 s; protocol 15. In the window, a pure menu model, tested
+without XAML; the row and background menus as a `CommandBarFlyout` with
+the icon row, the list, the plugin group with badges, Properties and
+"Edit Menu…"; the shell menu as a second flyout. Tests on both sides, an
+end-to-end test, the live check's section 18, the guides, the CHANGELOG
+and ADR 0015. Step 2: the in-menu edit mode.
+
+Done when, step 1: a fresh config shows today's menu unchanged; an
+entry added to `contextMenu.file` in the file shows at the next
+right-click without a restart; an entry with `extensions` shows for a
+matching file and not for another; a `programs` entry runs the program
+with the focused path and appears in the palette as `program.<name>`;
+a program not in the list is refused and logged; with `shellMenu` on,
+Shift+right-click shows the Windows menu of the file and a click runs
+its item, with the window's frames unaffected; with it off, the gesture
+opens the normal menu; the five core checks, the window's tests with
+the end-to-end tests on, and a live check with real keys (section 18,
+plus every earlier section) pass.
+
+Articles: 1 (the shell query off the UI thread), 3 (the native flyout),
+6 (the config mirrors the menu), 7 (every entry a named command), 10
+(the shell menu opt-in). Handed to a coder on Opus on 2026-09-30.
+
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
