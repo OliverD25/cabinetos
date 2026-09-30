@@ -333,7 +333,11 @@ machine works like this:
    - if it completes a chord that starts with the first half, the UI runs
      that command;
    - otherwise nothing runs, and the key is not passed on. The status bar
-     says the chord is not bound.
+     says the chord is not bound; when the two keys are bound in another
+     context, it says where they work instead: "Ctrl+K V works only in a
+     file list", or "Ctrl+K Ctrl+T does not work while you type in a box.
+     Esc leaves the box." (a chord without `when`, pressed in a text box).
+     Until 2026-10-01 it called such a chord not bound.
    If no combination comes within `chord_window_ms`, the wait ends and
    nothing runs.
    A first half held down is not a second half: Windows repeats a held

@@ -2448,7 +2448,7 @@ public sealed partial class MainWindow : Window
                 break;
             case KeyOutcome.NotBound notBound:
                 e.Handled = true;
-                ShowNotice($"{notBound.First.ToDisplay()} {notBound.Second.ToDisplay()} is not bound to a command.");
+                ShowNotice(ChordNotice.Text(notBound));
                 break;
         }
     }

@@ -28,6 +28,7 @@ public class ChordStateMachineTests
             new KeymapBinding("ctrl+k ctrl+w", "workspace.switch", null),
             new KeymapBinding("f2", "test.everywhere", null),
             new KeymapBinding("f2", "test.inPalette", KeyContexts.PaletteOpen),
+            new KeymapBinding("ctrl+k v", "editor.openMarkdownPreview", KeyContexts.FilesView),
         ],
         ["palette.show", "overlay.close", "keys.open"])));
     }
@@ -104,6 +105,27 @@ public class ChordStateMachineTests
         var notBound = Assert.IsType<KeyOutcome.NotBound>(Press("x"));
         Assert.Equal((Combo("ctrl+k"), Combo("x")), (notBound.First, notBound.Second));
         Assert.Null(_keys.PendingFirst);
+    }
+
+    [Fact]
+    public void A_second_half_that_completes_a_chord_bound_elsewhere_says_where_it_works()
+    {
+        // In a text box: the chord has no context, and only the Immutable System Tier applies there.
+        Press("ctrl+k", Typing);
+        var typing = Assert.IsType<KeyOutcome.NotBound>(Press("ctrl+w", Typing));
+        Assert.Equal("workspace.switch", typing.Elsewhere?.Command);
+        Assert.Equal("Ctrl+K Ctrl+W does not work while you type in a box. Esc leaves the box.", ChordNotice.Text(typing));
+
+        // Outside a file list: the chord is bound in filesView.
+        Press("ctrl+k");
+        var outside = Assert.IsType<KeyOutcome.NotBound>(Press("v"));
+        Assert.Equal("editor.openMarkdownPreview", outside.Elsewhere?.Command);
+        Assert.Equal("Ctrl+K V works only in a file list.", ChordNotice.Text(outside));
+
+        Press("ctrl+k");
+        var nowhere = Assert.IsType<KeyOutcome.NotBound>(Press("x"));
+        Assert.Null(nowhere.Elsewhere);
+        Assert.Equal("Ctrl+K X is not bound to a command.", ChordNotice.Text(nowhere));
     }
 
     [Fact]

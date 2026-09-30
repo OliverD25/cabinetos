@@ -9,11 +9,41 @@ public abstract record KeyOutcome
     /// <summary>The first half of a chord; waiting for the second. The key is consumed.</summary>
     public sealed record Pending(KeyCombo First) : KeyOutcome;
 
-    /// <summary>A chord's second half that completes nothing: nothing runs, the key is consumed.</summary>
-    public sealed record NotBound(KeyCombo First, KeyCombo Second) : KeyOutcome;
+    /// <summary>
+    /// A chord's second half that completes nothing here: nothing runs, the key is consumed.
+    /// <paramref name="Elsewhere"/> is the binding of these two keys that does not apply here
+    /// (its context does not hold, or a text box has the keyboard), or null when there is none.
+    /// </summary>
+    public sealed record NotBound(KeyCombo First, KeyCombo Second, Binding? Elsewhere = null) : KeyOutcome;
 
     /// <summary>No binding: the key goes on to whatever has focus.</summary>
     public sealed record PassThrough : KeyOutcome;
+}
+
+/// <summary>What the status bar says about a chord's second half that ran nothing (docs/keybindings.md, "Chords").</summary>
+public static class ChordNotice
+{
+    /// <summary>
+    /// The notice for <paramref name="outcome"/>: where a chord bound in another context works,
+    /// so a chord that is bound is never reported as not bound.
+    /// </summary>
+    public static string Text(KeyOutcome.NotBound outcome)
+    {
+        var keys = $"{outcome.First.ToDisplay()} {outcome.Second.ToDisplay()}";
+        if (outcome.Elsewhere is not { } binding)
+        {
+            return $"{keys} is not bound to a command.";
+        }
+        return binding.When switch
+        {
+            // No context of its own: a text box had the keyboard, where only the Immutable System Tier applies.
+            null => $"{keys} does not work while you type in a box. Esc leaves the box.",
+            KeyContexts.FilesView => $"{keys} works only in a file list.",
+            KeyContexts.PaletteOpen => $"{keys} works only in the command palette.",
+            KeyContexts.TerminalFocus => $"{keys} works only in the terminal.",
+            var context => $"{keys} works only where {context} holds.",
+        };
+    }
 }
 
 /// <summary>
@@ -71,7 +101,9 @@ public sealed class ChordStateMachine(Func<long> nowMilliseconds)
             }
             ClearPending();
             var chord = Best(combo, contexts, b => b.Keys.IsChord && b.Keys.First == first && b.Keys.Second == combo);
-            return chord is null ? new KeyOutcome.NotBound(first, combo) : new KeyOutcome.Run(chord.Command, chord.Keys);
+            return chord is null
+                ? new KeyOutcome.NotBound(first, combo, _keymap.Bindings.FirstOrDefault(b => b.Keys.IsChord && b.Keys.First == first && b.Keys.Second == combo))
+                : new KeyOutcome.Run(chord.Command, chord.Keys);
         }
 
         if (_keymap.Bindings.Any(b => b.Keys.IsChord && b.Keys.First == combo && Applies(b, contexts)))

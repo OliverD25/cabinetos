@@ -28,6 +28,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Tab switches panes again after a click on a button of the top row. The click left the keyboard on the button, and Tab walked from button to button. The buttons of the top row, the status bar, the breadcrumbs, the tab strips and the dock no longer take the keyboard from a click.
 - The right-click menu opens with its top-left corner at the pointer, as Explorer's does, and hangs above or to the left of the pointer near the window's edge. It used to open centred on the pointer, over the row that was clicked. From the keyboard it hangs under the focused row.
+- A chord pressed where it does not work says where it does, instead of "is not bound to a command": "Ctrl+K Ctrl+T does not work while you type in a box. Esc leaves the box." in the find box, the address box or the palette, and "Ctrl+K V works only in a file list." elsewhere.
 - A chord works however long its first key is held: holding Ctrl+K until Windows repeats it no longer ends the wait with "Ctrl+K Ctrl+K is not bound", so Ctrl+K Ctrl+T, Ctrl+K V and the other chords work every time.
 - Tab no longer takes the keyboard out of the theme picker or the plugin list while they stay open. Before, the next Enter or Space went to a sidebar row, a rail button or the file list under them.
 - Tab gives the keyboard to a Markdown Preview (or another tool) shown in the other pane. Before, Tab did nothing while the other pane showed a tool, and the next keys still acted on the first pane's files.
