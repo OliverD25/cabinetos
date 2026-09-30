@@ -1271,7 +1271,10 @@ if ($crumb) {
 # happened: "context menu shown" (target, keyboard, quick_actions), "context menu closed", "context menu entry left
 # out: no command has this ID", "windows menu shown" (items) and "windows menu item run". A menu's rows are found by their accessible names and
 # clicked with the real mouse. Windows' Copy is the one item of Windows' menu that runs: it changes nothing on disk,
-# and the run reads the clipboard back.
+# and the run reads the clipboard back. The menu's edit mode (step 2) logs "menu edit shown" (target, in_menu_place),
+# "menu edit step" (step, row, rows) and "menu edit closed" (saved); the core logs "configuration changed" when Done
+# or Ctrl+S writes contextMenu.file.items. The edit mode removes the program and a second edit puts it back, in the
+# place the section wrote it, so the checks after it find the file menu as before.
 Add-Type -AssemblyName System.Windows.Forms
 function LeftPanePoint {
   $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$rect, 16)
@@ -1296,6 +1299,21 @@ function GoLeftPane([string]$path) {
   [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
   [Live]::Type($path); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 }
+# The core's "configuration changed" lines for the file menu's list, and a wait for the next one (the core logs through a
+# writer thread of its own, as the window does).
+function CoreMenuChanges { @(Get-Content "$root\logs\core.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"configuration changed"' -and $_ -match 'contextMenu\.file\.items' }) }
+function WaitCoreMenuChange([int]$before, [int]$seconds = 5) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ($true) {
+    $lines = @(CoreMenuChanges)
+    if ($lines.Count -gt $before) { return $lines[$lines.Count - 1] }
+    if ((Get-Date) -ge $deadline) { return $null }
+    Start-Sleep -Milliseconds 200
+  }
+}
+function FileMenuItems { @((Get-Content -LiteralPath "$root\config\cabinetos.json" -Raw -Encoding UTF8 | ConvertFrom-Json).contextMenu.file.items | ForEach-Object { if ($_.separator) { '-' } else { $_.command } }) }
+$VK['S'] = 0x53
+$VK['Insert'] = 0x2D
 $m18 = "$files\menu18"
 New-Item -ItemType Directory -Force "$m18\bg18" | Out-Null
 foreach ($i in 1..40) { Set-Content -LiteralPath ("$m18\row-{0:D2}.txt" -f $i) -Value "x" -NoNewline }
@@ -1368,6 +1386,80 @@ $again = AppElement 'Live 18 Recorder' 2
 $closes = (ShellLines 'context menu closed').Count
 [Live]::Press($VK.Esc)
 "18: Esc closed it: $([bool](WaitShellLines 'context menu closed' $closes) -and (AppElementGone 'Live 18 Recorder'))"
+
+Step "18: Edit Menu... on the file menu: the edit mode in the menu's place; a click outside leaves it open"
+$shown = (ShellLines 'context menu shown').Count
+[Live]::RightClick($x, $y, $false)
+[void](WaitShellLines 'context menu shown' $shown)
+$edit = AppElement $editMenu 2
+$editShown = (ShellLines 'menu edit shown').Count
+$closes = (ShellLines 'menu edit closed').Count
+if ($edit) { ClickElement $edit }
+$editing = WaitShellLines 'menu edit shown' $editShown
+"18: $editMenu turned the file menu into its edit mode, where the menu was: $($editing.fields.target -eq 'File' -and $editing.fields.in_menu_place)"
+"18: the edit header names the file menu: $([bool](AppElement 'Editing: File menu' 2))"
+Shot $h "$ShotDir\18-edit-mode-live.png"
+# Low in the right pane, away from the edit mode: the click is swallowed, and nothing closes.
+$rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$rect, 16)
+[Live]::Click([int]($rect.Left + ($rect.Right - $rect.Left) * 0.85), [int]($rect.Top + ($rect.Bottom - $rect.Top) * 0.85)); Start-Sleep -Milliseconds 600
+"18: a click outside left it open: $((ShellLines 'menu edit closed').Count -eq $closes -and [bool](AppElement 'Editing: File menu'))"
+
+Step "18: the program's X, then Done: the core writes the list, and the next right-click has no program"
+$steps = (ShellLines 'menu edit step').Count
+$remove = AppElement 'Remove Live 18 Recorder' 2
+if ($remove) { ClickElement $remove }
+$step = WaitShellLines 'menu edit step' $steps
+"18: the X removed the program's row ($($step.fields.rows)): $($step.fields.step -eq 'remove' -and $step.fields.row -eq 'Live 18 Recorder')"
+$changes18 = @(CoreMenuChanges).Count
+$done = AppElement 'Done' 2
+if ($done) { ClickElement $done }
+$closed = WaitShellLines 'menu edit closed' $closes
+"18: Done saved and closed the edit mode: $($closed.fields.saved -eq $true)"
+"18: the core logged the change of contextMenu.file.items: $([bool](WaitCoreMenuChange $changes18))"
+"18: the file's list lost the program ($((FileMenuItems) -join ', ')): $(((FileMenuItems) -join '|') -eq 'nothing.here18|-|pane.openSelected')"
+$shown = (ShellLines 'context menu shown').Count
+[Live]::RightClick($x, $y, $false)
+$menu = WaitShellLines 'context menu shown' $shown
+$lastRow = AppElement $editMenu 2
+"18: the next right-click shows the file menu without the program: $($menu.fields.target -eq 'File' -and [bool]$lastRow -and -not (AppElement 'Live 18 Recorder'))"
+
+Step "18: a second edit puts the program back: Insert, the prompt, Enter, a drag with the real mouse, Alt+Down, Alt+Up, Ctrl+S"
+$editShown = (ShellLines 'menu edit shown').Count
+if ($lastRow) { ClickElement $lastRow }
+[void](WaitShellLines 'menu edit shown' $editShown)
+$prompts = (ShellLines 'prompt shown').Count
+[Live]::Press($VK.Insert)
+"18: Insert opened Add Command...'s prompt: $([bool](WaitShellLines 'prompt shown' $prompts))"
+Start-Sleep -Milliseconds 300
+$steps = (ShellLines 'menu edit step').Count
+[Live]::Type('Live 18'); Start-Sleep -Milliseconds 500
+[Live]::Press($VK.Enter)
+$added = WaitShellLines 'menu edit step' $steps
+"18: Enter added the program after the focused row ($($added.fields.rows)): $($added.fields.step -eq 'add' -and $added.fields.rows -eq 'nothing.here18|Live 18 Recorder|-|Open')"
+$from = AppElement 'Live 18 Recorder' 1
+$onto = AppElement 'nothing.here18' 1
+if ($from -and $onto) {
+  $a = $from.Current.BoundingRectangle; $b = $onto.Current.BoundingRectangle
+  $steps = (ShellLines 'menu edit step').Count
+  [Live]::Drag([int]($a.Left + 8), [int]($a.Top + $a.Height / 2), [int]($a.Left + 8), [int]($b.Top + $b.Height / 2))
+  $dragged = WaitShellLines 'menu edit step' $steps
+  "18: a drag put the program first ($($dragged.fields.rows)): $($dragged.fields.step -eq 'drag' -and $dragged.fields.rows -eq 'Live 18 Recorder|nothing.here18|-|Open')"
+} else {
+  "18: the rows to drag were found: False"
+}
+$steps = (ShellLines 'menu edit step').Count
+[Live]::Press($VK.Alt, $VK.Down)
+$down = WaitShellLines 'menu edit step' $steps
+[Live]::Press($VK.Alt, $VK.Up)
+$up = WaitShellLines 'menu edit step' ($steps + 1)
+"18: Alt+Down moved the focused row down and Alt+Up back: $($down.fields.rows -eq 'nothing.here18|Live 18 Recorder|-|Open' -and $up.fields.rows -eq 'Live 18 Recorder|nothing.here18|-|Open')"
+$closes = (ShellLines 'menu edit closed').Count
+$changes18 = @(CoreMenuChanges).Count
+[Live]::Press($VK.Ctrl, $VK.S)
+$closed = WaitShellLines 'menu edit closed' $closes
+"18: Ctrl+S saved and closed it, and the core logged the change: $($closed.fields.saved -eq $true -and [bool](WaitCoreMenuChange $changes18))"
+"18: the file's list is as the section wrote it ($((FileMenuItems) -join ', ')): $(((FileMenuItems) -join '|') -eq 'program.live18|nothing.here18|-|pane.openSelected')"
+Shot $h "$ShotDir\18-after-edit-live.png"
 
 Step "18: Shift+right-click on the row: Windows' own menu; its Copy puts the file on the clipboard"
 [System.Windows.Forms.Clipboard]::SetText("cabinetos live check 18")
