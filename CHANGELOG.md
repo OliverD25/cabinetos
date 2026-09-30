@@ -6,8 +6,10 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-The first version, built on 2026-09-28 and not released yet. It becomes
-0.1.0 when the first release is published ([docs/release.md](docs/release.md)).
+## [0.1.0] - 2026-09-30
+
+The first version. How it is built, signed and published:
+[docs/release.md](docs/release.md).
 
 ### Added
 
@@ -51,4 +53,5 @@ The first version, built on 2026-09-28 and not released yet. It becomes
 
 - The title bar with its workspace tab, the command bar, the global address bar and the global search field, and the pane's header: the top row and each pane's tab strip and breadcrumb row replace them. No setting of `cabinetos.json` served only these parts; the theme metrics that sized them are still accepted and size nothing.
 
-[Unreleased]: https://github.com/OliverD25/cabinetos/commits/main
+[Unreleased]: https://github.com/OliverD25/cabinetos/compare/v0.1.0...main
+[0.1.0]: https://github.com/OliverD25/cabinetos/releases/tag/v0.1.0

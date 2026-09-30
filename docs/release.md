@@ -285,6 +285,9 @@ creator's.
 1. **Choose the version.** Set `version` in `core/Cargo.toml`, run
    `pwsh.exe -NoProfile -File build/release.ps1 -SyncVersion`, rename
    `## [Unreleased]` in `CHANGELOG.md` to `## [0.1.0] - <date>`, and commit.
+   Done for 0.1.0 on 2026-09-30: both versions were 0.1.0 already, and the
+   section is `## [0.1.0] - 2026-09-30`, with an empty `## [Unreleased]`
+   above it for what comes next.
 2. **Build and sign** as above.
 3. **Make the repository public.** The release asset's address must work
    for strangers and for winget.

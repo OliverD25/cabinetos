@@ -40,19 +40,24 @@ public class UpdateTests
 
     // ----- The release notes -----
 
-    /// <summary>The Unreleased section of CHANGELOG.md, as build/release.ps1 cuts it for notes-&lt;version&gt;.md.</summary>
-    private static string UnreleasedSection()
+    /// <summary>
+    /// The newest section of CHANGELOG.md that has content, as build/release.ps1 cuts one for notes-&lt;version&gt;.md:
+    /// Unreleased while it holds anything, else the newest version's (Unreleased is empty right after a release).
+    /// </summary>
+    private static string NewestSection()
     {
         var changelog = File.ReadAllText(Path.Combine(Repo.Root, "CHANGELOG.md")).Replace("\r\n", "\n", StringComparison.Ordinal);
-        var match = Regex.Match(changelog, @"(?ms)^## \[Unreleased\][^\n]*\n(.*?)(?=^## \[|\z)");
-        Assert.True(match.Success, "CHANGELOG.md has no Unreleased section");
-        return Regex.Replace(match.Groups[1].Value.Trim(), @"(?m)^\[(Unreleased|\d+\.\d+\.\d+[^\]]*)\]:[ \t]+\S+[ \t]*$", "").Trim();
+        var section = Regex.Matches(changelog, @"(?ms)^## \[(?:Unreleased|\d+\.\d+\.\d+[^\]]*)\][^\n]*\n(.*?)(?=^## \[|\z)")
+            .Select(m => Regex.Replace(m.Groups[1].Value.Trim(), @"(?m)^\[(Unreleased|\d+\.\d+\.\d+[^\]]*)\]:[ \t]+\S+[ \t]*$", "").Trim())
+            .FirstOrDefault(s => s.Length > 0);
+        Assert.True(section is not null, "CHANGELOG.md has no section with content");
+        return section!;
     }
 
     [Fact]
     public void The_changelog_s_own_section_renders_with_every_heading_item_link_and_code_span()
     {
-        var section = UnreleasedSection();
+        var section = NewestSection();
         var blocks = ReleaseNotes.Parse(section, ReleaseNotes.BaseFor("0.1.0"));
         var spans = blocks.SelectMany(b => b.Spans).ToList();
         var lines = section.Split('\n');
