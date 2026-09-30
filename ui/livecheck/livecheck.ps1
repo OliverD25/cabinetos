@@ -640,8 +640,9 @@ foreach ($i in 1..2) {
 
 # A click on the top row's chrome must not leave the keyboard on the button: the pane keeps it, so Tab (view.focusOtherPane,
 # context filesView) still switches panes. The real mouse does what the snapshot aid's click: step cannot: it presses the button.
-# Evidence: the window's log says Tab ran view.focusOtherPane (one more "command executed" line), and UI Automation says the
-# focus is in the right half of the window (the other pane: the left one is the active pane) and is no Button.
+# Evidence: the window's log says Tab ran view.focusOtherPane (one more "command executed" line): had the click left the
+# keyboard on the button, Tab would have walked WinUI's tab stops and run nothing. UI Automation adds that the focus is no
+# Button; it cannot say which pane has it, because WinUI reports the focus at the window's input site (run of 2026-10-01).
 function FocusOtherCount { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match '"command executed"' -and $_ -match 'view\.focusOtherPane' }).Count }
 # The leftmost element of a name: the top row's button, not a folder or a menu row of the same name.
 function TopRowButton([string]$name) {
@@ -661,9 +662,8 @@ function TabReachesOtherPane([string]$what) {
   $wr = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$wr, 16)
   $fr = $focused.Current.BoundingRectangle
   $isButton = $focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button
-  $inRightHalf = ($fr.Left + $fr.Width / 2) -gt (($wr.Left + $wr.Right) / 2)
   "compact: $what, Tab ran view.focusOtherPane: $((FocusOtherCount) -eq $before + 1)"
-  "compact: $what, the keyboard is in the other pane (the right half) and on no Button: $($inRightHalf -and -not $isButton) (focused: '$($focused.Current.Name)', $($focused.Current.ClassName), $($focused.Current.ControlType.ProgrammaticName), centre x $([int]($fr.Left + $fr.Width / 2)) of $($wr.Left)..$($wr.Right))"
+  "compact: $what, the keyboard is on no Button after Tab: $(-not $isButton) (focused: '$($focused.Current.Name)', $($focused.Current.ClassName), $($focused.Current.ControlType.ProgrammaticName), centre x $([int]($fr.Left + $fr.Width / 2)) of $($wr.Left)..$($wr.Right))"
   [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 }
 
@@ -1425,7 +1425,10 @@ $menu = WaitShellLines 'context menu shown' $shown
 # Explorer's rule: the menu's top-left corner is at the pointer (above it, or to its left, when the menu would not fit). The
 # log's numbers are the window's content DIPs; the point is in screen pixels, and the window's frame is the content's origin
 # (step 13 measures the rail from it the same way), so the point in DIPs is (pixel - frame) / scale, good to a few pixels.
-$placed = WaitShellLines 'context menu placed' $placedBefore
+# The wanted line is the one after this right-click's "context menu shown": a count alone once handed back the line of an
+# earlier, keyboard-opened menu (run of 2026-10-01), so the line's time must not be before that menu's.
+$shownAt = if ($menu) { $menu.ts } else { '' }
+$placed = WaitShellLines 'context menu placed' $placedBefore 5 { param($line) $line.ts -ge $shownAt }
 $wr = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$wr, 16)
 $askedX = ($x - $wr.Left) / $scale; $askedY = ($y - $wr.Top) / $scale
 $nearX = $placed -and ([math]::Abs($placed.fields.left - $askedX) -le 4 -or [math]::Abs($placed.fields.left + $placed.fields.width - $askedX) -le 4)
