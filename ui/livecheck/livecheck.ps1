@@ -391,15 +391,17 @@ Step "Ctrl+Backquote in the terminal: the keyboard goes back to the pane; again:
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 800
 Shot $h "$ShotDir\phase-5c-terminal-hidden.png"
 
-Step "Ctrl+F: search 'report', Enter to the hits, Enter to go there"
-[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 400
+# Since Phase 16 Ctrl+F finds in the pane (section 16); the search through subfolders is the Search view, which the
+# classic layout shows in the sidebar's place while it is asked for (Ctrl+Shift+F).
+Step "Ctrl+Shift+F: the Search view; search 'report', Down to the hit, Enter to go there"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.F); Start-Sleep -Milliseconds 600
 [Live]::Type("report"); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\phase-5c-search-live.png"
-[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 500
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 500
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 Shot $h "$ShotDir\phase-5c-search-opened.png"
-Step "Ctrl+F, type, Esc: back to the folder"
-[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 400
+Step "Ctrl+Shift+F, type, Esc: back to the folder, the sidebar shows its folders again"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.F); Start-Sleep -Milliseconds 600
 [Live]::Type("readme"); Start-Sleep -Milliseconds 900
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
 Shot $h "$ShotDir\phase-5c-search-left.png"
@@ -418,7 +420,7 @@ Shot $h "$ShotDir\phase-5c-markdown-chord.png"
 $ready = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool ready"' }).Count
 "the preview said ready for each open (2 expected): $ready"
 
-# The preview stays open in the right pane through sub-phase 11a's Ctrl+P: the terminal then shows
+# The preview stays open in the right pane through sub-phase 11a's Ctrl+Alt+P: the terminal then shows
 # while a web page is open in the other pane, where run 4 lost every key until a mouse click (the
 # window left the keys in its own input window; docs/ui.md, "The terminal"). It closes right after
 # that check, so the later sections find two file panes.
@@ -494,17 +496,17 @@ if ($confirm) { ([System.Windows.Automation.InvokePattern]$confirm.GetCurrentPat
 Start-Sleep -Milliseconds 2500
 "Shift+F8 removed it for good: $(-not (Test-Path -LiteralPath "$tc\cabinetos-live-check-shift-f8.txt"))"
 
-Step "11a: Ctrl+P: the terminal shows with the folder typed at the prompt"
+Step "11a: Ctrl+Alt+P: the terminal shows with the folder typed at the prompt (Ctrl+P is Quick Open since Phase 16)"
 function HandedToTerminal { @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a page has the keyboard"' -and $_ -match '"page":"terminal"' }) }
 $handedBefore = (HandedToTerminal).Count
-[Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Seconds 3
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.P); Start-Sleep -Seconds 3
 Shot $h "$ShotDir\11a-terminal-path-live.png"
 "the path was typed: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"paths typed at the prompt"' -and $_ -match 'OkReply' }))"
 # The preview is open in the right pane (phase 5c left it there). The window checks where Windows
 # sends the keys after it gave the terminal the keyboard, and hands them over again when WinUI left
 # them in the window ("a page has the keyboard" with the hand-overs it took).
 $handed = HandedToTerminal | Select-Object -Skip $handedBefore | Select-Object -Last 1
-"the terminal's page has the keyboard after Ctrl+P (hand-overs: $(if ($handed) { ($handed | ConvertFrom-Json).fields.hand_overs } else { 'none' })), the preview open in the other pane: $([bool]$handed)"
+"the terminal's page has the keyboard after Ctrl+Alt+P (hand-overs: $(if ($handed) { ($handed | ConvertFrom-Json).fields.hand_overs } else { 'none' })), the preview open in the other pane: $([bool]$handed)"
 # Esc clears the typed line in pwsh; Ctrl+Backquote gives the keyboard back to the pane (the page
 # passes it to the window, which runs view.toggleTerminal).
 function ToggleCount { @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' -and $_ -match 'view\.toggleTerminal' }).Count }
@@ -512,7 +514,7 @@ $lostBefore = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 300
 $toggles = ToggleCount
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
-"Ctrl+Backquote reached the window after Ctrl+P, the preview open in the other pane: $((ToggleCount) -gt $toggles)"
+"Ctrl+Backquote reached the window after Ctrl+Alt+P, the preview open in the other pane: $((ToggleCount) -gt $toggles)"
 "keys the window had to take for the page (0 expected): $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a key the page did not get"' }).Count - $lostBefore)"
 
 Step "11a: close the preview, so the later sections find two file panes"
@@ -545,7 +547,7 @@ Step "11a: Ctrl+U: the panes change places"
 Shot $h "$ShotDir\11a-swapped-live.png"
 # And back, so the sections after this one find the panes where they expect them.
 [Live]::Press($VK.Ctrl, $VK.U); Start-Sleep -Milliseconds 800
-# The keyboard is in the pane: Ctrl+Backquote hides the terminal Ctrl+P showed, and the pane keeps the keys.
+# The keyboard is in the pane: Ctrl+Backquote hides the terminal Ctrl+Alt+P showed, and the pane keeps the keys.
 $toggles = ToggleCount
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 800
 $owner = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"keyboard owner"' -and $_ -match 'terminal hidden' } | Select-Object -Last 1
@@ -629,9 +631,10 @@ Shot $h "$ShotDir\compact-back-live.png"
 $metrics = LastMetrics
 "compact: switched back to $($metrics.theme): rows $($metrics.row_height) px (30 expected), function keys $($metrics.fkey_bar)"
 
-# ----- 12: tabs (docs/ui.md, "Tabs"): the row above a pane's list, with real keys -----
+# ----- 12: tabs (docs/ui.md, "Tabs"): the strip above a pane's list, with real keys -----
 # The window's log says what the tabs did: "tab shown" (the folder, the tab's place, how many tabs,
 # whether it is locked), "tab row shown" and "tab row hidden", and the notices of the status bar.
+# Since Phase 16 the strip shows from the first tab, so it is shown once at the start and never hidden.
 function TabLog { Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"target":"cabinetos_ui::tabs"' } | ForEach-Object { $_ | ConvertFrom-Json } }
 function LastTabShown { TabLog | Where-Object { $_.message -eq 'tab shown' -and $_.fields.pane -eq 0 } | Select-Object -Last 1 }
 function NoticeCount([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"notice shown"' -and $_ -match $pattern }).Count }
@@ -641,19 +644,19 @@ Set-Content -LiteralPath "$tb\one\note.txt" -Value "one" -NoNewline
 Set-Content -LiteralPath "$tb\one\sub\deep.txt" -Value "deep" -NoNewline
 Set-Content -LiteralPath "$tb\two\other.txt" -Value "two" -NoNewline
 
-Step "tabs: the left pane in tabs12\one, one tab, so no row"
+Step "tabs: the left pane in tabs12\one, one tab, and its strip shows"
 ClickLeftPane
 [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
 [Live]::Type("$tb\one"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 $rowShown = @(TabLog | Where-Object { $_.message -eq 'tab row shown' -and $_.fields.pane -eq 0 }).Count
-"tabs: the row was never shown with one tab: $($rowShown -eq 0)"
+"tabs: the strip is shown with one tab: $($rowShown -eq 1)"
 
 Step "tabs: Ctrl+T twice, three tabs, the row shows"
 [Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 900
 [Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 900
 $shown = LastTabShown
 "tabs: three tabs after Ctrl+T twice, the last in front: $($shown.fields.tabs -eq 3 -and $shown.fields.index -eq 2)"
-"tabs: the row is shown: $(@(TabLog | Where-Object { $_.message -eq 'tab row shown' -and $_.fields.pane -eq 0 }).Count -eq 1)"
+"tabs: the strip is still shown, once: $(@(TabLog | Where-Object { $_.message -eq 'tab row shown' -and $_.fields.pane -eq 0 }).Count -eq 1)"
 Shot $h "$ShotDir\tabs-three-live.png"
 
 Step "tabs: Ctrl+Tab goes on to the first tab"
@@ -679,12 +682,12 @@ Step "tabs: Ctrl+W closes the new tab"
 $shown = LastTabShown
 "tabs: three tabs again, the front tab is not in sub: $($shown.fields.tabs -eq 3 -and $shown.fields.path -ne "$tb\one\sub")"
 
-Step "tabs: Ctrl+W twice more leaves one tab, and the row hides"
+Step "tabs: Ctrl+W twice more leaves one tab, and the strip stays"
 [Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 1000
 [Live]::Press($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 1200
 $shown = LastTabShown
 "tabs: one tab left: $($shown.fields.tabs -eq 1)"
-"tabs: the row is hidden again: $(@(TabLog | Where-Object { $_.message -eq 'tab row hidden' -and $_.fields.pane -eq 0 }).Count -eq 1)"
+"tabs: the strip was never hidden: $(@(TabLog | Where-Object { $_.message -eq 'tab row hidden' -and $_.fields.pane -eq 0 }).Count -eq 0)"
 Shot $h "$ShotDir\tabs-hidden-live.png"
 
 Step "tabs: Ctrl+W on the last tab is refused"
@@ -1075,7 +1078,7 @@ PressForNameBox { [Live]::Press($VK.F2) }
 Shot $h "$ShotDir\edge-renamed-live.png"
 "F2 renamed the Cyrillic file: $((Test-Path -LiteralPath "$edge\names\$zvit 2027.txt") -and -not (Test-Path -LiteralPath "$edge\names\$zvit 2026.txt"))"
 
-Step "edge: Ctrl+F, a Cyrillic query"
+Step "edge: Ctrl+F, a Cyrillic query in the find widget: the pane keeps the names that hold it"
 [Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 400
 [Live]::Type($zvitLower); Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\edge-search-live.png"
@@ -1108,6 +1111,93 @@ Start-Sleep -Milliseconds 3000
 Shot $h "$ShotDir\edge-deleted-live.png"
 "the junction is gone: $(-not (Test-Path -LiteralPath "$edge\links\junction to target"))"
 "the files behind it stayed: $((@(Get-ChildItem -LiteralPath "$edge\link-target" | ForEach-Object { $_.Name }) -join ',') -eq 'kept 1.txt,kept 2.txt,kept 3.txt')"
+
+# ----- 16: the shell (docs/ui.md, "The top row", "The breadcrumb row", "Find in pane", "Quick Open") -----
+# The creator's SHELL_REDESIGN.md with real keys and clicks. The window's log says what happened: "find opened",
+# "find filtered" (how many rows match), "find closed", "quick open shown", "menu shown", and "command executed"
+# with each command and what started it. The hamburger and a crumb are found by their accessible names, as a
+# screen reader finds them, and clicked with the real mouse.
+function ShellLines([string]$message) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match "`"$message`"" } | ForEach-Object { $_ | ConvertFrom-Json }) }
+function ShellElement([string]$name) {
+  [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $name)))
+}
+function ClickElement($element) {
+  $r = $element.Current.BoundingRectangle
+  [Live]::Click([int]($r.Left + $r.Width / 2), [int]($r.Top + $r.Height / 2))
+}
+$sh = "$files\shell16"
+New-Item -ItemType Directory -Force "$sh\alpha", "$sh\beta\deep" | Out-Null
+Set-Content -LiteralPath "$sh\alpha\notes-16.txt" -Value "x" -NoNewline
+Set-Content -LiteralPath "$sh\alpha\other-16.txt" -Value "x" -NoNewline
+Set-Content -LiteralPath "$sh\beta\deep\target-16.md" -Value "x" -NoNewline
+
+Step "16: Ctrl+L, a path, Enter: the left pane in shell16\alpha"
+ClickLeftPane
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type("$sh\alpha"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+"16: Ctrl+L and Enter went there: $((SelectionText) -match 'notes-16|other-16')"
+
+Step "16: Ctrl+F, 'other', Enter, Esc: one row while the text is there, the cursor on it, every row after Esc"
+$opened = (ShellLines 'find opened').Count
+[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
+[Live]::Type("other"); Start-Sleep -Milliseconds 800
+$filtered = ShellLines 'find filtered' | Select-Object -Last 1
+"16: the find opened: $((ShellLines 'find opened').Count -gt $opened)"
+"16: the pane shows one row of two: $($filtered.fields.matches -eq 1 -and $filtered.fields.rows -eq 2)"
+Shot $h "$ShotDir\shell16-find-live.png"
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 500
+"16: Enter put the cursor on the match: $((SelectionText) -match 'other-16')"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
+$closed = ShellLines 'find closed' | Select-Object -Last 1
+"16: Esc closed the find and every row shows: $($closed.fields.rows -eq 2)"
+"16: the cursor stayed on the match: $((SelectionText) -match 'other-16')"
+
+Step "16: Ctrl+P, type, Esc: Quick Open shows and goes, the pane stays"
+$shown = (ShellLines 'quick open shown').Count
+[Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Milliseconds 500
+[Live]::Type("target-16"); Start-Sleep -Milliseconds 1200
+Shot $h "$ShotDir\shell16-quick-open-live.png"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+"16: Quick Open showed: $((ShellLines 'quick open shown').Count -gt $shown)"
+"16: Esc left the pane where it was: $((SelectionText) -match 'other-16')"
+
+Step "16: Ctrl+P, type, Enter: the file's folder in the pane, the file under the cursor"
+[Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Milliseconds 500
+[Live]::Type("target-16"); Start-Sleep -Milliseconds 1200
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
+"16: Enter opened the row in the pane: $((SelectionText) -match 'target-16')"
+
+Step "16: Alt+Left: Back in the left pane"
+[Live]::Press($VK.Alt, $VK.Left); Start-Sleep -Milliseconds 1000
+$back = ShellLines 'command executed' | Where-Object { $_.fields.command -eq 'go.back' } | Select-Object -Last 1
+"16: Alt+Left ran go.back from a key: $($back.fields.trigger -eq 'key')"
+"16: the pane is back in alpha: $((SelectionText) -match 'notes-16|other-16')"
+
+Step "16: the hamburger, clicked by its accessible name; a click outside closes it; again, and Esc closes it"
+$menu = ShellElement 'Menu'
+"16: the top row has a button named Menu: $([bool]$menu)"
+if ($menu) {
+  $menus = (ShellLines 'menu shown').Count
+  ClickElement $menu; Start-Sleep -Milliseconds 700
+  "16: the menu showed: $((ShellLines 'menu shown').Count -gt $menus)"
+  "16: its first row is New Tab: $([bool](ShellElement 'New Tab'))"
+  Shot $h "$ShotDir\shell16-menu-live.png"
+  ClickLeftPane
+  "16: a click outside closed it: $(-not (ShellElement 'New Tab'))"
+  ClickElement $menu; Start-Sleep -Milliseconds 700
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+  "16: Esc closed it: $(-not (ShellElement 'New Tab'))"
+}
+
+Step "16: a click on the shell16 crumb takes the pane there"
+$crumb = ShellElement $sh
+"16: the breadcrumb row has a crumb for shell16: $([bool]$crumb)"
+if ($crumb) {
+  ClickElement $crumb; Start-Sleep -Milliseconds 1000
+  "16: the pane is in shell16: $((SelectionText) -match 'alpha|beta')"
+  Shot $h "$ShotDir\shell16-crumb-live.png"
+}
 
 Step "close"
 $script:h = $null
