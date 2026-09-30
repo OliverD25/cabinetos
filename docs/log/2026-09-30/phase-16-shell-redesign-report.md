@@ -129,10 +129,12 @@ window's log of the run:
   check compared the wrong field.
 - "Quick Open showed" and "the menu showed": both lines were logged
   (`quick open shown` at 12:04:31.5 UTC, `menu shown` at 12:04:40.7) but
-  were not yet in the file when the checks read it 2.1 s and 0.7 s later:
-  the window's log writer writes through a buffer, so a burst of lines
-  lands at once and a single line waits. Evidence from the log needs a
-  wait, as the Claude Code probe does.
+  were not yet in the file when the checks read it 2.1 s and 0.7 s later.
+  (First read as a file buffer; wrong. The window's log writer takes lines
+  through a lock-free queue on its own thread and writes them unbuffered;
+  a line lands when that thread gets its turn, which a fixed sleep cannot
+  promise.) Evidence from the log needs a wait, as the Claude Code probe
+  does.
 - "Enter opened the row in the pane" and "Alt+Left ran go.back from a
   key": the section's fixture puts `target-16.md` in `shell16\beta\deep`
   while the pane, and so the workspace (a plain folder, no repository),
@@ -141,11 +143,77 @@ window's log of the run:
   back in alpha" passed for the wrong reason). The fixture gets a fake
   repository (`shell16\.git\HEAD`), which also makes the pill's branch
   testable.
-- "its first row is New Tab": the dropdown is a flyout, a window of its
-  own, which a search of the main window's automation tree never sees (the
-  drive-list section says the same); the search starts at the root with
-  the process ID.
+- "its first row is New Tab": read as a flyout, a window of its own, which
+  a search of the main window's automation tree never sees. Wrong too: the
+  coder's hand-back below has the real cause, the same still-open Quick
+  Open.
 
-The six fixes went to a coder on Sonnet the same afternoon; the section
-runs again after its push. The Claude Code probe (`claude-terminal.ps1`)
-ran on the same build at 15:08 with the new Ctrl+Alt+P: every check True.
+The six fixes went to a coder on Sonnet the same afternoon. The Claude
+Code probe (`claude-terminal.ps1`) ran on the same build at 15:08 with the
+new Ctrl+Alt+P: every check True.
+
+## The evidence fixes: the coder's hand-back (7fdd634, coder on Sonnet)
+
+One commit, `ui/livecheck/livecheck.ps1` and a paragraph in
+[ui.md](../../ui.md); the window untouched, so no test counts. The coder
+did not run the live check: the script parses in PowerShell 7.6 and 5.1,
+and the new helpers were run against a fake log in both shells. The
+planning session added `ui\livecheck` to `build/check-scripts.ps1` the
+same hour (6b6daac), so the parse check is no longer done by hand.
+
+What each check measures now:
+
+- "the pane shows one row while the text is there": the last `find
+  filtered` line has `matches` 1 and `rows` 1, and its wait targets the
+  line for the whole text (`query_length` 5), since the window logs one
+  line per key and skips stale ones.
+- "Quick Open showed", "the menu showed" and every other log check of the
+  section: `WaitShellLines` polls up to 5 s for a line that was not there
+  before the key or click.
+- "Enter opened the row in the pane" and "Alt+Left ran go.back from a key":
+  `shell16` now holds a fake repository, `.git\HEAD` with
+  `ref: refs/heads/live-16`, so it is the workspace and Quick Open finds
+  `target-16.md` from `alpha`. The Back check needs `command` `go.back` and
+  `trigger` `key`. A new check reads the branch `live-16` from the `quick
+  open shown` line, so the pill's branch is covered too.
+- "its first row is New Tab": `AppElement 'New Tab' 2` searches every
+  window of the app, found by process ID, for up to 2 s; the two close
+  checks count only when the row was seen open first (`AppElementGone`),
+  so they cannot pass on a menu that never opened.
+
+Two readings of the planning session were wrong, and the hand-back
+replaces them:
+
+- Alt+Left did go through the router. Quick Open was still open because
+  Enter had found nothing; focus was in its text box, and there a binding
+  runs only when its command is in the Immutable System Tier
+  (`ChordStateMachine.Applies`). `go.back` is not, so nothing ran. That is
+  by design (Article 7), not a fault.
+- The hamburger is not a flyout window; it is a `Canvas` overlay inside
+  the main window (`FileContextMenu.xaml`). The run's log shows the first
+  click on Menu never opened it: the still-open Quick Open closes on a
+  click outside and swallows that click. So "the menu showed: False" and
+  "New Tab: False" were true findings with one cause, the fixture, which
+  the fake repository removes. The search across the app's windows stays,
+  for a window of its own if one ever exists.
+
+Decisions (what — because — undo):
+
+- `AppElement` takes the desktop's children with this app's process ID and
+  searches each window's descendants by name — one AND-condition over the
+  whole desktop would walk every other program's UI tree — undo:
+  `RootElement.FindFirst(Descendants, AndCondition(Name, ProcessId))`.
+- `WaitShellLines` has an optional `-until` scriptblock on the last line —
+  a line count cannot say when the whole text is in for a message logged
+  once per key; when `-until` never holds the last line is still returned,
+  so the check shows what the window said — undo: remove it and use
+  `$filters + 4` as `$before`.
+- The crumb check's regex is `\.git|alpha|beta` — `.git` sorts first in
+  `shell16` — undo: `alpha|beta`.
+
+Left as found: `SelectionText` still reads the pane right after a fixed
+sleep, so "Enter opened the row in the pane" and "the pane is back in
+alpha" could be late in the same way; and the earlier "Quick Open showed:
+False" has no explanation yet, since the line was in the log and the file
+is unbuffered. If it fails again with the fixture fixed, that read is the
+place to look.
