@@ -1419,6 +1419,54 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Asks for Windows' own context menu of `paths` (Phase 18), when\n`contextMenu.shellMenu` is on. The core builds it on a background\nthread of its own and answers `shell_menu` within 3 s, else\n`shell_menu_error`; `shell_menu_off` while the setting is off. The\nmenu stays until an item is chosen or 30 s pass; a new one from the\nsame connection replaces it.",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "description": "Absolute paths, all in one folder: the right-clicked entry, or\nthe selection it is part of.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "shell_menu"
+        }
+      },
+      "required": [
+        "type",
+        "paths"
+      ]
+    },
+    {
+      "description": "Runs an item of a menu from `shell_menu`, as a click in Explorer's\nmenu does; the menu is gone afterwards. The core answers `ok` once\nthe item is done, or after 5 s while it still runs (a dialog it\nopened); `no_such_menu` when the menu was used, expired or is\nanother connection's; `shell_menu_error` when Windows refused.",
+      "type": "object",
+      "properties": {
+        "item_id": {
+          "description": "The item's `id`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "menu_id": {
+          "description": "The menu, from `shell_menu`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "shell_menu_invoke"
+        }
+      },
+      "required": [
+        "type",
+        "menu_id",
+        "item_id"
+      ]
     }
   ],
   "required": [

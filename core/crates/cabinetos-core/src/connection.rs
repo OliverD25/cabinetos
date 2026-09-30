@@ -12,7 +12,8 @@
 //!   `list_volumes`, `open_path`, `edit_path`, `show_properties`, `create_directory`,
 //!   `create_file`, `rename`, `measure_paths`,
 //!   `set_value`,
-//!   the keybinding and plugin settings writes, `start_job`, a plugin's command, `reload_plugin`, `search`,
+//!   the keybinding and plugin settings writes, `start_job`, a plugin's command, a program's
+//!   command, `shell_menu`, `shell_menu_invoke`, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`,
 //!   `list_themes`, `get_theme` of a named theme, `list_tools` and the
 //!   marketplace requests)
@@ -63,6 +64,9 @@ static NEXT_MEASURE_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Numbers the clients that said `hello`, for their IDs (`CabinetOS#2`).
 static NEXT_CLIENT: AtomicU64 = AtomicU64::new(1);
+
+/// Numbers the connections, so a shell menu belongs to the one that asked.
+static NEXT_CONNECTION: AtomicU64 = AtomicU64::new(1);
 
 /// Queues messages for the connection's writer task.
 #[derive(Clone, Debug)]
@@ -204,6 +208,7 @@ pub(crate) async fn handle_connection(
         last_listed: None,
         measures: HashMap::new(),
         in_process: false,
+        connection: NEXT_CONNECTION.fetch_add(1, Ordering::Relaxed),
     };
     loop {
         tokio::select! {
@@ -243,6 +248,7 @@ pub(crate) async fn handle_connection(
     if let Some(client) = &session.client {
         session.services.windows.remove(&client.id);
     }
+    session.services.shell_menus.close_owner(session.connection);
     // A measure counts on a pool thread, which aborting its task does not
     // stop.
     session.stop_measures();
@@ -299,6 +305,8 @@ struct Session {
     /// to, so a reply that carries one names it with handle 0 and the
     /// description only.
     in_process: bool,
+    /// This connection's number: the owner of its shell menus.
+    connection: u64,
 }
 
 impl Session {
@@ -443,6 +451,9 @@ impl Session {
                 | Request::UpdateSnooze) => {
                     self.update_request(&id, &span, kind, request);
                     None
+                }
+                request @ (Request::ShellMenu { .. } | Request::ShellMenuInvoke { .. }) => {
+                    self.shell_menu_request(&id, &span, kind, request)
                 }
             }
         };
@@ -1471,6 +1482,68 @@ impl Session {
         Some(reply)
     }
 
+    /// `shell_menu` and `shell_menu_invoke` (Phase 18): Windows' own menu,
+    /// built and run on a thread of its own in `cabinetos-fs` while a
+    /// blocking task of this connection waits for it (at most 3 s for a
+    /// menu, 5 s for an item). `shell_menu` answers `shell_menu_off` at
+    /// once while the setting is off.
+    fn shell_menu_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        let menus = self.services.shell_menus.clone();
+        let owner = self.connection;
+        match request {
+            Request::ShellMenu { paths } => {
+                if !self
+                    .services
+                    .settings
+                    .snapshot()
+                    .config
+                    .context_menu
+                    .shell_menu
+                {
+                    return Some(failure_reply((
+                        ErrorCode::ShellMenuOff,
+                        "contextMenu.shellMenu is off; the window shows its own menu".to_owned(),
+                    )));
+                }
+                self.spawn_reply(id, span, kind, move || match menus.open(owner, &paths) {
+                    Ok(menu) => {
+                        tracing::info!(
+                            menu_id = menu.menu_id,
+                            paths = paths.len(),
+                            items = menu.items.len(),
+                            verbs = ?menu.items.iter().filter_map(|item| item.verb.as_deref()).collect::<Vec<_>>(),
+                            "shell menu built"
+                        );
+                        Response::ShellMenu {
+                            menu_id: menu.menu_id,
+                            items: menu.items.iter().map(wire_item).collect(),
+                        }
+                    }
+                    Err(error) => shell_menu_failure(&error),
+                });
+            }
+            Request::ShellMenuInvoke { menu_id, item_id } => {
+                self.spawn_reply(id, span, kind, move || {
+                    match menus.invoke(owner, menu_id, item_id) {
+                        Ok(()) => {
+                            tracing::info!(menu_id, item_id, "shell menu item run");
+                            Response::Ok
+                        }
+                        Err(error) => shell_menu_failure(&error),
+                    }
+                });
+            }
+            _ => unreachable!("only the shell menu requests come here"),
+        }
+        None
+    }
+
     /// `execute_command` of `program.<name>`: the program of that
     /// `programs` entry, with the tokens of this client's window state (the
     /// newest state of any window for a client that sent none, such as the
@@ -1991,6 +2064,7 @@ pub(crate) async fn run_plugin_request(
         last_listed: None,
         measures: HashMap::new(),
         in_process: true,
+        connection: NEXT_CONNECTION.fetch_add(1, Ordering::Relaxed),
     };
     session.handle_frame(&frame);
     let answer = async {
@@ -2059,6 +2133,27 @@ fn protocol_error(message: &str) -> Response {
 
 fn failure_reply((code, message): Failure) -> Response {
     Response::Error { code, message }
+}
+
+/// A shell menu item as the protocol carries it.
+fn wire_item(item: &cabinetos_fs::ShellItem) -> cabinetos_protocol::ShellMenuItem {
+    cabinetos_protocol::ShellMenuItem {
+        id: item.id,
+        text: item.text.clone(),
+        separator: item.separator,
+        items: item.items.iter().map(wire_item).collect(),
+    }
+}
+
+/// The error reply for a shell menu that could not be built or used, with
+/// a warning in the log.
+fn shell_menu_failure(error: &cabinetos_fs::ShellMenuError) -> Response {
+    let code = match error {
+        cabinetos_fs::ShellMenuError::Failed(_) => ErrorCode::ShellMenuError,
+        cabinetos_fs::ShellMenuError::NoSuchMenu(_) => ErrorCode::NoSuchMenu,
+    };
+    tracing::warn!(?code, %error, "shell menu refused");
+    failure_reply((code, error.to_string()))
 }
 
 /// `ok`, or the error reply for a filesystem error.

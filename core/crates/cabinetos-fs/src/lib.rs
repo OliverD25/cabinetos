@@ -33,7 +33,7 @@
 //! listing itself.
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
-//! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `com`,
+//! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `shellmenu`, `com`,
 //! `hydrate`, `link`, `system`, `registry`, and one function in `sort`),
 //! each block with a `SAFETY:` comment.
 //!
@@ -63,6 +63,8 @@ mod preview;
 #[allow(unsafe_code)]
 pub mod registry;
 mod section;
+#[allow(unsafe_code)]
+mod shellmenu;
 mod sort;
 #[allow(unsafe_code)]
 mod system;
@@ -89,6 +91,9 @@ pub use path::verbatim_wide;
 pub use pattern::{NamePatterns, match_entries};
 pub use preview::{PreviewEntry, PreviewWriter};
 pub use section::{EntryView, LayoutError, ListingReader, ListingWriter, PreviewView};
+pub use shellmenu::{
+    BUILD_TIMEOUT, BuiltMenu, INVOKE_WAIT, MENU_LIFETIME, ShellItem, ShellMenuError, ShellMenus,
+};
 pub use system::windows_build;
 pub use watch::{DetailedChange, DirectoryChanged, DirectoryWatcher, EntryChange, EntryChangeKind};
 

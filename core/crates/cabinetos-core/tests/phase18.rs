@@ -311,6 +311,130 @@ async fn a_program_runs_with_the_paths_of_the_window_and_is_a_command() {
     }
 }
 
+/// Windows' own menu is off until `contextMenu.shellMenu` says so; then the
+/// core builds it and answers within 3 s. A menu is its connection's, used
+/// once, and a wrong item is refused. No real item runs here: each changes
+/// something on the desktop (the fs crate's test runs Properties).
+#[tokio::test]
+#[expect(clippy::too_many_lines, reason = "one scenario, step by step")]
+async fn the_shell_menu_is_opt_in_and_belongs_to_its_connection() {
+    let core = start_core(&json!({}));
+    let folder = core.files().join("docs 2026");
+    std::fs::create_dir_all(&folder).unwrap();
+    let a = folder.join("a.txt");
+    let b = folder.join("b.md");
+    std::fs::write(&a, "a").unwrap();
+    std::fs::write(&b, "b").unwrap();
+    let mut client = greeted(&core, "phase18").await;
+    let paths = vec![text(&a), text(&b)];
+
+    let reply = ask(
+        &mut client,
+        Request::ShellMenu {
+            paths: paths.clone(),
+        },
+    )
+    .await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::ShellMenuOff),
+        "{reply:?}"
+    );
+    assert_eq!(
+        ask(
+            &mut client,
+            Request::SetValue {
+                path: "contextMenu.shellMenu".to_owned(),
+                value: json!(true),
+            },
+        )
+        .await,
+        Response::Ok
+    );
+
+    let started = Instant::now();
+    let reply = ask(
+        &mut client,
+        Request::ShellMenu {
+            paths: paths.clone(),
+        },
+    )
+    .await;
+    assert!(started.elapsed() < Duration::from_secs(4));
+    let Response::ShellMenu { menu_id, items } = reply else {
+        panic!("expected shell_menu, got {reply:?}")
+    };
+    assert!(items.len() > 3, "{items:?}");
+    assert!(!items[0].separator && items[0].id > 0, "{items:?}");
+    assert!(
+        items
+            .iter()
+            .all(|item| item.separator || !item.text.contains('&') || item.text.contains("&&")),
+        "{items:?}"
+    );
+
+    // Another connection cannot use it.
+    let mut other = connect(&core.pipe).await;
+    let reply = ask(
+        &mut other,
+        Request::ShellMenuInvoke {
+            menu_id,
+            item_id: items[0].id,
+        },
+    )
+    .await;
+    assert_eq!(error_code(&reply), Some(ErrorCode::NoSuchMenu), "{reply:?}");
+    // An item it does not have is refused, and the menu is used up.
+    let reply = ask(
+        &mut client,
+        Request::ShellMenuInvoke {
+            menu_id,
+            item_id: 0x7FFF,
+        },
+    )
+    .await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::ShellMenuError),
+        "{reply:?}"
+    );
+    let reply = ask(
+        &mut client,
+        Request::ShellMenuInvoke {
+            menu_id,
+            item_id: items[0].id,
+        },
+    )
+    .await;
+    assert_eq!(error_code(&reply), Some(ErrorCode::NoSuchMenu), "{reply:?}");
+
+    // Files of two folders, and a file that is gone, have no menu.
+    let reply = ask(
+        &mut client,
+        Request::ShellMenu {
+            paths: vec![text(&a), text(&core.files().join("x.txt"))],
+        },
+    )
+    .await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::ShellMenuError),
+        "{reply:?}"
+    );
+    let reply = ask(
+        &mut client,
+        Request::ShellMenu {
+            paths: vec![text(&folder.join("gone.txt"))],
+        },
+    )
+    .await;
+    assert_eq!(
+        error_code(&reply),
+        Some(ErrorCode::ShellMenuError),
+        "{reply:?}"
+    );
+}
+
 /// A program added to the file while the core runs is a command at once;
 /// one removed is gone, and running it says so.
 #[tokio::test]

@@ -20,6 +20,8 @@ use serde_json::Value;
 ///   runs; so do `update_download`, `update_apply` and `update_rollback`,
 ///   and `update_check` and `update_snooze` steer them. `update_status`
 ///   only reads.
+/// - `shell_menu` and `shell_menu_invoke` reach the shell extensions of
+///   Windows, whose items open and run anything: out of every sandbox.
 pub const NEVER_ALLOWED: &[&str] = &[
     "hello",
     "shutdown",
@@ -39,6 +41,8 @@ pub const NEVER_ALLOWED: &[&str] = &[
     "update_apply",
     "update_rollback",
     "update_snooze",
+    "shell_menu",
+    "shell_menu_invoke",
 ];
 
 /// The largest request a plugin may send with `core-request`, in bytes.
@@ -150,7 +154,7 @@ mod tests {
     fn what_no_manifest_can_allow_stays_refused_and_is_a_real_request_type() {
         assert_eq!(
             NEVER_ALLOWED.len(),
-            18,
+            20,
             "adding to the list is a decision: update the docs and the count"
         );
         for kind in NEVER_ALLOWED {

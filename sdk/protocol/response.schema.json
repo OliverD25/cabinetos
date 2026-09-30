@@ -944,6 +944,34 @@
       "required": [
         "type"
       ]
+    },
+    {
+      "description": "Reply to `shell_menu`: Windows' menu, alive until an item is chosen\nor 30 s pass.",
+      "type": "object",
+      "properties": {
+        "items": {
+          "description": "Its items, top to bottom, without the ones Windows shows\ndisabled or draws itself.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShellMenuItem"
+          }
+        },
+        "menu_id": {
+          "description": "The menu, for `shell_menu_invoke`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "shell_menu"
+        }
+      },
+      "required": [
+        "type",
+        "menu_id",
+        "items"
+      ]
     }
   ],
   "required": [
@@ -1518,6 +1546,21 @@
           "description": "`program.<name>`: the program's command line would be longer than\n30,000 characters (many selected paths).",
           "type": "string",
           "const": "command_line_too_long"
+        },
+        {
+          "description": "Windows could not build its menu within 3 s (the paths are not in\none folder, one is gone, a shell extension is slow), or could not\nrun the item; the message says why.",
+          "type": "string",
+          "const": "shell_menu_error"
+        },
+        {
+          "description": "No menu has that `menu_id` for this connection: an item was chosen\nalready, it waited longer than 30 s, or a newer one replaced it.",
+          "type": "string",
+          "const": "no_such_menu"
+        },
+        {
+          "description": "`contextMenu.shellMenu` is off: the window shows its own menu.",
+          "type": "string",
+          "const": "shell_menu_off"
         }
       ]
     },
@@ -3313,6 +3356,38 @@
     "SecretText": {
       "description": "A secret's value in a message: plain text on the wire, `<hidden>` when\nprinted, so a message logged with `{:?}` never shows it.",
       "type": "string"
+    },
+    "ShellMenuItem": {
+      "description": "One item of Windows' own context menu (`shell_menu`).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "What `shell_menu_invoke` takes; 0 for a separator and for an item\nthat only opens a submenu.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "items": {
+          "description": "A submenu's items, one level deep (a submenu inside it is left out).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShellMenuItem"
+          }
+        },
+        "separator": {
+          "description": "A divider line.",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "The text as Windows shows it, without the `&` of its access key;\nempty for a separator.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "separator"
+      ]
     },
     "Stars": {
       "description": "From 0 to 5 stars.",

@@ -71,6 +71,9 @@ pub(crate) struct Services {
     pub(crate) market: Arc<Marketplace>,
     /// What each window shows, as it last said (`window_state`).
     pub(crate) windows: WindowStates,
+    /// Windows' own context menus (`shell_menu`), each on a thread of its
+    /// own until an item is chosen or it expires.
+    pub(crate) shell_menus: cabinetos_fs::ShellMenus,
     /// The previews of proposed changes, until applied, cancelled or
     /// expired.
     pub(crate) previews: Arc<Previews>,

@@ -558,6 +558,28 @@ pub enum Request {
     /// dialog until then (the user said Later). The core answers
     /// `update_state`.
     UpdateSnooze,
+    /// Asks for Windows' own context menu of `paths` (Phase 18), when
+    /// `contextMenu.shellMenu` is on. The core builds it on a background
+    /// thread of its own and answers `shell_menu` within 3 s, else
+    /// `shell_menu_error`; `shell_menu_off` while the setting is off. The
+    /// menu stays until an item is chosen or 30 s pass; a new one from the
+    /// same connection replaces it.
+    ShellMenu {
+        /// Absolute paths, all in one folder: the right-clicked entry, or
+        /// the selection it is part of.
+        paths: Vec<String>,
+    },
+    /// Runs an item of a menu from `shell_menu`, as a click in Explorer's
+    /// menu does; the menu is gone afterwards. The core answers `ok` once
+    /// the item is done, or after 5 s while it still runs (a dialog it
+    /// opened); `no_such_menu` when the menu was used, expired or is
+    /// another connection's; `shell_menu_error` when Windows refused.
+    ShellMenuInvoke {
+        /// The menu, from `shell_menu`.
+        menu_id: u64,
+        /// The item's `id`.
+        item_id: u32,
+    },
 }
 
 fn default_bundle_minutes() -> u32 {
@@ -641,6 +663,8 @@ impl Request {
         "update_apply",
         "update_rollback",
         "update_snooze",
+        "shell_menu",
+        "shell_menu_invoke",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -716,6 +740,8 @@ impl Request {
             Self::UpdateApply => "update_apply",
             Self::UpdateRollback => "update_rollback",
             Self::UpdateSnooze => "update_snooze",
+            Self::ShellMenu { .. } => "shell_menu",
+            Self::ShellMenuInvoke { .. } => "shell_menu_invoke",
         }
     }
 }
@@ -1024,6 +1050,32 @@ pub enum Response {
     },
     /// Reply to the `update_*` requests: where the updater is now.
     UpdateState(Box<UpdateStatus>),
+    /// Reply to `shell_menu`: Windows' menu, alive until an item is chosen
+    /// or 30 s pass.
+    ShellMenu {
+        /// The menu, for `shell_menu_invoke`.
+        menu_id: u64,
+        /// Its items, top to bottom, without the ones Windows shows
+        /// disabled or draws itself.
+        items: Vec<ShellMenuItem>,
+    },
+}
+
+/// One item of Windows' own context menu (`shell_menu`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ShellMenuItem {
+    /// What `shell_menu_invoke` takes; 0 for a separator and for an item
+    /// that only opens a submenu.
+    pub id: u32,
+    /// The text as Windows shows it, without the `&` of its access key;
+    /// empty for a separator.
+    pub text: String,
+    /// A divider line.
+    pub separator: bool,
+    /// A submenu's items, one level deep (a submenu inside it is left out).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ShellMenuItem>,
 }
 
 impl Response {
@@ -1067,6 +1119,7 @@ impl Response {
         "undo_started",
         "workspace_info",
         "update_state",
+        "shell_menu",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -1111,6 +1164,7 @@ impl Response {
             Self::UndoStarted { .. } => "undo_started",
             Self::WorkspaceInfo { .. } => "workspace_info",
             Self::UpdateState(_) => "update_state",
+            Self::ShellMenu { .. } => "shell_menu",
         }
     }
 }
@@ -1707,6 +1761,15 @@ pub enum ErrorCode {
     /// `program.<name>`: the program's command line would be longer than
     /// 30,000 characters (many selected paths).
     CommandLineTooLong,
+    /// Windows could not build its menu within 3 s (the paths are not in
+    /// one folder, one is gone, a shell extension is slow), or could not
+    /// run the item; the message says why.
+    ShellMenuError,
+    /// No menu has that `menu_id` for this connection: an item was chosen
+    /// already, it waited longer than 30 s, or a newer one replaced it.
+    NoSuchMenu,
+    /// `contextMenu.shellMenu` is off: the window shows its own menu.
+    ShellMenuOff,
 }
 
 #[cfg(test)]
@@ -2052,6 +2115,13 @@ mod tests {
             Request::UpdateApply,
             Request::UpdateRollback,
             Request::UpdateSnooze,
+            Request::ShellMenu {
+                paths: vec![r"C:\data\a.txt".to_owned(), r"C:\data\b.txt".to_owned()],
+            },
+            Request::ShellMenuInvoke {
+                menu_id: 3,
+                item_id: 19,
+            },
         ]
     }
 
@@ -2385,7 +2455,52 @@ mod tests {
                 branch: Some("main".to_owned()),
             },
             Response::UpdateState(Box::new(update_status())),
+            Response::ShellMenu {
+                menu_id: 3,
+                items: vec![
+                    ShellMenuItem {
+                        id: 19,
+                        text: "Open".to_owned(),
+                        separator: false,
+                        items: Vec::new(),
+                    },
+                    ShellMenuItem {
+                        id: 0,
+                        text: String::new(),
+                        separator: true,
+                        items: Vec::new(),
+                    },
+                    ShellMenuItem {
+                        id: 0,
+                        text: "Send to".to_owned(),
+                        separator: false,
+                        items: vec![ShellMenuItem {
+                            id: 40,
+                            text: "Desktop (create shortcut)".to_owned(),
+                            separator: false,
+                            items: Vec::new(),
+                        }],
+                    },
+                ],
+            },
         ]
+    }
+
+    #[test]
+    fn a_shell_menu_leaves_out_empty_submenus_on_the_wire() {
+        let item = ShellMenuItem {
+            id: 19,
+            text: "Open".to_owned(),
+            separator: false,
+            items: Vec::new(),
+        };
+        assert_eq!(
+            serde_json::to_value(&item).unwrap(),
+            json!({"id": 19, "text": "Open", "separator": false})
+        );
+        let back: ShellMenuItem =
+            serde_json::from_value(json!({"id": 19, "text": "Open", "separator": false})).unwrap();
+        assert_eq!(back, item);
     }
 
     #[expect(clippy::too_many_lines, reason = "one example of every event")]

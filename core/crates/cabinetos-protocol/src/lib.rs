@@ -50,7 +50,7 @@ pub use market::{
 pub use message::{
     CommandInfo, CommandInput, CommandSource, CommandTarget, DiskIdentity, EntryDetail, Envelope,
     ErrorCode, Event, Incoming, Keymap, KeymapBinding, MAX_DESCRIBED, MeasureResult, RefreshReason,
-    Request, Response, SearchHit, SortKey, SortSpec, VolumeDetails,
+    Request, Response, SearchHit, ShellMenuItem, SortKey, SortSpec, VolumeDetails,
 };
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 pub use preview::{ChangeKind, OpenedListing, PreviewRow};

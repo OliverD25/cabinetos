@@ -453,7 +453,7 @@ fn push_argument(line: &mut String, arg: &str) {
 const MAX_PATH: usize = 260;
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     // Opening or editing a file for real starts an application and leaves
@@ -594,9 +594,27 @@ mod tests {
         assert_eq!(extension(r"C:\a.b\c.tar.gz"), Some(".gz"));
     }
 
+    /// Held by each test that shows a property sheet: `sheets` sees every
+    /// dialog of the process, so two such tests at once would take each
+    /// other's sheet for their own.
+    pub(crate) static SHEET_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Closes the dialog `sheet` and waits until it is gone.
+    pub(crate) fn close_sheet(sheet: isize) {
+        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+
+        // SAFETY: a plain call; the window may be gone already, which
+        // makes it fail and nothing else.
+        unsafe { PostMessageW(Some(HWND(sheet as _)), WM_CLOSE, WPARAM(0), LPARAM(0)) }.unwrap();
+        within_ten_seconds("the sheet did not close", || {
+            (!sheets().contains(&sheet)).then_some(())
+        });
+    }
+
     /// The dialogs (window class `#32770`, as a property sheet is) this
     /// process shows now.
-    fn sheets() -> Vec<isize> {
+    pub(crate) fn sheets() -> Vec<isize> {
         use windows::Win32::Foundation::{HWND, LPARAM};
         use windows::Win32::System::Threading::GetCurrentProcessId;
         use windows::Win32::UI::WindowsAndMessaging::{
@@ -633,7 +651,7 @@ mod tests {
     }
 
     /// What `probe` finds within 10 s.
-    fn within_ten_seconds<T>(what: &str, mut probe: impl FnMut() -> Option<T>) -> T {
+    pub(crate) fn within_ten_seconds<T>(what: &str, mut probe: impl FnMut() -> Option<T>) -> T {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
             if let Some(found) = probe() {
@@ -649,9 +667,9 @@ mod tests {
     /// may), and the test closes it.
     #[test]
     fn the_property_sheet_shows_one_file_or_several_and_outlives_its_caller() {
-        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
-
+        let _sheets = SHEET_TESTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = scratch("properties");
         let a = dir.path().join("a.txt");
         let b = dir.path().join("Звіт b.txt");
@@ -676,13 +694,7 @@ mod tests {
             });
             std::thread::sleep(std::time::Duration::from_secs(1));
             assert!(sheets().contains(&sheet), "the sheet closed by itself");
-            // SAFETY: a plain call; the window may be gone already, which
-            // makes it fail and nothing else.
-            unsafe { PostMessageW(Some(HWND(sheet as _)), WM_CLOSE, WPARAM(0), LPARAM(0)) }
-                .unwrap();
-            within_ten_seconds("the sheet did not close", || {
-                (!sheets().contains(&sheet)).then_some(())
-            });
+            close_sheet(sheet);
         }
     }
 
