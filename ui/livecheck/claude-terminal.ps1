@@ -4,7 +4,7 @@
 # the core's pipe (terminal.new with {"profile":"claude","cwd":…}, as the dock's profile list would), then
 # keys into Claude Code as a user types them: a long answer cut short with Esc, a prompt that makes it write
 # a file (its own permission question gets Enter), a folder change in the pane (the sync must leave the
-# tab alone: decision SkipProfile), Ctrl+P (the pane's path lands in its input), and /exit. Two short
+# tab alone: decision SkipProfile), Ctrl+Alt+P (the pane's path lands in its input), and /exit. Two short
 # prompts go to the Claude subscription of whoever is logged in to Claude Code on this PC.
 #
 # It takes the keyboard and the mouse for about two minutes: run it on an unlocked, awake screen that
@@ -79,7 +79,7 @@ $waited = 0
 while ([Live]::IdleMilliseconds() -lt 12000 -and $waited -lt 600) { Start-Sleep -Seconds 2; $waited += 2 }
 "idle for $([Live]::IdleMilliseconds()) ms after waiting $waited s"
 [void][Live]::SetThreadDpiAwarenessContext([IntPtr]::new(-4))
-$VK = @{ Ctrl = 0x11; Shift = 0x10; P = 0x50; Esc = 0x1B; Enter = 0x0D; Back = 0x08; Backquote = 0xC0 }
+$VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; Esc = 0x1B; Enter = 0x0D; Back = 0x08; Backquote = 0xC0 }
 $script:falses = 0
 function Check([string]$text, [bool]$ok) { "{0}: {1}" -f $text, $ok; if (-not $ok) { $script:falses++ } }
 # A step line; before it, the window must be in front, or the keys would go elsewhere: then the run stops.
@@ -199,13 +199,13 @@ $decision = if ($last) { ($last | ConvertFrom-Json).fields.decision } else { '(n
 Check "the folder sync skipped the claude tab (decision SkipProfile)" ($seen -and $decision -eq 'SkipProfile')
 Check "no sync ever decided to type into the claude tab (no cwd sync line with decision Sync)" ((UiLines '"cwd sync".*"decision":"Sync"').Count -eq 0)
 
-# Ctrl+P is a pane key (terminal.insertPath): pressed in the pane it shows the terminal, types the pane's folder at
-# the prompt and hands the keyboard to the page. Inside the page it would be Claude Code's own key (its input history).
-Step "Ctrl+P from the pane: its folder typed into Claude Code's input, then removed"
+# Ctrl+Alt+P is a pane key (terminal.insertPath; Ctrl+P until Phase 16, which gave Ctrl+P to Quick Open): pressed in
+# the pane it shows the terminal, types the pane's folder at the prompt and hands the keyboard to the page.
+Step "Ctrl+Alt+P from the pane: its folder typed into Claude Code's input, then removed"
 $typed = (UiLines '"paths typed at the prompt"').Count
-[Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Seconds 2
+[Live]::Press($VK.Ctrl, $VK.Alt, $VK.P); Start-Sleep -Seconds 2
 Check "the path was typed at Claude Code's prompt" (WaitLog { UiLines '"paths typed at the prompt"' } $typed 5)
-Check "the terminal's page has the keyboard again after Ctrl+P" ((UiLines '"a page has the keyboard".*"page":"terminal"').Count -gt $handed)
+Check "the terminal's page has the keyboard again after Ctrl+Alt+P" ((UiLines '"a page has the keyboard".*"page":"terminal"').Count -gt $handed)
 Shot $h "$ShotDir\claude-4-path-typed.png"
 # The typed path is quoted and the cursor sits after it: Backspace once per character, and a few more for safety.
 $parent = Split-Path $Folder -Parent

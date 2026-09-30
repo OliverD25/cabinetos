@@ -140,7 +140,7 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   Claude Code in the pane's folder; a long answer cut short with Esc; a
   prompt that makes it write a file, its permission question answered
   with Enter; Backspace in the pane, whose folder change the sync must
-  skip (decision `SkipProfile`); Ctrl+P from the pane, which types the
+  skip (decision `SkipProfile`); Ctrl+Alt+P from the pane, which types the
   path into its input; `/exit`. Two short prompts go to the Claude login
   of whoever runs it. It waits until nobody has touched the PC for 12 s
   before it takes the keyboard, stops when another window comes in front,
@@ -1563,7 +1563,7 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   not catch it; the caption says "cwd not synced: the profile does not
   follow the pane"), when the shell is in that folder already, or when it
   ended. A new tab of such a profile starts with that caption, not with
-  "synced", since it will never sync. Ctrl+P and Ctrl+Shift+Enter still
+  "synced", since it will never sync. Ctrl+Alt+P and Ctrl+Shift+Enter still
   type paths at such a prompt: that is the user's own request. A skipped sync is not tried
   again when the line is finished, because that line may be the user's own
   `cd`; the next change of the pane's folder tries again. Only the shown
