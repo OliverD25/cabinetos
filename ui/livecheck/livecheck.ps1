@@ -1572,6 +1572,76 @@ $closes = (ShellLines 'context menu closed').Count
 [Live]::Press($VK.Esc)
 "18: Esc closed it: $([bool](WaitShellLines 'context menu closed' $closes) -and (AppElementGone 'New folder'))"
 
+# ----- 19: column widths (docs/ui.md, "Column widths") -----
+# A real drag of the left pane's Modified|Type grip by 40 px, then a real double-click on its Type heading, with the real
+# mouse. The grip is 8 px wide and centred on the divider, and the default look has no gap between the columns, so the grip
+# is where the Type heading's text starts: the drag presses 1 px left of that. The headings are found by UI Automation (text
+# elements named "Modified" and "Type"; the left pane's are the ones furthest left). The window's log says what happened:
+# "columns changed" (how: drag, fit or reset; the widths) and "columns saved". The palette's Reset Column Widths puts the
+# theme's widths back, so the file ends as the run found it.
+function HeadingElement([string]$name) {
+  $ae = [System.Windows.Automation.AutomationElement]
+  $condition = New-Object System.Windows.Automation.AndCondition(
+    (New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $name)),
+    (New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text)))
+  $mine = New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, [int]$script:p.Id)
+  $found = foreach ($window in $ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $mine)) {
+    $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition) | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.BoundingRectangle.Width -gt 0 }
+  }
+  $found | Sort-Object { $_.Current.BoundingRectangle.Left } | Select-Object -First 1
+}
+function ColumnsChanged([string]$how, [int]$before, [int]$seconds = 5) {
+  $line = WaitShellLines 'columns changed' $before $seconds { param($line) $line.fields.how -eq $how }
+  if ($line -and $line.fields.how -eq $how) { $line }
+}
+$c19 = "$files\columns19"
+New-Item -ItemType Directory -Force "$c19\a folder" | Out-Null
+foreach ($name in 'notes.txt', 'readme.md', 'data.json', 'script.ps1') { Set-Content -LiteralPath "$c19\$name" -Value "x" -NoNewline }
+
+Step "19: the left pane in a folder of four files; the Modified|Type grip dragged 40 px right with the real mouse"
+GoLeftPane $c19
+$modifiedHeading = HeadingElement 'Modified'
+$typeHeading = HeadingElement 'Type'
+if ($modifiedHeading -and $typeHeading) {
+  $m0 = $modifiedHeading.Current.BoundingRectangle; $t0 = $typeHeading.Current.BoundingRectangle
+  $oldModified = ($t0.Left - $m0.Left) / $scale
+  $gripX = [int]($t0.Left - 1); $gripY = [int]($t0.Top + $t0.Height / 2)
+  Step "19: Modified is $([Math]::Round($oldModified, 1)) px wide; the grip at $gripX,$gripY"
+  $changes = (ShellLines 'columns changed').Count
+  $saves = (ShellLines 'columns saved').Count
+  [Live]::Drag($gripX, $gripY, [int]($gripX + 40 * $scale), $gripY)
+  $dragged = ColumnsChanged 'drag' $changes
+  $saved = WaitShellLines 'columns saved' $saves
+  "19: the drag changed the columns ($($dragged.fields.modified)/$($dragged.fields.type)/$($dragged.fields.size), Name $($dragged.fields.name)): $([bool]$dragged)"
+  "19: Modified is 40 px wider ($([Math]::Round($oldModified, 1)) -> $($dragged.fields.modified)): $($dragged -and [Math]::Abs($dragged.fields.modified - $oldModified - 40) -le 2)"
+  "19: the widths were saved ($($saved.fields.columns)): $([bool]$saved)"
+  $t1 = (HeadingElement 'Type').Current.BoundingRectangle
+  "19: the Type heading moved with the divider ($([Math]::Round(($t1.Left - $t0.Left) / $scale, 1)) px): $([Math]::Abs(($t1.Left - $t0.Left) / $scale - 40) -le 2)"
+  Shot $h "$ShotDir\19-dragged-live.png"
+
+  Step "19: a double-click on the Type heading fits Type to its widest text on screen"
+  $changes = (ShellLines 'columns changed').Count
+  $x19 = [int]($t1.Left + $t1.Width / 2); $y19 = [int]($t1.Top + $t1.Height / 2)
+  [Live]::Click($x19, $y19); [Live]::Click($x19, $y19)
+  $fit = ColumnsChanged 'fit' $changes
+  $fitted = ShellLines 'columns fitted' | Select-Object -Last 1
+  "19: the double-click fitted Type ('$($fitted.fields.type_text)', $($fitted.fields.type_text_width) px, fit $($fitted.fields.type_fit)) to $($fit.fields.type) px: $([bool]$fit -and $fitted.fields.column -eq 'type')"
+  Shot $h "$ShotDir\19-fitted-live.png"
+} else {
+  "19: the Modified and Type headings were found by UI Automation: False"
+}
+
+Step "19: the palette's Reset Column Widths gives the theme's widths back"
+$changes = (ShellLines 'columns changed').Count
+$saves = (ShellLines 'columns saved').Count
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+[Live]::Type("reset column widths"); Start-Sleep -Milliseconds 700
+[Live]::Press($VK.Enter)
+$reset = ColumnsChanged 'reset' $changes
+$saved = WaitShellLines 'columns saved' $saves
+"19: the reset ran ($($reset.fields.modified)/$($reset.fields.type)/$($reset.fields.size)), and the file has no widths: $([bool]$reset -and [bool]$saved -and $null -eq (ConfigUi).columns)"
+Shot $h "$ShotDir\19-reset-live.png"
+
 Step "close"
 $script:h = $null
 [void]$p.CloseMainWindow(); [void]$p.WaitForExit(8000)

@@ -137,7 +137,10 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   program back with Insert, the prompt, a drag with the real mouse,
   Alt+Down, Alt+Up and Ctrl+S), Shift+right-click with Windows' Copy (the
   clipboard is read back), and the empty space's menu ("The context menu",
-  "Editing the menu").
+  "Editing the menu"). Last, section 19, the column widths: the left pane's
+  Modified|Type grip dragged 40 px with the real mouse, a real double-click
+  on its Type heading, and the palette's Reset Column Widths ("Column
+  widths").
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
