@@ -3,7 +3,7 @@
   "plugin": "plugin",
   "tool": "../../tools/agent-chat",
   "long": {
-    "plugin": "CabinetOS Agent works the file manager for you. You ask in words. It asks a model you choose (Claude with your own API key, or a model on your own computer through Ollama) and turns the answer into the same commands you can type yourself. By default every change first shows as a preview, and nothing happens until you apply it; you can also let it apply changes at once, and every change can be undone. The agent never sees your key: the core adds it to the request. It works from the command palette (Ctrl+K Ctrl+A). Install Agent Chat (agent-chat) too if you want a chat window for it.",
+    "plugin": "CabinetOS Agent works the file manager for you. You ask in words. It asks a model you choose (Claude with your own API key, or a model on your own computer through Ollama) and turns the answer into the same commands you can type yourself. By default every change first shows as a preview, and nothing happens until you apply it; you can also let it apply changes at once, and every change can be undone. The agent never sees your key: the core adds it to the request. It can also watch a folder and deal with each new file by a rule you write, a file at a time, with at most ten files a minute. It works from the command palette (Ctrl+K Ctrl+A). Install Agent Chat (agent-chat) too if you want a chat window for it.",
     "tool": "Agent Chat is the chat window for the CabinetOS Agent plugin (agent). It shows what you asked, what the agent did and the changes it proposes; you choose how much the agent may do, and you can undo its changes. It needs the plugin: install CabinetOS Agent (agent) too, or this page has nothing to talk to."
   }
 }

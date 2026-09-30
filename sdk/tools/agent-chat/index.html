@@ -22,6 +22,7 @@
       <button type="button" role="radio" aria-checked="false" data-tier="3" title="It applies changes at once. You can undo them.">Autonomous</button>
     </div>
     <button type="button" id="undo" title="Undo the last changes the agent made">Undo</button>
+    <button type="button" id="rules-toggle" aria-pressed="false" title="Folders the agent watches: it deals with each new file by your rule">Rules</button>
     <button type="button" id="log" aria-pressed="false" title="What the agent was asked and what it did">Log</button>
   </header>
   <p id="tier-note" class="note" role="status"></p>
@@ -29,6 +30,15 @@
     <p id="empty" class="empty">Ask in your own words, for example &ldquo;put the photos of last summer in a folder of their own&rdquo;. Drag files from a pane onto this page to point at them.</p>
   </main>
   <section id="audit" hidden aria-label="The agent's log"></section>
+  <section id="rules" hidden aria-label="Watch rules">
+    <p class="hint">A rule names a folder and what to do with each new file that arrives in it. The agent asks the model once for each new file, at most 10 files a minute, and pauses a rule after 3 failures in a row. At the Advisor tier the rules stay idle.</p>
+    <ul id="rule-list" class="rule-list"></ul>
+    <form id="rule-form" autocomplete="off">
+      <input id="rule-folder" type="text" placeholder="Folder, for example C:\Inbox" aria-label="Folder to watch">
+      <textarea id="rule-text" rows="2" placeholder="What to do with each new file, for example: put it in a folder of its year" aria-label="What to do with each new file"></textarea>
+      <div class="actions"><span class="hint"></span><button type="submit" class="primary">Add rule</button></div>
+    </form>
+  </section>
   <form id="composer" autocomplete="off">
     <div id="attached" class="chips" hidden></div>
     <label id="use-selection" class="check" hidden><input type="checkbox" id="use-selection-box" checked> <span id="use-selection-text"></span></label>

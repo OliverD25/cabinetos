@@ -6,7 +6,7 @@ It needs the plugin `agent` ([sdk/extensions/agent](../../extensions/agent/plugi
 without it the page has nothing to talk to.
 
 It opens no file. It has a page in the sidebar (`sidebar: true`), shows what
-you asked and what the agent did, has buttons for the three tiers, Undo and
+you asked and what the agent did, has buttons for the three tiers, Undo, the watch rules and
 the Log, and takes files dragged from a pane as what to work on.
 
 | File | What |

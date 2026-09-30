@@ -34,6 +34,9 @@ two marketplace items name each other, so you find both.
   listings (`fs:read`). Every change goes to the core as a preview, like a
   change a person asks for.
 - **Everything is logged** in an audit log that you can read.
+- **It can watch folders.** A watch rule names a folder and what to do with
+  each new file that arrives; the tier decides what becomes of the model's
+  answer, as for any request.
 
 ## Install and set up
 
@@ -47,6 +50,7 @@ two marketplace items name each other, so you find both.
    | `config:read` | Its own settings (`plugins.agent.settings`), and nothing else of `plugins`. |
    | `events:emit` | To tell the chat page and the window what it answered. |
    | `fs:read`, root `%USERPROFILE%` | To list the folders you ask about: names, sizes and dates. It reads no file contents. |
+   | `fs:watch`, root `%USERPROFILE%` | To hear about new files in the folders you give a watch rule (names only; it can read them where `fs:read` allows). |
    | `net`, hosts `api.anthropic.com` and `localhost:11434`, secrets `anthropic` and `openai` | To send your request and the folder listings to the model. |
    | `core:request`, requests `get_window_state`, `preview_listing`, `preview_apply`, `preview_cancel`, `undo_job`, `search` | To read what the window shows, propose changes as a preview, apply one (Autonomous tier only), undo, and search by name. It cannot read secrets or change settings. |
 
@@ -91,6 +95,7 @@ names the key.
 | `base` | URL | `http://localhost:11434` | The server of an `openai` provider (`<base>/v1/chat/completions`). |
 | `maxTokens` | 1 to 64000 | `4096` | The longest answer asked for. |
 | `tier` | `1`, `2`, `3` | `2` | How much the agent may do (see below). The tier you set with "Agent: Set Tier" or the chat page wins until you change `tier` here. |
+| `rules` | a list of `{ "folder", "rule" }` | none | Watch rules (see "Watch folders"). `folder` is an absolute Windows path, `rule` says what to do with each new file, and each folder has one rule. |
 | `fakeReplies` | a file name | `fake-replies.json` | For `fake`: a file in the plugin's own data folder with a JSON list of replies, given one after the other. |
 
 ## Tiers
@@ -113,6 +118,10 @@ raise it.
 | `agent.tier` | none | `input` or `tier` (1, 2 or 3) | Sets the tier, or, with no number, says which is set. |
 | `agent.undo` | none | `job` (optional) | Undoes the changes of the last applied preview, the last job first; or one job. |
 | `agent.audit` | none | `n` (optional, 20) | Tells the chat page the last entries of the audit log. |
+| `agent.rule.add` | none | `folder` and `rule`, or `input` (asked in a box): the folder, then the rule | Adds a watch rule and starts watching. |
+| `agent.rule.remove` | none | `folder`, or `input` | Removes a rule that `agent.rule.add` made. |
+| `agent.rule.resume` | none | `folder`, or `input` | Starts a paused or blocked rule again. |
+| `agent.rule.list` | none | `quiet` (optional) | Tells the chat page the rules; and, unless `quiet`, puts a line in the status bar. |
 
 ## How a request runs
 
@@ -152,6 +161,61 @@ agent learns which jobs a preview started from the core (`preview-applied`,
 [plugins.md](plugins.md)), also when you applied it yourself in the window;
 it remembers the last one over a restart.
 
+## Watch folders
+
+A watch rule names a folder and says what to do with each new file that
+arrives in it: "put each file in a folder of its year", "move the receipts to
+`D:\Papers\Receipts`". Rules come from two places:
+
+- **`plugins.agent.settings.rules`** in `cabinetos.json`, a list of
+  `{ "folder": "C:\\Users\\me\\Inbox", "rule": "..." }`. The agent starts
+  watching them when it starts and again whenever the settings change.
+- **`agent.rule.add`**, from the palette (one text: the folder, in quotes when
+  it has a space, then the rule) or from the chat page. A plugin may not
+  change the configuration, so these rules are kept in `rules.json` in the
+  plugin's own folder. A folder that has a rule in the settings cannot get
+  another; `agent.rule.remove` removes only the ones `agent.rule.add` made.
+
+What happens for a new file:
+
+1. The core watches the folder (`fs:watch`) and tells the agent about
+   `created` files. A file that gets its real name from a temporary one (a
+   finished browser download, `.crdownload`) counts as new too. Files that are
+   still being written (`.crdownload`, `.part`, `.tmp`), Office's `~$` files,
+   `desktop.ini` and `Thumbs.db` do not. Files that were there before the
+   agent started are not new. Subfolders are not watched.
+2. The agent asks the model **once** for each new file. The model is given the
+   rule, the file's path, what `describe` shows for it, and the names in the
+   folder. It has **one round**: nothing it looks at comes back, so it must use
+   what it was given and answer with the commands that change files, or with
+   words when the rule does not apply.
+3. The tier decides what becomes of the answer, as for any request. **Tier 2:**
+   a preview is offered (the agent tells the window with `agent.preview`, which
+   opens it in the other pane) and only you apply it. **Tier 3:** it is applied
+   at once and a status bar line says so; `agent.undo` reverses it. **Tier 1:**
+   the rules stay idle, and you are told once.
+4. Every request is in the audit log, with the source `rule`.
+
+Some limits keep a folder from costing money or looping:
+
+- A rule is **paused after 3 failures in a row** (the model cannot be reached,
+  or answers with an error), with a notice. `agent.rule.resume` (or the
+  Resume button) starts it again. A rule whose words you change starts afresh.
+- A rule hands the model **at most 10 new files a minute**. The other files of
+  that minute are skipped, and you are told once.
+- The changes the agent made itself (a renamed file shows up as a new file)
+  are not new files: the agent remembers the paths its changes made, and
+  ignores the first event about each. Otherwise a rule that renames files
+  would rename them for ever.
+- A rule proposes for its own file. It never cancels the preview you are
+  looking at, which a new request of yours would.
+- A folder the core cannot watch (outside the roots of `fs:watch`, not there,
+  or more than 16 folders) is a **blocked** rule with the reason. A watch that
+  ends by itself (the folder was deleted) blocks it the same way.
+
+The chat page's Rules button lists the rules with their state (watching,
+paused, blocked), and has a form to add one.
+
 ## The audit log
 
 One JSON line for each request, in the plugin's data folder,
@@ -169,7 +233,7 @@ button shows the last entries.
 `placement` is `dock`, it opens no file (`accepts` is empty) and it has a
 page in the sidebar. It shows what you asked, the agent's words, the changes
 it proposes and the command lines it ran (open, when one failed), the three
-tiers as buttons, Undo and the Log. Drag files from a pane onto the page to
+tiers as buttons, Undo, the watch rules and the Log. Drag files from a pane onto the page to
 point the agent at them; otherwise the selected files go along.
 
 The page speaks the window's page protocol only. It asks the window to run
@@ -181,6 +245,7 @@ commands, and the plugin answers with events:
 | `command agent.chat { message, paths }` | A message. |
 | `command agent.tier { tier, input }` | Set the tier; with an empty `input`, read it. |
 | `command agent.undo`, `command agent.audit { n }` | Undo; the log. |
+| `command agent.rule.list { quiet }`, `agent.rule.add { folder, rule, input }`, `agent.rule.remove { folder, input }`, `agent.rule.resume { folder, input }` | The watch rules. The `input` keeps the window from asking for the text in a box. |
 
 | Event of the agent (`plugin-event`) | Payload | The page shows |
 |---|---|---|
@@ -190,6 +255,8 @@ commands, and the plugin answers with events:
 | `agent.preview` | `preview` | Nothing but a line: the window opens the preview in the other pane. |
 | `agent.tier` | `tier`, `label` | Which tier is set. |
 | `agent.audit` | `entries` | The log. |
+| `agent.rules` | `rules` (`folder`, `rule`, `status`, `why`, `origin`) | The watch rules. |
+| `badge` | `view: "agent-chat"`, `kind: "spinner"` or `null` | Nothing: the window marks the chat's button in the rail while a request or a rule runs ([tool-extensions.md](tool-extensions.md), "The sidebar page"). |
 
 The window's general rules make this work without special code: an event
 whose payload has a string `preview` opens that preview in the other pane, and
@@ -203,7 +270,8 @@ or the window would open it twice.
 A page may run only the commands the window lists
 (`ToolMessages.AllowedCommands`, [tool-extensions.md](tool-extensions.md)).
 For the chat page to work, that list needs `agent.chat`, `agent.tier`,
-`agent.undo` and `agent.audit`. That is the shell's part; until then the page
+`agent.undo`, `agent.audit`, `agent.rule.add`, `agent.rule.remove`,
+`agent.rule.resume` and `agent.rule.list`. That is the shell's part; until then the page
 loads and the palette command "Agent: Ask" works.
 
 ## Testing without a model
@@ -218,7 +286,8 @@ real model:
   runs the plugin's logic as ordinary Rust tests, with a fake host.
 - `core/crates/cabinetos-plugins/tests/host.rs` loads the built WebAssembly
   (`sdk/fixtures/plugins/agent`) and runs `agent.ask` to a `preview_listing`
-  and `agent.undo` after a `preview_apply`, with real reads of a real folder.
+  and `agent.undo` after a `preview_apply`, with real reads of a real folder,
+  and a new file in a watched folder to a preview.
 - `core/crates/cabinetos-market/tests/install.rs` installs the plugin and the
   chat as the marketplace would.
 

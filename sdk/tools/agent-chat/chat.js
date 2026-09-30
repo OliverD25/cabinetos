@@ -7,8 +7,9 @@
 //
 // The plugin tells the page what happened with events, so a command's
 // result is not needed: agent.reply (an answer), agent.error, agent.notice,
-// agent.preview (the window opens the preview itself), agent.tier and
-// agent.audit. Everything from the model goes in with textContent.
+// agent.preview (the window opens the preview itself), agent.tier,
+// agent.audit and agent.rules. Everything from the model goes in with
+// textContent.
 'use strict';
 
 (() => {
@@ -32,6 +33,7 @@
 
   const thread = $('thread');
   const audit = $('audit');
+  const rulesView = $('rules');
   const input = $('input');
   const send = $('send');
   const tierNote = $('tier-note');
@@ -348,14 +350,91 @@
     }
   }
 
-  $('log').addEventListener('click', () => {
-    const showLog = audit.hidden;
-    audit.hidden = !showLog;
-    thread.hidden = showLog;
-    $('log').setAttribute('aria-pressed', String(showLog));
-    if (showLog) {
-      post({ type: 'command', id: 'agent.audit', args: { n: 30 } });
+  // One of three views fills the place between the bar and the composer:
+  // the conversation, the log, or the watch rules. A button shows its view,
+  // and pressing it again goes back to the conversation.
+  const views = { thread, audit, rules: rulesView };
+  const viewButtons = { audit: $('log'), rules: $('rules-toggle') };
+
+  function showView(name) {
+    for (const [key, node] of Object.entries(views)) {
+      node.hidden = key !== name;
     }
+    for (const [key, button] of Object.entries(viewButtons)) {
+      button.setAttribute('aria-pressed', String(key === name));
+    }
+    if (name === 'audit') {
+      post({ type: 'command', id: 'agent.audit', args: { n: 30 } });
+    } else if (name === 'rules') {
+      post({ type: 'command', id: 'agent.rule.list', args: { quiet: true } });
+    }
+  }
+
+  for (const [name, button] of Object.entries(viewButtons)) {
+    button.addEventListener('click', () => showView(views[name].hidden ? name : 'thread'));
+  }
+
+  // ----- the rules -----
+
+  function ruleButton(label, title, run) {
+    const button = el('button', '', label);
+    button.type = 'button';
+    button.title = title;
+    button.addEventListener('click', run);
+    return button;
+  }
+
+  function ruleNode(rule) {
+    const node = el('li', 'rule');
+    node.appendChild(el('div', 'folder', rule.folder));
+    node.appendChild(el('div', 'words', rule.rule));
+    const row = el('div', 'row');
+    row.appendChild(el('span', `tag ${rule.status}`, rule.status));
+    if (rule.origin === 'settings') {
+      row.appendChild(el('span', '', 'in your settings'));
+    }
+    if (rule.why) {
+      row.appendChild(el('span', '', rule.why));
+    }
+    const buttons = el('span', 'buttons');
+    if (rule.status !== 'watching') {
+      buttons.appendChild(ruleButton('Resume', 'Start this rule again', () => {
+        post({ type: 'command', id: 'agent.rule.resume', args: { folder: rule.folder, input: rule.folder } });
+      }));
+    }
+    if (rule.origin === 'added') {
+      buttons.appendChild(ruleButton('Remove', 'Stop watching this folder', () => {
+        post({ type: 'command', id: 'agent.rule.remove', args: { folder: rule.folder, input: rule.folder } });
+      }));
+    }
+    row.appendChild(buttons);
+    node.appendChild(row);
+    return node;
+  }
+
+  function renderRules(rules) {
+    const list = $('rule-list');
+    list.textContent = '';
+    const known = Array.isArray(rules) ? rules : [];
+    if (known.length === 0) {
+      list.appendChild(el('li', 'empty', 'No folder is watched yet.'));
+      return;
+    }
+    for (const rule of known) {
+      list.appendChild(ruleNode(rule));
+    }
+  }
+
+  $('rule-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const folder = $('rule-folder').value.trim();
+    const rule = $('rule-text').value.trim();
+    if (!folder || !rule) {
+      return;
+    }
+    // An "input" keeps the window from asking for the text in a prompt.
+    post({ type: 'command', id: 'agent.rule.add', args: { folder, rule, input: rule } });
+    $('rule-text').value = '';
   });
 
   // ----- what the window says -----
@@ -376,7 +455,10 @@
     const payload = payloadOf(message);
     switch (message.name) {
       case 'agent.reply':
-        setBusy(false);
+        // A watch rule's answer is not the one this person waits for.
+        if (payload.source !== 'rule') {
+          setBusy(false);
+        }
         addAgent(payload);
         break;
       case 'agent.error':
@@ -397,6 +479,9 @@
         break;
       case 'agent.audit':
         renderAudit(payload.entries);
+        break;
+      case 'agent.rules':
+        renderRules(payload.rules);
         break;
       default:
         break;

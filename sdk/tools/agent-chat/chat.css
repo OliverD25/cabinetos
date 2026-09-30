@@ -165,7 +165,8 @@ button[aria-pressed="true"] {
 /* ----- the thread ----- */
 
 #thread,
-#audit {
+#audit,
+#rules {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -174,6 +175,7 @@ button[aria-pressed="true"] {
 }
 
 #audit[hidden],
+#rules[hidden],
 #thread[hidden] {
   display: none;
 }
@@ -338,6 +340,74 @@ summary {
 
 .entry .failed {
   color: var(--error);
+}
+
+/* ----- the rules ----- */
+
+.rule-list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.rule {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--fill);
+}
+
+.rule .folder {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rule .words {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+.rule .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rule .row .buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.tag.watching {
+  color: var(--ok);
+}
+
+.tag.paused,
+.tag.blocked {
+  color: var(--warn);
+}
+
+#rule-form input,
+#rule-form textarea {
+  display: block;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--fill);
+  font: inherit;
+  color: inherit;
+}
+
+#rule-form input:focus-visible,
+#rule-form textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* ----- the composer ----- */

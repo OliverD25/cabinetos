@@ -247,7 +247,8 @@ is the chat with the Agent plugin ([extensions/agent.md](extensions/agent.md)).
 It opens no file (`accepts` is empty), has a page in the sidebar, and is the
 example of a page that follows a plugin: it sends `subscribe` and runs the
 plugin's commands, and the plugin answers with events. It needs the window to
-let a page run `agent.chat`, `agent.tier`, `agent.undo` and `agent.audit`.
+let a page run the agent's commands: `agent.chat`, `agent.tier`, `agent.undo`,
+`agent.audit` and the four `agent.rule.*` ones.
 
 `editor.openMarkdownPreview` is also in the palette ("Editor: Open
 Markdown Preview", Ctrl+K V in a pane): it opens the focused Markdown file
