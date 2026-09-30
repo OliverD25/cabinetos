@@ -1573,6 +1573,40 @@ running. A folder being counted is not asked about again. Checked on
 counted and 3.5 GB at the end; Shift+Alt+Enter on the repository counted
 `core\` at 27.7 GB in under a second.
 
+**Every folder of a listing.** The setting `panes.folderSizes` (default
+`false`) and the command `view.toggleFolderSizes` (Toggle Folder Sizes, in
+the palette, no default key) measure folders without a key. While the
+setting is on, a pane asks the core to count the folders of a listing when
+it opens or is listed again. It uses the same `measure_paths` request as
+Shift+Alt+Enter, with the folders in the listing's order. A folder that has
+a size, or is being counted, is not asked about again. So a watched folder
+that is listed again counts only its new folders. The Size column shows the
+running totals, and the status bar the sum, as for a count by key. A pane
+that leaves its folder cancels the count still running (`cancel_measure`),
+so the core does not go on walking a large tree for a folder nobody looks
+at. A count whose `measure_started` reply comes after the pane left is
+cancelled too. The core walks on its blocking threads, and the window only
+asks and shows. The setting is off by default because the walk costs disk
+time (Article 4). A listing with thousands of folders sends one request
+with all their paths.
+
+The toggle asks the core to write `panes.folderSizes` with the opposite
+value. The window then follows `config_changed`, as it does for an edit of
+the file by hand. Turning the setting on counts both panes' listings at
+once. Turning it off cancels the counts still running in both panes,
+those started by key too, and starts none. The sizes already shown stay
+until the folder changes. Space, Calculate Folder Size and Shift+Alt+Enter
+work as before, with the setting on or off.
+
+The log says what happened (Article 12). "folder sizes asked" has `pane`,
+`folders`, `why` (`listed` or `setting on`) and `listing_request`. "folder
+sizes counted" comes when a count ends, with `pane`, `folders`, `bytes` and
+`cancelled`. "folder sizes cancelled" has `pane`, `measures` and `why`
+(`left the folder` or `setting off`). "folder sizes follow the
+configuration" has `on`. The end-to-end test `FolderSizesEndToEndTests`
+checks all of it on a real window and core. The live check does the same
+with the palette.
+
 ### New text file
 
 Shift+F4 shows a name box over a new row at the top of the rows on

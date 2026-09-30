@@ -141,6 +141,7 @@ The core's commands, in palette order:
 | `update.showNotes` | Update: Show Release Notes | | | UI |
 | `view.fitColumns` | View: Fit Columns to Content | | `filesView` | UI |
 | `view.resetColumns` | View: Reset Column Widths | | `filesView` | UI |
+| `view.toggleFolderSizes` | View: Toggle Folder Sizes | | | UI |
 
 - The list is the design's `COMMANDS` array without its plugin commands
   (hex view, Git, compression), and the shell's own commands: moving
@@ -171,6 +172,11 @@ The core's commands, in palette order:
   Modified, Type and Size as wide as their texts on screen, as a
   double-click on the Name heading does; the second gives the theme's
   widths back. They have no default keys: the palette is their place.
+- `view.toggleFolderSizes` (Phase 19b) switches the setting
+  `panes.folderSizes`: while it is on, every folder of a listing is
+  measured when the listing opens ([ui.md](ui.md), "Folder sizes"). It has
+  no default key: the palette is its place. It works from anywhere, so its
+  context is empty.
 - The rows from `go.root` to `terminal.insertSelectedPaths` are Total
   Commander's small commands (sub-phase 11a): their titles, keys and
   contexts are the research note's

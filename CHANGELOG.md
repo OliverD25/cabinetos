@@ -15,6 +15,8 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The theme picker (Ctrl+K Ctrl+T) previews the highlighted theme live, whether the keys or the pointer moved the highlight; Enter or a click keeps it, and Esc keeps the current theme.
 - The file panes' column widths are yours, in any theme: drag the grip at a divider of the column headers, or double-click a heading (or a grip) to fit its column to the texts on screen; the Name heading fits the other three. Both panes share the widths, and they are saved in `cabinetos.json` as `ui.columns`. "Reset Column Widths" in the palette gives the theme's widths back.
 
+- Folder sizes for every folder of a listing: turn on `panes.folderSizes` in `cabinetos.json`, or run "Toggle Folder Sizes" from the palette, and each folder's Size is counted when a listing opens, with no key. It is off by default, because counting costs disk time. A pane that leaves a folder stops its count.
+
 ### Changed
 
 - The right-click menu is WinUI's command bar menu, as Windows 11's Explorer shows it: the icons in a row at the top, the keys on the right of each row.
