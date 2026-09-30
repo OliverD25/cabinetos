@@ -50,6 +50,7 @@ public sealed partial class MainWindow
             Diag.Info(MenuTarget, "context menu closed");
             FocusActivePane();
         };
+        _contextMenu.Opened += () => Diag.Info(MenuTarget, "context menu opened");
         _contextMenu.Run = RunMenuEntry;
         _windowsMenu.Closed += () =>
         {

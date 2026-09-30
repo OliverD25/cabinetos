@@ -152,6 +152,68 @@ public class ContextMenuEndToEndTests
     }
 
     /// <summary>
+    /// A menu asked for while the flyout of the same shape is still closing comes on screen (a fault
+    /// of step 1: the cached flyout was shown again inside its own <c>Closed</c>, which WinUI drops, and
+    /// every later menu of that shape then waited for a <c>Closed</c> that never came). The file menu
+    /// on alpha.txt, closed, and at once the same menu on the same row, twice: the place matters,
+    /// since a ShowAt at another place (another row) came through even inside <c>Closed</c>. "On
+    /// screen" is WinUI's <c>Opened</c>, not the window's own bookkeeping.
+    /// </summary>
+    [Fact]
+    public async Task A_menu_asked_for_while_the_same_menu_closes_comes_on_screen()
+    {
+        var (run, root, data) = Prepare("menu-reopen");
+        try
+        {
+            var process = run.Start("reopen", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "menu:alpha.txt",
+                "wait:600",
+                "shell:first",
+                // No step waits between these two: the second menu is asked for while the first one closes.
+                "cmd:overlay.close",
+                "menu:alpha.txt",
+                "wait:1000",
+                "shell:second",
+                "cmd:overlay.close",
+                "menu:alpha.txt",
+                "wait:1000",
+                "shell:third",
+                "cmd:overlay.close",
+                "wait:600",
+                "shell:closed",
+                "shot:done"));
+            var logs = await run.FinishAsync("reopen", process, "done");
+
+            foreach (var label in new[] { "first", "second", "third" })
+            {
+                State(logs, label, state =>
+                {
+                    Assert.True(state.GetProperty("context_menu_on_screen").GetBoolean(), $"the {label} menu is not on screen");
+                    Assert.Equal("alpha.txt", state.GetProperty("pane0_cursor").GetString());
+                    Assert.StartsWith("Open|", state.GetProperty("context_menu").GetString());
+                });
+            }
+            State(logs, "closed", state => Assert.False(state.GetProperty("context_menu_on_screen").GetBoolean()));
+            // The second and the third close the one before them: the shown lines come within 50 ms of the close.
+            var closes = logs.Where(l => Message(l) == "command executed" && Field(l, "command").GetString() == "overlay.close").Select(Timestamp).ToList();
+            var shown = logs.Where(l => Message(l) == "context menu shown").Select(Timestamp).ToList();
+            Assert.Equal(3, shown.Count);
+            Assert.InRange((shown[1] - closes[0]).TotalMilliseconds, 0, 50);
+            Assert.InRange((shown[2] - closes[1]).TotalMilliseconds, 0, 50);
+            Assert.Equal(3, logs.Count(l => Message(l) == "context menu opened"));
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
     /// Phase 18, step 2: "Edit Menu…" turns the file menu into its edit mode. A row goes with its X,
     /// a command comes through "Add Command…" (Insert) and moves with Alt+Up, Delete takes it out,
     /// and "Done" saves the list through the core: the file holds it and the next menu shows it. A

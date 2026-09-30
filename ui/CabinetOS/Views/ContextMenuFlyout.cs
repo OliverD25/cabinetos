@@ -35,6 +35,9 @@ internal sealed class ContextMenuFlyout
     // closing, and holds another flyout's back until then, so a new menu waits here for that Closed (_pending).
     private CommandBarFlyout? _shown;
     private (FrameworkElement Target, Point At)? _pending;
+
+    // The flyout WinUI says is open (its Opened came, its Closed not yet): a ShowAt WinUI dropped never gets here.
+    private CommandBarFlyout? _onScreen;
     private ContextMenuView? _view;
     private ContextMenuEntry? _chosen;
 
@@ -46,6 +49,12 @@ internal sealed class ContextMenuFlyout
 
     /// <summary>Raised when the menu closed, chosen or not, before the chosen entry runs.</summary>
     public event Action? Closed;
+
+    /// <summary>Raised when WinUI has put the menu on screen (its <c>Opened</c>), not only been asked to.</summary>
+    public event Action? Opened;
+
+    /// <summary>Whether WinUI has the menu on screen now: for the snapshot aid's log.</summary>
+    public bool IsOnScreen => _onScreen is not null;
 
     /// <summary>Whether the menu is on screen.</summary>
     public bool IsOpen => _front is not null;
@@ -119,6 +128,14 @@ internal sealed class ContextMenuFlyout
     private Built Build(ContextMenuView view)
     {
         var flyout = new CommandBarFlyout { AlwaysExpanded = true };
+        flyout.Opened += (_, _) =>
+        {
+            if (ReferenceEquals(flyout, _shown))
+            {
+                _onScreen = flyout;
+                Opened?.Invoke();
+            }
+        };
         flyout.Closed += (_, _) => OnClosed(flyout);
         var buttons = new List<(AppBarButton Button, bool Quick, int Index)>();
         for (var i = 0; i < view.QuickActions.Count; i++)
@@ -211,6 +228,10 @@ internal sealed class ContextMenuFlyout
 
     private void OnClosed(CommandBarFlyout flyout)
     {
+        if (ReferenceEquals(flyout, _onScreen))
+        {
+            _onScreen = null;
+        }
         if (!ReferenceEquals(flyout, _shown))
         {
             return;

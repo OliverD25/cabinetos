@@ -380,6 +380,7 @@ public sealed partial class MainWindow
             new("menu", FileMenu.Describe()),
             new("context_menu", _contextMenu.DescribeItems()),
             new("context_quick", _contextMenu.DescribeQuickActions()),
+            new("context_menu_on_screen", _contextMenu.IsOnScreen),
             new("menu_edit", MenuEditorView.Describe()),
             new("menu_edit_target", MenuEditorView.Model?.TargetName ?? ""),
             new("windows_menu", _windowsMenu.Describe()),
