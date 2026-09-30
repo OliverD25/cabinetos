@@ -625,8 +625,17 @@ but the immutable tier's (a change would put `view.showExplorer` in that
 tier); Enter in the tree goes to the folder and hands the keyboard to the
 pane; whether the default layout becomes `rail`; and a UI Automation walk
 over a tree of thousands of open rows stalls the window for seconds, so a
-screen reader on a huge tree is a risk worth a later look. Guide:
-[ui.md](ui.md), "The activity rail and the sidebar".
+screen reader on a huge tree is a risk worth a later look. One fault
+found the same day by the real-key check of the heavy-logging window and
+fixed (ca72efc): started in the rail layout, the tree was empty until a
+key opened it, because the reveal scrolled to a row before the list was
+laid out and the rows were drawn far below the sidebar's window; the row
+is laid out first now, or the scroll waits for the next layout, and a
+test starts the window the way a user does and finds the rows on screen
+before any key. 849 UI tests. The whole live check then ran with real
+keys to the end with exit code 0: 106 answers True, none False, and the
+scroll goal met in that run. Guide: [ui.md](ui.md), "The activity rail
+and the sidebar".
 
 ### Phase 14 — The AI agent extension (the card "AI Agent & Intelligent Workflows — the decision", 2026-09-29, which combines the two drafts at the creator's command; built in the sleep-mode run of 2026-09-29/30)
 
