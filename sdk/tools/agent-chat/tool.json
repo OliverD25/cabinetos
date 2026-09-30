@@ -1,0 +1,11 @@
+{
+  "id": "agent-chat",
+  "name": "Agent Chat",
+  "version": "0.1.0",
+  "author": "CabinetOS",
+  "description": "A chat with the CabinetOS Agent plugin: ask in words, see what it did, choose how much it may do, and undo.",
+  "entry": "index.html",
+  "accepts": [],
+  "placement": "dock",
+  "sidebar": true
+}

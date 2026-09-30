@@ -242,6 +242,13 @@ asks with `editor.openMarkdownPreview`); a link to a heading scrolls there;
 web links do not open. marked does not remove HTML inside Markdown; the
 page's Content-Security-Policy keeps it from running any script.
 
+The second tool, [sdk/tools/agent-chat](../sdk/tools/agent-chat/README.md),
+is the chat with the Agent plugin ([extensions/agent.md](extensions/agent.md)).
+It opens no file (`accepts` is empty), has a page in the sidebar, and is the
+example of a page that follows a plugin: it sends `subscribe` and runs the
+plugin's commands, and the plugin answers with events. It needs the window to
+let a page run `agent.chat`, `agent.tier`, `agent.undo` and `agent.audit`.
+
 `editor.openMarkdownPreview` is also in the palette ("Editor: Open
 Markdown Preview", Ctrl+K V in a pane): it opens the focused Markdown file
 in the preview, or says that no Markdown tool is installed.
