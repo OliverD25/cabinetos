@@ -907,24 +907,40 @@ Articles: 1 (the shell query off the UI thread), 3 (the native flyout),
 6 (the config mirrors the menu), 7 (every entry a named command), 10
 (the shell menu opt-in). Handed to a coder on Opus on 2026-09-30.
 
-**Status (2026-09-30, evening): step 1 done; step 2 in work.** Step 1
-landed as 49ca8b7..cc8d5b3 by a coder on Opus: `contextMenu` and
-`programs` in the config with today's menus as the defaults, the
+**Status (2026-09-30, night): done.** Step 1 landed as 49ca8b7..cc8d5b3
+and step 2 as acc0e30..4e20903, both by a coder on Opus: `contextMenu`
+and `programs` in the config with today's menus as the defaults, the
 `program.<name>` commands, Windows' menu on a COM thread of its own in
 `cabinetos-fs`, protocol 15, the pure menu model and the
-`CommandBarFlyout` in the window, ADR 0015. Checked on the main
-checkout: the five core checks (795 tests), 938 of 938 window tests with
-the end-to-end tests on, and the live check with real keys on the
-Release build: 143 True and 2 False at 20:38, both faults of the new
-section's own reading (the recorder's file read before its line was
-complete; the cursor on the fixture's first row, a folder, where the
-check expected a file), then 144 True and 1 False at 20:57 with the
-first fixed, the second fixed after it and confirmed by the next full
-run. Every earlier section True; the scroll goal met. Windows' menu
-answered 30 items in about 820 ms and its Copy reached the clipboard.
-The coder's fourteen decisions, with their undo, are in
-[log/2026-09-30/phase-18-context-menu-report.md](log/2026-09-30/phase-18-context-menu-report.md).
-Step 2, the edit mode inside the menu, went to a coder on Opus at 20:56.
+`CommandBarFlyout` in the window, ADR 0015; then the edit mode inside
+the menu (an in-window overlay: reorder by drag or Alt+arrows, remove,
+Insert or "Add Command…" through the prompt, Done or Ctrl+S saving
+`contextMenu.<target>.items` through the core, Cancel or Esc). The same
+coder fixed a step 1 fault it found (a menu of a shape whose flyout was
+still closing never came back, because the cached flyout was re-shown
+inside its own Closed handler; now shown one dispatcher turn later,
+with a test that failed before: 9046741, b7fdf19) and proved with a
+test that Windows' menu cannot meet it, since the core's answer always
+comes after the old menu has closed. Checked on the main checkout: the
+five core checks (795 tests), the window's build with warnings as
+errors, 964 of 964 window tests with the end-to-end tests on, and the
+live check with real keys on the Release build of 21:57
+(`run-2026-09-30-2209.txt`): 159 True, 0 False, section 18 all 32 True,
+the edit mode included with a real drag; every earlier section True;
+the scroll goal met. Earlier runs the same evening: 143 True and 2
+False (the section's own reading, fixed), one stopped by the creator's
+own use of the PC, then 144 True and 1 False. Windows' menu answers 30
+items in about 760 to 820 ms and its Copy reaches the clipboard. The
+coders' decisions with their undo (fourteen for each step) are in
+[log/2026-09-30/phase-18-context-menu-report.md](log/2026-09-30/phase-18-context-menu-report.md);
+the ones to know: the edit mode holds the keyboard like a dialog; Done
+with no change writes nothing; unknown IDs show greyed so they can be
+removed; quick actions, `extensions` filters and `programs` are edited
+in the file only. Left for later: the first opening of each menu shape
+costs one frame of 45 to 60 ms (a pre-build while the window is idle
+would remove it); Ctrl+V does not yet paste files that Windows' Copy
+put on the clipboard; a dialog that one of Windows' items opens may
+open behind the window.
 
 
 ## 6. Phase 1 in detail — the Rust core scaffold

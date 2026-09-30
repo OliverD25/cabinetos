@@ -214,3 +214,44 @@ same cached flyout inside its own Closed handler, which WinUI drops
 600 ms between menus to avoid it. Sent back to the same coder with a
 test to reproduce it first. Also left: the comment in the core's
 registry near `menu.edit` still says it opens the file.
+
+## The follow-ups and the planning session's checks (step 2)
+
+**Follow-up 1** (9046741, b7fdf19, 5d34050): the step 1 fault
+reproduced by a test first
+(`A_menu_asked_for_while_the_same_menu_closes_comes_on_screen`, failing
+on the old flyout with "the second menu is not on screen"). The fault
+needs the same menu at the same place, for example Esc and a quick
+right-click on the same row; on another row a `ShowAt` at a new place
+comes through even inside Closed. The fix shows the waiting menu one
+dispatcher turn later (`DispatcherQueue.TryEnqueue`); the newest
+request wins; a Close before that turn drops it; the cache and the
+pending logic are unchanged (undo: remove `ShowPending` and
+`_turnQueued`). The two 600 ms waits of the edit-mode test were removed,
+so it proves the fix too, and the registry's comment for `menu.edit`
+was corrected. 964 of 964 window tests, three runs in a row for the two
+tests; clippy and fmt clean.
+
+**Follow-up 2** (no commit): the same test written for Windows' menu
+(Shift+right-click, Esc, the same request at once, three times) passed
+on the current code, so nothing was changed: the window hides the open
+Windows menu when a request is made, its Closed arrives about 9 ms
+later, and the core answers `shell_menu` 224 to 229 ms after that (760
+ms the first time), so `ShellMenuFlyout.Show` always runs after the old
+flyout has closed. The temporary log line and the test were removed
+again.
+
+**The planning session's checks**, main at 5d34050 for the code: the
+window's Debug build with warnings as errors; 964 of 964 window tests
+with the end-to-end tests on, against the release core; the Release
+window built at 21:57; the live check with real keys
+(`run-2026-09-30-2209.txt`, started after 45 s of idle input): exit
+code 0, 159 True, 0 False. Section 18's 32 checks all True: the config
+change read, the file menu with the program in it, the program started
+with the row's path, Shift+F10, Windows' menu with 30 items answered in
+762 ms and its Copy on the clipboard, the empty-space menu, and the edit
+mode with the real mouse and keys: "Edit Menu…", the program's row
+removed with its X, Done, the next menu without it, then Insert and the
+prompt to put it back, a real drag to the top, Alt+Down and Alt+Up,
+Ctrl+S, and the file's list as the section wrote it. The scroll goal
+was met with no frame over 20 ms. Phase 18 is done.
