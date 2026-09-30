@@ -61,6 +61,31 @@ public static class Live {
     for (int i = vks.Length - 1; i >= 0; i--) Send(Key(vks[i], true));
   }
   public static void Type(string text) { foreach (var c in text) { Send(Unicode(c, false), Unicode(c, true)); Thread.Sleep(15); } }
+  // A key held down while Windows repeats it: the modifier down, the key down n times (the later ones are repeats), all up.
+  public static void Hold(ushort modifier, ushort vk, int downs, int gapMs) {
+    Send(Key(modifier, false)); Thread.Sleep(20);
+    for (int i = 0; i < downs; i++) { Send(Key(vk, false)); Thread.Sleep(gapMs); }
+    Send(Key(vk, true)); Thread.Sleep(20); Send(Key(modifier, true));
+  }
+  [DllImport("user32.dll")] static extern uint MapVirtualKeyEx(uint code, uint type, IntPtr hkl);
+  // Physical keys: each key but the modifiers goes as the scan code of the key where the US layout has it, so the window's own
+  // keyboard layout decides the virtual key, as it does for a hand on the keyboard.
+  public static void PressPhysical(params ushort[] vks) {
+    var inputs = new INPUT[vks.Length];
+    for (int i = 0; i < vks.Length; i++) {
+      inputs[i] = Key(vks[i], false);
+      if (vks[i] != 0x10 && vks[i] != 0x11 && vks[i] != 0x12) { inputs[i].u.ki.wVk = 0; inputs[i].u.ki.wScan = (ushort)MapVirtualKeyEx(vks[i], 0, (IntPtr)0x04090409); inputs[i].u.ki.dwFlags |= 8u; }
+    }
+    foreach (var input in inputs) Send(input);
+    for (int i = inputs.Length - 1; i >= 0; i--) { var up = inputs[i]; up.u.ki.dwFlags |= 2u; Send(up); }
+  }
+  [DllImport("user32.dll")] static extern int GetKeyboardLayoutList(int n, IntPtr[] list);
+  [DllImport("user32.dll")] static extern IntPtr GetKeyboardLayout(uint thread);
+  [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+  public static IntPtr[] Layouts() { var list = new IntPtr[32]; int n = GetKeyboardLayoutList(32, list); var result = new IntPtr[Math.Max(0, n)]; Array.Copy(list, result, result.Length); return result; }
+  public static IntPtr LayoutOf(IntPtr h) { uint pid; return GetKeyboardLayout(GetWindowThreadProcessId(h, out pid)); }
+  // The window's own layout, as its language bar would switch it (WM_INPUTLANGCHANGEREQUEST): never the system's default.
+  public static void SwitchLayout(IntPtr h, IntPtr hkl) { PostMessage(h, 0x0050, IntPtr.Zero, hkl); Thread.Sleep(400); }
   public static void Click(int x, int y) {
     SetCursorPos(x, y); Thread.Sleep(120);
     var down = new INPUT { type = 0 }; down.u.mi.dwFlags = 0x0002;
@@ -1739,6 +1764,102 @@ $samePlace = [Math]::Abs($back.Left - $full.Left) -le 2 -and [Math]::Abs($back.T
 "compact overlay: the dual pane, the sidebar and the dock came back as they were (dual $($left.fields.dual), sidebar $($left.fields.sidebar), dock $($left.fields.dock)): $([bool]$left -and $left.fields.dual -eq $entered.fields.dual -and $left.fields.sidebar -eq $entered.fields.sidebar -and $left.fields.dock -eq $entered.fields.dock)"
 $configAfter = ConfigUi
 "compact overlay: the file's ui.dualPane and ui.sidebar are as they were ($($configAfter.dualPane), $($configAfter.sidebar)): $($configAfter.dualPane -eq $configBefore.dualPane -and $configAfter.sidebar -eq $configBefore.sidebar)"
+
+# ----- keys (docs/log/2026-10-01/keys-audit-report.md) -----
+# The states where a key did nothing or the wrong thing until the keys audit of 2026-10-01, with real keys: Tab and Enter in
+# a dialog, Tab into a tool tab in the other pane, Tab in the theme picker, Ctrl+K held until Windows repeats it before a
+# chord's second half, and a chord pressed in the find box. Then the window's own keyboard layout goes to Ukrainian for
+# Ctrl+T and Ctrl+W pressed as physical keys, and back. The cursor rests on a folder before each overlay, so a key that
+# escaped one would open a folder, never a file in its program.
+function CommandCount([string]$command) { @(ShellLines 'command executed' | Where-Object { $_.fields.command -eq $command }).Count }
+$k20 = "$files\keys20"
+New-Item -ItemType Directory -Force "$k20\sub" | Out-Null
+foreach ($name in 'a.txt', 'b.txt') { Set-Content -LiteralPath "$k20\$name" -Value "x" -NoNewline }
+Set-Content -LiteralPath "$k20\notes.md" -Value "# notes" -NoNewline
+
+Step "keys: Shift+Delete on b.txt, then Tab and Enter: the dialog's Delete permanently, pressed from the keyboard"
+GoLeftPane $k20
+# Rows: sub, a.txt, b.txt, notes.md.
+[Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
+$held = (ShellLines 'key held by a dialog').Count
+$closedBefore = (ShellLines 'dialog closed').Count
+$shownBefore = (ShellLines 'dialog shown').Count
+[Live]::Press($VK.Shift, $VK.Delete)
+$shown = WaitShellLines 'dialog shown' $shownBefore
+Start-Sleep -Milliseconds 600
+Step "keys: Tab, Enter in the dialog"
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Enter)
+$closed = WaitShellLines 'dialog closed' $closedBefore
+Start-Sleep -Milliseconds 1500
+"keys: Tab and Enter answered the dialog '$($shown.fields.title)' with Delete permanently (result $($closed.fields.result)), no key held: $($closed.fields.result -eq 'Primary' -and (ShellLines 'key held by a dialog').Count -eq $held -and -not (Test-Path -LiteralPath "$k20\b.txt"))"
+
+Step "keys: Enter on notes.md opens it in the other pane; Tab gives that page the keyboard"
+# Rows: sub, a.txt, notes.md.
+[Live]::Press($VK.End); Start-Sleep -Milliseconds 300
+$opened = (ShellLines 'file opened in a tool').Count
+[Live]::Press($VK.Enter)
+[void](WaitShellLines 'file opened in a tool' $opened 8)
+Start-Sleep -Milliseconds 800
+$handed = (ShellLines 'a page has the keyboard').Count
+$tabs = CommandCount 'view.focusOtherPane'
+[Live]::Press($VK.Tab)
+$page = WaitShellLines 'a page has the keyboard' $handed 5 { param($line) $line.fields.page -like 'tool:*' }
+"keys: Tab ran view.focusOtherPane and the preview's page has the keyboard ($($page.fields.page)): $((CommandCount 'view.focusOtherPane') -gt $tabs -and $page.fields.page -like 'tool:*')"
+Step "keys: the palette's Close Editor, from inside the page, closes the preview"
+$toolsClosed = (ShellLines 'tool closed').Count
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+[Live]::Type("Close Editor"); Start-Sleep -Milliseconds 700
+[Live]::Press($VK.Enter)
+"keys: the preview closed: $([bool](WaitShellLines 'tool closed' $toolsClosed))"
+ClickLeftPane
+
+Step "keys: Ctrl+K Ctrl+T, Tab, Enter: Tab stays in the theme picker, and Enter applies the highlighted theme"
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+$applied = CommandCount 'theme.apply'
+$opens = CommandCount 'pane.openSelected'
+[Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 700
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
+"keys: Enter after Tab applied the theme in the picker, and opened nothing in the pane: $((CommandCount 'theme.apply') -gt $applied -and (CommandCount 'pane.openSelected') -eq $opens)"
+
+Step "keys: Ctrl+K held until Windows repeats it, then Ctrl+T: the theme picker opens"
+$pickers = CommandCount 'preferences.selectColorTheme'
+$notBound = NoticeCount 'is not bound'
+[Live]::Hold($VK.Ctrl, $VK.K, 4, 40); Start-Sleep -Milliseconds 100
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 700
+"keys: the held Ctrl+K and Ctrl+T ran the picker, and no chord was called not bound: $((CommandCount 'preferences.selectColorTheme') -gt $pickers -and (NoticeCount 'is not bound') -eq $notBound)"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+
+Step "keys: Ctrl+F, then Ctrl+K Ctrl+T in the find box: the status bar says the chord does not work while typing"
+$typing = NoticeCount 'does not work while you type in a box'
+[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
+[Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 700
+"keys: the notice names where the chord works: $((NoticeCount 'does not work while you type in a box') -gt $typing)"
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+
+# The creator types Ukrainian: a key named after a Latin letter must work on that layout. The window matches keys by their
+# virtual key, which a Cyrillic layout keeps on the Latin positions (Ctrl+T is the key that types "е" there).
+$ukrainian = @([Live]::Layouts() | Where-Object { ($_.ToInt64() -band 0xFFFF) -eq 0x0422 }) | Select-Object -First 1
+if (-not $ukrainian) {
+  "keys: the Ukrainian layout: not installed on this PC; the check is skipped"
+} else {
+  Step "keys: the window's own layout goes to Ukrainian; Ctrl+T and Ctrl+W as physical keys"
+  $layoutBefore = [Live]::LayoutOf($script:h)
+  [Live]::SwitchLayout($script:h, $ukrainian)
+  $layoutNow = [Live]::LayoutOf($script:h)
+  try {
+    $new = CommandCount 'tab.new'; $close = CommandCount 'tab.close'
+    [Live]::PressPhysical($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 700
+    [Live]::PressPhysical($VK.Ctrl, $VK.W); Start-Sleep -Milliseconds 700
+    "keys: on the Ukrainian layout ({0:X8}) Ctrl+T ran tab.new and Ctrl+W ran tab.close: {1}" -f $layoutNow.ToInt64(), ($layoutNow -eq $ukrainian -and (CommandCount 'tab.new') -gt $new -and (CommandCount 'tab.close') -gt $close)
+  } finally {
+    [Live]::SwitchLayout($script:h, $layoutBefore)
+    "keys: the window's layout is back ({0:X8}): {1}" -f ([Live]::LayoutOf($script:h)).ToInt64(), ([Live]::LayoutOf($script:h) -eq $layoutBefore)
+  }
+}
 
 Step "close"
 $script:h = $null

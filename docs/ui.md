@@ -143,9 +143,22 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   widths"). Step 19b sits with Total Commander's keys: the palette's
   Toggle Folder Sizes turns folder sizes on, a folder with two folders is
   opened and its count read from the window's log, and the same command
-  turns them off ("Folder sizes"). Last, the compact overlay: Ctrl+Alt+Up
+  turns them off ("Folder sizes"). Then the compact overlay: Ctrl+Alt+Up
   with real keys, the window's size and topmost style read from Windows,
-  and the key again ("Compact overlay").
+  and the key again ("Compact overlay"). Last, "keys": the states the keys
+  audit of 2026-10-01 found wrong, with real keys
+  ([log/2026-10-01/keys-audit-report.md](log/2026-10-01/keys-audit-report.md)):
+  Shift+Delete answered with Tab and Enter (the file must be gone), Tab
+  into a Markdown Preview in the other pane (its page must have the
+  keyboard), Tab and Enter in the theme picker (the theme applies, nothing
+  opens in the pane), Ctrl+K held until Windows repeats it and then Ctrl+T
+  (the picker opens), and Ctrl+K Ctrl+T in the find box (the notice says
+  where the chord works). Then the window's own keyboard layout goes to
+  Ukrainian (`WM_INPUTLANGCHANGEREQUEST` to the window, never the
+  system's default), Ctrl+T and Ctrl+W go as physical keys (scan codes,
+  so the layout decides the virtual key) and must run `tab.new` and
+  `tab.close`, and the layout goes back; a PC without the Ukrainian layout
+  says "not installed" and skips it.
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
