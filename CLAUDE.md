@@ -70,10 +70,10 @@ card "Development Plan (mirror of the repo plan)" is a copy of
 [docs/PLAN.md](docs/PLAN.md). The repo file is the source of truth. When
 `docs/PLAN.md` changes, refresh that card from the file in the same session.
 
-After a unit of work lands (commits on the branch), the project's Stop hook
-(`.claude/hooks/desk-after-task.py`) asks the session for one short look at
-the desk: new cards in Inbox or TODO since the last look; a card that can be
-worked on with nothing blocking it is announced in a line and started (the
-creator's rule of 2026-09-30). At most once in 20 minutes, never in a loop.
+After a unit of work lands, the creator's global Stop hook (desk-watch, in
+the global Claude config) asks the session for one short look at the desk:
+a new card in an actionable column that can be worked on with nothing
+blocking it is announced in a line and started (the creator's rule of
+2026-09-30). At most once in 30 minutes.
 
 @CONSTITUTION.md
