@@ -74,10 +74,12 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// the shell's own navigation, file, edit and search commands, the window's
 /// own commands (the sidebar's pins, the editor tabs, the transfer panel,
 /// the plugin list, the terminal tabs), Total Commander's small commands
-/// (sub-phase 11a), the tab commands (Phase 12), then the palette, overlays, a new window and About. Every one of them runs in the UI: the shell starts the file jobs
+/// (sub-phase 11a), the tab commands (Phase 12), the shell's top row and
+/// panes (Phase 16), then the palette, overlays, a new window and About.
+/// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 97] = [
+const SEED: [Seed; 101] = [
     seed(
         "palette.show",
         "View",
@@ -261,11 +263,12 @@ const SEED: [Seed; 97] = [
     seed("go.forward", "Go", "Forward", &["alt+right"], UI, None),
     seed("go.up", "Go", "Up One Level", &["alt+up"], UI, None),
     seed("go.toPath", "Go", "Go to Path…", &["ctrl+l"], UI, None),
+    // Phase 16: the find widget of the active pane's tab, which filters its
+    // list by name. Alt+F7: Total Commander's search key, kept beside Ctrl+F.
     seed(
         "search.focus",
         "Search",
-        "Find Files…",
-        // Alt+F7: Total Commander's search; its filters come in 11c.
+        "Find in Pane",
         &["ctrl+f", "alt+f7"],
         UI,
         None,
@@ -561,11 +564,12 @@ const SEED: [Seed; 97] = [
         UI,
         FILES,
     ),
+    // Ctrl+Alt+P since Phase 16: Ctrl+P is Quick Open's.
     seed(
         "terminal.insertPath",
         "Terminal",
         "Insert Folder Path",
-        &["ctrl+p"],
+        &["ctrl+alt+p"],
         UI,
         FILES,
     ),
@@ -607,6 +611,32 @@ const SEED: [Seed; 97] = [
         &["ctrl+k ctrl+right", "ctrl+k ctrl+left"],
         UI,
         FILES,
+    ),
+    // Phase 16: one command, nine keys; the digit says which tab comes to
+    // the front. The tab strip's clicks run it with the tab's index.
+    seed(
+        "tab.select",
+        "Tab",
+        "Go to Tab",
+        &[
+            "ctrl+1", "ctrl+2", "ctrl+3", "ctrl+4", "ctrl+5", "ctrl+6", "ctrl+7", "ctrl+8",
+            "ctrl+9",
+        ],
+        UI,
+        FILES,
+    ),
+    // Phase 16: the top row. Quick Open lists the workspace's files in the
+    // palette's frame; the menu is the top row's hamburger; Settings opens
+    // `cabinetos.json` for editing.
+    seed("quickOpen.show", "Go", "Quick Open…", &["ctrl+p"], UI, None),
+    seed("menu.show", "View", "Show Menu", &[], UI, None),
+    seed(
+        "settings.open",
+        "Preferences",
+        "Open Settings",
+        &["ctrl+comma"],
+        UI,
+        None,
     ),
     // Explorer's key for another window of the same folder.
     seed("window.new", "Window", "New Window", &["ctrl+n"], UI, None),
@@ -795,7 +825,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 97);
+        assert_eq!(registry.commands().len(), 101);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1035,7 +1065,7 @@ mod tests {
             "terminal.insertPath",
             "Terminal",
             "Insert Folder Path",
-            &["ctrl+p"],
+            &["ctrl+alt+p"],
             Some("filesView"),
         ),
         (
@@ -1253,12 +1283,102 @@ mod tests {
         assert_eq!(keys_of("go.showInRightPane"), ["ctrl+right"]);
     }
 
+    /// Phase 16: the shell redesign's commands (the creator's
+    /// `SHELL_REDESIGN.md`, "Keyboard additions"). Quick Open takes Ctrl+P, so
+    /// Total Commander's "path to the command line" moves to Ctrl+Alt+P;
+    /// Ctrl+F keeps its command, which now opens the pane's find widget.
+    #[test]
+    fn the_shell_redesign_commands_are_seeded_with_their_keys() {
+        let registry = CommandRegistry::core();
+        let digits: Vec<String> = (1..=9).map(|n| format!("ctrl+{n}")).collect();
+        let digits: Vec<&str> = digits.iter().map(String::as_str).collect();
+        for (id, category, title, keys, when) in [
+            ("quickOpen.show", "Go", "Quick Open…", &["ctrl+p"][..], None),
+            (
+                "settings.open",
+                "Preferences",
+                "Open Settings",
+                &["ctrl+comma"][..],
+                None,
+            ),
+            ("menu.show", "View", "Show Menu", &[][..], None),
+            (
+                "tab.select",
+                "Tab",
+                "Go to Tab",
+                &digits[..],
+                Some("filesView"),
+            ),
+            (
+                "search.focus",
+                "Search",
+                "Find in Pane",
+                &["ctrl+f", "alt+f7"][..],
+                None,
+            ),
+            (
+                "terminal.insertPath",
+                "Terminal",
+                "Insert Folder Path",
+                &["ctrl+alt+p"][..],
+                Some("filesView"),
+            ),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                (category, title),
+                "{id}"
+            );
+            assert_eq!(texts(&command.default_keys), keys, "{id}");
+            assert_eq!(command.when.as_deref(), when, "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.source, CommandSource::Core, "{id}");
+            assert!(!command.immutable, "{id}");
+        }
+        // Back, Forward and Up keep their IDs and keys (Backspace is the
+        // pane's own key for Up); the tab keys stay the tab commands'.
+        for (id, key) in [
+            ("go.back", "alt+left"),
+            ("go.forward", "alt+right"),
+            ("go.up", "alt+up"),
+            ("go.toPath", "ctrl+l"),
+            ("tab.new", "ctrl+t"),
+            ("tab.close", "ctrl+w"),
+            ("tab.next", "ctrl+tab"),
+            ("tab.previous", "ctrl+shift+tab"),
+        ] {
+            assert_eq!(
+                texts(&registry.get(id).unwrap().default_keys),
+                [key],
+                "{id}"
+            );
+        }
+        // The keymap takes them beside every other key: no key is used twice
+        // in a context, and the immutable tier keeps its own.
+        let compiled = crate::keymap::compile(&registry, &[]).unwrap();
+        let keys_of = |id: &str| -> Vec<String> {
+            compiled
+                .keymap
+                .keys_of(id)
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        };
+        assert_eq!(keys_of("quickOpen.show"), ["ctrl+p"]);
+        assert_eq!(keys_of("terminal.insertPath"), ["ctrl+alt+p"]);
+        assert_eq!(keys_of("tab.select").len(), 9);
+        assert_eq!(keys_of("palette.show"), ["ctrl+shift+p"]);
+    }
+
     #[test]
     fn ids_are_category_dot_verb_object() {
         for command in CommandRegistry::core().commands() {
             let (prefix, rest) = command.id.split_once('.').unwrap();
+            // The category may be camelCase, as `quickOpen` is (Phase 16).
             assert!(
-                prefix.chars().all(|c| c.is_ascii_lowercase()),
+                prefix.chars().next().unwrap().is_ascii_lowercase()
+                    && prefix.chars().all(|c| c.is_ascii_alphanumeric()),
                 "{}",
                 command.id
             );

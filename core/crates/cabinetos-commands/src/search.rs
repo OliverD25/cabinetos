@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn an_empty_query_lists_everything_in_order() {
-        let hits = search(&CommandRegistry::core(), "  ", 100);
+        let hits = search(&CommandRegistry::core(), "  ", 1000);
         assert_eq!(hits.len(), CommandRegistry::core().commands().len());
         assert_eq!(hits[0].id, "palette.show");
         assert!(hits.iter().all(|hit| hit.score == 0));

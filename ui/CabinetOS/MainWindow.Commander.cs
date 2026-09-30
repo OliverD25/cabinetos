@@ -89,7 +89,7 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("terminal.insertSelectedPaths", ListingOnly(invocation => InsertPathsAsync([.. Active.Targets().Select(t => t.Path)], invocation)));
     }
 
-    // Ctrl+P, Ctrl+Shift+Enter: the terminal shows (its default shell starts when none runs), the core
+    // Ctrl+Alt+P, Ctrl+Shift+Enter: the terminal shows (its default shell starts when none runs), the core
     // types the paths at the prompt, quoted for that shell and without Enter, and the terminal gets
     // the keyboard to go on typing (the note's decision D11).
     private async Task InsertPathsAsync(IReadOnlyList<string> paths, CommandInvocation invocation)
