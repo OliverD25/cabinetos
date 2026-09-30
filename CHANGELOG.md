@@ -12,6 +12,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - "Edit Menu…" at the end of the right-click menu edits the menu inside the menu: drag a row or move it with Alt+Up and Alt+Down, remove it with its X or Delete, add a command (Insert, from a list like the palette's) or a separator, and Done (Ctrl+S) saves it to `cabinetos.json` through the core. Esc cancels, and a click outside does not close it. The row of icons, the extension filters and the programs are still edited in the file, which Ctrl+, opens.
 - Programs of your own (`programs` in `cabinetos.json`) become commands (`program.<name>`) for the menu, a key or the palette. `{path}`, `{selection}` and `{cwd}` in their arguments stand for the cursor row, the selection and the folder.
 - Windows' own context menu (Open with, Send to, what other programs add) with Shift+right-click or Ctrl+Shift+F10, when `contextMenu.shellMenu` is on.
+- The theme picker (Ctrl+K Ctrl+T) previews the highlighted theme live, whether the keys or the pointer moved the highlight; Enter or a click keeps it, and Esc keeps the current theme.
 
 ### Changed
 

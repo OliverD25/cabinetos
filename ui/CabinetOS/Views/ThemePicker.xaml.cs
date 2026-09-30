@@ -17,13 +17,19 @@ namespace CabinetOS.Views;
 /// The theme picker (<c>preferences.selectColorTheme</c>, Ctrl+K Ctrl+T):
 /// the palette's frame with one row per theme, each with a swatch (the
 /// accent over the Mica tint), its name and author, and a check on the
-/// theme in effect. Up and Down move, Enter or a click applies through the
-/// window's router, Esc and the scrim close.
+/// theme in effect. Up and Down move, and the window shows the highlighted
+/// theme as a preview; Enter or a click applies through the window's router,
+/// Esc and the scrim close and bring the theme in effect back.
 /// </summary>
 public sealed partial class ThemePicker : UserControl
 {
     private readonly Storyboard _entrance;
     private ThemePickerModel? _model;
+
+    // The sizes the rows keep while the picker is open. A previewed density preset changes the
+    // window's metrics; rows that shrank under the pointer would put another row under it, whose
+    // preview would grow them back, and so on.
+    private ThemeMetrics? _metrics;
 
     /// <summary>Creates the picker, hidden.</summary>
     public ThemePicker()
@@ -75,6 +81,10 @@ public sealed partial class ThemePicker : UserControl
     /// <summary>Shows the picker and gives it the keyboard.</summary>
     public void Open()
     {
+        if (!IsOpen)
+        {
+            _metrics = WindowMetrics.Current;
+        }
         Visibility = Visibility.Visible;
         _entrance.Begin();
         Render();
@@ -85,6 +95,7 @@ public sealed partial class ThemePicker : UserControl
     public void Close()
     {
         Visibility = Visibility.Collapsed;
+        _metrics = null;
         OpenToolTips.Close(XamlRoot);
     }
 
@@ -139,7 +150,7 @@ public sealed partial class ThemePicker : UserControl
         {
             Rows.Children.Add(RowFor(model.Rows[i], i, i == model.Highlight));
         }
-        FooterText.Text = model.Error ?? "↑↓ choose · ↵ apply · Esc close · themes live in %LOCALAPPDATA%\\CabinetOS\\themes";
+        FooterText.Text = model.Error ?? "↑↓ or hover to preview · ↵ apply · Esc keeps the current · themes live in %LOCALAPPDATA%\\CabinetOS\\themes";
         FooterText.Foreground = ThemeResources.Brush(model.Error is null ? "CbHintTextBrush" : "CbErrorTextBrush");
     }
 
@@ -216,7 +227,7 @@ public sealed partial class ThemePicker : UserControl
         };
         ToolTipService.SetToolTip(check, "The theme in effect");
 
-        var m = WindowMetrics.Current;
+        var m = _metrics ?? WindowMetrics.Current;
         var row = new Grid
         {
             Height = m.PaletteRowHeight,

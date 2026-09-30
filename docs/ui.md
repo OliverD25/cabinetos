@@ -2235,10 +2235,27 @@ elements apply the same way ("Metrics and chrome").
   accent shows the Windows accent, and plain Mica shows light or dark Mica
   as the theme would now), the name, the author, "light" for a light
   theme or "light or dark, as Windows is set" for a `system` one, and a
-  check on the theme in effect. Up, Down, Home and End move; Enter or a
-  click applies it with `set_value ui.theme`. The picker closes once the
-  core accepts, and `theme_changed` then repaints the window. A refusal
-  shows in red in the footer. Esc or a click outside closes the picker.
+  check on the theme in effect. Up, Down, Home and End move the highlight,
+  and so does the pointer resting on a row. The window shows the
+  highlighted theme live, as a preview: 80 ms after the highlight stops,
+  the picker asks the core for that theme with `get_theme` and paints it
+  as it would apply it (colours, Mica, sizes, the terminal). Nothing is
+  written: `cabinetos.json` and the theme in effect stay as they were.
+  Highlighting the checked row paints the theme in effect again, with no
+  request. A reply for a row the highlight has already left is dropped,
+  so a pointer that sweeps down the list sends one request, not ten.
+  Enter or a click applies the highlighted theme with `set_value
+  ui.theme`. The picker closes once the core accepts, and `theme_changed`
+  then makes the preview the theme in effect, so the window does not
+  flash back in between. A refusal shows in red in the footer, and the
+  preview stays. Esc or a click outside closes the picker and paints the
+  theme in effect again at once; so does the palette or the marketplace
+  opening over it. A pointer that leaves the list keeps the highlight and
+  its preview, as in VS Code. The picker's own rows keep the sizes they
+  had when it opened: a density preset previewed changes the rest of the
+  window, but a row that shrank under the pointer would put another row
+  under it. A `theme_changed` from elsewhere while the picker is open
+  becomes the theme in effect, and the check moves to it.
   The tints come with `list_themes` (protocol 11), so opening it is one
   request; with an older core every swatch shows plain Mica. An open
   picker draws its swatches again when Windows' accent or mode changes.
@@ -2247,8 +2264,11 @@ elements apply the same way ("Metrics and chrome").
   the log and nothing of that theme is applied; the last theme stays.
 - **Logs.** Target `cabinetos_ui::theme`: "theme applied" with the ID, the
   kind, the mode it was drawn in (`light` or `dark`), the accent, and the
-  Mica tint and opacity; "theme chosen"; "a theme token could not be set"
-  (once per token) if a brush refuses a colour.
+  Mica tint and opacity; "theme chosen"; "theme previewed" with the ID
+  and the mode when the picker's preview is painted; "theme restored"
+  with the ID and the mode when the theme in effect is painted back after
+  a preview; "a theme token could not be set" (once per token) if a brush
+  refuses a colour.
 
 Checked on 2026-09-28 (release builds, locked screen): Nord named in
 `cabinetos.json` was applied at start ("theme applied nord accent
