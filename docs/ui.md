@@ -1111,18 +1111,53 @@ is gone.
 ### Tabs in the shell
 
 Since Phase 16 the strip shows from the first tab (the handout's rule: a
-theme may not remove it). The tab in front has a 2 px bar over it, in the
-accent in the active pane and white at 30 % in the other, a white 8 %
-fill, weight 600 and its ×; the others are at 65 % and close with a middle
-click. A tab is at most 160 px wide and its tooltip is the full path. The
-"+" after the last tab runs `tab.new` for that pane. The handout's
-"Open with…" button at the strip's right end, which opens the palette on
-the Editor commands, is hidden since 2026-09-30 (the creator's call: with
-Markdown Preview as the only editor its list was thin) and returns when a
-second editor exists; the commands stay in the palette. Ctrl+1 to Ctrl+9
-run `tab.select` for the tab at that place ("Tabs"). A tab keeps, besides
-its folder, history, order, cursor and marks, its list's scroll position
-and its find text.
+theme may not remove it). Since 2026-09-30 it is the window's own row of
+tabs, drawn as the creator's design page draws it (option 1a and the
+handout's "Tab strip"), and not WinUI's `TabView`: the `TabView` gave a
+grey rounded block, a bar floating over its corners, an icon on every tab
+and a boxed close button.
+
+- **The strip** is `tabRow` high. It has a white 3 % fill and a 1 px
+  hairline under it. Every tab fills its full height.
+- **A tab** has 10 px of space at each side and is at most 160 px wide.
+  Its name is cut with an ellipsis, and its tooltip is the full path.
+  There is no icon on a folder tab. A locked tab shows a 12 px lock before
+  its name, and a tab that shows a tool shows the tool's glyph.
+- **The tab in front of the active pane** has a white 8 % fill, a 2 px bar
+  on top in the accent, white text in weight 600, and its ×. The × is a
+  plain glyph with no box, at 55 % white. It turns white under the
+  pointer, and its target is at least 16 x 16 px.
+- **The tab in front of the other pane** has a white 6 % fill, the bar at
+  white 30 %, weight 600 and text at 90 % white. Its × shows only while
+  the pointer is over the tab.
+- **The other tabs** have no fill, text at 65 % white and a 1 px hairline
+  at the right. Under the pointer they get a white 6 % fill and white
+  text. They close with a middle click or their menu.
+- **Corners follow `tabRadius`.** It rounds the two top corners of a tab,
+  and the 2 px bar follows the curve, because the bar is the tab's own
+  top border. The design draws square tabs, so the metric should be 0 in
+  the default look. It is still 8 px there (the core's table of metrics
+  holds the default, and the theme schemas come from it); Commander
+  Compact has 3 px.
+- **The colours are the window's tokens** (`CbTabActiveFillBrush`,
+  `CbHoverFillBrush`, `CbTabFrontBarInactiveBrush`,
+  `CbTabInactiveTextBrush`, `CbTextPrimaryBrush` and `CbRowTextBrush` for
+  the text, `CbTextTertiaryBrush` for the ×), so a theme's colours reach
+  the strip.
+- **Tabs do not wrap.** When they do not fit, the row scrolls sideways,
+  and the tab in front scrolls into view when it changes.
+- **The "+"** is 24 px wide, right after the last tab, and runs `tab.new`
+  for that pane. It scrolls with the tabs.
+- **The keyboard never rests on the strip.** Nothing in it takes focus, so
+  a click leaves the keys with the pane.
+
+The handout's "Open with…" button at the strip's right end, which opens the
+palette on the Editor commands, is hidden since 2026-09-30 (the creator's
+call: with Markdown Preview as the only editor its list was thin) and
+returns when a second editor exists; the commands stay in the palette.
+Ctrl+1 to Ctrl+9 run `tab.select` for the tab at that place ("Tabs"). A
+tab keeps, besides its folder, history, order, cursor and marks, its
+list's scroll position and its find text.
 
 ### Find in pane
 
@@ -1427,8 +1462,8 @@ at the top of the pane. Until Phase 16 it was hidden while the pane had one
 tab; the shell redesign shows it from the first tab, `tabRow` high (32 px;
 24 px in Commander Compact), with a "+" (the handout's "Open with…" is
 hidden until a second editor exists; "The shell", "Tabs in the shell").
-It is a WinUI `TabView` with drag and reorder turned
-off, so every change goes through a command.
+It is the window's own row of tabs (`PaneTabs`, "Tabs in the shell"),
+with no drag and no reorder, so every change goes through a command.
 
 - **What a tab holds:** a folder with its own history, order, cursor and
   marks, and a lock. Or a Tool Extension (a Markdown Preview, say). A
@@ -1496,10 +1531,11 @@ of all runs:
 | With tabs, one tab (row hidden) | 14 | 402 ms | 418 ms |
 | With tabs, three tabs (row shown) | 11 | 388 ms | 402 ms |
 
-That is at most 3 % more, under the handout's 5 % limit, so the
-`TabView` stays. (The `ItemsRepeater` row the handout names as the
-fallback is not needed.) `scroll-bench.ps1 -Before "tab:new;tab:new"`
-repeats the third row.
+That is at most 3 % more, under the handout's 5 % limit. (The strip was
+a WinUI `TabView` when this was measured; it is the window's own row
+since. The `ItemsRepeater` row the handout names as the fallback was
+never needed.) `scroll-bench.ps1 -Before "tab:new;tab:new"` repeats the
+third row.
 
 Tests: `TabTests` (the model in `CabinetOS.Core`: strip, lock rule,
 `ui.tabs`, `window_state`), the snapshot steps `tab:new`, `tab:close` and

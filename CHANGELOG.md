@@ -18,6 +18,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The right-click menu is WinUI's command bar menu, as Windows 11's Explorer shows it: the icons in a row at the top, the keys on the right of each row.
 - The "Open with…" button at the right end of each pane's tab strip is hidden until a second editor exists; its Editor commands stay in the command palette.
+- The tabs of a pane look as the design draws them: the tab in front is a flat block with a 2 px bar on top (the accent in the active pane), the other tabs are plain text at 65 % white, a folder tab has no icon, and the close mark is a plain ×.
 
 ## [0.1.0] - 2026-09-30
 
