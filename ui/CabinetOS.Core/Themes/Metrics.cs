@@ -237,7 +237,7 @@ public static class MetricsMapper
         Px("tabPaddingX", 0, 64, 14),
         Px("tabMinWidth", 40, 240, 96),
         Px("tabFontSize", 8, 32, 12),
-        Px("tabRadius", 0, 16, 8),
+        Px("tabRadius", 0, 16, 0),
         Px("captionButtonWidth", 24, 96, 46),
         // Command bar
         Px("commandBarHeight", 14, 80, 48),

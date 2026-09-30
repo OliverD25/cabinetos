@@ -1681,7 +1681,7 @@
           "minimum": 0
         },
         "tabRadius": {
-          "description": "The radius of the two top corners of a pane's tabs. Whole pixels from 0 to 16; left out, 8.",
+          "description": "The radius of the two top corners of a pane's tabs. Whole pixels from 0 to 16; left out, 0.",
           "type": "integer",
           "maximum": 16,
           "minimum": 0

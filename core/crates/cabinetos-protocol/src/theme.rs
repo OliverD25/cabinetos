@@ -391,7 +391,7 @@ metrics! {
         "The narrowest a workspace tab got in the shell before Phase 16; it sizes nothing now.";
     tab_font_size "tabFontSize" Px [8.0, 32.0] 12.0 => 11.0,
         "The text size of a pane's tabs.";
-    tab_radius "tabRadius" Px [0.0, 16.0] 8.0 => 3.0,
+    tab_radius "tabRadius" Px [0.0, 16.0] 0.0 => 3.0,
         "The radius of the two top corners of a pane's tabs.";
     caption_button_width "captionButtonWidth" Px [24.0, 96.0] 46.0 => 40.0,
         "The width of the minimize, maximize and close buttons.";

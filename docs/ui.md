@@ -1205,12 +1205,10 @@ and a boxed close button.
 - **The other tabs** have no fill, text at 65 % white and a 1 px hairline
   at the right. Under the pointer they get a white 6 % fill and white
   text. They close with a middle click or their menu.
-- **Corners follow `tabRadius`.** It rounds the two top corners of a tab,
-  and the 2 px bar follows the curve, because the bar is the tab's own
-  top border. The design draws square tabs, so the metric should be 0 in
-  the default look. It is still 8 px there (the core's table of metrics
-  holds the default, and the theme schemas come from it); Commander
-  Compact has 3 px.
+- **Corners are square**, as the design draws them: `tabRadius` is 0 in
+  the default look. A theme that wants round tabs sets it. It rounds the
+  two top corners of a tab, and the 2 px bar follows the curve, because
+  the bar is the tab's own top border. Commander Compact has 3 px.
 - **The colours are the window's tokens** (`CbTabActiveFillBrush`,
   `CbHoverFillBrush`, `CbTabFrontBarInactiveBrush`,
   `CbTabInactiveTextBrush`, `CbTextPrimaryBrush` and `CbRowTextBrush` for

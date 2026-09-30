@@ -221,7 +221,7 @@ brackets are the handout's, for any theme that shows the bar.
 | `tabPaddingX` | px | 0 | 64 | 14 | 10 | Nothing since Phase 16: the space at each side of the workspace tab's text. |
 | `tabMinWidth` | px | 40 | 240 | 96 | 80 | Nothing since Phase 16: the narrowest the workspace tab got. |
 | `tabFontSize` | px | 8 | 32 | 12 | 11 | The text size of a tab in a pane's tab strip. |
-| `tabRadius` | px | 0 | 16 | 8 | 3 | The radius of a tab's two top corners. |
+| `tabRadius` | px | 0 | 16 | 0 | 3 | The radius of a tab's two top corners. The default look has square tabs. |
 | `captionButtonWidth` | px | 24 | 96 | 46 | 40 | The width of the minimize, maximize and close buttons. |
 | `commandBarHeight` | px | 14 | 80 | 48 | 32 | Nothing since Phase 16: the height of the command bar. |
 | `iconButtonSize` | px | 14 | 80 | 32 | 26 | Nothing since Phase 16: an icon button in the command bar. |
