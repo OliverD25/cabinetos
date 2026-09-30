@@ -638,6 +638,51 @@ foreach ($i in 1..2) {
 }
 "Tab never reached a function key: $($onBar -eq 0)"
 
+# A click on the top row's chrome must not leave the keyboard on the button: the pane keeps it, so Tab (view.focusOtherPane,
+# context filesView) still switches panes. The real mouse does what the snapshot aid's click: step cannot: it presses the button.
+# Evidence: the window's log says Tab ran view.focusOtherPane (one more "command executed" line), and UI Automation says the
+# focus is in the right half of the window (the other pane: the left one is the active pane) and is no Button.
+function FocusOtherCount { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match '"command executed"' -and $_ -match 'view\.focusOtherPane' }).Count }
+# The leftmost element of a name: the top row's button, not a folder or a menu row of the same name.
+function TopRowButton([string]$name) {
+  $all = [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants,
+    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $name)))
+  @($all | Sort-Object { $_.Current.BoundingRectangle.Top }, { $_.Current.BoundingRectangle.Left })[0]
+}
+function ClickCentre($element) {
+  $r = $element.Current.BoundingRectangle
+  [Live]::Click([int]($r.Left + $r.Width / 2), [int]($r.Top + $r.Height / 2))
+}
+# Tab, then one evidence line; a second Tab brings the keyboard back to the source pane for the steps after this one.
+function TabReachesOtherPane([string]$what) {
+  $before = FocusOtherCount
+  [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+  $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+  $wr = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$wr, 16)
+  $fr = $focused.Current.BoundingRectangle
+  $isButton = $focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button
+  $inRightHalf = ($fr.Left + $fr.Width / 2) -gt (($wr.Left + $wr.Right) / 2)
+  "compact: $what, Tab ran view.focusOtherPane: $((FocusOtherCount) -eq $before + 1)"
+  "compact: $what, the keyboard is in the other pane (the right half) and on no Button: $($inRightHalf -and -not $isButton) (focused: '$($focused.Current.Name)', $($focused.Current.ClassName), $($focused.Current.ControlType.ProgrammaticName), centre x $([int]($fr.Left + $fr.Width / 2)) of $($wr.Left)..$($wr.Right))"
+  [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+}
+
+Step "compact: a real click on the top row's Toggle dual pane, twice, then Tab reaches the other pane"
+$dualButton = TopRowButton "Toggle dual pane"
+if ($dualButton) {
+  ClickCentre $dualButton; Start-Sleep -Milliseconds 600
+  ClickCentre $dualButton; Start-Sleep -Milliseconds 600
+  TabReachesOtherPane "after two real clicks on Toggle dual pane"
+} else { "compact: no Toggle dual pane button found: False" }
+
+Step "compact: a real click on the hamburger (Menu), Esc, then Tab reaches the other pane"
+$menuButton = TopRowButton "Menu"
+if ($menuButton) {
+  ClickCentre $menuButton; Start-Sleep -Milliseconds 400
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 300
+  TabReachesOtherPane "after a real click on Menu and Esc"
+} else { "compact: no Menu button found: False" }
+
 Step "compact: F5 Copy pressed through the bar's button by its accessible name"
 $byName = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "F5 Copy")
 $f5 = [System.Windows.Automation.AutomationElement]::FromHandle($h).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $byName)
@@ -1369,9 +1414,19 @@ $x, $y = LeftPanePoint
 $row = if ((SelectionText) -match 'row-\d+\.txt') { $Matches[0] } else { '' }
 $shown = (ShellLines 'context menu shown').Count
 $warned = (ShellLines 'context menu entry left out: no command has this ID').Count
+$placedBefore = (ShellLines 'context menu placed').Count
 [Live]::RightClick($x, $y, $false)
 $menu = WaitShellLines 'context menu shown' $shown
 "18: the row under the pointer, $row, got the file menu: $($row -ne '' -and $menu.fields.target -eq 'File' -and -not $menu.fields.keyboard)"
+# Explorer's rule: the menu's top-left corner is at the pointer (above it, or to its left, when the menu would not fit). The
+# log's numbers are the window's content DIPs; the point is in screen pixels, and the window's frame is the content's origin
+# (step 13 measures the rail from it the same way), so the point in DIPs is (pixel - frame) / scale, good to a few pixels.
+$placed = WaitShellLines 'context menu placed' $placedBefore
+$wr = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$wr, 16)
+$askedX = ($x - $wr.Left) / $scale; $askedY = ($y - $wr.Top) / $scale
+$nearX = $placed -and ([math]::Abs($placed.fields.left - $askedX) -le 4 -or [math]::Abs($placed.fields.left + $placed.fields.width - $askedX) -le 4)
+$nearY = $placed -and ([math]::Abs($placed.fields.top - $askedY) -le 4 -or [math]::Abs($placed.fields.top + $placed.fields.height - $askedY) -le 4)
+"18: the menu's corner is at the right-click's point, not centred on it (placed left $($placed.fields.left) top $($placed.fields.top) width $($placed.fields.width) height $($placed.fields.height); point $([math]::Round($askedX, 1)),$([math]::Round($askedY, 1)); flipped up or left only near the window's edge; within 4 px): $([bool]($nearX -and $nearY))"
 "18: its icon row is the file's two quick actions: $($menu.fields.quick_actions -eq 2)"
 $entry = AppElement 'Live 18 Recorder' 2
 "18: the program is in the menu: $([bool]$entry)"
