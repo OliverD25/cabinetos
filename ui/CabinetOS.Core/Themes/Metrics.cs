@@ -72,6 +72,7 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
     public double RadiusSurface => this["radiusSurface"];
     public double Gap => this["gap"];
     public double BodyPadding => this["bodyPadding"];
+    public double HairlineOpacity => this["hairlineOpacity"];
 
     // ----- Title bar -----
     public double TitleBarHeight => this["titleBarHeight"];
@@ -82,11 +83,19 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
     public double TabRadius => this["tabRadius"];
     public double CaptionButtonWidth => this["captionButtonWidth"];
 
-    // ----- Command bar -----
+    // ----- Command bar (the shell before Phase 16; they size nothing now) -----
     public double CommandBarHeight => this["commandBarHeight"];
     public double IconButtonSize => this["iconButtonSize"];
     public double FieldHeight => this["fieldHeight"];
     public double ToggleHeight => this["toggleHeight"];
+
+    // ----- Top row (Phase 16) -----
+    public double TopRowHeight => this["topRowHeight"];
+    public double TopRowButtonSize => this["topRowButtonSize"];
+    public double WorkspacePillHeight => this["workspacePillHeight"];
+    public double WorkspacePillRadius => this["workspacePillRadius"];
+    public double CommandCenterHeight => this["commandCenterHeight"];
+    public double CommandCenterRadius => this["commandCenterRadius"];
 
     // ----- Sidebar -----
     public double SidebarMinWidth => this["sidebarMinWidth"];
@@ -108,6 +117,8 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
     // ----- Panes -----
     public double PaneHeaderHeight => this["paneHeaderHeight"];
     public double TabRow => this["tabRow"];
+    public double BreadcrumbRowHeight => this["breadcrumbRowHeight"];
+    public double NavButtonSize => this["navButtonSize"];
     public double ColumnHeaderPaddingY => this["columnHeaderPaddingY"];
     public double ColumnHeaderPaddingX => this["columnHeaderPaddingX"];
     public double NameColumnWeight => this["nameColumnWeight"];
@@ -151,6 +162,7 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
     // ----- Overlays -----
     public double PaletteRowHeight => this["paletteRowHeight"];
     public double MenuRowHeight => this["menuRowHeight"];
+    public double DropdownRowHeight => this["dropdownRowHeight"];
 
     // ----- Status bar -----
     public double StatusBarHeight => this["statusBarHeight"];
@@ -218,6 +230,7 @@ public static class MetricsMapper
         Px("radiusSurface", 0, 16, 8),
         Px("gap", 0, 48, 8),
         Px("bodyPadding", 0, 64, 8),
+        Num("hairlineOpacity", 0, 1, 0.06),
         // Title bar
         Px("titleBarHeight", 14, 80, 40),
         Px("tabHeight", 14, 80, 32),
@@ -231,6 +244,13 @@ public static class MetricsMapper
         Px("iconButtonSize", 14, 80, 32),
         Px("fieldHeight", 14, 80, 32),
         Px("toggleHeight", 14, 80, 32),
+        // Top row (Phase 16)
+        Px("topRowHeight", 14, 80, 40),
+        Px("topRowButtonSize", 14, 80, 36),
+        Px("workspacePillHeight", 14, 80, 24),
+        Px("workspacePillRadius", 0, 16, 4),
+        Px("commandCenterHeight", 14, 80, 24),
+        Px("commandCenterRadius", 0, 16, 4),
         // Sidebar
         Px("sidebarMinWidth", 100, 600, 180),
         Pct("sidebarWidthPercent", 5, 50, 20),
@@ -250,6 +270,8 @@ public static class MetricsMapper
         // Panes
         Px("paneHeaderHeight", 14, 80, 36),
         Px("tabRow", 14, 80, 32),
+        Px("breadcrumbRowHeight", 14, 80, 28),
+        Px("navButtonSize", 14, 80, 20),
         Px("columnHeaderPaddingY", 0, 64, 4),
         Px("columnHeaderPaddingX", 0, 64, 14),
         Num("nameColumnWeight", 0.1, 10, 1),
@@ -289,6 +311,7 @@ public static class MetricsMapper
         // Overlays
         Px("paletteRowHeight", 14, 80, 36),
         Px("menuRowHeight", 14, 80, 32),
+        Px("dropdownRowHeight", 14, 80, 26),
         // Status bar
         Px("statusBarHeight", 14, 80, 26),
         Px("statusBarPaddingX", 0, 64, 14),

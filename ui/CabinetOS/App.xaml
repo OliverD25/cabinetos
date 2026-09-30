@@ -86,6 +86,16 @@
             <SolidColorBrush x:Key="CbFkeyFillBrush" Color="#0DFFFFFF" />
             <SolidColorBrush x:Key="CbFkeyHoverFillBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="CbFkeyLabelBrush" Color="#CCFFFFFF" />
+            <!-- The shell of Phase 16: hairlines at the theme's hairlineOpacity, the workspace pill, the tab strip, the breadcrumb row, the find widget. -->
+            <SolidColorBrush x:Key="CbShellHairlineBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="CbWorkspacePillFillBrush" Color="#2E60CDFF" />
+            <SolidColorBrush x:Key="CbTabFrontBarInactiveBrush" Color="#4DFFFFFF" />
+            <SolidColorBrush x:Key="CbTabInactiveTextBrush" Color="#A6FFFFFF" />
+            <SolidColorBrush x:Key="CbCrumbRowActiveFillBrush" Color="#0F60CDFF" />
+            <SolidColorBrush x:Key="CbCrumbSeparatorBrush" Color="#59FFFFFF" />
+            <SolidColorBrush x:Key="CbCrumbTextBrush" Color="#B3FFFFFF" />
+            <SolidColorBrush x:Key="CbCrumbSegmentHoverBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="CbFindStrokeBrush" Color="#24FFFFFF" />
 
             <!-- A 1 px lighter bottom edge, as on a Fluent text field. -->
             <LinearGradientBrush x:Key="CbFieldStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">

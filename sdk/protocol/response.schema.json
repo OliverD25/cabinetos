@@ -2268,6 +2268,12 @@
           "maximum": 64,
           "minimum": 0
         },
+        "breadcrumbRowHeight": {
+          "description": "The height of a pane's breadcrumb row, under its tab strip: Back, Forward, Up and the folder's path. Whole pixels from 14 to 80; left out, 28.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
         "captionButtonWidth": {
           "description": "The width of the minimize, maximize and close buttons. Whole pixels from 24 to 96; left out, 46.",
           "type": "integer",
@@ -2293,10 +2299,22 @@
           "minimum": 0
         },
         "commandBarHeight": {
-          "description": "The height of the command bar. Whole pixels from 14 to 80; left out, 48.",
+          "description": "The height of the command bar of the shell before Phase 16; the top row replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 48.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
+        },
+        "commandCenterHeight": {
+          "description": "The height of the command center, the box in the middle of the top row that opens Quick Open. Whole pixels from 14 to 80; left out, 24.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "commandCenterRadius": {
+          "description": "The corner radius of the command center. Whole pixels from 0 to 16; left out, 4.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
         },
         "driveRowPaddingX": {
           "description": "The space at each side of a drive row's content in the sidebar. Whole pixels from 0 to 64; left out, 10.",
@@ -2310,6 +2328,12 @@
           "maximum": 64,
           "minimum": 0
         },
+        "dropdownRowHeight": {
+          "description": "The height of a row in the top row's menus: the hamburger menu and the workspace list. Whole pixels from 14 to 80; left out, 26.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
         "editorTabHeight": {
           "description": "The height of the editor's tab strip. Whole pixels from 14 to 80; left out, 36.",
           "type": "integer",
@@ -2317,7 +2341,7 @@
           "minimum": 14
         },
         "fieldHeight": {
-          "description": "The height of the address and search fields. Whole pixels from 14 to 80; left out, 32.",
+          "description": "The height of the address and search fields of the shell before Phase 16; it sizes nothing now. Whole pixels from 14 to 80; left out, 32.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -2358,6 +2382,12 @@
           "maximum": 48,
           "minimum": 0
         },
+        "hairlineOpacity": {
+          "description": "The opacity of the 1 px lines under the top row, the tab strips and the breadcrumb rows, and between tabs, in the theme's text colour. A number from 0 to 1; left out, 0.06.",
+          "type": "number",
+          "maximum": 1,
+          "minimum": 0
+        },
         "hexColumnGap": {
           "description": "The space between the hex view's columns. Whole pixels from 0 to 48; left out, 18.",
           "type": "integer",
@@ -2371,7 +2401,7 @@
           "minimum": 14
         },
         "iconButtonSize": {
-          "description": "The width and height of an icon button in the command bar. Whole pixels from 14 to 80; left out, 32.",
+          "description": "The width and height of an icon button in the command bar of the shell before Phase 16; topRowButtonSize replaced it. Whole pixels from 14 to 80; left out, 32.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -2460,6 +2490,12 @@
           "maximum": 10,
           "minimum": 0.1
         },
+        "navButtonSize": {
+          "description": "The width and height of the Back, Forward and Up buttons in a pane's breadcrumb row. Whole pixels from 14 to 80; left out, 20.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
         "paletteRowHeight": {
           "description": "The height of a row in the command palette. Whole pixels from 14 to 80; left out, 36.",
           "type": "integer",
@@ -2467,7 +2503,7 @@
           "minimum": 14
         },
         "paneHeaderHeight": {
-          "description": "The height of a pane's header, above its column headers. Whole pixels from 14 to 80; left out, 36.",
+          "description": "The height of a pane's header in the shell before Phase 16; the breadcrumb row replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 36.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -2605,37 +2641,37 @@
           "minimum": 0
         },
         "tabFontSize": {
-          "description": "The text size of a workspace tab. Whole pixels from 8 to 32; left out, 12.",
+          "description": "The text size of a pane's tabs. Whole pixels from 8 to 32; left out, 12.",
           "type": "integer",
           "maximum": 32,
           "minimum": 8
         },
         "tabHeight": {
-          "description": "The height of a workspace tab in the title bar. Whole pixels from 14 to 80; left out, 32.",
+          "description": "The height of a workspace tab in the title bar of the shell before Phase 16; the workspace pill replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 32.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
         },
         "tabMinWidth": {
-          "description": "The narrowest a workspace tab gets. Whole pixels from 40 to 240; left out, 96.",
+          "description": "The narrowest a workspace tab got in the shell before Phase 16; it sizes nothing now. Whole pixels from 40 to 240; left out, 96.",
           "type": "integer",
           "maximum": 240,
           "minimum": 40
         },
         "tabPaddingX": {
-          "description": "The space at each side of a workspace tab's text. Whole pixels from 0 to 64; left out, 14.",
+          "description": "The space at each side of a workspace tab's text in the shell before Phase 16; it sizes nothing now. Whole pixels from 0 to 64; left out, 14.",
           "type": "integer",
           "maximum": 64,
           "minimum": 0
         },
         "tabRadius": {
-          "description": "The radius of a workspace tab's two top corners. Whole pixels from 0 to 16; left out, 8.",
+          "description": "The radius of the two top corners of a pane's tabs. Whole pixels from 0 to 16; left out, 8.",
           "type": "integer",
           "maximum": 16,
           "minimum": 0
         },
         "tabRow": {
-          "description": "The height of a pane's tab row, which shows while the pane has more than one tab. Whole pixels from 14 to 80; left out, 32.",
+          "description": "The height of a pane's tab strip, at the top of the pane. Whole pixels from 14 to 80; left out, 32.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -2701,13 +2737,25 @@
           "minimum": 14
         },
         "titleBarHeight": {
-          "description": "The height of the title bar. Whole pixels from 14 to 80; left out, 40.",
+          "description": "The height of the title bar of the shell before Phase 16; the top row (topRowHeight) replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 40.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
         },
         "toggleHeight": {
-          "description": "The height of the dual and single pane toggle. Whole pixels from 14 to 80; left out, 32.",
+          "description": "The height of the dual and single pane toggle of the shell before Phase 16; the toggle is a top-row button now. Whole pixels from 14 to 80; left out, 32.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "topRowButtonSize": {
+          "description": "The width and height of an icon button in the top row: the menu and the view buttons. Whole pixels from 14 to 80; left out, 36.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "topRowHeight": {
+          "description": "The height of the top row: the menu, the workspace pill, the command center, the view buttons and the caption buttons. Windows draws the caption buttons 32 px high, so the row is never lower. Whole pixels from 14 to 80; left out, 40.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -2717,6 +2765,18 @@
           "type": "number",
           "maximum": 10,
           "minimum": 0.1
+        },
+        "workspacePillHeight": {
+          "description": "The height of the workspace pill in the top row. Whole pixels from 14 to 80; left out, 24.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "workspacePillRadius": {
+          "description": "The corner radius of the workspace pill. Whole pixels from 0 to 16; left out, 4.",
+          "type": "integer",
+          "maximum": 16,
+          "minimum": 0
         }
       },
       "additionalProperties": false

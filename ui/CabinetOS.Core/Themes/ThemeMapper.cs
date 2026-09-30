@@ -51,6 +51,7 @@ public static class ThemeMapper
 
         // Text-derived overlays: the design's white at an alpha, here the theme's text at that alpha.
         Argb Text(byte alpha) => text.ScaleAlpha(alpha / 255.0);
+        var metrics = MetricsMapper.Map(theme.Metrics);
 
         // The surfaces under dialogs and notes: the Acrylic tint, opaque, and a step darker: the
         // design's #202020 under #2C2C2C in dark mode, Windows' #F3F3F3 under #FCFCFC in light mode.
@@ -122,6 +123,20 @@ public static class ThemeMapper
             ["CbFkeyFillBrush"] = Text(0x0D),
             ["CbFkeyHoverFillBrush"] = Text(0x1F),
             ["CbFkeyLabelBrush"] = Text(0xCC),
+            // The shell of Phase 16 (the creator's SHELL_REDESIGN.md): the lines under the top row, the
+            // tab strips and the breadcrumb rows at the theme's hairlineOpacity; the workspace pill's
+            // accent at 18 %; a tab strip's front bar in the inactive pane (30 %) and its tabs behind
+            // (65 %); the active pane's breadcrumb row (the accent at 6 %), its separators (35 %), its
+            // segments before the last (70 %) and their hover (10 %); the find widget's border (14 %).
+            ["CbShellHairlineBrush"] = Text((byte)Math.Round(metrics.HairlineOpacity * 255)),
+            ["CbWorkspacePillFillBrush"] = accent.WithAlpha(0x2E),
+            ["CbTabFrontBarInactiveBrush"] = Text(0x4D),
+            ["CbTabInactiveTextBrush"] = Text(0xA6),
+            ["CbCrumbRowActiveFillBrush"] = accent.WithAlpha(0x0F),
+            ["CbCrumbSeparatorBrush"] = Text(0x59),
+            ["CbCrumbTextBrush"] = Text(0xB3),
+            ["CbCrumbSegmentHoverBrush"] = Text(0x1A),
+            ["CbFindStrokeBrush"] = Text(0x24),
         };
 
         // The palette's Acrylic alpha is how much luminosity it lays over the blur (0xB8, the design's .72);
@@ -151,7 +166,6 @@ public static class ThemeMapper
             fileTypes[extension.TrimStart('.')] = Parse(value, $"palette.fileTypeColors.{extension}");
         }
 
-        var metrics = MetricsMapper.Map(theme.Metrics);
         return new ThemeLook
         {
             Id = theme.Id,

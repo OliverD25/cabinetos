@@ -378,30 +378,45 @@ metrics! {
         "The space between the window's surfaces: the sidebar, the panes and the docks.";
     body_padding "bodyPadding" Px [0.0, 64.0] 8.0 => 0.0,
         "The space between the window's edges and its surfaces, at the sides and the bottom.";
+    hairline_opacity "hairlineOpacity" Ratio [0.0, 1.0] 0.06 => 0.08,
+        "The opacity of the 1 px lines under the top row, the tab strips and the breadcrumb rows, and between tabs, in the theme's text colour.";
     // Title bar
     title_bar_height "titleBarHeight" Px [14.0, 80.0] 40.0 => 30.0,
-        "The height of the title bar.";
+        "The height of the title bar of the shell before Phase 16; the top row (topRowHeight) replaced it, so it sizes nothing now.";
     tab_height "tabHeight" Px [14.0, 80.0] 32.0 => 24.0,
-        "The height of a workspace tab in the title bar.";
+        "The height of a workspace tab in the title bar of the shell before Phase 16; the workspace pill replaced it, so it sizes nothing now.";
     tab_padding_x "tabPaddingX" Px [0.0, 64.0] 14.0 => 10.0,
-        "The space at each side of a workspace tab's text.";
+        "The space at each side of a workspace tab's text in the shell before Phase 16; it sizes nothing now.";
     tab_min_width "tabMinWidth" Px [40.0, 240.0] 96.0 => 80.0,
-        "The narrowest a workspace tab gets.";
+        "The narrowest a workspace tab got in the shell before Phase 16; it sizes nothing now.";
     tab_font_size "tabFontSize" Px [8.0, 32.0] 12.0 => 11.0,
-        "The text size of a workspace tab.";
+        "The text size of a pane's tabs.";
     tab_radius "tabRadius" Px [0.0, 16.0] 8.0 => 3.0,
-        "The radius of a workspace tab's two top corners.";
+        "The radius of the two top corners of a pane's tabs.";
     caption_button_width "captionButtonWidth" Px [24.0, 96.0] 46.0 => 40.0,
         "The width of the minimize, maximize and close buttons.";
-    // Command bar
+    // Command bar (the shell before Phase 16)
     command_bar_height "commandBarHeight" Px [14.0, 80.0] 48.0 => 32.0,
-        "The height of the command bar.";
+        "The height of the command bar of the shell before Phase 16; the top row replaced it, so it sizes nothing now.";
     icon_button_size "iconButtonSize" Px [14.0, 80.0] 32.0 => 26.0,
-        "The width and height of an icon button in the command bar.";
+        "The width and height of an icon button in the command bar of the shell before Phase 16; topRowButtonSize replaced it.";
     field_height "fieldHeight" Px [14.0, 80.0] 32.0 => 24.0,
-        "The height of the address and search fields.";
+        "The height of the address and search fields of the shell before Phase 16; it sizes nothing now.";
     toggle_height "toggleHeight" Px [14.0, 80.0] 32.0 => 26.0,
-        "The height of the dual and single pane toggle.";
+        "The height of the dual and single pane toggle of the shell before Phase 16; the toggle is a top-row button now.";
+    // Top row (Phase 16)
+    top_row_height "topRowHeight" Px [14.0, 80.0] 40.0 => 32.0,
+        "The height of the top row: the menu, the workspace pill, the command center, the view buttons and the caption buttons. Windows draws the caption buttons 32 px high, so the row is never lower.";
+    top_row_button_size "topRowButtonSize" Px [14.0, 80.0] 36.0 => 26.0,
+        "The width and height of an icon button in the top row: the menu and the view buttons.";
+    workspace_pill_height "workspacePillHeight" Px [14.0, 80.0] 24.0 => 22.0,
+        "The height of the workspace pill in the top row.";
+    workspace_pill_radius "workspacePillRadius" Px [0.0, 16.0] 4.0 => 2.0,
+        "The corner radius of the workspace pill.";
+    command_center_height "commandCenterHeight" Px [14.0, 80.0] 24.0 => 22.0,
+        "The height of the command center, the box in the middle of the top row that opens Quick Open.";
+    command_center_radius "commandCenterRadius" Px [0.0, 16.0] 4.0 => 3.0,
+        "The corner radius of the command center.";
     // Sidebar
     sidebar_min_width "sidebarMinWidth" Px [100.0, 600.0] 180.0 => 150.0,
         "The narrowest the sidebar gets.";
@@ -435,9 +450,13 @@ metrics! {
         "The text size of a tag chip.";
     // Panes
     pane_header_height "paneHeaderHeight" Px [14.0, 80.0] 36.0 => 24.0,
-        "The height of a pane's header, above its column headers.";
-    tab_row "tabRow" Px [14.0, 80.0] 32.0 => 26.0,
-        "The height of a pane's tab row, which shows while the pane has more than one tab.";
+        "The height of a pane's header in the shell before Phase 16; the breadcrumb row replaced it, so it sizes nothing now.";
+    tab_row "tabRow" Px [14.0, 80.0] 32.0 => 24.0,
+        "The height of a pane's tab strip, at the top of the pane.";
+    breadcrumb_row_height "breadcrumbRowHeight" Px [14.0, 80.0] 28.0 => 22.0,
+        "The height of a pane's breadcrumb row, under its tab strip: Back, Forward, Up and the folder's path.";
+    nav_button_size "navButtonSize" Px [14.0, 80.0] 20.0 => 20.0,
+        "The width and height of the Back, Forward and Up buttons in a pane's breadcrumb row.";
     column_header_padding_y "columnHeaderPaddingY" Px [0.0, 64.0] 4.0 => 2.0,
         "The space above and below the column headers' text.";
     column_header_padding_x "columnHeaderPaddingX" Px [0.0, 64.0] 14.0 => 8.0,
@@ -512,6 +531,8 @@ metrics! {
         "The height of a row in the command palette.";
     menu_row_height "menuRowHeight" Px [14.0, 80.0] 32.0 => 26.0,
         "The height of an item in a context menu.";
+    dropdown_row_height "dropdownRowHeight" Px [14.0, 80.0] 26.0 => 26.0,
+        "The height of a row in the top row's menus: the hamburger menu and the workspace list.";
     // Status bar
     status_bar_height "statusBarHeight" Px [14.0, 80.0] 26.0 => 22.0,
         "The height of the status bar.";
