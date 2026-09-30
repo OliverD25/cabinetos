@@ -81,7 +81,7 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 110] = [
+const SEED: [Seed; 111] = [
     seed(
         "palette.show",
         "View",
@@ -988,7 +988,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 110);
+        assert_eq!(registry.commands().len(), 111);
         let keys = |id: &str| {
             registry
                 .get(id)
