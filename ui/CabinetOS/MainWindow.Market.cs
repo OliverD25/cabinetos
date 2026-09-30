@@ -98,6 +98,7 @@ public sealed partial class MainWindow
         }
         MarketView.Close();
         UpdateMarketButton();
+        Diag.Info(MarketTarget, "marketplace closed");
     }
 
     private void UpdateMarketButton()

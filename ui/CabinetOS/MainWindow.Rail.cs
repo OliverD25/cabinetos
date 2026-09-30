@@ -78,7 +78,14 @@ public sealed partial class MainWindow
             }
         };
         SearchPanelView.SearchNow += () => _ = SearchWhenDueAsync(now: true);
-        SearchPanelView.Cancelled += () => EndSearch(focusPane: true);
+        // Esc leaves the field even when no search is running (the hit was chosen, or nothing was typed): the pane gets the keyboard.
+        SearchPanelView.Cancelled += () =>
+        {
+            if (!EndSearch(focusPane: true))
+            {
+                FocusPaneOrEditor();
+            }
+        };
         SearchPanelView.HitChosen += hit => _ = GoToHitAsync(hit, null);
         SearchPanelView.WholeVolumeChanged += wholeVolume =>
             _ = _router.ExecuteAsync("search.scope", CommandArgs.Object(("wholeVolume", wholeVolume)), "sidebar");
@@ -123,6 +130,11 @@ public sealed partial class MainWindow
         SearchPanelView.Visibility = _railLayout && _sidebarView == RailModel.Search ? Visibility.Visible : Visibility.Collapsed;
         ShowSidebarPage(_railLayout && _sidebarOpen && _rail.Find(_sidebarView) is { Kind: RailKind.Tool } ? _sidebarView : null);
         UpdateRail();
+        // The live check reads this line: it is where it learns the width the divider sits at.
+        Diag.Info(RailTarget, "the sidebar shows a view",
+            new LogField("view", _sidebarView),
+            new LogField("open", _sidebarOpen),
+            new LogField("width", (int)Math.Round(SidebarWidthFor(_windowWidth > 0 ? _windowWidth : RootGrid.ActualWidth))));
         if (_railLayout && _sidebarOpen && explorer)
         {
             FollowActiveFolder();

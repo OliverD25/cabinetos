@@ -2138,6 +2138,11 @@ public sealed partial class MainWindow : Window
 
     private void ApplySidebar(bool open)
     {
+        // The rail layout's sidebar holds the tree, the search field or a web page: what hides must not keep the keyboard.
+        if (!open && _sidebarOpen && _railLayout && IsFocusWithin(SidebarHost))
+        {
+            FocusPaneOrEditor();
+        }
         _sidebarOpen = open;
         SidebarHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         UpdateSidebarChrome();

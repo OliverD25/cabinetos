@@ -240,6 +240,33 @@ public class TerminalTests
         }, keys);
     }
 
+    [Fact]
+    public void A_tool_page_in_the_sidebar_also_hands_back_the_keys_that_change_the_sidebar()
+    {
+        var keymap = Keymap.From(new KeymapData(1000,
+        [
+            new KeymapBinding("ctrl+shift+p", "palette.show", null),
+            new KeymapBinding("ctrl+shift+e", "view.showExplorer", null),
+            new KeymapBinding("ctrl+shift+f", "view.showSearch", null),
+            new KeymapBinding("ctrl+alt+b", "view.toggleSidebar", null),
+            new KeymapBinding("f5", "file.copyToOtherPane", KeyContexts.FilesView),
+            new KeymapBinding("ctrl+k ctrl+s", "view.showSearch", null),
+        ],
+        ["palette.show"]));
+
+        // A tool page in a pane keeps to the ways out, as before.
+        Assert.Equal(new Dictionary<string, string> { ["ctrl+shift+p"] = "palette.show" }, TerminalKeys.PassKeys(keymap, context: null));
+
+        // In the sidebar the view keys come too, under whatever keys the user gave them; a chord and a pane-only key stay with the page.
+        Assert.Equal(new Dictionary<string, string>
+        {
+            ["ctrl+shift+p"] = "palette.show",
+            ["ctrl+shift+e"] = "view.showExplorer",
+            ["ctrl+shift+f"] = "view.showSearch",
+            ["ctrl+alt+b"] = "view.toggleSidebar",
+        }, TerminalKeys.PassKeys(keymap, context: null, TerminalKeys.SidebarPageWays));
+    }
+
     [Theory]
     [InlineData(DockPlacement.Bottom, 300, 120)]
     [InlineData(DockPlacement.Bottom, 600, 180)]

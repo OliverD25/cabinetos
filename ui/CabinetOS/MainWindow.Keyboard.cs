@@ -107,7 +107,8 @@ public sealed partial class MainWindow
             // A modifier alone: the key that follows decides.
             return;
         }
-        var command = terminal ? _terminal.PassKeyCommand(combo) : _toolKeys.GetValueOrDefault(combo);
+        var inSidebar = _sidebarPages.Values.Any(p => p.Host.Page.View == view);
+        var command = terminal ? _terminal.PassKeyCommand(combo) : (inSidebar ? _sidebarPageKeys : _toolKeys).GetValueOrDefault(combo);
         Diag.Info(Target, "a key the page did not get", new LogField("page", terminal ? "terminal" : "tool"), new LogField("key", combo),
             new LogField("command", command ?? ""));
         if (command is not null)

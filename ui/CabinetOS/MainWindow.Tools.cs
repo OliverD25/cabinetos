@@ -27,6 +27,9 @@ public sealed partial class MainWindow
     private Task _toolsLoading = Task.CompletedTask;
     private IReadOnlyDictionary<string, string> _toolKeys = new Dictionary<string, string>();
 
+    // What a tool's page in the sidebar passes back: the ways out of every tool page, and the keys that change the sidebar's view.
+    private IReadOnlyDictionary<string, string> _sidebarPageKeys = new Dictionary<string, string>();
+
     private void SetUpTools()
     {
         _editorViews = [LeftEditor, RightEditor];
@@ -60,11 +63,15 @@ public sealed partial class MainWindow
     private void ApplyToolKeys(Keymap keymap)
     {
         _toolKeys = TerminalKeys.PassKeys(keymap, context: null);
+        _sidebarPageKeys = TerminalKeys.PassKeys(keymap, context: null, TerminalKeys.SidebarPageWays);
         foreach (var host in AllToolHosts())
         {
-            host.SendPassKeys(ToolMessages.PassKeys(_toolKeys.Keys));
+            host.SendPassKeys(ToolMessages.PassKeys(KeysOfHost(host).Keys));
         }
     }
+
+    private IReadOnlyDictionary<string, string> KeysOfHost(ToolHost host) =>
+        _sidebarPages.Values.Any(p => p.Host == host) ? _sidebarPageKeys : _toolKeys;
 
     // Tools are read once, at start, on a background thread: reading tool.json is file I/O in the
     // UI process, kept small and off the UI thread (docs/ui.md, "Tool Extensions").
@@ -235,15 +242,16 @@ public sealed partial class MainWindow
     // the theme go to it, and what it asks for is checked in RunToolCommand.
     private ToolHost NewToolHost(InstalledTool tool, Border frame, string? dataName)
     {
-        var host = new ToolHost(tool, frame, ToolKeyScript.Build(_toolKeys.Keys), dataName)
+        var sidebar = dataName is not null;
+        var host = new ToolHost(tool, frame, ToolKeyScript.Build((sidebar ? _sidebarPageKeys : _toolKeys).Keys), dataName)
         {
             Context = ToolContext,
         };
         host.Page.ColorScheme = ToolColorScheme();
-        host.CommandRequested += (id, args) => RunToolCommand(tool, id, args);
+        host.CommandRequested += (id, args) => RunToolCommand(tool, host, id, args);
         host.KeyPressed += keys =>
         {
-            if (_toolKeys.TryGetValue(keys, out var command))
+            if ((sidebar ? _sidebarPageKeys : _toolKeys).TryGetValue(keys, out var command))
             {
                 _ = _router.ExecuteAsync(command, trigger: "key");
             }
@@ -251,10 +259,11 @@ public sealed partial class MainWindow
         return host;
     }
 
-    // A tool may move around and open things, never change files or grant rights (ToolMessages.MayRun).
-    private void RunToolCommand(InstalledTool tool, string commandId, JsonElement? args)
+    // A tool may move around and open things, never change files or grant rights (ToolMessages.MayRun); besides that the
+    // commands of a plugin its page follows, which is how a plugin's own page (the agent's chat) runs the plugin's commands.
+    private void RunToolCommand(InstalledTool tool, ToolHost host, string commandId, JsonElement? args)
     {
-        if (!ToolMessages.MayRun(commandId))
+        if (!ToolMessages.MayRun(commandId, _router.Find(commandId)?.Source, host.Subscriptions.Wants))
         {
             Diag.Warn(ToolsTarget, "a tool asked for a command it may not run", new LogField("tool", tool.Manifest.Id),
                 new LogField("command", commandId));

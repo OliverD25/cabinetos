@@ -154,6 +154,15 @@ and in the log:
 | `palette.show`, `search.focus`, `help.about` | Hand over to the user |
 | `terminal.new` (`{"cwd": …}`) | A shell in a folder |
 | `editor.openMarkdownPreview` (`{"path": …}`) | Open another Markdown file (a link) |
+| Any command of a plugin the page follows | A plugin's own page (the agent's chat page) runs the plugin's commands ("Plugin events and dropped rows" below) |
+
+The last row is a rule, not a list, so no plugin's name is in the window
+(Constitution Article 10). A page may run a command when three things hold:
+the page follows the plugin (`subscribe`, below), the command is listed with
+that plugin as its source, and its id starts with `<plugin id>.`. A page that
+follows a name like `file` gets none of the core's commands by it: their
+source is the core, not that plugin. The page loses the right when it
+unfollows, or loads again (it must follow again after each `ready`).
 
 **Plugin events and dropped rows** (Phase 14). A page may follow a plugin:
 
@@ -218,6 +227,13 @@ sidebar page and works as before.
 - **Messages are the same**: `command`, `subscribe`, `unsubscribe`, keys
   passed back to the window. A page cannot tell that it is in the sidebar,
   except that it never gets a file.
+- **Keys.** A page in the sidebar also hands back the keys that change what
+  the sidebar shows: `view.showExplorer` (Ctrl+Shift+E), `view.showSearch`
+  (Ctrl+Shift+F) and `view.toggleSidebar`, under whatever keys the user gave
+  them, beside the ways out (`palette.show`, `view.toggleTerminal`) of every
+  tool page. Without them the mouse would be the only way out of the page
+  (Constitution Article 7). When the sidebar closes while the page has the
+  keyboard, the keyboard goes to the pane.
 - **A badge.** A plugin marks the button with the event `badge` and the
   payload `{ "view": "<tool id>", "kind": "dot" | "spinner" | null }`
   (`null` takes it away). The tool's own page cannot set it.

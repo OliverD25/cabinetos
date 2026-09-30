@@ -247,6 +247,38 @@ public class ToolTests
         Assert.Equal(allowed, ToolMessages.MayRun(command));
 
     [Fact]
+    public void A_page_that_follows_a_plugin_may_run_that_plugin_s_commands_and_no_other()
+    {
+        var agent = new CommandSource("plugin", "agent", "Agent");
+        var core = new CommandSource("core", null, null);
+        var subscriptions = new ToolSubscriptions();
+
+        // Not followed: as before, only the fixed list.
+        Assert.False(ToolMessages.MayRun("agent.chat", agent, subscriptions.Wants));
+        Assert.True(ToolMessages.MayRun("go.toPath", core, subscriptions.Wants));
+
+        subscriptions.Subscribe("agent");
+        // Followed: every command the plugin registered, by whatever name, needs no name in the window.
+        Assert.True(ToolMessages.MayRun("agent.chat", agent, subscriptions.Wants));
+        Assert.True(ToolMessages.MayRun("agent.rule.add", agent, subscriptions.Wants));
+        Assert.True(ToolMessages.MayRun("agent.audit", agent, subscriptions.Wants));
+        // A command that is not listed, or is listed by another source, or has another prefix, stays refused.
+        Assert.False(ToolMessages.MayRun("agent.chat", null, subscriptions.Wants));
+        Assert.False(ToolMessages.MayRun("agent.chat", core, subscriptions.Wants));
+        Assert.False(ToolMessages.MayRun("agentx.chat", agent, subscriptions.Wants));
+        Assert.False(ToolMessages.MayRun("agent.", agent, subscriptions.Wants));
+        Assert.False(ToolMessages.MayRun("file.delete", agent, subscriptions.Wants));
+
+        // A page that follows the name of a core group gets none of the core's commands by it: their source is the core.
+        subscriptions.Subscribe("file");
+        Assert.False(ToolMessages.MayRun("file.delete", core, subscriptions.Wants));
+
+        // Stopping the follow takes the right away.
+        subscriptions.Unsubscribe("agent");
+        Assert.False(ToolMessages.MayRun("agent.chat", agent, subscriptions.Wants));
+    }
+
+    [Fact]
     public void The_key_script_uses_the_window_s_key_names_and_keys()
     {
         var script = ToolKeyScript.Build(["ctrl+shift+p", "ctrl+backquote"]);

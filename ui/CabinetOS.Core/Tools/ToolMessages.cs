@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Text.Json;
+using CabinetOS.Core.Protocol;
 
 namespace CabinetOS.Core.Tools;
 
@@ -36,8 +37,23 @@ public static class ToolMessages
         "terminal.new", "editor.openMarkdownPreview",
     ], StringComparer.Ordinal);
 
-    /// <summary>Whether a tool may run <paramref name="commandId"/>.</summary>
+    /// <summary>Whether a tool may run <paramref name="commandId"/> of the fixed list.</summary>
     public static bool MayRun(string commandId) => AllowedCommands.Contains(commandId);
+
+    /// <summary>
+    /// Whether a tool page may run <paramref name="commandId"/>: a command of the fixed list, or a command of a plugin the
+    /// page follows (<paramref name="follows"/>). A page that follows a plugin is that plugin's own page, so it may run what
+    /// the plugin registered, whatever the names (Constitution Article 10: no plugin's name is in the window). The command
+    /// must be listed with that plugin as its source and start with <c>&lt;plugin id&gt;.</c>; a page that follows a name
+    /// like <c>file</c> gets none of the core's commands by it.
+    /// </summary>
+    public static bool MayRun(string commandId, CommandSource? source, Func<string, bool> follows) =>
+        MayRun(commandId)
+        || (source is { Kind: "plugin", Id: { Length: > 0 } plugin }
+            && commandId.Length > plugin.Length + 1
+            && commandId.StartsWith(plugin, StringComparison.Ordinal)
+            && commandId[plugin.Length] == '.'
+            && follows(plugin));
 
     /// <summary>The commands a tool may run, for the documentation and the log.</summary>
     public static IReadOnlyCollection<string> Allowed => AllowedCommands;
