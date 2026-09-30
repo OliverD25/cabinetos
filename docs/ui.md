@@ -155,9 +155,10 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   keyboard), Tab and Enter in the theme picker (the theme applies, nothing
   opens in the pane), Ctrl+K held until Windows repeats it and then Ctrl+T
   (the picker opens), Ctrl+B held for six key-downs (the sidebar toggles
-  once). Then the find box, with the other pane on a folder
-  of the fixture: a letter filters, Enter finds, F5 copies the cursor row
-  (the file must be in the other folder), Ctrl+A selects the box's text
+  once). Then the find box, with the other pane on the fixture's folder
+  `sub` (Ctrl+Right shows it there; F5 is pressed only when the log shows
+  both panes on the fixture): a letter filters, Enter finds, F5 copies the
+  cursor row (the file must be in `sub`), Ctrl+A selects the box's text
   (the next letter replaces it), Ctrl+T and Ctrl+W open and close a tab,
   and Ctrl+K Ctrl+T opens the theme picker. Then the window's own keyboard layout goes to
   Ukrainian (`WM_INPUTLANGCHANGEREQUEST` to the window, never the

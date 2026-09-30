@@ -1888,24 +1888,26 @@ $heldToggles = (CommandCount 'view.toggleSidebar') - $toggles
 "keys: six key-downs of a held Ctrl+B ran view.toggleSidebar $heldToggles time(s): $($heldToggles -eq 1)"
 
 # The find box is the pane's (keybindings.md, "Contexts"): the pane's keys that type nothing act on the pane from it, and
-# the box keeps its typing and editing keys. The other pane goes to a folder of the fixture first, for F5's copy.
+# the box keeps its typing and editing keys. F5 copies into the other pane, so that pane must show the fixture: Ctrl+Right
+# on the folder sub shows it there without a change of pane, and F5 is pressed only when the log says both panes are the
+# fixture's. A section run on its own once had the right pane on the PC's Documents after a Tab that did not switch.
 Step "keys: the find box: a letter filters, Enter finds, F5 copies the cursor row to the other pane"
-$k20other = "$files\keys20-other"
-New-Item -ItemType Directory -Force $k20other | Out-Null
-ClickLeftPane
-[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($k20other); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
-[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
-$copies = CommandCount 'file.copyToOtherPane'
+GoLeftPane $k20
 # Rows: sub, a.txt, notes.md; "a" is only in a.txt.
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Ctrl, $VK.Right); Start-Sleep -Milliseconds 1000
+$other = ShellLines 'listing shown' | Select-Object -Last 1
+$copies = CommandCount 'file.copyToOtherPane'
 [Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
+$find = ShellLines 'find opened' | Select-Object -Last 1
 [Live]::Type("a"); Start-Sleep -Milliseconds 600
 $typed = ShellLines 'find filtered' | Select-Object -Last 1
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 300
-[Live]::Press($VK.F5); Start-Sleep -Milliseconds 2000
+$fixture = $other.fields.path -eq "$k20\sub" -and $find.fields.pane -eq 0 -and $find.fields.path -eq $k20
+"keys: the find is the left pane's in keys20 and the right pane shows keys20\sub (find in '$($find.fields.path)', right '$($other.fields.path)'): $fixture"
+if ($fixture) { [Live]::Press($VK.F5); Start-Sleep -Milliseconds 2000 }
 "keys: 'a' in the find box shows $($typed.fields.matches) of $($typed.fields.rows) rows: $($typed.fields.query_length -eq 1 -and $typed.fields.matches -eq 1)"
-"keys: F5 in the find box ran the copy, and a.txt is in the other pane: $((CommandCount 'file.copyToOtherPane') -gt $copies -and (Test-Path -LiteralPath "$k20other\a.txt"))"
+"keys: F5 in the find box ran the copy, and a.txt is in keys20\sub: $((CommandCount 'file.copyToOtherPane') -gt $copies -and (Test-Path -LiteralPath "$k20\sub\a.txt"))"
 
 Step "keys: the find box: Ctrl+A selects its text, Ctrl+T opens a tab, Ctrl+W closes it, Ctrl+K Ctrl+T opens the theme picker"
 # Ctrl+A in the pane would mark rows; in the box it selects the text, which the next letter replaces ("n": notes.md).
