@@ -76,12 +76,12 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// the plugin list, the terminal tabs), Total Commander's small commands
 /// (sub-phase 11a), the tab commands (Phase 12), the shell's top row and
 /// panes (Phase 16), the context menu's two (Phase 18), then the palette,
-/// overlays, a new window and About, and last the two of the file panes'
-/// column widths.
+/// overlays, a new window and About, then the two of the file panes'
+/// column widths, the folder sizes' toggle and the column view's.
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 111] = [
+const SEED: [Seed; 112] = [
     seed(
         "palette.show",
         "View",
@@ -747,6 +747,16 @@ const SEED: [Seed; 111] = [
         UI,
         None,
     ),
+    // The column view (Phase 19f, ADR 0016): the active pane's front tab
+    // shows its folder as columns, or as the list again.
+    seed(
+        "view.toggleColumns",
+        "View",
+        "Toggle Column View",
+        &["ctrl+alt+c"],
+        UI,
+        FILES,
+    ),
 ];
 
 /// The command a seed row describes.
@@ -985,10 +995,36 @@ mod tests {
         assert!(toggle.default_keys.is_empty());
     }
 
+    /// Phase 19f (ADR 0016): the column view's toggle acts on the active
+    /// pane, on Ctrl+Alt+C, which no other command has.
+    #[test]
+    fn the_column_view_toggle_is_seeded_on_a_key_of_its_own_in_the_files_view() {
+        let registry = CommandRegistry::core();
+        let command = registry.get("view.toggleColumns").unwrap();
+        assert_eq!(
+            (command.category.as_str(), command.title.as_str()),
+            ("View", "Toggle Column View")
+        );
+        assert_eq!(command.target, CommandTarget::Ui);
+        assert_eq!(command.source, CommandSource::Core);
+        assert_eq!(command.when.as_deref(), Some("filesView"));
+        assert!(!command.immutable);
+        assert_eq!(texts(&command.default_keys), ["ctrl+alt+c"]);
+        let sharing: Vec<&str> = registry
+            .commands()
+            .iter()
+            .filter(|other| texts(&other.default_keys).contains(&"ctrl+alt+c".to_owned()))
+            .map(|other| other.id.as_str())
+            .collect();
+        assert_eq!(sharing, ["view.toggleColumns"]);
+        // The default keymap compiles with it.
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 111);
+        assert_eq!(registry.commands().len(), 112);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1665,7 +1701,7 @@ mod tests {
             &registry,
             &[crate::keymap::Override {
                 command: "program.code".to_owned(),
-                keys: Some("ctrl+alt+c".parse().unwrap()),
+                keys: Some("ctrl+alt+e".parse().unwrap()),
                 when: None,
             }],
         )
@@ -1676,7 +1712,7 @@ mod tests {
             .iter()
             .map(ToString::to_string)
             .collect();
-        assert_eq!(keys, ["ctrl+alt+c"]);
+        assert_eq!(keys, ["ctrl+alt+e"]);
     }
 
     #[test]
