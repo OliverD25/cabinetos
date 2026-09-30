@@ -99,3 +99,39 @@ clipboard (documented in ui.md); dialogs that Windows' items open
 (Properties, Open with) belong to the core, have no owner window, and
 may open behind CabinetOS; step 2, the in-menu edit mode, is not
 started.
+
+## The planning session's checks (step 1)
+
+Main pulled at f584e5d, then cc8d5b3, on the main checkout. The five
+core checks: the first chain reported "TEST DONE" without having run
+the tests, because cargo could not relink the debug core while the
+window's unit tests held that file, and the grep behind the pipe hid
+cargo's exit code; rerun alone with the pipe status checked: 795
+passed, 0 failed, 6 ignored; clippy, fmt and deny green. The release
+core, CLI and indexer built; the window's Debug build with warnings as
+errors (0 warnings); 938 of 938 window tests with `CABINETOS_UI_E2E=1`,
+against the release core. Two test fixes the planning session made in
+parallel (the greeting's protocol 15, the changelog test on the frozen
+0.1.0 section) were dropped in favour of the coder's own cc8d5b3, which
+does the same.
+
+The live check with real keys, the Release window of 20:36 and the
+release core of 20:34 (`run-2026-09-30-2038.txt`): exit code 0, 143
+True, 2 False, both in the new section 18 and both the section's own
+reading: "the left pane is in menu18" read the cursor row before the
+listing had arrived (and expects a file name where the first row is the
+folder `bg18`), while the next check found `row-12.txt` under the
+pointer; "the program got the row's path" read the recorder's file
+before its line was complete, while the printed value was the right
+path. Every earlier section passed on the new menu; the scroll goal was
+met with no frame over 20 ms; Windows' menu showed 30 items, answered
+by the core in 817 ms, and its Copy put the row's file on the
+clipboard. A second run (20:49) was stopped by the foreground guard at
+its edge section when the creator, back at the PC, switched to Chrome;
+the third (20:57, after 45 s of idle input) gave 144 True and 1 False:
+the program check passes with its wait, and the pane check's pattern
+now accepts the folder's name, confirmed by the next full run.
+
+Step 2, the edit mode inside the menu, went to a coder on Opus at 20:56,
+since step 1's window behaviour was verified with real keys by the
+20:38 run.

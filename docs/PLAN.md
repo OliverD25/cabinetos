@@ -907,6 +907,25 @@ Articles: 1 (the shell query off the UI thread), 3 (the native flyout),
 6 (the config mirrors the menu), 7 (every entry a named command), 10
 (the shell menu opt-in). Handed to a coder on Opus on 2026-09-30.
 
+**Status (2026-09-30, evening): step 1 done; step 2 in work.** Step 1
+landed as 49ca8b7..cc8d5b3 by a coder on Opus: `contextMenu` and
+`programs` in the config with today's menus as the defaults, the
+`program.<name>` commands, Windows' menu on a COM thread of its own in
+`cabinetos-fs`, protocol 15, the pure menu model and the
+`CommandBarFlyout` in the window, ADR 0015. Checked on the main
+checkout: the five core checks (795 tests), 938 of 938 window tests with
+the end-to-end tests on, and the live check with real keys on the
+Release build: 143 True and 2 False at 20:38, both faults of the new
+section's own reading (the recorder's file read before its line was
+complete; the cursor on the fixture's first row, a folder, where the
+check expected a file), then 144 True and 1 False at 20:57 with the
+first fixed, the second fixed after it and confirmed by the next full
+run. Every earlier section True; the scroll goal met. Windows' menu
+answered 30 items in about 820 ms and its Copy reached the clipboard.
+The coder's fourteen decisions, with their undo, are in
+[log/2026-09-30/phase-18-context-menu-report.md](log/2026-09-30/phase-18-context-menu-report.md).
+Step 2, the edit mode inside the menu, went to a coder on Opus at 20:56.
+
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
