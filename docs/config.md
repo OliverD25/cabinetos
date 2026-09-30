@@ -61,9 +61,10 @@ file itself shows everything that can be set:
   "terminal": {
     "defaultProfile": "pwsh",
     "profiles": [
-      { "name": "pwsh", "command": "pwsh.exe", "args": ["-NoLogo"] },
-      { "name": "cmd", "command": "cmd.exe", "args": [] },
-      { "name": "wsl", "command": "wsl.exe", "args": [] }
+      { "name": "pwsh", "command": "pwsh.exe", "args": ["-NoLogo"], "followsPane": true },
+      { "name": "cmd", "command": "cmd.exe", "args": [], "followsPane": true },
+      { "name": "wsl", "command": "wsl.exe", "args": [], "followsPane": true },
+      { "name": "claude", "command": "claude.exe", "args": ["--append-system-prompt", "…"], "followsPane": false }
     ]
   },
   "keybindings": [],
@@ -79,7 +80,14 @@ file itself shows everything that can be set:
 }
 ```
 
-(The core writes each profile over several lines; they are shortened here.)
+(The core writes each profile over several lines; they are shortened here,
+and the `claude` profile's note is cut to `…`: the whole text is in
+[terminal.md](terminal.md), "Profiles".)
+
+The file is written only when it is missing. A `cabinetos.json` that exists
+already keeps its own `terminal.profiles`: if it lists three profiles, it
+gets no `claude`. Add the profile by hand
+([terminal.md](terminal.md), "Profiles", has the exact JSON to paste).
 
 It also writes `cabinetos.schema.json` next to the file, and brings it up to
 date at every start. The `$schema` key points to it, so editors such as
@@ -121,7 +129,7 @@ while you type.
 | `panes.selection` | `windows`, `commander` | `windows` | How the keyboard marks rows. `windows`: as in Explorer, a key that moves the cursor selects the row it moves to. `commander`: as in Total Commander, keys that move the cursor keep the marks, Shift with them marks the rows passed over, a new listing starts with nothing marked, and commands act on the marked rows, or on the cursor row when none is marked. The mouse keeps the Windows rules in both |
 | `files.editor` | `null`, or `{ "command", "args" }` | `null` | The program `file.edit` (F4) opens a file with; the file's path is added as the last argument. `null`: Windows' own edit verb for the file's type, else Notepad. `command` is a full path, or a program name found on the `PATH`, as for a terminal profile, never the current folder; it may not be empty. `args` may be left out |
 | `terminal.defaultProfile` | a profile `name` | `pwsh` | The shell a new terminal starts with when the client names none; must name one of the profiles |
-| `terminal.profiles` | list of `{ "name", "command", "args" }` | pwsh, cmd, wsl | The shells a terminal can run. Names must be unique; `args` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). |
+| `terminal.profiles` | list of `{ "name", "command", "args", "followsPane" }` | pwsh, cmd, wsl, claude | The programs a terminal can run. Names must be unique; `args` and `followsPane` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). `followsPane` (default `true`): whether the window types a change-directory line into the session when the active pane changes folder; `false` for a program that is not a shell, such as `claude`. |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
 | `logging.heavy` | `true`, `false` | `false` | Heavy logging: every operation is also written, at every level, into `heavy-<process>.<date>.jsonl` files next to the logs, at most 2 GB in all, even when that slows an operation down. On until turned off ([diagnostics.md](diagnostics.md), "Heavy mode") |

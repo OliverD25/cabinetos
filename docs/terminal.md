@@ -36,14 +36,53 @@ The defaults:
   "profiles": [
     { "name": "pwsh", "command": "pwsh.exe", "args": ["-NoLogo"] },
     { "name": "cmd", "command": "cmd.exe", "args": [] },
-    { "name": "wsl", "command": "wsl.exe", "args": [] }
+    { "name": "wsl", "command": "wsl.exe", "args": [] },
+    {
+      "name": "claude",
+      "command": "claude.exe",
+      "args": ["--append-system-prompt", "…"],
+      "followsPane": false
+    }
   ]
 }
 ```
 
+(The core writes `followsPane` for every profile, `true` for the first
+three. The `claude` profile's note is quoted below.)
+
 - The core reads the profiles at each `terminal_open`, so an edited profile
   applies to the next shell at once. A running shell keeps what it started
   with.
+- `followsPane` (default `true`) says whether the window types a
+  change-directory line into the session when the active pane changes
+  folder ("Following the active pane" below). Set it to `false` for a
+  program that is not a shell: the window never types that line into it,
+  because the program would take the line as its input. The client's own
+  `terminal_sync_cwd` (`cabinetos-cli term cd`) still works on such a
+  session, and so does typing paths at the prompt (Ctrl+P): that is the
+  user's own request. The key is read by the window only; the core starts
+  every profile the same way.
+- The `claude` profile starts Claude Code (`claude.exe`, the
+  subscription-based command-line program; it needs no API key). It is
+  not a shell, so it does not follow the pane: it starts in the folder
+  the terminal was opened in and stays there. `--append-system-prompt`
+  adds one line to Claude Code's system prompt, so it knows where it runs
+  and how to reach `cabinetos-cli`:
+  > You run inside the CabinetOS file manager's integrated terminal. Its
+  > command line is on the PATH as cabinetos-cli (also as cab).
+  > `cabinetos-cli state --json` prints both panes: their tabs, cursor and
+  > marked files. `cabinetos-cli --help` lists the rest. For the marked
+  > files, prefer its copy, move and delete: they run as jobs, and
+  > `cabinetos-cli undo --last` reverses the last one.
+- **A `cabinetos.json` that exists already keeps its own profile list.** The
+  core writes the defaults only when the file is missing; a file that lists
+  three profiles gets no `claude`. Add it by hand to `terminal.profiles`
+  (the full note is in the default file of a new install, and in
+  `sdk/config/cabinetos.schema.json`):
+  ```json
+  { "name": "claude", "command": "claude.exe", "followsPane": false,
+    "args": ["--append-system-prompt", "You run inside the CabinetOS file manager's integrated terminal. Its command line is on the PATH as cabinetos-cli (also as cab). `cabinetos-cli state --json` prints both panes: their tabs, cursor and marked files. `cabinetos-cli --help` lists the rest. For the marked files, prefer its copy, move and delete: they run as jobs, and `cabinetos-cli undo --last` reverses the last one."] }
+  ```
 - `command` is a full path, or a name looked up in the folders of `PATH`
   (with `.exe` added when it has no extension). The current folder is not
   searched, so a stray `pwsh.exe` there never runs. A program that is not
@@ -56,6 +95,13 @@ The defaults:
   (the pseudo-console speaks the VT sequences of xterm) and
   `CABINETOS_SESSION=<session id>`, so a script can tell it runs in a
   CabinetOS terminal.
+- The core's own folder is added at the end of the session's `PATH`
+  (unless `PATH` lists it already; a `PATH` that is missing or empty
+  becomes that folder alone). That folder holds `cabinetos-cli.exe`, and in
+  a release `cab.exe` too, so `cabinetos-cli` (and `cab` in a release) run
+  from any CabinetOS terminal. It goes last, so a program with the same
+  name that is already on `PATH` still wins. The core's own `PATH` does
+  not change.
 
 ## The byte pipe
 
@@ -148,7 +194,8 @@ The path must be an absolute path to a folder (`invalid_path`, `not_found`
 otherwise). Limits of typing a command: text already on the prompt line
 stays in front of it, and a program that runs in the shell (an editor, a
 long build) receives the line instead of the shell. The client decides
-when to sync; the core does not guess.
+when to sync; the core does not guess. The window does not ask for a sync
+in a session whose profile has `followsPane: false` ("Profiles" above).
 
 ## Typing paths
 

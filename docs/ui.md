@@ -1308,7 +1308,9 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   `terminal.profiles`. The caption says whether the shell follows the
   active pane: "cwd synced to active pane · {folder}", "cwd not synced: a
   command is being typed", "cwd not synced: a full-screen program runs",
-  or "pwsh exited with code 0" (shorter on the right). The × at the end
+  "cwd not synced: the profile does not follow the pane", or "pwsh
+  exited with code 0" (shorter on the right: "not synced: typing", "not
+  synced: a program runs", "not synced: profile"). The × at the end
   hides the dock; the shells go on running.
 - **Ctrl+`.** In a pane, it shows the terminal and gives it the keyboard;
   the first time, it starts the default profile in the active pane's
@@ -1323,8 +1325,14 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   that typing would break. The sync is skipped when a line is half typed
   (keys went in since the last Enter or Ctrl+C: the command would be
   added to that line), when a full-screen program runs (xterm.js shows the
-  alternate screen: vim, less, a TUI would get the line), when the shell
-  is in that folder already, or when it ended. A skipped sync is not tried
+  alternate screen: vim, less, a TUI would get the line), when the
+  session's profile has `followsPane: false` (a program that is not a
+  shell, such as the `claude` profile: the line would be its input, and
+  Claude Code does not use the alternate screen, so the rule before would
+  not catch it; the caption says "cwd not synced: the profile does not
+  follow the pane"), when the shell is in that folder already, or when it
+  ended. Ctrl+P and Ctrl+Shift+Enter still type paths at such a prompt:
+  that is the user's own request. A skipped sync is not tried
   again when the line is finished, because that line may be the user's own
   `cd`; the next change of the pane's folder tries again. Only the shown
   tab follows, and only while the dock is shown; when it is shown again,

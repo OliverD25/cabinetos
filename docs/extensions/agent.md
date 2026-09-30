@@ -314,3 +314,17 @@ step.
 - It cannot change settings, read secrets, run a program or reach any
   network host the manifest does not name.
 - The model can be wrong. That is the reason for the preview, and for undo.
+
+## Claude Code in the terminal
+
+You can also run Claude Code, the command-line program, from the `claude`
+terminal profile: Ctrl+` opens the terminal, and the `terminal.new` command
+with `{"profile": "claude"}`, or the dock's profile list, starts it in the
+active pane's folder, on your Claude subscription, so CabinetOS holds no key
+for it ([terminal.md](../terminal.md), "Profiles"). It finds `cabinetos-cli`
+(and `cab` in a release) on the `PATH`, and a note added to its system prompt
+tells it so. Keys go to it as to any shell, and the folder sync leaves it
+alone. It does not get this extension's preview-before-change flow: it asks
+its own permission questions, and CabinetOS shows no preview. A copy, move or
+delete it runs through `cabinetos-cli` is a job in the undo journal, and what
+it does with its own tools is not.
