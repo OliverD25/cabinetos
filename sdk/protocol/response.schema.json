@@ -1215,6 +1215,24 @@
             "id",
             "name"
           ]
+        },
+        {
+          "description": "An entry of `programs` in the configuration: the command\n`program.<name>`, which the core runs.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "program"
+            },
+            "name": {
+              "description": "The program's `name`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ]
         }
       ]
     },
@@ -1485,6 +1503,21 @@
           "description": "The updater cannot do it: this install cannot update itself (a\ndevelopment build, an all-users install), there is nothing to\ndownload or to apply, no previous version to roll back to, another\nupdate step is running, or the step failed (the message says why).",
           "type": "string",
           "const": "update_error"
+        },
+        {
+          "description": "`program.<name>`: no entry of `programs` has that name.",
+          "type": "string",
+          "const": "unknown_program"
+        },
+        {
+          "description": "`program.<name>`: the program cannot start now. Its command is\nneither a file nor a program on the `PATH`, a token has nothing to\nstand for (no focused entry for `{path}`), or Windows refused.",
+          "type": "string",
+          "const": "program_refused"
+        },
+        {
+          "description": "`program.<name>`: the program's command line would be longer than\n30,000 characters (many selected paths).",
+          "type": "string",
+          "const": "command_line_too_long"
         }
       ]
     },

@@ -21,7 +21,9 @@ mod search;
 
 pub use keymap::{Binding, CHORD_WINDOW_MS, Compiled, Keymap, KeymapError, Override, compile};
 pub use keys::{Key, KeyChord, KeyParseError, KeySequence, MAX_CHORDS};
-pub use registry::{Command, CommandRegistry, DuplicateCommand, IMMUTABLE_TIER};
+pub use registry::{
+    Command, CommandRegistry, DuplicateCommand, IMMUTABLE_TIER, PROGRAM_PREFIX, program_command,
+};
 pub use search::{rank, search};
 
 /// The palette's view of a command, with the keys bound now.

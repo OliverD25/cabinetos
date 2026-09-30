@@ -75,11 +75,12 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// own commands (the sidebar's pins, the editor tabs, the transfer panel,
 /// the plugin list, the terminal tabs), Total Commander's small commands
 /// (sub-phase 11a), the tab commands (Phase 12), the shell's top row and
-/// panes (Phase 16), then the palette, overlays, a new window and About.
+/// panes (Phase 16), the context menu's two (Phase 18), then the palette,
+/// overlays, a new window and About.
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 105] = [
+const SEED: [Seed; 107] = [
     seed(
         "palette.show",
         "View",
@@ -638,6 +639,25 @@ const SEED: [Seed; 105] = [
         UI,
         None,
     ),
+    // Phase 18: the context menu comes from `contextMenu` in the settings.
+    // Windows' own menu of the focused row, when `contextMenu.shellMenu` is
+    // on (else the context menu); and the file opened at the menu's keys.
+    seed(
+        "menu.showShell",
+        "File",
+        "Show Windows Context Menu",
+        &["ctrl+shift+f10"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "menu.edit",
+        "Preferences",
+        "Edit Context Menu…",
+        &[],
+        UI,
+        None,
+    ),
     // Explorer's key for another window of the same folder.
     seed("window.new", "Window", "New Window", &["ctrl+n"], UI, None),
     seed("help.about", "Help", "About CabinetOS", &[], UI, None),
@@ -707,6 +727,29 @@ fn from_seed(seed: &Seed) -> Command {
     }
 }
 
+/// The prefix of the command a `programs` entry becomes: `program.<name>`.
+pub const PROGRAM_PREFIX: &str = "program.";
+
+/// The command of a `programs` entry: the core runs it (it starts the
+/// program with the paths of the window's state), in the palette's
+/// Programs group, bindable in a file pane like the file commands.
+#[must_use]
+pub fn program_command(name: &str, title: &str) -> Command {
+    Command {
+        id: format!("{PROGRAM_PREFIX}{name}"),
+        category: "Programs".to_owned(),
+        title: title.to_owned(),
+        default_keys: Vec::new(),
+        source: CommandSource::Program {
+            name: name.to_owned(),
+        },
+        target: CommandTarget::Core,
+        when: FILES.map(str::to_owned),
+        immutable: false,
+        input: None,
+    }
+}
+
 /// Every command, in a stable order.
 #[derive(Clone, Debug, Default)]
 pub struct CommandRegistry {
@@ -752,6 +795,27 @@ impl CommandRegistry {
         self.commands.retain(
             |command| !matches!(&command.source, CommandSource::Plugin { id, .. } if id == plugin_id),
         );
+    }
+
+    /// Replaces the commands of the configuration's `programs` with these,
+    /// each `(name, title)` the command `program.<name>` (Phase 18). They
+    /// have no default keys, so they never clash with a binding; a key the
+    /// user gives one in `keybindings` binds it as any other command. A
+    /// program whose ID another command has (a plugin's) is left out, and
+    /// its name returned.
+    pub fn set_programs<'a>(
+        &mut self,
+        programs: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Vec<String> {
+        self.commands
+            .retain(|command| !matches!(command.source, CommandSource::Program { .. }));
+        let mut left_out = Vec::new();
+        for (name, title) in programs {
+            if self.register(program_command(name, title)).is_err() {
+                left_out.push(name.to_owned());
+            }
+        }
+        left_out
     }
 
     /// The command with this ID.
@@ -845,7 +909,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 105);
+        assert_eq!(registry.commands().len(), 107);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1425,6 +1489,98 @@ mod tests {
             .map(|command| command.id.as_str())
             .collect();
         assert_eq!(immutable, IMMUTABLE_TIER);
+    }
+
+    #[test]
+    fn the_context_menu_has_two_commands_of_its_own() {
+        let registry = CommandRegistry::core();
+        let show = registry.get("menu.showShell").unwrap();
+        assert_eq!(texts(&show.default_keys), ["ctrl+shift+f10"]);
+        assert_eq!(show.when.as_deref(), Some("filesView"));
+        assert_eq!(show.target, CommandTarget::Ui);
+        let edit = registry.get("menu.edit").unwrap();
+        assert!(edit.default_keys.is_empty());
+        assert_eq!(
+            (edit.category.as_str(), edit.title.as_str()),
+            ("Preferences", "Edit Context Menu…")
+        );
+        // Shift+F10 stays the pane's own key for the context menu.
+        let compiled = crate::keymap::compile(&registry, &[]).unwrap();
+        assert!(
+            compiled
+                .keymap
+                .to_wire()
+                .bindings
+                .iter()
+                .all(|binding| binding.keys != "shift+f10")
+        );
+    }
+
+    #[test]
+    fn programs_become_commands_that_the_core_runs() {
+        let mut registry = CommandRegistry::core();
+        let core_count = registry.commands().len();
+        let left_out = registry.set_programs([("code", "Open in Code"), ("notes", "notes")]);
+        assert!(left_out.is_empty());
+        let code = registry.get("program.code").unwrap();
+        assert_eq!(
+            (
+                code.category.as_str(),
+                code.title.as_str(),
+                code.target,
+                code.when.as_deref()
+            ),
+            (
+                "Programs",
+                "Open in Code",
+                CommandTarget::Core,
+                Some("filesView")
+            )
+        );
+        assert_eq!(
+            code.source,
+            CommandSource::Program {
+                name: "code".to_owned()
+            }
+        );
+        assert!(code.default_keys.is_empty() && !code.immutable);
+        // A new list replaces the old one; the core's commands stay.
+        registry.set_programs([("notes", "Notes")]);
+        assert!(registry.get("program.code").is_none());
+        assert_eq!(registry.get("program.notes").unwrap().title, "Notes");
+        assert_eq!(registry.commands().len(), core_count + 1);
+        // A plugin's command with the same ID keeps its place.
+        let mut plugin = program_command("taken", "x");
+        plugin.source = CommandSource::Plugin {
+            id: "p".to_owned(),
+            name: "P".to_owned(),
+        };
+        registry.register(plugin).unwrap();
+        assert_eq!(registry.set_programs([("taken", "Taken")]), ["taken"]);
+        assert!(matches!(
+            registry.get("program.taken").unwrap().source,
+            CommandSource::Plugin { .. }
+        ));
+        registry.set_programs([]);
+        assert_eq!(registry.commands().len(), core_count + 1);
+        // A key in the settings binds a program as any other command.
+        registry.set_programs([("code", "Code")]);
+        let compiled = crate::keymap::compile(
+            &registry,
+            &[crate::keymap::Override {
+                command: "program.code".to_owned(),
+                keys: Some("ctrl+alt+c".parse().unwrap()),
+                when: None,
+            }],
+        )
+        .unwrap();
+        let keys: Vec<String> = compiled
+            .keymap
+            .keys_of("program.code")
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(keys, ["ctrl+alt+c"]);
     }
 
     #[test]

@@ -6,10 +6,8 @@
 //! core checks them when the file is read and turns each program into the
 //! command `program.<name>`.
 
+pub use cabinetos_commands::PROGRAM_PREFIX;
 use serde::{Deserialize, Serialize};
-
-/// The prefix of the command a `programs` entry becomes: `program.<name>`.
-pub const PROGRAM_PREFIX: &str = "program.";
 
 /// The tokens a program's arguments may hold.
 pub const PROGRAM_TOKENS: [&str; 3] = ["{path}", "{selection}", "{cwd}"];

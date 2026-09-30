@@ -112,5 +112,10 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// `update_download`, `update_apply`, `update_rollback` and
 /// `update_snooze` with the reply `update_state`, the events
 /// `update_state_changed` and `update_progress`, and the error code
-/// `update_error`.
-pub const PROTOCOL_VERSION: u32 = 14;
+/// `update_error`; version 15 the context menu of Phase 18: the command
+/// source `program` and the error codes `unknown_program`,
+/// `program_refused` and `command_line_too_long` of the `program.<name>`
+/// commands, and Windows' own menu (`shell_menu` with the reply
+/// `shell_menu`, `shell_menu_invoke`, the error codes `shell_menu_error`,
+/// `no_such_menu` and `shell_menu_off`).
+pub const PROTOCOL_VERSION: u32 = 15;

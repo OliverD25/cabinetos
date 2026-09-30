@@ -7,7 +7,7 @@
 
 use std::ffi::OsString;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use windows::Win32::Storage::FileSystem::{
     FILE_ATTRIBUTE_DIRECTORY, GetFileAttributesW, INVALID_FILE_ATTRIBUTES,
@@ -53,6 +53,7 @@ fn open_launch(plain: &[u16]) -> Launch<'_> {
         file: plain,
         parameters: None,
         mask: SEE_MASK_NO_CONSOLE,
+        directory: None,
     }
 }
 
@@ -80,6 +81,7 @@ pub fn show_properties(paths: &[String]) -> Result<(), FsError> {
             file: &plain,
             parameters: None,
             mask: SEE_MASK_INVOKEIDLIST,
+            directory: None,
         })
         .map_err(|error| refused(path, &plain, &error));
     }
@@ -144,6 +146,7 @@ pub fn edit_path(path: &str, editor: Option<&Editor>) -> Result<(), FsError> {
                 file: &plain,
                 parameters: None,
                 mask: SEE_MASK_NO_CONSOLE,
+                directory: None,
             })
             .map_err(|error| refused(path, &plain, &error));
         }
@@ -168,8 +171,54 @@ pub fn edit_path(path: &str, editor: Option<&Editor>) -> Result<(), FsError> {
         file: &file,
         parameters: Some(&parameters),
         mask: SEE_MASK_NO_CONSOLE,
+        directory: None,
     })
     .map_err(|error| shell_error(&program.program.display().to_string(), &error))
+}
+
+/// Starts `program` (a full path, found by the caller) with `arguments`,
+/// each quoted as the Microsoft C runtime splits a command line back
+/// ([`command_line`]), through the same `ShellExecuteExW` call as
+/// [`edit_path`]: no error dialogs, a console program with a console of
+/// its own. `directory` is its working folder when it is an existing
+/// folder whose plain path the shell takes (shorter than 260 characters);
+/// otherwise the shell's default. Returns once the program is started.
+/// The `programs` of the configuration start this way (Phase 18).
+pub fn start_program(
+    program: &Path,
+    arguments: &[String],
+    directory: Option<&str>,
+) -> Result<(), FsError> {
+    let file: Vec<u16> = program.as_os_str().encode_wide().chain([0]).collect();
+    let parameters: Vec<u16> = command_line(arguments).encode_utf16().chain([0]).collect();
+    let folder = directory
+        .filter(|folder| Path::new(folder).is_dir())
+        .map(|folder| folder.encode_utf16().chain([0]).collect::<Vec<u16>>())
+        .filter(|wide| wide.len() <= MAX_PATH);
+    let _apartment = Apartment::enter();
+    shell_execute(&Launch {
+        verb: w!("open"),
+        file: &file,
+        parameters: Some(&parameters),
+        mask: SEE_MASK_NO_CONSOLE,
+        directory: folder.as_deref(),
+    })
+    .map_err(|error| shell_error(&program.display().to_string(), &error))
+}
+
+/// `arguments` as one command line, each quoted the way the Microsoft C
+/// runtime splits a command line back into arguments (the rules
+/// `std::process::Command` follows): quotes only where needed.
+#[must_use]
+pub fn command_line(arguments: &[String]) -> String {
+    let mut line = String::new();
+    for arg in arguments {
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        push_argument(&mut line, arg);
+    }
+    line
 }
 
 /// `Ok` when `path` can be opened for editing: it exists as given (a link
@@ -240,6 +289,9 @@ struct Launch<'a> {
     /// no window. `SEE_MASK_INVOKEIDLIST`: the verb comes from the item's
     /// own context menu, which is where `properties` is.
     mask: u32,
+    /// The program's working folder, NUL-terminated; `None` leaves it to
+    /// the shell.
+    directory: Option<&'a [u16]>,
 }
 
 /// Runs `launch` without error dialogs, returning once the shell is done
@@ -263,6 +315,9 @@ fn execute_info(launch: &Launch<'_>) -> SHELLEXECUTEINFOW {
         lpParameters: launch
             .parameters
             .map_or_else(PCWSTR::null, |parameters| PCWSTR(parameters.as_ptr())),
+        lpDirectory: launch
+            .directory
+            .map_or_else(PCWSTR::null, |directory| PCWSTR(directory.as_ptr())),
         nShow: SW_SHOWNORMAL.0,
         ..SHELLEXECUTEINFOW::default()
     }

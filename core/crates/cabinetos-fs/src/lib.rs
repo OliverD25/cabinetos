@@ -81,7 +81,9 @@ pub use drives::DriveWatcher;
 pub use error::FsError;
 pub use hydrate::{Hydrator, ICON_SIZES, ICONS_KEPT};
 pub use measure::{MeasureError, Tree, measure_tree};
-pub use open::{Editor, check_editable, edit_path, open_path, show_properties};
+pub use open::{
+    Editor, check_editable, command_line, edit_path, open_path, show_properties, start_program,
+};
 pub use ops::{create_directory, create_file, rename};
 pub use path::verbatim_wide;
 pub use pattern::{NamePatterns, match_entries};

@@ -1275,6 +1275,12 @@ pub enum CommandSource {
         /// The plugin's display name, for the badge on its commands.
         name: String,
     },
+    /// An entry of `programs` in the configuration: the command
+    /// `program.<name>`, which the core runs.
+    Program {
+        /// The program's `name`.
+        name: String,
+    },
 }
 
 /// Who runs a command.
@@ -1692,6 +1698,15 @@ pub enum ErrorCode {
     /// download or to apply, no previous version to roll back to, another
     /// update step is running, or the step failed (the message says why).
     UpdateError,
+    /// `program.<name>`: no entry of `programs` has that name.
+    UnknownProgram,
+    /// `program.<name>`: the program cannot start now. Its command is
+    /// neither a file nor a program on the `PATH`, a token has nothing to
+    /// stand for (no focused entry for `{path}`), or Windows refused.
+    ProgramRefused,
+    /// `program.<name>`: the program's command line would be longer than
+    /// 30,000 characters (many selected paths).
+    CommandLineTooLong,
 }
 
 #[cfg(test)]

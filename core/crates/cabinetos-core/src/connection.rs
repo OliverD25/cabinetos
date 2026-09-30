@@ -1449,6 +1449,9 @@ impl Session {
             });
             return None;
         }
+        if let Some(name) = command.strip_prefix(cabinetos_config::PROGRAM_PREFIX) {
+            return self.run_program(id, span, name);
+        }
         let reply = self.services.settings.execute(&command);
         if let Response::Error {
             code: ErrorCode::UnknownCommand,
@@ -1466,6 +1469,55 @@ impl Session {
             )));
         }
         Some(reply)
+    }
+
+    /// `execute_command` of `program.<name>`: the program of that
+    /// `programs` entry, with the tokens of this client's window state (the
+    /// newest state of any window for a client that sent none, such as the
+    /// command line). It starts on the blocking pool: the shell may take a
+    /// moment.
+    fn run_program(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        name: &str,
+    ) -> Option<Response> {
+        let snapshot = self.services.settings.snapshot();
+        let Some(program) = snapshot
+            .config
+            .programs
+            .iter()
+            .find(|program| program.name == name)
+            .cloned()
+        else {
+            return Some(crate::programs::refuse(
+                name,
+                ErrorCode::UnknownProgram,
+                format!(
+                    "no entry of programs is named `{name}`; the menu, a key or the palette starts only the programs listed there"
+                ),
+            ));
+        };
+        let own = self.client.as_ref().map(|client| client.id.as_str());
+        let state = match self.services.windows.get(own) {
+            Response::WindowState { state, .. } => state,
+            _ => match self.services.windows.get(None) {
+                Response::WindowState { state, .. } => state,
+                _ => {
+                    return Some(crate::programs::refuse(
+                        name,
+                        ErrorCode::NoWindow,
+                        format!(
+                            "program.{name}: no window has said what it shows, so {{path}}, {{selection}} and {{cwd}} have nothing to stand for"
+                        ),
+                    ));
+                }
+            },
+        };
+        self.spawn_reply(id, span, "execute_command", move || {
+            crate::programs::run(&program, &state)
+        });
+        None
     }
 
     /// The plugin requests. `list_plugins` answers at once; the others run

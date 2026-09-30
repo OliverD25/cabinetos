@@ -32,6 +32,7 @@ mod market;
 mod measure;
 mod plugins;
 mod preview;
+mod programs;
 mod search;
 mod secrets;
 mod settings;

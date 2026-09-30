@@ -54,10 +54,13 @@ impl Settings {
     /// compiles the keymap. A file with an error leaves the defaults in
     /// effect until it is fixed. Blocking: it reads and may write the file.
     pub(crate) fn open(path: PathBuf, events: Arc<EventHub>) -> Arc<Self> {
-        let registry = CommandRegistry::core();
+        let mut registry = CommandRegistry::core();
         let mut compiled = None;
         let (store, opened) = ConfigStore::open(path.clone(), |config| {
-            compiled = Some(compile(&registry, &config.overrides())?);
+            compiled = Some(compile(
+                &with_programs(&registry, config),
+                &config.overrides(),
+            )?);
             Ok(())
         });
         match &opened {
@@ -77,6 +80,7 @@ impl Settings {
                 "the configuration file has an error; using the defaults until it is fixed"
             ),
         }
+        set_programs(&mut registry, store.config());
         // Without a loaded file the store holds the defaults, and the
         // defaults always compile (a test in cabinetos-commands says so).
         let compiled = compiled.unwrap_or_else(|| {
@@ -181,7 +185,7 @@ impl Settings {
                 keybinding: None,
                 message,
             })?;
-            compiled = Some(compile(&self.registry(), &config.overrides())?);
+            compiled = Some(self.compile_for(config)?);
             Ok(())
         });
         match result {
@@ -271,7 +275,7 @@ impl Settings {
         let mut store = self.lock_store();
         let mut compiled = None;
         let result = store.set_keybinding(command, keys, |config| {
-            compiled = Some(compile(&self.registry(), &config.overrides())?);
+            compiled = Some(self.compile_for(config)?);
             Ok(())
         });
         self.finish_update(&store, result, compiled)
@@ -295,7 +299,7 @@ impl Settings {
         let mut store = self.lock_store();
         let mut compiled = None;
         let result = store.unset_keybinding(command, |config| {
-            compiled = Some(compile(&self.registry(), &config.overrides())?);
+            compiled = Some(self.compile_for(config)?);
             Ok(())
         });
         self.finish_update(&store, result, compiled)
@@ -317,7 +321,7 @@ impl Settings {
                 Ok(())
             },
             |config| {
-                compiled = Some(compile(&self.registry(), &config.overrides())?);
+                compiled = Some(self.compile_for(config)?);
                 Ok(())
             },
         );
@@ -336,8 +340,18 @@ impl Settings {
     pub(crate) fn plugin_of(&self, command: &str) -> Option<String> {
         match &self.registry().get(command)?.source {
             CommandSource::Plugin { id, .. } => Some(id.clone()),
-            CommandSource::Core => None,
+            CommandSource::Core | CommandSource::Program { .. } => None,
         }
+    }
+
+    /// The keymap `config` would have: compiled against the registry with
+    /// `config`'s programs, so a key bound to a program added in the same
+    /// edit binds.
+    fn compile_for(&self, config: &Config) -> Result<Compiled, KeymapError> {
+        compile(
+            &with_programs(&self.registry(), config),
+            &config.overrides(),
+        )
     }
 
     /// Replaces the commands of one plugin (none: it stopped or crashed)
@@ -450,7 +464,7 @@ impl Settings {
         let mut store = self.lock_store();
         let mut compiled = None;
         let outcome = store.reload(|config| {
-            compiled = Some(compile(&self.registry(), &config.overrides())?);
+            compiled = Some(self.compile_for(config)?);
             Ok(())
         });
         match outcome {
@@ -486,6 +500,9 @@ impl Settings {
         if config.logging.heavy != previous.config.logging.heavy {
             apply_heavy(config.logging.heavy);
         }
+        if config.programs != previous.config.programs {
+            set_programs(&mut self.registry_mut(), &config);
+        }
         bundle_config(&config);
         tracing::info!(?changed, keymap_changed, "configuration changed");
         let wire_keymap = keymap_changed.then(|| keymap.to_wire());
@@ -516,6 +533,35 @@ impl Settings {
             .write()
             .unwrap_or_else(PoisonError::into_inner)
     }
+}
+
+/// Makes `config`'s programs the registry's `program.<name>` commands.
+fn set_programs(registry: &mut CommandRegistry, config: &Config) {
+    let left_out = registry.set_programs(
+        config
+            .programs
+            .iter()
+            .map(|program| (program.name.as_str(), program.shown_title())),
+    );
+    for name in left_out {
+        tracing::warn!(
+            program = %name,
+            "another command has the ID program.{name} already (a plugin's); the program has no command"
+        );
+    }
+    tracing::info!(programs = config.programs.len(), "programs registered");
+}
+
+/// A copy of `registry` with `config`'s programs.
+fn with_programs(registry: &CommandRegistry, config: &Config) -> CommandRegistry {
+    let mut registry = registry.clone();
+    registry.set_programs(
+        config
+            .programs
+            .iter()
+            .map(|program| (program.name.as_str(), program.shown_title())),
+    );
+    registry
 }
 
 /// Registers one plugin command; its default keys are dropped when they

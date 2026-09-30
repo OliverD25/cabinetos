@@ -183,7 +183,7 @@ fn command_line(command: &CommandInfo) -> String {
     };
     let badge = match &command.source {
         CommandSource::Plugin { name, .. } => format!("  [{name}]"),
-        CommandSource::Core => String::new(),
+        CommandSource::Core | CommandSource::Program { .. } => String::new(),
     };
     let asks = if command.input.is_some() {
         "  (asks for text)"
