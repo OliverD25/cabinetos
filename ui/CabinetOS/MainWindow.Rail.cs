@@ -23,6 +23,11 @@ public sealed partial class MainWindow
     private FolderTreeModel _tree = null!;
     private bool _railLayout;
 
+    // The classic and right layouts have no rail: the Search view takes the sidebar's place while it is asked for
+    // (view.showSearch), and the folders come back when the search is left (Phase 16 removed the command bar's field).
+    private bool _searchInSidebar;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _treeDrawnTimer;
+
     // The view ui.sidebarView names, and the one that shows: a tool's ID names none until the tools are read.
     private string _wantedSidebarView = RailModel.Explorer;
     private string _sidebarView = RailModel.Explorer;
@@ -69,24 +74,23 @@ public sealed partial class MainWindow
         SidebarSplitter.Dragged += delta => ResizeSidebar(_sidebarDragStart + delta);
         SidebarSplitter.DragCompleted += EndSidebarDrag;
 
-        // The Search view drives the search the command bar's box drives: the two fields' texts stay equal.
-        SearchPanelView.QueryChanged += text =>
-        {
-            if (SearchBox.Text != text)
-            {
-                SearchBox.Text = text;
-            }
-        };
+        // The Search view's field drives the search (the command bar's field is gone since Phase 16).
+        SearchPanelView.QueryChanged += SetSearchText;
         SearchPanelView.SearchNow += () => _ = SearchWhenDueAsync(now: true);
         // Esc leaves the field even when no search is running (the hit was chosen, or nothing was typed): the pane gets the keyboard.
         SearchPanelView.Cancelled += () =>
         {
+            LeaveSidebarSearch();
             if (!EndSearch(focusPane: true))
             {
                 FocusPaneOrEditor();
             }
         };
-        SearchPanelView.HitChosen += hit => _ = GoToHitAsync(hit, null);
+        SearchPanelView.HitChosen += hit =>
+        {
+            LeaveSidebarSearch();
+            _ = GoToHitAsync(hit, null);
+        };
         SearchPanelView.WholeVolumeChanged += wholeVolume =>
             _ = _router.ExecuteAsync("search.scope", CommandArgs.Object(("wholeVolume", wholeVolume)), "sidebar");
     }
@@ -105,6 +109,7 @@ public sealed partial class MainWindow
     private void ApplyRailLayout(bool rail)
     {
         _railLayout = rail;
+        _searchInSidebar = false;
         Rail.Visibility = rail ? Visibility.Visible : Visibility.Collapsed;
         SidebarView.ShowTree = rail;
         ReapplyWidths();
@@ -125,9 +130,10 @@ public sealed partial class MainWindow
     private void UpdateSidebarChrome()
     {
         SidebarSplitter.Visibility = _railLayout && _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
-        var explorer = !_railLayout || _sidebarView == RailModel.Explorer;
+        var explorer = _railLayout ? _sidebarView == RailModel.Explorer : !_searchInSidebar;
         SidebarView.Visibility = explorer ? Visibility.Visible : Visibility.Collapsed;
-        SearchPanelView.Visibility = _railLayout && _sidebarView == RailModel.Search ? Visibility.Visible : Visibility.Collapsed;
+        var search = _railLayout ? _sidebarView == RailModel.Search : _searchInSidebar;
+        SearchPanelView.Visibility = search ? Visibility.Visible : Visibility.Collapsed;
         ShowSidebarPage(_railLayout && _sidebarOpen && _rail.Find(_sidebarView) is { Kind: RailKind.Tool } ? _sidebarView : null);
         UpdateRail();
         // The live check reads this line: it is where it learns the width the divider sits at.
@@ -238,6 +244,7 @@ public sealed partial class MainWindow
         if (!_railLayout)
         {
             // The other layouts have the sidebar only: open it, and put the keyboard on its first folder.
+            LeaveSidebarSearch();
             if (!_sidebarOpen)
             {
                 SetSidebarOpen(true);
@@ -257,7 +264,19 @@ public sealed partial class MainWindow
     {
         if (!_railLayout)
         {
-            return _router.ExecuteAsync("search.focus", trigger: "view.showSearch");
+            // Without a rail the Search view shows in the sidebar's place until the search is left.
+            _searchInSidebar = true;
+            if (_sidebarOpen)
+            {
+                UpdateSidebarChrome();
+            }
+            else
+            {
+                SetSidebarOpen(true);
+            }
+            SidebarHost.UpdateLayout();
+            SearchPanelView.FocusQuery();
+            return Task.CompletedTask;
         }
         if (MarketView.IsOpen)
         {
@@ -265,6 +284,16 @@ public sealed partial class MainWindow
         }
         ShowSidebarView(RailModel.Search, focus: true);
         return Task.CompletedTask;
+    }
+
+    // The classic and right layouts: the sidebar shows its folders again.
+    private void LeaveSidebarSearch()
+    {
+        if (!_railLayout && _searchInSidebar)
+        {
+            _searchInSidebar = false;
+            UpdateSidebarChrome();
+        }
     }
 
     // ----- The folder tree -----
@@ -362,7 +391,8 @@ public sealed partial class MainWindow
     // its rows in the model and none on the screen looks full in every other line of the log.
     private void LogTreeDrawnSoon()
     {
-        var timer = DispatcherQueue.CreateTimer();
+        // Held in a field: a timer nothing refers to may be collected before it ticks.
+        var timer = _treeDrawnTimer = DispatcherQueue.CreateTimer();
         timer.IsRepeating = false;
         timer.Interval = TimeSpan.FromMilliseconds(600);
         timer.Tick += (_, _) => Diag.Info(RailTarget, "the tree drew rows", new LogField("rows", _tree.Rows.Count),

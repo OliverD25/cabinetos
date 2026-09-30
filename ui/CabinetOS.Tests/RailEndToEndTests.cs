@@ -216,7 +216,7 @@ public class RailEndToEndTests
         {
             var folder = Path.Combine(data, "a");
             var sub = Path.Combine(folder, "sub");
-            // The tree opens down to sub and lists it; the Search view shows what the command bar's box searched; two tool
+            // The tree opens down to sub and lists it; the Search view shows what the snapshot aid typed into it; two tool
             // pages start; the explorer's return suspends the page hidden first; the divider takes 320 px, then snaps shut.
             var first = run.Start("first", string.Join(';',
                 "size:1400x800",
@@ -258,7 +258,7 @@ public class RailEndToEndTests
             {
                 Assert.Equal("search", state.GetProperty("view").GetString());
                 Assert.Equal("one", state.GetProperty("search_text").GetString());
-                Assert.True(state.GetProperty("search_hits").GetInt32() >= 1, "the Search view lists the hits of the command bar's search");
+                Assert.True(state.GetProperty("search_hits").GetInt32() >= 1, "the Search view lists the hits of the search typed into it");
                 Assert.Equal("search", state.GetProperty("active").GetString());
             });
             State(logs, "notes", state =>

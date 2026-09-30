@@ -51,8 +51,6 @@ public sealed partial class FilePane : UserControl
     private string _renameOriginal = "";
     private int _noteIndex = -1;
     private bool _searchShown;
-    private string _headerPath = "";
-    private double _pathCharWidth;
     private readonly RowFactory _rows;
     private int _rowsAhead;
     private readonly PendingCursorKeys _cursorKeys = new();
@@ -77,11 +75,6 @@ public sealed partial class FilePane : UserControl
             ApplyCursorKeys();
             Focus(FocusState.Pointer);
         }), handledEventsToo: true);
-        Header.SizeChanged += (_, e) =>
-        {
-            PathText.MaxWidth = Math.Max(0, e.NewSize.Width * 0.45);
-            FitPathText();
-        };
         Scroller.ViewChanged += (_, _) => PositionEditors();
         EditLayer.SizeChanged += (_, e) => EditLayer.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
         RenameBox.KeyDown += OnRenameKeyDown;
@@ -97,9 +90,9 @@ public sealed partial class FilePane : UserControl
 
     /// <summary>
     /// Lays the pane out with the window's sizes and chrome now (docs/ui.md,
-    /// "Metrics and chrome"): the frame's corners, the header, the column
-    /// headers, the rows and the scroll arithmetic, the text boxes over a row.
-    /// Under hairlines the column headers are filled and the list has no inset.
+    /// "Metrics and chrome"): the frame's corners, the column headers, the
+    /// rows and the scroll arithmetic, the text boxes over a row. Under
+    /// hairlines the column headers are filled and the list has no inset.
     /// </summary>
     public void ApplyMetrics()
     {
@@ -109,9 +102,6 @@ public sealed partial class FilePane : UserControl
         _listPadding = hairlines ? 0 : 4;
         FontSize = m.FontSize;
         Frame.CornerRadius = WindowMetrics.Corners(m.RadiusSurface);
-        HeaderRow.Height = new GridLength(m.PaneHeaderHeight);
-        Header.Padding = WindowMetrics.Pad(m.ColumnHeaderPaddingX);
-        HeaderBorder.BorderBrush = ThemeResources.Brush(hairlines ? "CbHairlineBrush" : "CbDividerBrush");
         SearchBarGrid.Padding = new Thickness(m.ColumnHeaderPaddingX, 4, m.ColumnHeaderPaddingX, 6);
         SearchNoteText.LineHeight = SearchNoteText.FontSize * m.LineHeight;
         ColumnHeader.Background = hairlines ? ThemeResources.Brush("CbBarFillBrush") : null;
@@ -172,7 +162,6 @@ public sealed partial class FilePane : UserControl
                 _model.PropertyChanged += OnModelChanged;
                 _model.DetailsArrived += OnDetailsArrived;
             }
-            UpdateHeader();
             UpdateActivity();
             ApplyRows();
             UpdateSortGlyphs();
@@ -191,7 +180,7 @@ public sealed partial class FilePane : UserControl
         _rename = pending;
         _renameIndex = index;
         _renameOriginal = name;
-        ScrollIntoView(index);
+        ScrollIntoView(PositionOf(index));
         UpdateLayout();
         RenameBox.Text = name;
         RenameBox.Visibility = Visibility.Visible;
@@ -253,8 +242,21 @@ public sealed partial class FilePane : UserControl
     /// <summary>Stops an edit without renaming (Esc).</summary>
     public void CancelRename() => EndRename(commit: false);
 
-    /// <summary>The pane's header, where the drive list (Alt+F1, Alt+F2) opens under.</summary>
-    public FrameworkElement HeaderElement => Header;
+    /// <summary>How far down the list is scrolled, in pixels: what a tab keeps when it goes behind.</summary>
+    public double ScrollOffset => Scroller.VerticalOffset;
+
+    /// <summary>Scrolls the list to <paramref name="offset"/> pixels once its rows are laid out (a tab that comes to the front).</summary>
+    public void ScrollTo(double offset)
+    {
+        Scroller.UpdateLayout();
+        Scroller.ChangeView(null, Math.Max(0, offset), null, disableAnimation: true);
+        if (Scroller.VerticalOffset + 0.5 < Math.Min(offset, Scroller.ScrollableHeight))
+        {
+            // The repeater lays the rows out a moment later: try again then.
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () => Scroller.ChangeView(null, Math.Max(0, offset), null, disableAnimation: true));
+        }
+    }
 
     // WinUI's text box shows a clear button (×) while it has the focus. A name edited in
     // place has none in the design, and a click on it would move the focus and end the edit.
@@ -315,7 +317,7 @@ public sealed partial class FilePane : UserControl
     /// <summary>Where a context menu opened from the keyboard goes: under the row's name, in the window's coordinates.</summary>
     public Point RowAnchor(int index)
     {
-        if (index >= 0 && Repeater.TryGetElement(index) is FileRow row)
+        if (index >= 0 && PositionOf(index) is >= 0 and var position && Repeater.TryGetElement(position) is FileRow row)
         {
             return row.TransformToVisual(null).TransformPoint(new Point(40, _rowHeight));
         }
@@ -331,9 +333,6 @@ public sealed partial class FilePane : UserControl
                 break;
             case nameof(PaneModel.Selection):
                 MarkSelection();
-                break;
-            case nameof(PaneModel.Path):
-                UpdateHeader();
                 break;
             case nameof(PaneModel.ShowsActiveStroke) or nameof(PaneModel.HasBrightTitle):
                 UpdateActivity();
@@ -380,38 +379,6 @@ public sealed partial class FilePane : UserControl
         }
     }
 
-    private void UpdateHeader()
-    {
-        if (_model?.Search is { } search)
-        {
-            TitleText.Text = search.Header;
-            _headerPath = search.Scope;
-        }
-        else
-        {
-            TitleText.Text = _model?.FolderName ?? "";
-            _headerPath = _model?.Path ?? "";
-        }
-        FitPathText();
-    }
-
-    // The header's path keeps its drive and its last names around "…" when it is too long for
-    // its room (docs/ui.md, "Long paths"); the font is fixed-width, so a character count is exact.
-    private void FitPathText()
-    {
-        if (_pathCharWidth <= 0)
-        {
-            var probe = new TextBlock { FontFamily = PathText.FontFamily, FontSize = PathText.FontSize, Text = new string('0', 10) };
-            probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            _pathCharWidth = probe.DesiredSize.Width / 10;
-        }
-        var room = PathText.MaxWidth is > 0 and < double.PositiveInfinity && _pathCharWidth > 0
-            ? (int)(PathText.MaxWidth / _pathCharWidth)
-            : int.MaxValue;
-        PathText.Text = DisplayFormat.ShortPath(_headerPath, room);
-        ToolTipService.SetToolTip(PathText, PathText.Text == _headerPath ? null : _headerPath);
-    }
-
     // Search mode (docs/ui.md, "Search"): the hits in the same rows, the search's title and
     // note in the header, "Folder" where a listing has "Modified". The listing waits underneath.
     private void ApplySearch()
@@ -427,7 +394,6 @@ public sealed partial class FilePane : UserControl
                 _searchShown = false;
                 SearchBar.Visibility = Visibility.Collapsed;
                 SecondHeading.Text = "Modified";
-                UpdateHeader();
                 ApplyRows();
                 ScrollToFocus();
             }
@@ -439,7 +405,9 @@ public sealed partial class FilePane : UserControl
         HideRowNote();
         SearchBar.Visibility = Visibility.Visible;
         SecondHeading.Text = "Folder";
-        UpdateHeader();
+        // The search's title and what it searched, where the pane's header had them.
+        SearchTitleText.Text = search.Header;
+        ToolTipService.SetToolTip(SearchTitleText, search.Scope.Length > 0 ? search.Scope : null);
         SearchNoteText.Text = search.Note;
         SearchNoteText.Visibility = search.Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         WholeVolumeBox.IsChecked = search.WholeVolume;
@@ -463,14 +431,14 @@ public sealed partial class FilePane : UserControl
             _ => "Inactive",
         };
         VisualStateManager.GoToState(this, state, false);
-        // Under hairlines the active pane's header is filled (a single pane's always is), as in the handout.
-        HeaderBorder.Background = WindowMetrics.Chrome.Hairlines && state != "Inactive" ? ThemeResources.Brush("CbHeaderActiveFillBrush") : null;
     }
 
+    // "This folder is empty." says nothing while a find filter shows no row: the widget's count says so.
     private void UpdateMessage()
     {
-        MessageText.Text = _model?.Message ?? "";
-        MessageText.Visibility = string.IsNullOrEmpty(_model?.Message) ? Visibility.Collapsed : Visibility.Visible;
+        var message = _model is { Selection.IsFiltered: false } model ? model.Message : null;
+        MessageText.Text = message ?? "";
+        MessageText.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void ApplyRows()
@@ -497,7 +465,7 @@ public sealed partial class FilePane : UserControl
             HideRowNote();
             if (_model is { FocusIndex: > 0 } model)
             {
-                ScrollIntoView(model.FocusIndex);
+                ScrollIntoView(PositionOf(model.FocusIndex));
             }
         }
         else if (IsRenaming && !_newRow)
@@ -561,7 +529,7 @@ public sealed partial class FilePane : UserControl
                 _rows.MakeAhead(ahead);
             }
             _realized.Add(row);
-            Mark(row, args.Index);
+            Mark(row, row.Index);
             row.DragStartingRow -= OnRowDragStarting;
             row.DragStartingRow += OnRowDragStarting;
             row.DropCompletedRow -= OnRowDropCompleted;
@@ -589,9 +557,10 @@ public sealed partial class FilePane : UserControl
         _preparedFirst = int.MaxValue;
         _preparedLast = -1;
         // Search hits are not entries of the listing: their types come from what is known per extension.
+        // Under a find filter the rows shown are not neighbours in the listing: the model maps them.
         if (last >= first && _model is { Search: null } model)
         {
-            model.EnsureDetails(first, last);
+            model.EnsureShownDetails(first, last);
         }
         FrameParts.Stop(FramePart.Requests, started);
     }
@@ -709,10 +678,10 @@ public sealed partial class FilePane : UserControl
         switch (e.Key)
         {
             case VirtualKey.Home:
-                MoveFocus(0, selection.KeyMode(shift, ctrl, toListEnd: true));
+                MoveFocus(selection.IndexAt(0), selection.KeyMode(shift, ctrl, toListEnd: true));
                 break;
             case VirtualKey.End:
-                MoveFocus(_model.ShownCount - 1, selection.KeyMode(shift, ctrl, toListEnd: true));
+                MoveFocus(selection.IndexAt(_model.ShownCount - 1), selection.KeyMode(shift, ctrl, toListEnd: true));
                 break;
             case VirtualKey.Back:
                 // A file manager convention the keymap does not hold (go.up is Alt+Up there).
@@ -738,9 +707,12 @@ public sealed partial class FilePane : UserControl
     {
         if (_model is not null)
         {
-            ScrollIntoView(_model.CurrentSelection.Focus);
+            ScrollIntoView(PositionOf(_model.CurrentSelection.Focus));
         }
     }
+
+    // Where listing row `index` is in the list shown: itself, or its place among a find filter's rows (-1 when hidden).
+    private int PositionOf(int index) => _model is { } model && index >= 0 ? model.CurrentSelection.PositionOf(index) : index;
 
     private Task Run(string commandId, JsonElement? args = null, string trigger = "key") =>
         RunCommand?.Invoke(commandId, args, trigger) ?? Task.CompletedTask;
@@ -752,7 +724,7 @@ public sealed partial class FilePane : UserControl
             return;
         }
         _model.CurrentSelection.MoveTo(index, mode);
-        ScrollIntoView(_model.CurrentSelection.Focus);
+        ScrollIntoView(PositionOf(_model.CurrentSelection.Focus));
     }
 
     private int RowsPerPage() => Math.Max(1, (int)((Scroller.ViewportHeight - (2 * _listPadding)) / _rowHeight) - 1);
@@ -793,7 +765,7 @@ public sealed partial class FilePane : UserControl
 
     /// <summary>The snapshot aid's <c>layout:</c> step: the sizes the metrics set here, to compare two looks by.</summary>
     internal string SizeSignature() => string.Create(System.Globalization.CultureInfo.InvariantCulture,
-        $"header={HeaderBorder.ActualHeight:0.#} columns={ColumnHeader.ActualHeight:0.#}/{ColumnGrid.Padding.Left:0.#} radius={Frame.CornerRadius.TopLeft:0.#} inset={Scroller.Padding.Left:0.#} font={FontSize:0.#} row={_rowHeight:0.#}");
+        $"columns={ColumnHeader.ActualHeight:0.#}/{ColumnGrid.Padding.Left:0.#} radius={Frame.CornerRadius.TopLeft:0.#} inset={Scroller.Padding.Left:0.#} font={FontSize:0.#} row={_rowHeight:0.#}");
 
     /// <summary>
     /// The snapshot aid's <c>layout:</c> step: the list's height, how many rows
@@ -828,7 +800,7 @@ public sealed partial class FilePane : UserControl
     {
         if (_model is not null)
         {
-            MoveFocus(_model.CurrentSelection.Focus + RowsPerPage(), SelectMode.Single);
+            MoveFocus(PendingCursorKeys.Target(_model.CurrentSelection, CursorKey.PageDown, shift: false, ctrl: false, RowsPerPage()).Index, SelectMode.Single);
         }
     }
 
@@ -997,28 +969,28 @@ public sealed partial class FilePane : UserControl
             Canvas.SetTop(RenameBox, _listPadding + boxTop);
             RenameBox.Width = Math.Max(160, (width - 84) / 2);
         }
-        else if (_rename is not null && _renameIndex >= 0)
+        else if (_rename is not null && _renameIndex >= 0 && PositionOf(_renameIndex) >= 0)
         {
-            var (left, top, width) = NameBox(_renameIndex);
+            var (left, top, width) = NameBox(PositionOf(_renameIndex));
             Canvas.SetLeft(RenameBox, left - 7);
             Canvas.SetTop(RenameBox, top + boxTop);
             RenameBox.Width = Math.Max(80, width + 14);
         }
-        if (RowNote.Visibility == Visibility.Visible && _noteIndex >= 0)
+        if (RowNote.Visibility == Visibility.Visible && _noteIndex >= 0 && PositionOf(_noteIndex) >= 0)
         {
-            var (left, top, width) = NameBox(_noteIndex);
+            var (left, top, width) = NameBox(PositionOf(_noteIndex));
             Canvas.SetLeft(RowNote, left - 7);
             Canvas.SetTop(RowNote, top + _rowHeight);
             RowNote.MaxWidth = Math.Max(160, width + 120);
         }
     }
 
-    // The name column of row `index` in the edit layer's coordinates: from the
+    // The name column of the row shown at `position` in the edit layer's coordinates: from the
     // row itself when it is on screen, else from the grid's own proportions.
-    private (double Left, double Top, double Width) NameBox(int index)
+    private (double Left, double Top, double Width) NameBox(int position)
     {
-        var top = _listPadding + (index * _rowHeight) - Scroller.VerticalOffset;
-        if (Repeater.TryGetElement(index) is FileRow row && row.NameElement.ActualWidth > 0)
+        var top = _listPadding + (position * _rowHeight) - Scroller.VerticalOffset;
+        if (Repeater.TryGetElement(position) is FileRow row && row.NameElement.ActualWidth > 0)
         {
             var name = row.NameElement;
             var origin = name.TransformToVisual(EditLayer).TransformPoint(new Point(0, 0));

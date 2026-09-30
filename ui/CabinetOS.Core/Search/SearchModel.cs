@@ -26,7 +26,8 @@ public enum SearchPhase
 public sealed record SearchQuery(string Text, string? Root);
 
 /// <summary>
-/// The command bar's search (docs/ui.md, "Search"): what the user typed goes
+/// The window's search (docs/ui.md, "Search"), typed into the Search view's
+/// field since Phase 16 removed the command bar's box: what the user typed goes
 /// to the core as <c>search</c> once 150 ms pass without another key, limited
 /// to the active pane's folder unless "whole volume" is on. The core finds and
 /// ranks; the model only keeps the latest answer and says what it means. An

@@ -11,7 +11,8 @@ using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace CabinetOS;
 
-// The search field and the pane's search results (docs/ui.md, "Search").
+// The search and the pane's search results (docs/ui.md, "Search"). Since Phase 16 the Search view of the rail
+// layout's sidebar holds the only search field; Ctrl+F finds in the pane, and Ctrl+P opens files of the workspace.
 public sealed partial class MainWindow
 {
     private SearchModel _search = null!;
@@ -26,18 +27,11 @@ public sealed partial class MainWindow
         _searchTimer = DispatcherQueue.CreateTimer();
         _searchTimer.IsRepeating = false;
         _searchTimer.Tick += (_, _) => _ = SearchWhenDueAsync(now: false);
-        SearchBox.TextChanged += OnSearchTextChanged;
-        SearchBox.KeyDown += OnSearchKeyDown;
     }
 
     private void RegisterSearchCommands()
     {
-        _router.RegisterUiHandler("search.focus", _ =>
-        {
-            EndAddressEdit();
-            SearchBox.Focus(FocusState.Keyboard);
-            SearchBox.SelectAll();
-        });
+        _router.RegisterUiHandler("search.focus", _ => ShowNotice("Find in Pane arrives in a later version."));
         // The pane's "Whole volume" box passes its state; from the palette or a key it toggles.
         _router.RegisterUiHandler("search.scope", invocation =>
         {
@@ -50,12 +44,11 @@ public sealed partial class MainWindow
         });
     }
 
-    // Typing searches the active pane's folder; typing while the other pane is
+    // Typing in the Search view searches the active pane's folder; typing while the other pane is
     // active moves the results there.
-    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+    private void SetSearchText(string text)
     {
-        // The Search view's field shows the same text.
-        SearchPanelView.Query = SearchBox.Text;
+        SearchPanelView.Query = text;
         if (_settingSearchText)
         {
             return;
@@ -64,39 +57,14 @@ public sealed partial class MainWindow
         {
             _panes[_searchPane].Search = null;
         }
-        if (_editorViews[_active].IsOpen && SearchBox.Text.Trim().Length > 0)
+        if (_editorViews[_active].IsOpen && text.Trim().Length > 0)
         {
             // One pane shown with a tool in it: the hits need the pane, so its folder tab comes to the front (the tool tab stays).
             ShowFolderTabBehindTool(_active);
         }
         _searchPane = _active;
-        _search.SetText(SearchBox.Text, Active.Path.Length > 0 ? Active.Path : null);
+        _search.SetText(text, Active.Path.Length > 0 ? Active.Path : null);
         ScheduleSearch();
-    }
-
-    private void OnSearchKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        switch (e.Key)
-        {
-            case VirtualKey.Enter:
-                // Enter searches at once and hands the keyboard to the hits; Enter there opens one.
-                e.Handled = true;
-                _ = SearchNowAndFocusAsync();
-                break;
-            case VirtualKey.Down when _searchPane >= 0 && _panes[_searchPane].ShownCount > 0:
-                e.Handled = true;
-                _paneViews[_searchPane].Focus(FocusState.Keyboard);
-                break;
-        }
-    }
-
-    private async Task SearchNowAndFocusAsync()
-    {
-        await SearchWhenDueAsync(now: true);
-        if (_searchPane >= 0 && _panes[_searchPane].ShownCount > 0)
-        {
-            _paneViews[_searchPane].Focus(FocusState.Keyboard);
-        }
     }
 
     private void ScheduleSearch()
@@ -146,15 +114,14 @@ public sealed partial class MainWindow
     /// <summary>Leaves the search: the field empties and the pane shows its folder again.</summary>
     private bool EndSearch(bool focusPane)
     {
-        if (!_search.IsActive && SearchBox.Text.Length == 0)
+        if (!_search.IsActive && SearchPanelView.Query.Length == 0)
         {
             return false;
         }
         var pane = _searchPane;
         _settingSearchText = true;
-        SearchBox.Text = "";
-        _settingSearchText = false;
         SearchPanelView.Query = "";
+        _settingSearchText = false;
         _searchTimer.Stop();
         _search.Clear();
         if (focusPane)

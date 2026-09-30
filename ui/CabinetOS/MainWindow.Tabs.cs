@@ -87,9 +87,17 @@ public sealed partial class MainWindow
             var to = CommandArgs.Text(invocation.Args, "to") switch { "left" => 0, "right" => 1, _ => 1 - pane };
             return MoveTabAsync(pane, index, to, invocation.RequestId);
         });
-        // The tab row's own buttons: a click on a tab (not in the registry, so not in the palette).
-        _router.RegisterLocal("tab.select", invocation =>
+        // Go to Tab (Phase 16): Ctrl+1 to Ctrl+9 name the tab by its place (KeyArguments), a click on the strip by its
+        // index. Without a tab to go to (the palette) there is nothing to choose; a place past the last tab does nothing.
+        _router.RegisterUiHandler("tab.select", invocation =>
         {
+            if (CommandArgs.Number(invocation.Args, "tab") is null)
+            {
+                ShowNotice(KeysOf("tab.select") is { Length: > 0 } keys
+                    ? $"Go to Tab is a key per place: {keys} goes to the first tab, the next digits to the tabs after it."
+                    : "Go to Tab is a key per place: bind it to a key that ends in a digit.");
+                return Task.CompletedTask;
+            }
             var (pane, index) = TabTarget(invocation);
             return ActivateTabAsync(pane, index, invocation.RequestId);
         });
@@ -104,8 +112,13 @@ public sealed partial class MainWindow
     }
 
     // A chord's key names the side: Ctrl+K Ctrl+Right sends the tab to the right pane, Ctrl+K Ctrl+Left to the left one.
-    private static JsonElement? KeyArguments(string command, KeySequence keys) =>
-        command == "tab.moveToOtherPane" && keys.Second is { Key: "left" or "right" } second ? CommandArgs.With("to", second.Key) : null;
+    // A digit names the tab of Go to Tab: Ctrl+1 is the first, Ctrl+9 the ninth (Phase 16).
+    private static JsonElement? KeyArguments(string command, KeySequence keys) => command switch
+    {
+        "tab.moveToOtherPane" when keys.Second is { Key: "left" or "right" } second => CommandArgs.With("to", second.Key),
+        "tab.select" when (keys.Second ?? keys.First) is { Key: [>= '1' and <= '9'] digit } => CommandArgs.Object(("tab", digit[0] - '1')),
+        _ => null,
+    };
 
     private void InstallStrip(int pane, TabStrip strip)
     {
@@ -171,12 +184,18 @@ public sealed partial class MainWindow
             if (_held[pane] is { IsTool: false } old && strip.IndexOf(old) >= 0)
             {
                 _panes[pane].CaptureInto(old);
+                // The list's scroll position is the view's, not the model's: the tab keeps it too (Phase 16).
+                old.ScrollOffset = view.ScrollOffset;
             }
             _held[pane] = tab;
             var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             if (!await _panes[pane].RestoreAsync(tab, [profile, @"C:\"], requestId))
             {
                 Diag.Warn(TabsTarget, "a tab could not show its folder", new LogField("pane", pane), new LogField("path", tab.Path));
+            }
+            else if (tab.ScrollOffset > 0)
+            {
+                view.ScrollTo(tab.ScrollOffset);
             }
             Diag.Info(TabsTarget, "tab shown", new LogField("pane", pane), new LogField("path", tab.Path), new LogField("index", strip.ActiveIndex),
                 new LogField("tabs", strip.Count), new LogField("locked", tab.Locked));
@@ -361,7 +380,8 @@ public sealed partial class MainWindow
     {
         for (var i = 0; i < _strips.Length; i++)
         {
-            // A row shown or hidden is in the log for the live check, which cannot see the window's tree.
+            // A strip shown or hidden is in the log for the live check, which cannot see the window's tree.
+            // Since Phase 16 a pane's strip shows from its first tab on.
             if (_strips[i].ShowsRow != _rowLogged[i])
             {
                 _rowLogged[i] = _strips[i].ShowsRow;

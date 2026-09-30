@@ -7,11 +7,11 @@ using Windows.System;
 namespace CabinetOS.Views;
 
 /// <summary>
-/// The Search view of the rail layout: a field, the "Whole volume" box and the
-/// hits of the window's search (docs/ui.md, "Search"). It drives the same
-/// model as the command bar's box: the window keeps the two fields' texts equal
-/// and shows the same hits in the pane. Enter on a hit, or a click, goes to it
-/// in the active pane.
+/// The Search view: a field, the "Whole volume" box and the hits of the
+/// window's search (docs/ui.md, "Search"). The rail layout has it as a view;
+/// the classic and right layouts show it in the sidebar's place while it is
+/// asked for (Phase 16 removed the command bar's field). The pane shows the
+/// same hits. Enter on a hit, or a click, goes to it in the active pane.
 /// </summary>
 public sealed partial class SearchPanel : UserControl
 {
@@ -67,7 +67,7 @@ public sealed partial class SearchPanel : UserControl
     /// <summary>The "Whole volume" box was switched.</summary>
     public event Action<bool>? WholeVolumeChanged;
 
-    /// <summary>The field's text (set by the window when the command bar's box changes; it does not raise <see cref="QueryChanged"/>).</summary>
+    /// <summary>The field's text (set by the window when a search ends or the snapshot aid types; it does not raise <see cref="QueryChanged"/>).</summary>
     public string Query
     {
         get => QueryBox.Text;

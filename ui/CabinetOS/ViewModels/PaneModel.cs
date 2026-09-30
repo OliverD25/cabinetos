@@ -52,6 +52,9 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     private SortSpec? _sort;
     private SortSpec _defaultSort = new(PaneSort.Name, false);
     private bool _isLocked;
+    private readonly PaneFind _find;
+    // The filter the rows were made with, so a change of it makes new rows.
+    private IReadOnlyList<int>? _rowsVisible;
 
     /// <summary>
     /// Creates pane <paramref name="index"/>, asking <paramref name="core"/> for
@@ -71,6 +74,44 @@ public sealed class PaneModel : ObservableObject, IRowDetails
             OnPropertyChanged(nameof(FocusName));
         };
         SearchSelection.Changed += () => OnPropertyChanged(nameof(Selection));
+        _find = new PaneFind(core, Selection);
+        _find.Changed += OnFindChanged;
+    }
+
+    /// <summary>
+    /// The find widget of the tab in front (Ctrl+F; docs/ui.md, "Find in
+    /// pane"): its text, and the rows of the listing it shows. The other
+    /// pane has its own.
+    /// </summary>
+    public PaneFind Find => _find;
+
+    /// <summary>Filters the listing by <paramref name="text"/> (the find widget's box); an empty text shows every row.</summary>
+    public Task<bool> SetFindTextAsync(string text, string? requestId = null)
+    {
+        if (!_find.IsOpen)
+        {
+            _find.Open(text);
+        }
+        return _view is { } view
+            ? _find.SetQueryAsync(text, _listingId, view.Generation, view.Count, requestId)
+            : Task.FromResult(false);
+    }
+
+    /// <summary>Asks the core again for the find text's rows, after the listing changed under it.</summary>
+    public Task RefindAsync() =>
+        _find.Query is { } query && _view is { } view
+            ? _find.SetQueryAsync(query, _listingId, view.Generation, view.Count)
+            : Task.CompletedTask;
+
+    // The find's rows changed: the list shows them (a new object, so the view resets its repeater).
+    private void OnFindChanged()
+    {
+        if (_view is { } view && !ReferenceEquals(_rowsVisible, Selection.Visible))
+        {
+            _rowsVisible = Selection.Visible;
+            Rows = new ListingRows(view, this, _rowsVisible);
+        }
+        OnPropertyChanged(nameof(Find));
     }
 
     /// <summary>
@@ -98,8 +139,8 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// <summary>The selection of what the pane shows: the hits in search mode, else the listing.</summary>
     public SelectionModel CurrentSelection => _search is null ? Selection : SearchSelection;
 
-    /// <summary>How many rows the pane shows: hits in search mode, else entries.</summary>
-    public int ShownCount => _search is null ? Count : _search.Rows?.Count ?? 0;
+    /// <summary>How many rows the pane shows: hits in search mode, else the entries a find filter leaves (all without one).</summary>
+    public int ShownCount => _search is null ? Selection.ShownCount : _search.Rows?.Count ?? 0;
 
     /// <summary>The focused hit in search mode, or null.</summary>
     public SearchRowItem? FocusedHit =>
@@ -135,6 +176,25 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         foreach (var (from, count) in _details.TakePagesToRequest(first, last, view.Count))
         {
             _ = FetchDetailsAsync(from, count);
+        }
+    }
+
+    /// <summary>
+    /// The same for the rows shown at <paramref name="firstPosition"/> to
+    /// <paramref name="lastPosition"/>: under a find filter they are not
+    /// neighbours in the listing, so each asks for its own page (once).
+    /// </summary>
+    public void EnsureShownDetails(int firstPosition, int lastPosition)
+    {
+        if (!Selection.IsFiltered)
+        {
+            EnsureDetails(firstPosition, lastPosition);
+            return;
+        }
+        for (var position = firstPosition; position <= lastPosition; position++)
+        {
+            var index = Selection.IndexAt(position);
+            EnsureDetails(index, index);
         }
     }
 
@@ -539,6 +599,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         }
 
         var previousPath = Path;
+        var samePlace = string.Equals(previousPath, path, StringComparison.OrdinalIgnoreCase);
         switch (kind)
         {
             case NavigationKind.New when previousPath.Length > 0 && !string.Equals(previousPath, path, StringComparison.OrdinalIgnoreCase):
@@ -566,9 +627,22 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         Path = path;
         Drives.Remember(path);
         Message = view.Count == 0 ? "This folder is empty." : null;
+        _rowsVisible = null;
         Rows = new ListingRows(view, this);
         var select = selectName is null ? -1 : view.IndexOfName(selectName);
         Selection.Reset(view.Count, select >= 0 ? select : 0);
+        // The find belongs to the folder: another folder closes it, the same one (a reload) asks again.
+        if (_find.IsOpen)
+        {
+            if (samePlace)
+            {
+                _ = RefindAsync();
+            }
+            else
+            {
+                _find.Close();
+            }
+        }
         RaiseHistoryChanged();
         oldView?.Dispose();
         if (oldListing != 0)
@@ -588,7 +662,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// </summary>
     public async Task<bool> RefreshAsync(string? requestId = null)
     {
-        var marked = SelectedNames();
+        var marked = AllSelectedNames();
         if (!await ReloadAsync(requestId))
         {
             return false;
@@ -603,6 +677,10 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// <summary>The names of the selected entries, in listing order.</summary>
     public IReadOnlyList<string> SelectedNames() =>
         _view is { } view ? Selection.Selected.Select(view.Name).ToList() : [];
+
+    /// <summary>The names of every selected entry, the ones a find filter hides too, in listing order.</summary>
+    public IReadOnlyList<string> AllSelectedNames() =>
+        _view is { } view ? Selection.AllSelected.Order().Select(view.Name).ToList() : [];
 
     /// <summary>The marks a file command or an unmark cleared last, for Restore Selection (Num /).</summary>
     public MarkMemory SavedMarks { get; } = new();
@@ -697,7 +775,10 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         tab.Back = [.. _back];
         tab.Forward = [.. _forward];
         tab.CursorName = FocusName;
-        tab.MarkedNames = Selection.HasMarks ? SelectedNames() : [];
+        // The marks a find filter hides are marks too.
+        var hiddenMarks = Selection.IsFiltered && Selection.AllSelected.Any(index => !Selection.IsShown(index));
+        tab.MarkedNames = Selection.HasMarks || hiddenMarks ? AllSelectedNames() : [];
+        tab.FindQuery = _find.Query;
     }
 
     /// <summary>
@@ -708,6 +789,11 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// </summary>
     public async Task<bool> RestoreAsync(PaneTab tab, IEnumerable<string> fallbacks, string? requestId = null)
     {
+        // The find of the tab that was in front is its own; this tab's comes back once its folder is listed.
+        if (_find.IsOpen)
+        {
+            _find.Close();
+        }
         _back.Clear();
         _forward.Clear();
         foreach (var folder in tab.Back.Reverse())
@@ -736,6 +822,11 @@ public sealed class PaneModel : ObservableObject, IRowDetails
             if (i == 0 && tab.MarkedNames.Count > 0 && _view is { } view)
             {
                 Selection.Restore(view.Count, view.IndexesOfNames(tab.MarkedNames), Selection.Focus, Selection.Anchor);
+            }
+            if (i == 0 && tab.FindQuery is { } query)
+            {
+                _find.Open(query);
+                await RefindAsync();
             }
             return true;
         }
@@ -786,12 +877,15 @@ public sealed class PaneModel : ObservableObject, IRowDetails
 
         var focusId = Selection.Focus >= 0 ? old.Id(Selection.Focus) : (ulong?)null;
         var anchorId = Selection.Anchor >= 0 ? old.Id(Selection.Anchor) : (ulong?)null;
-        var selectedIds = Selection.SelectedUnordered.Select(old.Id).ToList();
+        // The rows a find filter hides are selected too; so are the ones it shows.
+        var selectedIds = Selection.AllSelected.Select(old.Id).ToList();
+        var shownIds = Selection.Visible?.Select(old.Id).ToList();
         var previousFocus = Selection.Focus;
 
         _view = view;
         _details.Reset(_listingId, view.Generation);
         Message = view.Count == 0 ? "This folder is empty." : null;
+        _rowsVisible = null;
         Rows = new ListingRows(view, this);
 
         var expected = _expectedName is { } name ? view.IndexOfName(name) : -1;
@@ -805,10 +899,21 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         }
         else
         {
-            var indexOf = IndexById(view, selectedIds.Count > 1);
+            var indexOf = IndexById(view, selectedIds.Count > 1 || shownIds is { Count: > 1 });
             var focus = focusId is { } id ? indexOf(id) : -1;
             var anchor = anchorId is { } anchorEntry ? indexOf(anchorEntry) : -1;
             Selection.Restore(view.Count, selectedIds.Select(indexOf).Where(i => i >= 0), focus >= 0 ? focus : previousFocus, anchor);
+            if (shownIds is not null)
+            {
+                // The rows the find showed, found again by ID until the core answers for the new listing.
+                Selection.SetVisible(shownIds.Select(indexOf).Where(i => i >= 0));
+                _rowsVisible = Selection.Visible;
+                Rows = new ListingRows(view, this, _rowsVisible);
+            }
+        }
+        if (_find.IsFiltering || _find.IsOpen)
+        {
+            _ = RefindAsync();
         }
         Diag.Debug(Target, "listing refreshed", new LogField("listing_id", _listingId),
             new LogField("generation", refreshed.Generation), new LogField("entries", view.Count), new LogField("reason", refreshed.Reason));

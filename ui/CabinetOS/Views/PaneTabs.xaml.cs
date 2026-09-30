@@ -8,12 +8,14 @@ using Windows.Foundation;
 namespace CabinetOS.Views;
 
 /// <summary>
-/// A pane's tab row (Phase 12; docs/ui.md, "Tabs"). It shows the pane's
-/// <see cref="TabStrip"/> from the second tab on and reports what the user
-/// does as commands (<c>tab.select</c>, <c>tab.close</c>, <c>tab.toggleLock</c>,
-/// <c>tab.moveToOtherPane</c>), each with the pane and the tab it concerns:
-/// the window decides and changes the strip, and the row follows its
-/// <see cref="TabStrip.Changed"/>. The keyboard never rests on the row.
+/// A pane's tab strip (Phases 12 and 16; docs/ui.md, "Tabs"). It shows the
+/// pane's <see cref="TabStrip"/>, one tab or more, and reports what the user
+/// does as commands (<c>tab.select</c>, <c>tab.close</c>, <c>tab.new</c> from
+/// its "+", <c>tab.toggleLock</c>, <c>tab.moveToOtherPane</c>), each with the
+/// pane and the tab it concerns: the window decides and changes the strip,
+/// and the strip follows its <see cref="TabStrip.Changed"/>. A middle click
+/// closes any tab; the tab in front shows its ×. The keyboard never rests on
+/// the strip.
 /// </summary>
 public sealed partial class PaneTabs : UserControl
 {
@@ -28,7 +30,11 @@ public sealed partial class PaneTabs : UserControl
         InitializeComponent();
         Strip.SelectionChanged += OnSelectionChanged;
         Strip.TabCloseRequested += OnCloseRequested;
+        Strip.AddTabButtonClick += (_, _) => _ = RunCommand?.Invoke("tab.new", CommandArgs.Object(("pane", PaneIndex)), "button");
         Strip.SizeChanged += (_, _) => PositionAccent();
+        Strip.Loaded += (_, _) => NameAddButton();
+        OpenWithButton.Click += (_, _) => _ = RunCommand?.Invoke("palette.show", CommandArgs.With("query", "Editor"), "button");
+        AccentLine.Fill = ThemeResources.Brush("CbTabFrontBarInactiveBrush");
         ApplyMetrics();
     }
 
@@ -65,8 +71,8 @@ public sealed partial class PaneTabs : UserControl
     }
 
     /// <summary>
-    /// Whether the row belongs to the active pane: only its front tab has the
-    /// 2 px accent line, as the active pane's header has its bright title.
+    /// Whether the strip belongs to the active pane: the 2 px bar over its
+    /// front tab is the accent then, and white at 30 % in the other pane.
     /// </summary>
     public bool ShowsAccent
     {
@@ -76,6 +82,7 @@ public sealed partial class PaneTabs : UserControl
             if (_accent != value)
             {
                 _accent = value;
+                AccentLine.Fill = ThemeResources.Brush(value ? "CbAccentBrush" : "CbTabFrontBarInactiveBrush");
                 PositionAccent();
             }
         }
@@ -86,19 +93,22 @@ public sealed partial class PaneTabs : UserControl
         ? ""
         : string.Join(" | ", _strip.Tabs.Select((tab, i) => $"{(i == _strip.ActiveIndex ? "*" : "")}{tab.Title}{(tab.Locked ? " (locked)" : "")}{(tab.IsTool ? " (tool)" : "")}"));
 
-    /// <summary>The row's height now, 0 while it is hidden (the snapshot aid's <c>layout:</c> step).</summary>
+    /// <summary>The strip's height now, 0 while it is hidden (the snapshot aid's <c>layout:</c> step).</summary>
     public double RowHeight => Visibility == Visibility.Visible ? ActualHeight : 0;
 
-    /// <summary>Lays the row out with the window's sizes now: the theme's <c>tabRow</c> as its height, the tab text at the base size.</summary>
+    /// <summary>Lays the strip out with the window's sizes now: the theme's <c>tabRow</c> as its height, the tab text at the base size.</summary>
     public void ApplyMetrics()
     {
         var m = WindowMetrics.Current;
         Strip.Height = m.TabRow;
         Strip.FontSize = m.FontSize;
+        OpenWithButton.Height = Math.Max(14, m.TabRow - 4);
+        OpenWithButton.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
         foreach (var item in Strip.TabItems.OfType<TabViewItem>())
         {
             SizeItem(item);
         }
+        NameAddButton();
         PositionAccent();
     }
 
@@ -107,8 +117,40 @@ public sealed partial class PaneTabs : UserControl
         var m = WindowMetrics.Current;
         item.Height = item.MinHeight = m.TabRow;
         item.FontSize = m.TabFontSize;
-        // The same top corners as the workspace tab in the title bar (the theme's tabRadius).
+        item.Padding = new Thickness(10, 0, 4, 0);
+        // The top corners follow the theme's tabRadius.
         item.CornerRadius = WindowMetrics.TopCorners(m.TabRadius);
+    }
+
+    // The strip's "+" (24 px): a name for assistive technology, and the key in its tooltip.
+    private void NameAddButton()
+    {
+        if (FindNamed(Strip, "AddButton") is not Button add)
+        {
+            return;
+        }
+        var size = Math.Min(24, WindowMetrics.Current.TabRow);
+        add.Width = add.Height = size;
+        add.IsTabStop = false;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(add, "New tab");
+        ToolTipService.SetToolTip(add, KeysOf?.Invoke("tab.new") is { } keys ? $"New tab ({keys})" : "New tab");
+    }
+
+    private static DependencyObject? FindNamed(DependencyObject parent, string name)
+    {
+        for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is FrameworkElement { Name: var childName } && childName == name)
+            {
+                return child;
+            }
+            if (FindNamed(child, name) is { } found)
+            {
+                return found;
+            }
+        }
+        return null;
     }
 
     /// <summary>Makes the row show the strip as it is now: the tabs, their titles, locks and close buttons, and the one in front.</summary>
@@ -116,13 +158,11 @@ public sealed partial class PaneTabs : UserControl
     {
         if (_strip is not { } strip)
         {
-            Visibility = Visibility.Collapsed;
             return;
         }
         _updating = true;
         try
         {
-            Visibility = strip.ShowsRow ? Visibility.Visible : Visibility.Collapsed;
             if (!_shown.SequenceEqual(strip.Tabs))
             {
                 Strip.TabItems.Clear();
@@ -155,6 +195,15 @@ public sealed partial class PaneTabs : UserControl
         var item = new TabViewItem { IsTabStop = false, AllowFocusOnInteraction = false, Tag = tab };
         SizeItem(item);
         item.SizeChanged += (_, _) => PositionAccent();
+        // A middle click closes any tab, the one in front or not.
+        item.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(item).Properties.IsMiddleButtonPressed && Strip.TabItems.IndexOf(item) is >= 0 and var index)
+            {
+                e.Handled = true;
+                Run("tab.close", index);
+            }
+        };
         item.ContextRequested += (_, e) =>
         {
             e.Handled = true;
@@ -175,7 +224,10 @@ public sealed partial class PaneTabs : UserControl
         {
             item.IconSource = new FontIconSource { Glyph = glyph, FontSize = 14 };
         }
-        item.IsClosable = _strip?.CanClose(index) ?? false;
+        // The tab in front shows its ×; the others close with a middle click or their menu.
+        var front = index == _strip?.ActiveIndex;
+        item.IsClosable = front && (_strip?.CanClose(index) ?? false);
+        item.FontWeight = front ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
         ToolTipService.SetToolTip(item, tab.IsTool ? $"{tab.ToolName}: {tab.Path}" : tab.Locked ? $"{tab.Path} (locked)" : tab.Path);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, tab.Locked ? $"{title}, locked" : title);
     }
@@ -230,10 +282,10 @@ public sealed partial class PaneTabs : UserControl
         return item;
     }
 
-    // The accent line lies over the tab in front, when the row belongs to the active pane.
+    // The 2 px bar lies over the tab in front: the accent in the active pane, white at 30 % in the other.
     private void PositionAccent()
     {
-        if (!_accent || _strip is null || Visibility != Visibility.Visible || Strip.SelectedIndex < 0
+        if (_strip is null || Visibility != Visibility.Visible || Strip.SelectedIndex < 0
             || Strip.ContainerFromIndex(Strip.SelectedIndex) is not FrameworkElement item || item.ActualWidth <= 0)
         {
             AccentLine.Visibility = Visibility.Collapsed;

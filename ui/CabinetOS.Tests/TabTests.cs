@@ -45,14 +45,15 @@ public class TabTests
     }
 
     [Fact]
-    public void The_row_shows_from_the_second_tab_on()
+    public void The_strip_shows_with_one_tab_too()
     {
+        // Phase 16: the strip is at the top of every pane (it showed from the second tab on before).
         var strip = Strip(@"C:\a");
-        Assert.False(strip.ShowsRow);
+        Assert.True(strip.ShowsRow);
         strip.Add(new PaneTab(@"C:\b"));
         Assert.True(strip.ShowsRow);
         strip.Remove(0);
-        Assert.False(strip.ShowsRow);
+        Assert.True(strip.ShowsRow);
     }
 
     [Fact]

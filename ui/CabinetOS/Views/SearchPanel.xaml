@@ -6,7 +6,7 @@
     xmlns:vm="using:CabinetOS.ViewModels"
     XYFocusKeyboardNavigation="Enabled"
     IsTabStop="False">
-    <!-- The Search view of the rail layout: the search field of Phase 5c and its hits, over the same model as the command bar's box. -->
+    <!-- The Search view: the search field of Phase 5c and its hits; the only search field since Phase 16. -->
     <Border
         x:Name="Frame"
         BorderBrush="{ThemeResource CbHairlineBrush}"

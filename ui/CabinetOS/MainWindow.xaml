@@ -9,226 +9,226 @@
         <!-- The default look's sizes; the theme's metrics replace them (MainWindow.Metrics.cs). -->
         <Grid x:Name="ShellContent">
             <Grid.RowDefinitions>
-                <RowDefinition x:Name="TitleRow" Height="40" />
-                <RowDefinition x:Name="CommandRow" Height="48" />
+                <RowDefinition x:Name="TopRow" Height="40" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition x:Name="StatusRow" Height="26" />
             </Grid.RowDefinitions>
 
-            <!-- Title bar (40 px): app tile, name, workspace tabs; Windows draws the caption buttons. -->
-            <Grid x:Name="TitleBar" Background="Transparent">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel
-                    Padding="14,0,4,0"
-                    VerticalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="10">
-                    <Border
-                        x:Name="AppTile"
-                        Width="18"
-                        Height="18"
-                        Background="{StaticResource CbAppTileBrush}"
-                        CornerRadius="5" />
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{ThemeResource CbTextSecondaryBrush}"
-                        Text="CabinetOS" />
-                </StackPanel>
-                <StackPanel
-                    Grid.Column="1"
-                    Padding="6,0,0,0"
-                    VerticalAlignment="Bottom"
-                    Orientation="Horizontal"
-                    Spacing="2">
-                    <!-- Workspaces arrive in a later phase; one static tab until then. -->
-                    <Border
-                        x:Name="WorkspaceTab"
-                        Height="32"
-                        MinWidth="96"
-                        Padding="14,0"
-                        Background="{ThemeResource CbTabActiveFillBrush}"
-                        CornerRadius="8,8,0,0">
-                        <StackPanel
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal"
-                            Spacing="8">
-                            <Ellipse
-                                Width="8"
-                                Height="8"
-                                Fill="{ThemeResource CbAccentBrush}" />
-                            <TextBlock
-                                x:Name="WorkspaceTabText"
-                                FontSize="12"
-                                Foreground="{ThemeResource CbTextPrimaryBrush}"
-                                Text="Default" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Grid>
-
-            <!-- Command bar (48 px); under hairlines filled, with a hairline above and below. -->
+            <!--
+              The top row (Phase 16; docs/ui.md, "The top row"): the menu, the app icon and the workspace pill on the left,
+              the command center in the middle, the view buttons and Windows' caption buttons on the right. The whole row
+              is the window's drag area except over its controls (MainWindow.Shell.cs, UpdateDragRegions).
+            -->
             <Border
-                x:Name="CommandBarFrame"
-                Grid.Row="1"
-                BorderBrush="{ThemeResource CbDividerBrush}"
-                BorderThickness="0">
-                <Grid
-                    x:Name="CommandBar"
-                    Padding="10,0"
-                    ColumnSpacing="4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Button
-                        x:Name="BackButton"
-                        AutomationProperties.Name="Back"
-                        Style="{StaticResource CbSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Back (Alt+Left)">
-                        <FontIcon FontSize="14" Glyph="&#xE72B;" />
-                    </Button>
-                    <Button
-                        x:Name="ForwardButton"
-                        Grid.Column="1"
-                        AutomationProperties.Name="Forward"
-                        Style="{StaticResource CbSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Forward (Alt+Right)">
-                        <FontIcon FontSize="14" Glyph="&#xE72A;" />
-                    </Button>
-                    <Button
-                        x:Name="UpButton"
-                        Grid.Column="2"
-                        AutomationProperties.Name="Up"
-                        Style="{StaticResource CbSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Up (Backspace)">
-                        <FontIcon FontSize="14" Glyph="&#xE74A;" />
-                    </Button>
-
-                    <Grid
-                        x:Name="AddressBar"
-                        Grid.Column="3"
-                        Height="32"
-                        Margin="6,0">
+                x:Name="TopBar"
+                Background="{ThemeResource CbBarFillBrush}"
+                BorderBrush="{ThemeResource CbShellHairlineBrush}"
+                BorderThickness="0,0,0,1">
+                <Grid x:Name="TopRowGrid">
+                    <StackPanel
+                        x:Name="TopLeft"
+                        Padding="4,0,0,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <Button
+                            x:Name="MenuButton"
+                            Width="36"
+                            Height="36"
+                            AutomationProperties.Name="Menu"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            ToolTipService.ToolTip="Menu">
+                            <FontIcon FontSize="14" Glyph="&#xE700;" />
+                        </Button>
                         <Border
-                            x:Name="CrumbBar"
-                            Padding="4,0,6,0"
+                            x:Name="AppTile"
+                            Width="16"
+                            Height="16"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            Background="{StaticResource CbAppTileBrush}"
+                            CornerRadius="4" />
+                        <!-- The accent at 18 % under the button, so its hover fill lies over the accent. -->
+                        <Border
+                            x:Name="WorkspacePillFrame"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource CbWorkspacePillFillBrush}"
+                            CornerRadius="4">
+                            <Button
+                                x:Name="WorkspacePill"
+                                Height="24"
+                                Padding="8,0"
+                                AutomationProperties.Name="Workspace"
+                                CornerRadius="4"
+                                Style="{StaticResource CbSubtleButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Ellipse
+                                        Width="8"
+                                        Height="8"
+                                        VerticalAlignment="Center"
+                                        Fill="{ThemeResource CbAccentBrush}" />
+                                    <TextBlock
+                                        x:Name="WorkspaceName"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Foreground="{ThemeResource CbTextPrimaryBrush}"
+                                        Text="Default" />
+                                    <TextBlock
+                                        x:Name="WorkspaceBranch"
+                                        VerticalAlignment="Center"
+                                        FontFamily="{StaticResource CbMonoFont}"
+                                        FontSize="10"
+                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
+                                        Visibility="Collapsed" />
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="8"
+                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
+                                        Glyph="&#xE70D;" />
+                                </StackPanel>
+                            </Button>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- The command center, placed by TopRowLayout: centred, clamp(200px, 34%, 380px), hidden below 640 px. -->
+                    <Canvas x:Name="CenterLayer">
+                        <Border
+                            x:Name="CommandCenterFrame"
+                            Height="24"
                             Background="{ThemeResource CbControlFillBrush}"
-                            BorderBrush="{StaticResource CbFieldStrokeBrush}"
+                            BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
                             BorderThickness="1"
                             CornerRadius="4">
-                            <ScrollViewer
-                                x:Name="CrumbScroller"
-                                HorizontalScrollBarVisibility="Hidden"
-                                HorizontalScrollMode="Enabled"
-                                IsTabStop="False"
-                                VerticalScrollBarVisibility="Disabled"
-                                VerticalScrollMode="Disabled">
-                                <StackPanel
-                                    x:Name="Crumbs"
-                                    VerticalAlignment="Center"
-                                    Orientation="Horizontal"
-                                    Spacing="2" />
-                            </ScrollViewer>
+                            <Button
+                                x:Name="CommandCenter"
+                                Padding="8,0"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                AutomationProperties.Name="Quick Open"
+                                CornerRadius="3"
+                                Style="{StaticResource CbSubtleButtonStyle}"
+                                ToolTipService.ToolTip="Quick Open (Ctrl+P)">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                        Glyph="&#xE721;" />
+                                    <TextBlock
+                                        x:Name="CommandCenterText"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
+                                        Text="Default"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        x:Name="CommandCenterKeys"
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        FontFamily="{StaticResource CbMonoFont}"
+                                        FontSize="11"
+                                        Foreground="{ThemeResource CbHintTextBrush}"
+                                        Text="Ctrl+P" />
+                                </Grid>
+                            </Button>
                         </Border>
-                        <TextBox
-                            x:Name="AddressEdit"
-                            AutomationProperties.Name="Address"
-                            FontSize="13"
-                            Visibility="Collapsed" />
-                    </Grid>
+                    </Canvas>
 
-                    <!-- Search (Ctrl+F): the core searches the active pane's folder; the hits show in that pane. -->
-                    <TextBox
-                        x:Name="SearchBox"
-                        Grid.Column="4"
-                        Height="32"
-                        AutomationProperties.Name="Search files"
-                        ToolTipService.ToolTip="Search files by name (Ctrl+F)" />
-
-                    <Rectangle
-                        Grid.Column="5"
-                        Width="1"
-                        Height="20"
-                        Margin="6,0"
-                        Fill="{ThemeResource CbOverlayStrokeBrush}" />
-
-                    <Button
-                        x:Name="DualButton"
-                        Grid.Column="6"
-                        Padding="10,0"
-                        AutomationProperties.Name="Toggle dual pane"
-                        Style="{StaticResource CbSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Toggle dual pane (Ctrl+Shift+D)">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                    <StackPanel
+                        x:Name="TopRight"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <Button
+                            x:Name="DualButton"
+                            Width="36"
+                            Height="36"
+                            AutomationProperties.Name="Toggle dual pane"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            ToolTipService.ToolTip="Toggle dual pane (Ctrl+Shift+D)">
                             <FontIcon
                                 x:Name="DualIcon"
                                 FontSize="14"
                                 Glyph="&#xE89A;" />
-                            <TextBlock
-                                x:Name="DualLabel"
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                Text="Dual" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="TerminalButton"
-                        Grid.Column="7"
-                        AutomationProperties.Name="Toggle terminal"
-                        Style="{StaticResource CbSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Toggle terminal (Ctrl+`)">
-                        <FontIcon
-                            x:Name="TerminalIcon"
-                            FontSize="14"
-                            Glyph="&#xE756;" />
-                    </Button>
-                    <Button
-                        x:Name="MarketplaceButton"
-                        Grid.Column="8"
-                        AutomationProperties.Name="Marketplace"
-                        Style="{StaticResource CbSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Marketplace (Ctrl+Shift+X)">
-                        <FontIcon
-                            x:Name="MarketplaceIcon"
-                            FontSize="14"
-                            Glyph="&#xE719;" />
-                    </Button>
-                    <Button
-                        x:Name="PaletteButton"
-                        Grid.Column="9"
-                        AutomationProperties.Name="Command palette"
-                        Style="{StaticResource CbSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Command palette (Ctrl+Shift+P)">
-                        <FontIcon
-                            FontSize="14"
-                            Glyph="&#xE712;"
-                            RenderTransformOrigin="0.5,0.5">
-                            <FontIcon.RenderTransform>
-                                <RotateTransform Angle="90" />
-                            </FontIcon.RenderTransform>
-                        </FontIcon>
-                    </Button>
+                        </Button>
+                        <Button
+                            x:Name="TerminalButton"
+                            Width="36"
+                            Height="36"
+                            AutomationProperties.Name="Toggle terminal"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            ToolTipService.ToolTip="Toggle terminal (Ctrl+`)">
+                            <FontIcon
+                                x:Name="TerminalIcon"
+                                FontSize="14"
+                                Glyph="&#xE756;" />
+                        </Button>
+                        <Button
+                            x:Name="MarketplaceButton"
+                            Width="36"
+                            Height="36"
+                            AutomationProperties.Name="Marketplace"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            ToolTipService.ToolTip="Marketplace (Ctrl+Shift+X)">
+                            <FontIcon
+                                x:Name="MarketplaceIcon"
+                                FontSize="14"
+                                Glyph="&#xE719;" />
+                        </Button>
+                        <Button
+                            x:Name="PaletteButton"
+                            Width="36"
+                            Height="36"
+                            AutomationProperties.Name="Command palette"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            ToolTipService.ToolTip="Command palette (Ctrl+Shift+P)">
+                            <FontIcon
+                                x:Name="PaletteIcon"
+                                FontSize="14"
+                                Glyph="&#xE712;"
+                                RenderTransformOrigin="0.5,0.5">
+                                <FontIcon.RenderTransform>
+                                    <RotateTransform Angle="90" />
+                                </FontIcon.RenderTransform>
+                            </FontIcon>
+                        </Button>
+                        <Button
+                            x:Name="SettingsButton"
+                            Width="36"
+                            Height="36"
+                            AutomationProperties.Name="Settings"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            ToolTipService.ToolTip="Settings (Ctrl+,)">
+                            <FontIcon FontSize="14" Glyph="&#xE713;" />
+                        </Button>
+                        <Rectangle
+                            x:Name="CaptionDivider"
+                            Width="1"
+                            Height="16"
+                            Margin="6,0"
+                            VerticalAlignment="Center"
+                            Fill="{ThemeResource CbShellHairlineBrush}" />
+                        <!-- Where Windows draws the minimize, maximize and close buttons (AppWindow.TitleBar.RightInset). -->
+                        <Border x:Name="CaptionSpace" Width="138" />
+                    </StackPanel>
                 </Grid>
             </Border>
 
             <!-- Body: the activity rail (rail layout only), the sidebar and the main column, 8 px gutters (the theme's bodyPadding and gap). -->
             <Grid
                 x:Name="Body"
-                Grid.Row="2"
+                Grid.Row="1"
                 Padding="8,0,8,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -281,18 +281,21 @@
                             <ColumnDefinition x:Name="RightColumn" Width="*" />
                         </Grid.ColumnDefinitions>
                         <!--
-                          Each pane: its tab row (collapsed until a second tab opens) over its listing. A Tool
-                          Extension's editor (design view D) covers the listing while the pane's front tab shows one.
+                          Each pane, top to bottom (Phase 16): its tab strip, its breadcrumb row with Back, Forward and
+                          Up, and its listing. A Tool Extension's editor (design view D) covers the listing while the
+                          pane's front tab shows one.
                         -->
                         <Grid x:Name="LeftSide" Margin="0,0,4,0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <views:PaneTabs x:Name="LeftTabs" />
-                            <views:FilePane x:Name="LeftPane" Grid.Row="1" />
-                            <views:EditorPane x:Name="LeftEditor" Grid.Row="1" />
-                            <views:PreviewPane x:Name="LeftPreview" Grid.Row="1" />
+                            <views:PaneCrumbs x:Name="LeftCrumbs" Grid.Row="1" />
+                            <views:FilePane x:Name="LeftPane" Grid.Row="2" />
+                            <views:EditorPane x:Name="LeftEditor" Grid.Row="2" />
+                            <views:PreviewPane x:Name="LeftPreview" Grid.Row="2" />
                         </Grid>
                         <Grid
                             x:Name="RightSide"
@@ -300,12 +303,14 @@
                             Margin="4,0,0,0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <views:PaneTabs x:Name="RightTabs" />
-                            <views:FilePane x:Name="RightPane" Grid.Row="1" />
-                            <views:EditorPane x:Name="RightEditor" Grid.Row="1" />
-                            <views:PreviewPane x:Name="RightPreview" Grid.Row="1" />
+                            <views:PaneCrumbs x:Name="RightCrumbs" Grid.Row="1" />
+                            <views:FilePane x:Name="RightPane" Grid.Row="2" />
+                            <views:EditorPane x:Name="RightEditor" Grid.Row="2" />
+                            <views:PreviewPane x:Name="RightPreview" Grid.Row="2" />
                         </Grid>
                     </Grid>
                     <!-- Above the panes and the dock: with no gap the handle lies over their edges. -->
@@ -332,11 +337,11 @@
             </Grid>
 
             <!-- The function-key bar (chrome fkeyBar): collapsed, and its row with it, unless the theme shows it. -->
-            <views:FunctionKeyBar x:Name="FkeyBar" Grid.Row="3" />
+            <views:FunctionKeyBar x:Name="FkeyBar" Grid.Row="2" />
 
             <!-- Status bar (26 px). -->
             <Border
-                Grid.Row="4"
+                Grid.Row="3"
                 BorderBrush="{ThemeResource CbDividerBrush}"
                 BorderThickness="0,1,0,0">
                 <Grid

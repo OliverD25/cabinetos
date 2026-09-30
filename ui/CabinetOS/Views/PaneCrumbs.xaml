@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.PaneCrumbs"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <!--
+      A pane's breadcrumb row (Phase 16; docs/ui.md, "The breadcrumb row"): Back, Forward and Up as 20 px buttons, then one
+      segment per part of the path in the mono font, collapsed to "Drive › … › parent › current" by Breadcrumbs. Ctrl+L turns
+      the segments into a text box. The height is the theme's breadcrumbRowHeight; the active pane's row is tinted.
+    -->
+    <Border
+        x:Name="Root"
+        Height="28"
+        BorderBrush="{ThemeResource CbShellHairlineBrush}"
+        BorderThickness="0,0,0,1">
+        <Grid
+            x:Name="RowGrid"
+            Padding="4,0,8,0"
+            ColumnSpacing="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <StackPanel
+                x:Name="Nav"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="2">
+                <Button
+                    x:Name="BackButton"
+                    Width="20"
+                    Height="20"
+                    MinWidth="0"
+                    AllowFocusOnInteraction="False"
+                    AutomationProperties.Name="Back"
+                    Style="{StaticResource CbSubtleButtonStyle}"
+                    ToolTipService.ToolTip="Back (Alt+Left)">
+                    <FontIcon FontSize="10" Glyph="&#xE72B;" />
+                </Button>
+                <Button
+                    x:Name="ForwardButton"
+                    Width="20"
+                    Height="20"
+                    MinWidth="0"
+                    AllowFocusOnInteraction="False"
+                    AutomationProperties.Name="Forward"
+                    Style="{StaticResource CbSubtleButtonStyle}"
+                    ToolTipService.ToolTip="Forward (Alt+Right)">
+                    <FontIcon FontSize="10" Glyph="&#xE72A;" />
+                </Button>
+                <Button
+                    x:Name="UpButton"
+                    Width="20"
+                    Height="20"
+                    MinWidth="0"
+                    AllowFocusOnInteraction="False"
+                    AutomationProperties.Name="Up"
+                    Style="{StaticResource CbSubtleButtonStyle}"
+                    ToolTipService.ToolTip="Up (Backspace)">
+                    <FontIcon FontSize="10" Glyph="&#xE74A;" />
+                </Button>
+            </StackPanel>
+
+            <Grid x:Name="PathArea" Grid.Column="1">
+                <ScrollViewer
+                    x:Name="CrumbScroller"
+                    Background="Transparent"
+                    HorizontalScrollBarVisibility="Hidden"
+                    HorizontalScrollMode="Enabled"
+                    IsTabStop="False"
+                    VerticalScrollBarVisibility="Disabled"
+                    VerticalScrollMode="Disabled">
+                    <StackPanel
+                        x:Name="Crumbs"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="1">
+                        <StackPanel.Resources>
+                            <!-- A segment's hover fill: the handout's white at 10 %, the same brush object, changed in place by a theme. -->
+                            <StaticResource x:Key="CbHoverFillBrush" ResourceKey="CbCrumbSegmentHoverBrush" />
+                        </StackPanel.Resources>
+                    </StackPanel>
+                </ScrollViewer>
+                <TextBox
+                    x:Name="AddressEdit"
+                    MinHeight="0"
+                    Padding="6,0,6,0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Address"
+                    FontFamily="{StaticResource CbMonoFont}"
+                    FontSize="11"
+                    Visibility="Collapsed" />
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

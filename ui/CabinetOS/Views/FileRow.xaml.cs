@@ -104,6 +104,9 @@ public sealed partial class FileRow : UserControl
     /// <summary>The row's index in its listing, or -1.</summary>
     public int Index { get; private set; } = -1;
 
+    /// <summary>Where the row is in the list shown (under a find filter, among the rows it shows): the stripes count this.</summary>
+    public int Position { get; private set; } = -1;
+
     /// <summary>The theme's stroke for a file named <paramref name="name"/> (the editor tab's glyph too).</summary>
     public static Brush IconBrushFor(string name) =>
         ThemeBrushes.FileType(DisplayFormat.Extension(name)) ?? ThemeResources.Brush("CbRowMetaBrush");
@@ -204,7 +207,7 @@ public sealed partial class FileRow : UserControl
     // Every other row a shade lighter when the theme turns the stripes on (chrome rowStripes).
     private void UpdateStripe()
     {
-        var striped = WindowMetrics.Chrome.RowStripes && Index % 2 == 1;
+        var striped = WindowMetrics.Chrome.RowStripes && Position % 2 == 1;
         if (_striped.Take(striped))
         {
             Root.Background = striped ? ThemeResources.Brush("CbRowStripeBrush") : Clear;
@@ -239,6 +242,7 @@ public sealed partial class FileRow : UserControl
         _item = null;
         _hit = hit;
         Index = hit.Index;
+        Position = hit.Index;
         UpdateStripe();
         SetText(NameText, ref _name, hit.Name);
         SetText(ModifiedText, ref _second, hit.FolderText);
@@ -255,12 +259,14 @@ public sealed partial class FileRow : UserControl
         if (item is null)
         {
             Index = -1;
+            Position = -1;
             IconKey = null;
             return;
         }
         var view = item.View;
         var index = item.Index;
         Index = index;
+        Position = item.Position;
         UpdateStripe();
         var isFolder = view.IsFolder(index);
         SetText(NameText, ref _name, view.Name(index));

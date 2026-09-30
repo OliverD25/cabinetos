@@ -199,7 +199,7 @@ public sealed partial class ActivityRail : UserControl
         });
     }
 
-    // The keys the design names for the built-in views, in the tooltip like the command bar's buttons.
+    // The keys the design names for the built-in views, in the tooltip like the top row's buttons.
     private static string Tooltip(RailButton rail) => rail.Id switch
     {
         RailModel.Explorer => "Explorer (Ctrl+Shift+E)",

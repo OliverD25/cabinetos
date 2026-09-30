@@ -159,7 +159,7 @@
                 <Setter Property="Foreground" Value="{ThemeResource CbKeycapTextBrush}" />
             </Style>
 
-            <!-- A flat 32 x 32 button: command bar, pane and palette icons. -->
+            <!-- A flat 32 x 32 button: top row, pane and palette icons. -->
             <Style x:Key="CbSubtleButtonStyle" TargetType="Button">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="Foreground" Value="{ThemeResource CbTextSecondaryBrush}" />

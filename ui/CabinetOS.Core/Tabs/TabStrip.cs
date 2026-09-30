@@ -41,8 +41,12 @@ public sealed class TabStrip
     /// <summary>The tab in front.</summary>
     public PaneTab Active => _tabs[_active];
 
-    /// <summary>Whether the tab row shows: from the second tab on.</summary>
-    public bool ShowsRow => _tabs.Count > 1;
+    /// <summary>
+    /// Whether the tab strip shows: always, since the Phase 16 shell (the
+    /// creator's SHELL_REDESIGN.md §2 puts it at the top of every pane, and a
+    /// pane always has a tab). Before, it showed from the second tab on.
+    /// </summary>
+    public bool ShowsRow => _tabs.Count > 0;
 
     /// <summary>How many of the tabs show a folder.</summary>
     public int FolderCount => _tabs.Count(t => !t.IsTool);

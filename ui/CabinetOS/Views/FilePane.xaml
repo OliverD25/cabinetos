@@ -26,60 +26,25 @@
                 <VisualState x:Name="Active">
                     <VisualState.Setters>
                         <Setter Target="Frame.BorderBrush" Value="{ThemeResource CbLayerStrokeActiveBrush}" />
-                        <Setter Target="TitleText.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
                     </VisualState.Setters>
                 </VisualState>
-                <VisualState x:Name="OnlyPane">
-                    <VisualState.Setters>
-                        <Setter Target="TitleText.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
-                    </VisualState.Setters>
-                </VisualState>
+                <VisualState x:Name="OnlyPane" />
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
-        <!-- The default look's sizes; the theme's metrics replace them (FilePane.ApplyMetrics). -->
+        <!--
+          The default look's sizes; the theme's metrics replace them (FilePane.ApplyMetrics). The folder's name and path are
+          in the pane's breadcrumb row above (Phase 16), so the pane starts with its column headers.
+        -->
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition x:Name="HeaderRow" Height="36" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Border
-                x:Name="HeaderBorder"
-                BorderBrush="{ThemeResource CbDividerBrush}"
-                BorderThickness="0,0,0,1">
-                <Grid
-                    x:Name="Header"
-                    Padding="14,0,14,0"
-                    ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        x:Name="TitleText"
-                        VerticalAlignment="Center"
-                        FontWeight="SemiBold"
-                        Foreground="{ThemeResource CbPaneTitleInactiveBrush}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="NoWrap" />
-                    <TextBlock
-                        x:Name="PathText"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        FontFamily="{StaticResource CbMonoFont}"
-                        FontSize="11"
-                        Foreground="{ThemeResource CbTextTertiaryBrush}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="NoWrap" />
-                </Grid>
-            </Border>
-
-            <!-- Search mode only: whether the answer is complete, and the "whole volume" box. -->
+            <!-- Search mode only: the search's title, whether the answer is complete, and the "whole volume" box. -->
             <Border
                 x:Name="SearchBar"
-                Grid.Row="1"
                 BorderBrush="{ThemeResource CbDividerBrush}"
                 BorderThickness="0,0,0,1"
                 Visibility="Collapsed">
@@ -91,13 +56,20 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock
-                        x:Name="SearchNoteText"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        Foreground="{ThemeResource CbTextSecondaryBrush}"
-                        IsTextSelectionEnabled="True"
-                        TextWrapping="Wrap" />
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock
+                            x:Name="SearchTitleText"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource CbTextPrimaryBrush}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <TextBlock
+                            x:Name="SearchNoteText"
+                            FontSize="11"
+                            Foreground="{ThemeResource CbTextSecondaryBrush}"
+                            IsTextSelectionEnabled="True"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
                     <CheckBox
                         x:Name="WholeVolumeBox"
                         Grid.Column="1"
@@ -113,7 +85,7 @@
 
             <Border
                 x:Name="ColumnHeader"
-                Grid.Row="2"
+                Grid.Row="1"
                 BorderBrush="{ThemeResource CbDividerBrush}"
                 BorderThickness="0,0,0,1">
                 <Grid x:Name="ColumnGrid" Padding="14,4">
@@ -191,7 +163,7 @@
 
             <ScrollViewer
                 x:Name="Scroller"
-                Grid.Row="3"
+                Grid.Row="2"
                 Padding="4"
                 HorizontalScrollBarVisibility="Disabled"
                 HorizontalScrollMode="Disabled"
@@ -206,7 +178,7 @@
 
             <TextBlock
                 x:Name="MessageText"
-                Grid.Row="3"
+                Grid.Row="2"
                 Padding="40"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
@@ -216,7 +188,7 @@
                 Visibility="Collapsed" />
 
             <!-- Inline rename: one text box over the row's name, and a note under the row for an error. -->
-            <Canvas x:Name="EditLayer" Grid.Row="3">
+            <Canvas x:Name="EditLayer" Grid.Row="2">
                 <!-- New Text File (Shift+F4): a row the listing does not have yet, the name box over it. -->
                 <Border
                     x:Name="NewRow"

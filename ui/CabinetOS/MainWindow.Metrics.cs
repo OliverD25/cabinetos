@@ -15,13 +15,6 @@ namespace CabinetOS;
 // A theme's sizes and chrome elements, applied live like its colours (docs/ui.md, "Metrics and chrome").
 public sealed partial class MainWindow
 {
-    // Windows draws the caption buttons 32 px high (TitleBarHeightOption.Standard); a lower title
-    // bar would lay them over the command bar, so the title bar is never lower than they are.
-    private const double CaptionButtonsHeight = 32;
-
-    // The default look's text boxes: WinUI's own 32 px with its own padding.
-    private const double FieldHeightOfWinUi = 32;
-
     /// <summary>
     /// A theme was applied: when its sizes or chrome differ from the window's,
     /// the window lays itself out again with them, without a restart. A
@@ -37,7 +30,8 @@ public sealed partial class MainWindow
         LayOutWithMetrics();
         var m = look.Metrics;
         Diag.Info(Target, "metrics applied", new LogField("theme", look.Id), new LogField("preset", m.IsPreset),
-            new LogField("row_height", m.RowHeight), new LogField("font_size", m.FontSize), new LogField("pane_header_height", m.PaneHeaderHeight),
+            new LogField("row_height", m.RowHeight), new LogField("font_size", m.FontSize), new LogField("top_row_height", m.TopRowHeight),
+            new LogField("breadcrumb_row_height", m.BreadcrumbRowHeight), new LogField("tab_row", m.TabRow),
             new LogField("fkey_bar", look.Chrome.FkeyBar), new LogField("row_stripes", look.Chrome.RowStripes), new LogField("hairlines", look.Chrome.Hairlines),
             new LogField("ignored", m.Ignored.Count == 0 ? null : string.Join(",", m.Ignored)));
     }
@@ -51,35 +45,28 @@ public sealed partial class MainWindow
         // WinUI's own controls made from now on (dialogs, menus' text boxes) take the theme's control radius too.
         Application.Current.Resources["ControlCornerRadius"] = control;
 
-        // Title bar: its height, the app tile (the design's 5 px), and the workspace tab.
-        TitleRow.Height = new GridLength(Math.Max(m.TitleBarHeight, CaptionButtonsHeight));
-        AppTile.CornerRadius = WindowMetrics.Inner(5);
-        WorkspaceTab.Height = m.TabHeight;
-        WorkspaceTab.MinWidth = m.TabMinWidth;
-        WorkspaceTab.Padding = WindowMetrics.Pad(m.TabPaddingX);
-        WorkspaceTab.CornerRadius = WindowMetrics.TopCorners(m.TabRadius);
-        WorkspaceTabText.FontSize = m.TabFontSize;
-
-        // Command bar: its height, its buttons, its fields; under hairlines filled, with lines above and below.
-        CommandRow.Height = new GridLength(m.CommandBarHeight);
-        CommandBarFrame.Background = chrome.Hairlines ? ThemeResources.Brush("CbBarFillBrush") : null;
-        CommandBarFrame.BorderThickness = new Thickness(0, chrome.Hairlines ? 1 : 0, 0, chrome.Hairlines ? 1 : 0);
-        foreach (var button in new[] { BackButton, ForwardButton, UpButton, TerminalButton, MarketplaceButton, PaletteButton })
+        // The top row (Phase 16): its height (never lower than Windows' caption buttons), its buttons, the pill, the
+        // command center and the app icon.
+        TopRow.Height = new GridLength(Math.Max(m.TopRowHeight, CaptionButtonsHeight));
+        AppTile.CornerRadius = WindowMetrics.Inner(4);
+        foreach (var button in new[] { MenuButton, DualButton, TerminalButton, MarketplaceButton, PaletteButton, SettingsButton })
         {
-            button.Height = button.MinWidth = m.IconButtonSize;
+            button.Width = button.Height = m.TopRowButtonSize;
             button.CornerRadius = control;
         }
-        DualButton.Height = m.ToggleHeight;
-        DualButton.CornerRadius = control;
-        // The address field fills the address bar; the search field has a height of its own.
-        AddressBar.Height = m.FieldHeight;
-        CrumbBar.CornerRadius = control;
-        SizeField(AddressEdit, m);
-        SizeField(SearchBox, m);
-        SearchBox.Height = m.FieldHeight;
+        WorkspacePill.Height = m.WorkspacePillHeight;
+        WorkspacePill.CornerRadius = WorkspacePillFrame.CornerRadius = WindowMetrics.Corners(m.WorkspacePillRadius);
+        CommandCenterFrame.Height = m.CommandCenterHeight;
+        CommandCenterFrame.CornerRadius = WindowMetrics.Corners(m.CommandCenterRadius);
+        CommandCenter.CornerRadius = WindowMetrics.Corners(Math.Max(0, m.CommandCenterRadius - 1));
+        foreach (var crumbs in _crumbViews)
+        {
+            crumbs.ApplyMetrics();
+        }
 
-        // Body: the space at its edges, between the sidebar and the panes, and between the panes.
-        Body.Padding = new Thickness(m.BodyPadding, 0, m.BodyPadding, m.BodyPadding);
+        // Body: the space at its edges, between the sidebar and the panes, and between the panes; under the top
+        // row the space between surfaces, as the top row is one.
+        Body.Padding = new Thickness(m.BodyPadding, m.Gap, m.BodyPadding, m.BodyPadding);
         SidebarColumn.Margin = new Thickness(0, 0, m.Gap, 0);
         Rail.Margin = new Thickness(0, 0, m.Gap, 0);
         // A gap too narrow to grab (a theme's gap 0) keeps a 6 px handle for the divider, laid over the edges it joins.
@@ -120,24 +107,7 @@ public sealed partial class MainWindow
         UpdateDockHeader();
         UpdateCrumbs();
         UpdateLayoutText();
-    }
-
-    // A text field of the command bar: as high as fieldHeight, its text at the base size. The
-    // default look keeps WinUI's own 32 px box; a lower one needs a smaller padding and minimum.
-    private static void SizeField(TextBox field, ThemeMetrics m)
-    {
-        field.FontSize = m.FontSize;
-        field.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
-        if (m.FieldHeight >= FieldHeightOfWinUi)
-        {
-            field.ClearValue(FrameworkElement.MinHeightProperty);
-            field.ClearValue(Control.PaddingProperty);
-        }
-        else
-        {
-            field.MinHeight = 0;
-            field.Padding = new Thickness(10, WindowMetrics.TextTop(m.FieldHeight, m.FontSize), 6, 0);
-        }
+        LayOutTopRow();
     }
 
     // The space between the panes: half the gap on each side. Under hairlines with no gap
@@ -260,8 +230,9 @@ public sealed partial class MainWindow
         // The sizes the metrics set, element by element: two looks compare by this line.
         var named = new (string Name, FrameworkElement Element)[]
         {
-            ("title", TitleBar), ("tile", AppTile), ("tab", WorkspaceTab), ("commandbar", CommandBarFrame), ("back", BackButton), ("address", AddressBar),
-            ("search", SearchBox), ("dual", DualButton), ("body", Body), ("sidebar", SidebarView), ("left", LeftPane), ("right", RightPane),
+            ("top", TopBar), ("menu", MenuButton), ("tile", AppTile), ("pill", WorkspacePillFrame), ("center", CommandCenterFrame),
+            ("dual", DualButton), ("settings", SettingsButton), ("body", Body), ("sidebar", SidebarView), ("lefttabs", LeftTabs),
+            ("leftcrumbs", LeftCrumbs), ("left", LeftPane), ("righttabs", RightTabs), ("rightcrumbs", RightCrumbs), ("right", RightPane),
             ("fkeys", FkeyBar), ("status", StatusGrid), ("dock", Dock),
         };
         var sizes = named.Where(n => n.Element.Visibility == Visibility.Visible)

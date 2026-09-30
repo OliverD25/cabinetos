@@ -150,6 +150,7 @@ public sealed partial class MainWindow : Window
         SetUpPlugins();
         SetUpTools();
         SetUpTabs();
+        SetUpShell();
         SetUpPreview();
         SetUpMarket();
         SetUpRail();
@@ -171,16 +172,9 @@ public sealed partial class MainWindow : Window
         FileMenu.Closed += FocusActivePane;
         FkeyBar.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
 
-        BackButton.Click += (_, _) => _ = _router.ExecuteAsync("go.back", trigger: "button");
-        ForwardButton.Click += (_, _) => _ = _router.ExecuteAsync("go.forward", trigger: "button");
-        UpButton.Click += (_, _) => _ = _router.ExecuteAsync("go.up", trigger: "button");
         DualButton.Click += (_, _) => _ = _router.ExecuteAsync("view.toggleDualPane", trigger: "button");
         PaletteButton.Click += (_, _) => _ = _router.ExecuteAsync("palette.show", trigger: "button");
         PaletteKeycap.Click += (_, _) => _ = _router.ExecuteAsync("palette.show", trigger: "button");
-        CrumbBar.Tapped += OnCrumbBarTapped;
-        CrumbScroller.SizeChanged += (_, _) => FitCrumbs();
-        AddressEdit.KeyDown += OnAddressKeyDown;
-        AddressEdit.LostFocus += (_, _) => EndAddressEdit();
 
         RegisterCommands();
         SetUpDiagnostics();
@@ -223,7 +217,8 @@ public sealed partial class MainWindow : Window
         // Mica that a theme can tint (MicaBackdrop has no tint).
         SystemBackdrop = _backdrop;
         ExtendsContentIntoTitleBar = true;
-        SetTitleBar(TitleBar);
+        // The top row is the drag area; its controls are taken out of it (UpdateDragRegions).
+        SetTitleBar(TopBar);
         AppWindow.Title = "CabinetOS";
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
@@ -237,9 +232,12 @@ public sealed partial class MainWindow : Window
         UpdateCaptionColors();
         if (AppWindow.Presenter is OverlappedPresenter presenter && RootGrid.XamlRoot is { } root)
         {
-            presenter.PreferredMinimumWidth = (int)(760 * root.RasterizationScale);
+            // 600 px, so the window can be narrower than the 640 px under which the command center hides (Phase 16).
+            presenter.PreferredMinimumWidth = (int)(600 * root.RasterizationScale);
             presenter.PreferredMinimumHeight = (int)(480 * root.RasterizationScale);
         }
+        FitCaptionSpace();
+        LayOutTopRow();
         if (!_started)
         {
             _started = true;
@@ -287,7 +285,8 @@ public sealed partial class MainWindow : Window
         {
             SidebarColumn.Width = SidebarWidthFor(windowWidth);
         }
-        SearchBox.Width = Math.Clamp(windowWidth * 0.22, 120, 240);
+        FitCaptionSpace();
+        LayOutTopRow();
     }
 
     private async void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -440,7 +439,11 @@ public sealed partial class MainWindow : Window
                     await _terminal.TypeAsync(step.Argument.Replace("{enter}", "\r", StringComparison.Ordinal));
                     break;
                 case "search":
-                    SearchBox.Text = step.Argument;
+                    // Typed into the Search view's field (the command bar's search field is gone since Phase 16).
+                    SetSearchText(step.Argument);
+                    break;
+                case "shell":
+                    LogShellState(step.Argument);
                     break;
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
@@ -1239,9 +1242,18 @@ public sealed partial class MainWindow : Window
 
         // The shell's own commands, in the core's registry since protocol 9
         // (target ui, keys in the keymap, so each one can be rebound).
-        _router.RegisterUiHandler("go.back", invocation => Active.IsLocked ? StayInLockedTab() : Active.GoBackAsync(invocation.RequestId));
-        _router.RegisterUiHandler("go.forward", invocation => Active.IsLocked ? StayInLockedTab() : Active.GoForwardAsync(invocation.RequestId));
-        _router.RegisterUiHandler("go.up", invocation => Active.GoUpAsync(invocation.RequestId));
+        // A pane's breadcrumb row names its pane; a key or the palette means the active one.
+        _router.RegisterUiHandler("go.back", invocation =>
+        {
+            var pane = ActivatePaneOf(invocation);
+            return pane.IsLocked ? StayInLockedTab() : pane.GoBackAsync(invocation.RequestId);
+        });
+        _router.RegisterUiHandler("go.forward", invocation =>
+        {
+            var pane = ActivatePaneOf(invocation);
+            return pane.IsLocked ? StayInLockedTab() : pane.GoForwardAsync(invocation.RequestId);
+        });
+        _router.RegisterUiHandler("go.up", invocation => ActivatePaneOf(invocation).GoUpAsync(invocation.RequestId));
         _router.RegisterUiHandler("pane.openSelected", invocation => Active.Search is null ? OpenAsync(invocation) : OpenHitAsync(invocation));
         _router.RegisterUiHandler("file.copyToOtherPane", ListingOnly(invocation => TransferToOtherPaneAsync(JobKind.Copy, invocation)));
         _router.RegisterUiHandler("file.moveToOtherPane", ListingOnly(invocation => TransferToOtherPaneAsync(JobKind.Move, invocation)));
@@ -1394,8 +1406,10 @@ public sealed partial class MainWindow : Window
 
     private async Task GoToPathAsync(CommandInvocation invocation)
     {
+        var pane = PaneOf(invocation);
         if (CommandArgs.Text(invocation.Args, "path") is { Length: > 0 } path)
         {
+            ActivatePaneOf(invocation);
             // The pane takes the keyboard before the address box collapses (see the palette).
             FocusActivePane();
             EndAddressEdit();
@@ -1404,8 +1418,19 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            BeginAddressEdit();
+            BeginAddressEdit(pane);
         }
+    }
+
+    // The pane a command names comes to the front (a click on its breadcrumb row); the active one otherwise.
+    private PaneModel ActivatePaneOf(CommandInvocation invocation)
+    {
+        var pane = PaneOf(invocation);
+        if (pane != _active && (_dual || pane == 0))
+        {
+            SetActive(pane);
+        }
+        return _panes[pane];
     }
 
     private void TogglePalette()
@@ -1485,7 +1510,7 @@ public sealed partial class MainWindow : Window
         {
             EndQuickSearch();
         }
-        else if (AddressEdit.Visibility == Visibility.Visible)
+        else if (IsEditingAddress)
         {
             // The pane takes the keyboard before the address box collapses (see the palette).
             FocusActivePane();
@@ -2143,10 +2168,7 @@ public sealed partial class MainWindow : Window
         RightColumn.Width = dual ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         RightSide.Visibility = dual ? Visibility.Visible : Visibility.Collapsed;
         ApplyPaneGaps();
-        DualLabel.Text = dual ? "Dual" : "Single";
-        var brush = dual ? ThemeResources.Brush("CbAccentBrush") : ThemeResources.Brush("CbTextSecondaryBrush");
-        DualIcon.Foreground = brush;
-        DualLabel.Foreground = brush;
+        UpdateDualButton();
         foreach (var pane in _panes)
         {
             pane.IsDual = dual;
@@ -2160,6 +2182,8 @@ public sealed partial class MainWindow : Window
         {
             UpdateTabRows();
         }
+        // Two panes show 3 parts of a path whole, one pane 5 (Breadcrumbs).
+        UpdateCrumbs();
     }
 
     private void ApplySidebar(bool open)
@@ -2223,6 +2247,15 @@ public sealed partial class MainWindow : Window
             // The pane went elsewhere (Backspace, a crumb, a lost folder): its results are stale.
             EndSearch(focusPane: false);
         }
+        // Each pane's breadcrumb row follows its own pane, active or not.
+        if (e.PropertyName == nameof(PaneModel.Path))
+        {
+            UpdateCrumbs();
+        }
+        if (e.PropertyName is nameof(PaneModel.Path) or nameof(PaneModel.CanGoBack) or nameof(PaneModel.CanGoForward) or nameof(PaneModel.CanGoUp))
+        {
+            UpdateNavigationButtons();
+        }
         if (sender != Active)
         {
             return;
@@ -2231,14 +2264,9 @@ public sealed partial class MainWindow : Window
         {
             case nameof(PaneModel.Path):
                 EndQuickSearch();
-                UpdateCrumbs();
                 _sidebar.SetActivePath(Active.Path);
-                UpdateNavigationButtons();
                 _terminal.SetActiveFolder(Active.Path);
                 ScheduleToolContext();
-                break;
-            case nameof(PaneModel.CanGoBack) or nameof(PaneModel.CanGoForward) or nameof(PaneModel.CanGoUp):
-                UpdateNavigationButtons();
                 break;
             case nameof(PaneModel.Count) or nameof(PaneModel.Selection) or nameof(PaneModel.Rows):
                 UpdateStatus();
@@ -2248,187 +2276,6 @@ public sealed partial class MainWindow : Window
                 // A measured folder that is selected adds to the selected size.
                 UpdateStatus();
                 break;
-        }
-    }
-
-    // ----- Address bar -----
-
-    // The crumbs, the separator after each, and their widths with nothing hidden, for CrumbFit.
-    private readonly List<Button> _crumbButtons = [];
-    private readonly List<FontIcon> _crumbSeparators = [];
-    private readonly List<(string Label, string Path)> _crumbPaths = [];
-    private Button? _crumbMore;
-    private FontIcon? _crumbMoreSeparator;
-    private double[] _crumbWidths = [];
-    private double _crumbSeparatorWidth;
-    private double _crumbMoreWidth;
-
-    private void UpdateCrumbs()
-    {
-        Crumbs.Children.Clear();
-        _crumbButtons.Clear();
-        _crumbSeparators.Clear();
-        _crumbPaths.Clear();
-        _crumbMore = null;
-        _crumbMoreSeparator = null;
-        var crumbs = DisplayFormat.Crumbs(Active.Path);
-        for (var i = 0; i < crumbs.Count; i++)
-        {
-            var (label, path) = crumbs[i];
-            var button = new Button
-            {
-                // A single name wider than the bar ends in "\u2026" (FitCrumbs caps the button).
-                Content = new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis },
-                Style = (Style)ThemeResources.Get("CbCrumbButtonStyle")!,
-                FontSize = WindowMetrics.Current.FontSize,
-                Height = CrumbHeight(),
-                Tag = path,
-            };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, path);
-            button.Click += (_, _) => _ = _router.ExecuteAsync("go.toPath", CommandArgs.With("path", path), "crumb");
-            _crumbButtons.Add(button);
-            _crumbPaths.Add((label, path));
-            Crumbs.Children.Add(button);
-            if (i < crumbs.Count - 1)
-            {
-                var separator = CrumbSeparator();
-                _crumbSeparators.Add(separator);
-                Crumbs.Children.Add(separator);
-            }
-            if (i == 0 && crumbs.Count > 1)
-            {
-                // Stands for the crumbs a long path leaves out; its menu goes to them.
-                _crumbMore = new Button
-                {
-                    Content = "\u2026",
-                    Style = (Style)ThemeResources.Get("CbCrumbButtonStyle")!,
-                    FontSize = WindowMetrics.Current.FontSize,
-                    Height = CrumbHeight(),
-                    Flyout = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft },
-                };
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_crumbMore, "Folders in between");
-                ToolTipService.SetToolTip(_crumbMore, "Folders in between");
-                ((MenuFlyout)_crumbMore.Flyout).Opening += OnCrumbMoreOpening;
-                _crumbMoreSeparator = CrumbSeparator();
-                Crumbs.Children.Add(_crumbMore);
-                Crumbs.Children.Add(_crumbMoreSeparator);
-            }
-        }
-        SearchBox.PlaceholderText = $"Search {Active.FolderName}";
-        // Everything shown once, to learn each width; FitCrumbs then hides what does not fit.
-        CrumbScroller.UpdateLayout();
-        var spacing = Crumbs.Spacing;
-        _crumbWidths = [.. _crumbButtons.Select(b => b.DesiredSize.Width)];
-        _crumbSeparatorWidth = _crumbSeparators.Count > 0 ? _crumbSeparators[0].DesiredSize.Width + (2 * spacing) : 0;
-        _crumbMoreWidth = _crumbMore?.DesiredSize.Width ?? 0;
-        FitCrumbs();
-    }
-
-    // A crumb: the design's 24 px, lower in a lower address field so it stays inside the field's border.
-    private static double CrumbHeight() => Math.Min(24, WindowMetrics.Current.FieldHeight - 4);
-
-    private static FontIcon CrumbSeparator() => new()
-    {
-        Glyph = "\uE76C",
-        FontSize = 10,
-        Opacity = 0.5,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
-
-    // A path too long for the bar keeps its root, a "\u2026", and its last crumbs (docs/ui.md, "Long paths").
-    private void FitCrumbs()
-    {
-        var count = _crumbButtons.Count;
-        if (count == 0 || _crumbWidths.Length != count)
-        {
-            return;
-        }
-        // A little slack, so rounding never leaves a pixel to scroll.
-        var available = CrumbScroller.ActualWidth - 4;
-        var fit = available > 0 ? CrumbFit.Fit(_crumbWidths, available, _crumbSeparatorWidth, _crumbMoreWidth) : new CrumbLayout(true, 1, false);
-        _crumbButtons[0].Visibility = Shown(fit.ShowRoot);
-        for (var i = 1; i < count; i++)
-        {
-            _crumbButtons[i].Visibility = Shown(!fit.Ellipsis || i >= fit.FirstTail);
-        }
-        for (var i = 0; i < _crumbSeparators.Count; i++)
-        {
-            // The separator after a crumb shows with it; the root's only while the root shows.
-            _crumbSeparators[i].Visibility = i == 0 ? Shown(fit.ShowRoot) : _crumbButtons[i].Visibility;
-        }
-        if (_crumbMore is { } more && _crumbMoreSeparator is { } moreSeparator)
-        {
-            more.Visibility = Shown(fit.Ellipsis);
-            moreSeparator.Visibility = Shown(fit.Ellipsis);
-        }
-        _crumbButtons[^1].MaxWidth = fit.ShowRoot ? double.PositiveInfinity : Math.Max(40, available - _crumbMoreWidth - _crumbSeparatorWidth);
-        CrumbScroller.UpdateLayout();
-        CrumbScroller.ChangeView(CrumbScroller.ScrollableWidth, null, null, disableAnimation: true);
-
-        static Visibility Shown(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    // The "\u2026" menu: the crumbs left out, the root first.
-    private void OnCrumbMoreOpening(object? sender, object e)
-    {
-        if (sender is not MenuFlyout menu)
-        {
-            return;
-        }
-        menu.Items.Clear();
-        for (var i = 0; i < _crumbButtons.Count; i++)
-        {
-            if (_crumbButtons[i].Visibility == Visibility.Visible)
-            {
-                continue;
-            }
-            var path = _crumbPaths[i].Path;
-            var item = new MenuFlyoutItem { Text = _crumbPaths[i].Label, Icon = new FontIcon { Glyph = "\uE8B7" } };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, path);
-            ToolTipService.SetToolTip(item, path);
-            item.Click += (_, _) => _ = _router.ExecuteAsync("go.toPath", CommandArgs.With("path", path), "crumb");
-            menu.Items.Add(item);
-        }
-    }
-
-    private void OnCrumbBarTapped(object sender, TappedRoutedEventArgs e)
-    {
-        for (var element = e.OriginalSource as DependencyObject; element is not null && element != CrumbBar; element = VisualTreeHelper.GetParent(element))
-        {
-            if (element is Button)
-            {
-                return;
-            }
-        }
-        _ = _router.ExecuteAsync("go.toPath", trigger: "mouse");
-    }
-
-    private void BeginAddressEdit()
-    {
-        AddressEdit.Text = Active.Path;
-        AddressEdit.Visibility = Visibility.Visible;
-        CrumbBar.Visibility = Visibility.Collapsed;
-        AddressEdit.Focus(FocusState.Programmatic);
-        AddressEdit.SelectAll();
-    }
-
-    private void EndAddressEdit()
-    {
-        if (AddressEdit.Visibility == Visibility.Collapsed)
-        {
-            return;
-        }
-        AddressEdit.Visibility = Visibility.Collapsed;
-        CrumbBar.Visibility = Visibility.Visible;
-    }
-
-    private void OnAddressKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == VirtualKey.Enter)
-        {
-            e.Handled = true;
-            var path = AddressEdit.Text.Trim().Trim('"');
-            _ = _router.ExecuteAsync("go.toPath", CommandArgs.With("path", path), "address");
         }
     }
 
@@ -2577,7 +2424,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // ----- Status bar and command bar -----
+    // ----- Status bar -----
 
     private void UpdateStatus()
     {
@@ -2609,13 +2456,6 @@ public sealed partial class MainWindow : Window
     }
 
     private string _selectionShown = "";
-
-    private void UpdateNavigationButtons()
-    {
-        BackButton.IsEnabled = Active.CanGoBack;
-        ForwardButton.IsEnabled = Active.CanGoForward;
-        UpButton.IsEnabled = Active.CanGoUp;
-    }
 
     private void ShowNotice(string text, bool isError = false)
     {

@@ -23,13 +23,16 @@ public interface IRowDetails
 /// read from shared memory when the row becomes visible; the type name and
 /// the icon come from the core a page at a time (<see cref="Details"/>).
 /// </summary>
-public sealed class RowItem(ListingView view, int index, IRowDetails? details = null)
+public sealed class RowItem(ListingView view, int index, IRowDetails? details = null, int position = -1)
 {
     /// <summary>The listing the row belongs to.</summary>
     public ListingView View { get; } = view;
 
     /// <summary>The row's position in the listing (the core's sort order).</summary>
     public int Index { get; } = index;
+
+    /// <summary>Where the row is in the list shown: its index, or its place among the rows a find filter shows.</summary>
+    public int Position { get; } = position < 0 ? index : position;
 
     /// <summary>Where the row's type name and icon come from.</summary>
     public IRowDetails? Details { get; } = details;
@@ -40,18 +43,22 @@ public sealed class RowItem(ListingView view, int index, IRowDetails? details = 
 /// makes a <see cref="RowItem"/> only when the repeater asks for an index, so
 /// a folder of 100,000 entries never has 100,000 objects. It implements the
 /// non-generic <see cref="IList"/> because that is what WinUI reads by index.
+/// With <paramref name="visible"/> (a find filter; docs/ui.md, "Find in
+/// pane") it lists only those entries, in listing order.
 /// </summary>
-public sealed class ListingRows(ListingView view, IRowDetails? details = null) : IReadOnlyList<RowItem>, IList
+public sealed class ListingRows(ListingView view, IRowDetails? details = null, IReadOnlyList<int>? visible = null) : IReadOnlyList<RowItem>, IList
 {
     /// <summary>The listing behind the rows.</summary>
     public ListingView View { get; } = view;
 
     /// <inheritdoc/>
-    public int Count => View.Count;
+    public int Count => visible?.Count ?? View.Count;
 
     /// <inheritdoc/>
     public RowItem this[int index] =>
-        (uint)index < (uint)Count ? new RowItem(View, index, details) : throw new ArgumentOutOfRangeException(nameof(index));
+        (uint)index < (uint)Count
+            ? new RowItem(View, visible is null ? index : visible[index], details, index)
+            : throw new ArgumentOutOfRangeException(nameof(index));
 
     bool IList.IsFixedSize => true;
 
@@ -72,13 +79,13 @@ public sealed class ListingRows(ListingView view, IRowDetails? details = null) :
     {
         for (var i = 0; i < Count; i++)
         {
-            yield return new RowItem(View, i, details);
+            yield return this[i];
         }
     }
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    int IList.IndexOf(object? value) => value is RowItem row && row.View == View ? row.Index : -1;
+    int IList.IndexOf(object? value) => value is RowItem row && row.View == View && (uint)row.Position < (uint)Count ? row.Position : -1;
 
     bool IList.Contains(object? value) => ((IList)this).IndexOf(value) >= 0;
 
@@ -86,7 +93,7 @@ public sealed class ListingRows(ListingView view, IRowDetails? details = null) :
     {
         for (var i = 0; i < Count; i++)
         {
-            array.SetValue(new RowItem(View, i, details), index + i);
+            array.SetValue(this[i], index + i);
         }
     }
 
