@@ -30,6 +30,7 @@ is a plan paragraph with its commits.
 | [phase-14a-core-report.md](phase-14a-core-report.md) | core, Opus | the public index as the default; `ui.tabs`; Phase 14a, protocol 13 | 349a59f, 77c1169, 46c644c to 4feb72f; 700 core tests |
 | [phase-14-window-report.md](phase-14-window-report.md) | shell, Sonnet | Phase 14: the window's parts | 401d439 to d6e2de7; 767 UI tests; live check section 14's drag True |
 | [phase-14b-e-extension-report.md](phase-14b-e-extension-report.md) | extension, Sonnet | the two core additions; Phase 14b to 14e, the Agent extension | 3887a4c to 9e8d8e5; 722 core tests, 90 plugin tests |
+| [phase-13-rail-report.md](phase-13-rail-report.md) | shell, Sonnet | Phase 13: the activity rail and the modular sidebar; a tool page runs its plugin's commands; the live check's "ask" step | 68ee1f0 to 1a05a5c; 839 UI tests; whole-script live check 105 True, 0 False |
 
 The extension agent's earlier per-item reports (item 2b, item 3) never
 reached the planning session; its final hand-back above carries the run's

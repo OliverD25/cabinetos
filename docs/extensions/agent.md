@@ -265,14 +265,15 @@ one with a string `notice` shows it in the status bar
 in its result only, and `agent.chat` names it in `agent.preview`: never both,
 or the window would open it twice.
 
-## What the window must allow
+## What the window allows
 
-A page may run only the commands the window lists
-(`ToolMessages.AllowedCommands`, [tool-extensions.md](tool-extensions.md)).
-For the chat page to work, that list needs `agent.chat`, `agent.tier`,
-`agent.undo`, `agent.audit`, `agent.rule.add`, `agent.rule.remove`,
-`agent.rule.resume` and `agent.rule.list`. That is the shell's part; until then the page
-loads and the palette command "Agent: Ask" works.
+A page may run the commands of the window's fixed list, and the commands
+of a plugin it follows: a command whose source is that plugin and whose id
+starts with the plugin's id (`agent.`), once the page has sent
+`subscribe { plugin: "agent" }` ([tool-extensions.md](tool-extensions.md)).
+The chat page subscribes first, so `agent.chat`, `agent.tier`,
+`agent.undo`, `agent.audit` and the rule commands run without any name of
+this extension in the window.
 
 ## Testing without a model
 
