@@ -53,11 +53,17 @@ public sealed partial class FilePane : UserControl
     private bool _searchShown;
     private string _headerPath = "";
     private double _pathCharWidth;
+    private readonly RowFactory _rows;
+    private int _rowsAhead;
+    private readonly PendingCursorKeys _cursorKeys = new();
+    private bool _cursorKeysHooked;
 
     /// <summary>Creates the pane; <see cref="Model"/> gives it its content.</summary>
     public FilePane()
     {
         InitializeComponent();
+        _rows = new RowFactory((DataTemplate)Resources["RowTemplate"], DispatcherQueue);
+        Repeater.ItemTemplate = _rows;
         Repeater.ElementPrepared += OnElementPrepared;
         Repeater.ElementClearing += OnElementClearing;
         Repeater.Tapped += OnRowTapped;
@@ -65,7 +71,12 @@ public sealed partial class FilePane : UserControl
         Frame.RightTapped += OnRightTapped;
         KeyDown += OnKeyDown;
         GotFocus += (_, _) => Activated?.Invoke(this);
-        AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => Focus(FocusState.Pointer)), handledEventsToo: true);
+        AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) =>
+        {
+            // A click acts where the waiting cursor keys leave the cursor.
+            ApplyCursorKeys();
+            Focus(FocusState.Pointer);
+        }), handledEventsToo: true);
         Header.SizeChanged += (_, e) =>
         {
             PathText.MaxWidth = Math.Max(0, e.NewSize.Width * 0.45);
@@ -148,6 +159,8 @@ public sealed partial class FilePane : UserControl
         get => _model;
         set
         {
+            // Keys pressed before the pane shows another model belong to the one it showed.
+            ApplyCursorKeys();
             if (_model is not null)
             {
                 _model.PropertyChanged -= OnModelChanged;
@@ -536,6 +549,17 @@ public sealed partial class FilePane : UserControl
         var started = FrameParts.Start();
         if (args.Element is FileRow row)
         {
+            // The row is bound here, not in its own DataContextChanged: with that event, a held
+            // PageDown had WinUI ask .NET for a full, blocking garbage collection every 2 to 3 s,
+            // a pause of 17 to 25 ms; without it, none in 20 s (docs/ui.md, "Scrolling").
+            row.Show(row.DataContext);
+            // Rows for two pages ahead, made while the window is idle (RowFactory).
+            var ahead = 2 * (RowsPerPage() + 2);
+            if (ahead > _rowsAhead)
+            {
+                _rowsAhead = ahead;
+                _rows.MakeAhead(ahead);
+            }
             _realized.Add(row);
             Mark(row, args.Index);
             row.DragStartingRow -= OnRowDragStarting;
@@ -665,29 +689,30 @@ public sealed partial class FilePane : UserControl
         // does (panes.selection: commander).
         var ctrl = IsDown(VirtualKey.Control);
         var shift = IsDown(VirtualKey.Shift);
+        if (CursorKeyOf(e.Key) is { } cursorKey)
+        {
+            // Made at the start of the next frame, so a page's new rows fit in it (PendingCursorKeys).
+            _cursorKeys.Add(cursorKey, shift, ctrl);
+            if (!_cursorKeysHooked)
+            {
+                _cursorKeysHooked = true;
+                CompositionTarget.Rendering += OnFrameForCursorKeys;
+            }
+            e.Handled = true;
+            return;
+        }
+        // Every other key sees the cursor where the keys before it left it.
+        ApplyCursorKeys();
         var selection = _model.CurrentSelection;
-        var mode = selection.KeyMode(shift, ctrl);
         var focus = selection.Focus;
         var handled = true;
         switch (e.Key)
         {
-            case VirtualKey.Up:
-                MoveFocus(focus - 1, mode);
-                break;
-            case VirtualKey.Down:
-                MoveFocus(focus + 1, mode);
-                break;
             case VirtualKey.Home:
                 MoveFocus(0, selection.KeyMode(shift, ctrl, toListEnd: true));
                 break;
             case VirtualKey.End:
                 MoveFocus(_model.ShownCount - 1, selection.KeyMode(shift, ctrl, toListEnd: true));
-                break;
-            case VirtualKey.PageUp:
-                MoveFocus(focus - RowsPerPage(), mode);
-                break;
-            case VirtualKey.PageDown:
-                MoveFocus(focus + RowsPerPage(), mode);
                 break;
             case VirtualKey.Back:
                 // A file manager convention the keymap does not hold (go.up is Alt+Up there).
@@ -731,6 +756,40 @@ public sealed partial class FilePane : UserControl
     }
 
     private int RowsPerPage() => Math.Max(1, (int)((Scroller.ViewportHeight - (2 * _listPadding)) / _rowHeight) - 1);
+
+    private static CursorKey? CursorKeyOf(VirtualKey key) => key switch
+    {
+        VirtualKey.Up => CursorKey.Up,
+        VirtualKey.Down => CursorKey.Down,
+        VirtualKey.PageUp => CursorKey.PageUp,
+        VirtualKey.PageDown => CursorKey.PageDown,
+        _ => null,
+    };
+
+    private void OnFrameForCursorKeys(object? sender, object e) => ApplyCursorKeys();
+
+    /// <summary>
+    /// Makes the cursor keys that wait for the next frame now, in order. The
+    /// window calls it before anything that reads the cursor: a command, a
+    /// typed letter of a quick search; the pane before a click and its other keys.
+    /// </summary>
+    public void ApplyCursorKeys()
+    {
+        if (_cursorKeysHooked)
+        {
+            _cursorKeysHooked = false;
+            CompositionTarget.Rendering -= OnFrameForCursorKeys;
+        }
+        while (_cursorKeys.TryTake(out var key))
+        {
+            if (_model is null)
+            {
+                continue;
+            }
+            var (index, mode) = PendingCursorKeys.Target(_model.CurrentSelection, key.Key, key.Shift, key.Ctrl, RowsPerPage());
+            MoveFocus(index, mode);
+        }
+    }
 
     /// <summary>The snapshot aid's <c>layout:</c> step: the sizes the metrics set here, to compare two looks by.</summary>
     internal string SizeSignature() => string.Create(System.Globalization.CultureInfo.InvariantCulture,

@@ -46,6 +46,31 @@ public sealed partial class FileRow : UserControl
     private bool _selected;
     private bool _pointerOver;
 
+    /// <summary>
+    /// Shows <paramref name="data"/>: a listing's row or a search hit. The pane
+    /// calls it when the repeater prepares the row; the row does not listen to
+    /// its own DataContextChanged: with it, a held key's scrolling made WinUI
+    /// ask for a blocking garbage collection every 2 to 3 s (docs/ui.md, "Scrolling").
+    /// </summary>
+    public void Show(object? data)
+    {
+        var started = FrameParts.Start();
+        // A recycled row built with the sizes of the theme before.
+        if (_metricsVersion != WindowMetrics.Version)
+        {
+            ApplyMetrics();
+        }
+        if (data is SearchRowItem hit)
+        {
+            BindHit(hit);
+        }
+        else
+        {
+            Bind(data as RowItem);
+        }
+        FrameParts.Stop(FramePart.Bind, started);
+    }
+
     /// <summary>Creates a row; the repeater recycles it for many indexes.</summary>
     public FileRow()
     {
@@ -54,24 +79,6 @@ public sealed partial class FileRow : UserControl
         _plainSizeBrush = SizeText.Foreground;
         Icon.Glyph = FileGlyph;
         ApplyMetrics();
-        DataContextChanged += (_, _) =>
-        {
-            var started = FrameParts.Start();
-            // A recycled row built with the sizes of the theme before.
-            if (_metricsVersion != WindowMetrics.Version)
-            {
-                ApplyMetrics();
-            }
-            if (DataContext is SearchRowItem hit)
-            {
-                BindHit(hit);
-            }
-            else
-            {
-                Bind(DataContext as RowItem);
-            }
-            FrameParts.Stop(FramePart.Bind, started);
-        };
         PointerEntered += OnPointerEntered;
         PointerExited += OnPointerExited;
         // A row can be dragged out (to a tool's page); the pane decides what goes with it.

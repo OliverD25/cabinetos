@@ -39,6 +39,10 @@ public sealed class FrameMonitor
     private CpuReading _runCpu;
     private long _runStart;
     private long[] _runCalls = [];
+    private TimeSpan _gcPause = GC.GetTotalPauseDuration();
+    private (int, int, int) _gcCounts = (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+    private (int, int, int) _secondGcCounts = (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+    private double _secondGcPauseMs;
 
     /// <summary>A monitor; <paramref name="corePid"/> names the core's process for the CPU load of a run.</summary>
     public FrameMonitor(Func<int?> corePid, bool heavyOnly = false)
@@ -159,20 +163,39 @@ public sealed class FrameMonitor
     {
         var now = Stopwatch.GetTimestamp();
         var parts = FrameParts.Take();
+        // What the garbage collector did since the last frame: a pause stops the UI thread too.
+        var gcPause = GC.GetTotalPauseDuration();
+        var gcPauseMs = (gcPause - _gcPause).TotalMilliseconds;
+        var gcCounts = (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+        var gcs = $"{gcCounts.Item1 - _gcCounts.Item1}/{gcCounts.Item2 - _gcCounts.Item2}/{gcCounts.Item3 - _gcCounts.Item3}";
+        _gcPause = gcPause;
+        _gcCounts = gcCounts;
+        _secondGcPauseMs += gcPauseMs;
         if (_last != 0)
         {
             var frame = new FrameSample(Stopwatch.GetElapsedTime(_last, now).TotalMilliseconds, _workMs, parts, _layoutInFrameMs);
             _second.Add(frame);
             _run?.Add(frame);
-            if (_run is not null && frame.GapMs >= FrameSummary.DroppedMs)
+            if (frame.GapMs >= FrameSummary.DroppedMs)
             {
-                // During a run each dropped frame is told apart, so a rare slow one can be traced.
-                var fields = new List<LogField> { new("gap_ms", Math.Round(frame.GapMs, 1)), new("work_ms", Math.Round(frame.WorkMs, 1)) };
+                // Each dropped frame is told apart, so a rare slow one can be traced.
+                var fields = new List<LogField> { new("gap_ms", Math.Round(frame.GapMs, 1)), new("work_ms", Math.Round(frame.WorkMs, 1)),
+                    new("busy_ms", Math.Round(FrameTable.Busy(frame), 1)), new("gc_pause_ms", Math.Round(gcPauseMs, 1)), new("gcs", gcs) };
+                if (gcPauseMs > 0)
+                {
+                    // The heap the last collection went through, and what survived it: a full blocking
+                    // collection's pause grows with them.
+                    var info = GC.GetGCMemoryInfo(GCKind.Any);
+                    fields.Add(new("gc_heap_mb", Math.Round(info.HeapSizeBytes / 1048576.0, 1)));
+                    fields.Add(new("gc_promoted_mb", Math.Round(info.PromotedBytes / 1048576.0, 1)));
+                    fields.Add(new("gc_generation", info.Generation));
+                    fields.Add(new("gc_concurrent", info.Concurrent));
+                }
                 for (var i = 0; i < PartNames.Length; i++)
                 {
                     fields.Add(new($"{PartNames[i]}_ms", Math.Round(parts[i], 2)));
                 }
-                Diag.Info(Target, "slow frame", [.. fields]);
+                Log("slow frame", [.. fields]);
             }
         }
         _last = now;
@@ -200,7 +223,12 @@ public sealed class FrameMonitor
             // Sums over the second, so seconds add up: ms per frame is a sum divided by frames.
             new("work_ms", Math.Round(all.WorkMs * all.Frames, 1)),
             new("busy_ms", Math.Round(_second.BusySum(), 1)),
+            // The garbage collector's pauses in the second, and its collections by generation (0/1/2).
+            new("gc_pause_ms", Math.Round(_secondGcPauseMs, 1)),
+            new("gcs", $"{_gcCounts.Item1 - _secondGcCounts.Item1}/{_gcCounts.Item2 - _secondGcCounts.Item2}/{_gcCounts.Item3 - _secondGcCounts.Item3}"),
         };
+        _secondGcPauseMs = 0;
+        _secondGcCounts = _gcCounts;
         for (var i = 0; i < PartNames.Length; i++)
         {
             fields.Add(new($"{PartNames[i]}_ms", Math.Round(all.PartMs[i] * all.Frames, 1)));

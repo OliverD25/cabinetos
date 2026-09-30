@@ -43,6 +43,11 @@ public static class ScrollBenchCpu {
 "@
 
 # The machine's load over $Milliseconds: its total in percent of all processors, and the busiest process.
+function TsUtc($ts) {
+  if ($ts -is [datetime]) { return $ts.ToUniversalTime() }
+  return [datetime]::Parse([string]$ts, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]'AdjustToUniversal, AssumeUniversal')
+}
+
 function Measure-Load([int]$Milliseconds) {
   $before = @{}
   foreach ($p in Get-Process) { try { $before[$p.Id] = @($p.ProcessName, $p.TotalProcessorTime.Ticks) } catch { } }
@@ -140,7 +145,10 @@ for ($n = 1; $n -le $Runs; $n++) {
   ""
   "run ${n} ($scroll; idle frame clock {0} frames a second: {1}):" -f $clock, $(if ($clock -ne '?' -and $clock -ge 50) { 'display awake' } elseif ($clock -ne '?') { 'display asleep or locked' } else { 'not seen' })
   Show-Run $line.fields $(if ($settle) { $settle.fields }) $load
-  $slow = @($lines | Where-Object { $_.message -eq 'slow frame' })
+  # The window logs a slow frame whenever the frame stats are on; only the run's own are shown.
+  $runEnd = TsUtc $line.ts
+  $runStart = $runEnd.AddSeconds(-[double]$line.fields.seconds)
+  $slow = @($lines | Where-Object { $_.message -eq 'slow frame' -and (TsUtc $_.ts) -ge $runStart -and (TsUtc $_.ts) -le $runEnd })
   if ($slow.Count -gt 0) {
     "frames of 33 ms or more during the run:"
     $slow | ForEach-Object { "  {0} ms (WinUI {1} ms; measure {2}, rows' own measure {3}, bind {4}, details {5}, selection {6}, status {7})" -f $_.fields.gap_ms, $_.fields.work_ms, $_.fields.measure_ms, $_.fields.row_measure_ms, $_.fields.bind_ms, $_.fields.details_ms, $_.fields.selection_ms, $_.fields.status_ms }

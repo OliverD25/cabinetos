@@ -143,6 +143,8 @@ public sealed partial class MainWindow
             return;
         }
         e.Handled = true;
+        // A search from the cursor starts where the waiting cursor keys leave it.
+        view.ApplyCursorKeys();
         TypeIntoQuickSearch(view, pane, e.Character);
     }
 

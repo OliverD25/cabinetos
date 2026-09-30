@@ -1301,9 +1301,24 @@ public sealed partial class MainWindow : Window
         RegisterAboutCommand();
 
         _router.Completed += OnCommandCompleted;
+        // A command acts where the cursor keys waiting for the next frame leave the cursor
+        // (FilePane.ApplyCursorKeys; docs/ui.md, "Scrolling").
+        _router.Executing += _ => ApplyCursorKeys();
         // A plugin's command from the palette or a key gets the active pane's files, as the
         // context menu passes them (docs/plugins.md, "What the shell passes").
-        _router.PluginArgs = _ => ActivePaneFiles();
+        _router.PluginArgs = _ =>
+        {
+            ApplyCursorKeys();
+            return ActivePaneFiles();
+        };
+    }
+
+    private void ApplyCursorKeys()
+    {
+        foreach (var view in _paneViews)
+        {
+            view.ApplyCursorKeys();
+        }
     }
 
     private JsonElement ActivePaneFiles()
