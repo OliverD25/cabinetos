@@ -107,11 +107,12 @@ public class ThemePickerEndToEndTests
                 "cmd:theme.apply",
                 "wait:1500",
                 "shot:done"));
-            var chosen = Index(applied, "theme chosen", "nord");
-            Assert.True(chosen >= 0, "no \"theme chosen\" for nord");
             var shown = Index(applied, "theme previewed", "nord");
-            Assert.True(shown >= 0 && shown < chosen, "no \"theme previewed\" for nord before it was chosen");
-            Assert.True(Index(applied, "theme applied", "nord", from: chosen) > chosen, "no \"theme applied\" for nord after it was chosen");
+            Assert.True(shown >= 0, "no \"theme previewed\" for nord");
+            var chosen = Index(applied, "theme chosen", "nord", from: shown);
+            Assert.True(chosen > shown, "no \"theme chosen\" for nord after its preview");
+            // The core's theme_changed may come before its reply to set_value, which "theme chosen" waits for.
+            Assert.True(Index(applied, "theme applied", "nord", from: shown) > shown, "no \"theme applied\" for nord after its preview");
             Assert.DoesNotContain(applied, l => Message(l) == "theme restored");
             using (var config = JsonDocument.Parse(File.ReadAllText(configPath)))
             {
