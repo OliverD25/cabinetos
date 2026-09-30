@@ -100,8 +100,11 @@ public sealed partial class MainWindow
         UpdateMarketButton();
     }
 
-    private void UpdateMarketButton() =>
+    private void UpdateMarketButton()
+    {
         MarketplaceIcon.Foreground = ThemeResources.Brush(MarketView.IsOpen ? "CbAccentBrush" : "CbTextSecondaryBrush");
+        UpdateRail();
+    }
 
     // Esc: the detail column first, then the marketplace (the design's order).
     private void CloseMarketLevel()

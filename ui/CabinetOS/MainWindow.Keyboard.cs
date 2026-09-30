@@ -124,6 +124,10 @@ public sealed partial class MainWindow
         {
             FocusEditorPage(pane);
         }
+        else if (_sidebarPages.FirstOrDefault(p => p.Value.Host.Page.View == view) is { Value: not null } sidebarPage)
+        {
+            FocusSidebarPage(sidebarPage.Key);
+        }
     }
 
     private void LogKeyboard(string moment)
@@ -160,6 +164,13 @@ public sealed partial class MainWindow
                 if (host?.Page.View is { } page && Covers(page, x, y))
                 {
                     return $"tool:{host.Tool.Manifest.Id}";
+                }
+            }
+            foreach (var (id, sidebarPage) in _sidebarPages)
+            {
+                if (sidebarPage.Host.Page.View is { } page && Covers(page, x, y))
+                {
+                    return $"sidebar:{id}";
                 }
             }
         }

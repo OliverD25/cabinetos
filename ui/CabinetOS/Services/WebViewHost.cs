@@ -53,6 +53,9 @@ internal sealed class WebViewHost
     /// <summary>Whether a page runs (started and not failed).</summary>
     public bool IsRunning { get; private set; }
 
+    /// <summary>Whether the page is suspended (<see cref="TrySuspendAsync"/>): it runs no script and uses no processor time until <see cref="Resume"/>.</summary>
+    public bool IsSuspended { get; private set; }
+
     /// <summary>The browser process of this host, or 0; the crash-isolation check ends it.</summary>
     public int BrowserProcessId => _core is { } core ? (int)core.BrowserProcessId : 0;
 
@@ -172,7 +175,7 @@ internal sealed class WebViewHost
     /// <summary>Sends the page a string (<c>chrome.webview</c>'s <c>message</c> event); dropped while it is not running.</summary>
     public void Post(string json)
     {
-        if (!IsRunning || _core is not { } core)
+        if (!IsRunning || IsSuspended || _core is not { } core)
         {
             return;
         }
@@ -207,6 +210,50 @@ internal sealed class WebViewHost
         return true;
     }
 
+    /// <summary>
+    /// Puts the page to sleep (<c>CoreWebView2.TrySuspendAsync</c>) to free its
+    /// memory and processor time while it is hidden. The control must not be
+    /// visible; when WebView2 refuses, the page stays awake. Returns whether
+    /// the page is suspended now.
+    /// </summary>
+    public async Task<bool> TrySuspendAsync()
+    {
+        if (!IsRunning || _core is not { } core || IsSuspended)
+        {
+            return IsSuspended;
+        }
+        try
+        {
+            IsSuspended = await core.TrySuspendAsync();
+        }
+        catch (Exception error) when (error is COMException or InvalidOperationException)
+        {
+            Diag.Info(Target, "a page could not be suspended", new LogField("host", _name), new LogField("error", error.Message));
+            return false;
+        }
+        Diag.Info(Target, IsSuspended ? "a page was suspended" : "WebView2 did not suspend a page", new LogField("host", _name));
+        return IsSuspended;
+    }
+
+    /// <summary>Wakes a suspended page.</summary>
+    public void Resume()
+    {
+        if (!IsSuspended)
+        {
+            return;
+        }
+        IsSuspended = false;
+        try
+        {
+            _core?.Resume();
+            Diag.Info(Target, "a page was resumed", new LogField("host", _name));
+        }
+        catch (Exception error) when (error is COMException or InvalidOperationException)
+        {
+            Diag.Info(Target, "a page could not be resumed", new LogField("host", _name), new LogField("error", error.Message));
+        }
+    }
+
     /// <summary>Takes the page's pixels as PNG (the snapshot aid). False when there is no page.</summary>
     public async Task<bool> CaptureAsync(IRandomAccessStream stream)
     {
@@ -230,6 +277,7 @@ internal sealed class WebViewHost
     public void Close()
     {
         IsRunning = false;
+        IsSuspended = false;
         var view = _view;
         _view = null;
         _core = null;

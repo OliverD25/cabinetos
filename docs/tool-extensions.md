@@ -23,6 +23,8 @@ tested). The first tool is [sdk/tools/markdown-preview](../sdk/tools/markdown-pr
   window for things with commands.
 - When the page's process ends, the pane says "The tool stopped" with
   Reload, and the rest of the window goes on.
+- A tool may also have a page in the sidebar of the rail layout
+  ("The sidebar page" below).
 
 ## Where tools live
 
@@ -198,6 +200,36 @@ Closing the tool's tab (Ctrl+W, or the close button) is what
 `editor.close` did. The tab cannot move to the other pane, and it is not
 saved in `ui.tabs`.
 
+## The sidebar page
+
+A tool with `"sidebar": true` also has a page in the sidebar of the rail
+layout (`ui.layout: rail`; [ui.md](ui.md), "The activity rail and the
+sidebar"). Its button is in the activity rail after the terminal's, with
+the first letters of the tool's name on it and the name as its tooltip;
+the user can move it (Shift+Up and Shift+Down on the button; the order is
+`ui.rail`). Pressing the button shows the page; pressing it again while it
+shows closes the sidebar. In the classic and right layouts the tool has no
+sidebar page and works as before.
+
+- **The same `entry` page**, in a WebView2 of its own (its own browser
+  process, as every tool page has), started when the button is first
+  pressed. It gets `ready` and `context` like any tool page, and no
+  `open`: there is no file. The page has the sidebar's width and height.
+- **Messages are the same**: `command`, `subscribe`, `unsubscribe`, keys
+  passed back to the window. A page cannot tell that it is in the sidebar,
+  except that it never gets a file.
+- **A badge.** A plugin marks the button with the event `badge` and the
+  payload `{ "view": "<tool id>", "kind": "dot" | "spinner" | null }`
+  (`null` takes it away). The tool's own page cannot set it.
+- **Hidden pages.** The page keeps running while another view shows. The
+  page hidden last stays awake; the ones hidden before it are suspended
+  (`CoreWebView2.TrySuspendAsync`) and wake up when their button is
+  pressed again, so a tool that no one looks at costs no processor time.
+- **When it stops** (the page's process ends), the sidebar says so, and
+  pressing its button loads the page again.
+- **A tool id that is a built-in view's ID** (`explorer`, `search`,
+  `marketplace`, `terminal`) gets no button: those IDs belong to the window.
+
 ## Markdown Preview
 
 The first tool ([sdk/tools/markdown-preview](../sdk/tools/markdown-preview/README.md))
@@ -228,7 +260,9 @@ in the preview, or says that no Markdown tool is installed.
 ## Not yet
 
 - Tabs for dock tools in the Tool Dock (a `dock` tool opens in a pane).
-- A tool that opens without a file (from a command of its own).
+- A tool that opens without a file from a command of its own (its
+  sidebar page, with `"sidebar": true`, has no file and is the one
+  exception).
 - Capabilities for tools, like plugins': a tool cannot change files, so
   none are needed yet.
 - Reading the tools folders again while the window runs.

@@ -9,7 +9,10 @@ using Microsoft.UI.Xaml.Shapes;
 
 namespace CabinetOS.Views;
 
-/// <summary>The sidebar (design view A): pinned folders and drives.</summary>
+/// <summary>
+/// The sidebar (design view A): pinned folders and drives. In the rail layout it is
+/// the Explorer view, and the folder tree follows the drives (<see cref="ShowTree"/>).
+/// </summary>
 public sealed partial class Sidebar : UserControl
 {
     private SidebarModel? _model;
@@ -18,6 +21,7 @@ public sealed partial class Sidebar : UserControl
     public Sidebar()
     {
         InitializeComponent();
+        TreeSection.Navigate += path => Navigate?.Invoke(path);
         PinnedList.ElementPrepared += (_, e) => SizePinnedRow(e.Element);
         DriveList.ElementPrepared += (_, e) => SizeDriveRow(e.Element);
         ApplyMetrics();
@@ -42,6 +46,7 @@ public sealed partial class Sidebar : UserControl
         PinnedLabel.Margin = new Thickness(m.SidebarHeaderPaddingX, Math.Max(0, m.SidebarHeaderPaddingTop - 8), m.SidebarHeaderPaddingX, m.SidebarHeaderPaddingBottom);
         DrivesLabel.Margin = new Thickness(m.SidebarHeaderPaddingX, m.SidebarHeaderPaddingTop, m.SidebarHeaderPaddingX, m.SidebarHeaderPaddingBottom);
         PinnedLabel.FontSize = DrivesLabel.FontSize = m.SidebarHeaderFontSize;
+        TreeSection.ApplyMetrics();
         if (_model is not null)
         {
             _model.ShortFreeLabels = WindowMetrics.Chrome.Hairlines;
@@ -104,6 +109,25 @@ public sealed partial class Sidebar : UserControl
 
     /// <summary>Raised with a folder the user picked: the window runs <c>go.toPath</c>.</summary>
     public event Action<string>? Navigate;
+
+    /// <summary>Gives the keyboard to the first pinned folder (view.showExplorer in a layout without the rail).</summary>
+    public void FocusFirstRow()
+    {
+        if (PinnedList.TryGetElement(0) is Control first)
+        {
+            first.Focus(FocusState.Keyboard);
+        }
+    }
+
+    /// <summary>The folder tree under the drives; it shows only in the rail layout.</summary>
+    public FolderTreeView Tree => TreeSection;
+
+    /// <summary>Whether the folder tree shows under the drives (the rail layout's Explorer); the other layouts have none.</summary>
+    public bool ShowTree
+    {
+        get => TreeSection.Visibility == Visibility.Visible;
+        set => TreeSection.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     /// <summary>Raised with a user-pinned folder to unpin: the window runs <c>sidebar.unpin</c>.</summary>
     public event Action<string>? UnpinRequested;

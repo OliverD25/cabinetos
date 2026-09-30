@@ -180,7 +180,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_WEBVIEW2_DIR` | Where WebView2 keeps its user data (its cache and storage) for the terminal and the tool pages, one subfolder per host; by default `%LOCALAPPDATA%\CabinetOS\WebView2`. The two-window test and the live checks set it to their scratch folder, so they never write into the real one |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part ("Scrolling"). The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load, and a `slow frame` line for each frame of 33 ms or more |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row (`menu:*` on the empty space); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the search field; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` opens the crumbs' "…" menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `until:running`, `until:conflict`, `until:terminal`, `until:search` or `until:tool` waits for a job, a shell, an answer or a tool page (a sidebar page too); `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -1474,6 +1474,180 @@ variable `CABINETOS_TOOLS_DIR`).
 - **The Tool Dock** holds the terminal, under or beside the panes. A tool
   with `placement: dock` opens in a pane in this version.
 
+## The activity rail and the sidebar
+
+Phase 13. The rail layout (`ui.layout: rail`, a choice beside `classic` and
+`right`; the default stays `classic`) puts a column of buttons at the
+window's left edge, and the sidebar becomes a host that shows one view at a
+time ([design/README.md](design/README.md), "Activity rail"). The classic
+and right layouts are not changed: no rail, no folder tree, no divider, the
+sidebar as it was (pinned folders and drives). Article 4 (a user who never
+sets the layout never sees the rail), Article 7 (each view has a command and
+a key), Articles 10 and 11 (the window's own views are Explorer and Search;
+every other view is a Tool Extension's page).
+
+The decisions live in Core, with tests (`ui/CabinetOS.Core/Sidebar/`):
+`RailModel` (buttons, order, clicks, badges), `SidebarSizing` (the divider),
+`WarmPages` (which hidden web page stays awake) and `FolderTreeModel` (the
+tree). The window (`MainWindow.Rail.cs`, `MainWindow.SidebarTools.cs`,
+`Views/ActivityRail`, `Views/FolderTreeView`, `Views/SearchPanel`) lays them
+onto XAML.
+
+### The rail
+
+- A 44 px column with 36 px buttons, 4 px apart, and a 3 px accent pill on
+  the button whose view or panel is on show; its glyph is white then, and
+  dimmer on the others. The buttons are Explorer, Search, Marketplace and
+  Terminal, then one for each installed tool with `"sidebar": true` (the
+  first two letters of its name on it; the name is the tooltip).
+- **A click** on the button of the view on show closes the sidebar
+  (`ui.sidebar` false); a click on another view's button shows that view,
+  opens the sidebar if it was closed, and puts the keyboard into the view
+  (the tree, the search field, or the tool's page). Marketplace and
+  Terminal run `marketplace.browse` and `view.toggleTerminal`; while the
+  marketplace is open, a view button brings the panes back first, as the
+  design's Explorer button does.
+- **The order** is `ui.rail` (a list of button IDs; empty is the default
+  order). Up and Down walk the buttons; Shift+Up and Shift+Down on a
+  focused button move it. IDs the list does not name follow in the default
+  order, so a newly installed tool's button appears at the end. A tool
+  whose ID is `explorer`, `search`, `marketplace` or `terminal` gets no
+  button: those IDs are the window's.
+- **Badges.** A plugin event `badge` with `{ "view": "<button ID>", "kind":
+  "dot" | "spinner" | null }` marks a button: a dot, a spinner, or none.
+  The view is a button's ID (`explorer`, `search`, `marketplace`,
+  `terminal` or a tool's ID). At most 64 badges are kept.
+
+### The sidebar
+
+- One column shows one view: **Explorer**, **Search**, or the page of a tool.
+  The native views (Explorer, Search) are kept alive while hidden, so the
+  tree and the hits are as they were when the view comes back.
+- **Width.** The design's `clamp(180 px, 20 %, 224 px)` until the user
+  drags the divider (the 8 px gap between the sidebar and the panes; an
+  accent line shows under the pointer). The width follows the pointer, at
+  most half the window and 480 px. **Under 150 px** the column fades
+  while the pointer is there, and letting go closes the sidebar
+  (`ui.sidebar` false) and keeps the last width above 150 for the next time
+  it opens. The width is `ui.sidebarWidth` (whole pixels, `null`: the
+  design's). `Ctrl+B` (`view.toggleSidebar`) works as before.
+- **What is saved**, through `set_value`: `ui.sidebarView` (the view shown
+  last: `explorer`, `search` or a tool's ID; the Explorer shows for an ID
+  that is not installed), `ui.sidebarWidth`, `ui.rail`, and `ui.sidebar`
+  as before. `ui.sidebarAutoReveal` (default `true`) is read only: the
+  Explorer follows the active pane's folder or does not. A configuration
+  the core sends while a write of the window's own is on its way does not
+  undo it. The core keeps these four in its strict schema
+  ([config.md](config.md)).
+
+### Explorer
+
+Pinned and Drives as before, and under them **FOLDERS**: the drives, and
+under each the folders the user opened.
+
+- **Lazy.** A drive's or folder's sub-folders are read when its row opens:
+  one `list_directory` request for each open row (`watch` off, sorted by
+  name whatever the panes are sorted by, hidden entries as
+  `panes.showHidden` says). The names are read from the shared-memory
+  listing off the UI thread and the listing is closed at once. A row that
+  closes before the answer comes abandons its request, and so do the rows
+  under it (`CoreClient` closes a listing that arrives for nobody). Opening
+  a row again shows what it had at once and reads the folder once more; the
+  rows that were open under it stay open, a new folder gets a row, a folder
+  that is gone loses it. A folder with thousands of sub-folders opens with
+  one change of the list, not one for each row. A folder the core refuses
+  stays closed and its tooltip says why.
+- **It follows the active pane** (`ui.sidebarAutoReveal`): each time the
+  active pane's folder, or the active pane, changes, the tree opens the
+  folders down to it (rows beside the path are not touched, and no row is
+  closed), marks its row with the pill and the fill, and scrolls to it. A
+  folder made after the last read is found by reading its parent once more;
+  a path on no drive (a network path) marks nothing. A newer reveal stops an
+  older one that still waits for a folder. The tree does this only while
+  the Explorer shows.
+- **The lock** button in the header of FOLDERS (`sidebar.lock`, no default
+  key) stops the following, and shows in the accent colour while it holds;
+  the status bar says so. **Locate** (`sidebar.locate`, `Alt+Shift+L`, and
+  the button beside the lock) shows the Explorer, reveals the active
+  folder now, locked or not, and puts the keyboard on its row.
+- **Going there.** A click on a row, or Enter on the cursor row, runs
+  `go.toPath` in the active pane. The chevron opens or closes the row.
+- **Keys** while the tree has the keyboard: Up, Down, PageUp, PageDown,
+  Home and End move the cursor (an outline on the row; it is shown only
+  while the tree has the keyboard); Right opens the row, and on an open
+  one goes to its first folder; Left closes it, and on a closed one goes to
+  the folder above; Space opens or closes; Enter goes there; Esc gives the
+  keyboard back to the pane.
+
+### Search
+
+The view holds the field of the command bar, its "Whole volume" box and the
+hits ([Search](#search) above). It drives the same model as the command
+bar's box: the two fields' texts are kept equal, typing in either searches
+(the same 150 ms wait), the pane shows the same hits, Esc in either leaves
+the search. The list shows each hit's name and folder; a click or Enter on
+one goes to it in the active pane with the hit selected, as Enter on a hit in
+the pane does. Down in the field moves to the first hit.
+
+### Tool pages
+
+A tool with `"sidebar": true` in its `tool.json`
+([tool-extensions.md](tool-extensions.md), "The sidebar page") has a button
+and a page. The page is the tool's `entry`, in a WebView2 of its own (its
+own browser process, data folder `sidebar-<id>`), started when its button
+is first pressed, with no file: it gets `ready` and `context`, never
+`open`. It gets the window's keys and the panes' context like a pane's
+tool, and its commands run through the same check. The keyboard goes into
+the page through `GiveKeysToPage` (never `WebView2.Focus`), with the same
+hand-over check as a pane's tool.
+
+- **Warm and suspended.** The page hidden last stays awake; the pages hidden
+  before it are suspended with `CoreWebView2.TrySuspendAsync` (the frame is
+  collapsed first, and the call waits 300 ms for WebView2 to hide the
+  page), and wake with `Resume` when their button is pressed (`WarmPages`,
+  tested). Closing the sidebar hides the page on show, which then becomes
+  the warm one. A suspended page gets no messages until it wakes; the
+  window then sends the context again.
+- **When its process ends** the sidebar covers the page with "{name}
+  stopped" and a Reload button, and the window goes on.
+
+### Commands
+
+| Command | Default key | What it does |
+|---|---|---|
+| `view.showExplorer` | `Ctrl+Shift+E` | Shows the Explorer and puts the keyboard in the tree. Without the rail it opens the sidebar and puts the keyboard on its first folder. |
+| `view.showSearch` | `Ctrl+Shift+F` | Shows the Search view and selects its field. Without the rail it is `search.focus`. |
+| `view.toggleSidebar` | `Ctrl+B` | As before. |
+| `sidebar.locate` | `Alt+Shift+L` | Reveals the active folder in the tree. Without the rail the status bar says the tree is in the rail layout. |
+| `sidebar.lock` | none | Locks or unlocks the tree. Same without the rail. |
+
+### Snapshot steps and checks
+
+The snapshot aid has `rail:<id>` (presses a button), `rail-move:<id>|<1 or
+-1>`, `divider:<pixels>` (drags the divider to that width and lets go),
+`tree:<path>` (opens the folder in the tree and the ones on the way) and
+`rail-state:<label>`, which writes one log line, "rail state": the layout,
+whether the rail, the tree and the divider show, the sidebar's width and
+view, the buttons in order, the ones wearing the pill, the badges, the
+Search view's text and hits, and the tree's rows, requests and current
+folder. `RailEndToEndTests` runs a window in each of the three layouts on
+the real core (the rail layout, the two others without a rail, a tree or a
+divider, and the same 224 px sidebar in a 1400 px window), and one in the
+rail layout that switches views, starts two tool pages, checks that the
+page hidden first is suspended and wakes, drags the divider to 320 px and
+under 150 px, and starts a second window on the saved configuration, which
+finds the width, the view and the order again. A pixel comparison of the
+classic and right layouts against snapshots taken before this phase found
+the same images: 19 and 11 pixels of 2.5 million differ, and two runs of
+one build differ by 6.
+
+The live check has the section "13: rail" (`ui/livecheck/livecheck.ps1`):
+the layout is switched to `rail` in the run's configuration (the earlier
+sections run in the classic layout), a test tool with a sidebar page
+(`ui/livecheck/fixtures/quick-notes`) is installed from the run's own tools
+folder, and real keys and the mouse press the rail's buttons, walk the
+tree, drag the divider and use Ctrl+Shift+E and Ctrl+Shift+F.
+
 ## Themes
 
 A theme from the core changes the window's colours at once, without a
@@ -2293,7 +2467,7 @@ planning session's, on a screen someone watches.
 |---|---|
 | Publisher identities, "Trust {author}", rating an extension, update checks in the background | Not in Phase 9 ([marketplace.md](marketplace.md), "Not yet"); an update shows when the index is read (Refresh) |
 | A virtualized card grid | Every card of the tab is made; fine for an index of hundreds |
-| Tools in the Tool Dock, and tools opened without a file | The dock holds the terminal; tools open as editor tabs ([tool-extensions.md](tool-extensions.md), "Not yet") |
+| Tools in the Tool Dock; a tool opened without a file, except its sidebar page | The dock holds the terminal; tools open as editor tabs, and a tool with a sidebar page ("The activity rail and the sidebar") has that one page without a file ([tool-extensions.md](tool-extensions.md), "Not yet") |
 | Reattaching to shells after the UI restarts | The UI starts its own core, and the core closes its shells when it stops, so there is nothing to reattach to (`terminal_list` is ready for it) |
 | Light-mode tokens from the design | The design has none yet; a `system` theme in light mode uses Windows 11's own light colours ("Themes") |
 | Workspaces (title-bar tabs, sidebar section) and Tags | One static "Default" tab; both sidebar sections stay hidden (Article 4) |

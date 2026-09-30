@@ -152,6 +152,7 @@ public sealed partial class MainWindow : Window
         SetUpTabs();
         SetUpPreview();
         SetUpMarket();
+        SetUpRail();
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
@@ -279,8 +280,13 @@ public sealed partial class MainWindow : Window
 
     private void UpdateWidths(double windowWidth)
     {
-        // The design's clamp(180px, 20%, 224px), or the theme's, and clamp(120px, 22%, 240px).
-        SidebarView.Width = WindowMetrics.Current.SidebarWidth(windowWidth);
+        _windowWidth = windowWidth;
+        // The design's clamp(180px, 20%, 224px), or the theme's (in the rail layout the width the user dragged the divider to),
+        // and clamp(120px, 22%, 240px). The divider sets the width itself while it is dragged.
+        if (!_sidebarDragging)
+        {
+            SidebarColumn.Width = SidebarWidthFor(windowWidth);
+        }
         SearchBox.Width = Math.Clamp(windowWidth * 0.22, 120, 240);
     }
 
@@ -479,6 +485,9 @@ public sealed partial class MainWindow : Window
                 case "preview" or "preview-key" or "plugin-event" or "drop" or "fake-command":
                     await RunPreviewStepAsync(step.Kind, step.Argument);
                     break;
+                case "rail" or "rail-move" or "rail-state" or "divider" or "tree":
+                    await RunRailStepAsync(step.Kind, step.Argument);
+                    break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
                     var shown = Active.View?.IndexOfName(step.Argument) ?? -1;
@@ -553,7 +562,7 @@ public sealed partial class MainWindow : Window
     }
 
     // Every WebView2 the window hosts, for the snapshot aid.
-    private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage, .. _toolHosts.OfType<ToolHost>().Select(h => h.Page)];
+    private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage, .. AllToolHosts().Select(h => h.Page)];
 
     // The snapshot aid's click: step: the first shown button or menu item (open menus included) with that
     // accessible name, pressed as assistive technology may press it: the keyboard moves to it, then its
@@ -684,7 +693,7 @@ public sealed partial class MainWindow : Window
                 "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
                 "terminal" => _terminal.Shown is { Pipe: not null },
                 "search" => _search.Phase is SearchPhase.Done or SearchPhase.Failed,
-                "tool" => _toolHosts.Any(h => h is { IsReady: true }),
+                "tool" => AllToolHosts().Any(h => h.IsReady),
                 _ => true,
             };
             if (met)
@@ -856,12 +865,10 @@ public sealed partial class MainWindow : Window
         if (firstStart || settings.Layout != previous.Layout)
         {
             ApplyDockPlacement(DockLayout.PlacementFor(settings.Layout));
+            ApplyRailLayout(settings.Layout == "rail");
         }
         ApplyStoredDockSize(settings);
-        if (firstStart && settings.Layout == "rail")
-        {
-            Diag.Info(Target, "the rail layout arrives in a later phase; showing the sidebar");
-        }
+        ApplyRailSettings(settings, previous, firstStart);
         if (firstStart || settings.Selection != previous.Selection)
         {
             // panes.selection applies at once: the marks stay, only the keys mark differently.
@@ -1290,6 +1297,7 @@ public sealed partial class MainWindow : Window
         RegisterToolCommands();
         RegisterThemeCommands();
         RegisterMarketCommands();
+        RegisterRailCommands();
         RegisterAboutCommand();
 
         _router.Completed += OnCommandCompleted;
@@ -2131,7 +2139,8 @@ public sealed partial class MainWindow : Window
     private void ApplySidebar(bool open)
     {
         _sidebarOpen = open;
-        SidebarView.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        SidebarHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        UpdateSidebarChrome();
     }
 
     private void FocusOtherPane()

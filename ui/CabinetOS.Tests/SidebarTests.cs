@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Text.Json;
 using CabinetOS.Core.Settings;
 using CabinetOS.Core.Sidebar;
@@ -48,6 +49,24 @@ public class RailTests
 
         rail.SetOrder([]);
         Assert.True(rail.IsDefaultOrder);
+    }
+
+    [Fact]
+    public void Tools_read_after_the_start_get_their_buttons_where_the_saved_order_puts_them_and_the_badges_stay()
+    {
+        // The window reads the tools once, after it started: the saved order names a tool that is not known yet.
+        var rail = new RailModel([], ["notes", "terminal"]);
+        rail.SetBadge("notes", "dot");
+        Assert.Equal(["terminal", "explorer", "search", "marketplace"], rail.Order);
+        var changes = 0;
+        rail.Changed += () => changes++;
+
+        rail.SetTools([Notes, Bookmarks]);
+
+        Assert.Equal(["notes", "terminal", "explorer", "search", "marketplace", "bookmarks"], rail.Order);
+        Assert.Equal("dot", rail.BadgeOf("notes"));
+        Assert.Equal(1, changes);
+        Assert.False(rail.IsDefaultOrder);
     }
 
     [Fact]
@@ -350,6 +369,24 @@ public class FolderTreeTests
         // Opening an open row asks nothing more.
         await tree.ExpandAsync(tree.Rows[1]);
         Assert.Equal(2, tree.Requests);
+    }
+
+    [Fact]
+    public async Task A_folder_with_thousands_of_sub_folders_opens_and_closes_with_one_change_of_the_rows_each()
+    {
+        var folders = new FakeFolders().Add(@"C:\", Enumerable.Range(0, 3000).Select(i => $"folder{i:D4}").ToArray());
+        var tree = Tree(folders);
+        var changes = new List<NotifyCollectionChangedAction>();
+        tree.Rows.CollectionChanged += (_, e) => changes.Add(e.Action);
+
+        await tree.ExpandAsync(tree.Rows[0]);
+
+        Assert.Equal(3002, tree.Rows.Count);
+        Assert.Equal([NotifyCollectionChangedAction.Add], changes);
+        changes.Clear();
+        tree.Collapse(tree.Rows[0]);
+        Assert.Equal(2, tree.Rows.Count);
+        Assert.Equal([NotifyCollectionChangedAction.Remove], changes);
     }
 
     [Fact]

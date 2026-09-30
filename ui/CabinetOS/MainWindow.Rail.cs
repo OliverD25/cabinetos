@@ -1,0 +1,523 @@
+using CabinetOS.Core.Commands;
+using CabinetOS.Core.Diagnostics;
+using CabinetOS.Core.Protocol;
+using CabinetOS.Core.Settings;
+using CabinetOS.Core.Sidebar;
+using CabinetOS.Core.Tools;
+using CabinetOS.Services;
+using CabinetOS.ViewModels;
+using CabinetOS.Views;
+using Microsoft.UI.Xaml;
+
+namespace CabinetOS;
+
+// The activity rail and the modular sidebar of the rail layout (docs/ui.md, "The activity rail and the
+// sidebar"). The classic and right layouts keep the sidebar as it was: pinned folders and drives, no rail.
+// The decisions are RailModel's, SidebarSizing's, WarmPages' and FolderTreeModel's (all in Core, all tested);
+// this file lays them onto the window.
+public sealed partial class MainWindow
+{
+    private const string RailTarget = "cabinetos_ui::rail";
+
+    private readonly RailModel _rail = new([], []);
+    private FolderTreeModel _tree = null!;
+    private bool _railLayout;
+
+    // The view ui.sidebarView names, and the one that shows: a tool's ID names none until the tools are read.
+    private string _wantedSidebarView = RailModel.Explorer;
+    private string _sidebarView = RailModel.Explorer;
+
+    // ui.sidebarWidth as the window knows it; null is the design's width.
+    private double? _sidebarWidth;
+    private double _windowWidth;
+    private double _sidebarDragStart;
+    private bool _sidebarDragging;
+    private bool _sidebarWillClose;
+    private bool _treeLocked;
+    private bool _autoReveal = true;
+    private CancellationTokenSource? _reveal;
+
+    // Writes on their way: the configuration the core sends meanwhile may still hold the old value and must not undo the click.
+    private int _viewWrites;
+    private int _railWrites;
+    private int _widthWrites;
+
+    private void SetUpRail()
+    {
+        _tree = new FolderTreeModel(new CoreFolderSource(_session));
+        SidebarView.Tree.Tree = _tree;
+        SidebarView.Tree.Navigate += path => _ = _router.ExecuteAsync("go.toPath", CommandArgs.With("path", path), "sidebar");
+        SidebarView.Tree.LockToggled += () => _ = _router.ExecuteAsync("sidebar.lock", trigger: "button");
+        SidebarView.Tree.LocateRequested += () => _ = _router.ExecuteAsync("sidebar.locate", trigger: "button");
+        SidebarView.Tree.EscapePressed += FocusPaneOrEditor;
+        _sidebar.DrivesChanged += () =>
+        {
+            _tree.SetRoots(_sidebar.Drives.Select(d => (d.Path, d.Name)).ToList());
+            FollowActiveFolder();
+        };
+        _sidebar.ActivePathChanged += _ => FollowActiveFolder();
+
+        Rail.Bind(_rail, button => RailModel.IsActive(button, _sidebarOpen, _sidebarView, MarketView.IsOpen, _dockVisible));
+        Rail.Clicked += OnRailClicked;
+        Rail.MoveRequested += OnRailMoveRequested;
+
+        SidebarSplitter.DragStarted += () =>
+        {
+            _sidebarDragging = true;
+            _sidebarDragStart = SidebarColumn.ActualWidth;
+        };
+        SidebarSplitter.Dragged += delta => ResizeSidebar(_sidebarDragStart + delta);
+        SidebarSplitter.DragCompleted += EndSidebarDrag;
+
+        // The Search view drives the search the command bar's box drives: the two fields' texts stay equal.
+        SearchPanelView.QueryChanged += text =>
+        {
+            if (SearchBox.Text != text)
+            {
+                SearchBox.Text = text;
+            }
+        };
+        SearchPanelView.SearchNow += () => _ = SearchWhenDueAsync(now: true);
+        SearchPanelView.Cancelled += () => EndSearch(focusPane: true);
+        SearchPanelView.HitChosen += hit => _ = GoToHitAsync(hit, null);
+        SearchPanelView.WholeVolumeChanged += wholeVolume =>
+            _ = _router.ExecuteAsync("search.scope", CommandArgs.Object(("wholeVolume", wholeVolume)), "sidebar");
+    }
+
+    private void RegisterRailCommands()
+    {
+        _router.RegisterUiHandler("view.showExplorer", _ => ShowExplorer());
+        _router.RegisterUiHandler("view.showSearch", _ => ShowSearchView());
+        _router.RegisterUiHandler("sidebar.locate", _ => LocateActiveFolderAsync());
+        _router.RegisterUiHandler("sidebar.lock", _ => ToggleTreeLock());
+    }
+
+    // ----- Layout -----
+
+    // ui.layout is rail (or was): the rail shows, the Explorer has its tree, the divider works, and the width is the user's.
+    private void ApplyRailLayout(bool rail)
+    {
+        _railLayout = rail;
+        Rail.Visibility = rail ? Visibility.Visible : Visibility.Collapsed;
+        SidebarView.ShowTree = rail;
+        ReapplyWidths();
+        UpdateSidebarChrome();
+        Diag.Info(RailTarget, rail ? "the rail layout is on" : "the rail layout is off");
+    }
+
+    private void ReapplyWidths() => UpdateWidths(_windowWidth > 0 ? _windowWidth : RootGrid.ActualWidth);
+
+    // The sidebar's width: the design's clamp, or in the rail layout the width the user dragged it to.
+    private double SidebarWidthFor(double windowWidth)
+    {
+        var design = WindowMetrics.Current.SidebarWidth(windowWidth);
+        return _railLayout ? SidebarSizing.Effective(_sidebarWidth, design, windowWidth) : design;
+    }
+
+    // What shows in the sidebar's column, and what the rail says, after any change of the layout, the open state or the view.
+    private void UpdateSidebarChrome()
+    {
+        SidebarSplitter.Visibility = _railLayout && _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
+        var explorer = !_railLayout || _sidebarView == RailModel.Explorer;
+        SidebarView.Visibility = explorer ? Visibility.Visible : Visibility.Collapsed;
+        SearchPanelView.Visibility = _railLayout && _sidebarView == RailModel.Search ? Visibility.Visible : Visibility.Collapsed;
+        ShowSidebarPage(_railLayout && _sidebarOpen && _rail.Find(_sidebarView) is { Kind: RailKind.Tool } ? _sidebarView : null);
+        UpdateRail();
+        if (_railLayout && _sidebarOpen && explorer)
+        {
+            FollowActiveFolder();
+        }
+    }
+
+    // The pills follow what shows: the view on show, the marketplace, the terminal.
+    private void UpdateRail() => Rail.Refresh();
+
+    // ----- Views -----
+
+    private void OnRailClicked(RailButton button)
+    {
+        var click = RailModel.Click(button, _sidebarOpen, _sidebarView, MarketView.IsOpen);
+        Diag.Info(RailTarget, "a rail button was pressed", new LogField("button", button.Id), new LogField("action", click.Action.ToString()));
+        switch (click.Action)
+        {
+            case RailAction.ShowView:
+                if (click.LeaveMarketplace)
+                {
+                    CloseMarket(focusPane: false);
+                }
+                ShowSidebarView(click.View!, focus: true);
+                break;
+            case RailAction.CloseSidebar:
+                SetSidebarOpen(false);
+                break;
+            case RailAction.ToggleMarketplace:
+                _ = _router.ExecuteAsync("marketplace.browse", trigger: "rail");
+                break;
+            case RailAction.ToggleTerminal:
+                _ = _router.ExecuteAsync("view.toggleTerminal", trigger: "rail");
+                break;
+        }
+    }
+
+    // ui.sidebar, as view.toggleSidebar writes it.
+    private void SetSidebarOpen(bool open)
+    {
+        ApplySidebar(open);
+        _ = PersistAsync(ShellState.SidebarKey, open);
+    }
+
+    private void ShowSidebarView(string id, bool focus)
+    {
+        if (!_rail.IsSidebarView(id))
+        {
+            id = RailModel.Explorer;
+        }
+        var changed = id != _sidebarView || id != _wantedSidebarView;
+        _sidebarView = _wantedSidebarView = id;
+        if (_sidebarOpen)
+        {
+            UpdateSidebarChrome();
+        }
+        else
+        {
+            SetSidebarOpen(true);
+        }
+        if (changed)
+        {
+            _ = PersistSidebarViewAsync(id);
+        }
+        if (focus)
+        {
+            FocusSidebarView();
+        }
+    }
+
+    // The view ui.sidebarView names, once the tools are known: a tool that is not installed shows the Explorer.
+    private void ResolveSidebarView()
+    {
+        _sidebarView = _rail.IsSidebarView(_wantedSidebarView) ? _wantedSidebarView : RailModel.Explorer;
+        UpdateSidebarChrome();
+    }
+
+    // The keyboard goes into the view on show: the tree, the search field, or the tool's page.
+    private void FocusSidebarView()
+    {
+        if (!_railLayout || !_sidebarOpen)
+        {
+            return;
+        }
+        SidebarHost.UpdateLayout();
+        switch (_sidebarView)
+        {
+            case RailModel.Explorer:
+                SidebarView.Tree.FocusTree();
+                break;
+            case RailModel.Search:
+                SearchPanelView.FocusQuery();
+                break;
+            default:
+                FocusSidebarPage(_sidebarView);
+                break;
+        }
+    }
+
+    private void ShowExplorer()
+    {
+        if (!_railLayout)
+        {
+            // The other layouts have the sidebar only: open it, and put the keyboard on its first folder.
+            if (!_sidebarOpen)
+            {
+                SetSidebarOpen(true);
+            }
+            SidebarHost.UpdateLayout();
+            SidebarView.FocusFirstRow();
+            return;
+        }
+        if (MarketView.IsOpen)
+        {
+            CloseMarket(focusPane: false);
+        }
+        ShowSidebarView(RailModel.Explorer, focus: true);
+    }
+
+    private Task ShowSearchView()
+    {
+        if (!_railLayout)
+        {
+            return _router.ExecuteAsync("search.focus", trigger: "view.showSearch");
+        }
+        if (MarketView.IsOpen)
+        {
+            CloseMarket(focusPane: false);
+        }
+        ShowSidebarView(RailModel.Search, focus: true);
+        return Task.CompletedTask;
+    }
+
+    // ----- The folder tree -----
+
+    private void ToggleTreeLock()
+    {
+        if (!_railLayout)
+        {
+            ShowNotice("The folder tree is in the rail layout (ui.layout: rail).");
+            return;
+        }
+        _treeLocked = !_treeLocked;
+        SidebarView.Tree.IsLocked = _treeLocked;
+        ShowNotice(_treeLocked ? "The folder tree is locked: it stays as it is." : "The folder tree follows the active folder again.");
+        if (!_treeLocked)
+        {
+            FollowActiveFolder();
+        }
+    }
+
+    private async Task LocateActiveFolderAsync()
+    {
+        if (!_railLayout)
+        {
+            ShowNotice("The folder tree is in the rail layout (ui.layout: rail).");
+            return;
+        }
+        if (MarketView.IsOpen)
+        {
+            CloseMarket(focusPane: false);
+        }
+        ShowSidebarView(RailModel.Explorer, focus: false);
+        await RevealActiveFolderAsync(force: true, focus: true);
+    }
+
+    // The tree follows the active pane's folder while it shows, is not locked and sidebar.autoReveal is on.
+    private void FollowActiveFolder()
+    {
+        if (_railLayout && _sidebarOpen && _sidebarView == RailModel.Explorer)
+        {
+            _ = RevealActiveFolderAsync(force: false, focus: false);
+        }
+    }
+
+    // Opens the folders down to the active pane's folder (rows beside the path stay as they are) and scrolls to it.
+    // A newer reveal stops an older one that still waits for a folder.
+    private async Task RevealActiveFolderAsync(bool force, bool focus)
+    {
+        if (!_railLayout || (!force && (_treeLocked || !_autoReveal)))
+        {
+            return;
+        }
+        var path = _sidebar.ActivePath;
+        if (path.Length == 0)
+        {
+            return;
+        }
+        _reveal?.Cancel();
+        var cancellation = _reveal = new CancellationTokenSource();
+        var node = await _tree.RevealAsync(path, cancellation.Token);
+        if (cancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        if (node is null)
+        {
+            if (force)
+            {
+                ShowNotice("This folder is not on a drive the tree knows.");
+            }
+            return;
+        }
+        Diag.Info(RailTarget, "the tree shows a folder", new LogField("path", node.Path), new LogField("rows", _tree.Rows.Count));
+        // The rows the reveal opened are laid out before the list scrolls to the one it marked.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            SidebarView.Tree.ScrollTo(node);
+            if (focus)
+            {
+                _tree.SetCursor(node);
+                SidebarView.Tree.FocusTree();
+            }
+        });
+    }
+
+    // ----- The divider -----
+
+    // The width follows the pointer; under 150 px the column fades to say that letting go closes the sidebar.
+    private void ResizeSidebar(double proposed)
+    {
+        var drag = SidebarSizing.Drag(proposed, _windowWidth);
+        _sidebarWillClose = drag.Close;
+        SidebarColumn.Width = drag.Width;
+        SidebarColumn.Opacity = drag.Close ? 0.4 : 1;
+    }
+
+    private void EndSidebarDrag()
+    {
+        _sidebarDragging = false;
+        SidebarColumn.Opacity = 1;
+        if (_sidebarWillClose)
+        {
+            // Snapped shut: the width it had before stays for the next time it opens.
+            _sidebarWillClose = false;
+            SetSidebarOpen(false);
+            ReapplyWidths();
+            return;
+        }
+        var width = SidebarColumn.Width;
+        _sidebarWidth = width;
+        _ = PersistSidebarWidthAsync(width);
+    }
+
+    // ----- What the rail keeps in the configuration (ui.rail, ui.sidebarWidth, ui.sidebarView) -----
+
+    private void OnRailMoveRequested(string id, int delta)
+    {
+        if (_rail.Move(id, delta))
+        {
+            _ = PersistRailAsync();
+            Rail.FocusButton(id);
+        }
+    }
+
+    // The default order is stored as an empty list.
+    private async Task PersistRailAsync()
+    {
+        _railWrites++;
+        try
+        {
+            await _settingsWriter.SetAsync("ui.rail", _rail.IsDefaultOrder ? [] : _rail.Order);
+        }
+        finally
+        {
+            _railWrites--;
+        }
+    }
+
+    private async Task PersistSidebarViewAsync(string view)
+    {
+        _viewWrites++;
+        try
+        {
+            await _settingsWriter.SetAsync("ui.sidebarView", view);
+        }
+        finally
+        {
+            _viewWrites--;
+        }
+    }
+
+    private async Task PersistSidebarWidthAsync(double width)
+    {
+        _widthWrites++;
+        try
+        {
+            await _settingsWriter.SetAsync("ui.sidebarWidth", SidebarSizing.ToSetting(width));
+        }
+        finally
+        {
+            _widthWrites--;
+        }
+    }
+
+    // The rail's four settings from the configuration, at start and after an edit of the file. A write of the
+    // window's own that is still on its way is not undone by the configuration sent before it landed.
+    private void ApplyRailSettings(UiSettings settings, UiSettings previous, bool firstStart)
+    {
+        _autoReveal = settings.SidebarAutoReveal;
+        if ((firstStart || !(settings.Rail ?? []).SequenceEqual(previous.Rail ?? [])) && _railWrites == 0)
+        {
+            _rail.SetOrder(settings.Rail ?? []);
+        }
+        if ((firstStart || settings.SidebarWidth != previous.SidebarWidth) && _widthWrites == 0 && !_sidebarDragging)
+        {
+            _sidebarWidth = settings.SidebarWidth;
+            ReapplyWidths();
+        }
+        if ((firstStart || settings.SidebarView != previous.SidebarView) && _viewWrites == 0 && settings.SidebarView is { Length: > 0 } view)
+        {
+            _wantedSidebarView = view;
+            ResolveSidebarView();
+        }
+        if (!_autoReveal)
+        {
+            return;
+        }
+        if (firstStart || !previous.SidebarAutoReveal)
+        {
+            FollowActiveFolder();
+        }
+    }
+
+    // ----- Plugin events and tools -----
+
+    // The plugin event badge { view, kind }: a dot or a spinner on a button, or none (docs/ui.md).
+    private void OnBadgeEvent(PluginEventEvent pluginEvent)
+    {
+        if (PluginEvents.BadgeOf(pluginEvent.Name, pluginEvent.Payload) is { } badge && _rail.SetBadge(badge.View, badge.Kind))
+        {
+            Diag.Info(RailTarget, "a badge changed", new LogField("plugin", pluginEvent.PluginId), new LogField("view", badge.View),
+                new LogField("kind", badge.Kind ?? "none"));
+        }
+    }
+
+    // The tools are read: the ones with a sidebar page get their buttons.
+    private void OnToolsLoadedForRail()
+    {
+        _rail.SetTools(_tools.Tools.Where(t => t.Manifest.Sidebar).Select(t => new RailTool(t.Manifest.Id, t.Manifest.Name)).ToList());
+        ResolveSidebarView();
+    }
+
+    // ----- The snapshot aid's steps for the rail -----
+
+    // What the three layouts show, in one line: the tests read it, and so does anyone comparing a layout with what it should be.
+    private void LogRailState(string label) => Diag.Info(RailTarget, "rail state",
+        new LogField("label", label),
+        new LogField("layout", _settings.Layout),
+        new LogField("rail_visible", Rail.Visibility == Visibility.Visible),
+        new LogField("tree_visible", SidebarView.ShowTree),
+        new LogField("splitter_visible", SidebarSplitter.Visibility == Visibility.Visible),
+        new LogField("sidebar_open", _sidebarOpen),
+        new LogField("sidebar_width", (int)Math.Round(SidebarColumn.ActualWidth)),
+        new LogField("view", _sidebarView),
+        new LogField("buttons", string.Join(",", _rail.Order)),
+        new LogField("active", string.Join(",", _rail.Buttons
+            .Where(b => RailModel.IsActive(b, _sidebarOpen, _sidebarView, MarketView.IsOpen, _dockVisible)).Select(b => b.Id))),
+        new LogField("badges", string.Join(",", _rail.Badges.Select(b => $"{b.Key}={b.Value}"))),
+        new LogField("search_text", SearchPanelView.Query),
+        new LogField("search_hits", SearchPanelView.HitCount),
+        new LogField("tree_rows", _tree.Rows.Count),
+        new LogField("tree_requests", _tree.Requests),
+        new LogField("tree_current", _tree.Current?.Path ?? ""),
+        new LogField("tree_locked", _treeLocked));
+
+    // rail:<id> presses that button; rail-move:<id>|<1 or -1> moves it (Shift+Down, Shift+Up);
+    // divider:<pixels> drags the divider to that width and lets go; tree:<path> opens the folder in the tree
+    // (and the ones on the way); rail-state:<label> writes what the rail, the sidebar and the tree show into the log.
+    private async Task RunRailStepAsync(string kind, string argument)
+    {
+        switch (kind)
+        {
+            case "rail" when _rail.Find(argument) is { } button:
+                OnRailClicked(button);
+                break;
+            case "rail-move" when argument.Split('|') is [var id, var delta] && int.TryParse(delta, out var step):
+                OnRailMoveRequested(id, step);
+                break;
+            case "rail-state":
+                LogRailState(argument);
+                break;
+            case "divider" when double.TryParse(argument, System.Globalization.CultureInfo.InvariantCulture, out var width):
+                _sidebarDragging = true;
+                _sidebarDragStart = SidebarColumn.ActualWidth;
+                ResizeSidebar(width);
+                EndSidebarDrag();
+                break;
+            case "tree":
+                if (await _tree.RevealAsync(argument) is { } node)
+                {
+                    await _tree.ExpandAsync(node);
+                    SidebarView.Tree.ScrollTo(node);
+                }
+                break;
+        }
+        await Task.Delay(400);
+    }
+}

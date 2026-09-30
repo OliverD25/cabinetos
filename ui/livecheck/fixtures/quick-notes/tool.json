@@ -1,0 +1,11 @@
+{
+  "id": "quick-notes",
+  "name": "Quick Notes",
+  "version": "0.1.0",
+  "author": "CabinetOS",
+  "description": "A test tool with a page in the sidebar: it shows the active folder and how many times the window told it.",
+  "entry": "index.html",
+  "accepts": [],
+  "placement": "pane",
+  "sidebar": true
+}

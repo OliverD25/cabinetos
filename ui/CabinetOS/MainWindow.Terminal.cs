@@ -184,6 +184,7 @@ public sealed partial class MainWindow
         ApplyDockSize();
         _terminal.IsVisible = visible;
         TerminalIcon.Foreground = ThemeResources.Brush(visible ? "CbAccentBrush" : "CbTextSecondaryBrush");
+        UpdateRail();
     }
 
     private void ApplyDockPlacement(DockPlacement placement)

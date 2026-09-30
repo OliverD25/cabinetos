@@ -9,6 +9,7 @@ using CabinetOS.Core.Tools;
 using CabinetOS.Services;
 using CabinetOS.Views;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
@@ -41,7 +42,7 @@ public sealed partial class MainWindow
         _contextTimer.Tick += (_, _) => SendToolContext();
         RootGrid.ActualThemeChanged += (_, _) =>
         {
-            foreach (var host in _toolHosts.OfType<ToolHost>())
+            foreach (var host in AllToolHosts())
             {
                 host.Page.ColorScheme = ToolColorScheme();
             }
@@ -59,7 +60,7 @@ public sealed partial class MainWindow
     private void ApplyToolKeys(Keymap keymap)
     {
         _toolKeys = TerminalKeys.PassKeys(keymap, context: null);
-        foreach (var host in _toolHosts.OfType<ToolHost>())
+        foreach (var host in AllToolHosts())
         {
             host.SendPassKeys(ToolMessages.PassKeys(_toolKeys.Keys));
         }
@@ -79,6 +80,7 @@ public sealed partial class MainWindow
         Diag.Info(ToolsTarget, "tools found", new LogField("count", catalog.Tools.Count),
             new LogField("tools", string.Join(",", catalog.Tools.Select(t => $"{t.Manifest.Id}@{t.Folder}"))),
             new LogField("roots", string.Join(";", roots)));
+        OnToolsLoadedForRail();
     }
 
     // --tools-dir (or CABINETOS_TOOLS_DIR) first, so a tool being written wins over an installed copy.
@@ -219,17 +221,25 @@ public sealed partial class MainWindow
 
     private ToolHost CreateToolHost(InstalledTool tool, int pane)
     {
-        var host = new ToolHost(tool, _editorViews[pane].Frame, ToolKeyScript.Build(_toolKeys.Keys))
-        {
-            Context = ToolContext,
-        };
-        host.Page.ColorScheme = ToolColorScheme();
+        var host = NewToolHost(tool, _editorViews[pane].Frame, dataName: null);
         host.Failed += reason =>
         {
             Diag.Info(ToolsTarget, "tool stopped; the pane says so", new LogField("tool", tool.Manifest.Id), new LogField("pane", pane),
                 new LogField("reason", reason));
             _editorViews[pane].ShowStopped(reason);
         };
+        return host;
+    }
+
+    // A host for a tool's page in any frame (a pane's editor, or the sidebar): the window's keys, the panes' context and
+    // the theme go to it, and what it asks for is checked in RunToolCommand.
+    private ToolHost NewToolHost(InstalledTool tool, Border frame, string? dataName)
+    {
+        var host = new ToolHost(tool, frame, ToolKeyScript.Build(_toolKeys.Keys), dataName)
+        {
+            Context = ToolContext,
+        };
+        host.Page.ColorScheme = ToolColorScheme();
         host.CommandRequested += (id, args) => RunToolCommand(tool, id, args);
         host.KeyPressed += keys =>
         {
@@ -318,7 +328,7 @@ public sealed partial class MainWindow
 
     private void ScheduleToolContext()
     {
-        if (_toolHosts.Any(h => h is not null))
+        if (_toolHosts.Any(h => h is not null) || _sidebarPages.Count > 0)
         {
             _contextTimer.Stop();
             _contextTimer.Start();
@@ -328,7 +338,7 @@ public sealed partial class MainWindow
     private void SendToolContext()
     {
         var context = ToolContext();
-        foreach (var host in _toolHosts.OfType<ToolHost>())
+        foreach (var host in AllToolHosts())
         {
             host.Send(context);
         }

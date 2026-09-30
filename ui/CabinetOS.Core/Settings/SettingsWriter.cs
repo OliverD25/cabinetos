@@ -60,6 +60,9 @@ public sealed class SettingsWriter(ICoreChannel core)
     /// <summary>Sets a true/false setting.</summary>
     public Task<bool> SetAsync(string path, bool value) => SetAsync(path, Json(writer => writer.WriteBooleanValue(value)));
 
+    /// <summary>Sets a text, such as <c>ui.sidebarView</c>.</summary>
+    public Task<bool> SetAsync(string path, string value) => SetAsync(path, Json(writer => writer.WriteStringValue(value)));
+
     /// <summary>Sets a whole number, such as <c>ui.dockSize.bottom</c>.</summary>
     public Task<bool> SetAsync(string path, uint value) => SetAsync(path, Json(writer => writer.WriteNumberValue(value)));
 

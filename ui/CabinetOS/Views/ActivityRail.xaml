@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.ActivityRail"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <!-- The rail layout's 44 px column (design README, "Activity rail"): 36 px buttons 4 px apart, 4 px from the top. The buttons are built in code (ActivityRail.Rebuild): they follow RailModel. -->
+    <StackPanel
+        x:Name="Buttons"
+        Width="44"
+        Padding="0,4,0,0"
+        HorizontalAlignment="Left"
+        Spacing="4" />
+</UserControl>

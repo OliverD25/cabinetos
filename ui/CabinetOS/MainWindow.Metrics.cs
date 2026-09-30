@@ -80,7 +80,11 @@ public sealed partial class MainWindow
 
         // Body: the space at its edges, between the sidebar and the panes, and between the panes.
         Body.Padding = new Thickness(m.BodyPadding, 0, m.BodyPadding, m.BodyPadding);
-        SidebarView.Margin = new Thickness(0, 0, m.Gap, 0);
+        SidebarColumn.Margin = new Thickness(0, 0, m.Gap, 0);
+        Rail.Margin = new Thickness(0, 0, m.Gap, 0);
+        // A gap too narrow to grab (a theme's gap 0) keeps a 6 px handle for the divider, laid over the edges it joins.
+        SidebarSplitter.Width = Math.Max(m.Gap, 6);
+        SidebarSplitter.Margin = new Thickness(0, 0, -Math.Max(0, (6 - m.Gap) / 2), 0);
         ApplyPaneGaps();
 
         // Status bar, and the transfer flyout that sits above it (and above the function keys).
@@ -106,6 +110,8 @@ public sealed partial class MainWindow
             preview.ApplyMetrics();
         }
         SidebarView.ApplyMetrics();
+        SearchPanelView.ApplyMetrics();
+        Rail.ApplyMetrics();
         Dock.ApplyMetrics(_dockPlacement == DockPlacement.Bottom);
         MarketView.ApplyMetrics();
         FkeyBar.ApplyMetrics();

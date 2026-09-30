@@ -94,6 +94,24 @@ public sealed class ToolFileSession(string toolId, string domain, IToolPage page
         }
     }
 
+    /// <summary>
+    /// Starts the page with no file (the tool's sidebar page): there is no
+    /// folder to serve and nothing to open, so the page only gets
+    /// <c>context</c> when it says <c>ready</c>. False when WebView2 could not start.
+    /// </summary>
+    public Task<bool> StartViewAsync()
+    {
+        FilePath = null;
+        Problem = null;
+        IsReady = false;
+        if (Host is { } previous)
+        {
+            page.UnmapFolder(previous);
+            Host = null;
+        }
+        return page.LoadAsync();
+    }
+
     /// <summary>The page said <c>ready</c>: it gets <paramref name="context"/> (if any), then the file.</summary>
     public void OnReady(string? context)
     {

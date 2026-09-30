@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.SearchPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:CabinetOS.ViewModels"
+    XYFocusKeyboardNavigation="Enabled"
+    IsTabStop="False">
+    <!-- The Search view of the rail layout: the search field of Phase 5c and its hits, over the same model as the command bar's box. -->
+    <Border
+        x:Name="Frame"
+        BorderBrush="{ThemeResource CbHairlineBrush}"
+        BorderThickness="0">
+        <Grid x:Name="Layout" Padding="8,4,8,0" RowSpacing="6">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock
+                x:Name="SearchLabel"
+                Margin="4,6,4,0"
+                Style="{StaticResource CbSectionLabelStyle}"
+                Text="SEARCH" />
+            <TextBox
+                x:Name="QueryBox"
+                Grid.Row="1"
+                Height="32"
+                AutomationProperties.Name="Search files in the sidebar"
+                PlaceholderText="Search files by name" />
+            <CheckBox
+                x:Name="WholeVolumeBox"
+                Grid.Row="2"
+                Margin="4,0,0,0"
+                MinWidth="0"
+                AutomationProperties.Name="Whole volume"
+                Content="Whole volume"
+                FontSize="12"
+                ToolTipService.ToolTip="Search every indexed volume, not only the active folder" />
+            <TextBlock
+                x:Name="SummaryText"
+                Grid.Row="3"
+                Margin="4,0"
+                FontSize="11"
+                Foreground="{ThemeResource CbStatusTextBrush}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <ScrollViewer
+                x:Name="HitsScroller"
+                Grid.Row="4"
+                HorizontalScrollMode="Disabled"
+                IsTabStop="False"
+                VerticalScrollBarVisibility="Auto">
+                <ItemsRepeater x:Name="HitList">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Spacing="2" />
+                    </ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SearchRowItem">
+                            <Button
+                                Height="44"
+                                Padding="8,0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                AutomationProperties.Name="{x:Bind Name}"
+                                Click="OnHitClick"
+                                Style="{StaticResource CbSubtleButtonStyle}"
+                                Tag="{x:Bind}"
+                                ToolTipService.ToolTip="{x:Bind Hit.Path}">
+                                <StackPanel VerticalAlignment="Center" Spacing="1">
+                                    <TextBlock
+                                        Foreground="{ThemeResource CbTextPrimaryBrush}"
+                                        Text="{x:Bind Name}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        FontSize="11"
+                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                        Text="{x:Bind FolderText}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>

@@ -225,23 +225,46 @@
                 </Grid>
             </Border>
 
-            <!-- Body: sidebar and the main column, 8 px gutters (the theme's bodyPadding and gap). -->
+            <!-- Body: the activity rail (rail layout only), the sidebar and the main column, 8 px gutters (the theme's bodyPadding and gap). -->
             <Grid
                 x:Name="Body"
                 Grid.Row="2"
                 Padding="8,0,8,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <views:Sidebar x:Name="SidebarView" Margin="0,0,8,0" />
+                <views:ActivityRail
+                    x:Name="Rail"
+                    Margin="0,0,8,0"
+                    Visibility="Collapsed" />
+
+                <!--
+                  The sidebar's column: the Explorer (pinned folders, drives, and in the rail layout the folder tree), the Search
+                  view, and the pages of tools with a sidebar page, one over another; the divider lies over the gap on its right.
+                -->
+                <Grid x:Name="SidebarHost" Grid.Column="1">
+                    <Grid x:Name="SidebarColumn" Margin="0,0,8,0">
+                        <views:Sidebar x:Name="SidebarView" />
+                        <views:SearchPanel x:Name="SearchPanelView" Visibility="Collapsed" />
+                        <Grid x:Name="ToolViews" Visibility="Collapsed" />
+                    </Grid>
+                    <views:SplitterBar
+                        x:Name="SidebarSplitter"
+                        Width="8"
+                        HorizontalAlignment="Right"
+                        Canvas.ZIndex="1"
+                        Orientation="Vertical"
+                        Visibility="Collapsed" />
+                </Grid>
 
                 <!--
                   The main column: the panes, and the Tool Dock under them (layout
                   classic) or beside them (layout right), behind an 8 px splitter.
                   The dock only changes cells, so its WebView2 is never re-parented.
                 -->
-                <Grid x:Name="MainColumn" Grid.Column="1">
+                <Grid x:Name="MainColumn" Grid.Column="2">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition x:Name="BottomGapRow" Height="0" />
@@ -305,7 +328,7 @@
                 </Grid>
 
                 <!-- The marketplace (design view C) takes the main column's place; the sidebar and the status bar stay. -->
-                <views:MarketplaceView x:Name="MarketView" Grid.Column="1" />
+                <views:MarketplaceView x:Name="MarketView" Grid.Column="2" />
             </Grid>
 
             <!-- The function-key bar (chrome fkeyBar): collapsed, and its row with it, unless the theme shows it. -->

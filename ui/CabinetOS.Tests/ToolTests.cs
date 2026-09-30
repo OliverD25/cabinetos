@@ -330,6 +330,30 @@ public class ToolTests
         Assert.Equal(["map", "load", "unmap"], page.Calls.Select(call => call.Split(' ')[0]));
     }
 
+    [Fact]
+    public async Task A_sidebar_page_starts_with_no_file_and_gets_the_context_and_never_an_open()
+    {
+        var page = new RecordingPage();
+        var files = new ToolFileSession("quick-notes", "cabinetos.example", page);
+
+        Assert.True(await files.StartViewAsync());
+        Assert.Null(files.FilePath);
+        Assert.Null(files.Host);
+        Assert.False(files.IsReady);
+
+        files.OnReady("""{"type":"context"}""");
+
+        Assert.True(files.IsReady);
+        // No folder is served and nothing is opened: the page loads, and says ready, and hears the context.
+        Assert.Equal(["load", """post {"type":"context"}"""], page.Calls);
+
+        // After a crash it loads again the same way.
+        page.Calls.Clear();
+        Assert.True(await files.ReloadAsync());
+        files.OnReady(null);
+        Assert.Equal(["load"], page.Calls);
+    }
+
     // A page that writes down what the file session asks of it.
     private sealed class RecordingPage : IToolPage
     {

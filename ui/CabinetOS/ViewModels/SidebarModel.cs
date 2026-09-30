@@ -100,12 +100,26 @@ public sealed class SidebarModel : ObservableObject
     public bool IsPinned(string path) =>
         Pinned.Any(item => string.Equals(item.Path.TrimEnd('\\'), path.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>The folder the active pane shows.</summary>
+    public string ActivePath { get; private set; } = "";
+
+    /// <summary>The active pane shows another folder (or another pane became the active one): the Explorer's tree follows it.</summary>
+    public event Action<string>? ActivePathChanged;
+
+    /// <summary>The drives changed: the Explorer's tree starts from them.</summary>
+    public event Action? DrivesChanged;
+
     /// <summary>Marks the pinned folder the active pane shows.</summary>
     public void SetActivePath(string path)
     {
         foreach (var item in Pinned)
         {
             item.IsActive = string.Equals(item.Path.TrimEnd('\\'), path.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+        }
+        if (!string.Equals(ActivePath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            ActivePath = path;
+            ActivePathChanged?.Invoke(path);
         }
     }
 
@@ -117,6 +131,7 @@ public sealed class SidebarModel : ObservableObject
         if (volumes is null)
         {
             ShowDrives = false;
+            DrivesChanged?.Invoke();
             return;
         }
         // In the core's order: the UI does not sort (brief §1).
@@ -130,5 +145,6 @@ public sealed class SidebarModel : ObservableObject
                 Math.Clamp(used, 0, 1)));
         }
         ShowDrives = Drives.Count > 0;
+        DrivesChanged?.Invoke();
     }
 }

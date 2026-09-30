@@ -85,29 +85,15 @@ public sealed class RailModel
     private readonly Dictionary<string, RailButton> _buttons = new(StringComparer.Ordinal);
     private readonly List<string> _order = [];
     private readonly Dictionary<string, string> _badges = new(StringComparer.Ordinal);
+    private List<string> _defaults = [];
+    private List<string> _arranged = [];
 
     /// <summary>Builds the rail for <paramref name="tools"/> (the tools with a sidebar page, in the order found) and the saved order.</summary>
     public RailModel(IReadOnlyList<RailTool> tools, IReadOnlyList<string> savedOrder)
     {
-        _buttons[Explorer] = new RailButton(Explorer, RailKind.Explorer, "Explorer", "\uE8B7", "EX");
-        _buttons[Search] = new RailButton(Search, RailKind.Search, "Search", "\uE721", "SE");
-        _buttons[Marketplace] = new RailButton(Marketplace, RailKind.Marketplace, "Marketplace", "\uE719", "MK");
-        _buttons[Terminal] = new RailButton(Terminal, RailKind.Terminal, "Terminal", "\uE756", ">_");
-        var defaults = new List<string>(BuiltIn);
-        foreach (var tool in tools)
-        {
-            // A tool named like a built-in view would answer to its ID: it keeps to the pane.
-            if (!_buttons.ContainsKey(tool.Id))
-            {
-                _buttons[tool.Id] = new RailButton(tool.Id, RailKind.Tool, tool.Name, "", InitialsOf(tool.Name));
-                defaults.Add(tool.Id);
-            }
-        }
-        _defaults = defaults;
-        Compose(savedOrder);
+        _arranged = [.. savedOrder];
+        Build(tools);
     }
-
-    private readonly List<string> _defaults;
 
     /// <summary>The badges or the order changed.</summary>
     public event Action? Changed;
@@ -134,11 +120,23 @@ public sealed class RailModel
     public void SetOrder(IReadOnlyList<string> savedOrder)
     {
         var before = _order.ToArray();
-        Compose(savedOrder);
+        _arranged = [.. savedOrder];
+        Compose();
         if (!before.SequenceEqual(_order, StringComparer.Ordinal))
         {
             Changed?.Invoke();
         }
+    }
+
+    /// <summary>
+    /// The tools with a sidebar page were read (the window reads them once,
+    /// after it started). The buttons, the order the user arranged and the
+    /// badges stay; a tool's button appears where that order puts it.
+    /// </summary>
+    public void SetTools(IReadOnlyList<RailTool> tools)
+    {
+        Build(tools);
+        Changed?.Invoke();
     }
 
     /// <summary>Moves a button up (<paramref name="delta"/> below zero) or down; false when it cannot move that way.</summary>
@@ -152,6 +150,7 @@ public sealed class RailModel
         }
         _order.RemoveAt(from);
         _order.Insert(to, id);
+        _arranged = [.. _order];
         Changed?.Invoke();
         return true;
     }
@@ -240,10 +239,30 @@ public sealed class RailModel
         return initials.ToUpperInvariant();
     }
 
-    private void Compose(IReadOnlyList<string> savedOrder)
+    private void Build(IReadOnlyList<RailTool> tools)
+    {
+        _buttons.Clear();
+        _buttons[Explorer] = new RailButton(Explorer, RailKind.Explorer, "Explorer", "\uE8B7", "EX");
+        _buttons[Search] = new RailButton(Search, RailKind.Search, "Search", "\uE721", "SE");
+        _buttons[Marketplace] = new RailButton(Marketplace, RailKind.Marketplace, "Marketplace", "\uE719", "MK");
+        _buttons[Terminal] = new RailButton(Terminal, RailKind.Terminal, "Terminal", "\uE756", ">_");
+        _defaults = [.. BuiltIn];
+        foreach (var tool in tools)
+        {
+            // A tool named like a built-in view would answer to its ID: it keeps to the pane.
+            if (!_buttons.ContainsKey(tool.Id))
+            {
+                _buttons[tool.Id] = new RailButton(tool.Id, RailKind.Tool, tool.Name, "", InitialsOf(tool.Name));
+                _defaults.Add(tool.Id);
+            }
+        }
+        Compose();
+    }
+
+    private void Compose()
     {
         _order.Clear();
-        foreach (var id in savedOrder)
+        foreach (var id in _arranged)
         {
             if (_buttons.ContainsKey(id) && !_order.Contains(id))
             {

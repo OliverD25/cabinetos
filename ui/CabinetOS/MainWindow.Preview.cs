@@ -310,9 +310,10 @@ public sealed partial class MainWindow
         {
             _ = OpenPreviewAsync(preview);
         }
-        foreach (var host in _toolHosts)
+        OnBadgeEvent(pluginEvent);
+        foreach (var host in AllToolHosts())
         {
-            host?.Deliver(pluginEvent);
+            host.Deliver(pluginEvent);
         }
     }
 

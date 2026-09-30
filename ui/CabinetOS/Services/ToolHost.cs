@@ -22,12 +22,16 @@ internal sealed class ToolHost : IToolPage
     private readonly WebViewHost _page;
     private readonly ToolFileSession _files;
 
-    /// <summary>A host for <paramref name="tool"/> whose WebView2 goes into <paramref name="frame"/>.</summary>
-    public ToolHost(InstalledTool tool, Border frame, string hostScript)
+    /// <summary>
+    /// A host for <paramref name="tool"/> whose WebView2 goes into <paramref name="frame"/>.
+    /// <paramref name="dataName"/> names its browser's data folder: the tool's ID for a pane's page, and a name of
+    /// its own for the sidebar's page, which is a second page of the same tool with its own browser process.
+    /// </summary>
+    public ToolHost(InstalledTool tool, Border frame, string hostScript, string? dataName = null)
     {
         Tool = tool;
         _files = new ToolFileSession(tool.Manifest.Id, WebViewHost.Domain, this);
-        _page = new WebViewHost(frame, $"tool-{tool.Manifest.Id}") { HostScript = hostScript };
+        _page = new WebViewHost(frame, dataName ?? $"tool-{tool.Manifest.Id}") { HostScript = hostScript };
         _page.MapFolder(PageHost, tool.Folder, CoreWebView2HostResourceAccessKind.Deny);
         _page.MessageReceived += OnMessage;
         _page.Failed += reason =>
@@ -102,6 +106,9 @@ internal sealed class ToolHost : IToolPage
     /// (<see cref="Problem"/>).
     /// </summary>
     public Task<bool> OpenAsync(string path) => _files.OpenAsync(path);
+
+    /// <summary>Starts the page with no file: the tool's sidebar page (it gets <c>ready</c> and <c>context</c>, never <c>open</c>).</summary>
+    public Task<bool> StartViewAsync() => _files.StartViewAsync();
 
     /// <summary>Sends <c>context</c> (the active pane's folder and selection) if the page is ready.</summary>
     public void Send(string message)

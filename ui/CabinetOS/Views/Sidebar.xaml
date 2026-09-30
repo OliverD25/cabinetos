@@ -129,6 +129,9 @@
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>
                 </StackPanel>
+
+                <!-- The folder tree: only in the rail layout (Sidebar.ShowTree). -->
+                <views:FolderTreeView x:Name="TreeSection" Visibility="Collapsed" />
             </StackPanel>
         </ScrollViewer>
     </Border>

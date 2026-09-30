@@ -54,6 +54,8 @@ public sealed partial class MainWindow
     // active moves the results there.
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
     {
+        // The Search view's field shows the same text.
+        SearchPanelView.Query = SearchBox.Text;
         if (_settingSearchText)
         {
             return;
@@ -128,6 +130,7 @@ public sealed partial class MainWindow
         {
             pane.Search = null;
             _searchPane = -1;
+            SearchPanelView.Show(null);
             UpdateStatus();
             return;
         }
@@ -135,6 +138,8 @@ public sealed partial class MainWindow
             ? ReferenceEquals(results.Hits, pane.Search?.Rows?.Hits) ? pane.Search!.Rows : new SearchRows(results.Hits, pane.KnownDetails, _search.Shown?.Root)
             : null;
         pane.Search = new PaneSearch(_search.Header, _search.Scope, _search.Note, _search.WholeVolume, rows);
+        SearchPanelView.SetWholeVolume(_search.WholeVolume);
+        SearchPanelView.Show(pane.Search);
         UpdateStatus();
     }
 
@@ -149,6 +154,7 @@ public sealed partial class MainWindow
         _settingSearchText = true;
         SearchBox.Text = "";
         _settingSearchText = false;
+        SearchPanelView.Query = "";
         _searchTimer.Stop();
         _search.Clear();
         if (focusPane)
@@ -165,11 +171,17 @@ public sealed partial class MainWindow
         {
             return;
         }
+        await GoToHitAsync(hit, invocation.RequestId);
+    }
+
+    // The same from the Search view of the sidebar: a click or Enter on one of its hits.
+    private async Task GoToHitAsync(SearchRowItem hit, string? requestId)
+    {
         var folder = hit.Folder.Length > 0 ? hit.Folder : hit.Hit.Path;
         var name = hit.Folder.Length > 0 ? hit.Name : null;
         var paneIndex = _active;
         EndSearch(focusPane: false);
-        await _panes[paneIndex].NavigateAsync(folder, invocation.RequestId, NavigationKind.New, name);
+        await _panes[paneIndex].NavigateAsync(folder, requestId, NavigationKind.New, name);
         // The hit may be in the folder the pane showed already, which keeps its scroll position.
         _paneViews[paneIndex].ScrollToFocus();
         _paneViews[paneIndex].Focus(FocusState.Programmatic);

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.FolderTreeView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:side="using:CabinetOS.Core.Sidebar"
+    xmlns:views="using:CabinetOS.Views"
+    IsTabStop="True"
+    UseSystemFocusVisuals="False">
+    <!-- The Explorer's folder tree (rail layout): the drives, and under each the folders the user opened. Rows come from FolderTreeModel; the keyboard works on the model's cursor. -->
+    <StackPanel x:Name="Root">
+        <Grid x:Name="HeaderRow" ColumnSpacing="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="FoldersLabel"
+                Margin="12,14,12,4"
+                VerticalAlignment="Center"
+                Style="{StaticResource CbSectionLabelStyle}"
+                Text="FOLDERS" />
+            <Button
+                x:Name="LocateButton"
+                Grid.Column="1"
+                Width="24"
+                Height="24"
+                MinWidth="24"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Locate the active folder"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Locate the active folder (Alt+Shift+L)">
+                <FontIcon FontSize="12" Glyph="&#xE81D;" />
+            </Button>
+            <Button
+                x:Name="LockButton"
+                Grid.Column="2"
+                Width="24"
+                Height="24"
+                MinWidth="24"
+                Margin="0,0,8,0"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Lock the folder tree"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Lock the tree: it stops following the active folder">
+                <FontIcon x:Name="LockIcon" FontSize="12" Glyph="&#xE785;" />
+            </Button>
+        </Grid>
+        <ItemsRepeater x:Name="TreeList">
+            <ItemsRepeater.Layout>
+                <StackLayout x:Name="TreeLayout" Spacing="2" />
+            </ItemsRepeater.Layout>
+            <ItemsRepeater.ItemTemplate>
+                <DataTemplate x:DataType="side:FolderNode">
+                    <Grid Height="32">
+                        <Border
+                            x:Name="CurrentFill"
+                            Margin="4,0"
+                            Background="{ThemeResource CbHoverFillBrush}"
+                            CornerRadius="4"
+                            Visibility="{x:Bind IsCurrent, Mode=OneWay}" />
+                        <Border
+                            x:Name="CursorFrame"
+                            Margin="4,0"
+                            BorderBrush="{ThemeResource CbCursorStrokeBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Visibility="{x:Bind IsCursor, Mode=OneWay}" />
+                        <Rectangle
+                            x:Name="CurrentBar"
+                            Width="3"
+                            Height="16"
+                            Margin="4,0,0,0"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Fill="{ThemeResource CbAccentBrush}"
+                            RadiusX="1.5"
+                            RadiusY="1.5"
+                            Visibility="{x:Bind IsCurrent, Mode=OneWay}" />
+                        <Grid Margin="{x:Bind views:FolderTreeView.Indent(Depth)}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                x:Name="Chevron"
+                                Width="22"
+                                Height="24"
+                                MinWidth="22"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                AllowFocusOnInteraction="False"
+                                AutomationProperties.Name="Open or close the folder"
+                                Click="OnChevronClick"
+                                IsHitTestVisible="{x:Bind HasChildren, Mode=OneWay}"
+                                IsTabStop="False"
+                                Opacity="{x:Bind views:FolderTreeView.ChevronOpacity(HasChildren), Mode=OneWay}"
+                                Style="{StaticResource CbSubtleButtonStyle}"
+                                Tag="{x:Bind}">
+                                <FontIcon
+                                    FontSize="10"
+                                    Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                    Glyph="{x:Bind ChevronGlyph, Mode=OneWay}" />
+                            </Button>
+                            <Button
+                                x:Name="RowButton"
+                                Grid.Column="1"
+                                Height="30"
+                                Padding="4,0,8,0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                VerticalAlignment="Center"
+                                AllowFocusOnInteraction="False"
+                                AutomationProperties.Name="{x:Bind Name}"
+                                Background="Transparent"
+                                Click="OnRowClick"
+                                IsTabStop="False"
+                                Style="{StaticResource CbSubtleButtonStyle}"
+                                Tag="{x:Bind}"
+                                ToolTipService.ToolTip="{x:Bind views:FolderTreeView.Tip(Path, Error), Mode=OneWay}">
+                                <StackPanel
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
+                                    <views:FolderGlyph VerticalAlignment="Center" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource CbTextPrimaryBrush}"
+                                        Text="{x:Bind Name}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <ProgressRing
+                                        Width="12"
+                                        Height="12"
+                                        VerticalAlignment="Center"
+                                        IsActive="{x:Bind IsLoading, Mode=OneWay}"
+                                        Visibility="{x:Bind IsLoading, Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+            </ItemsRepeater.ItemTemplate>
+        </ItemsRepeater>
+    </StackPanel>
+</UserControl>

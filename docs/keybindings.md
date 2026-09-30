@@ -166,6 +166,17 @@ The core's commands, in palette order:
   pane. A tab that has a tool (Markdown Preview) in it is a tab like the
   others. Tab and Alt+Left / Alt+Right keep their old jobs: the pane switch,
   Back and Forward.
+- In the rail layout ([ui.md](ui.md), "The activity rail and the sidebar")
+  `view.showExplorer` (`ctrl+shift+e`) and `view.showSearch`
+  (`ctrl+shift+f`) show the views of the sidebar and put the keyboard in
+  them, and `sidebar.locate` (`shift+alt+l`, the design's Alt+Shift+L) reveals
+  the active folder in the tree; `sidebar.lock` has no key. In the classic
+  and right layouts the first two open the sidebar and search, and the other
+  two say that the tree belongs to the rail layout. Inside a view the keys
+  are the view's own and are not commands: in the tree Up, Down, PageUp,
+  PageDown, Home, End, Right, Left, Space, Enter and Esc; on a rail button
+  Up and Down walk the buttons and Shift+Up / Shift+Down move the button
+  (`ui.rail`). `shift+alt+l` is the core's own spelling of the chord.
 - While a preview of proposed changes shows in a pane (a plugin proposed
   it; [ui.md](ui.md), "What plugins ask of the window"), **Enter applies it
   and Esc cancels it**, before the keymap: the window takes these two keys

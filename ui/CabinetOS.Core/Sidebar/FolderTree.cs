@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -128,6 +129,45 @@ public sealed class FolderNode : INotifyPropertyChanged
 }
 
 /// <summary>
+/// The rows of the tree: an observable list that can take or drop a whole run of rows with one change event,
+/// so a folder with thousands of sub-folders opens with one update of the list and not thousands.
+/// </summary>
+public sealed class FolderRows : ObservableCollection<FolderNode>
+{
+    /// <summary>Puts <paramref name="nodes"/> at <paramref name="index"/> and reports it once.</summary>
+    public void InsertRange(int index, IReadOnlyList<FolderNode> nodes)
+    {
+        if (nodes.Count == 0)
+        {
+            return;
+        }
+        CheckReentrancy();
+        ((List<FolderNode>)Items).InsertRange(index, nodes);
+        Raise(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, nodes.ToList(), index));
+    }
+
+    /// <summary>Drops <paramref name="count"/> rows from <paramref name="index"/> and reports it once.</summary>
+    public void RemoveRange(int index, int count)
+    {
+        if (count <= 0)
+        {
+            return;
+        }
+        CheckReentrancy();
+        var removed = ((List<FolderNode>)Items).GetRange(index, count);
+        ((List<FolderNode>)Items).RemoveRange(index, count);
+        Raise(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, removed, index));
+    }
+
+    private void Raise(NotifyCollectionChangedEventArgs change)
+    {
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
+        OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
+        OnCollectionChanged(change);
+    }
+}
+
+/// <summary>
 /// The Explorer view's folder tree (docs/ui.md, "The activity rail and the
 /// sidebar"). It is lazy: a folder's sub-folders are read when its row is
 /// expanded, one request per expanded row, and the request is abandoned when
@@ -144,7 +184,7 @@ public sealed class FolderTreeModel(IFolderSource source)
     private FolderNode? _cursor;
 
     /// <summary>The rows that show, top to bottom; changes are reported one row at a time.</summary>
-    public ObservableCollection<FolderNode> Rows { get; } = [];
+    public FolderRows Rows { get; } = [];
 
     /// <summary>How many requests were sent so far.</summary>
     public int Requests { get; private set; }
@@ -190,14 +230,13 @@ public sealed class FolderTreeModel(IFolderSource source)
         _roots.Clear();
         _roots.AddRange(roots);
         Rows.Clear();
+        var shown = new List<FolderNode>();
         foreach (var root in _roots)
         {
-            Rows.Add(root);
-            foreach (var row in VisibleBelow(root))
-            {
-                Rows.Add(row);
-            }
+            shown.Add(root);
+            shown.AddRange(VisibleBelow(root));
         }
+        Rows.InsertRange(0, shown);
     }
 
     /// <summary>The row of a folder that is in the tree now (its parents expanded or not), or null.</summary>
@@ -531,21 +570,16 @@ public sealed class FolderTreeModel(IFolderSource source)
 
     // ----- Rows -----
 
-    private void InsertBelow(FolderNode node)
-    {
-        var at = Rows.IndexOf(node) + 1;
-        foreach (var row in VisibleBelow(node))
-        {
-            Rows.Insert(at++, row);
-        }
-    }
+    private void InsertBelow(FolderNode node) => Rows.InsertRange(Rows.IndexOf(node) + 1, VisibleBelow(node).ToList());
 
     private void RemoveBelow(FolderNode node, int index)
     {
-        while (index + 1 < Rows.Count && Rows[index + 1].Depth > node.Depth)
+        var end = index + 1;
+        while (end < Rows.Count && Rows[end].Depth > node.Depth)
         {
-            Rows.RemoveAt(index + 1);
+            end++;
         }
+        Rows.RemoveRange(index + 1, end - index - 1);
     }
 
     // The rows under a node that shows, in order: its sub-folders, and under each open one its own.
