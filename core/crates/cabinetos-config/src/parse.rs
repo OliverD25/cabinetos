@@ -7,7 +7,10 @@ use cabinetos_commands::KeymapError;
 
 use crate::locate::{Segment, locate, position};
 use crate::menu::check_extension;
-use crate::{Config, FORMAT_VERSION, MenuItem, is_program_name, parse_arg};
+use crate::{
+    Config, FORMAT_VERSION, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, MenuItem, is_program_name,
+    parse_arg,
+};
 
 /// A configuration file that cannot be used. The settings in effect stay as
 /// they were.
@@ -200,6 +203,7 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
             ));
         }
     }
+    check_columns(text, config)?;
     check_programs(text, config)?;
     check_menu_extensions(text, config)?;
     let profiles = &config.terminal.profiles;
@@ -232,6 +236,34 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
                 config.terminal.default_profile
             ),
         ));
+    }
+    Ok(())
+}
+
+/// `ui.columns`: each width in whole pixels from 24 to 2000, so a hand edit
+/// cannot make a column vanish or push the others out of the pane.
+fn check_columns(text: &str, config: &Config) -> Result<(), ConfigError> {
+    let Some(columns) = &config.ui.columns else {
+        return Ok(());
+    };
+    for (column, width) in [
+        ("modified", columns.modified),
+        ("type", columns.r#type),
+        ("size", columns.size),
+    ] {
+        if !(MIN_COLUMN_WIDTH..=MAX_COLUMN_WIDTH).contains(&width) {
+            return Err(ConfigError::at(
+                text,
+                &[
+                    Segment::Key("ui"),
+                    Segment::Key("columns"),
+                    Segment::Key(column),
+                ],
+                format!(
+                    "ui.columns.{column} is {width}; a column is from {MIN_COLUMN_WIDTH} to {MAX_COLUMN_WIDTH} pixels wide"
+                ),
+            ));
+        }
     }
     Ok(())
 }
@@ -538,6 +570,49 @@ mod tests {
             parse(r#"{"ui": {"tabs": {"left": {"items": [{"path": "C:\\"}, {"path": "D:\\"}], "active": 1}}}}"#)
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn column_widths_are_whole_pixels_from_24_to_2000() {
+        let config =
+            parse(r#"{"ui": {"columns": {"modified": 24, "type": 2000, "size": 64}}}"#).unwrap();
+        let columns = config.ui.columns.unwrap();
+        assert_eq!(
+            (columns.modified, columns.r#type, columns.size),
+            (24, 2000, 64)
+        );
+        assert_eq!(
+            parse(r#"{"ui": {"columns": null}}"#).unwrap().ui.columns,
+            None
+        );
+        let text = "{\n  \"ui\": {\n    \"columns\": {\n      \"modified\": 120,\n      \"type\": 23,\n      \"size\": 64\n    }\n  }\n}";
+        let error = parse(text).unwrap_err();
+        assert!(
+            error.message.contains("ui.columns.type is 23") && error.message.contains("24 to 2000"),
+            "{error}"
+        );
+        assert_eq!(error.line, Some(5), "{error}");
+        for (bad, expected) in [
+            (
+                r#"{"ui": {"columns": {"modified": 120, "type": 90, "size": 2001}}}"#,
+                "ui.columns.size is 2001",
+            ),
+            (
+                r#"{"ui": {"columns": {"modified": 120.5, "type": 90, "size": 64}}}"#,
+                "invalid type: floating point",
+            ),
+            (
+                r#"{"ui": {"columns": {"modified": 120, "type": 90}}}"#,
+                "missing field `size`",
+            ),
+            (
+                r#"{"ui": {"columns": {"modified": 120, "type": 90, "size": 64, "name": 300}}}"#,
+                "unknown field `name`",
+            ),
+        ] {
+            let error = parse(bad).unwrap_err();
+            assert!(error.message.contains(expected), "{bad}: {error}");
+        }
     }
 
     #[test]

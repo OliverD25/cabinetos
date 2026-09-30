@@ -506,7 +506,7 @@ fn content_hash(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Layout;
+    use crate::{ColumnWidths, Layout};
 
     fn temp_config() -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().unwrap();
@@ -1091,6 +1091,77 @@ mod tests {
         }
         assert!(parse(r#"{"ui": {"rail": ["explorer"], "sidebarView": "search"}}"#).is_ok());
         assert!(parse(r#"{"ui": {"sidebarOpen": true}}"#).is_err());
+    }
+
+    #[test]
+    fn column_widths_round_trip_through_the_file() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(store.config().ui.columns, None, "null: the theme's widths");
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["columns"], Value::Null);
+
+        let widths = serde_json::json!({"modified": 160, "type": 110, "size": 72});
+        assert_eq!(
+            store
+                .set_value("ui.columns", widths.clone(), accept)
+                .unwrap(),
+            ["ui.columns"]
+        );
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["columns"], widths);
+        let (reopened, opened) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(opened, Opened::Loaded);
+        assert_eq!(
+            reopened.config().ui.columns,
+            Some(ColumnWidths {
+                modified: 160,
+                r#type: 110,
+                size: 72
+            })
+        );
+
+        // A drag changes one width: only that one is reported.
+        assert_eq!(
+            store
+                .set_value(
+                    "ui.columns",
+                    serde_json::json!({"modified": 200, "type": 110, "size": 72}),
+                    accept
+                )
+                .unwrap(),
+            ["ui.columns.modified"]
+        );
+
+        // A width out of bounds, a fraction or a missing column is refused, and the file stays as it was.
+        let before = std::fs::read_to_string(&path).unwrap();
+        for value in [
+            serde_json::json!({"modified": 10, "type": 110, "size": 72}),
+            serde_json::json!({"modified": 160, "type": 110, "size": 2400}),
+            serde_json::json!({"modified": 160.5, "type": 110, "size": 72}),
+            serde_json::json!({"modified": 160, "type": 110}),
+            serde_json::json!("wide"),
+        ] {
+            let result = store.set_value("ui.columns", value.clone(), accept);
+            let Err(UpdateError::Rejected(rejection)) = result else {
+                panic!("{value}: {result:?}")
+            };
+            assert!(
+                rejection.message.contains("ui.columns"),
+                "{value}: {}",
+                rejection.message
+            );
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+
+        // Back to the theme's with `null`.
+        assert_eq!(
+            store.set_value("ui.columns", Value::Null, accept).unwrap(),
+            ["ui.columns"]
+        );
+        assert_eq!(store.config().ui.columns, None);
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["columns"], Value::Null);
     }
 
     #[test]

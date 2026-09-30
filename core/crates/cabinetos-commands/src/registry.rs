@@ -76,11 +76,12 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// the plugin list, the terminal tabs), Total Commander's small commands
 /// (sub-phase 11a), the tab commands (Phase 12), the shell's top row and
 /// panes (Phase 16), the context menu's two (Phase 18), then the palette,
-/// overlays, a new window and About.
+/// overlays, a new window and About, and last the two of the file panes'
+/// column widths.
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 107] = [
+const SEED: [Seed; 109] = [
     seed(
         "palette.show",
         "View",
@@ -707,6 +708,25 @@ const SEED: [Seed; 107] = [
         UI,
         None,
     ),
+    // The file panes' column widths (`ui.columns`): the Name heading's
+    // double-click fits Modified, Type and Size to their texts; the reset
+    // gives the theme's widths back. No keys: the palette is their place.
+    seed(
+        "view.fitColumns",
+        "View",
+        "Fit Columns to Content",
+        &[],
+        UI,
+        FILES,
+    ),
+    seed(
+        "view.resetColumns",
+        "View",
+        "Reset Column Widths",
+        &[],
+        UI,
+        FILES,
+    ),
 ];
 
 /// The command a seed row describes.
@@ -910,7 +930,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 107);
+        assert_eq!(registry.commands().len(), 109);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1251,10 +1271,25 @@ mod tests {
             "sidebar.pin",
             "sidebar.unpin",
             "help.about",
+            "view.fitColumns",
+            "view.resetColumns",
         ] {
             let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
             assert_eq!(command.target, CommandTarget::Ui, "{id}");
             assert!(command.default_keys.is_empty(), "{id}");
+        }
+        // The column widths' two act on the file panes.
+        for (id, title) in [
+            ("view.fitColumns", "Fit Columns to Content"),
+            ("view.resetColumns", "Reset Column Widths"),
+        ] {
+            let command = registry.get(id).unwrap();
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                ("View", title),
+                "{id}"
+            );
+            assert_eq!(command.when.as_deref(), Some("filesView"), "{id}");
         }
         let preview = registry.get("editor.openMarkdownPreview").unwrap();
         assert_eq!(preview.when.as_deref(), Some("filesView"));

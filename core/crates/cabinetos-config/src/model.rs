@@ -22,6 +22,12 @@ pub const FORMAT_VERSION: u32 = 1;
 pub const DEFAULT_MARKETPLACE_INDEX: &str =
     "https://oliverd25.github.io/cabinetos-marketplace/index.json";
 
+/// The narrowest a column of `ui.columns` may be set, in pixels.
+pub const MIN_COLUMN_WIDTH: u32 = 24;
+
+/// The widest a column of `ui.columns` may be set, in pixels.
+pub const MAX_COLUMN_WIDTH: u32 = 2000;
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -139,6 +145,28 @@ pub struct UiConfig {
     pub sidebar_view: String,
     /// The Explorer view follows the active pane's folder.
     pub sidebar_auto_reveal: bool,
+    /// The widths of the file panes' Modified, Type and Size columns as the
+    /// user last dragged or fitted them; both panes share them, and the
+    /// Name column takes the rest. `null`: the theme's widths. The window
+    /// owns them; the core only checks and stores them.
+    pub columns: Option<ColumnWidths>,
+}
+
+/// A file pane's column widths in pixels, each a whole number from 24 to
+/// 2000.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct ColumnWidths {
+    /// The Modified column (Folder while the pane shows search results).
+    #[cfg_attr(feature = "schema", schemars(range(min = MIN_COLUMN_WIDTH, max = MAX_COLUMN_WIDTH)))]
+    pub modified: u32,
+    /// The Type column.
+    #[cfg_attr(feature = "schema", schemars(range(min = MIN_COLUMN_WIDTH, max = MAX_COLUMN_WIDTH)))]
+    pub r#type: u32,
+    /// The Size column.
+    #[cfg_attr(feature = "schema", schemars(range(min = MIN_COLUMN_WIDTH, max = MAX_COLUMN_WIDTH)))]
+    pub size: u32,
 }
 
 /// The tabs of both panes.
@@ -205,6 +233,7 @@ impl Default for UiConfig {
             sidebar_width: None,
             sidebar_view: "explorer".to_owned(),
             sidebar_auto_reveal: true,
+            columns: None,
         }
     }
 }
@@ -577,6 +606,7 @@ mod tests {
             (None, None)
         );
         assert_eq!(config.ui.tabs, TabsConfig::default());
+        assert_eq!(config.ui.columns, None, "the theme's column widths");
         assert!(config.ui.tabs.left.items.is_empty() && config.ui.tabs.right.items.is_empty());
         assert_eq!(
             (config.ui.tabs.left.active, config.ui.tabs.right.active),
@@ -792,6 +822,17 @@ mod tests {
             }
         );
         assert!(serde_json::from_str::<UiConfig>(r#"{"dockSize": {"left": 1}}"#).is_err());
+        assert!(
+            text.contains("\"sidebarAutoReveal\":true,\"columns\":null"),
+            "{text}"
+        );
+        let fitted: UiConfig =
+            serde_json::from_str(r#"{"columns": {"modified": 150, "type": 96, "size": 70}}"#)
+                .unwrap();
+        assert_eq!(
+            serde_json::to_string(&fitted.columns).unwrap(),
+            r#"{"modified":150,"type":96,"size":70}"#
+        );
         assert!(text.contains("\"showHidden\":false"));
         assert!(text.contains("\"selection\":\"windows\""), "{text}");
         assert!(text.contains("\"files\":{\"editor\":null}"), "{text}");

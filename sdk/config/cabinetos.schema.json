@@ -202,6 +202,7 @@
       "description": "The window.",
       "$ref": "#/$defs/UiConfig",
       "default": {
+        "columns": null,
         "dockSize": {
           "bottom": null,
           "right": null
@@ -280,6 +281,39 @@
         }
       },
       "additionalProperties": false
+    },
+    "ColumnWidths": {
+      "description": "A file pane's column widths in pixels, each a whole number from 24 to\n2000.",
+      "type": "object",
+      "properties": {
+        "modified": {
+          "description": "The Modified column (Folder while the pane shows search results).",
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 2000,
+          "minimum": 24
+        },
+        "size": {
+          "description": "The Size column.",
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 2000,
+          "minimum": 24
+        },
+        "type": {
+          "description": "The Type column.",
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 2000,
+          "minimum": 24
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "modified",
+        "type",
+        "size"
+      ]
     },
     "ContextMenuConfig": {
       "description": "The right-click menu of a file pane: one list for each kind of target,\nand whether Shift+right-click shows Windows' own menu.",
@@ -1024,6 +1058,18 @@
       "description": "The window.",
       "type": "object",
       "properties": {
+        "columns": {
+          "description": "The widths of the file panes' Modified, Type and Size columns as the\nuser last dragged or fitted them; both panes share them, and the\nName column takes the rest. `null`: the theme's widths. The window\nowns them; the core only checks and stores them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColumnWidths"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "dockSize": {
           "description": "The Tool Dock's size as the user last dragged it, so it survives a\nrestart.",
           "$ref": "#/$defs/DockSize",
