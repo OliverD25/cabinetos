@@ -37,6 +37,8 @@ The first version, built on 2026-09-28 and not released yet. It becomes
 - Find in Pane (Ctrl+F): filters the active pane's list by name as you type, and Esc shows every row again.
 - Quick Open (Ctrl+P): the files and folders of the workspace on the command palette's surface; `>` switches to the commands. Enter opens a row in the active pane, Ctrl+Enter in the other one.
 - Ctrl+1 to Ctrl+9 bring a pane's tabs to the front, and Ctrl+, opens `cabinetos.json` for editing.
+- Updates from inside the app for the per-user install: a check once a day (`update.check`, and `update.channel` for the stable or the preview channel), the download in the background with a pill in the status bar, the release notes in a dialog with Restart now and Later, and a rollback to the version before. A download whose SHA-256 does not match is deleted, and a swap that fails half way puts the old version back. `cabinetos-cli update` does the same from a terminal.
+- CabinetOS appears in Settings > Apps, with its version and size, and uninstalls from there.
 
 ### Changed
 

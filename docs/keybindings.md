@@ -132,6 +132,10 @@ The core's commands, in palette order:
 | `diagnostics.toggleHeavy` | Diagnostics: Toggle Heavy Logging | | | UI |
 | `diagnostics.openLogFolder` | Diagnostics: Open Log Folder | | | UI |
 | `diagnostics.saveBundle` | Diagnostics: Save Log Bundle | | | UI |
+| `update.check` | Update: Check for Updates | | | UI |
+| `update.apply` | Update: Restart to Update | | | UI |
+| `update.rollback` | Update: Roll Back to the Previous Version | | | UI |
+| `update.showNotes` | Update: Show Release Notes | | | UI |
 
 - The list is the design's `COMMANDS` array without its plugin commands
   (hex view, Git, compression), and the shell's own commands: moving
@@ -150,6 +154,9 @@ The core's commands, in palette order:
   `diagnostics.toggleHeavy` too. What they do is in
   [diagnostics.md](diagnostics.md) ("Heavy mode", "Bundles") and
   [ui.md](ui.md) ("Heavy logging").
+- The four `update.*` commands (Phase 17) have no default keys either:
+  the palette, the top row's menu and the status bar's update pill are
+  their places ([ui.md](ui.md), "Updates").
 - The rows from `go.root` to `terminal.insertSelectedPaths` are Total
   Commander's small commands (sub-phase 11a): their titles, keys and
   contexts are the research note's

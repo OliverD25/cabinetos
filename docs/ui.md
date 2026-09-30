@@ -586,7 +586,11 @@ version (the window's, the same as the core's in a release), the core's
 version and protocol from `ping`, and the build: the commit and the build
 time from `release.json` next to `CabinetOS.exe` (written by
 [build/release.ps1](../build/release.ps1)), with "with uncommitted changes"
-when the release says so; without that file, "Development build". Two
+when the release says so; without that file, "Development build". The
+"Update" row (Phase 17) says where the updater is: "0.2.0 is ready:
+restart to run it" with an accent dot while a version waits, "Up to date
+on the stable channel, checked Today 09:11", the reason a development
+build does not update itself, and so on ("Updates"). Two
 links open `LICENSE` and `THIRD-PARTY-NOTICES.md` next to the program with
 `open_path` (the core opens them with their default application); a
 development build, which has neither, says so instead. The copyright line
@@ -849,9 +853,11 @@ window. Left to right:
 
 - **The menu** (the hamburger, `topRowButtonSize`, 36 px): `menu.show`.
   Its dropdown lists New Tab, New Folder, Find in Pane, Go to Path…,
-  Toggle Sidebar, the marketplace and Keyboard Shortcuts, each with the
-  title and the first key the registry has now (`ShellMenu`), so a
-  rebinding shows at once.
+  Toggle Sidebar, the marketplace, Keyboard Shortcuts and Check for
+  Updates, each with the title and the first key the registry has now
+  (`ShellMenu`), so a rebinding shows at once. While an update waits for
+  a restart, the button carries an accent dot, and Check for Updates
+  becomes "Restart to Update (0.2.0)" with the same dot ("Updates").
 - **The app icon**, 16 px.
 - **The workspace pill** (`workspacePillHeight` 24 px, `workspacePillRadius`
   4 px, the accent at 18 %): a dot, the workspace's name ("Default" until
@@ -2426,6 +2432,96 @@ replaces its files."; Uninstall was offered. Update installed 1.1.0
 without applying it, the card and the button went back to "Installed",
 and the status bar said "Paper is updated to version 1.1.0.". The
 snapshot step `click:Installed` showed the tab.
+
+## Updates
+
+In-app updates (Phase 17, [ADR 0014](decisions/0014-in-app-updates.md)).
+The core does the work: it reads the channel's `latest.json`, downloads
+the release's zip, checks its SHA-256, unpacks it, and swaps it into the
+install folder ([ipc.md](ipc.md), "Updates"; [release.md](release.md),
+"Updates"). The window shows where the updater is, shows the release
+notes, and restarts itself into the new version. It reads no file and
+fetches nothing itself (brief §1): the notes come in `update_state`. The
+rules below are in `CabinetOS.Core.Updates` (`UpdateModel`, `UpdateText`,
+`ReleaseNotes`), with tests; the window's part is `MainWindow.Update.cs`
+and `Views/UpdateDialog.cs`.
+
+- **The state.** After every start of a core the window asks
+  `update_status`, which the core answers from memory; then it follows
+  `update_state_changed` and `update_progress`. A core before protocol 14
+  answers `unknown_request`: the window then shows no pill and no dot, and
+  the commands say that updates need a newer core.
+- **The commands** (category Update, target `ui`, no default keys: the
+  palette, the menu and the pill are their places):
+
+  | Command | What it does |
+  |---|---|
+  | `update.check` "Check for Updates" | Asks `update_check`. A newer version downloads at once (`update_download`) with the pill, and its dialog opens when the download is complete, even after Later, because the user asked just now. Otherwise a notice: "CabinetOS 0.1.0 is the newest version on the stable channel.", why a development build or an all-users install does not update itself, or why the check failed. While a version waits, it opens that version's dialog instead. |
+  | `update.apply` "Restart to Update" | Swaps the downloaded version in (`update_apply`), then restarts. A swap done already (state `ready`, after `cabinetos-cli update apply` or in another window) restarts at once. It refuses while a transfer runs, because the core stops with the window and the transfer with it. |
+  | `update.rollback` "Roll Back to the Previous Version" | Asks first (Cancel is the default button), then `update_rollback`, then restarts into the version kept in `previous\`. |
+  | `update.showNotes` "Show Release Notes" | Opens the dialog of the newest version the core knows, at any time. |
+
+- **The pill** in the status bar, in the transfer pill's style: while a
+  download runs, the 80 × 4 px track and "Update · 45% · 4.2 MB/s" (the
+  tooltip has the bytes, "34.3 MB of 76.3 MB"); "Update · installing"
+  during the swap; "Update ready · Restart" while a version waits, and a
+  click on it runs `update.apply`. No pill in any other state.
+- **The dialog** (`UpdateDialog`, a ContentDialog like the others, so no
+  command runs while it is open): "CabinetOS 0.2.0 is ready", "You have
+  0.1.0. Published 2026-10-01 on the stable channel.", the notes in a
+  scrolling area of at most 360 px, a "Full changelog" link, and Restart
+  now / Later. Before the download is complete it shows the notes with
+  Close only. The notes are the CHANGELOG.md section the release script
+  publishes as `notes-<version>.md`, rendered natively in a RichTextBlock
+  (no WebView2): headings, bullet and numbered lists with nesting,
+  paragraphs, fenced code, bold, italic, code spans and links. A relative
+  link points into the repository at the version's tag
+  (`https://github.com/OliverD25/cabinetos/blob/v<version>/`), where
+  CHANGELOG.md sits at the root, and so does "Full changelog". Only
+  `https:` and `http:` links can be clicked; any other link shows as its
+  text. Underscores never mark emphasis, so a name such as `update_status`
+  outside a code span stays as written. When the core could not read the
+  notes, the dialog says so and links them.
+- **The snooze rule.** The dialog opens by itself when a download is
+  complete (`update_state_changed` with `downloaded`), once per version in
+  a run, and not while `snoozed_until_ms` is still ahead. Later, Esc and
+  every other way of closing the dialog of a downloaded version send
+  `update_snooze`: no dialog by itself for a day. The pill, the dot and the
+  commands stay. A dialog already open is not pushed aside.
+- **The dot.** While a version waits (`downloaded`, or `ready` after a
+  swap), the menu button carries a 6 px accent dot, the menu's Check for
+  Updates becomes "Restart to Update (0.2.0)" with the dot
+  (`ShellMenu.Build`), and About's "Update" row starts with the dot.
+- **The restart.** The window closes the way the close button closes it:
+  the tabs and the last folders are saved, and the core stops. Then it
+  starts `CabinetOS.exe` in `install_dir` from `update_state`, without
+  `CABINETOS_CORE_EXE` and the snapshot aid's variables, so the new window
+  starts the new core next to it. That core confirms the swap at its start.
+  Until then the old window, core and command line run on from
+  `previous\`.
+
+Checked by the tests: the notes of CHANGELOG.md's own Unreleased section
+(every heading, item, link and code span), the dialog in each state, the
+pill's texts, the snooze rule, the dot, the menu entry, About's row, and
+the six requests, `update_state` and the two events against the schemas.
+The end-to-end tests run against the release core with protocol 14, and
+one of them (`ShellEndToEndTests`) runs the window with a copy of that
+core in a folder with `release.json` 0.1.0: Check for Updates downloads
+"0.2.0" from a local feed, the dialog opens by itself once, Esc snoozes
+it, the pill and the dot stay, and nothing is swapped. The shell state
+line logs `update_pill` and `update_dot` for such checks.
+
+Checked once with the snapshot aid (2026-09-30): the dialog with the real
+Unreleased section as its notes, the menu with "Restart to Update (0.2.0)"
+and its dot, and About's row with the dot looked as described. A real
+restart: the Debug window and the release core ran from a fake per-user
+install; Restart to Update moved their files (the window's DLLs and
+resources among them) into `previous\` while both ran, copied the new
+ones in, closed the window and started the `CabinetOS.exe` in the install
+folder, which came up with a core of its own. Not checked: real keys (the
+GUI live check was not run in Phase 17), and a restart into a build whose
+version really differs, so the new core's confirmation of the swap was not
+seen in that run (the core's own tests cover it).
 
 ## Scrolling
 
