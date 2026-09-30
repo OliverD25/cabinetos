@@ -224,7 +224,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_WEBVIEW2_DIR` | Where WebView2 keeps its user data (its cache and storage) for the terminal and the tool pages, one subfolder per host; by default `%LOCALAPPDATA%\CabinetOS\WebView2`. The two-window test and the live checks set it to their scratch folder, so they never write into the real one |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part, with the garbage collector's pauses and collections in the second ("Scrolling"). A `slow frame` line for each frame of 33 ms or more, with the collector's pause in it. The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits 1.5 s for the core; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`), and `menu-edit-drag:<title>|<title>` drops the first row on the second through the drag's own steps (not the pointer's events); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>`, `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `pick:<index>` puts the open theme picker's highlight on that row, as the pointer or a key moves it (its preview follows); `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it, then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the next reading of the configuration (after an edit of the file) or the core's next report of an error in the file; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active; `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row), as the keyboard opens it, under the row; `menu-at:<name>|<x>,<y>` opens it as a right-click at that point does, in the window's content DIPs (`menu-at:alpha.txt|300,200`); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits 1.5 s for the core, and `shellmenu-at:<name>|<x>,<y>` does it at a point; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`), and `menu-edit-drag:<title>|<title>` drops the first row on the second through the drag's own steps (not the pointer's events); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>`, `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `pick:<index>` puts the open theme picker's highlight on that row, as the pointer or a key moves it (its preview follows); `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it when the button takes the keyboard (the window's chrome buttons refuse it, as under a real click), then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree and `rail-state:<label>` logs what the rail, the sidebar and the tree show ("The activity rail and the sidebar"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the next reading of the configuration (after an edit of the file) or the core's next report of an error in the file; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -751,18 +751,42 @@ pasted in this version.
 
 ### The context menu
 
-A right-click on a row opens that row's menu at the pointer; a right-click
-on the pane's empty space opens the folder's menu. Shift+F10 and the Menu
-key open the focused row's menu under it. A right-click inside the
+A right-click on a row opens that row's menu with its top-left corner at
+the pointer, as Explorer does, flipped up or to the left when it would not
+fit; a right-click on the pane's empty space opens the folder's menu the
+same way. Shift+F10 and the Menu key open the focused row's menu under the
+row, left-aligned with the row's name. A right-click inside the
 selection keeps the selection, as in Explorer; outside it, it selects that
 row first. The menu is WinUI's `CommandBarFlyout`, as Windows 11's Explorer
 shows it (Article 3): a row of icons at the top (the quick actions, each
 with its title and keys as a tooltip), then the list, each row with its
-command's keys on the right. The control places itself and flips near the
-screen's edges; the arrow keys move, Enter runs, Esc and a click outside
-close it. An entry runs after the menu has closed and the pane has the
+command's keys on the right. The window places it ("Where it opens", below);
+the arrow keys move, Enter runs, Esc and a click outside close it. An entry runs after the menu has closed and the pane has the
 keyboard back, so a command that takes the keyboard (Rename's text box)
 keeps it.
+
+**Where it opens.** The menu's top-left corner is at the point: the
+pointer's, or for the keyboard the focused row's bottom-left, at the left
+edge of the name column (`FilePane.RowAnchor`). It is shown with
+`Placement = BottomEdgeAlignedLeft` at that corner. When the menu would not
+fit below the point it hangs above it, its bottom at the point; when it
+would not fit on the right it hangs to the left, its right edge at the
+point; a menu that fits neither way sits against the far edge, 4 px in.
+`MenuPlacement` (Core) holds this rule, in the window's content coordinates.
+The window applies it and WinUI does not, because WinUI measures a
+`CommandBarFlyout` against the screen, not the window: measured on
+2026-09-30, a menu asked for near the window's bottom kept its list below
+the point, past the window's edge, and one near the right edge was not
+moved at all. The size the rule needs is the one WinUI drew the last time
+for that menu shape; the first time it is an estimate from the entries (an
+icon row is 60.7 px high, a row of the list 32, a divider 9.3, the width 309
+with five icons), good to a pixel in the default theme. The edit mode that
+opens from a point, not from an open menu, follows the same rule, so it
+appears where the menu would have; chosen from an open menu it takes the
+menu's own place, as before. Windows' own menu is a `MenuFlyout` of 20 to
+40 rows, never short enough for a window: it has the same top-left corner,
+and WinUI keeps it on the screen (it moves a menu up only when the screen is
+too low for it).
 
 **What is in it** comes from `contextMenu` in `cabinetos.json`
 ([config.md](config.md), "The context menu"). It has four targets:
@@ -826,6 +850,18 @@ inside its own `Closed`, at the place it had (the same menu on the same
 row, as after Esc and a quick right-click), the flyout never came back,
 and every later menu of that shape waited for it. The log says "context
 menu opened" when WinUI has the menu on screen, not only asked for.
+
+**Logs** (Article 12). "context menu shown" has the target, the quick
+actions, the items, `keyboard`, `x` and `y` (the point asked for, in the
+window's content DIPs) and `build_ms`; from the keyboard it also has
+`row_left`, `row_top` and `row_bottom`, the focused row's name column and its
+top and bottom in the same coordinates. "context menu placed" follows it a
+few frames later, once WinUI has laid the menu out: `left`, `top`, `width`
+and `height` of the icon row's popup and the list's popup joined, in the
+same coordinates, so a menu's place reads against the point it was asked for
+(`left` and `top` are the corner, or `left` + `width` and `top` + `height`
+are the point when the menu flipped). "windows menu shown" has `x` and `y`
+too, and "windows menu placed" has the four numbers of the menu's popup.
 
 #### Windows' own menu
 
@@ -941,7 +977,18 @@ comes on screen (WinUI's `Opened`, `context_menu_on_screen` in the shell
 state) within 1 s. With the frame tests, it
 enters the edit mode over 100,000 selected rows: no frame over 33 ms. The
 live check's section 18 does the same with the real mouse and keys, and
-runs Windows' Copy.
+runs Windows' Copy. `MenuPlacementTests` (Core) pin the placement rule: it
+fits, it flips up, it flips left, both, it fits neither way, it is bigger
+than the window. Another end-to-end test opens a pointer menu at (300, 200)
+and a keyboard menu on a real window, then menus of a small window near its
+bottom, its right edge and its corner (the snapshot aid's `menu-at`), and
+compares "context menu placed" with the point asked for and with the row:
+left and top within 2 px, and in the small window the whole menu inside the
+window, flipped, its bottom or right edge at the point. The test of Windows'
+menu checks that its left edge is at the row's and its top is not below it.
+The live check's section 18 compares the menu's place with the point of its
+first real right-click (frame-relative pixels over the DPI scale, within 4
+px).
 
 ### New folder and rename
 
@@ -1071,6 +1118,31 @@ The dropdowns use the acrylic surface the context menu had until Phase 18
 under their trigger,
 with `dropdownRowHeight` rows (26 px); a click outside or Esc closes them.
 Opened from a key, the keyboard is on their first row.
+
+**The chrome never takes the keyboard.** The buttons of the top row, the
+status bar's pills and keycap, the crumb row (Back, Forward, Up and the
+segments), the tab strips (the "+" and "Open with…"), the Tool Dock's header
+and tabs, and the editor pane's header refuse it: `AllowFocusOnInteraction`
+is off and they are no tab stop. So a click acts on the active pane and
+leaves the keyboard in it, and Tab always switches panes
+(`view.focusOtherPane`, bound in the context `filesView`, which holds only
+while a pane has the keyboard). Until 2026-09-30 a click on a top-row
+button left the keyboard on the button, Tab fell through to WinUI and
+walked the buttons as in a dialog (Article 7: the mouse is optional, and a
+key must mean the same thing whatever was clicked before). Two exceptions
+keep a tab stop and refuse only the click: the rail's buttons, because Up,
+Down and Shift+Up/Down work on a button the keyboard was walked to, and the
+classic sidebar's rows, because Ctrl+Shift+E without the rail puts the
+keyboard on the first one. The overlays and the full-column views (the
+palette, Quick Open, the prompt, the theme picker, the plugin list, the
+review dialog, the marketplace, the context menu and its edit mode, the
+transfer flyout, the update dialog) are not chrome: Tab walks there. A new
+chrome button follows the rule: `ChromeKeyboardTests` reads the XAML and the
+code that builds buttons and fails on one that takes the keyboard;
+`ChromeKeyboardEndToEndTests` presses the dual toggle, the hamburger and the
+workspace pill on a real window and checks the keyboard focus line; the live
+check does it with the real mouse ("compact: a real click on the top row's
+Toggle dual pane…" and the hamburger step).
 
 **The branch.** Until workspaces exist, the workspace is the git
 repository that holds the active pane's folder: the nearest folder at or
@@ -2004,13 +2076,17 @@ onto XAML.
 - **A click** on the button of the view on show closes the sidebar
   (`ui.sidebar` false); a click on another view's button shows that view,
   opens the sidebar if it was closed, and puts the keyboard into the view
-  (the tree, the search field, or the tool's page). Marketplace and
+  (the tree, the search field, or the tool's page). A click never leaves
+  the keyboard on the button itself (the chrome rule, "The top row"): when
+  no view takes it, it stays in the pane. Marketplace and
   Terminal run `marketplace.browse` and `view.toggleTerminal`; while the
   marketplace is open, a view button brings the panes back first, as the
   design's Explorer button does.
 - **The order** is `ui.rail` (a list of button IDs; empty is the default
   order). Up and Down walk the buttons; Shift+Up and Shift+Down on a
-  focused button move it. IDs the list does not name follow in the default
+  focused button move it. The keyboard reaches a button by Tab (the buttons
+  are tab stops) or from assistive technology (UI Automation's `SetFocus`),
+  not by a click. IDs the list does not name follow in the default
   order, so a newly installed tool's button appears at the end. A tool
   whose ID is `explorer`, `search`, `marketplace` or `terminal` gets no
   button: those IDs are the window's.
@@ -2182,8 +2258,10 @@ the run's own tools folder. Real keys and the mouse then check:
   the toggle key closes the sidebar and gives the keyboard to the pane;
 - the mouse on the Marketplace button opens it, and a second click closes it;
   the mouse on the active Explorer button closes the sidebar;
-- Shift+Down on the button just pressed moves it, Shift+Up moves it back
-  (`ui.rail` holds the order, then an empty list);
+- Shift+Down on the Explorer button, focused through UI Automation as
+  assistive technology does (a click leaves the keyboard in the pane), moves
+  it, Shift+Up moves it back (`ui.rail` holds the order, then an empty
+  list);
 - the divider dragged to 300 px is `ui.sidebarWidth`; dragged under 150 px it
   closes the sidebar (`ui.sidebar` false) and keeps 300; the toggle key opens
   it at 300;

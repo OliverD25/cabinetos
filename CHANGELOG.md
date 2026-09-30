@@ -20,6 +20,11 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The "Open with…" button at the right end of each pane's tab strip is hidden until a second editor exists; its Editor commands stay in the command palette.
 - The tabs of a pane look as the design draws them: the tab in front is a flat block with a 2 px bar on top (the accent in the active pane), the other tabs are plain text at 65 % white, a folder tab has no icon, and the close mark is a plain ×.
 
+### Fixed
+
+- Tab switches panes again after a click on a button of the top row. The click left the keyboard on the button, and Tab walked from button to button. The buttons of the top row, the status bar, the breadcrumbs, the tab strips and the dock no longer take the keyboard from a click.
+- The right-click menu opens with its top-left corner at the pointer, as Explorer's does, and hangs above or to the left of the pointer near the window's edge. It used to open centred on the pointer, over the row that was clicked. From the keyboard it hangs under the focused row.
+
 ## [0.1.0] - 2026-09-30
 
 The first version. How it is built, signed and published:
