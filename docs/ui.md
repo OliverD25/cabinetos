@@ -287,7 +287,7 @@ heavy file only (the table with every field is in
 | Every key that reaches the window | `keys` | By name and modifiers, with the type and name of the element that has the keyboard. A key that types a character into a text box (a name, the address, the palette's field, a search) is `text input` with no key and no character. Ctrl or Alt alone with a letter is a shortcut and is named; Ctrl and Alt together are AltGr and count as typing |
 | Every command | `commands` | `command run` (the registry's source, `target`, `trigger`, the arguments masked and cut at 4 KB) and `command done` (outcome, milliseconds) |
 | Every change of focus | `focus` | From and to, as element type and name, and where Windows sends the keys (`WindowsPlatform.KeyboardFocus`, the same probe as the "keyboard owner" lines) |
-| The frame table, every second | `frames` | `FrameMonitor` runs while heavy mode is on, as `CABINETOS_UI_FRAMESTATS=1` runs it (which the variable still does by itself). It keeps the window drawing while nothing changes: heavy mode's cost |
+| The frame table, every second, and each frame of 33 ms or more (`slow frame`) | `frames` | `FrameMonitor` runs while heavy mode is on, as `CABINETOS_UI_FRAMESTATS=1` runs it (which the variable still does by itself). It keeps the window drawing while nothing changes: heavy mode's cost |
 | Every message to and from a web page | `pages` | The terminal's and the tools' pages: the message's `type` and its size, never the content |
 
 A key press that becomes a command shares one trace with it: the press gets
