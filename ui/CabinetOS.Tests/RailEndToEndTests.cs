@@ -21,7 +21,10 @@ public class RailEndToEndTests
         public List<Process> Started { get; } = [];
 
         // Starts the window on the run's configuration and tools; the snapshot steps are the test's script.
-        public Process Start(string name, string steps)
+        public Process Start(string name, string steps) => Start(name, steps, snapshot: true);
+
+        // With snapshot false the window starts as a user starts it: no aid, no steps, nothing waits for the window to be ready.
+        public Process Start(string name, string steps, bool snapshot)
         {
             var start = new ProcessStartInfo(exe) { UseShellExecute = false };
             start.Environment["CABINETOS_CORE_EXE"] = core;
@@ -34,8 +37,11 @@ public class RailEndToEndTests
             start.Environment["CABINETOS_MARKETPLACE_DIR"] = Path.Combine(root, "marketplace");
             start.Environment["CABINETOS_WEBVIEW2_DIR"] = Path.Combine(root, "webview2");
             start.Environment["CABINETOS_TOOLS_DIR"] = Path.Combine(root, "tools");
-            start.Environment["CABINETOS_UI_SNAPSHOT"] = Path.Combine(root, "shots-" + name);
-            start.Environment["CABINETOS_UI_SNAPSHOT_STEPS"] = steps;
+            if (snapshot)
+            {
+                start.Environment["CABINETOS_UI_SNAPSHOT"] = Path.Combine(root, "shots-" + name);
+                start.Environment["CABINETOS_UI_SNAPSHOT_STEPS"] = steps;
+            }
             var process = Process.Start(start)!;
             Started.Add(process);
             return process;
@@ -139,6 +145,58 @@ public class RailEndToEndTests
                 Assert.Contains(logs, l => Message(l) == "notice shown" && Field(l, "text").GetString()!.Contains("rail layout", StringComparison.Ordinal));
                 Assert.DoesNotContain(logs, l => Message(l) == "a rail button was pressed");
             }
+        }
+        finally
+        {
+            foreach (var process in run.Started.Where(p => !p.HasExited))
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    // Found by a real-key check of the window on 2026-09-30: started in the rail layout, the tree under FOLDERS was empty, though
+    // the log said "the tree shows a folder ... rows 4488"; the rows came after Ctrl+Shift+E. The reveal scrolled the list to the
+    // folder before the list was laid out, so it drew its rows around the folder, far from the sidebar's window. The snapshot aid
+    // waits until the window is ready and does not show it, so this test starts the window the way a user does.
+    [Fact]
+    public async Task The_tree_has_rows_on_the_screen_when_the_window_starts_in_the_rail_layout_before_any_key()
+    {
+        var (run, root, data) = Prepare("rail-start", "{}");
+        try
+        {
+            // Far more rows above the folder than the sidebar shows, so the folder lies well below the window when the tree opens.
+            for (var i = 0; i < 80; i++)
+            {
+                Directory.CreateDirectory(Path.Combine(data, $"0-{i:00}"));
+            }
+            var folder = Path.Combine(data, "a", "sub");
+            File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"),
+                JsonSerializer.Serialize(new { ui = new { layout = "rail", sidebar = true, lastPaths = new[] { folder, folder } } }));
+
+            var process = run.Start("plain", "", snapshot: false);
+            List<string> log()
+            {
+                var folderOfLogs = Path.Combine(root, "logs-plain");
+                return Directory.Exists(folderOfLogs) && Directory.GetFiles(folderOfLogs, "ui.*.jsonl") is [var file] ? Lines(file) : [];
+            }
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            while (!log().Any(l => Message(l) == "the tree drew rows"))
+            {
+                Assert.True(DateTime.UtcNow < deadline, "waited 60 s for the tree's look at its rows; the window's log so far: " + string.Join(" | ", log().TakeLast(12).Select(Message)));
+                await Task.Delay(200);
+            }
+            var logs = log();
+            process.CloseMainWindow();
+            Assert.True(process.WaitForExit(20_000), "the window did not close");
+
+            var shown = Assert.Single(logs, l => Message(l) == "the tree shows a folder");
+            Assert.Equal(folder, Field(shown, "path").GetString(), ignoreCase: true);
+            var drew = Assert.Single(logs, l => Message(l) == "the tree drew rows");
+            // All the rows are in the model, and some of them are inside the sidebar's window, with no key pressed.
+            Assert.True(Field(drew, "rows").GetInt32() > 80);
+            Assert.True(Field(drew, "visible").GetInt32() > 0, "the tree has its rows in the model and none on the screen");
         }
         finally
         {

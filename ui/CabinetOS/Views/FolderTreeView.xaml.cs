@@ -3,6 +3,7 @@ using CabinetOS.Core.Sidebar;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
 namespace CabinetOS.Views;
@@ -92,17 +93,99 @@ public sealed partial class FolderTreeView : UserControl
     /// <summary>
     /// Brings the row of <paramref name="node"/> into view and lets go of the
     /// keyboard's cursor there. Returns false when the node has no row (a
-    /// closed folder's child).
+    /// closed folder's child). Until the tree has been laid out in its
+    /// scrolling window (the window is still starting, or the tree is hidden)
+    /// the scroll waits for the layout: asked earlier, the list draws its rows
+    /// around the row it was asked for, far from the window, and shows none.
     /// </summary>
-    public bool ScrollTo(FolderNode node)
+    public bool ScrollTo(FolderNode node, Action? scrolled = null)
     {
         var index = _tree?.Rows.IndexOf(node) ?? -1;
         if (index < 0)
         {
             return false;
         }
-        TreeList.GetOrCreateElement(index).StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 0.5 });
+        if (!IsLaidOut())
+        {
+            _pendingScroll = node;
+            _pendingDone = scrolled;
+            LayoutUpdated -= OnLayoutUpdated;
+            LayoutUpdated += OnLayoutUpdated;
+            return true;
+        }
+        // The row is placed by a layout pass before it is brought into view (the documented order for a repeater): a row that
+        // was only asked for has no place yet, the scroll goes nowhere, and the list draws its rows far from the window.
+        var row = TreeList.GetOrCreateElement(index);
+        TreeList.UpdateLayout();
+        row.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 0.5 });
+        scrolled?.Invoke();
         return true;
+    }
+
+    private FolderNode? _pendingScroll;
+    private Action? _pendingDone;
+
+    // The tree is in the visual tree, shown, and its scrolling window has a size and has measured the list.
+    private bool IsLaidOut() =>
+        IsLoaded && Visibility == Visibility.Visible && TreeList.ActualHeight > 0 && FindScroller() is { ViewportHeight: > 0 };
+
+    private void OnLayoutUpdated(object? sender, object e)
+    {
+        if (!IsLaidOut())
+        {
+            return;
+        }
+        LayoutUpdated -= OnLayoutUpdated;
+        if (_pendingScroll is { } node)
+        {
+            var done = _pendingDone;
+            _pendingScroll = null;
+            _pendingDone = null;
+            ScrollTo(node, done);
+        }
+    }
+
+    /// <summary>How many rows the list has drawn (realized), wherever they lie.</summary>
+    public int RealizedRowCount => VisualTreeHelper.GetChildrenCount(TreeList);
+
+    /// <summary>
+    /// How many of the drawn rows lie inside the sidebar's scrolling window: what the user sees. A tree can have every row in
+    /// its model and rows drawn far from the window (the list was asked to scroll before it was laid out) and show none.
+    /// </summary>
+    public int VisibleRowCount()
+    {
+        if (FindScroller() is not { } scroller)
+        {
+            return 0;
+        }
+        var window = new Windows.Foundation.Rect(0, 0, scroller.ActualWidth, scroller.ActualHeight);
+        var visible = 0;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(TreeList); i++)
+        {
+            if (VisualTreeHelper.GetChild(TreeList, i) is FrameworkElement row && row.ActualHeight > 0)
+            {
+                var bounds = row.TransformToVisual(scroller).TransformBounds(new Windows.Foundation.Rect(0, 0, row.ActualWidth, row.ActualHeight));
+                bounds.Intersect(window);
+                if (!bounds.IsEmpty && bounds.Height > 0)
+                {
+                    visible++;
+                }
+            }
+        }
+        return visible;
+    }
+
+    // The scrolling window the tree lies in (the sidebar's), once the tree is in the visual tree.
+    private ScrollViewer? FindScroller()
+    {
+        for (var parent = VisualTreeHelper.GetParent(this); parent is not null; parent = VisualTreeHelper.GetParent(parent))
+        {
+            if (parent is ScrollViewer scroller)
+            {
+                return scroller;
+            }
+        }
+        return null;
     }
 
     /// <summary>Gives the tree the keyboard; the cursor goes to the current folder's row, or the first one.</summary>

@@ -872,6 +872,8 @@ ClickLeftPane
 [Live]::Type($rl); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1800
 $f = LastFields '"the tree shows a folder"'
 "13: the tree followed the left pane to rail13: $($f.path -eq $rl)"
+$f = LastFields '"the tree drew rows"'
+"13: the tree has rows inside the sidebar's window, before Ctrl+Shift+E: $([int]$f.visible -gt 0)"
 $f = LastFields '"the sidebar shows a view"'
 "13: the sidebar is open on the Explorer: $($f.view -eq 'explorer' -and $f.open -eq $true)"
 Shot $h "$ShotDir\rail13-explorer-live.png"

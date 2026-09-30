@@ -345,14 +345,29 @@ public sealed partial class MainWindow
         DispatcherQueue.TryEnqueue(() =>
         {
             var scrolling = System.Diagnostics.Stopwatch.GetTimestamp();
-            SidebarView.Tree.ScrollTo(node);
-            Diag.Info(RailTarget, "the tree scrolled to a folder", new LogField("scroll_ms", Math.Round(System.Diagnostics.Stopwatch.GetElapsedTime(scrolling).TotalMilliseconds, 1)));
+            SidebarView.Tree.ScrollTo(node, () =>
+            {
+                Diag.Info(RailTarget, "the tree scrolled to a folder", new LogField("scroll_ms", Math.Round(System.Diagnostics.Stopwatch.GetElapsedTime(scrolling).TotalMilliseconds, 1)));
+                LogTreeDrawnSoon();
+            });
             if (focus)
             {
                 _tree.SetCursor(node);
                 SidebarView.Tree.FocusTree();
             }
         });
+    }
+
+    // Once the layout after the reveal has settled: how many rows the list has drawn. The tests read it, since a tree with all
+    // its rows in the model and none on the screen looks full in every other line of the log.
+    private void LogTreeDrawnSoon()
+    {
+        var timer = DispatcherQueue.CreateTimer();
+        timer.IsRepeating = false;
+        timer.Interval = TimeSpan.FromMilliseconds(600);
+        timer.Tick += (_, _) => Diag.Info(RailTarget, "the tree drew rows", new LogField("rows", _tree.Rows.Count),
+            new LogField("drawn", SidebarView.Tree.RealizedRowCount), new LogField("visible", SidebarView.Tree.VisibleRowCount()));
+        timer.Start();
     }
 
     // ----- The divider -----
@@ -501,6 +516,8 @@ public sealed partial class MainWindow
         new LogField("search_text", SearchPanelView.Query),
         new LogField("search_hits", SearchPanelView.HitCount),
         new LogField("tree_rows", _tree.Rows.Count),
+        new LogField("tree_realized", SidebarView.Tree.RealizedRowCount),
+        new LogField("tree_rows_visible", SidebarView.Tree.VisibleRowCount()),
         new LogField("tree_requests", _tree.Requests),
         new LogField("tree_current", _tree.Current?.Path ?? ""),
         new LogField("tree_locked", _treeLocked));

@@ -1584,7 +1584,16 @@ under each the folders the user opened.
   folder made after the last read is found by reading its parent once more;
   a path on no drive (a network path) marks nothing. A newer reveal stops an
   older one that still waits for a folder. The tree does this only while
-  the Explorer shows.
+  the Explorer shows. The scroll waits until the tree is laid out in the
+  sidebar's window, and the row is laid out before it is brought into view
+  (`FolderTreeView.ScrollTo`). Asked earlier, at the start of the window, the
+  list drew its rows around the folder, far from the window, and FOLDERS
+  showed none until Ctrl+Shift+E (found with real keys, 2026-09-30). The log's
+  line "the tree drew rows" says, 600 ms after the scroll, how many rows are
+  in the model, drawn, and inside the window (`visible`); the end-to-end test
+  `The_tree_has_rows_on_the_screen_when_the_window_starts_in_the_rail_layout_before_any_key`
+  starts the window as a user does, without the snapshot aid (which waits
+  until the window is ready and would not show this) and reads it.
 - **The lock** button in the header of FOLDERS (`sidebar.lock`, no default
   key) stops the following, and shows in the accent colour while it holds;
   the status bar says so. **Locate** (`sidebar.locate`, `Alt+Shift+L`, and
