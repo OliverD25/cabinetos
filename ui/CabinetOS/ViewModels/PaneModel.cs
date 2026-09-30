@@ -1043,6 +1043,9 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     {
         _listingId = 0;
         _detailsUnavailable = false;
+        // The dead core's counts never finish: without this the rows say "counting" for good, and the
+        // folder-sizes setting skips them as counted. No cancel: the core that counted is gone.
+        Sizes.Clear();
     }
 
     /// <summary>Releases the listing, at shutdown.</summary>
