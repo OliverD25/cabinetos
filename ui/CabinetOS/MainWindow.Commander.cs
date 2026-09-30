@@ -791,11 +791,14 @@ public sealed partial class MainWindow
         // The tabs go with the panes: each pane's strip, and the tab its model holds.
         (_strips[0], _strips[1]) = (_strips[1], _strips[0]);
         (_held[0], _held[1]) = (_held[1], _held[0]);
+        // A column view goes with its pane's tab.
+        (_columnViews[0], _columnViews[1]) = (_columnViews[1], _columnViews[0]);
         for (var i = 0; i < _panes.Length; i++)
         {
             _panes[i].Index = i;
             _panes[i].IsActive = i == _active;
             _paneViews[i].Model = _panes[i];
+            _paneViews[i].ShowColumns(_columnViews[i]);
             _tabViews[i].Model = _strips[i];
             var pane = i;
             _panes[i].LockedNavigation = (path, requestId, selectName) => OpenFolderInNewTabAsync(pane, path, requestId, selectName);

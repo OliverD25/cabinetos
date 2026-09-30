@@ -215,6 +215,14 @@
                 TextWrapping="Wrap"
                 Visibility="Collapsed" />
 
+            <!-- The column view (ADR 0016), in the list's place while the tab in front shows columns; made the first time it is needed. -->
+            <views:ColumnView
+                x:Name="ColumnsHost"
+                Grid.Row="1"
+                Grid.RowSpan="2"
+                x:Load="False"
+                Visibility="Collapsed" />
+
             <!-- Inline rename: one text box over the row's name, and a note under the row for an error. -->
             <Canvas x:Name="EditLayer" Grid.Row="2">
                 <!-- Never seen: a fit measures the texts on screen with it, in the fonts the rows inherit (FilePane.MeasureColumn). -->

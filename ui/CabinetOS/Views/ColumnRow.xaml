@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.ColumnRow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:CabinetOS.Views"
+    IsTabStop="False">
+    <!-- A row of the column view: the file row's icon and name, and a chevron on a folder. The theme's metrics size it (ColumnRow.ApplyMetrics). -->
+    <Grid
+        x:Name="Root"
+        Height="30"
+        Background="Transparent"
+        CornerRadius="4">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="RowStates">
+                <VisualState x:Name="Normal" />
+                <VisualState x:Name="PointerOver">
+                    <VisualState.Setters>
+                        <Setter Target="Root.Background" Value="{ThemeResource CbHoverFillBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <!-- Selected in the column with the keyboard: the fill and the accent bar, as in the list. -->
+                <VisualState x:Name="Selected">
+                    <VisualState.Setters>
+                        <Setter Target="Root.Background" Value="{ThemeResource CbSelectedFillBrush}" />
+                        <Setter Target="Pill.Visibility" Value="Visible" />
+                        <Setter Target="NameText.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <!-- In a column the keyboard left: the row the next column opened from, and the marks, filled without the bar. -->
+                <VisualState x:Name="SelectedAway">
+                    <VisualState.Setters>
+                        <Setter Target="Root.Background" Value="{ThemeResource CbHoverFillBrush}" />
+                        <Setter Target="NameText.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <!-- The keyboard's row when it is not simply the one selected row. -->
+        <Border
+            x:Name="CursorOutline"
+            BorderBrush="{ThemeResource CbCursorStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="4"
+            Visibility="Collapsed" />
+
+        <Rectangle
+            x:Name="Pill"
+            Width="3"
+            Height="16"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            Fill="{ThemeResource CbAccentBrush}"
+            RadiusX="1.5"
+            RadiusY="1.5"
+            Visibility="Collapsed" />
+
+        <Grid
+            x:Name="Cell"
+            Margin="10,0"
+            ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid
+                Width="16"
+                Height="16"
+                VerticalAlignment="Center">
+                <FontIcon
+                    x:Name="Icon"
+                    VerticalAlignment="Center"
+                    FontSize="16"
+                    Foreground="{ThemeResource CbRowMetaBrush}" />
+                <local:FolderGlyph
+                    x:Name="FolderIcon"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed" />
+                <Image
+                    x:Name="IconImage"
+                    Width="16"
+                    Height="16"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed" />
+            </Grid>
+            <TextBlock
+                x:Name="NameText"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource CbRowTextBrush}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <!-- A folder opens a column to its right. -->
+            <FontIcon
+                x:Name="Chevron"
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontSize="10"
+                Foreground="{ThemeResource CbTextTertiaryBrush}"
+                Glyph="&#xE76C;"
+                Visibility="Collapsed" />
+        </Grid>
+    </Grid>
+</UserControl>

@@ -332,6 +332,10 @@ public sealed partial class MainWindow : Window
         await Task.WhenAll(SaveLastPathsAsync(), FlushTabsAsync(deadline.Token));
         await _session.StopAsync();
         StartRestart();
+        foreach (var columns in _columnViews)
+        {
+            columns?.Abandon();
+        }
         foreach (var pane in _panes)
         {
             pane.Release();
@@ -570,6 +574,9 @@ public sealed partial class MainWindow : Window
                     break;
                 case "columns" or "column-drag" or "column-fit":
                     RunColumnStep(step.Kind, step.Argument);
+                    break;
+                case "column-view" or "column-open" or "column-key" or "column-click":
+                    await RunColumnViewStepAsync(step.Kind, step.Argument);
                     break;
                 case "open":
                     // Enter on a row by name in the active pane, as the user would.
@@ -810,6 +817,11 @@ public sealed partial class MainWindow : Window
             else
             {
                 _icons.Reset();
+                // The columns' listings belonged to the old core: forgotten, not closed; each view starts over at its keyboard's folder.
+                foreach (var columns in _columnViews)
+                {
+                    columns?.ForgetListings();
+                }
                 foreach (var pane in _panes)
                 {
                     pane.ForgetListing();
@@ -1042,12 +1054,17 @@ public sealed partial class MainWindow : Window
         switch (coreEvent)
         {
             case ListingRefreshedEvent refreshed:
-                _ = _panes.Any(p => p.ApplyRefresh(refreshed));
+                // A pane's own listing, else a column of a column view (ADR 0016).
+                _ = _panes.Any(p => p.ApplyRefresh(refreshed)) || _columnViews.Any(c => c?.ApplyRefresh(refreshed) == true);
                 break;
             case ListingLostEvent lost:
                 foreach (var pane in _panes.Where(p => p.ListingId == lost.ListingId))
                 {
                     _ = pane.ApplyLostAsync(lost);
+                }
+                foreach (var columns in _columnViews)
+                {
+                    columns?.ApplyLost(lost);
                 }
                 break;
             case ConfigChangedEvent changed:
@@ -1367,7 +1384,12 @@ public sealed partial class MainWindow : Window
             var pane = ActivatePaneOf(invocation);
             return pane.IsLocked ? StayInLockedTab() : pane.GoForwardAsync(invocation.RequestId);
         });
-        _router.RegisterUiHandler("go.up", invocation => ActivatePaneOf(invocation).GoUpAsync(invocation.RequestId));
+        _router.RegisterUiHandler("go.up", invocation =>
+        {
+            // In the column view: to the parent column, and from the first column to its parent listed as the new first.
+            var pane = ActivatePaneOf(invocation);
+            return _columnViews[Array.IndexOf(_panes, pane)] is { } columns ? columns.UpAsync(invocation.RequestId) : pane.GoUpAsync(invocation.RequestId);
+        });
         _router.RegisterUiHandler("pane.openSelected", invocation => Active.Search is null ? OpenAsync(invocation) : OpenHitAsync(invocation));
         _router.RegisterUiHandler("file.copyToOtherPane", ListingOnly(invocation => TransferToOtherPaneAsync(JobKind.Copy, invocation)));
         _router.RegisterUiHandler("file.moveToOtherPane", ListingOnly(invocation => TransferToOtherPaneAsync(JobKind.Move, invocation)));
@@ -1429,6 +1451,7 @@ public sealed partial class MainWindow : Window
         RegisterRailCommands();
         RegisterColumnCommands();
         RegisterCompactCommands();
+        RegisterColumnViewCommands();
         RegisterAboutCommand();
 
         _router.Completed += OnCommandCompleted;
@@ -1765,7 +1788,10 @@ public sealed partial class MainWindow : Window
         }
         if (entry.IsFolder)
         {
-            await pane.NavigateAsync(entry.Path, invocation.RequestId);
+            // In the column view a folder opens as a new column right of the keyboard's (ADR 0016).
+            await (_columnViews[_active] is { } columns
+                ? columns.OpenFocusedAsync(invocation.RequestId)
+                : pane.NavigateAsync(entry.Path, invocation.RequestId));
             return;
         }
         // An installed Tool Extension that opens this name gets it (a .md in Markdown Preview);

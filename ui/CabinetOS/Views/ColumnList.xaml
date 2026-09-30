@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.ColumnList"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:CabinetOS.Views"
+    xmlns:vm="using:CabinetOS.ViewModels"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <DataTemplate x:Key="RowTemplate" x:DataType="vm:RowItem">
+            <views:ColumnRow />
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- One column of the column view: its rows, a line at its right, and a note for an empty or lost folder. The width is the theme's columnViewWidth (ColumnList.ApplyMetrics). -->
+    <Grid
+        x:Name="Root"
+        Width="220"
+        Background="Transparent">
+        <ScrollViewer
+            x:Name="Scroller"
+            Padding="4"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <ItemsRepeater x:Name="Repeater">
+                <ItemsRepeater.Layout>
+                    <views:RowLayout Orientation="Vertical" />
+                </ItemsRepeater.Layout>
+            </ItemsRepeater>
+        </ScrollViewer>
+        <TextBlock
+            x:Name="MessageText"
+            Padding="12"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            Foreground="{ThemeResource CbTextTertiaryBrush}"
+            IsHitTestVisible="False"
+            TextAlignment="Center"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+        <Rectangle
+            x:Name="Divider"
+            Width="1"
+            HorizontalAlignment="Right"
+            Fill="{ThemeResource CbDividerBrush}"
+            IsHitTestVisible="False" />
+    </Grid>
+</UserControl>

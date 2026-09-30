@@ -55,6 +55,7 @@ public sealed partial class FilePane : UserControl
     private int _rowsAhead;
     private readonly PendingCursorKeys _cursorKeys = new();
     private bool _cursorKeysHooked;
+    private PaneColumns? _columns;
 
     /// <summary>Creates the pane; <see cref="Model"/> gives it its content.</summary>
     public FilePane()
@@ -132,7 +133,95 @@ public sealed partial class FilePane : UserControl
             row.ApplyMetrics(rebind: true);
         }
         Repeater.InvalidateMeasure();
+        ColumnsHost?.ApplyMetrics();
         PositionEditors();
+    }
+
+    // ----- The column view (ADR 0016; docs/ui.md, "The column view") -----
+
+    /// <summary>
+    /// Shows the front tab's folder as <paramref name="columns"/>, in the
+    /// list's place, or the list again (null). The keyboard's column shows
+    /// the model's own rows and selection, so the list's keys work there.
+    /// </summary>
+    internal void ShowColumns(PaneColumns? columns)
+    {
+        if (ReferenceEquals(_columns, columns))
+        {
+            return;
+        }
+        _columns = columns;
+        if (columns is not null && ColumnsHost is null)
+        {
+            FindName(nameof(ColumnsHost));
+            ColumnsHost!.RowTapped += (column, index) => _ = _columns?.ClickAsync(column, index, IsDown(VirtualKey.Control), IsDown(VirtualKey.Shift));
+            ColumnsHost.RowDoubleTapped += (column, index, folder) => _ = OpenFromColumnAsync(column, index, folder);
+            ColumnsHost.RowRightTapped += (column, index, point) => _ = MenuFromColumnAsync(column, index, point, IsDown(VirtualKey.Shift));
+        }
+        EndRename(commit: false);
+        HideRowNote();
+        if (ColumnsHost is { } host)
+        {
+            host.Columns = columns;
+        }
+        UpdateBody();
+        ApplyRows();
+    }
+
+    /// <summary>The columns of the tab in front, when it shows them.</summary>
+    internal PaneColumns? Columns => _columns;
+
+    /// <summary>The column view on screen, or null (the snapshot aid's log).</summary>
+    internal ColumnView? ColumnViewShown => ShowsColumnView ? ColumnsHost : null;
+
+    /// <summary>
+    /// The columns' rows, cursor and marks changed (a column opened, the
+    /// keyboard moved, a column was listed again); with
+    /// <paramref name="bringIntoView"/> the keyboard's column comes into view.
+    /// </summary>
+    internal void SyncColumns(bool bringIntoView)
+    {
+        if (ShowsColumnView)
+        {
+            ColumnsHost!.Sync(bringIntoView);
+        }
+    }
+
+    // A search shows its hits in the list, over the columns too; the columns come back when it ends.
+    private bool ShowsColumnView => _columns is not null && _model is { Search: null } && ColumnsHost is not null;
+
+    private void UpdateBody()
+    {
+        var columns = ShowsColumnView;
+        if (ColumnsHost is { } host)
+        {
+            host.Visibility = columns ? Visibility.Visible : Visibility.Collapsed;
+        }
+        ColumnHeader.Visibility = columns ? Visibility.Collapsed : Visibility.Visible;
+        Scroller.Visibility = columns ? Visibility.Collapsed : Visibility.Visible;
+        if (columns)
+        {
+            MessageText.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    // A double-click on a file opens it, as in the list; on a folder the click before it opened the column already.
+    private async Task OpenFromColumnAsync(int column, int index, bool folder)
+    {
+        if (!folder && _columns is { } columns && await columns.PointAtAsync(column, index, keepSelection: false))
+        {
+            await Run("pane.openSelected", trigger: "mouse");
+        }
+    }
+
+    // A right-click in a column: the keyboard goes there, then the menu opens for the row, or for the column's folder.
+    private async Task MenuFromColumnAsync(int column, int index, Point point, bool shift)
+    {
+        Focus(FocusState.Pointer);
+        if (_columns is { } columns && await columns.PointAtAsync(column, index, keepSelection: true))
+        {
+            (shift ? ShellMenuRequested : ContextMenuRequested)?.Invoke(this, index, point);
+        }
     }
 
     /// <summary>Raised when the pane gets the focus: it becomes the active pane.</summary>
@@ -343,6 +432,12 @@ public sealed partial class FilePane : UserControl
     /// </summary>
     public (double Left, double Top, double Bottom) RowEdges(int index)
     {
+        if (ShowsColumnView && index >= 0 && PositionOf(index) is >= 0 and var shown && ColumnsHost!.KeyboardList?.RowAt(shown) is { } columnRow)
+        {
+            var rowTop = columnRow.TransformToVisual(null).TransformPoint(new Point(0, 0));
+            var nameLeft = columnRow.NameElement.TransformToVisual(null).TransformPoint(new Point(0, 0)).X;
+            return (nameLeft, rowTop.Y, rowTop.Y + _rowHeight);
+        }
         if (index >= 0 && PositionOf(index) is >= 0 and var position && Repeater.TryGetElement(position) is FileRow row)
         {
             var top = row.TransformToVisual(null).TransformPoint(new Point(0, 0));
@@ -367,6 +462,7 @@ public sealed partial class FilePane : UserControl
                 break;
             case nameof(PaneModel.ShowsActiveStroke) or nameof(PaneModel.HasBrightTitle):
                 UpdateActivity();
+                SyncColumns(bringIntoView: false);
                 MarkSelection();
                 break;
             case nameof(PaneModel.Message) or nameof(PaneModel.Find):
@@ -425,6 +521,7 @@ public sealed partial class FilePane : UserControl
                 _searchShown = false;
                 SearchBar.Visibility = Visibility.Collapsed;
                 SecondHeading.Text = "Modified";
+                UpdateBody();
                 ApplyRows();
                 ScrollToFocus();
             }
@@ -434,6 +531,7 @@ public sealed partial class FilePane : UserControl
         _searchShown = true;
         EndRename(commit: false);
         HideRowNote();
+        UpdateBody();
         SearchBar.Visibility = Visibility.Visible;
         SecondHeading.Text = "Folder";
         // The search's title and what it searched, where the pane's header had them.
@@ -467,6 +565,12 @@ public sealed partial class FilePane : UserControl
     // "This folder is empty." says nothing while a find filter shows no row: the widget's count says so.
     private void UpdateMessage()
     {
+        if (ShowsColumnView)
+        {
+            // Each column says it is empty itself.
+            MessageText.Visibility = Visibility.Collapsed;
+            return;
+        }
         var message = _model is { Selection.IsFiltered: false } model ? model.Message : null;
         MessageText.Text = message ?? "";
         MessageText.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
@@ -477,6 +581,22 @@ public sealed partial class FilePane : UserControl
         if (_model?.Search is not null)
         {
             // The listing changed under the search results; it shows when the search is left.
+            return;
+        }
+        if (ShowsColumnView)
+        {
+            // The keyboard's column shows the rows; the list shows them again, from the top, when the tab leaves the columns.
+            if (_model is not null)
+            {
+                _model.PendingTiming = null;
+            }
+            Repeater.ItemsSource = null;
+            _shownPath = null;
+            UpdateMessage();
+            if (!_columns!.IsSwapping)
+            {
+                ColumnsHost!.Sync(bringIntoView: false);
+            }
             return;
         }
         _timing = _model?.PendingTiming;
@@ -532,6 +652,7 @@ public sealed partial class FilePane : UserControl
                 row.RefreshDetails();
             }
         }
+        ColumnsHost?.RefreshIcon(key);
     }
 
     /// <summary>Binds every row's type name and icon again (the screen's scale changed the icon size).</summary>
@@ -541,6 +662,7 @@ public sealed partial class FilePane : UserControl
         {
             row.RefreshDetails();
         }
+        ColumnsHost?.RefreshDetails();
     }
 
     private void OnElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
@@ -606,6 +728,10 @@ public sealed partial class FilePane : UserControl
                 row.RefreshDetails();
             }
         }
+        if (ShowsColumnView)
+        {
+            ColumnsHost!.RefreshKeyboardDetails(from, count);
+        }
         FrameParts.Stop(FramePart.Details, started);
     }
 
@@ -660,6 +786,10 @@ public sealed partial class FilePane : UserControl
         foreach (var row in _realized)
         {
             Mark(row, row.Index);
+        }
+        if (ShowsColumnView && !_columns!.IsSwapping)
+        {
+            ColumnsHost!.MarkKeyboard();
         }
         FrameParts.Stop(FramePart.Selection, started);
     }
@@ -718,6 +848,13 @@ public sealed partial class FilePane : UserControl
                 // A file manager convention the keymap does not hold (go.up is Alt+Up there).
                 _ = Run("go.up");
                 break;
+            // The column view: Left to the parent column, Right into the column of the cursor's folder or opening it.
+            case VirtualKey.Left when ShowsColumnView && !shift && !ctrl:
+                _ = _columns!.MoveLeftAsync();
+                break;
+            case VirtualKey.Right when ShowsColumnView && !shift && !ctrl:
+                _ = _columns!.RightAsync(null);
+                break;
             case VirtualKey.F10 when shift:
             case VirtualKey.Application:
                 // Hits have no menu: Enter goes to one, Esc back to the folder.
@@ -758,7 +895,9 @@ public sealed partial class FilePane : UserControl
         ScrollIntoView(PositionOf(_model.CurrentSelection.Focus));
     }
 
-    private int RowsPerPage() => Math.Max(1, (int)((Scroller.ViewportHeight - (2 * _listPadding)) / _rowHeight) - 1);
+    private int RowsPerPage() => ShowsColumnView && ColumnsHost!.KeyboardList is { } column
+        ? Math.Max(1, (int)((column.ViewportHeight - (2 * column.ListPadding)) / _rowHeight) - 1)
+        : Math.Max(1, (int)((Scroller.ViewportHeight - (2 * _listPadding)) / _rowHeight) - 1);
 
     private static CursorKey? CursorKeyOf(VirtualKey key) => key switch
     {
@@ -839,6 +978,11 @@ public sealed partial class FilePane : UserControl
     {
         if (index < 0)
         {
+            return;
+        }
+        if (ShowsColumnView)
+        {
+            ColumnsHost!.ScrollKeyboardRowIntoView(index);
             return;
         }
         var top = _listPadding + (index * _rowHeight);
@@ -993,12 +1137,19 @@ public sealed partial class FilePane : UserControl
             // Where the first row on screen is; its name starts after the row's padding, the icon and its gap.
             var m = WindowMetrics.Current;
             var width = Math.Max(0, EditLayer.ActualWidth - (2 * _listPadding));
-            Canvas.SetLeft(NewRow, _listPadding);
+            var left = _listPadding;
+            if (ShowsColumnView && ColumnsHost!.KeyboardList is { } column)
+            {
+                // Over the top of the keyboard's column, where the new file will be listed.
+                left = column.TransformToVisual(EditLayer).TransformPoint(new Point(0, 0)).X + column.ListPadding;
+                width = Math.Max(0, column.ActualWidth - (2 * column.ListPadding));
+            }
+            Canvas.SetLeft(NewRow, left);
             Canvas.SetTop(NewRow, _listPadding);
             NewRow.Width = width;
-            Canvas.SetLeft(RenameBox, _listPadding + m.RowPaddingX + 16 + m.RowIconGap - 7);
+            Canvas.SetLeft(RenameBox, left + m.RowPaddingX + 16 + m.RowIconGap - 7);
             Canvas.SetTop(RenameBox, _listPadding + boxTop);
-            RenameBox.Width = Math.Max(160, (width - 84) / 2);
+            RenameBox.Width = ShowsColumnView ? Math.Max(100, width - m.RowPaddingX - 16 - m.RowIconGap) : Math.Max(160, (width - 84) / 2);
         }
         else if (_rename is not null && _renameIndex >= 0 && PositionOf(_renameIndex) >= 0)
         {
@@ -1020,6 +1171,18 @@ public sealed partial class FilePane : UserControl
     // row itself when it is on screen, else from the grid's own proportions.
     private (double Left, double Top, double Width) NameBox(int position)
     {
+        if (ShowsColumnView && ColumnsHost!.KeyboardList is { } list)
+        {
+            // In the keyboard's column: the name's left edge, to the column's right edge.
+            var listLeft = list.TransformToVisual(EditLayer).TransformPoint(new Point(0, 0));
+            var rowTop = listLeft.Y + list.ListPadding + (position * _rowHeight) - list.VerticalOffset;
+            if (list.RowAt(position) is { } columnRow && columnRow.NameElement.ActualWidth > 0)
+            {
+                var nameLeft = columnRow.NameElement.TransformToVisual(EditLayer).TransformPoint(new Point(0, 0)).X;
+                return (nameLeft, rowTop, Math.Max(60, listLeft.X + list.ActualWidth - nameLeft - 12));
+            }
+            return (listLeft.X + 34, rowTop, Math.Max(60, list.ActualWidth - 46));
+        }
         var top = _listPadding + (position * _rowHeight) - Scroller.VerticalOffset;
         if (Repeater.TryGetElement(position) is FileRow row && row.NameElement.ActualWidth > 0)
         {

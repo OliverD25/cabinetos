@@ -310,7 +310,7 @@ public sealed partial class MainWindow
         }
         for (var i = 0; i < _crumbViews.Length; i++)
         {
-            _crumbViews[i].Show(_panes[i].Path, _dual);
+            _crumbViews[i].Show(TabFolder(i), _dual);
             _crumbViews[i].IsActivePane = _dual ? i == _active : i == 0;
         }
     }
@@ -408,6 +408,9 @@ public sealed partial class MainWindow
             fields.Add(new($"pane{i}_tabs", _tabViews[i].Describe()));
             fields.Add(new($"pane{i}_tab_row", Math.Round(_tabViews[i].RowHeight, 1)));
             fields.Add(new($"pane{i}_crumb_row", Math.Round(_crumbViews[i].ActualHeight, 1)));
+            // The listings the pane holds: one per column in the column view (ADR 0016), so a dropped column's is seen to go.
+            fields.Add(new($"pane{i}_listings", ListingCount(i)));
+            fields.Add(new($"pane{i}_columns", _columnViews[i]?.Count ?? 0));
         }
         Diag.Info("cabinetos_ui::snapshot", "shell state", [.. fields]);
     }

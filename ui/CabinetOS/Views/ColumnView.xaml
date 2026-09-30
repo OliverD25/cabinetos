@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.ColumnView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <!-- The column view (ADR 0016): the columns side by side, no wrapping; the strip scrolls sideways and keeps the keyboard's column in view. -->
+    <ScrollViewer
+        x:Name="Strip"
+        HorizontalScrollBarVisibility="Auto"
+        HorizontalScrollMode="Enabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Disabled"
+        VerticalScrollMode="Disabled"
+        ZoomMode="Disabled">
+        <StackPanel x:Name="Lists" Orientation="Horizontal" />
+    </ScrollViewer>
+</UserControl>

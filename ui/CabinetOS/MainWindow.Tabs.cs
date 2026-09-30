@@ -184,6 +184,8 @@ public sealed partial class MainWindow
         view.Visibility = Visibility.Visible;
         if (_held[pane] != tab)
         {
+            // The columns belong to the tab that goes behind: it keeps its deepest folder and its mode, not its columns.
+            CloseColumnView(pane);
             if (_held[pane] is { IsTool: false } old && strip.IndexOf(old) >= 0)
             {
                 _panes[pane].CaptureInto(old);
@@ -203,6 +205,8 @@ public sealed partial class MainWindow
             Diag.Info(TabsTarget, "tab shown", new LogField("pane", pane), new LogField("path", tab.Path), new LogField("index", strip.ActiveIndex),
                 new LogField("tabs", strip.Count), new LogField("locked", tab.Locked));
         }
+        // A tab in the columns mode starts its column view at its folder (ADR 0016).
+        SyncColumnView(pane);
         UpdateNavigationButtons();
         UpdateFind(pane);
         ScheduleToolContext();
@@ -233,24 +237,27 @@ public sealed partial class MainWindow
     private Task NewTabAsync(int pane, string? folder, string? requestId)
     {
         var model = _panes[pane];
-        var path = folder ?? model.Path;
+        var path = folder ?? TabFolder(pane);
         if (path.Length == 0)
         {
             return Task.CompletedTask;
         }
-        // Same folder (or the one asked for) and the pane's order, a history of its own, not locked.
-        _strips[pane].Add(new PaneTab(path) { Sort = model.Sort });
+        // Same folder (or the one asked for), the pane's order and the front tab's mode, a history of its own, not locked.
+        _strips[pane].Add(new PaneTab(path, mode: FrontMode(pane)) { Sort = model.Sort });
         return QueueShow(pane, giveKeys: true, requestId);
     }
 
     // What a locked tab does when it is asked for another folder: the folder opens in a new tab beside it.
     private async Task<bool> OpenFolderInNewTabAsync(int pane, string folder, string? requestId, string? selectName)
     {
-        var tab = new PaneTab(folder) { Sort = _panes[pane].Sort, CursorName = selectName };
+        var tab = new PaneTab(folder, mode: FrontMode(pane)) { Sort = _panes[pane].Sort, CursorName = selectName };
         _strips[pane].Add(tab);
         await QueueShow(pane, giveKeys: true, requestId);
         return _held[pane] == tab && _panes[pane].Path.Length > 0;
     }
+
+    // The mode a new tab of the pane starts in: the folder tab's it holds.
+    private TabMode FrontMode(int pane) => _held[pane] is { IsTool: false } tab ? tab.Mode : TabMode.Files;
 
     private async Task CloseTabAsync(int pane, int index, string? requestId)
     {
@@ -320,9 +327,10 @@ public sealed partial class MainWindow
         {
             return;
         }
-        // The pane's own state goes with the tab: its history, order, cursor and marks.
+        // The pane's own state goes with the tab: its history, order, cursor and marks (of its deepest column in the column view).
         if (_held[from] == tab)
         {
+            CloseColumnView(from);
             _panes[from].CaptureInto(tab);
         }
         TabStrip.Move(strip, index, _strips[to]);
@@ -406,13 +414,14 @@ public sealed partial class MainWindow
         }
     }
 
-    // The tab in front follows its pane's folder, whatever moved the pane (a click, Back, a lost folder).
+    // The tab in front follows its pane's folder, whatever moved the pane (a click, Back, a lost folder); in the column view
+    // it follows the deepest column (ADR 0016).
     private void SyncTabFolder(PaneModel pane)
     {
         var index = Array.IndexOf(_panes, pane);
-        if (index >= 0 && _held[index] is { IsTool: false } tab && tab.Path != pane.Path)
+        if (index >= 0 && _held[index] is { IsTool: false } tab && TabFolder(index) is var folder && tab.Path != folder)
         {
-            tab.Path = pane.Path;
+            tab.Path = folder;
             _strips[index].Touch();
         }
     }
@@ -446,7 +455,8 @@ public sealed partial class MainWindow
         if (await _settingsWriter.SetAsync(TabsConfig.Key, value, cancellationToken))
         {
             _tabsWritten = text;
-            Diag.Info(TabsTarget, "tabs saved", new LogField("left", tabs.Left.Items.Count), new LogField("right", tabs.Right.Items.Count));
+            Diag.Info(TabsTarget, "tabs saved", new LogField("left", tabs.Left.Items.Count), new LogField("right", tabs.Right.Items.Count),
+                new LogField("columns", tabs.Left.Items.Concat(tabs.Right.Items).Count(i => i.Mode == TabMode.Columns)));
         }
     }
 
@@ -491,7 +501,9 @@ public sealed partial class MainWindow
             strip.Tabs,
             strip.ActiveIndex,
             listing ? pane.EntryAt(pane.FocusIndex)?.Path : null,
-            listing ? pane.MarkedPaths(WindowStateBuilder.MaxMarked) : []);
+            listing ? pane.MarkedPaths(WindowStateBuilder.MaxMarked) : [],
+            // In the column view the cursor and the marks are the keyboard's column's rows: its folder goes with them.
+            listing && _columnViews[index] is not null ? pane.Path : null);
     }
 
     // ----- Start and close -----
@@ -503,6 +515,8 @@ public sealed partial class MainWindow
         _held[pane] = strip.Active;
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         await _panes[pane].RestoreAsync(strip.Active, [fallback, profile, @"C:\"]);
+        // A tab saved in the columns mode starts with its folder as the one column.
+        SyncColumnView(pane);
     }
 
     private async Task FlushTabsAsync(CancellationToken cancellationToken)

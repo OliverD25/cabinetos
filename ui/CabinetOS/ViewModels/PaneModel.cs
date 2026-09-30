@@ -656,8 +656,56 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         {
             CloseListing(oldListing);
         }
+        Navigated?.Invoke(this, kind, samePlace);
         Listed?.Invoke(this, requestId);
         return true;
+    }
+
+    /// <summary>
+    /// Raised when the pane listed a folder by any way but the column view's
+    /// own moves (a crumb, Back, the sidebar, a tab, a reload): the kind of
+    /// navigation, and whether the folder is the one it showed. A column view
+    /// starts over from another folder (ADR 0016).
+    /// </summary>
+    public event Action<PaneModel, NavigationKind, bool>? Navigated;
+
+    /// <summary>
+    /// The column view's keyboard moves to another column (ADR 0016): the
+    /// pane's listing, with its cursor and marks, goes into a column of its
+    /// own, which is returned, and <paramref name="incoming"/>'s listing
+    /// becomes the pane's, with its cursor and marks, without asking the core
+    /// again. The history stays: the columns are the path. Returns null when
+    /// the pane had no listing.
+    /// </summary>
+    internal ColumnListing? SwapListing(ColumnListing incoming)
+    {
+        ForgetExpectedName();
+        if (_find.IsOpen)
+        {
+            // The find belongs to the folder, as another folder closes it in the list.
+            _find.Close();
+        }
+        if (!Sizes.IsEmpty)
+        {
+            ForgetSizes();
+        }
+        var outgoing = _view is { } view
+            ? new ColumnListing(Path, view, _listingId, KnownDetails, Selection.Style, Selection.Focus, Selection.Anchor, [.. Selection.AllSelected])
+            : null;
+        var focus = incoming.Selection.Focus;
+        var anchor = incoming.Selection.Anchor;
+        var selected = incoming.Selection.AllSelected.ToList();
+        var (newView, listingId) = incoming.HandOver();
+        _view = newView;
+        _listingId = listingId;
+        _details.Reset(listingId, newView.Generation);
+        Path = incoming.Path;
+        Drives.Remember(incoming.Path);
+        Message = newView.Count == 0 ? "This folder is empty." : null;
+        _rowsVisible = null;
+        Rows = new ListingRows(newView, this);
+        Selection.Restore(newView.Count, selected, focus, anchor);
+        return outgoing;
     }
 
     /// <summary>Lists the same folder again, keeping the focused entry.</summary>
@@ -1036,7 +1084,8 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         }
     }
 
-    private static string Describe(ErrorReply error) => error.Code switch
+    /// <summary>Why the core could not list a folder, in the words the pane shows.</summary>
+    internal static string Describe(ErrorReply error) => error.Code switch
     {
         ErrorCodes.NotFound => "it does not exist.",
         ErrorCodes.AccessDenied => "access is denied.",
