@@ -1269,7 +1269,7 @@ if ($crumb) {
 # notes the path it gets in stub-program.js.log), a file menu that shows it, an ID no command has, and shellMenu: true
 # into the run's configuration, then drives the menus with the real mouse and keys. The window's log says what
 # happened: "context menu shown" (target, keyboard, quick_actions), "context menu closed", "context menu entry left
-# out", "windows menu shown" (items) and "windows menu item run". A menu's rows are found by their accessible names and
+# out: no command has this ID", "windows menu shown" (items) and "windows menu item run". A menu's rows are found by their accessible names and
 # clicked with the real mouse. Windows' Copy is the one item of Windows' menu that runs: it changes nothing on disk,
 # and the run reads the clipboard back.
 Add-Type -AssemblyName System.Windows.Forms
@@ -1327,7 +1327,7 @@ $x, $y = LeftPanePoint
 [Live]::Click($x, $y); Start-Sleep -Milliseconds 400
 $row = if ((SelectionText) -match 'row-\d+\.txt') { $Matches[0] } else { '' }
 $shown = (ShellLines 'context menu shown').Count
-$warned = (ShellLines 'context menu entry left out').Count
+$warned = (ShellLines 'context menu entry left out: no command has this ID').Count
 [Live]::RightClick($x, $y, $false)
 $menu = WaitShellLines 'context menu shown' $shown
 "18: the row under the pointer, $row, got the file menu: $($row -ne '' -and $menu.fields.target -eq 'File' -and -not $menu.fields.keyboard)"
@@ -1335,7 +1335,7 @@ $menu = WaitShellLines 'context menu shown' $shown
 $entry = AppElement 'Live 18 Recorder' 2
 "18: the program is in the menu: $([bool]$entry)"
 "18: so is $editMenu, last: $([bool](AppElement $editMenu))"
-$leftOut = WaitShellLines 'context menu entry left out' $warned
+$leftOut = WaitShellLines 'context menu entry left out: no command has this ID' $warned
 "18: the ID no command has is left out, with a warning: $($leftOut.fields.command -eq 'nothing.here18')"
 Shot $h "$ShotDir\18-file-menu-live.png"
 if ($entry) {
