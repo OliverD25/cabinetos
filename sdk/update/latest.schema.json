@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CabinetOS update",
+  "description": "`latest.json`: the newest version of one channel, where its zip is, how\nto check it, and where its release notes are.",
+  "type": "object",
+  "properties": {
+    "channel": {
+      "description": "The channel this file belongs to.",
+      "$ref": "#/$defs/UpdateChannel"
+    },
+    "notes": {
+      "description": "The release notes: the CHANGELOG section of the version.",
+      "$ref": "#/$defs/UpdateNotes"
+    },
+    "published": {
+      "description": "The day it was published, `YYYY-MM-DD`.",
+      "type": "string"
+    },
+    "requires": {
+      "description": "The runtimes the version needs, `major.minor`, for the user to see.",
+      "$ref": "#/$defs/UpdateRequires",
+      "default": {}
+    },
+    "schemaVersion": {
+      "description": "The format of this file; always 1 for now.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "version": {
+      "description": "The version, as semantic versioning writes it: `0.2.0`, or with a\npre-release tag on the preview channel, `0.2.0-preview.1`.",
+      "type": "string"
+    },
+    "zip": {
+      "description": "The release's zip.",
+      "$ref": "#/$defs/UpdateZip"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "channel",
+    "version",
+    "published",
+    "zip",
+    "notes"
+  ],
+  "$defs": {
+    "UpdateChannel": {
+      "description": "A release channel: which `latest.json` the updater reads\n(`<update.source>/<channel>/latest.json`).",
+      "oneOf": [
+        {
+          "description": "Releases only; never a version with a pre-release tag.",
+          "type": "string",
+          "const": "stable"
+        },
+        {
+          "description": "Releases and previews, such as `0.2.0-preview.1`.",
+          "type": "string",
+          "const": "preview"
+        }
+      ]
+    },
+    "UpdateNotes": {
+      "description": "Where a release's notes are.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "A Markdown file: an absolute URL, or a path relative to\n`latest.json`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "UpdateRequires": {
+      "description": "The runtimes a release needs.",
+      "type": "object",
+      "properties": {
+        "dotnet": {
+          "description": "The .NET runtime, `major.minor`, such as `10.0`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "windowsAppRuntime": {
+          "description": "The Windows App Runtime, `major.minor`, such as `2.5`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "UpdateZip": {
+      "description": "Where a release's zip is and how to check it.",
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "description": "The zip's SHA-256, 64 hex digits. A download with another hash is\ndeleted.",
+          "type": "string"
+        },
+        "size": {
+          "description": "The zip's size in bytes, more than 0. A download that grows beyond\nit is stopped and deleted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "url": {
+          "description": "An absolute URL (the GitHub Release asset), or a path relative to\n`latest.json`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "sha256",
+        "size"
+      ]
+    }
+  }
+}

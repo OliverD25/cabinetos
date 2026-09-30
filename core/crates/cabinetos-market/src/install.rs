@@ -8,19 +8,18 @@
 //! place, and an uninstall removes those and nothing else.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write as _;
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
-use std::path::{Component, Path, PathBuf};
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use cabinetos_protocol::{ErrorCode, ExtensionKind, MarketItem, ToolInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
-use crate::index::{self, Http, Index, Location, Source};
+use crate::index::{self, Index, Source};
 use crate::tools::{self, TOOL_MANIFEST_FILE};
+use crate::transfer::{self, Client, DownloadError, Http, ZipLimits};
 use crate::{MarketError, now_ms, parse_version};
 
 /// The most bytes a download may have, whatever the index says.
@@ -372,66 +371,27 @@ impl Market {
                 item.id, item.version
             ))
         };
-        let started = std::time::Instant::now();
-        // Set for a download over the network, which heavy mode logs.
-        let mut web = None;
-        let mut source: Box<dyn Read> = match index.locate(&item.download.url, allow_insecure)? {
-            Location::File(path) => Box::new(
-                File::open(&path)
-                    .map_err(|error| failed(format!("{}: {error}", path.display())))?,
-            ),
-            Location::Web(url) => {
-                let response = self
-                    .http
-                    .agent(allow_insecure)
-                    .get(url.as_str())
-                    .call()
-                    .map_err(|error| {
-                        crate::http_line(&url, "GET", 0, 0, started);
-                        failed(error.to_string())
-                    })?;
-                let status = response.status().as_u16();
-                if status != 200 {
-                    crate::http_line(&url, "GET", status, 0, started);
-                    return Err(failed(format!("the server answered {status} for {url}")));
-                }
-                web = Some(url);
-                Box::new(response.into_body().into_reader())
-            }
-        };
+        let location = index.locate(&item.download.url, allow_insecure)?;
         let limit = item.size.min(MAX_DOWNLOAD);
-        let mut file =
-            File::create(to).map_err(|error| failed(format!("{}: {error}", to.display())))?;
-        let mut hasher = Sha256::new();
-        let mut buffer = vec![0; 64 * 1024];
-        let mut done = 0_u64;
         progress(0, item.size, false);
-        loop {
-            let read = source
-                .read(&mut buffer)
-                .map_err(|error| failed(error.to_string()))?;
-            if read == 0 {
-                break;
-            }
-            done += read as u64;
-            if done > limit {
-                return Err(MarketError::market(format!(
-                    "the download of {} {} is larger than the {} bytes the index gives; it was deleted and nothing was installed",
-                    item.id, item.version, item.size
-                )));
-            }
-            hasher.update(&buffer[..read]);
-            file.write_all(&buffer[..read])
-                .map_err(|error| failed(format!("{}: {error}", to.display())))?;
-            progress(done, item.size, false);
-        }
-        file.flush()
-            .map_err(|error| failed(format!("{}: {error}", to.display())))?;
-        if let Some(url) = &web {
-            crate::http_line(url, "GET", 200, done, started);
-        }
-        progress(done, item.size, true);
-        let hash = hex(&hasher.finalize());
+        let downloaded = transfer::download(
+            &self.http,
+            &location,
+            to,
+            limit,
+            allow_insecure,
+            Client::Market,
+            &mut |done| progress(done, item.size, false),
+        )
+        .map_err(|error| match error {
+            DownloadError::TooLarge => MarketError::market(format!(
+                "the download of {} {} is larger than the {} bytes the index gives; it was deleted and nothing was installed",
+                item.id, item.version, item.size
+            )),
+            DownloadError::Failed(problem) => failed(problem),
+        })?;
+        progress(downloaded.bytes, item.size, true);
+        let hash = downloaded.sha256;
         if !hash.eq_ignore_ascii_case(&item.download.sha256) {
             return Err(MarketError::new(
                 ErrorCode::HashMismatch,
@@ -564,7 +524,15 @@ fn unpack(item: &MarketItem, download: &Path, staging: &Path) -> Result<Vec<Stri
             ])
         }
         ExtensionKind::Plugin | ExtensionKind::Tool if magic == *b"PK\x03\x04" => {
-            extract_zip(download, staging).map_err(not_valid)
+            transfer::extract_zip(
+                download,
+                staging,
+                ZipLimits {
+                    entries: MAX_ZIP_ENTRIES,
+                    bytes: MAX_UNPACKED,
+                },
+            )
+            .map_err(not_valid)
         }
         ExtensionKind::Plugin => Err(not_valid(
             "is neither a zip nor a WebAssembly component".to_owned(),
@@ -586,53 +554,6 @@ fn first_bytes(path: &Path) -> io::Result<[u8; 4]> {
         filled += read;
     }
     Ok(magic)
-}
-
-/// Unpacks a zip into `staging`. Refuses entries that point outside it,
-/// links, more than 1,000 entries and more than 256 MiB unpacked.
-fn extract_zip(archive: &Path, staging: &Path) -> Result<Vec<String>, String> {
-    let file = File::open(archive).map_err(|error| format!("cannot be opened: {error}"))?;
-    let mut zip =
-        zip::ZipArchive::new(file).map_err(|error| format!("is not a valid zip: {error}"))?;
-    if zip.len() > MAX_ZIP_ENTRIES {
-        return Err(format!("has more than {MAX_ZIP_ENTRIES} files"));
-    }
-    let mut unpacked = 0_u64;
-    let mut files = BTreeSet::new();
-    for position in 0..zip.len() {
-        let mut entry = zip
-            .by_index(position)
-            .map_err(|error| format!("is not a valid zip: {error}"))?;
-        let name = entry.name().to_owned();
-        let relative = entry
-            .enclosed_name()
-            .filter(|path| {
-                path.components()
-                    .all(|part| matches!(part, Component::Normal(_)))
-            })
-            .ok_or_else(|| format!("has the entry `{name}`, which points outside its folder"))?;
-        if entry.is_symlink() {
-            return Err(format!("has the entry `{name}`, which is a link"));
-        }
-        let out = staging.join(&relative);
-        if entry.is_dir() {
-            fs::create_dir_all(&out).map_err(|error| format!("cannot be unpacked: {error}"))?;
-            continue;
-        }
-        if let Some(parent) = out.parent() {
-            fs::create_dir_all(parent).map_err(|error| format!("cannot be unpacked: {error}"))?;
-        }
-        let mut written =
-            File::create(&out).map_err(|error| format!("cannot unpack `{name}`: {error}"))?;
-        let budget = MAX_UNPACKED - unpacked + 1;
-        unpacked += io::copy(&mut (&mut entry).take(budget), &mut written)
-            .map_err(|error| format!("cannot unpack `{name}`: {error}"))?;
-        if unpacked > MAX_UNPACKED {
-            return Err("unpacks to more than 256 MiB".to_owned());
-        }
-        files.insert(slash_path(&relative));
-    }
-    Ok(files.into_iter().collect())
 }
 
 /// Checks the staged files as the kind needs.
@@ -729,14 +650,6 @@ fn relative_path(text: &str) -> Option<PathBuf> {
         !part.is_empty() && *part != "." && *part != ".." && !part.contains(['\\', ':'])
     });
     plain.then(|| parts.iter().collect())
-}
-
-/// A relative path with `/` between its names.
-fn slash_path(path: &Path) -> String {
-    path.components()
-        .map(|part| part.as_os_str().to_string_lossy())
-        .collect::<Vec<_>>()
-        .join("/")
 }
 
 /// Copies `from` over `to` through a temporary file and a rename, so
@@ -852,12 +765,4 @@ fn write_record(market: &Path, record: &BTreeMap<String, Installed>) -> io::Resu
         let _ = fs::remove_file(&temporary);
     }
     result
-}
-
-fn hex(bytes: &[u8]) -> String {
-    let mut text = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        let _ = write!(text, "{byte:02x}");
-    }
-    text
 }

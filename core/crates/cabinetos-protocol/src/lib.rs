@@ -28,6 +28,7 @@ mod secret;
 pub mod shm;
 mod terminal;
 mod theme;
+mod update;
 mod window;
 
 #[cfg(feature = "schema")]
@@ -58,6 +59,10 @@ pub use terminal::{TerminalSession, TerminalState};
 pub use theme::{
     Chrome, Color, Decimal, FileTypeColors, METRICS, MetricSpec, MetricUnit, Metrics, MicaTint,
     Opacity, Palette, Rgb, THEME_FORMAT, TerminalColors, Theme, ThemeInfo, ThemeKind,
+};
+pub use update::{
+    DEFAULT_UPDATE_SOURCE, UPDATE_SCHEMA_VERSION, UpdateChannel, UpdateNotes, UpdatePhase, UpdateRelease, UpdateRequires,
+    UpdateStatus, UpdateZip,
 };
 pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 

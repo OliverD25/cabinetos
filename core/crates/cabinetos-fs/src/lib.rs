@@ -34,8 +34,11 @@
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
 //! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `com`,
-//! `hydrate`, `link`, `system`, and one function in `sort`), each block
-//! with a `SAFETY:` comment.
+//! `hydrate`, `link`, `system`, `registry`, and one function in `sort`),
+//! each block with a `SAFETY:` comment.
+//!
+//! [`registry`] reads and writes values under the current user's hive: the
+//! Settings > Apps entry the updater keeps current.
 
 #[allow(unsafe_code)]
 mod com;
@@ -57,6 +60,8 @@ mod path;
 mod pattern;
 mod pipeline;
 mod preview;
+#[allow(unsafe_code)]
+pub mod registry;
 mod section;
 mod sort;
 #[allow(unsafe_code)]

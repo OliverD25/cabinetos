@@ -27,6 +27,7 @@ cabinetos-protocol = { path = "crates/cabinetos-protocol" }
 cabinetos-secrets = { path = "crates/cabinetos-secrets" }
 cabinetos-terminal = { path = "crates/cabinetos-terminal" }
 cabinetos-themes = { path = "crates/cabinetos-themes" }
+cabinetos-update = { path = "crates/cabinetos-update" }
 
 # External crates. Each crate adds the features it needs on top of these.
 anyhow = "1.0"

@@ -4,7 +4,8 @@
 //! The message schemas are checked into `sdk/protocol/` so the C# side can be
 //! validated against the Rust types; the theme schema into `sdk/themes/`,
 //! for editors; the index schema into `sdk/marketplace/`, for whoever
-//! publishes an index. A test keeps the checked-in files equal to what the
+//! publishes an index; the update schema (`latest.json`) into `sdk/update/`,
+//! for the release script and whoever checks its output. A test keeps the checked-in files equal to what the
 //! types produce. After changing a message or a file format, regenerate
 //! them from `core/`:
 //!
@@ -16,7 +17,7 @@ use schemars::{Schema, schema_for};
 
 use crate::{
     Envelope, Event, IndexerRequest, IndexerResponse, MarketIndex, Request, Response, THEME_FORMAT,
-    Theme,
+    Theme, UpdateRelease,
 };
 
 /// The JSON Schema of a request: an [`Envelope`] around a [`Request`].
@@ -73,6 +74,13 @@ pub fn theme_schema() -> Schema {
 #[must_use]
 pub fn market_index_schema() -> Schema {
     titled(schema_for!(MarketIndex), "CabinetOS marketplace index")
+}
+
+/// The JSON Schema of `latest.json`, the newest version of one update
+/// channel.
+#[must_use]
+pub fn update_release_schema() -> Schema {
+    titled(schema_for!(UpdateRelease), "CabinetOS update")
 }
 
 /// The envelopes would otherwise be titled "Envelope". Code generators on
@@ -199,6 +207,35 @@ mod tests {
     #[test]
     fn market_index_schema_matches_sdk() {
         check_snapshot_in("marketplace", "index.schema.json", &market_index_schema());
+    }
+
+    #[test]
+    fn update_schema_matches_sdk() {
+        check_snapshot_in("update", "latest.schema.json", &update_release_schema());
+    }
+
+    #[test]
+    fn the_update_schema_needs_the_zip_hash_and_the_notes() {
+        let schema = serde_json::to_value(update_release_schema()).unwrap();
+        let required: Vec<&str> = schema["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect();
+        for key in [
+            "schemaVersion",
+            "channel",
+            "version",
+            "published",
+            "zip",
+            "notes",
+        ] {
+            assert!(required.contains(&key), "{key}");
+        }
+        assert!(!required.contains(&"requires"));
+        let zip = &schema["$defs"]["UpdateZip"]["required"];
+        assert_eq!(zip, &serde_json::json!(["url", "sha256", "size"]));
     }
 
     #[test]

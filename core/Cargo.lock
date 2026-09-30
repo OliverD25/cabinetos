@@ -437,6 +437,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cabinetos-update"
+version = "0.1.0"
+dependencies = [
+ "cabinetos-fs",
+ "cabinetos-market",
+ "cabinetos-protocol",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tracing",
+ "url",
+ "zip",
+]
+
+[[package]]
 name = "cap-primitives"
 version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,29 @@
+[package]
+name = "cabinetos-update"
+description = "In-app updates: the channel's latest.json, the download checked by SHA-256, the swap into the install folder, the rollback."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The Settings > Apps entry, under the user's own registry hive.
+cabinetos-fs.workspace = true
+# Addresses, the HTTPS client, downloads checked by SHA-256 and unpacking a
+# zip: the marketplace's own code (cabinetos_market::transfer).
+cabinetos-market.workspace = true
+cabinetos-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+sha2.workspace = true
+tempfile.workspace = true
+zip = { workspace = true, features = ["deflate-flate2-zlib-rs"] }
+
+[lints]
+workspace = true

@@ -16,6 +16,9 @@
 //!
 //! The crate never touches the network on its own: only [`Market::fetch`]
 //! and [`Market::install`] do, and only when the core asks for a client.
+//! [`transfer`] holds what the marketplace shares with the updater
+//! (`cabinetos-update`): addresses, the HTTPS client, downloads checked by
+//! SHA-256, and unpacking a zip safely.
 //!
 //! Serves Constitution Article 2 (Free & Open Source: the marketplace is a
 //! static index anyone can serve) and Article 8 (Sandboxed Extensibility:
@@ -26,6 +29,7 @@
 mod index;
 mod install;
 mod tools;
+pub mod transfer;
 
 use std::ffi::OsString;
 use std::fmt;
@@ -36,25 +40,6 @@ use cabinetos_protocol::ErrorCode;
 
 pub use index::{Index, Source, parse_index, search};
 
-/// Heavy mode's line for one network request: host, method, status (0 when
-/// no answer came), bytes and time; never its headers or its body.
-pub(crate) fn http_line(
-    url: &url::Url,
-    method: &'static str,
-    status: u16,
-    bytes: u64,
-    started: std::time::Instant,
-) {
-    tracing::debug!(
-        target: "heavy::market",
-        host = url.host_str().unwrap_or_default(),
-        method,
-        status,
-        bytes,
-        ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-        "http request"
-    );
-}
 pub use install::{Dirs, Installed, Market};
 pub use tools::{TOOL_MANIFEST_FILE, list_tools};
 

@@ -1,18 +1,14 @@
 //! The index: where it is, reading it, and searching it.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-use std::time::Duration;
 
 use cabinetos_commands::rank;
 use cabinetos_protocol::{ExtensionKind, INDEX_SCHEMA_VERSION, MarketItem, extension_id_problem};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use ureq::Agent;
-use ureq::tls::{RootCerts, TlsConfig};
 use url::Url;
 
+use crate::transfer::{self, Base, Client, Fetched, Http, Location};
 use crate::{MarketError, now_ms, parse_version};
 
 /// The file an index folder holds.
@@ -20,12 +16,6 @@ pub(crate) const INDEX_FILE: &str = "index.json";
 
 /// The most bytes an index may have.
 const MAX_INDEX_BYTES: u64 = 16 * 1024 * 1024;
-
-/// How long connecting to a server may take.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-
-/// How long one request may take, a download included.
-const REQUEST_TIMEOUT: Duration = Duration::from_mins(10);
 
 /// Where an index is (`marketplace.index`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,18 +35,11 @@ impl Source {
         if location.is_empty() {
             return Err(MarketError::market("marketplace.index is empty"));
         }
-        if looks_like_path(location) {
-            return local(PathBuf::from(location));
-        }
-        match Url::parse(location) {
-            Ok(url) if url.scheme() == "file" => {
-                let path = url.to_file_path().map_err(|()| {
-                    MarketError::market(format!("`{location}` does not name a file"))
-                })?;
-                local(path)
-            }
-            Ok(url) => web_url(url, allow_insecure).map(Self::Remote),
-            Err(_) => local(PathBuf::from(location)),
+        match transfer::parse_location(location, allow_insecure, Client::Market)
+            .map_err(MarketError::market)?
+        {
+            Location::File(path) => local(path),
+            Location::Web(url) => Ok(Self::Remote(url)),
         }
     }
 }
@@ -69,28 +52,6 @@ fn local(path: PathBuf) -> Result<Source, MarketError> {
             "marketplace.index `{}` must be an absolute path or a URL",
             path.display()
         )))
-    }
-}
-
-/// `C:\…`, `C:/…` or `\\server\share`: a Windows path, which a URL parser
-/// would read as the scheme `c:`.
-fn looks_like_path(text: &str) -> bool {
-    let bytes = text.as_bytes();
-    (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
-        || text.starts_with(r"\\")
-}
-
-/// `url` if the core may fetch it: `https:`, or `http:` when allowed.
-fn web_url(url: Url, allow_insecure: bool) -> Result<Url, MarketError> {
-    match url.scheme() {
-        "https" => Ok(url),
-        "http" if allow_insecure => Ok(url),
-        "http" => Err(MarketError::market(format!(
-            "`{url}` uses plain http, which anyone on the network can change on the way; use https, or set marketplace.allowInsecure to true (for testing only)"
-        ))),
-        scheme => Err(MarketError::market(format!(
-            "`{url}`: the marketplace reads https: URLs, file: URLs and paths, not {scheme}:"
-        ))),
     }
 }
 
@@ -108,19 +69,6 @@ pub struct Index {
     base: Base,
 }
 
-#[derive(Clone, Debug)]
-enum Base {
-    Folder(PathBuf),
-    Web(Url),
-}
-
-/// Where a download is.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Location {
-    File(PathBuf),
-    Web(Url),
-}
-
 impl Index {
     /// Where a download named in this index is: an absolute URL, or a path
     /// relative to the index. An index on the web may only name downloads
@@ -130,63 +78,8 @@ impl Index {
         reference: &str,
         allow_insecure: bool,
     ) -> Result<Location, MarketError> {
-        match &self.base {
-            Base::Web(base) => {
-                let url = base.join(reference).map_err(|error| {
-                    MarketError::market(format!("the download `{reference}` is not a URL: {error}"))
-                })?;
-                web_url(url, allow_insecure).map(Location::Web)
-            }
-            Base::Folder(folder) => {
-                if !looks_like_path(reference)
-                    && let Ok(url) = Url::parse(reference)
-                {
-                    if url.scheme() == "file" {
-                        return url.to_file_path().map(Location::File).map_err(|()| {
-                            MarketError::market(format!("`{reference}` does not name a file"))
-                        });
-                    }
-                    return web_url(url, allow_insecure).map(Location::Web);
-                }
-                Ok(Location::File(folder.join(reference)))
-            }
-        }
-    }
-}
-
-/// The HTTP clients, made when first needed: a core that never reaches the
-/// network never sets up TLS. Certificates are checked against the Windows
-/// certificate store.
-#[derive(Debug, Default)]
-pub(crate) struct Http {
-    strict: OnceLock<Agent>,
-    lenient: OnceLock<Agent>,
-}
-
-impl Http {
-    /// The client; `allow_insecure` lets it follow plain `http:` too.
-    pub(crate) fn agent(&self, allow_insecure: bool) -> &Agent {
-        let cell = if allow_insecure {
-            &self.lenient
-        } else {
-            &self.strict
-        };
-        cell.get_or_init(|| {
-            Agent::config_builder()
-                .tls_config(
-                    TlsConfig::builder()
-                        .root_certs(RootCerts::PlatformVerifier)
-                        .build(),
-                )
-                // A redirect from https to plain http is refused too.
-                .https_only(!allow_insecure)
-                .http_status_as_error(false)
-                .timeout_connect(Some(CONNECT_TIMEOUT))
-                .timeout_global(Some(REQUEST_TIMEOUT))
-                .user_agent(format!("CabinetOS/{}", env!("CARGO_PKG_VERSION")))
-                .build()
-                .new_agent()
-        })
+        transfer::locate(&self.base, reference, allow_insecure, Client::Market)
+            .map_err(MarketError::market)
     }
 }
 
@@ -229,22 +122,7 @@ pub(crate) fn fetch(
 }
 
 fn read_limited(file: &Path) -> Result<Vec<u8>, MarketError> {
-    let cannot = |error: std::io::Error| {
-        MarketError::market(format!("cannot read the index {}: {error}", file.display()))
-    };
-    let mut bytes = Vec::new();
-    std::fs::File::open(file)
-        .map_err(cannot)?
-        .take(MAX_INDEX_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(cannot)?;
-    if bytes.len() as u64 > MAX_INDEX_BYTES {
-        return Err(MarketError::market(format!(
-            "the index {} is larger than 16 MiB",
-            file.display()
-        )));
-    }
-    Ok(bytes)
+    transfer::read_limited(file, MAX_INDEX_BYTES, "the index").map_err(MarketError::market)
 }
 
 fn text_of(bytes: &[u8], what: &str) -> Result<String, MarketError> {
@@ -322,45 +200,23 @@ fn download(
     http: &Http,
     allow_insecure: bool,
 ) -> Result<Downloaded, MarketError> {
-    let started = std::time::Instant::now();
-    let mut request = http.agent(allow_insecure).get(url.as_str());
-    if let Some(tag) = tag {
-        request = request.header("If-None-Match", tag);
-    }
-    let response = request.call().map_err(|error| {
-        crate::http_line(url, "GET", 0, 0, started);
-        MarketError::market(format!("cannot fetch the index {url}: {error}"))
-    })?;
-    let status = response.status().as_u16();
-    if status != 200 {
-        crate::http_line(url, "GET", status, 0, started);
-    }
-    match status {
-        304 if tag.is_some() => Ok(Downloaded::NotModified),
-        200 => {
-            let etag = response
-                .headers()
-                .get("etag")
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_owned);
-            let bytes = response
-                .into_body()
-                .into_with_config()
-                .limit(MAX_INDEX_BYTES)
-                .read_to_vec()
-                .map_err(|error| {
-                    MarketError::market(format!("cannot read the index {url}: {error}"))
-                })?;
-            crate::http_line(url, "GET", status, bytes.len() as u64, started);
-            Ok(Downloaded::Whole {
-                text: text_of(&bytes, url.as_str())?,
-                etag,
-            })
-        }
-        status => Err(MarketError::market(format!(
-            "the server answered {status} for the index {url}"
-        ))),
-    }
+    let fetched = transfer::get(
+        http,
+        url,
+        tag,
+        allow_insecure,
+        MAX_INDEX_BYTES,
+        "the index",
+        Client::Market,
+    )
+    .map_err(MarketError::market)?;
+    Ok(match fetched {
+        Fetched::NotModified => Downloaded::NotModified,
+        Fetched::Whole { bytes, etag } => Downloaded::Whole {
+            text: text_of(&bytes, url.as_str())?,
+            etag,
+        },
+    })
 }
 
 /// The items of the cached copy of the index at `url`.
@@ -376,28 +232,16 @@ fn read_cached(cached: &Path, url: &Url) -> Result<Vec<MarketItem>, MarketError>
 fn keep_in_cache(cache_dir: &Path, text: Option<&str>, meta: &CacheMeta) {
     let written = std::fs::create_dir_all(cache_dir)
         .and_then(|()| match text {
-            Some(text) => replace_file(&cache_dir.join(INDEX_FILE), text.as_bytes()),
+            Some(text) => transfer::replace_file(&cache_dir.join(INDEX_FILE), text.as_bytes()),
             None => Ok(()),
         })
         .and_then(|()| {
             let meta = serde_json::to_vec_pretty(meta).map_err(std::io::Error::other)?;
-            replace_file(&cache_dir.join(META_FILE), &meta)
+            transfer::replace_file(&cache_dir.join(META_FILE), &meta)
         });
     if let Err(error) = written {
         tracing::warn!(dir = %cache_dir.display(), %error, "cannot keep the index in the cache");
     }
-}
-
-fn replace_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let name = path
-        .file_name()
-        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-    let temporary = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
-    let result = std::fs::write(&temporary, bytes).and_then(|()| std::fs::rename(&temporary, path));
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temporary);
-    }
-    result
 }
 
 #[derive(Deserialize)]
