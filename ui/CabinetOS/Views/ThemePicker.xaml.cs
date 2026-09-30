@@ -135,6 +135,10 @@ public sealed partial class ThemePicker : UserControl
                 _ = RunCommand?.Invoke("theme.apply", null, "key");
                 e.Handled = true;
                 break;
+            case VirtualKey.Tab:
+                // The picker keeps the keyboard while it is open, as the palette does.
+                e.Handled = true;
+                break;
         }
     }
 

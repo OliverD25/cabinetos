@@ -5,7 +5,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     IsTabStop="False"
     Visibility="Collapsed">
-    <!-- Like the palette: a transparent scrim (a click closes) and a 640 px Acrylic panel. -->
+    <!--
+      Like the palette: a transparent scrim (a click closes) and a 640 px Acrylic panel. Tab goes around the panel's own
+      buttons and never leaves it while it is open (Cycle), as the palette keeps its keyboard.
+    -->
     <Grid x:Name="Scrim" Background="Transparent">
         <Border
             x:Name="Panel"
@@ -17,6 +20,7 @@
             BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
             BorderThickness="1"
             CornerRadius="8"
+            TabFocusNavigation="Cycle"
             Translation="0,0,32">
             <Border.Shadow>
                 <ThemeShadow />

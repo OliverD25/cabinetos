@@ -1137,6 +1137,15 @@ through the router and closes the palette, a click on the scrim or Esc
 closes it. A row shows the command's first binding as keycaps, and "+N"
 when it has more; its tooltip lists them all.
 
+Tab keeps the keyboard in the palette while it is open, and so it does in
+Quick Open, the prompts in the palette's frame and the theme picker; in
+the plugin list it goes around the list's own buttons. Until 2026-10-01
+Tab left the theme picker and the plugin list with the keyboard on a
+sidebar row, a rail button or the pane, while they stayed on screen: the
+next Enter or Space acted under them (the keys audit,
+[log/2026-10-01](log/2026-10-01/README.md)). The permissions review has
+the same fault by reading and keeps it until a test can open the review.
+
 Rebinding: the pencil (or F2 on the highlighted row) starts recording. The
 next key that is not a modifier forms a combination; a second one within
 1000 ms makes a chord and ends the recording at once; otherwise it ends

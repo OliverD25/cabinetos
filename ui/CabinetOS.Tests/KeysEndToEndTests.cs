@@ -95,6 +95,52 @@ public class KeysEndToEndTests
         }
     }
 
+    [Fact]
+    public async Task Tab_keeps_the_keyboard_in_the_theme_picker_and_in_the_plugin_list()
+    {
+        var (run, root, data) = Prepare("keys-overlays");
+        try
+        {
+            var process = run.Start("overlays", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "cmd:preferences.selectColorTheme",
+                "wait:600",
+                "focus:picker",
+                "key:tab",
+                "wait:300",
+                "focus:picker-tab",
+                "key:escape",
+                "wait:400",
+                "cmd:plugins.list",
+                "wait:800",
+                "focus:plugins",
+                "key:tab",
+                "wait:300",
+                "focus:plugins-tab",
+                "key:escape",
+                "wait:400",
+                "focus:end",
+                "shot:done"));
+            var logs = await run.FinishAsync("overlays", process, "done");
+
+            var focus = Focus(logs);
+            (string?, string?) Where(string label) => (Field(focus[label], "element").GetString(), Field(focus[label], "name").GetString());
+            Assert.NotEqual("FilePane", Where("picker").Item1);
+            Assert.Equal(Where("picker"), Where("picker-tab"));
+            Assert.Equal(("Button", "Close"), Where("plugins"));
+            Assert.Equal(Where("plugins"), Where("plugins-tab"));
+            Assert.Equal("FilePane", Where("end").Item1);
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
     private static Dictionary<string, string> Focus(List<string> logs) =>
         logs.Where(l => Message(l) == "keyboard focus").ToDictionary(l => Field(l, "label").GetString()!);
 
