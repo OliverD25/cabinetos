@@ -28,12 +28,23 @@ public sealed class FolderSizes
     /// <summary>Whether any folder has a size or is being counted.</summary>
     public bool IsEmpty => _sizes.Count == 0;
 
+    /// <summary>The measures still counting, to cancel (<c>cancel_measure</c>).</summary>
+    public IReadOnlyList<ulong> RunningIds => [.. _running.Keys];
+
     /// <summary>
     /// The paths of <paramref name="paths"/> worth asking about: not being
     /// counted already. Use before <c>measure_paths</c>.
     /// </summary>
     public IReadOnlyList<string> NotCounting(IReadOnlyList<string> paths) =>
         [.. paths.Where(path => !_sizes.TryGetValue(DisplayFormat.FolderName(path), out var size) || size.Done)];
+
+    /// <summary>
+    /// The paths of <paramref name="paths"/> that have no size and are not being counted: what
+    /// <c>panes.folderSizes</c> asks for when a listing opens or is listed again. A folder counted
+    /// already keeps its size until the pane leaves the folder; Space counts it again.
+    /// </summary>
+    public IReadOnlyList<string> NotMeasured(IReadOnlyList<string> paths) =>
+        [.. paths.Where(path => !_sizes.ContainsKey(DisplayFormat.FolderName(path)))];
 
     /// <summary>
     /// A measure started (<c>measure_started</c>): its paths show as being

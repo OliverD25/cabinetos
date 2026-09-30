@@ -62,6 +62,7 @@ public sealed partial class MainWindow
                 "Put the cursor on a folder, or mark folders: their sizes are counted.")));
         _router.RegisterUiHandler("file.calculateAllFolderSizes", ListingOnly(invocation =>
             MeasureFoldersAsync(AllFolders(Active), invocation, "This folder has no folders to measure.")));
+        _router.RegisterUiHandler("view.toggleFolderSizes", ToggleFolderSizesAsync);
         _router.RegisterUiHandler("edit.invertSelection", ListingOnly(_ => InvertSelection()));
         _router.RegisterUiHandler("edit.unselectAll", ListingOnly(_ =>
         {
@@ -565,6 +566,95 @@ public sealed partial class MainWindow
                 break;
             case ErrorReply error:
                 ShowNotice($"Folder size: {error.Message}", isError: true);
+                break;
+        }
+    }
+
+    // view.toggleFolderSizes: the core writes panes.folderSizes, and the window follows config_changed as
+    // it does for a hand edit, so the file and the window never disagree (Article 6).
+    private async Task ToggleFolderSizesAsync(CommandInvocation invocation)
+    {
+        if (!await _settingsWriter.SetAsync("panes.folderSizes", !_settings.FolderSizes))
+        {
+            ShowNotice("Folder sizes could not be switched: the core did not take the setting.", isError: true);
+        }
+    }
+
+    // panes.folderSizes: a listing that opened or was listed again has its folders counted, those nobody
+    // counted yet, in the listing's order. The count runs on the core's blocking threads and its totals
+    // arrive as events, so nothing here waits for it.
+    private void OnPaneListed(PaneModel pane, string? requestId)
+    {
+        if (_settings.FolderSizes)
+        {
+            _ = MeasureNewFoldersAsync(pane, requestId, "listed");
+        }
+    }
+
+    // The setting changed (the toggle, or an edit of the file): on, both listings are counted now; off, what
+    // still counts is stopped and nothing more starts. The sizes already shown stay until the folder changes.
+    private void ApplyFolderSizes(UiSettings settings, UiSettings previous, bool firstStart)
+    {
+        if (firstStart || settings.FolderSizes == previous.FolderSizes)
+        {
+            return;
+        }
+        Diag.Info(Target, "folder sizes follow the configuration", new LogField("on", settings.FolderSizes));
+        if (settings.FolderSizes)
+        {
+            foreach (var pane in _panes)
+            {
+                _ = MeasureNewFoldersAsync(pane, null, "setting on");
+            }
+            ShowNotice("Folder sizes are on: the folders of a listing are counted when it opens.");
+        }
+        else
+        {
+            foreach (var pane in _panes)
+            {
+                pane.CancelMeasures("setting off");
+            }
+            ShowNotice("Folder sizes are off. The sizes shown stay until the folder changes.");
+        }
+    }
+
+    // The count gets a request ID of its own: a command that lists both panes gives both navigations one ID,
+    // and the client refuses an ID that already waits.
+    private async Task MeasureNewFoldersAsync(PaneModel pane, string? listingRequest, string why)
+    {
+        if (pane.Path.Length == 0 || _unavailable.Contains("measure_paths"))
+        {
+            return;
+        }
+        var folders = pane.Sizes.NotMeasured(AllFolders(pane));
+        if (folders.Count == 0)
+        {
+            return;
+        }
+        Diag.Info(Target, "folder sizes asked", new LogField("pane", pane.Index), new LogField("folders", folders.Count),
+            new LogField("why", why), new LogField("listing_request", listingRequest));
+        CoreReply? reply;
+        try
+        {
+            reply = await pane.MeasureAsync(folders);
+        }
+        catch (IOException error)
+        {
+            Diag.Info(Target, "folder sizes could not be asked", new LogField("pane", pane.Index), new LogField("error", error.Message));
+            return;
+        }
+        switch (reply)
+        {
+            case MeasureStartedReply when !_settings.FolderSizes:
+                // The setting went off while the core was starting the count: nothing more starts.
+                pane.CancelMeasures("setting off");
+                break;
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                Unavailable("measure_paths", "Folder sizes need a newer core.");
+                break;
+            case ErrorReply error:
+                // No notice: a listing opens often, and a folder that vanished meanwhile is not the user's doing.
+                Diag.Info(Target, "folder sizes refused", new LogField("pane", pane.Index), new LogField("code", error.Code), new LogField("error", error.Message));
                 break;
         }
     }

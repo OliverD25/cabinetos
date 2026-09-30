@@ -140,6 +140,7 @@ public sealed partial class MainWindow : Window
             view.ContextMenuRequested += OnContextMenuRequested;
             pane.PropertyChanged += OnPaneChanged;
             pane.Notice += text => ShowNotice(text, isError: true);
+            pane.Listed += OnPaneListed;
         }
         _panes[0].IsActive = true;
 
@@ -965,6 +966,7 @@ public sealed partial class MainWindow : Window
                 pane.Selection.SetStyle(settings.Selection);
             }
         }
+        ApplyFolderSizes(settings, previous, firstStart);
         foreach (var pane in _panes)
         {
             // What a pane without its own order (Ctrl+F3 to Ctrl+F6) is sorted by.

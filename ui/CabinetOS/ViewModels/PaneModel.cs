@@ -155,6 +155,13 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// <summary>Raised with (first row, count) when type names and icon keys arrived for rows.</summary>
     public event Action<int, int>? DetailsArrived;
 
+    /// <summary>
+    /// Raised when a listing is on show: a folder opened, or a watched one listed again. The second
+    /// argument is the navigation's request ID, or null for a refresh. Folder sizes follow it
+    /// (<c>panes.folderSizes</c>).
+    /// </summary>
+    public event Action<PaneModel, string?>? Listed;
+
     /// <inheritdoc/>
     public EntryDetail? Detail(int index, ReadOnlySpan<char> name, bool isFolder) =>
         _details.Get(index) ?? _known.Guess(name, isFolder);
@@ -649,6 +656,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         {
             CloseListing(oldListing);
         }
+        Listed?.Invoke(this, requestId);
         return true;
     }
 
@@ -707,14 +715,33 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         {
             return null;
         }
+        var asked = _path;
         var reply = await _core.RequestAsync(new MeasurePathsRequest(wanted) { Id = requestId ?? "" });
         // Right after the reply, before any of its events: the client hands the UI a reply first.
         if (reply is MeasureStartedReply started)
         {
+            if (!string.Equals(_path, asked, StringComparison.OrdinalIgnoreCase))
+            {
+                // The pane left the folder while the core started the count: these names mean nothing here.
+                CancelMeasures([started.MeasureId], "left the folder");
+                return reply;
+            }
             Sizes.Start(started.MeasureId, wanted);
             OnPropertyChanged(nameof(Sizes));
         }
         return reply;
+    }
+
+    /// <summary>
+    /// Stops every measure still counting and keeps the sizes shown (<c>panes.folderSizes</c> turned
+    /// off): the core ends each with <c>measure_finished</c>, which drops the folders it did not
+    /// finish. Returns how many it stopped.
+    /// </summary>
+    public int CancelMeasures(string why)
+    {
+        var running = Sizes.RunningIds;
+        CancelMeasures(running, why);
+        return running.Count;
     }
 
     /// <summary>A measure's progress or end; false when the measure is not this pane's.</summary>
@@ -729,6 +756,11 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         if (mine)
         {
             OnPropertyChanged(nameof(Sizes));
+            if (coreEvent is MeasureFinishedEvent done)
+            {
+                Diag.Info(Target, "folder sizes counted", new LogField("pane", Index), new LogField("folders", done.Results.Count),
+                    new LogField("bytes", done.Results.Aggregate(0UL, (sum, result) => sum + result.Bytes)), new LogField("cancelled", done.Cancelled));
+            }
         }
         return mine;
     }
@@ -736,11 +768,21 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     // The folder changed: its sizes mean nothing here, and a count still running is stopped.
     private void ForgetSizes()
     {
-        foreach (var measureId in Sizes.Clear())
+        CancelMeasures(Sizes.Clear(), "left the folder");
+        OnPropertyChanged(nameof(Sizes));
+    }
+
+    private void CancelMeasures(IReadOnlyList<ulong> running, string why)
+    {
+        if (running.Count == 0)
+        {
+            return;
+        }
+        Diag.Info(Target, "folder sizes cancelled", new LogField("pane", Index), new LogField("measures", running.Count), new LogField("why", why));
+        foreach (var measureId in running)
         {
             _ = CancelMeasureAsync(measureId);
         }
-        OnPropertyChanged(nameof(Sizes));
     }
 
     private async Task CancelMeasureAsync(ulong measureId)
@@ -918,6 +960,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         Diag.Debug(Target, "listing refreshed", new LogField("listing_id", _listingId),
             new LogField("generation", refreshed.Generation), new LogField("entries", view.Count), new LogField("reason", refreshed.Reason));
         old.Dispose();
+        Listed?.Invoke(this, null);
         return true;
     }
 

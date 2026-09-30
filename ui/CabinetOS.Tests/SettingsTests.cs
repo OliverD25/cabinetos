@@ -49,6 +49,25 @@ public class SettingsTests
     }
 
     [Fact]
+    public void Panes_folderSizes_is_off_until_the_config_turns_it_on()
+    {
+        Assert.False(UiSettings.Defaults.FolderSizes);
+        Assert.False(UiSettings.FromConfig(JsonDocument.Parse("{}").RootElement).FolderSizes);
+
+        using var on = JsonDocument.Parse("""{"version":1,"panes":{"folderSizes":true}}""");
+        Assert.True(Schemas.Config.Evaluate(on.RootElement).IsValid);
+        Assert.True(UiSettings.FromConfig(on.RootElement).FolderSizes);
+
+        using var off = JsonDocument.Parse("""{"version":1,"panes":{"folderSizes":false}}""");
+        Assert.True(Schemas.Config.Evaluate(off.RootElement).IsValid);
+        Assert.False(UiSettings.FromConfig(off.RootElement).FolderSizes);
+
+        using var odd = JsonDocument.Parse("""{"panes":{"folderSizes":"yes"}}""");
+        Assert.False(Schemas.Config.Evaluate(odd.RootElement).IsValid);
+        Assert.False(UiSettings.FromConfig(odd.RootElement).FolderSizes);
+    }
+
+    [Fact]
     public async Task A_setting_is_written_through_the_core_as_json()
     {
         var core = new FakeChannel(_ => new OkReply());

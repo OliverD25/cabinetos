@@ -59,6 +59,46 @@ public class FolderSizesTests
     }
 
     [Fact]
+    public void The_running_measures_are_listed_by_ID_until_they_end()
+    {
+        var sizes = new FolderSizes();
+        Assert.Empty(sizes.RunningIds);
+        sizes.Start(6, [@"C:\a\x"]);
+        sizes.Start(7, [@"C:\a\y", @"C:\a\z"]);
+        Assert.Equal([6UL, 7UL], sizes.RunningIds.Order());
+
+        // A measure that took nothing (its folders were being counted) is not running.
+        sizes.Start(8, [@"C:\a\x"]);
+        Assert.Equal([6UL, 7UL], sizes.RunningIds.Order());
+
+        sizes.Apply(new MeasureFinishedEvent(6, [new MeasureResult(@"C:\a\x", 1, 0, 1, 0)], Cancelled: false));
+        Assert.Equal([7UL], sizes.RunningIds);
+        // Asking for the IDs changes nothing: a cancel keeps the sizes shown until the core's measure_finished.
+        Assert.Equal(new FolderSize(1, 1, 0, 0, Done: true), sizes.Get("x"));
+        Assert.Equal(new FolderSize(0, 0, 0, 0, Done: false), sizes.Get("y"));
+    }
+
+    [Fact]
+    public void Only_folders_without_a_size_are_asked_for_when_a_listing_opens()
+    {
+        var sizes = new FolderSizes();
+        string[] listing = [@"C:\a\one", @"C:\a\two", @"C:\a\three"];
+        Assert.Equal(listing, sizes.NotMeasured(listing));
+
+        // One is counted, one is being counted: neither is asked again, and the order of the rest stays.
+        sizes.Start(1, [@"C:\a\one", @"C:\a\two"]);
+        sizes.Apply(new MeasureFinishedEvent(1, [new MeasureResult(@"C:\a\one", 1, 0, 10, 0)], Cancelled: true));
+        sizes.Start(2, [@"C:\a\two"]);
+        Assert.Equal([@"C:\a\three"], sizes.NotMeasured(listing));
+        Assert.Empty(sizes.NotMeasured([@"C:\a\one", @"C:\a\two"]));
+        Assert.Empty(sizes.NotMeasured([]));
+
+        // Once the pane leaves the folder, nothing is known.
+        sizes.Clear();
+        Assert.Equal(listing, sizes.NotMeasured(listing));
+    }
+
+    [Fact]
     public void Leaving_the_folder_forgets_the_sizes_and_names_the_measures_to_cancel()
     {
         var sizes = new FolderSizes();

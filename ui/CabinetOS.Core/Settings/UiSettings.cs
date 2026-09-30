@@ -18,6 +18,7 @@ namespace CabinetOS.Core.Settings;
 /// <see cref="SidebarAutoReveal"/> (<c>ui.sidebarAutoReveal</c>: whether the folder tree follows the active pane).
 /// A core that does not know them leaves them out, and the window keeps them in memory.
 /// <see cref="Columns"/> is <c>ui.columns</c>: the file panes' Modified, Type and Size widths, or null for the theme's.
+/// <see cref="FolderSizes"/> is <c>panes.folderSizes</c>: whether every folder of a listing is measured when it opens.
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -35,7 +36,8 @@ public sealed record UiSettings(
     double? SidebarWidth = null,
     string? SidebarView = null,
     bool SidebarAutoReveal = true,
-    ColumnWidths? Columns = null)
+    ColumnWidths? Columns = null,
+    bool FolderSizes = false)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -66,7 +68,8 @@ public sealed record UiSettings(
             Pixels(ui, "sidebarWidth"),
             String(ui, "sidebarView"),
             Bool(ui, "sidebarAutoReveal") ?? Defaults.SidebarAutoReveal,
-            ColumnLayout.FromConfig(config));
+            ColumnLayout.FromConfig(config),
+            Bool(panes, "folderSizes") ?? Defaults.FolderSizes);
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).
