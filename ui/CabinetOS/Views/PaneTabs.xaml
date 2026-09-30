@@ -43,7 +43,9 @@
                     <StaticResource x:Key="TabViewBorderBrush" ResourceKey="CbShellHairlineBrush" />
                 </TabView.Resources>
                 <TabView.TabStripFooter>
-                    <!-- The editors a file may open in: the palette, filtered to them (the design's editor hint), at the strip's right end. -->
+                    <!-- The editors a file may open in: the palette, filtered to them (the design's editor hint), at the strip's right end.
+                         Hidden since 2026-09-30 by the creator: with Markdown Preview as the only editor the list it opens is thin.
+                         Shown again when a second editor exists; the Editor commands stay in the palette meanwhile. -->
                     <Button
                         x:Name="OpenWithButton"
                         Height="24"
@@ -52,6 +54,7 @@
                         Padding="8,0"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
+                        Visibility="Collapsed"
                         AllowFocusOnInteraction="False"
                         AutomationProperties.Name="Open with…"
                         IsTabStop="False"

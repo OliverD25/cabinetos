@@ -1115,8 +1115,11 @@ theme may not remove it). The tab in front has a 2 px bar over it, in the
 accent in the active pane and white at 30 % in the other, a white 8 %
 fill, weight 600 and its ×; the others are at 65 % and close with a middle
 click. A tab is at most 160 px wide and its tooltip is the full path. The
-"+" after the last tab runs `tab.new` for that pane, and "Open with…" at
-the strip's right end opens the palette on the editors. Ctrl+1 to Ctrl+9
+"+" after the last tab runs `tab.new` for that pane. The handout's
+"Open with…" button at the strip's right end, which opens the palette on
+the Editor commands, is hidden since 2026-09-30 (the creator's call: with
+Markdown Preview as the only editor its list was thin) and returns when a
+second editor exists; the commands stay in the palette. Ctrl+1 to Ctrl+9
 run `tab.select` for the tab at that place ("Tabs"). A tab keeps, besides
 its folder, history, order, cursor and marks, its list's scroll position
 and its find text.
@@ -1422,8 +1425,9 @@ Each pane can hold several tabs (Phase 12, Article 5: the dual pane stays
 the base, and a tab is a second folder in one of its panes). The strip sits
 at the top of the pane. Until Phase 16 it was hidden while the pane had one
 tab; the shell redesign shows it from the first tab, `tabRow` high (32 px;
-24 px in Commander Compact), with a "+" and "Open with…" ("The shell",
-"Tabs in the shell"). It is a WinUI `TabView` with drag and reorder turned
+24 px in Commander Compact), with a "+" (the handout's "Open with…" is
+hidden until a second editor exists; "The shell", "Tabs in the shell").
+It is a WinUI `TabView` with drag and reorder turned
 off, so every change goes through a command.
 
 - **What a tab holds:** a folder with its own history, order, cursor and

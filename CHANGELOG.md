@@ -16,6 +16,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The right-click menu is WinUI's command bar menu, as Windows 11's Explorer shows it: the icons in a row at the top, the keys on the right of each row.
+- The "Open with…" button at the right end of each pane's tab strip is hidden until a second editor exists; its Editor commands stay in the command palette.
 
 ## [0.1.0] - 2026-09-30
 
