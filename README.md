@@ -26,7 +26,7 @@ pseudo-consoles, applies JSON colour themes live, and installs plugins,
 themes and tools from a static marketplace index with each download's
 SHA-256 checked, all over a user-only named pipe, with the indexer behind a
 read-only pipe of its own and each shell's bytes on a pipe of their own
-(`core/`, 715 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 767
+(`core/`, 720 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 767
 tests): two panes over the core's shared-memory listings with the shell's
 type names and icons, breadcrumbs, a status bar, the command palette with
 chord keys and inline rebinding, copy, move, delete, rename, new folder and
@@ -63,6 +63,7 @@ instead of shipping with the core.
 | [docs/terminal.md](docs/terminal.md) | The integrated terminal: profiles, the byte pipe of each session, following the active pane, closing, the `term` CLI. |
 | [docs/ui.md](docs/ui.md) | The WinUI 3 shell: the solution, running and debugging, the core launcher, listings in shared memory, keys and the command router, the palette, file operations, search, plugins, the terminal, Tool Extensions, themes, the marketplace view, what is not built yet. |
 | [docs/tool-extensions.md](docs/tool-extensions.md) | Tool Extensions: `tool.json`, where tools live, the page's rules, the messages between the window and a tool, Markdown Preview. |
+| [docs/extensions/agent.md](docs/extensions/agent.md) | The Agent extension (a plugin and a chat page): models and keys, the three tiers, previews and undo, the audit log, building and packing it. |
 | [docs/themes.md](docs/themes.md) | Colour themes: the JSON format, the shipped themes, the themes folder, live editing. |
 | [docs/marketplace.md](docs/marketplace.md) | The marketplace: the index format, where installs go, the trust rules, a local index for testing. |
 | [docs/release.md](docs/release.md) | Releases: how the zip is built, installed, removed, signed and published. |

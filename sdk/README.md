@@ -20,9 +20,16 @@ What lives here, or will:
   `wit-bindgen`, `hello` as the template and five test fixtures, and
   `build-fixtures.ps1` ([templates/README.md](templates/README.md)).
 - `tools/` — Tool Extensions (Phase 5c): the JSON Schema of `tool.json`,
-  and `markdown-preview`, the first tool and the example to start a new
-  one from ([tools/README.md](tools/README.md),
+  `markdown-preview`, the first tool and the example to start a new
+  one from, and `agent-chat`, the chat with the Agent ([tools/README.md](tools/README.md),
   [../docs/tool-extensions.md](../docs/tool-extensions.md)).
+- `extensions/` — extensions that are a Core Plugin and a Tool Extension
+  together, built to be installed from the marketplace: the Agent
+  (`agent/plugin`, and its chat page in `tools/agent-chat`), the build script
+  `build-extensions.ps1` and `extension.json`, which names the tool and the
+  texts of the two marketplace items
+  ([extensions/README.md](extensions/README.md),
+  [../docs/extensions/agent.md](../docs/extensions/agent.md)).
 - `fixtures/plugins/` — those plugins built as components, with their
   `plugin.json`. They are committed, so the core's tests and CI need no
   WebAssembly toolchain.

@@ -18,13 +18,22 @@
 # (ADR 0012) offers themes only until a real plugin exists, and the test
 # plugins Hello and friends are not for the public.
 #
+# With -Extensions, the index also offers the extensions of sdk/extensions:
+# each folder there that has an extension.json gives a Core Plugin
+# (<extension>\plugin: a zip of plugin.json and plugin.wasm, which
+# sdk/extensions/build-extensions.ps1 builds) and, when it names one, a Tool
+# Extension (a zip of the tool's folder), as two items that name each other
+# in their long descriptions. The extension's plugin is also a fixture for
+# the core's tests; the index offers it as the extension's item only, so
+# without -Extensions it is not offered at all.
+#
 # Point the core at it with marketplace.index (the folder, or its
 # index.json). Nothing is uploaded or published: the folder stays on this
 # machine. The format: sdk/marketplace/index.schema.json and
 # docs/marketplace.md.
 #
 # Run from anywhere, in Windows PowerShell or PowerShell 7:
-#   powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-ThemesOnly]
+#   powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-ThemesOnly] [-Extensions]
 
 param(
     [Parameter(Mandatory = $true)]
@@ -34,7 +43,10 @@ param(
     [switch] $Collection,
 
     # Leave the fixture plugins out (the public index).
-    [switch] $ThemesOnly
+    [switch] $ThemesOnly,
+
+    # Also pack the extensions of sdk/extensions (plugin and tool).
+    [switch] $Extensions
 )
 
 $ErrorActionPreference = 'Stop'
@@ -91,40 +103,114 @@ function Add-ThemeItem($File, $Theme, [string] $Description, [string] $License, 
     })
 }
 
+# One Core Plugin as an index item: a zip of its plugin.json and plugin.wasm.
+function Add-PluginItem([string] $ManifestPath, [string] $Component, [string] $Long) {
+    $manifest = Read-Json $ManifestPath
+    $name = "$($manifest.id)-$($manifest.version).zip"
+    $package = Join-Path $files $name
+    if (Test-Path $package) { Remove-Item $package }
+    $zip = [System.IO.Compression.ZipFile]::Open($package, 'Create')
+    try {
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $ManifestPath, 'plugin.json')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $Component, 'plugin.wasm')
+    }
+    finally {
+        $zip.Dispose()
+    }
+    $capabilities = @()
+    if ($manifest.capabilities) { $capabilities = @($manifest.capabilities) }
+    if (-not $Long) { $Long = $manifest.description }
+    [void]$items.Add([ordered]@{
+        id             = $manifest.id
+        kind           = 'plugin'
+        name           = $manifest.name
+        author         = [ordered]@{ name = $manifest.author; verified = $false }
+        version        = $manifest.version
+        description    = $manifest.description
+        long           = $Long
+        size           = (Get-Item $package).Length
+        download       = [ordered]@{ url = "files/$name"; sha256 = (Get-Sha256 $package) }
+        manifest       = $manifest
+        capabilities   = $capabilities
+        minCoreVersion = $manifest.minCoreVersion
+        license        = 'MIT'
+    })
+}
+
+# One Tool Extension as an index item: a zip of the tool's folder, with
+# tool.json at its root.
+function Add-ToolItem([string] $Folder, [string] $Long) {
+    $manifest = Read-Json (Join-Path $Folder 'tool.json')
+    $name = "$($manifest.id)-$($manifest.version).zip"
+    $package = Join-Path $files $name
+    if (Test-Path $package) { Remove-Item $package }
+    $zip = [System.IO.Compression.ZipFile]::Open($package, 'Create')
+    try {
+        $root = (Get-Item -LiteralPath $Folder).FullName.TrimEnd('\') + '\'
+        Get-ChildItem -LiteralPath $Folder -Recurse -File | ForEach-Object {
+            $entry = $_.FullName.Substring($root.Length).Replace('\', '/')
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $entry)
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+    if (-not $Long) { $Long = $manifest.description }
+    [void]$items.Add([ordered]@{
+        id             = $manifest.id
+        kind           = 'tool'
+        name           = $manifest.name
+        author         = [ordered]@{ name = $manifest.author; verified = $false }
+        version        = $manifest.version
+        description    = $manifest.description
+        long           = $Long
+        size           = (Get-Item $package).Length
+        download       = [ordered]@{ url = "files/$name"; sha256 = (Get-Sha256 $package) }
+        manifest       = $manifest
+        minCoreVersion = '0.1.0'
+        license        = 'MIT'
+    })
+}
+
+# The extensions of sdk/extensions: a folder with an extension.json, which
+# names its plugin folder and, when it has one, its tool folder (relative to
+# the extension), and the long descriptions that make the two items name each
+# other.
+$extensionFolders = @()
+$extensionsRoot = Join-Path $sdk 'extensions'
+if (Test-Path $extensionsRoot) {
+    $extensionFolders = @(Get-ChildItem -Path $extensionsRoot -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'extension.json') })
+}
+$extensionPluginIds = @{}
+foreach ($folder in $extensionFolders) {
+    $extension = Read-Json (Join-Path $folder.FullName 'extension.json')
+    $extensionPluginIds[$extension.id] = $true
+}
+
 if (-not $ThemesOnly) {
     Get-ChildItem -Path (Join-Path $sdk 'fixtures\plugins') -Directory | ForEach-Object {
         $manifestPath = Join-Path $_.FullName 'plugin.json'
         $component = Join-Path $_.FullName 'plugin.wasm'
         if (-not (Test-Path $manifestPath) -or -not (Test-Path $component)) { return }
-        $manifest = Read-Json $manifestPath
-        $name = "$($manifest.id)-$($manifest.version).zip"
-        $package = Join-Path $files $name
-        if (Test-Path $package) { Remove-Item $package }
-        $zip = [System.IO.Compression.ZipFile]::Open($package, 'Create')
-        try {
-            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $manifestPath, 'plugin.json')
-            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $component, 'plugin.wasm')
+        # An extension's plugin is offered as the extension's item, or not at all.
+        if ($extensionPluginIds.ContainsKey((Read-Json $manifestPath).id)) { return }
+        Add-PluginItem $manifestPath $component $null
+    }
+}
+
+if ($Extensions) {
+    foreach ($folder in $extensionFolders) {
+        $extension = Read-Json (Join-Path $folder.FullName 'extension.json')
+        $plugin = Join-Path $folder.FullName $extension.plugin
+        $manifestPath = Join-Path $plugin 'plugin.json'
+        $component = Join-Path $plugin 'plugin.wasm'
+        if (-not (Test-Path $component)) {
+            throw "$component is not built; run sdk\extensions\build-extensions.ps1 first"
         }
-        finally {
-            $zip.Dispose()
+        Add-PluginItem $manifestPath $component $extension.long.plugin
+        if ($extension.tool) {
+            Add-ToolItem (Join-Path $folder.FullName $extension.tool) $extension.long.tool
         }
-        $capabilities = @()
-        if ($manifest.capabilities) { $capabilities = @($manifest.capabilities) }
-        [void]$items.Add([ordered]@{
-            id             = $manifest.id
-            kind           = 'plugin'
-            name           = $manifest.name
-            author         = [ordered]@{ name = $manifest.author; verified = $false }
-            version        = $manifest.version
-            description    = $manifest.description
-            long           = $manifest.description
-            size           = (Get-Item $package).Length
-            download       = [ordered]@{ url = "files/$name"; sha256 = (Get-Sha256 $package) }
-            manifest       = $manifest
-            capabilities   = $capabilities
-            minCoreVersion = $manifest.minCoreVersion
-            license        = 'MIT'
-        })
     }
 }
 

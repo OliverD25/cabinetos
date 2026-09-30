@@ -1,6 +1,7 @@
 //! The marketplace client end to end, without a core: indexes built on the
 //! fly in `%TEMP%\cabinetos-core-test\`, from the committed `hello` fixture
-//! plugin, and a web server on 127.0.0.1 for the web path. Nothing here
+//! plugin (and the Agent extension's two items, from the repository's own
+//! files), and a web server on 127.0.0.1 for the web path. Nothing here
 //! reaches the network.
 
 use std::collections::BTreeMap;
@@ -678,4 +679,103 @@ fn a_web_index_is_refused_over_plain_http_unless_allowed_and_then_cached() {
             .contains("if-none-match: \"v1\"")
     );
     assert!(seen[2].contains("/market/files/hello-0.1.0.bin"));
+}
+
+/// The files of a folder of the repository, as a zip would carry them:
+/// names with `/`, relative to the folder.
+fn folder_files(dir: &Path) -> Vec<(String, Vec<u8>)> {
+    fn walk(root: &Path, dir: &Path, into: &mut Vec<(String, Vec<u8>)>) {
+        let mut entries: Vec<_> = fs::read_dir(dir).unwrap().flatten().collect();
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(root, &path, into);
+            } else {
+                let name = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                into.push((name, fs::read(&path).unwrap()));
+            }
+        }
+    }
+    let mut found = Vec::new();
+    walk(dir, dir, &mut found);
+    found
+}
+
+#[test]
+fn the_agent_extension_installs_as_a_plugin_and_a_tool_from_the_repository_s_own_files() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let plugin = repository.join("sdk/fixtures/plugins/agent");
+    let tool = repository.join("sdk/tools/agent-chat");
+    let mut setup = Setup::new();
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(plugin.join("plugin.json")).unwrap()).unwrap();
+    let capabilities = manifest["capabilities"].clone();
+    let plugin_zip = zip(&[
+        (
+            "plugin.json",
+            &fs::read(plugin.join("plugin.json")).unwrap(),
+        ),
+        (
+            "plugin.wasm",
+            &fs::read(plugin.join("plugin.wasm")).unwrap(),
+        ),
+    ]);
+    setup.offer(
+        "plugin",
+        "agent",
+        "0.1.0",
+        &plugin_zip,
+        &json!({ "manifest": manifest, "capabilities": capabilities }),
+    );
+    let files = folder_files(&tool);
+    let tool_zip = zip(&files
+        .iter()
+        .map(|(name, bytes)| (name.as_str(), bytes.as_slice()))
+        .collect::<Vec<_>>());
+    let tool_manifest: Value =
+        serde_json::from_slice(&fs::read(tool.join("tool.json")).unwrap()).unwrap();
+    setup.offer(
+        "tool",
+        "agent-chat",
+        "0.1.0",
+        &tool_zip,
+        &json!({ "manifest": tool_manifest }),
+    );
+    setup.write_index();
+
+    let market = setup.market();
+    let index = market
+        .fetch(&Source::Local(setup.index_dir()), false)
+        .unwrap();
+    for id in ["agent", "agent-chat"] {
+        let item = market.choose(&index, id, None).unwrap();
+        market
+            .install(&index, item, false, &check_plugin, &mut |_, _, _| {})
+            .unwrap();
+    }
+    assert!(
+        setup
+            .dirs()
+            .plugins
+            .join("agent")
+            .join("plugin.wasm")
+            .is_file()
+    );
+    let tools = market.tools();
+    assert_eq!(tools.len(), 1);
+    assert_eq!(
+        (tools[0].id.as_str(), tools[0].name.as_str()),
+        ("agent-chat", "Agent Chat")
+    );
+    for (name, _) in &files {
+        assert!(
+            setup.dirs().tools.join("agent-chat").join(name).is_file(),
+            "{name}"
+        );
+    }
 }

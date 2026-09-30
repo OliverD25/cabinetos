@@ -230,7 +230,7 @@ in `sdk/fixtures/plugins` (each as a zip) and the shipped themes in
 `sdk/themes`, with their hashes, into a folder of your choice:
 
 ```text
-powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection]
+powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-Extensions]
 cabinetos-cli config set marketplace.index "<folder>"
 cabinetos-cli market refresh
 cabinetos-cli market install hello
@@ -242,6 +242,18 @@ The shipped themes are in the index too, but installing one is refused
 while its file is in the themes folder (trust rule 7). With `-Collection`
 the index also offers the 36 themes of `sdk/themes/collection`
 ([themes.md](themes.md), "The collection").
+
+With `-Extensions` the index also offers the extensions of `sdk/extensions`:
+each folder there with an `extension.json` gives its Core Plugin (a zip of
+`plugin.json` and `plugin.wasm`, built first with
+`sdk\extensions\build-extensions.ps1`) and, when it names one, its Tool
+Extension (a zip of the tool's folder), as two items whose long descriptions
+name each other. The first is the Agent, items `agent` and `agent-chat`
+([extensions/agent.md](extensions/agent.md)). An extension's plugin is also a
+fixture for the core's tests; the index offers it as the extension's item
+only, so without `-Extensions` it is not offered at all. `-Extensions` and
+`-ThemesOnly` are independent. Nothing is uploaded: the public index gets an
+extension only when the creator publishes it.
 
 ## The messages
 
