@@ -29,7 +29,10 @@
         </Storyboard>
     </UserControl.Resources>
 
-    <!-- Permissions review (design view C): 440 px on a 40 % black scrim; a click on the scrim cancels. -->
+    <!--
+      Permissions review (design view C): 440 px on a 40 % black scrim; a click on the scrim cancels. Tab goes around the
+      card's own controls and never leaves it while it is open (Cycle), as in the plugin list.
+    -->
     <Grid x:Name="Scrim" Background="{StaticResource CbScrimBrush}">
         <Border
             x:Name="Card"
@@ -41,6 +44,7 @@
             BorderThickness="1"
             CornerRadius="8"
             RenderTransformOrigin="0.5,0.5"
+            TabFocusNavigation="Cycle"
             Translation="0,0,48">
             <Border.RenderTransform>
                 <CompositeTransform x:Name="CardTransform" />

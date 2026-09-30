@@ -1167,12 +1167,15 @@ when it has more; its tooltip lists them all.
 
 Tab keeps the keyboard in the palette while it is open, and so it does in
 Quick Open, the prompts in the palette's frame and the theme picker; in
-the plugin list it goes around the list's own buttons. Until 2026-10-01
+the plugin list and in the permissions review it goes around their own
+controls. Until 2026-10-01
 Tab left the theme picker and the plugin list with the keyboard on a
 sidebar row, a rail button or the pane, while they stayed on screen: the
 next Enter or Space acted under them (the keys audit,
-[log/2026-10-01](log/2026-10-01/README.md)). The permissions review has
-the same fault by reading and keeps it until a test can open the review.
+[log/2026-10-01](log/2026-10-01/README.md)). The permissions review had
+the same fault by reading. It got the plugin list's fix by reading too
+(`TabFocusNavigation="Cycle"`), and no test opens the review yet: that
+needs a plugin that asks for a capability.
 
 Rebinding: the pencil (or F2 on the highlighted row) starts recording. The
 next key that is not a modifier forms a combination; a second one within
