@@ -18,16 +18,34 @@ public sealed record ThemeChoice(ThemeInfo Info, string? Tint, bool IsCurrent);
 /// and applying one through <c>set_value ui.theme</c>. The core then sends
 /// <c>theme_changed</c>, which the window applies. <c>list_themes</c> carries
 /// each theme's Mica tint since protocol 11, so opening the picker is one
-/// request; with an older core every swatch shows plain Mica.
+/// request; with an older core every swatch shows plain Mica. While the
+/// picker is open the highlighted theme is previewed: <see cref="PreviewDelay"/>
+/// after the highlight stops, <c>get_theme</c> fetches it whole and
+/// <see cref="Preview"/> hands it to the window, which paints it without
+/// writing anything.
 /// </summary>
 public sealed class ThemePickerModel(ICoreChannel core)
 {
     private const string Target = "cabinetos_ui::theme";
 
     private int _load;
+    private int _preview;
+    private bool _previews;
 
     /// <summary>The rows, the rows' tints, the highlight or the error changed.</summary>
     public event Action? Changed;
+
+    /// <summary>
+    /// The window is to paint this theme as a preview, or, with null, the
+    /// theme in effect again. Raised on the thread that moved the highlight.
+    /// </summary>
+    public event Action<ColorTheme?>? Preview;
+
+    /// <summary>How long the highlight must rest on a row before its theme is fetched.</summary>
+    public TimeSpan PreviewDelay { get; set; } = TimeSpan.FromMilliseconds(80);
+
+    /// <summary>Whether the window shows a previewed theme rather than the theme in effect.</summary>
+    public bool IsPreviewShown { get; private set; }
 
     /// <summary>The themes, in the core's order.</summary>
     public IReadOnlyList<ThemeChoice> Rows { get; private set; } = [];
@@ -69,6 +87,8 @@ public sealed class ThemePickerModel(ICoreChannel core)
                 var current = Rows.ToList().FindIndex(r => r.IsCurrent);
                 Highlight = Rows.Count == 0 ? -1 : Math.Max(0, current);
                 Changed?.Invoke();
+                // On the current row this sends nothing; with no current row, row 0 is shown as the highlight says.
+                SchedulePreview();
                 return true;
             case ErrorReply { Code: ErrorCodes.UnknownRequest }:
                 return Fail("This core has no themes yet (list_themes).");
@@ -95,6 +115,100 @@ public sealed class ThemePickerModel(ICoreChannel core)
         {
             Highlight = index;
             Changed?.Invoke();
+            SchedulePreview();
+        }
+    }
+
+    /// <summary>The picker opened: from now on the highlighted theme is previewed.</summary>
+    public void BeginPreviews() => _previews = true;
+
+    /// <summary>
+    /// The picker closed. With <paramref name="restore"/> the theme in effect
+    /// is painted again if a preview was shown (Esc, a click outside, another
+    /// view taking the place); without it the preview stays on screen for the
+    /// <c>theme_changed</c> that makes it the theme in effect. A preview on its
+    /// way is dropped either way.
+    /// </summary>
+    public void EndPreviews(bool restore)
+    {
+        _previews = false;
+        _preview++;
+        var shown = IsPreviewShown;
+        IsPreviewShown = false;
+        if (restore && shown)
+        {
+            Preview?.Invoke(null);
+        }
+    }
+
+    /// <summary>
+    /// The core's <c>theme_changed</c> made <paramref name="id"/> the theme in
+    /// effect while the picker is open: the check moves there, the highlight
+    /// stays. The window now shows that theme, so no preview is shown any more
+    /// and one on its way is dropped.
+    /// </summary>
+    public void MarkCurrent(string id)
+    {
+        Rows = Rows.Select(r => r with { IsCurrent = r.Info.Id == id }).ToList();
+        _preview++;
+        IsPreviewShown = false;
+        Changed?.Invoke();
+    }
+
+    private void SchedulePreview()
+    {
+        if (_previews && (uint)Highlight < (uint)Rows.Count)
+        {
+            _ = PreviewAsync(++_preview, Highlight);
+        }
+    }
+
+    // The awaits stay on the caller's context: Preview is raised on the UI thread, as Changed is.
+    private async Task PreviewAsync(int sequence, int row)
+    {
+        if (PreviewDelay > TimeSpan.Zero)
+        {
+            await Task.Delay(PreviewDelay);
+            if (sequence != _preview)
+            {
+                return;
+            }
+        }
+        var choice = Rows[row];
+        if (choice.IsCurrent)
+        {
+            if (IsPreviewShown)
+            {
+                IsPreviewShown = false;
+                Preview?.Invoke(null);
+            }
+            return;
+        }
+        CoreReply reply;
+        try
+        {
+            reply = await core.RequestAsync(new GetThemeRequest { ThemeId = choice.Info.Id });
+        }
+        catch (IOException error)
+        {
+            Diag.Debug(Target, "theme preview failed", new LogField("theme", choice.Info.Id), new LogField("error", error.Message));
+            return;
+        }
+        if (sequence != _preview)
+        {
+            return;
+        }
+        switch (reply)
+        {
+            case ThemeReply { Theme: var theme }:
+                IsPreviewShown = true;
+                Preview?.Invoke(theme);
+                break;
+            case ErrorReply error:
+                // Enter shows the core's reason in the footer; a preview only leaves the screen as it is.
+                Diag.Debug(Target, "theme preview failed", new LogField("theme", choice.Info.Id), new LogField("code", error.Code),
+                    new LogField("error", error.Message));
+                break;
         }
     }
 

@@ -1,10 +1,15 @@
+using System.Collections.Concurrent;
+using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Themes;
 using CabinetOS.Tests.Support;
 
 namespace CabinetOS.Tests;
 
-/// <summary>The theme picker's model: the core's themes, the highlight, and applying one through <c>set_value ui.theme</c>.</summary>
+/// <summary>
+/// The theme picker's model: the core's themes, the highlight, applying one through <c>set_value ui.theme</c>,
+/// and the live preview of the highlighted theme through <c>get_theme</c>.
+/// </summary>
 public class ThemePickerTests
 {
     private static readonly ThemeInfo[] Themes =
@@ -14,12 +19,56 @@ public class ThemePickerTests
         new("paper", "Paper", "Someone", "0.1.0", ColorTheme.Light, "#0F6CBD"),
     ];
 
-    private static FakeChannel Core(Func<SetValueRequest, CoreReply>? setValue = null) => new(request => request switch
+    private static FakeChannel Core(Func<SetValueRequest, CoreReply>? setValue = null, Func<GetThemeRequest, CoreReply>? getTheme = null) =>
+        new(request => request switch
+        {
+            ListThemesRequest => new ThemesReply(Themes),
+            SetValueRequest set => setValue?.Invoke(set) ?? new OkReply(),
+            GetThemeRequest get => getTheme?.Invoke(get) ?? new ThemeReply(Whole(get.ThemeId!)),
+            _ => new ErrorReply(ErrorCodes.UnknownRequest, request.Type),
+        });
+
+    // Any whole theme will do: the picker hands on what get_theme answered, by ID.
+    private static ColorTheme Whole(string id) => ThemeTests.Shipped("nord") with { Id = id };
+
+    // An open picker on "default" with previews on and no delay; the IDs it asked the window to paint (null: the theme in effect).
+    private static async Task<(ThemePickerModel Picker, ConcurrentQueue<string?> Painted)> OpenAsync(ICoreChannel core)
     {
-        ListThemesRequest => new ThemesReply(Themes),
-        SetValueRequest set => setValue?.Invoke(set) ?? new OkReply(),
-        _ => new ErrorReply(ErrorCodes.UnknownRequest, request.Type),
-    });
+        var picker = new ThemePickerModel(core) { PreviewDelay = TimeSpan.Zero };
+        var painted = new ConcurrentQueue<string?>();
+        picker.Preview += theme => painted.Enqueue(theme?.Id);
+        picker.BeginPreviews();
+        Assert.True(await picker.LoadAsync("default"));
+        return (picker, painted);
+    }
+
+    private static async Task UntilAsync(Func<bool> condition)
+    {
+        for (var waited = 0; !condition(); waited += 10)
+        {
+            Assert.True(waited < 5000, "waited 5 s");
+            await Task.Delay(10);
+        }
+    }
+
+    // A core whose get_theme answers wait until the test gives them, in any order.
+    private sealed class HeldCore : ICoreChannel
+    {
+        public List<(string Id, TaskCompletionSource<CoreReply> Reply)> Held { get; } = [];
+
+        public Task<CoreReply> RequestAsync(CoreRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request is not GetThemeRequest get)
+            {
+                return Task.FromResult<CoreReply>(new ThemesReply(Themes));
+            }
+            var reply = new TaskCompletionSource<CoreReply>();
+            Held.Add((get.ThemeId!, reply));
+            return reply.Task;
+        }
+
+        public void Answer(int index) => Held[index].Reply.SetResult(new ThemeReply(Whole(Held[index].Id)));
+    }
 
     [Fact]
     public async Task Opening_lists_the_themes_in_the_core_order_with_the_current_one_marked_and_highlighted()
@@ -106,5 +155,145 @@ public class ThemePickerTests
         Assert.Equal(-1, picker.Highlight);
         Assert.Equal("This core has no themes yet (list_themes).", picker.Error);
         Assert.False(await picker.ApplyAsync());
+    }
+
+    [Fact]
+    public async Task Moving_the_highlight_previews_the_theme_get_theme_answers_and_writes_nothing()
+    {
+        var core = Core();
+        var (picker, painted) = await OpenAsync(core);
+        // Opening lands on the theme in effect: nothing to fetch.
+        Assert.Empty(core.Requests.OfType<GetThemeRequest>());
+
+        picker.Move(1);
+        Assert.Equal(["nord"], painted);
+        Assert.True(picker.IsPreviewShown);
+        picker.SetHighlight(2);
+        Assert.Equal(["nord", "paper"], painted);
+
+        Assert.Equal(["nord", "paper"], core.Requests.OfType<GetThemeRequest>().Select(r => r.ThemeId));
+        Assert.Empty(core.Requests.OfType<SetValueRequest>());
+    }
+
+    [Fact]
+    public async Task Highlighting_the_theme_in_effect_paints_it_again_without_a_request()
+    {
+        var core = Core();
+        var (picker, painted) = await OpenAsync(core);
+
+        picker.Move(1);
+        picker.Move(-1);
+
+        Assert.Equal(["nord", null], painted);
+        Assert.False(picker.IsPreviewShown);
+        Assert.Single(core.Requests.OfType<GetThemeRequest>());
+    }
+
+    [Fact]
+    public async Task A_reply_for_a_row_the_highlight_left_is_dropped_and_the_later_one_is_painted()
+    {
+        var core = new HeldCore();
+        var (picker, painted) = await OpenAsync(core);
+
+        picker.Move(1);
+        picker.Move(1);
+        Assert.Equal(["nord", "paper"], core.Held.Select(h => h.Id));
+        core.Answer(1);
+        await UntilAsync(() => !painted.IsEmpty);
+        core.Answer(0);
+        await Task.Delay(100);
+
+        Assert.Equal(["paper"], painted);
+    }
+
+    [Fact]
+    public async Task Closing_with_restore_paints_the_theme_in_effect_once_and_only_after_a_preview()
+    {
+        var (unmoved, nothing) = await OpenAsync(Core());
+        unmoved.EndPreviews(restore: true);
+        Assert.Empty(nothing);
+
+        var (picker, painted) = await OpenAsync(Core());
+        picker.Move(1);
+        picker.EndPreviews(restore: true);
+        picker.EndPreviews(restore: true);
+        Assert.Equal(["nord", null], painted);
+
+        // A reply that comes after the close is dropped, and the closed picker previews no more.
+        var core = new HeldCore();
+        var (late, latePainted) = await OpenAsync(core);
+        late.Move(1);
+        late.EndPreviews(restore: true);
+        core.Answer(0);
+        await Task.Delay(100);
+        late.Move(1);
+        Assert.Empty(latePainted);
+        Assert.Single(core.Held);
+        Assert.False(late.IsPreviewShown);
+    }
+
+    [Fact]
+    public async Task Closing_after_an_apply_leaves_the_preview_on_screen()
+    {
+        var (picker, painted) = await OpenAsync(Core());
+        picker.Move(1);
+        Assert.True(await picker.ApplyAsync());
+
+        picker.EndPreviews(restore: false);
+
+        Assert.Equal(["nord"], painted);
+        Assert.False(picker.IsPreviewShown);
+    }
+
+    [Fact]
+    public async Task Quick_moves_fetch_only_the_row_the_highlight_rests_on()
+    {
+        var core = Core();
+        var picker = new ThemePickerModel(core) { PreviewDelay = TimeSpan.FromMilliseconds(40) };
+        var painted = new ConcurrentQueue<string?>();
+        picker.Preview += theme => painted.Enqueue(theme?.Id);
+        picker.BeginPreviews();
+        await picker.LoadAsync("default");
+
+        picker.Move(1);
+        picker.Move(1);
+        picker.Move(-1);
+        await UntilAsync(() => !painted.IsEmpty);
+        await Task.Delay(200);
+
+        Assert.Equal("nord", Assert.Single(core.Requests.OfType<GetThemeRequest>()).ThemeId);
+        Assert.Equal(["nord"], painted);
+    }
+
+    [Fact]
+    public async Task A_theme_changed_moves_the_check_and_leaves_the_highlight()
+    {
+        var (picker, painted) = await OpenAsync(Core());
+        picker.Move(1);
+        var redraws = 0;
+        picker.Changed += () => redraws++;
+
+        picker.MarkCurrent("nord");
+
+        Assert.Equal([false, true, false], picker.Rows.Select(r => r.IsCurrent));
+        Assert.Equal((1, 1), (picker.Highlight, redraws));
+        // Nord is the theme in effect now: Esc has nothing to paint back.
+        Assert.False(picker.IsPreviewShown);
+        picker.EndPreviews(restore: true);
+        Assert.Equal(["nord"], painted);
+    }
+
+    [Fact]
+    public async Task A_theme_the_core_cannot_send_leaves_the_screen_and_the_footer_as_they_are()
+    {
+        var picker = (await OpenAsync(Core(getTheme: get => new ErrorReply(ErrorCodes.NoSuchTheme, $"no theme {get.ThemeId}")))).Picker;
+        var painted = 0;
+        picker.Preview += _ => painted++;
+
+        picker.Move(1);
+
+        Assert.Equal(0, painted);
+        Assert.False(picker.IsPreviewShown);
+        Assert.Null(picker.Error);
     }
 }

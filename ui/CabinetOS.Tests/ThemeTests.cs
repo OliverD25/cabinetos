@@ -17,7 +17,7 @@ public class ThemeTests
     /// <summary>The Windows default blue's shades, with the design's #60CDFF as Light2.</summary>
     private static readonly AccentShades DesignAccent = ThemeMapper.Shades(new Argb(0xFF, 0x60, 0xCD, 0xFF), light: false);
 
-    private static ColorTheme Shipped(string id) =>
+    internal static ColorTheme Shipped(string id) =>
         JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(Repo.Root, "sdk", "themes", id + ".json")), ProtocolJson.Default.ColorTheme)!;
 
     [Fact]
