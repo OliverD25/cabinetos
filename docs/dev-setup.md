@@ -153,6 +153,16 @@ Checked on 2026-09-28 on the main PC (Windows 11 25H2, build 26200).
   rustup target add wasm32-wasip2 && cargo install cargo-component wasm-tools --locked
   ```
 
+- The Agent extension (Phase 14) is a Cargo project of its own,
+  `sdk/extensions/agent/plugin`, outside the core workspace. Its
+  `rust-toolchain.toml` pins the core's channel plus the `wasm32-wasip2`
+  target, which rustup adds on first use. `cargo test` in that folder runs
+  its own 90 tests natively with a fake host; the five core checks do not
+  run them, and CI has a step for them. The component itself is built by
+  `sdk/extensions/build-extensions.ps1`, which also refreshes the committed
+  test copy in `sdk/fixtures/plugins/agent` ([extensions/agent.md](extensions/agent.md),
+  "Building and packing").
+
 ## Phase 6: the indexer
 
 - Tests that read the MFT or the USN Journal need an **elevated** terminal

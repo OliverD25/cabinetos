@@ -22,6 +22,8 @@ on:
       - "sdk/themes/**"
       # A test checks the marketplace index schema.
       - "sdk/marketplace/**"
+      # The Agent extension's plugin has a Cargo project and tests of its own.
+      - "sdk/extensions/**"
       # The WinUI shell; its tests also read sdk/protocol and sdk/config.
       - "ui/**"
       # Tool Extensions; the shell's tests check the shipped tool.json against its schema.
@@ -74,7 +76,7 @@ jobs:
             if printf '%s\n' "$changed" | grep -Eq "$1"; then echo true; else echo false; fi
           }
           # The same paths as the trigger above, split by the job that needs them.
-          echo "core=$(touches '^(core/|sdk/(protocol|config|wit|fixtures|themes|marketplace)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "core=$(touches '^(core/|sdk/(protocol|config|wit|fixtures|themes|marketplace|extensions)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           # The shell's theme tests map the shipped themes of sdk/themes.
           echo "ui=$(touches '^(ui/|sdk/(protocol|config|tools|themes)/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
           echo "scripts=$(touches '^(build/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
@@ -124,6 +126,15 @@ jobs:
           # The runner is thrown away after the run, so the test that sends
           # a file to the Recycle Bin may run here (it is skipped elsewhere).
           CABINETOS_TEST_RECYCLE_BIN: "1"
+
+      # The Agent extension's plugin (sdk/extensions/agent/plugin) is a Cargo
+      # project of its own, outside the core workspace: its 90 tests run the
+      # plugin's logic natively with a fake host (docs/extensions/agent.md,
+      # "Testing without a model"). Its rust-toolchain.toml pins the same
+      # channel plus the wasm32-wasip2 target, which rustup adds on first use.
+      - name: Test the Agent extension's plugin
+        working-directory: sdk/extensions/agent/plugin
+        run: cargo test
 
       - name: Release build
         run: cargo build --workspace --release
