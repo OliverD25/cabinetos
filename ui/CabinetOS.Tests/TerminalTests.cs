@@ -135,6 +135,17 @@ public class TerminalTests
     }
 
     [Fact]
+    public void A_new_tab_starts_with_the_decision_its_profile_will_always_make()
+    {
+        // The caption of a tab of a profile that does not follow the pane must not
+        // say "synced" before the first pane change.
+        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Initial(followsPane: false));
+        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Initial(followsPane: true));
+        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Initial(TerminalProfiles.Defaults.FollowsPane("claude")));
+        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Initial(TerminalProfiles.Defaults.FollowsPane("pwsh")));
+    }
+
+    [Fact]
     public void Paths_typed_by_ctrl_p_hold_the_line_until_the_user_presses_enter()
     {
         var typing = new TypingTracker();

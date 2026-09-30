@@ -62,6 +62,13 @@ public sealed class TypingTracker
 /// <summary>The rule for following the active pane, on its own so it is tested without a shell.</summary>
 public static class CwdSyncRule
 {
+    /// <summary>
+    /// What a new tab's caption says before any sync was decided: a shell starts in the
+    /// active pane's folder, but a profile that does not follow the pane never syncs, so
+    /// its caption must say so from the start.
+    /// </summary>
+    public static CwdSyncDecision Initial(bool followsPane) => followsPane ? CwdSyncDecision.Sync : CwdSyncDecision.SkipProfile;
+
     /// <summary>Decides for <paramref name="folder"/>, the active pane's folder after the wait.</summary>
     public static CwdSyncDecision Decide(string folder, string? lastSynced, bool running, TypingTracker typing, bool followsPane = true)
     {

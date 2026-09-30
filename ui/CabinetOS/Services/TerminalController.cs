@@ -410,7 +410,10 @@ internal sealed class TerminalController
 
     private async Task<TerminalTab?> AttachAsync(TerminalOpenedReply opened, string profile, string? folder, ushort cols, ushort rows)
     {
-        var tab = new TerminalTab(opened.SessionId, profile, folder, cols, rows);
+        var tab = new TerminalTab(opened.SessionId, profile, folder, cols, rows)
+        {
+            LastDecision = CwdSyncRule.Initial(Profiles.FollowsPane(profile)),
+        };
         _tabs.Add(tab);
         _page.Post(TerminalPageMessages.Create(tab.SessionId));
         ShowTab(tab);
