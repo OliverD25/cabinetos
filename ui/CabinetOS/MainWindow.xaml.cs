@@ -70,6 +70,9 @@ public sealed partial class MainWindow : Window
     private readonly bool _selfTestCrash;
     private readonly string? _toolsDir;
     private UiSettings _settings = UiSettings.Defaults;
+
+    // How often the configuration was read: the snapshot aid's until:config waits for the next one.
+    private int _configReads;
     private ShellState _shell = ShellState.Empty;
     private bool _dual = true;
     private bool _sidebarOpen = true;
@@ -151,6 +154,7 @@ public sealed partial class MainWindow : Window
         SetUpTools();
         SetUpTabs();
         SetUpShell();
+        SetUpContextMenu();
         SetUpFind();
         SetUpQuickOpen();
         SetUpPreview();
@@ -419,13 +423,28 @@ public sealed partial class MainWindow : Window
                     }
                     break;
                 case "menu":
-                    // "menu:*" is the pane's empty space; "menu:" the focused row; else a row by name.
-                    var row = step.Argument == "*" ? -1 : step.Argument.Length == 0 ? Active.FocusIndex : Active.View?.IndexOfName(step.Argument) ?? -1;
-                    if (row >= 0)
+                    // "menu:*" is the pane's empty space; "menu:" the focused row; else a row by name. A row outside
+                    // the selection is selected first, as a right-click does.
+                    OnContextMenuRequested(_paneViews[_active], MenuRowForStep(step.Argument), null);
+                    break;
+                case "shellmenu":
+                    // Shift+right-click on the same rows; Windows' menu comes when the core answers.
+                    OnShellMenuRequested(_paneViews[_active], MenuRowForStep(step.Argument), null);
+                    await Task.Delay(1500);
+                    break;
+                case "menu-click":
+                    if (!_contextMenu.Click(step.Argument))
                     {
-                        Active.Selection.MoveTo(row, SelectMode.Single);
+                        Diag.Info("cabinetos_ui::snapshot", "no such entry in the open context menu", new LogField("title", step.Argument));
                     }
-                    OnContextMenuRequested(_paneViews[_active], row, null);
+                    await Task.Delay(300);
+                    break;
+                case "shellmenu-click":
+                    if (!_windowsMenu.Click(step.Argument))
+                    {
+                        Diag.Info("cabinetos_ui::snapshot", "no such item in the open Windows menu", new LogField("text", step.Argument));
+                    }
+                    await Task.Delay(300);
                     break;
                 case "type":
                     // Into the prompt in the palette's frame when one is shown, else the palette.
@@ -709,10 +728,13 @@ public sealed partial class MainWindow : Window
     // Snapshot steps that wait for the core: "until:running" (a job moves bytes) or "until:conflict".
     private async Task WaitUntilAsync(string condition)
     {
+        var configReads = _configReads;
         for (var waited = 0; waited < 20_000; waited += 100)
         {
             var met = condition switch
             {
+                // The configuration was read again: an edit of the file, from outside, arrived.
+                "config" => _configReads > configReads,
                 "conflict" => _transfers.Conflicts.Current is not null,
                 "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
                 "terminal" => _terminal.Shown is { Pipe: not null },
@@ -809,6 +831,7 @@ public sealed partial class MainWindow : Window
         var reply = await _session.RequestAsync(new GetConfigRequest());
         if (reply is ConfigReply config)
         {
+            _configReads++;
             _shell = ShellState.FromConfig(config.Config);
             Diag.SetBundleConfig(config.Config);
             if (firstStart)
@@ -818,6 +841,7 @@ public sealed partial class MainWindow : Window
             }
             SetPinnedFolders();
             ApplySettings(UiSettings.FromConfig(config.Config), firstStart);
+            ApplyMenuConfig(config.Config);
             _terminal.Profiles = TerminalProfiles.FromConfig(config.Config);
             Dock.SetProfiles(_terminal.Profiles);
         }
@@ -1401,6 +1425,10 @@ public sealed partial class MainWindow : Window
                 break;
             case CommandOutcomeKind.CoreResult when OpensPreview(outcome):
                 break;
+            case CommandOutcomeKind.CoreResult when _router.Find(outcome.CommandId) is { Source.Kind: "program" } program:
+                // A program started (program.<name>): a line in the status bar, not a dialog.
+                ShowNotice($"{program.Title}: started.");
+                break;
             case CommandOutcomeKind.CoreResult when outcome.Result is { } result:
                 _ = ShowResultAsync(name, result);
                 break;
@@ -1535,6 +1563,12 @@ public sealed partial class MainWindow : Window
         else if (FileMenu.IsOpen)
         {
             FileMenu.Close();
+        }
+        else if (_contextMenu.IsOpen || _windowsMenu.IsOpen)
+        {
+            // The flyouts take Esc themselves; this is the palette's and the snapshot aid's way.
+            _contextMenu.Close();
+            _windowsMenu.Close();
         }
         else if (_paneViews.FirstOrDefault(v => v.IsRenaming) is { } renaming)
         {
@@ -2050,85 +2084,11 @@ public sealed partial class MainWindow : Window
         ShowNotice(notice);
     }
 
-    // ----- Context menu (design view D) -----
-
-    private void OnContextMenuRequested(FilePane view, int index, Point? at)
-    {
-        var paneIndex = Array.IndexOf(_paneViews, view);
-        if (paneIndex < 0)
-        {
-            return;
-        }
-        SetActive(paneIndex);
-        var pane = _panes[paneIndex];
-        var position = at ?? view.RowAnchor(index);
-        EndAddressEdit();
-        if (index < 0 || pane.EntryAt(index) is not { } entry)
-        {
-            FileMenu.Show(position, [], FolderMenu(pane), fromKeyboard: at is null);
-            return;
-        }
-        FileMenu.Show(position, RowStrip(pane), RowMenu(pane, entry), fromKeyboard: at is null);
-    }
-
-    private IReadOnlyList<MenuEntry> RowStrip(PaneModel pane) =>
-    [
-        new(MenuEntryKind.Item, "Cut", "\uE8C6", "edit.cut", Tooltip: WithKeys("Cut", "edit.cut")),
-        new(MenuEntryKind.Item, "Copy", "\uE8C8", "edit.copy", Tooltip: WithKeys("Copy", "edit.copy")),
-        new(MenuEntryKind.Item, "Paste", "\uE77F", "edit.paste", IsEnabled: !_clipboard.IsEmpty, Tooltip: WithKeys("Paste", "edit.paste")),
-        new(MenuEntryKind.Item, "Rename", "\uE8AC", "file.rename", IsEnabled: !_unavailable.Contains("rename") && pane.Selection.SelectedCount <= 1, Tooltip: WithKeys("Rename", "file.rename")),
-        new(MenuEntryKind.Item, "Delete", "\uE74D", "file.delete", Tooltip: WithKeys("Delete to the Recycle Bin", "file.delete")),
-    ];
-
-    private IReadOnlyList<MenuEntry> RowMenu(PaneModel pane, PaneEntry entry)
-    {
-        var items = new List<MenuEntry>
-        {
-            new(MenuEntryKind.Item, "Open", "\uE8E5", "pane.openSelected", Keys: KeysOf("pane.openSelected"), IsEnabled: entry.IsFolder || !_unavailable.Contains("open_path")),
-            new(MenuEntryKind.Item, "Open in other pane", "\uE8A7", "file.openInOtherPane", Keys: KeysOf("file.openInOtherPane"), IsEnabled: entry.IsFolder),
-            new(MenuEntryKind.Item, "Copy to other pane", "\uE8C8", "file.copyToOtherPane", Keys: KeysOf("file.copyToOtherPane"), IsEnabled: _dual),
-            // A new shell in the row's folder (a file's own folder for a file). No keys shown:
-            // Ctrl+` toggles the pane, which is not the same thing.
-            new(MenuEntryKind.Item, "Open in Terminal", "\uE756", "terminal.new", CommandArgs.With("cwd", entry.IsFolder ? entry.Path : pane.Path)),
-        };
-        var plugins = _router.Commands.Where(c => c.Source.Kind == "plugin" && c.When == KeyContexts.FilesView).ToList();
-        if (plugins.Count > 0)
-        {
-            // Plugins cannot read the selection yet (docs/plugins.md): the menu hands them the paths.
-            var args = CommandArgs.Object(("path", entry.Path), ("paths", pane.Targets().Select(t => t.Path).ToList()));
-            items.Add(MenuEntry.Separator);
-            items.Add(MenuEntry.Header("From plugins"));
-            items.AddRange(plugins.Select(p => new MenuEntry(MenuEntryKind.Item, p.Title, CommandId: p.Id, Args: args,
-                Keys: KeysOf(p.Id), Badge: p.Source.Name ?? p.Source.Id ?? "plugin")));
-        }
-        items.Add(MenuEntry.Separator);
-        items.Add(new(MenuEntryKind.Item, "Properties", "\uE946", "file.properties", Keys: KeysOf("file.properties")));
-        return items;
-    }
-
-    private List<MenuEntry> FolderMenu(PaneModel pane)
-    {
-        var items = new List<MenuEntry>
-        {
-            new(MenuEntryKind.Item, "Paste", "\uE77F", "edit.paste", Keys: KeysOf("edit.paste"), IsEnabled: !_clipboard.IsEmpty),
-            new(MenuEntryKind.Item, "New folder", "\uE8F4", "file.newFolder", Keys: KeysOf("file.newFolder"), IsEnabled: !_unavailable.Contains("create_directory")),
-        };
-        if (pane.Path.Length > 0 && !_sidebar.IsPinned(pane.Path))
-        {
-            items.Add(new(MenuEntryKind.Item, "Pin this folder to the sidebar", "\uE718", "sidebar.pin", CommandArgs.With("path", pane.Path)));
-        }
-        items.Add(MenuEntry.Separator);
-        items.Add(new(MenuEntryKind.Item, "Properties", "\uE946", "file.properties", CommandArgs.With("scope", "folder")));
-        return items;
-    }
-
     // A registry command's first binding as the menu shows it: "F5", "Ctrl+K Ctrl+H".
     private string? KeysOf(string commandId) =>
         _router.Find(commandId)?.Keys is [var first, ..] && KeySequence.TryParse(first, out var keys)
             ? string.Join(' ', keys.DisplayParts())
             : null;
-
-    private string WithKeys(string title, string commandId) => KeysOf(commandId) is { } keys ? $"{title} ({keys})" : title;
 
     // ----- Transfers (design view E) -----
 

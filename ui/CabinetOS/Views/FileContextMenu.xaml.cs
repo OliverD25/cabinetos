@@ -266,6 +266,9 @@ public sealed partial class FileContextMenu : UserControl
         return button;
     }
 
+    /// <summary>A plugin's stable color, by its name; the right-click menu marks its commands with it too.</summary>
+    internal static Color PluginColor(string badge) => PluginColors[StableHash(badge) % (uint)PluginColors.Length];
+
     // string.GetHashCode changes with every start; the plugin's color must not.
     private static uint StableHash(string text)
     {

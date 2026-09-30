@@ -137,6 +137,12 @@ public sealed partial class FilePane : UserControl
     /// </summary>
     public event Action<FilePane, int, Point?>? ContextMenuRequested;
 
+    /// <summary>
+    /// Raised for Windows' own menu (Shift+right-click, Phase 18): the row (-1 for the pane's
+    /// empty space) and where the pointer was, in the window's coordinates.
+    /// </summary>
+    public event Action<FilePane, int, Point?>? ShellMenuRequested;
+
     /// <summary>Runs a command by ID through the window's router: (command, arguments, trigger).</summary>
     public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
 
@@ -893,7 +899,7 @@ public sealed partial class FilePane : UserControl
         }
         if (_model.Search is null)
         {
-            ContextMenuRequested?.Invoke(this, index, e.GetPosition(null));
+            (IsDown(VirtualKey.Shift) ? ShellMenuRequested : ContextMenuRequested)?.Invoke(this, index, e.GetPosition(null));
         }
     }
 
