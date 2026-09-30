@@ -124,7 +124,11 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   "The terminal", "Handing the keyboard to the page"), Commander Compact chosen in the theme picker with its
   keys (the window's log must say 20 px rows; Tab must never land on a
   function key; F5 pressed through the bar's button by its accessible name
-  must copy a file) and switched back, and the edge cases.
+  must copy a file) and switched back, the tabs ("Tabs"), what plugins ask of
+  the window (a row dragged onto a tool's page; the Agent installed through
+  the marketplace with its fake provider, asked to rename three files, the
+  preview applied with Enter: "What plugins ask of the window"), section 13,
+  the rail layout (below), and the edge cases.
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
@@ -152,6 +156,22 @@ and `livecheck.ps1` needs the 100,000-entry folder that
 `cargo bench -p cabinetos-fs --bench list_directory` makes in
 `%TEMP%\cabinetos-bench`. `livecheck.ps1` leaves one file in the Recycle
 Bin, `cabinetos-live-check-delete-me.txt` (the Delete check).
+
+What a run keeps out of the real application data, all under its own folder:
+the configuration, logs, themes, the undo journal, WebView2's data, the
+plugins and their data (`CABINETOS_PLUGINS_DIR`, `CABINETOS_PLUGINS_DATA_DIR`),
+the marketplace's files (`CABINETOS_MARKETPLACE_DIR`) and a copy of the tools
+folder with Markdown Preview and the test tool Quick Notes. Its marketplace is a
+local index the script builds (`sdk\marketplace\build-index.ps1`, with
+`-Extensions` when `sdk\extensions\agent\plugin\plugin.wasm` is built), so the
+marketplace never reads the network. Without that file the Agent steps say
+"WAITING" and do not run; `sdk\extensions\build-extensions.ps1` makes it (a copy
+of the committed `sdk\fixtures\plugins\agent\plugin.wasm` does too).
+
+The keys of the cursor block (the arrows, Home, End, Page Up and Down, Insert,
+Delete) are sent as extended keys, as a real keyboard's are. Sent plain they
+are the numeric keypad's, and with Num Lock on Windows takes Shift away from
+Shift+Down: the window saw a bare Down.
 
 ```text
 # PowerShell: the scripts use Windows' SendInput and UI Automation
@@ -1589,6 +1609,16 @@ the search. The list shows each hit's name and folder; a click or Enter on
 one goes to it in the active pane with the hit selected, as Enter on a hit in
 the pane does. Down in the field moves to the first hit.
 
+The field is a text box, so it keeps every key but the ones of the immutable
+tier ([keybindings.md](keybindings.md), "Contexts"): Ctrl+Shift+E does not
+show the Explorer while the field has the keyboard. Esc leaves it. The
+window takes Esc before the field's own handler sees it, so `overlay.close`
+does the work: in the rail or in the sidebar (a rail button, the tree, the
+field, a hit) it gives the keyboard to the pane and ends a search that is
+running, and writes "Esc gave the keyboard from the rail layout's sidebar
+back to the pane" into the log. The tree's Esc and the field's Esc are the
+same.
+
 ### Tool pages
 
 A tool with `"sidebar": true` in its `tool.json`
@@ -1641,12 +1671,36 @@ classic and right layouts against snapshots taken before this phase found
 the same images: 19 and 11 pixels of 2.5 million differ, and two runs of
 one build differ by 6.
 
-The live check has the section "13: rail" (`ui/livecheck/livecheck.ps1`):
-the layout is switched to `rail` in the run's configuration (the earlier
-sections run in the classic layout), a test tool with a sidebar page
-(`ui/livecheck/fixtures/quick-notes`) is installed from the run's own tools
-folder, and real keys and the mouse press the rail's buttons, walk the
-tree, drag the divider and use Ctrl+Shift+E and Ctrl+Shift+F.
+The live check has the section "13: rail" (`ui/livecheck/livecheck.ps1`).
+The layout is switched to `rail` in the run's configuration (the sections
+before it run in the classic layout, and the one after it gets it back), and
+a test tool with a sidebar page (`ui/livecheck/fixtures/quick-notes`) is in
+the run's own tools folder. Real keys and the mouse then check:
+
+- the rail's five buttons (found with UI Automation) are 36 px square, 40 px
+  apart and 12 px in from the window's edge;
+- Ctrl+Shift+F shows the Search view, a query finds a file two folders down,
+  Down goes to the hit and Enter takes the pane there; Ctrl+Shift+E shows the
+  Explorer with the tree opened down to the pane's folder;
+- in the tree: Down and Enter go to a folder, Right opens it and goes into it,
+  Esc gives the keyboard back to the pane (the window says so in its log);
+- "Lock Folder Tree" from the palette keeps the tree where it is while the
+  pane goes to another folder, and Alt+Shift+L finds it again;
+- the mouse on the Quick Notes button starts the tool's page once and shows
+  it; Ctrl+Shift+F, Esc and Ctrl+Shift+E from the page reach the window, and
+  the toggle key closes the sidebar and gives the keyboard to the pane;
+- the mouse on the Marketplace button opens it, and a second click closes it;
+  the mouse on the active Explorer button closes the sidebar;
+- Shift+Down on the button just pressed moves it, Shift+Up moves it back
+  (`ui.rail` holds the order, then an empty list);
+- the divider dragged to 300 px is `ui.sidebarWidth`; dragged under 150 px it
+  closes the sidebar (`ui.sidebar` false) and keeps 300; the toggle key opens
+  it at 300;
+- the log has no warning or error line during the section.
+
+In the Search view's field a key of the window does not run (a text box keeps every
+key but the immutable tier's), so the check leaves the field with Esc before
+Ctrl+Shift+E.
 
 ## Themes
 

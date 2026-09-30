@@ -176,7 +176,16 @@ log.WriteLine(WScript.Arguments.length > 0 ? WScript.Arguments(0) : "(no file)")
 log.Close();
 '@
 # Without a byte order mark (Windows PowerShell's UTF8 writes one): the core reads plain JSON.
-$editorJson = @{ version = 1; files = @{ editor = @{ command = "wscript.exe"; args = [string[]]@("//B", "//Nologo", $stub) } } } | ConvertTo-Json -Depth 5
+# A marketplace index of this run's own (built here, nothing uploaded, nothing fetched): the fixture plugins and the shipped
+# themes, and the Agent extension when the repository has it built (sdk\extensions\build-extensions.ps1).
+$indexScript = "$PSScriptRoot\..\..\sdk\marketplace\build-index.ps1"
+$agentPlugin = "$PSScriptRoot\..\..\sdk\extensions\agent\plugin\plugin.wasm"
+$hasExtensions = (Test-Path -LiteralPath $indexScript) -and ((Get-Content -LiteralPath $indexScript -Raw) -match '\[switch\]\s*\$Extensions') -and (Test-Path -LiteralPath $agentPlugin)
+$indexDir = "$root\index"
+$indexArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $indexScript, '-OutDir', $indexDir)
+if ($hasExtensions) { $indexArgs += '-Extensions' }
+& powershell.exe @indexArgs | ForEach-Object { "index: $_" }
+$editorJson = @{ version = 1; files = @{ editor = @{ command = "wscript.exe"; args = [string[]]@("//B", "//Nologo", $stub) } }; marketplace = @{ index = $indexDir } } | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($env:CABINETOS_CONFIG, $editorJson, (New-Object System.Text.UTF8Encoding $false))
 $env:CABINETOS_LOG_DIR = "$root\logs"
 $env:CABINETOS_UI_FRAMESTATS = "1"
@@ -186,12 +195,16 @@ $env:CABINETOS_THEMES_DIR = "$root\themes"
 $env:CABINETOS_UNDO_DIR = "$root\undo"
 # WebView2's user data (the terminal, the tools) into this run's folder too, not the real app data.
 $env:CABINETOS_WEBVIEW2_DIR = "$root\webview2"
+# The plugins, their data and the marketplace's own files too: section 14 installs the Agent through the marketplace.
+$env:CABINETOS_PLUGINS_DIR = "$root\plugins"
+$env:CABINETOS_PLUGINS_DATA_DIR = "$root\plugins-data"
+$env:CABINETOS_MARKETPLACE_DIR = "$root\marketplace"
 # Tool Extensions from the repository (Markdown Preview), as --tools-dir would give them, and Quick Notes: a test
 # tool with a sidebar page (fixtures\quick-notes), which section 13 needs and no other section notices. A copy in
-# this run's folder, so the repository's tools folder stays as it is.
+# this run's folder, so the repository's tools folder stays as it is, and the sidebar's buttons are these two tools'.
 $runTools = "$root\tools"
 New-Item -ItemType Directory -Force $runTools | Out-Null
-Get-ChildItem -LiteralPath ([System.IO.Path]::GetFullPath($Tools)) -Directory | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $runTools -Recurse }
+Copy-Item -LiteralPath (Join-Path ([System.IO.Path]::GetFullPath($Tools)) 'markdown-preview') -Destination $runTools -Recurse
 Copy-Item -LiteralPath "$PSScriptRoot\fixtures\quick-notes" -Destination $runTools -Recurse
 $env:CABINETOS_TOOLS_DIR = $runTools
 "tools dir: $env:CABINETOS_TOOLS_DIR (exists: $(Test-Path -LiteralPath $env:CABINETOS_TOOLS_DIR))"
@@ -734,43 +747,56 @@ Step "14: drag: the palette's Close Editor closes the page's tab, the keyboard i
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 ClickLeftPane
 
-$agentDir = "$PSScriptRoot\..\..\sdk\extensions\agent"
-$indexScript = "$PSScriptRoot\..\..\sdk\marketplace\build-index.ps1"
-$hasExtensions = (Test-Path -LiteralPath $indexScript) -and ((Get-Content -LiteralPath $indexScript -Raw) -match '\[switch\]\s*\$Extensions')
-if (-not ((Test-Path -LiteralPath $agentDir) -and $hasExtensions)) {
-  "14: ask: WAITING: sdk\extensions\agent or build-index.ps1 -Extensions is not in the repository yet; the steps below did not run"
+if (-not $hasExtensions) {
+  "14: ask: WAITING: the Agent extension is not built here (sdk\extensions\agent\plugin\plugin.wasm: run sdk\extensions\build-extensions.ps1, or copy sdk\fixtures\plugins\agent\plugin.wasm there); the steps below did not run"
 } else {
-  # Written against the protocol (docs/ipc.md, "Previews"; docs/plugins.md, "Commands that ask for text") and not
-  # run yet. What it assumes, to check on the first run: the agent's command is agent.ask with Ctrl+K Ctrl+A, its
-  # fake provider is chosen with plugins.agent.provider = "fake", and the marketplace card is named "CabinetOS Agent".
-  $index = "$root\index-agent"
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $indexScript -OutDir $index -Extensions | ForEach-Object { "14: index: $_" }
-  $cfgPath = "$root\config\cabinetos.json"
-  $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
-  $cfg.marketplace.index = $index
-  if (-not $cfg.plugins) { $cfg | Add-Member -NotePropertyName plugins -NotePropertyValue ([pscustomobject]@{}) -Force }
-  $cfg.plugins | Add-Member -NotePropertyName agent -NotePropertyValue ([pscustomobject]@{ provider = 'fake' }) -Force
-  [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
-  Start-Sleep -Milliseconds 1500
-
-  Step "14: ask: the marketplace, Install on the agent's card, Allow and install through UI Automation"
-  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.X); Start-Sleep -Milliseconds 2500
-  $uia = [System.Windows.Automation.AutomationElement]::FromHandle($h)
-  $card = $uia.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "CabinetOS Agent, Extension, by CabinetOS")))
-  $install = if ($card) { $card.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Install"))) }
-  if ($install) { ([System.Windows.Automation.InvokePattern]$install.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke(); Start-Sleep -Milliseconds 1500 } else { "14: ask: no Install button found for the agent's card" }
-  $allow = $uia.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Allow and install")))
-  if ($allow) {
-    Shot $h "$ShotDir\ask14-review-live.png"
-    ([System.Windows.Automation.InvokePattern]$allow.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke(); Start-Sleep -Milliseconds 6000
-  } else { "14: ask: no Allow and install button found" }
-  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 800
-  "14: ask: the agent plugin is active: $([bool](PluginLog '"notice shown"' | Where-Object { $_ -match 'is active' }))"
-
-  Step "14: ask: three files in the left pane, Ctrl+K Ctrl+A, 'rename these to vacation_*', Enter"
+  # What the extension's guide says (docs\extensions\agent.md, "Testing without a model"): the setting is
+  # plugins.agent.settings.provider; the fake provider answers from fake-replies.json in the plugin's data folder,
+  # a JSON list of texts, one for each model call, that hold exact cab command lines; the plugin reads only under
+  # %USERPROFILE%, and this run's folder is under it. The marketplace card is "CabinetOS Agent, WASM plugin, by CabinetOS";
+  # it comes from the run's own index (built with -Extensions at the start), and installs into the run's plugins folder.
   $ask = "$files\ask14"
   New-Item -ItemType Directory -Force $ask | Out-Null
   foreach ($n in 1..3) { Set-Content -LiteralPath "$ask\photo$n.jpg" -Value "x" -NoNewline }
+  $fence = '```'
+  $commands = (1..3 | ForEach-Object { "rename `"$ask\photo$_.jpg`" vacation_$_.jpg" }) -join "`n"
+  $reply = "Renaming the three photos.`n$fence`n$commands`n$fence"
+  New-Item -ItemType Directory -Force "$env:CABINETOS_PLUGINS_DATA_DIR\agent" | Out-Null
+  [System.IO.File]::WriteAllText("$env:CABINETOS_PLUGINS_DATA_DIR\agent\fake-replies.json", '[' + ($reply | ConvertTo-Json) + ']', (New-Object System.Text.UTF8Encoding $false))
+
+  function Uia([string]$name) {
+    [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+      (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $name)))
+  }
+  function InvokeUia($element) { ([System.Windows.Automation.InvokePattern]$element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke() }
+
+  Step "14: ask: the marketplace, the agent's card, Install, Allow and install through UI Automation"
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.X); Start-Sleep -Milliseconds 2500
+  $card = Uia "CabinetOS Agent, WASM plugin, by CabinetOS"
+  "14: ask: the agent's card is in the marketplace: $([bool]$card)"
+  if ($card) { InvokeUia $card; Start-Sleep -Milliseconds 1200 }
+  $install = Uia "Install"
+  "14: ask: the detail has an Install button: $([bool]$install)"
+  if ($install) { InvokeUia $install; Start-Sleep -Milliseconds 1500 }
+  $allow = Uia "Allow and install"
+  if ($allow) {
+    Shot $h "$ShotDir\ask14-review-live.png"
+    InvokeUia $allow; Start-Sleep -Milliseconds 6000
+  } else { "14: ask: no Allow and install button found" }
+  "14: ask: the plugin is installed in this run's folder: $(Test-Path -LiteralPath "$env:CABINETOS_PLUGINS_DIR\agent\plugin.wasm")"
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 800
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 800
+
+  # The setting is written once the plugin is installed: the file already holds its entry then.
+  $cfgPath = "$root\config\cabinetos.json"
+  $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  if (-not $cfg.plugins) { $cfg | Add-Member -NotePropertyName plugins -NotePropertyValue ([pscustomobject]@{}) -Force }
+  if (-not $cfg.plugins.agent) { $cfg.plugins | Add-Member -NotePropertyName agent -NotePropertyValue ([pscustomobject]@{}) -Force }
+  $cfg.plugins.agent | Add-Member -NotePropertyName settings -NotePropertyValue ([pscustomobject]@{ provider = 'fake' }) -Force
+  [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
+  Start-Sleep -Milliseconds 2000
+
+  Step "14: ask: three files in the left pane, Ctrl+K Ctrl+A, 'rename these to vacation_*', Enter"
   ClickLeftPane
   [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
   [Live]::Type($ask); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
@@ -831,6 +857,7 @@ $rl = "$files\rail13"
 New-Item -ItemType Directory -Force "$rl\alpha\inner", "$rl\beta\sub", "$rl\gamma" | Out-Null
 Set-Content -LiteralPath "$rl\alpha\zzreport13.txt" -Value "found" -NoNewline
 Set-Content -LiteralPath "$rl\note.txt" -Value "note" -NoNewline
+Set-Content -LiteralPath "$rl\beta\sub\s.txt" -Value "s" -NoNewline
 $origUi = ConfigUi
 $origSidebar = if ($null -ne $origUi.sidebar) { [bool]$origUi.sidebar } else { $true }
 $warnBefore = (UiLines '"level":"(WARN|WARNING|ERROR)"').Count
@@ -892,11 +919,16 @@ $f = LastFields '"listing shown"'
 "13: the pane shows beta\sub: $($f.path -eq "$rl\beta\sub")"
 Shot $h "$ShotDir\rail13-tree-keys-live.png"
 
-Step "13: Esc gives the keyboard back to the pane; Backspace goes up"
-[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+# Enter in the tree has taken the keyboard to the pane (go.toPath, as the address box's Enter does). Ctrl+Shift+E puts it in the
+# tree again; Esc must give it back: the window's own key handler takes Esc first, and says so when it moved the keyboard.
+Step "13: Ctrl+Shift+E puts the keyboard in the tree; Esc gives it back to the pane; Backspace goes up"
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 800
+$gave = (UiLines 'Esc gave the keyboard from the rail layout').Count
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
+"13: Esc in the tree gave the keyboard back to the pane: $((UiLines 'Esc gave the keyboard from the rail layout').Count -eq $gave + 1)"
 [Live]::Press($VK.Back); Start-Sleep -Milliseconds 1500
 $f = LastFields '"listing shown"'
-"13: the keyboard was in the pane: Backspace went up to beta: $($f.path -eq "$rl\beta")"
+"13: Backspace went up to beta: $($f.path -eq "$rl\beta")"
 
 Step "13: the palette, Lock Folder Tree; the pane goes to gamma; the tree stays; Alt+Shift+L finds gamma"
 $locked = NoticeCount 'folder tree is locked'
