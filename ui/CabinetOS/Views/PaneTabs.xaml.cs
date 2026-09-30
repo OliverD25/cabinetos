@@ -40,7 +40,9 @@ public sealed partial class PaneTabs : UserControl
     private readonly List<Cell> _cells = [];
     private TabStrip? _strip;
     private bool _accent;
-    private bool _scrollQueued;
+    private bool _settleQueued;
+    private bool _scrollPending;
+    private bool _addPinned;
     private int _lastFront = -1;
 
     /// <summary>Creates the row, hidden.</summary>
@@ -49,11 +51,12 @@ public sealed partial class PaneTabs : UserControl
         InitializeComponent();
         AddButton.Click += (_, _) => _ = RunCommand?.Invoke("tab.new", CommandArgs.Object(("pane", PaneIndex)), "button");
         OpenWithButton.Click += (_, _) => _ = RunCommand?.Invoke("palette.show", CommandArgs.With("query", "Editor"), "button");
-        Scroller.SizeChanged += (_, _) => QueueScrollToFront();
+        Scroller.SizeChanged += (_, _) => QueueSettle(scroll: true);
+        TabList.SizeChanged += (_, _) => QueueSettle(scroll: false);
         Loaded += (_, _) =>
         {
             NameAddButton();
-            QueueScrollToFront();
+            QueueSettle(scroll: true);
         };
         ApplyMetrics();
     }
@@ -132,7 +135,7 @@ public sealed partial class PaneTabs : UserControl
             Layout(cell);
         }
         NameAddButton();
-        QueueScrollToFront();
+        QueueSettle(scroll: true);
     }
 
     // The strip's "+": the key of tab.new in its tooltip (its name for assistive technology is in the markup).
@@ -170,7 +173,7 @@ public sealed partial class PaneTabs : UserControl
         if (rebuilt || strip.ActiveIndex != _lastFront)
         {
             _lastFront = strip.ActiveIndex;
-            QueueScrollToFront();
+            QueueSettle(scroll: true);
         }
     }
 
@@ -301,33 +304,85 @@ public sealed partial class PaneTabs : UserControl
         }
     }
 
-    // The tab in front comes into view when it changes or the strip's width does; the layout has to be done first.
-    private void QueueScrollToFront()
+    // What depends on the tabs' widths is settled after the layout pass, not inside it: where the "+" sits, and, when asked,
+    // the tab in front coming into view (when it changes or the strip's width does).
+    private void QueueSettle(bool scroll)
     {
-        if (_scrollQueued)
+        _scrollPending |= scroll;
+        if (_settleQueued)
         {
             return;
         }
-        _scrollQueued = true;
+        _settleQueued = true;
         DispatcherQueue.TryEnqueue(() =>
         {
-            _scrollQueued = false;
-            ScrollToFront();
+            _settleQueued = false;
+            Settle();
         });
     }
 
-    private void ScrollToFront()
+    private void Settle()
     {
-        if (_strip is null || !IsLoaded || (uint)_strip.ActiveIndex >= (uint)_cells.Count)
+        if (_strip is null || !IsLoaded)
         {
             return;
         }
         UpdateLayout();
+        if (PlaceAddButton())
+        {
+            UpdateLayout();
+        }
+        if (_scrollPending)
+        {
+            ScrollToFront();
+        }
+    }
+
+    // The "+" is right after the last tab while the tabs fit. When they do not, it leaves the scrolling row for its own
+    // place at the strip's end, so it does not scroll away. Whether they fit does not depend on where the "+" is (the
+    // tabs' widths plus its 24 px against the room), so the two places cannot flip each other.
+    private bool PlaceAddButton()
+    {
+        var room = Root.ActualWidth;
+        if (OpenWithButton.Visibility == Visibility.Visible)
+        {
+            room -= OpenWithButton.ActualWidth + OpenWithButton.Margin.Left + OpenWithButton.Margin.Right;
+        }
+        if (room <= 0)
+        {
+            return false;
+        }
+        var pin = _cells.Sum(cell => cell.Outer.ActualWidth) + AddButton.Width > room + 0.5;
+        if (pin == _addPinned)
+        {
+            return false;
+        }
+        _addPinned = pin;
+        if (pin)
+        {
+            TabList.Children.Remove(AddButton);
+            PinnedAdd.Child = AddButton;
+        }
+        else
+        {
+            PinnedAdd.Child = null;
+            TabList.Children.Add(AddButton);
+        }
+        return true;
+    }
+
+    private void ScrollToFront()
+    {
+        if (_strip is null || (uint)_strip.ActiveIndex >= (uint)_cells.Count)
+        {
+            return;
+        }
         var tab = _cells[_strip.ActiveIndex].Outer;
         if (tab.ActualWidth <= 0 || Scroller.ViewportWidth <= 0)
         {
             return;
         }
+        _scrollPending = false;
         var left = tab.TransformToVisual(TabList).TransformPoint(new Point(0, 0)).X;
         var right = left + tab.ActualWidth;
         if (left < Scroller.HorizontalOffset)

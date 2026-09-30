@@ -8,7 +8,8 @@
     <!--
       A pane's tab strip (Phases 12 and 16; docs/ui.md, "Tabs"): the window's own strip, drawn as the design draws it, not
       WinUI's TabView. The tabs are built in code (PaneTabs.xaml.cs) and lie in a row that scrolls sideways when they do
-      not fit, with the "+" after the last one; the "Open with…" button stays outside the scroller, at the right end.
+      not fit, with the "+" after the last one (when they do not fit it leaves the row and stays at the strip's end, in
+      PinnedAdd); the "Open with…" button stays outside the scroller, at the right end.
       The keyboard never rests on the strip: the pane keeps it, so the keys stay the pane's (IsTabStop,
       AllowFocusOnInteraction on every element that could take it); Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+1 to Ctrl+9 do what
       its clicks do. The height is the theme's tabRow.
@@ -65,6 +66,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <ScrollViewer
                 x:Name="Scroller"
@@ -75,7 +77,7 @@
                 VerticalScrollBarVisibility="Disabled"
                 VerticalScrollMode="Disabled">
                 <StackPanel x:Name="TabList" Orientation="Horizontal">
-                    <!-- The tabs come before it, in code. -->
+                    <!-- The tabs come before it, in code. The code moves it to PinnedAdd while the tabs overflow. -->
                     <Button
                         x:Name="AddButton"
                         Width="24"
@@ -87,12 +89,13 @@
                     </Button>
                 </StackPanel>
             </ScrollViewer>
+            <Border x:Name="PinnedAdd" Grid.Column="1" />
             <!-- The editors a file may open in: the palette, filtered to them (the design's editor hint), at the strip's right end.
                  Hidden since 2026-09-30 by the creator: with Markdown Preview as the only editor the list it opens is thin.
                  Shown again when a second editor exists; the Editor commands stay in the palette meanwhile. -->
             <Button
                 x:Name="OpenWithButton"
-                Grid.Column="1"
+                Grid.Column="2"
                 Height="24"
                 MinWidth="0"
                 Margin="4,0,4,0"

@@ -1216,8 +1216,9 @@ and a boxed close button.
   the strip.
 - **Tabs do not wrap.** When they do not fit, the row scrolls sideways,
   and the tab in front scrolls into view when it changes.
-- **The "+"** is 24 px wide, right after the last tab, and runs `tab.new`
-  for that pane. It scrolls with the tabs.
+- **The "+"** is 24 px wide and runs `tab.new` for that pane. It is right
+  after the last tab while the tabs fit. When they do not fit, it stays
+  at the end of the strip and does not scroll away.
 - **The keyboard never rests on the strip.** Nothing in it takes focus, so
   a click leaves the keys with the pane.
 
