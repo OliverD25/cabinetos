@@ -2266,10 +2266,17 @@ public sealed partial class MainWindow : Window
 
     private void FocusOtherPane()
     {
-        if (_dual)
+        if (!_dual)
         {
-            _paneViews[1 - _active].Focus(FocusState.Keyboard);
+            return;
         }
+        // A tool tab in front covers the other pane's list, which then cannot take the keyboard: its page does.
+        if (_editorViews[1 - _active].IsOpen)
+        {
+            FocusEditorPage(1 - _active);
+            return;
+        }
+        _paneViews[1 - _active].Focus(FocusState.Keyboard);
     }
 
     private void OnPaneActivated(FilePane view) => SetActive(Array.IndexOf(_paneViews, view));

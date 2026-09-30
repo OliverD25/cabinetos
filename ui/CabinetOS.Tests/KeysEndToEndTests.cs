@@ -60,6 +60,41 @@ public class KeysEndToEndTests
         }
     }
 
+    [Fact]
+    public async Task Tab_gives_the_keyboard_to_a_tool_tab_in_the_other_pane()
+    {
+        var (run, root, data) = Prepare("keys-tool-tab");
+        try
+        {
+            // Enter on a Markdown file opens it in the other pane's tool tab; the keyboard stays in the list until Tab.
+            var process = run.Start("tool", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "open:readme.md",
+                "until:tool",
+                "wait:800",
+                "focus:before",
+                "key:tab",
+                "wait:800",
+                "focus:after",
+                "shot:done"));
+            var logs = await run.FinishAsync("tool", process, "done");
+
+            var focus = Focus(logs);
+            Assert.Equal("FilePane", Field(focus["before"], "element").GetString());
+            Assert.Contains(logs, l => Message(l) == "command executed" && Field(l, "command").GetString() == "view.focusOtherPane"
+                && Field(l, "trigger").GetString() == "key");
+            Assert.Equal("WebView2", Field(focus["after"], "element").GetString());
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
     private static Dictionary<string, string> Focus(List<string> logs) =>
         logs.Where(l => Message(l) == "keyboard focus").ToDictionary(l => Field(l, "label").GetString()!);
 

@@ -28,6 +28,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Tab switches panes again after a click on a button of the top row. The click left the keyboard on the button, and Tab walked from button to button. The buttons of the top row, the status bar, the breadcrumbs, the tab strips and the dock no longer take the keyboard from a click.
 - The right-click menu opens with its top-left corner at the pointer, as Explorer's does, and hangs above or to the left of the pointer near the window's edge. It used to open centred on the pointer, over the row that was clicked. From the keyboard it hangs under the focused row.
+- Tab gives the keyboard to a Markdown Preview (or another tool) shown in the other pane. Before, Tab did nothing while the other pane showed a tool, and the next keys still acted on the first pane's files.
 - The keyboard now works in dialogs: Tab and the arrows move between the buttons, and Enter and Space press one. Before, only Esc worked in "Delete permanently?", Properties, About, the update questions and the other dialogs.
 
 ## [0.1.0] - 2026-09-30

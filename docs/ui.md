@@ -1776,7 +1776,12 @@ with no drag and no reorder, so every change goes through a command.
   design has no Acrylic on the inactive pane).
 - **Tab is still the pane switch, and Alt+Left and Alt+Right are still
   Back and Forward.** In a locked tab, Back and Forward stay on the
-  folder and say so in the status bar.
+  folder and say so in the status bar. When the other pane's front tab is
+  a tool (a Markdown Preview), Tab gives the keyboard to the tool's page,
+  as a click into it does; the active pane stays the one with the folder.
+  Until 2026-10-01 Tab did nothing then: the tool covers the pane's list,
+  which cannot take the keyboard, so the keys went on acting on the
+  folder in the first pane.
 - **A locked tab opens a new tab** when you go into another folder
   (Enter on a folder, a crumb, a pinned folder, Backspace). A tab that
   shows a tool has no lock.
