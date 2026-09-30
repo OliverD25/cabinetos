@@ -117,3 +117,29 @@ held. The first conversation with Claude waits for the creator's key
 Found while writing the client: a pipe handle opened without overlapped
 I/O serializes its reads and writes, so a reader thread's blocking read
 holds the writer back; the client reads and writes on one thread.
+
+## Check 4: the Agent extension's first conversation with Claude
+
+Later the same day the creator created a key in the Anthropic Console and
+stored it with `cabinetos-cli secret set anthropic` (the key never passed
+through the chat). The same client ran again with the `anthropic`
+provider and the default model `claude-sonnet-5-5`, tier 2, the same
+folder and the same request. Result, 2.4 s from the command to its reply:
+
+| Step | Result |
+|---|---|
+| the model's reply | "I'll rename the marked file old.txt to new.txt." and one line, `rename C:\…\files\old.txt new.txt` |
+| the agent | proposed it as `preview-1`, one change |
+| `preview_apply` | one job; `new.txt` on disk, `old.txt` gone, 0.5 s later |
+| `agent.undo` | "Undid 1 job."; `old.txt` back, `new.txt` gone |
+| the audit log | two entries: the ask (provider `anthropic`, model `claude-sonnet-5-5`, no error) and the undo |
+
+The client had expected a `preview_opened` event and saw none: the core
+does not broadcast it. The window learns of a preview from the plugin's
+`agent.preview` event (six plugin events arrived) and asks `open_preview`
+itself, which the window's tests and the live check's section 14 cover.
+So the extension's whole path is now proven with a real model, and the
+difference between the two models is the lesson of the day: the local
+27B model broke the format on the first request; Claude kept to it on the
+first request. Outputs: `_io/agent-ollama-check/agent-anthropic-run1.txt`
+and `messages-anthropic-run1.jsonl`.

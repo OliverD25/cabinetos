@@ -613,9 +613,12 @@ protocol 13 (14a): `46c644c` to `4feb72f`, 700 core tests. The window's parts:
 `9e8d8e5`, 722 core tests. Claude Code in the terminal: `2f0af70` to `72a4bbc`,
 726 core and 852 window tests. With the fake provider the chain works, and
 Claude Code runs in a terminal profile with no API key. A local model broke the
-command format and the agent changed nothing; no Claude model has answered it
-yet. Open for the creator: store a key (`cabinetos-cli secret set anthropic`);
-check the login's organization with `/status`; publish the two extension items.
+command format and the agent changed nothing. On 2026-09-30 the creator stored
+a key and Claude (`claude-sonnet-5-5`) answered the first real request
+correctly in 2.4 s: one `rename` line, a preview, the file renamed on apply and
+back on undo ([log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md),
+check 4). Open for the creator: check the Claude Code login's organization with
+`/status`; publish the two extension items.
 History: [plan/phase-14-agent-extension.md](plan/phase-14-agent-extension.md)
 
 ### Phase 15 — Heavy logging mode and trace ids (the creator's idea, 2026-09-29 late evening; built in the sleep-mode run of 2026-09-29/30)
