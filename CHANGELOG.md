@@ -8,6 +8,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- "Toggle Compact Overlay" (Ctrl+Alt+Up) makes the window a small always-on-top drawer with one pane, no sidebar and no dock, 480 by 640 or the size you last gave it (`ui.compactOverlay`), and brings the window back as it was.
 - The right-click menu comes from `contextMenu` in `cabinetos.json`: for the empty space, a file, a folder and a selection of several rows, each with its row of icons and its list, and rows shown only for some file extensions.
 - "Edit Menu…" at the end of the right-click menu edits the menu inside the menu: drag a row or move it with Alt+Up and Alt+Down, remove it with its X or Delete, add a command (Insert, from a list like the palette's) or a separator, and Done (Ctrl+S) saves it to `cabinetos.json` through the core. Esc cancels, and a click outside does not close it. The row of icons, the extension filters and the programs are still edited in the file, which Ctrl+, opens.
 - Programs of your own (`programs` in `cabinetos.json`) become commands (`program.<name>`) for the menu, a key or the palette. `{path}`, `{selection}` and `{cwd}` in their arguments stand for the cursor row, the selection and the folder.

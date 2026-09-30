@@ -137,13 +137,15 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   program back with Insert, the prompt, a drag with the real mouse,
   Alt+Down, Alt+Up and Ctrl+S), Shift+right-click with Windows' Copy (the
   clipboard is read back), and the empty space's menu ("The context menu",
-  "Editing the menu"). Last, section 19, the column widths: the left pane's
+  "Editing the menu"). Section 19, the column widths: the left pane's
   Modified|Type grip dragged 40 px with the real mouse, a real double-click
   on its Type heading, and the palette's Reset Column Widths ("Column
   widths"). Step 19b sits with Total Commander's keys: the palette's
   Toggle Folder Sizes turns folder sizes on, a folder with two folders is
   opened and its count read from the window's log, and the same command
-  turns them off ("Folder sizes").
+  turns them off ("Folder sizes"). Last, the compact overlay: Ctrl+Alt+Up
+  with real keys, the window's size and topmost style read from Windows,
+  and the key again ("Compact overlay").
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
@@ -1025,6 +1027,7 @@ Like every setting, the window's own state lives in `cabinetos.json`
 | `ui.tabs` | A tab is opened, closed, moved, locked or changes its folder (at most once a second), and when the window closes | At start: each pane opens its tabs; a folder that is gone falls back as `ui.lastPaths` does ("Tabs") |
 | `ui.pinned` | "Pin this folder to the sidebar", and "Unpin from sidebar" on a pinned row | At start and on `config_changed` |
 | `ui.dockSize.bottom`, `ui.dockSize.right` | A drag of the dock's splitter ends (once per drag) | At start and on `config_changed`, except during a drag ("The terminal") |
+| `ui.compactOverlay` | The drawer is resized, half a second after the last resize ("Compact overlay") | When the drawer starts, and while it is on, on `config_changed` |
 
 The sidebar always shows Desktop, Downloads, Documents and the profile
 folder; `ui.pinned` holds the folders the user added, shown after them,
@@ -1032,6 +1035,88 @@ and only those can be unpinned. While a toggle's own write is on its way,
 a configuration the core sends meanwhile does not flip the view back. A
 core without `set_value` answers `unknown_request`: the window then keeps
 its state in memory and logs one line.
+
+### Compact overlay
+
+The command `view.toggleCompactOverlay` ("Toggle Compact Overlay", category
+View) makes the window a small drawer that stays on top of other windows.
+The same command brings the window back. Its default key is Ctrl+Alt+Up, the
+key the Files app uses; no other command has it. The mode is off until the
+user asks for it (Article 4), it has a command and a key (Article 7), and
+its size is in the file (Article 6).
+
+What the drawer is:
+
+- **An ordinary window that is always on top.** It is the same window with
+  the overlapped presenter's `IsAlwaysOnTop` turned on. It is not WinUI's
+  `CompactOverlay` presenter kind: that one keeps the aspect ratio of a video
+  and has a caption of its own, which does not fit a file drawer.
+- **One pane, no sidebar, no dock.** The left pane stays, with its tabs. The
+  sidebar and the dock are hidden through the same code that the toggles
+  use, without their saves. The right pane is hidden, not closed: its tool
+  tabs stay open for the way back (turning Dual Pane off closes them). The
+  rail, the top row's buttons for the second pane and the terminal, and the
+  workspace pill are hidden too: they would do nothing, or they would run
+  under the buttons on the right. The command center hides under 640 px as
+  always.
+- **Its size is `ui.compactOverlay`.** `width` and `height` are the window's
+  outer size in device-independent pixels (DIPs), each from 240 to 4000
+  ([config.md](config.md)). `null`, the default, gives 480 by 640. The size
+  is raised to the window's minimum and cut to the work area of the screen
+  (`CompactOverlayLayout.Decide`). The minimum width is 360 DIPs while the
+  mode is on (600 in the full window). The minimum height stays 480, so a
+  saved height below that is raised to it. The drawer opens where the
+  window's top-left corner was, and is moved only as far as keeps it on the
+  work area.
+- **A resize is saved.** Half a second after the last resize in the mode, the
+  window writes the size with `set_value ui.compactOverlay`. A resize that
+  is still waiting is saved when the user leaves the mode. An edit of the
+  file while the drawer is on resizes it at once. The next entry opens at
+  the saved size.
+- **Leaving puts everything back.** The window returns to the size and place
+  it had, with its minimum width, its dual pane, sidebar and dock as they
+  were at entry, and the active pane. A maximized window comes back
+  maximized. The mode is not a setting: it writes none of `ui.dualPane`,
+  `ui.sidebar` and `ui.dockSize`. If `ui.dualPane` or `ui.sidebar` is edited
+  while the drawer is on, the edit is kept for the way back.
+- **What would undo the drawer is refused.** Toggle Dual Pane, Toggle
+  Sidebar, Show Explorer, Show Search, the terminal, Open in Other Pane,
+  moving a tab to the other pane, the right pane's drive list (Alt+F2),
+  Ctrl+Right and Quick Open's other pane say "The compact overlay has no dual pane: Ctrl+Alt+Up
+  leaves it" in the status bar and do nothing. A proposal from a plugin needs
+  the second pane: entering the mode is refused while one waits, and one that
+  arrives in the drawer makes the window leave it first.
+- **The status bar names the mode and the key.** "Compact overlay · Ctrl+Alt+Up
+  leaves it" takes the place of the layout's name ("Terminal: bottom"), with
+  the key as it is bound now (with no key, "leave it from the command
+  palette"). To make room in a status bar 345 to 465 px wide, the encoding
+  text and the palette's keycap are hidden, the gaps are narrower, and the
+  selection text is cut to 90 px (and hidden under 420 px).
+
+Like every ordinary shortcut, the key does nothing while a text box has the
+keyboard: press Esc first. Some Intel graphics drivers use Ctrl+Alt with an
+arrow key to turn the screen. If that happens, turn the driver's hotkeys off
+or rebind the command in the palette.
+
+The window logs, with the target `cabinetos_ui::shell` (Article 12):
+
+| Message | Fields |
+|---|---|
+| `compact overlay entered` | `width`, `height` (DIPs), `saved` (the size came from the file), `previous_width`, `previous_height` (DIPs), `previous_left`, `previous_top` (pixels), `dual`, `sidebar`, `dock` (as they were) |
+| `compact overlay left` | `width`, `height` (DIPs, as restored), `left`, `top` (pixels), `dual`, `sidebar`, `dock` (as restored), `maximized` |
+| `compact overlay size saved` | `width`, `height` |
+| `compact overlay size not saved` | `error` (the core's refusal, or that it cannot write settings) |
+| `compact overlay follows the configuration` | `width`, `height`: the file was edited while the drawer was on |
+
+`CompactOverlayTests` checks what needs no window: the size it opens at, the
+place, the JSON of the saved size, the settings reading it and the key's path
+through the chord machine. `CompactOverlayEndToEndTests` (opt-in, with
+`CABINETOS_UI_E2E=1`) runs a real window: it reads the window's topmost style
+and rectangle from Windows while the drawer is on, reads the file for the
+three layout keys during the mode, resizes the window through Windows and
+reads the saved size, and starts the drawer again at it. The live check's
+compact overlay section presses Ctrl+Alt+Up with real keys and reads the same
+style and rectangle.
 
 ## The command palette
 
