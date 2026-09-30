@@ -3,8 +3,9 @@
 # with SendInput, and takes screenshots. Run it only on an unlocked screen you are watching:
 # it stops the moment another window comes to the front, so no key reaches another program.
 # Leaves two files in the Recycle Bin (cabinetos-live-check-delete-me.txt, the Delete check, and
-# cabinetos-live-check-f8.txt, the F8 check), and the edge-case fixture in
-# %TEMP%\cabinetos-edge-live (sdk\fixtures\edge-fixture.ps1). F4 edits with a stand-in editor the
+# cabinetos-live-check-f8.txt, the F8 check), the edge-case fixture in
+# %TEMP%\cabinetos-edge-live (sdk\fixtures\edge-fixture.ps1), and a file of its own on the clipboard
+# (section 18 runs Windows' Copy and reads the clipboard back). F4 edits with a stand-in editor the
 # run writes itself (files.editor: wscript.exe and a script that notes the file): never Notepad.
 # Needs the release builds of the window and the core, and the 100,000-entry folder that
 # `cargo bench -p cabinetos-fs --bench list_directory` makes in %TEMP%\cabinetos-bench.
@@ -62,6 +63,15 @@ public static class Live {
     var down = new INPUT { type = 0 }; down.u.mi.dwFlags = 0x0002;
     var up = new INPUT { type = 0 }; up.u.mi.dwFlags = 0x0004;
     Send(down); Thread.Sleep(40); Send(up);
+  }
+  // A right-click; with shift, Shift is held until the button is up, as a hand holds it for Windows' own menu.
+  public static void RightClick(int x, int y, bool shift) {
+    SetCursorPos(x, y); Thread.Sleep(120);
+    if (shift) { Send(Key(0x10, false)); Thread.Sleep(40); }
+    var down = new INPUT { type = 0 }; down.u.mi.dwFlags = 0x0008;
+    var up = new INPUT { type = 0 }; up.u.mi.dwFlags = 0x0010;
+    Send(down); Thread.Sleep(40); Send(up);
+    if (shift) { Thread.Sleep(40); Send(Key(0x10, true)); }
   }
   [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
   // A real mouse move (an absolute move over the whole desktop, as a mouse's own report would be): SetCursorPos alone
@@ -1253,6 +1263,135 @@ if ($crumb) {
   "16: the pane is in shell16: $((SelectionText) -match '\.git|alpha|beta')"
   Shot $h "$ShotDir\shell16-crumb-live.png"
 }
+
+# ----- 18: the context menu (docs/ui.md, "The context menu") -----
+# The right-click menu is contextMenu of cabinetos.json. This section writes a program (a copy of the F4 stand-in, which
+# notes the path it gets in stub-program.js.log), a file menu that shows it, an ID no command has, and shellMenu: true
+# into the run's configuration, then drives the menus with the real mouse and keys. The window's log says what
+# happened: "context menu shown" (target, keyboard, quick_actions), "context menu closed", "context menu entry left
+# out", "windows menu shown" (items) and "windows menu item run". A menu's rows are found by their accessible names and
+# clicked with the real mouse. Windows' Copy is the one item of Windows' menu that runs: it changes nothing on disk,
+# and the run reads the clipboard back.
+Add-Type -AssemblyName System.Windows.Forms
+function LeftPanePoint {
+  $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$rect, 16)
+  @([int]($rect.Left + ($rect.Right - $rect.Left) * 0.33), [int]($rect.Top + ($rect.Bottom - $rect.Top) * 0.45))
+}
+# A menu item by its accessible name: Windows' menu has a Copy, and the window may have other things called Copy.
+function MenuItemElement([string]$name, [double]$seconds = 2) {
+  $ae = [System.Windows.Automation.AutomationElement]
+  $condition = New-Object System.Windows.Automation.AndCondition(
+    (New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, [int]$script:p.Id)),
+    (New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $name)),
+    (New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::MenuItem)))
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ($true) {
+    $found = $ae::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    if ($found -or (Get-Date) -ge $deadline) { return $found }
+    Start-Sleep -Milliseconds 100
+  }
+}
+function GoLeftPane([string]$path) {
+  ClickLeftPane
+  [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+  [Live]::Type($path); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+}
+$m18 = "$files\menu18"
+New-Item -ItemType Directory -Force "$m18\bg18" | Out-Null
+foreach ($i in 1..40) { Set-Content -LiteralPath ("$m18\row-{0:D2}.txt" -f $i) -Value "x" -NoNewline }
+Set-Content -LiteralPath "$m18\bg18\only-18.txt" -Value "x" -NoNewline
+$recorder = "$root\stub-program.js"
+Copy-Item -LiteralPath $stub -Destination $recorder
+$editMenu = "Edit Menu$([char]0x2026)"
+
+Step "18: the configuration gets a program, a file menu and Windows' menu"
+$changes = (ShellLines 'configuration changed').Count
+$cfgPath = "$root\config\cabinetos.json"
+$cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$program = @{ name = 'live18'; title = 'Live 18 Recorder'; command = 'wscript.exe'; args = [string[]]@('//B', '//Nologo', $recorder, '{path}') }
+$cfg | Add-Member -NotePropertyName programs -NotePropertyValue @($program) -Force
+$cfg | Add-Member -NotePropertyName contextMenu -NotePropertyValue @{
+  shellMenu = $true
+  file = @{
+    quickActions = [string[]]@('edit.copy', 'file.rename')
+    items = @(@{ command = 'program.live18' }, @{ command = 'nothing.here18' }, @{ separator = $true }, @{ command = 'pane.openSelected' })
+  }
+} -Force
+[System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
+"18: the window read the change: $([bool](WaitShellLines 'configuration changed' $changes))"
+GoLeftPane $m18
+"18: the left pane is in menu18: $((SelectionText) -match 'row-\d+\.txt')"
+
+Step "18: a right-click on a row: the file menu, the program in it; a click on the program runs it with the row's path"
+$x, $y = LeftPanePoint
+[Live]::Click($x, $y); Start-Sleep -Milliseconds 400
+$row = if ((SelectionText) -match 'row-\d+\.txt') { $Matches[0] } else { '' }
+$shown = (ShellLines 'context menu shown').Count
+$warned = (ShellLines 'context menu entry left out').Count
+[Live]::RightClick($x, $y, $false)
+$menu = WaitShellLines 'context menu shown' $shown
+"18: the row under the pointer, $row, got the file menu: $($row -ne '' -and $menu.fields.target -eq 'File' -and -not $menu.fields.keyboard)"
+"18: its icon row is the file's two quick actions: $($menu.fields.quick_actions -eq 2)"
+$entry = AppElement 'Live 18 Recorder' 2
+"18: the program is in the menu: $([bool]$entry)"
+"18: so is $editMenu, last: $([bool](AppElement $editMenu))"
+$leftOut = WaitShellLines 'context menu entry left out' $warned
+"18: the ID no command has is left out, with a warning: $($leftOut.fields.command -eq 'nothing.here18')"
+Shot $h "$ShotDir\18-file-menu-live.png"
+if ($entry) {
+  $closes = (ShellLines 'context menu closed').Count
+  ClickElement $entry
+  "18: the menu closed: $([bool](WaitShellLines 'context menu closed' $closes))"
+  $deadline = (Get-Date).AddSeconds(5)
+  while (-not (Test-Path -LiteralPath "$recorder.log") -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+  Start-Sleep -Milliseconds 300
+  $ran = if (Test-Path -LiteralPath "$recorder.log") { @(Get-Content -LiteralPath "$recorder.log" -Encoding Unicode) } else { @() }
+  "18: the program got the row's path ($($ran -join ' | ')): $($ran.Count -eq 1 -and $ran[0] -like "*\menu18\$row")"
+  "18: the status bar says it started: $((NoticeCount 'Live 18 Recorder: started') -gt 0)"
+}
+
+Step "18: Shift+F10: the same menu from the keyboard; Esc closes it"
+$shown = (ShellLines 'context menu shown').Count
+[Live]::Press($VK.Shift, $VK.F10)
+$menu = WaitShellLines 'context menu shown' $shown
+$again = AppElement 'Live 18 Recorder' 2
+"18: Shift+F10 opened the file menu, from the keyboard: $($menu.fields.target -eq 'File' -and $menu.fields.keyboard -and [bool]$again)"
+$closes = (ShellLines 'context menu closed').Count
+[Live]::Press($VK.Esc)
+"18: Esc closed it: $([bool](WaitShellLines 'context menu closed' $closes) -and (AppElementGone 'Live 18 Recorder'))"
+
+Step "18: Shift+right-click on the row: Windows' own menu; its Copy puts the file on the clipboard"
+[System.Windows.Forms.Clipboard]::SetText("cabinetos live check 18")
+$windows = (ShellLines 'windows menu shown').Count
+[Live]::RightClick($x, $y, $true)
+# The core builds Windows' menu: the first one takes the shell's handlers a moment to load.
+$windowsMenu = WaitShellLines 'windows menu shown' $windows 8
+"18: Windows' menu showed, $($windowsMenu.fields.items) items, the core answered in $($windowsMenu.fields.reply_ms) ms: $($windowsMenu.fields.items -gt 5)"
+$copy = MenuItemElement 'Copy'
+"18: it has Copy: $([bool]$copy)"
+Shot $h "$ShotDir\18-windows-menu-live.png"
+if ($copy) {
+  $runs = (ShellLines 'windows menu item run').Count
+  ClickElement $copy
+  "18: the core ran the item: $([bool](WaitShellLines 'windows menu item run' $runs))"
+  Start-Sleep -Milliseconds 500
+  $dropped = @([System.Windows.Forms.Clipboard]::GetFileDropList())
+  "18: the clipboard holds the row's file ($($dropped -join ' | ')): $($dropped.Count -eq 1 -and $dropped[0] -like "*\menu18\$row")"
+} else {
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+}
+
+Step "18: a right-click on the empty space: the folder's menu"
+GoLeftPane "$m18\bg18"
+$shown = (ShellLines 'context menu shown').Count
+[Live]::RightClick($x, $y, $false)
+$menu = WaitShellLines 'context menu shown' $shown
+$newFolder = AppElement 'New folder' 2
+"18: the empty space got the folder menu, with New folder: $($menu.fields.target -eq 'Background' -and [bool]$newFolder)"
+Shot $h "$ShotDir\18-background-menu-live.png"
+$closes = (ShellLines 'context menu closed').Count
+[Live]::Press($VK.Esc)
+"18: Esc closed it: $([bool](WaitShellLines 'context menu closed' $closes) -and (AppElementGone 'New folder'))"
 
 Step "close"
 $script:h = $null
