@@ -101,6 +101,8 @@ public class ProtocolTests
             new UpdateApplyRequest(),
             new UpdateRollbackRequest(),
             new UpdateSnoozeRequest(),
+            new ShellMenuRequest([@"C:\data\a.txt", @"C:\data\b.md"]),
+            new ShellMenuInvokeRequest(3, 19),
         ];
     }
 
@@ -181,8 +183,8 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        // 54 since Phase 16's workspace_info, 60 since Phase 17's six update requests.
-        Assert.Equal(60, checkedTypes.Count);
+        // 54 since Phase 16's workspace_info, 60 since Phase 17's six update requests, 62 since Phase 18's shell menu.
+        Assert.Equal(62, checkedTypes.Count);
     }
 
     [Fact]
@@ -392,6 +394,20 @@ public class ProtocolTests
                 b => Assert.Equal(new WorkspaceInfoReply(@"C:\repo", "phase-16"), b)),
             ($$$"""{"id":"{{{Id}}}","type":"workspace_info","root":"C:\\notes","branch":null}""",
                 b => Assert.Equal(new WorkspaceInfoReply(@"C:\notes", null), b)),
+            // Protocol 15: Windows' own menu, a submenu one level deep; an item without one leaves `items` out.
+            ($$$"""{"id":"{{{Id}}}","type":"shell_menu","menu_id":3,"items":[{"id":19,"text":"Open","separator":false},{"id":0,"text":"","separator":true},{"id":0,"text":"Send to","separator":false,"items":[{"id":40,"text":"Documents","separator":false}]}]}""",
+                b =>
+                {
+                    var menu = Assert.IsType<ShellMenuReply>(b);
+                    Assert.Equal(3UL, menu.MenuId);
+                    Assert.Equal(new ShellMenuItemInfo(19, "Open", false), menu.Items[0]);
+                    Assert.True(menu.Items[1].Separator);
+                    Assert.Equal((40U, "Documents"), (menu.Items[2].Items!.Single().Id, menu.Items[2].Items!.Single().Text));
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"commands","commands":[{"id":"program.code","category":"Programs","title":"Open in Code","keys":[],"default_keys":[],"source":{"kind":"program","name":"code"},"target":"core","when":"filesView","immutable":false}]}""",
+                b => Assert.Equal(new CommandSource("program", null, "code"), Assert.IsType<CommandsReply>(b).Commands.Single().Source)),
+            ($$$"""{"id":"{{{Id}}}","type":"error","code":"shell_menu_off","message":"contextMenu.shellMenu is off"}""",
+                b => Assert.Equal(ErrorCodes.ShellMenuOff, Assert.IsType<ErrorReply>(b).Code)),
             ($$$"""{"id":"{{{Id}}}","type":"marketplace_index","source":"C:\\market\\index.json","fetched_at_ms":1790000000000,"items":[{{{HelloItem}}},{{{NordItem}}}]}""",
                 b =>
                 {

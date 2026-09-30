@@ -277,7 +277,10 @@ public sealed record KeymapReply(uint ChordWindowMs, IReadOnlyList<KeymapBinding
     public KeymapData ToData() => new(ChordWindowMs, Bindings, Immutable);
 }
 
-/// <summary>Who provides a command: <c>core</c>, or <c>plugin</c> with its ID and name.</summary>
+/// <summary>
+/// Who provides a command: <c>core</c>, <c>plugin</c> with its ID and name, or (protocol 15)
+/// <c>program</c> with the name of its <c>programs</c> entry.
+/// </summary>
 public sealed record CommandSource(string Kind, string? Id, string? Name);
 
 /// <summary>
@@ -349,7 +352,23 @@ public static class ErrorCodes
     public const string TooManyPreviews = "too_many_previews";
     public const string NoWindow = "no_window";
     public const string UpdateError = "update_error";
+    public const string UnknownProgram = "unknown_program";
+    public const string ProgramRefused = "program_refused";
+    public const string CommandLineTooLong = "command_line_too_long";
+    public const string ShellMenuError = "shell_menu_error";
+    public const string NoSuchMenu = "no_such_menu";
+    public const string ShellMenuOff = "shell_menu_off";
 }
+
+/// <summary>
+/// One item of Windows' own context menu (<c>shell_menu</c>, protocol 15): <see cref="Id"/> for
+/// <c>shell_menu_invoke</c> (0 for a separator and for a submenu), the text Windows shows, and a
+/// submenu's items one level deep.
+/// </summary>
+public sealed record ShellMenuItemInfo(uint Id, string Text, bool Separator, IReadOnlyList<ShellMenuItemInfo>? Items = null);
+
+/// <summary>Reply to <c>shell_menu</c>: the menu the core built, alive until an item is chosen or 30 s pass.</summary>
+public sealed record ShellMenuReply(ulong MenuId, IReadOnlyList<ShellMenuItemInfo> Items) : CoreReply;
 
 /// <summary>A tint laid over the Mica backdrop: a <c>#RRGGBB</c> colour and how much of it covers the backdrop.</summary>
 public sealed record MicaTint(string Tint, double Opacity);

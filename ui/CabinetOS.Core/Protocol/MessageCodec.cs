@@ -18,7 +18,7 @@ public sealed record IncomingMessage(string? Id, string? Type, object? Body, boo
 /// <summary>Turns requests into JSON and JSON into replies and events.</summary>
 public static class MessageCodec
 {
-    /// <summary>Every event type of protocol version 14; everything else is a reply.</summary>
+    /// <summary>Every event type of protocol version 15; everything else is a reply.</summary>
     public static readonly FrozenSet<string> EventTypes = FrozenSet.ToFrozenSet(
     [
         "measure_progress",
@@ -105,6 +105,7 @@ public static class MessageCodec
         ["update_state"] = ProtocolJson.Default.UpdateStateReply,
         ["update_state_changed"] = ProtocolJson.Default.UpdateStateChangedEvent,
         ["update_progress"] = ProtocolJson.Default.UpdateProgressEvent,
+        ["shell_menu"] = ProtocolJson.Default.ShellMenuReply,
     }.ToFrozenDictionary();
 
     /// <summary>The request as UTF-8 JSON, <c>id</c> and <c>type</c> first.</summary>

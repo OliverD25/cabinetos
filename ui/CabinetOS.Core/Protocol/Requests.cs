@@ -632,3 +632,27 @@ public sealed class UpdateRollbackRequest() : CoreRequest("update_rollback");
 
 /// <summary>Later: no update dialog for a day; the reply is <c>update_state</c> with <c>snoozed_until_ms</c>.</summary>
 public sealed class UpdateSnoozeRequest() : CoreRequest("update_snooze");
+
+/// <summary>
+/// Asks for Windows' own context menu of <see cref="Paths"/> (protocol 15, Phase 18), which the
+/// core builds on a background thread of its own. The reply is <c>shell_menu</c> within 3 s, or
+/// <c>shell_menu_error</c>; <c>shell_menu_off</c> while <c>contextMenu.shellMenu</c> is off.
+/// </summary>
+public sealed class ShellMenuRequest(IReadOnlyList<string> paths) : CoreRequest("shell_menu")
+{
+    /// <summary>Absolute paths, all in one folder.</summary>
+    public IReadOnlyList<string> Paths { get; } = paths;
+}
+
+/// <summary>
+/// Runs an item of a menu from <c>shell_menu</c>, as a click in Explorer's menu does; the reply is
+/// <c>ok</c>, <c>no_such_menu</c> (used, expired or replaced) or <c>shell_menu_error</c>.
+/// </summary>
+public sealed class ShellMenuInvokeRequest(ulong menuId, uint itemId) : CoreRequest("shell_menu_invoke")
+{
+    /// <summary>The menu, from <c>shell_menu</c>.</summary>
+    public ulong MenuId { get; } = menuId;
+
+    /// <summary>The item's ID.</summary>
+    public uint ItemId { get; } = itemId;
+}
