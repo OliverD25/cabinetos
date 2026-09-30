@@ -641,7 +641,8 @@ const SEED: [Seed; 107] = [
     ),
     // Phase 18: the context menu comes from `contextMenu` in the settings.
     // Windows' own menu of the focused row, when `contextMenu.shellMenu` is
-    // on (else the context menu); and the file opened at the menu's keys.
+    // on (else the context menu); and the menu's edit mode, which turns the
+    // open menu into it (or, with no menu open, edits the focused row's).
     seed(
         "menu.showShell",
         "File",
