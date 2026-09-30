@@ -473,6 +473,61 @@ Shot $h "$ShotDir\11a-folder-sizes-live.png"
 $measures = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"request sent"' -and $_ -match '"measure_paths"' }).Count
 "measure_paths sent (2 expected): $measures"
 
+# ----- 19b: folder sizes for every folder of a listing (docs/ui.md, "Folder sizes") -----
+# The palette's Toggle Folder Sizes turns panes.folderSizes on; a folder with two folders, opened in the left pane with the keyboard,
+# has both counted with no key; the same command turns the setting off, so the run ends as it started. The window's log says what
+# it asked ("folder sizes asked") and what the count found ("folder sizes counted"). The helpers are here because the ones
+# further down the script are not defined yet.
+function FolderSizeLines([string]$message) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match "`"$message`"" } | ForEach-Object { $_ | ConvertFrom-Json }) }
+# The first line of the left pane (pane 0) after the $before lines taken earlier, polled every 200 ms; $null when none came.
+function WaitFolderSizeLine([string]$message, [int]$before, [int]$seconds = 10) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ($true) {
+    $line = @(FolderSizeLines $message | Select-Object -Skip $before | Where-Object { $_.fields.pane -eq 0 }) | Select-Object -First 1
+    if ($line -or (Get-Date) -ge $deadline) { return $line }
+    Start-Sleep -Milliseconds 200
+  }
+}
+function ToggleFolderSizesFromPalette {
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  [Live]::Type("toggle folder sizes"); Start-Sleep -Milliseconds 900
+  [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+}
+function FolderSizesInFile { (Get-Content "$root\config\cabinetos.json" -Raw -Encoding UTF8 | ConvertFrom-Json).panes.folderSizes }
+$fs19 = "$files\foldersizes19b"
+New-Item -ItemType Directory -Force "$fs19\one", "$fs19\two\deeper" | Out-Null
+[System.IO.File]::WriteAllBytes("$fs19\one\a.bin", (New-Object byte[] 4000))
+[System.IO.File]::WriteAllBytes("$fs19\two\deeper\b.bin", (New-Object byte[] 6000))
+Set-Content -LiteralPath "$fs19\note.txt" -Value "x" -NoNewline
+
+Step "19b: the palette, Toggle Folder Sizes, Enter"
+ToggleFolderSizesFromPalette
+"19b: panes.folderSizes is true in the file: $((FolderSizesInFile) -eq $true)"
+$follows = (FolderSizeLines 'folder sizes follow the configuration')
+"19b: the window followed the file ($(@($follows | ForEach-Object { $_.fields.on }) -join ',')): $($follows.Count -gt 0 -and $follows[-1].fields.on -eq $true)"
+
+Step "19b: Ctrl+L to a folder with two folders: both are counted with no key"
+$asked19 = (FolderSizeLines 'folder sizes asked').Count
+$counted19 = (FolderSizeLines 'folder sizes counted').Count
+ClickLeftPane
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type($fs19); [Live]::Press($VK.Enter)
+$ask19 = WaitFolderSizeLine 'folder sizes asked' $asked19
+$done19 = WaitFolderSizeLine 'folder sizes counted' $counted19
+Start-Sleep -Milliseconds 500
+Shot $h "$ShotDir\19b-folder-sizes-live.png"
+"19b: the window asked for 2 folders when the listing opened ($($ask19.fields.folders) folders, why '$($ask19.fields.why)'): $($ask19.fields.folders -eq 2 -and $ask19.fields.why -eq 'listed')"
+"19b: the count ended for 2 folders with 10000 bytes ($($done19.fields.folders) folders, $($done19.fields.bytes) bytes, cancelled $($done19.fields.cancelled)): $($done19.fields.folders -eq 2 -and $done19.fields.bytes -eq 10000 -and -not $done19.fields.cancelled)"
+
+Step "19b: the palette, Toggle Folder Sizes again; then back to the folder of 11a"
+$asksWhileOn = (FolderSizeLines 'folder sizes asked').Count
+ToggleFolderSizesFromPalette
+"19b: panes.folderSizes is false in the file again: $((FolderSizesInFile) -eq $false)"
+ClickLeftPane
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type($tc); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+"19b: with the setting off, opening the folder of 11a asked for nothing: $((FolderSizeLines 'folder sizes asked').Count -eq $asksWhileOn)"
+
 Step "11a: F3 on run.cmd: the status bar says no tool shows it; nothing runs it"
 [Live]::Press($VK.End); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.F3); Start-Sleep -Milliseconds 800
