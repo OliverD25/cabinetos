@@ -40,6 +40,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Tab no longer takes the keyboard out of the theme picker or the plugin list while they stay open. Before, the next Enter or Space went to a sidebar row, a rail button or the file list under them.
 - Tab gives the keyboard to a Markdown Preview (or another tool) shown in the other pane. Before, Tab did nothing while the other pane showed a tool, and the next keys still acted on the first pane's files.
 - The keyboard now works in dialogs: Tab and the arrows move between the buttons, and Enter and Space press one. Before, only Esc worked in "Delete permanently?", Properties, About, the update questions and the other dialogs.
+- Shift+F10 or the Menu key on a focused row that was scrolled out of view no longer closes CabinetOS without a word. The menu opens near the top of the pane instead, as it does for a row the list has not drawn.
 
 ## [0.1.0] - 2026-09-30
 

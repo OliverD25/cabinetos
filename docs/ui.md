@@ -827,6 +827,12 @@ edge of the name column (`FilePane.RowAnchor`). It is shown with
 fit below the point it hangs above it, its bottom at the point; when it
 would not fit on the right it hangs to the left, its right edge at the
 point; a menu that fits neither way sits against the far edge, 4 px in.
+A focused row that is scrolled out of view gives the keyboard's menu a
+point near the top of the pane, and a point outside the window counts as
+the edge it is past: WinUI ended the whole process (a fault in
+CoreMessagingXP.dll, with no crash trace) when a menu was shown outside the
+window, which the speed review of 2026-10-01 found with Shift+F10 on a row
+the list had made ahead of the view.
 `MenuPlacement` (Core) holds this rule, in the window's content coordinates.
 The window applies it and WinUI does not, because WinUI measures a
 `CommandBarFlyout` against the screen, not the window: measured on

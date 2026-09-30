@@ -468,6 +468,49 @@ public class ContextMenuEndToEndTests
     }
 
     /// <summary>
+    /// The speed review of 2026-10-01 found the window ended by WinUI (no crash trace, a fault in CoreMessagingXP)
+    /// when the keyboard's menu was asked for a row the list had made ahead of the view but scrolled out of it: the
+    /// menu was shown below the window. The row's menu now opens near the top of the pane, inside the window, and
+    /// the window goes on.
+    /// </summary>
+    [Fact]
+    public async Task The_keyboards_menu_for_a_row_out_of_view_opens_inside_the_window()
+    {
+        var (run, root, data) = Prepare("menu-out-of-view");
+        try
+        {
+            for (var i = 0; i < 120; i++)
+            {
+                File.WriteAllText(Path.Combine(data, $"row-{i:D3}.txt"), "x");
+            }
+            var process = run.Start("out-of-view", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{data}",
+                "wait:800",
+                "menu:row-040.txt",
+                "wait:800",
+                "shell:open",
+                "cmd:overlay.close",
+                "wait:300",
+                "shot:done"));
+            var logs = await run.FinishAsync("out-of-view", process, "done");
+
+            var shown = Assert.Single(logs, l => Message(l) == "context menu shown");
+            Assert.True(Field(shown, "keyboard").GetBoolean());
+            Assert.InRange(Field(shown, "y").GetDouble(), 0, 700);
+            State(logs, "open", state => Assert.True(state.GetProperty("context_menu_on_screen").GetBoolean()));
+            var placed = Assert.Single(logs, l => Message(l) == "context menu placed");
+            Assert.InRange(Field(placed, "top").GetDouble() + Field(placed, "height").GetDouble(), 0, 700);
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
     /// The frame measurement, alone: another test's window on the same desktop takes the processor and
     /// the GPU, and its load shows in this window's frames (one 35 ms frame in the full run of
     /// 2026-09-30, none when the test ran by itself).

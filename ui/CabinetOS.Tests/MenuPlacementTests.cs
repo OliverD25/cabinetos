@@ -62,6 +62,23 @@ public class MenuPlacementTests
         Assert.Equal(MenuPlacement.Margin, y);
     }
 
+    /// <summary>
+    /// A point outside the window (the keyboard's menu for a row the list had made but scrolled out of view, found by
+    /// the speed review of 2026-10-01): the menu still lies inside the window. WinUI ended the process when a flyout
+    /// was shown there.
+    /// </summary>
+    [Theory]
+    [InlineData(281, 1638)]
+    [InlineData(281, 5000)]
+    [InlineData(-40, -300)]
+    [InlineData(2400, 350)]
+    public void A_point_outside_the_window_gives_a_menu_inside_it(double x, double y)
+    {
+        var (left, top) = Corner(x, y);
+        Assert.InRange(left, 0, 1200 - Width);
+        Assert.InRange(top, 0, 700 - Height);
+    }
+
     [Fact]
     public void A_menu_wider_than_the_window_starts_at_the_margin()
     {

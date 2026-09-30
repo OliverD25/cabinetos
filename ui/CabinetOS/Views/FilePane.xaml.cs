@@ -428,7 +428,8 @@ public sealed partial class FilePane : UserControl
 
     /// <summary>
     /// The row's name column's left edge, and the row's top and bottom, in the window's coordinates, for a menu opened from
-    /// the keyboard. A row that is not on screen gives a point near the top of the pane, twice.
+    /// the keyboard. A row that is not on screen gives a point near the top of the pane, twice: the list makes rows ahead
+    /// of the view, and a made row scrolled out of it lies outside the window.
     /// </summary>
     public (double Left, double Top, double Bottom) RowEdges(int index)
     {
@@ -441,10 +442,14 @@ public sealed partial class FilePane : UserControl
         if (index >= 0 && PositionOf(index) is >= 0 and var position && Repeater.TryGetElement(position) is FileRow row)
         {
             var top = row.TransformToVisual(null).TransformPoint(new Point(0, 0));
-            var name = row.NameElement.ActualWidth > 0
-                ? row.NameElement.TransformToVisual(null).TransformPoint(new Point(0, 0)).X
-                : top.X + 40;
-            return (name, top.Y, top.Y + _rowHeight);
+            var view = Scroller.TransformToVisual(null).TransformBounds(new Rect(0, 0, Scroller.ActualWidth, Scroller.ActualHeight));
+            if (top.Y < view.Bottom && top.Y + _rowHeight > view.Top)
+            {
+                var name = row.NameElement.ActualWidth > 0
+                    ? row.NameElement.TransformToVisual(null).TransformPoint(new Point(0, 0)).X
+                    : top.X + 40;
+                return (name, top.Y, top.Y + _rowHeight);
+            }
         }
         var fallback = Frame.TransformToVisual(null).TransformPoint(new Point(40, 80));
         return (fallback.X, fallback.Y, fallback.Y);
