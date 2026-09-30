@@ -23,7 +23,10 @@ public enum MenuEntryKind
     Header,
 }
 
-/// <summary>One row of the context menu, or one icon of its strip: every one runs a command.</summary>
+/// <summary>
+/// One row of the context menu, or one icon of its strip: every one runs a command. <see cref="Dot"/>
+/// draws the accent dot of an update that waits for a restart (the hamburger menu, Phase 17).
+/// </summary>
 public sealed record MenuEntry(
     MenuEntryKind Kind,
     string Title = "",
@@ -33,7 +36,8 @@ public sealed record MenuEntry(
     string? Keys = null,
     string? Badge = null,
     bool IsEnabled = true,
-    string? Tooltip = null)
+    string? Tooltip = null,
+    bool Dot = false)
 {
     /// <summary>A separator line.</summary>
     public static MenuEntry Separator { get; } = new(MenuEntryKind.Separator);
@@ -204,7 +208,19 @@ public sealed partial class FileContextMenu : UserControl
         Grid.SetColumn(title, 1);
         row.Children.Add(title);
 
-        if (entry.Badge is not null)
+        if (entry.Dot)
+        {
+            var dot = new Ellipse
+            {
+                Width = 6,
+                Height = 6,
+                VerticalAlignment = VerticalAlignment.Center,
+                Fill = ThemeResources.Brush("CbAccentBrush"),
+            };
+            Grid.SetColumn(dot, 2);
+            row.Children.Add(dot);
+        }
+        else if (entry.Badge is not null)
         {
             var badge = new Border
             {

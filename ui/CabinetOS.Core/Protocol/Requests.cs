@@ -608,3 +608,27 @@ public sealed class WorkspaceInfoRequest(string path) : CoreRequest("workspace_i
     /// <summary>An absolute folder.</summary>
     public string Path { get; } = path;
 }
+
+/// <summary>
+/// Asks for the updater's state (protocol 14, docs/ipc.md, "Updates"); the core answers at once from
+/// memory. The reply is <c>update_state</c>, as for every update request.
+/// </summary>
+public sealed class UpdateStatusRequest() : CoreRequest("update_status");
+
+/// <summary>Reads the channel's <c>latest.json</c> now; the reply is <c>update_state</c> once the check ended.</summary>
+public sealed class UpdateCheckRequest() : CoreRequest("update_check");
+
+/// <summary>
+/// Downloads the newer version the last check found, checks its SHA-256 and unpacks it; the reply is
+/// <c>update_state</c> once it is ready (<c>downloaded</c>), and <c>update_progress</c> goes out meanwhile.
+/// </summary>
+public sealed class UpdateDownloadRequest() : CoreRequest("update_download");
+
+/// <summary>Swaps the downloaded version into the install folder; the reply is <c>update_state</c> (<c>ready</c>).</summary>
+public sealed class UpdateApplyRequest() : CoreRequest("update_apply");
+
+/// <summary>Swaps the version kept in <c>previous\</c> back in; the reply is <c>update_state</c> (<c>ready</c>).</summary>
+public sealed class UpdateRollbackRequest() : CoreRequest("update_rollback");
+
+/// <summary>Later: no update dialog for a day; the reply is <c>update_state</c> with <c>snoozed_until_ms</c>.</summary>
+public sealed class UpdateSnoozeRequest() : CoreRequest("update_snooze");

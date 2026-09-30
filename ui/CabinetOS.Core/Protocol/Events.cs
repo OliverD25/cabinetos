@@ -148,3 +148,24 @@ public sealed record MeasureResult(string Path, ulong Files, ulong Folders, ulon
 
 /// <summary>A measure ended (version 12): every path's total, or what it had when it was cancelled.</summary>
 public sealed record MeasureFinishedEvent(ulong MeasureId, IReadOnlyList<MeasureResult> Results, bool Cancelled) : CoreEvent;
+
+/// <summary>
+/// The updater moved on (protocol 14): a check, a download, a swap or a snooze, the daily check's
+/// included. The same fields as <c>update_state</c>.
+/// </summary>
+[JsonConverter(typeof(UpdateStateChangedEventConverter))]
+public sealed record UpdateStateChangedEvent(UpdateStatus Status) : CoreEvent;
+
+/// <summary>Reads <c>update_state_changed</c> as <see cref="UpdateStateChangedEvent"/>.</summary>
+public sealed class UpdateStateChangedEventConverter : FlatUpdateStatusConverter<UpdateStateChangedEvent>
+{
+    private protected override UpdateStateChangedEvent Wrap(UpdateStatus status) => new(status);
+
+    private protected override UpdateStatus Unwrap(UpdateStateChangedEvent message) => message.Status;
+}
+
+/// <summary>
+/// How far an update's download has come (protocol 14): at most 4 a second, and one when it is complete.
+/// <see cref="Total"/> is the zip's size as <c>latest.json</c> gives it; the speed is since the download began.
+/// </summary>
+public sealed record UpdateProgressEvent(string Version, ulong Bytes, ulong Total, ulong BytesPerSecond) : CoreEvent;

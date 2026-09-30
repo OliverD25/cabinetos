@@ -79,7 +79,7 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 101] = [
+const SEED: [Seed; 105] = [
     seed(
         "palette.show",
         "View",
@@ -666,6 +666,26 @@ const SEED: [Seed; 101] = [
         UI,
         None,
     ),
+    // In-app updates (Phase 17, ADR 0014); no keys: the menu, the status-bar pill
+    // and the palette are their places.
+    seed("update.check", "Update", "Check for Updates", &[], UI, None),
+    seed("update.apply", "Update", "Restart to Update", &[], UI, None),
+    seed(
+        "update.rollback",
+        "Update",
+        "Roll Back to the Previous Version",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "update.showNotes",
+        "Update",
+        "Show Release Notes",
+        &[],
+        UI,
+        None,
+    ),
 ];
 
 /// The command a seed row describes.
@@ -825,7 +845,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 101);
+        assert_eq!(registry.commands().len(), 105);
         let keys = |id: &str| {
             registry
                 .get(id)

@@ -40,7 +40,19 @@
                             AutomationProperties.Name="Menu"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             ToolTipService.ToolTip="Menu">
-                            <FontIcon FontSize="14" Glyph="&#xE700;" />
+                            <Grid>
+                                <FontIcon FontSize="14" Glyph="&#xE700;" />
+                                <!-- An update waits for a restart (docs/ui.md, "Updates"). -->
+                                <Ellipse
+                                    x:Name="MenuUpdateDot"
+                                    Width="6"
+                                    Height="6"
+                                    Margin="0,-3,-5,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Fill="{ThemeResource CbAccentBrush}"
+                                    Visibility="Collapsed" />
+                            </Grid>
                         </Button>
                         <Border
                             x:Name="AppTile"
@@ -442,6 +454,40 @@
                                 FontSize="10"
                                 FontWeight="SemiBold"
                                 Foreground="{ThemeResource CbAccentBrush}" />
+                        </Button>
+                        <!-- An update (docs/ui.md, "Updates"): the transfer pill's look while it downloads, "Update ready · Restart" after. -->
+                        <Button
+                            x:Name="UpdatePill"
+                            Height="20"
+                            MinWidth="0"
+                            Padding="8,0"
+                            AllowFocusOnInteraction="False"
+                            Background="{ThemeResource CbPillFillBrush}"
+                            CornerRadius="10"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Grid
+                                    x:Name="UpdatePillTrack"
+                                    Width="80"
+                                    Height="4"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource CbPillTrackBrush}"
+                                    CornerRadius="2">
+                                    <Rectangle
+                                        x:Name="UpdatePillFill"
+                                        Width="0"
+                                        HorizontalAlignment="Left"
+                                        Fill="{ThemeResource CbAccentBrush}"
+                                        RadiusX="2"
+                                        RadiusY="2" />
+                                </Grid>
+                                <TextBlock
+                                    x:Name="UpdatePillText"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{ThemeResource CbTextPrimaryBrush}" />
+                            </StackPanel>
                         </Button>
                     </StackPanel>
                     <!-- The minimized transfer (design view E): an 80 x 4 px track and "Copying · 45%". -->

@@ -155,6 +155,8 @@ public sealed partial class MainWindow
         "view.toggleSidebar" => "\uE89F",
         "marketplace.browse" => "\uE719",
         "keys.open" => "\uE765",
+        "update.check" => "\uE895",
+        "update.apply" => "\uE777",
         _ => null,
     };
 
@@ -170,8 +172,9 @@ public sealed partial class MainWindow
             FileMenu.Close();
             return;
         }
-        var items = ShellMenu.Build(_router.Commands)
-            .Select(item => new MenuEntry(MenuEntryKind.Item, item.Title, MenuGlyph(item.CommandId), item.CommandId, Keys: item.Keys))
+        // While an update waits, Check for Updates gives its place to Restart to Update with a dot (Phase 17).
+        var items = ShellMenu.Build(_router.Commands, _update.WaitingVersion)
+            .Select(item => new MenuEntry(MenuEntryKind.Item, item.Title, MenuGlyph(item.CommandId), item.CommandId, Keys: item.Keys, Dot: item.Dot))
             .ToList();
         FileMenu.Show(Below(MenuButton), [], items, fromKeyboard, WindowMetrics.Current.DropdownRowHeight);
         Diag.Info(ShellTarget, "menu shown", new LogField("items", items.Count));
@@ -377,6 +380,8 @@ public sealed partial class MainWindow
             new("menu", FileMenu.Describe()),
             new("branch", WorkspaceBranch.Visibility == Visibility.Visible ? WorkspaceBranch.Text : ""),
             new("active_pane", _active),
+            new("update_pill", UpdatePill.Visibility == Visibility.Visible ? UpdatePillText.Text : ""),
+            new("update_dot", MenuUpdateDot.Visibility == Visibility.Visible),
         };
         for (var i = 0; i < _panes.Length; i++)
         {

@@ -280,7 +280,7 @@ public class ShellEndToEndTests
 
             // The registry's titles, as the palette shows them: a rename there shows here too.
             State(logs, "menu", state => Assert.Equal(
-                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Browse Plugins and Themes|Open Keyboard Shortcuts",
+                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Browse Plugins and Themes|Open Keyboard Shortcuts|Check for Updates",
                 state.GetProperty("menu").GetString()));
             State(logs, "menu-closed", state => Assert.Equal("", state.GetProperty("menu").GetString()));
             State(logs, "workspace", state => Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString()));
@@ -302,6 +302,92 @@ public class ShellEndToEndTests
         finally
         {
             run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    [Fact]
+    public async Task A_downloaded_update_opens_its_dialog_once_and_Later_keeps_the_pill_and_the_dot()
+    {
+        var (_, root, _) = Prepare("shell-update");
+        try
+        {
+            // An install the core may update: a copy of the core with release.json 0.1.0 beside it (docs/ui.md, "Updates").
+            var core = CoreLauncher.Find(Path.Combine(Repo.Root, "ui"), Environment.GetEnvironmentVariable, File.Exists)!;
+            var install = Directory.CreateDirectory(Path.Combine(root, "install")).FullName;
+            File.Copy(core, Path.Combine(install, "cabinetos-core.exe"));
+            File.WriteAllText(Path.Combine(install, "release.json"), """{"product":"CabinetOS","version":"0.1.0"}""");
+            // The stable channel's feed: latest.json names 0.2.0, its notes and its zip (the two programs are stand-ins).
+            var feed = Path.Combine(root, "feed");
+            var channel = Directory.CreateDirectory(Path.Combine(feed, "stable")).FullName;
+            Directory.CreateDirectory(Path.Combine(channel, "files"));
+            var zip = Path.Combine(channel, "files", "CabinetOS-0.2.0-win-x64.zip");
+            using (var archive = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                foreach (var (name, text) in new[] { ("release.json", """{"product":"CabinetOS","version":"0.2.0"}"""), ("CabinetOS.exe", "window"), ("cabinetos-core.exe", "core") })
+                {
+                    using var writer = new StreamWriter(archive.CreateEntry(name).Open());
+                    writer.Write(text);
+                }
+            }
+            File.WriteAllText(Path.Combine(channel, "notes-0.2.0.md"), "### Added\n\n- Updates from **inside** the app, see [the guide](docs/release.md).\n- `cabinetos-cli update`\n");
+            var latest = new Dictionary<string, object>
+            {
+                ["schemaVersion"] = 1,
+                ["channel"] = "stable",
+                ["version"] = "0.2.0",
+                ["published"] = "2026-10-01",
+                ["zip"] = new Dictionary<string, object>
+                {
+                    ["url"] = "files/CabinetOS-0.2.0-win-x64.zip",
+                    ["sha256"] = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(zip))),
+                    ["size"] = new FileInfo(zip).Length,
+                },
+                ["notes"] = new Dictionary<string, object> { ["url"] = "notes-0.2.0.md" },
+                ["requires"] = new Dictionary<string, object> { ["windowsAppRuntime"] = "2.5", ["dotnet"] = "10.0" },
+            };
+            File.WriteAllText(Path.Combine(channel, "latest.json"), JsonSerializer.Serialize(latest));
+            // No daily check: only the command checks, so nothing races it.
+            File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["version"] = 1,
+                ["ui"] = new Dictionary<string, object> { ["dualPane"] = true },
+                ["update"] = new Dictionary<string, object> { ["check"] = false, ["source"] = feed },
+            }));
+            var updateDir = Path.Combine(root, "update");
+            var exe = Path.Combine(Repo.Root, "ui", "CabinetOS", "bin", "x64", "Debug", "net10.0-windows10.0.22621.0", "win-x64", "CabinetOS.exe");
+            var run = new Run(root, exe, Path.Combine(install, "cabinetos-core.exe"));
+
+            var process = run.Start("update", string.Join(';',
+                "size:1200x700",
+                "shell:start",
+                "cmd-nowait:update.check",
+                "wait:5000",
+                "shell:dialog",
+                "shot:dialog",
+                // Esc closes the dialog as Later does: a day's snooze; the pill and the dot stay.
+                "dismiss",
+                "wait:1500",
+                "shell:later",
+                "shot:done"));
+            var logs = await run.FinishAsync("update", process, "done");
+
+            State(logs, "start", state => Assert.Equal(("", false), (state.GetProperty("update_pill").GetString(), state.GetProperty("update_dot").GetBoolean())));
+            var shown = Assert.Single(logs, l => Message(l) == "update dialog shown");
+            Assert.Equal(("0.2.0", true, 3), (Field(shown, "version").GetString(), Field(shown, "automatic").GetBoolean(), Field(shown, "notes_blocks").GetInt32()));
+            Assert.Contains(logs, l => Message(l) == "dialog shown" && Field(l, "title").GetString() == "CabinetOS 0.2.0 is ready");
+            Assert.Contains(logs, l => Message(l) == "update snoozed");
+            foreach (var label in new[] { "dialog", "later" })
+            {
+                State(logs, label, state => Assert.Equal(("Update ready \u00b7 Restart", true),
+                    (state.GetProperty("update_pill").GetString(), state.GetProperty("update_dot").GetBoolean())));
+            }
+            Assert.Contains("\"snoozedUntilMs\"", File.ReadAllText(Path.Combine(updateDir, "state.json")), StringComparison.Ordinal);
+            // Nothing was swapped: Later leaves the install as it was.
+            Assert.Equal(["cabinetos-core.exe", "release.json"], Directory.GetFileSystemEntries(install).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        }
+        finally
+        {
             Repo.RemoveTempFolder(root);
         }
     }
@@ -335,6 +421,8 @@ public class ShellEndToEndTests
             start.Environment["CABINETOS_TOOLS_DIR"] = Path.Combine(root, "tools");
             start.Environment["CABINETOS_UI_SNAPSHOT"] = Path.Combine(root, "shots-" + name);
             start.Environment["CABINETOS_UI_SNAPSHOT_STEPS"] = steps;
+            // The updater's folder; the core takes it from the window's environment (docs/release.md, "Updates").
+            start.Environment["CABINETOS_UPDATE_DIR"] = Path.Combine(root, "update");
             var process = Process.Start(start)!;
             _started.Add(process);
             return process;

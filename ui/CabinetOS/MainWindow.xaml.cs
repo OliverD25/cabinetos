@@ -180,6 +180,7 @@ public sealed partial class MainWindow : Window
 
         RegisterCommands();
         SetUpDiagnostics();
+        SetUpUpdates();
         _keys.PendingChanged += UpdateChordIndicator;
         RootGrid.PreviewKeyDown += OnPreviewKeyDown;
         RootGrid.SizeChanged += (_, e) => UpdateWidths(e.NewSize.Width);
@@ -304,17 +305,24 @@ public sealed partial class MainWindow : Window
         }
         // The window hides at once; the core gets its shutdown without the UI thread waiting.
         args.Cancel = true;
+        await CloseWindowAsync();
+    }
+
+    // The close button's way out, also a restart's into a new version (MainWindow.Update.cs).
+    private async Task CloseWindowAsync()
+    {
         if (_closing)
         {
             return;
         }
         _closing = true;
-        sender.Hide();
+        AppWindow.Hide();
         Diag.Info(Target, "window closing");
         // Closing must stay quick: what the core does not answer within a second is not waited for.
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
         await Task.WhenAll(SaveLastPathsAsync(), FlushTabsAsync(deadline.Token));
         await _session.StopAsync();
+        StartRestart();
         foreach (var pane in _panes)
         {
             pane.Release();
@@ -748,6 +756,7 @@ public sealed partial class MainWindow : Window
             }
             await Task.WhenAll(theme, keymap, commands, volumes, jobs);
             await RefreshPluginsAsync();
+            await ReadUpdateStatusAsync();
         }
         catch (IOException error)
         {
@@ -1017,6 +1026,9 @@ public sealed partial class MainWindow : Window
                 return;
             case MeasureProgressEvent or MeasureFinishedEvent:
                 OnMeasureEvent(coreEvent);
+                return;
+            case UpdateStateChangedEvent or UpdateProgressEvent:
+                OnUpdateEvent(coreEvent);
                 return;
         }
         _ = RefreshCommandsAsync(coreEvent);

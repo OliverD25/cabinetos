@@ -3,6 +3,7 @@ using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
+using CabinetOS.Core.Updates;
 using CabinetOS.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -33,7 +34,9 @@ public sealed partial class MainWindow
             Diag.Info(Target, "about: the core did not answer ping", new LogField("error", unreachable.Message));
         }
 
-        var rows = AboutText.Rows(Program.Version, core, release);
+        // The updater's state as the core sent it last, with the dot while a version waits (Phase 17).
+        var update = UpdateText.AboutRow(_update.Status, _update.Progress, DateTime.Now);
+        List<(string Label, string Value)> rows = [.. AboutText.Rows(Program.Version, core, release), ("Update", update.Text)];
         var grid = new Grid { ColumnSpacing = 16, RowSpacing = 6, MinWidth = 360 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -41,7 +44,12 @@ public sealed partial class MainWindow
         {
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             var label = new TextBlock { Text = rows[i].Label, Foreground = ThemeResources.Brush("CbTextTertiaryBrush") };
-            var value = new TextBlock { Text = rows[i].Value, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+            var value = new TextBlock { TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+            if (i == rows.Count - 1 && update.Dot)
+            {
+                value.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = "\u25CF ", Foreground = ThemeResources.Brush("CbAccentBrush") });
+            }
+            value.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = rows[i].Value });
             Grid.SetRow(label, i);
             Grid.SetRow(value, i);
             Grid.SetColumn(value, 1);
@@ -91,7 +99,7 @@ public sealed partial class MainWindow
             DefaultButton = ContentDialogButton.Close,
         };
         Diag.Info(Target, "about shown", new LogField("version", Program.Version), new LogField("core", core?.CoreVersion ?? ""),
-            new LogField("protocol", core?.ProtocolVersion ?? 0), new LogField("release", release.HasReleaseFile));
+            new LogField("protocol", core?.ProtocolVersion ?? 0), new LogField("release", release.HasReleaseFile), new LogField("update", update.Text));
         await ShowDialogAsync(dialog);
         FocusActivePane();
     }

@@ -95,6 +95,12 @@ public class ProtocolTests
             new PreviewCancelRequest("preview-3"),
             new SaveLogBundleRequest(10),
             new WorkspaceInfoRequest(@"C:\repo\src"),
+            new UpdateStatusRequest(),
+            new UpdateCheckRequest(),
+            new UpdateDownloadRequest(),
+            new UpdateApplyRequest(),
+            new UpdateRollbackRequest(),
+            new UpdateSnoozeRequest(),
         ];
     }
 
@@ -175,8 +181,8 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        // 54 since Phase 16's workspace_info.
-        Assert.Equal(54, checkedTypes.Count);
+        // 54 since Phase 16's workspace_info, 60 since Phase 17's six update requests.
+        Assert.Equal(60, checkedTypes.Count);
     }
 
     [Fact]
@@ -416,6 +422,10 @@ public class ProtocolTests
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"jobs_started","jobs":[12,13]}""",
                 b => Assert.Equal([12UL, 13UL], Assert.IsType<JobsStartedReply>(b).Jobs)),
+            (UpdateTests.UpdateStateJson("update_state"),
+                b => Assert.Equal("0.2.0", Assert.IsType<UpdateStateReply>(b).Status.Latest!.Version)),
+            ($$$"""{"id":"{{{Id}}}","type":"update_state","state":"not_updatable","reason":"a development build","current":"0.1.0","channel":"stable"}""",
+                b => Assert.Equal(new UpdateStatus(UpdatePhases.NotUpdatable, "0.1.0", "stable", Reason: "a development build"), Assert.IsType<UpdateStateReply>(b).Status)),
             ($$$"""{"id":"{{{Id}}}","type":"plugins","plugins":[{"id":"agent","name":"Agent","version":"0.1.0","author":"CabinetOS","description":"Works next to you.","state":{"type":"needs_review","missing":["net"]},"capabilities":[{"name":"net","level":"high","granted":false,"reason":"Asks the model provider.","hosts":["api.anthropic.com","localhost:11434"],"secrets":["anthropic"]}],"commands":[]}]}""",
                 b =>
                 {
@@ -511,6 +521,10 @@ public class ProtocolTests
                 b => Assert.Equal([12UL, 13UL], Assert.IsType<PreviewAppliedEvent>(b).Jobs)),
             ($$$"""{"id":"{{{Id}}}","type":"preview_cancelled","preview":"preview-4"}""",
                 b => Assert.Equal(new PreviewCancelledEvent("preview-4"), b)),
+            (UpdateTests.UpdateStateJson("update_state_changed"),
+                b => Assert.Equal(UpdatePhases.Downloaded, Assert.IsType<UpdateStateChangedEvent>(b).Status.State)),
+            ($$$"""{"id":"{{{Id}}}","type":"update_progress","version":"0.2.0","bytes":4194304,"total":80123456,"bytes_per_second":2097152}""",
+                b => Assert.Equal(new UpdateProgressEvent("0.2.0", 4194304, 80123456, 2097152), b)),
         };
         foreach (var (json, check) in samples)
         {

@@ -348,6 +348,7 @@ public static class ErrorCodes
     public const string NoSuchPreview = "no_such_preview";
     public const string TooManyPreviews = "too_many_previews";
     public const string NoWindow = "no_window";
+    public const string UpdateError = "update_error";
 }
 
 /// <summary>A tint laid over the Mica backdrop: a <c>#RRGGBB</c> colour and how much of it covers the backdrop.</summary>
@@ -500,3 +501,97 @@ public sealed record MarketItem(
 /// and when it was read or found unchanged (ms since 1970, UTC).
 /// </summary>
 public sealed record MarketplaceIndexReply(IReadOnlyList<MarketItem> Items, string Source, ulong FetchedAtMs) : CoreReply;
+
+/// <summary>Where the updater is (<c>update_state</c>'s <c>state</c>; docs/ipc.md, "Updates").</summary>
+public static class UpdatePhases
+{
+    public const string NotUpdatable = "not_updatable";
+    public const string Unchecked = "unchecked";
+    public const string UpToDate = "up_to_date";
+    public const string Checking = "checking";
+    public const string Available = "available";
+    public const string Downloading = "downloading";
+    public const string Downloaded = "downloaded";
+    public const string Applying = "applying";
+    public const string Ready = "ready";
+    public const string Failed = "failed";
+}
+
+/// <summary>The release's zip: its address (a GitHub Release asset), its SHA-256 and its size in bytes.</summary>
+public sealed record UpdateZip(string Url, string Sha256, ulong Size);
+
+/// <summary>Where the release notes are: <c>notes-&lt;version&gt;.md</c> next to <c>latest.json</c>.</summary>
+public sealed record UpdateNotes(string Url);
+
+/// <summary>The runtimes the release needs, major.minor, as its <c>release.json</c> names them.</summary>
+public sealed record UpdateRequires(
+    [property: JsonPropertyName("windowsAppRuntime")] string? WindowsAppRuntime = null,
+    string? Dotnet = null);
+
+/// <summary>
+/// A channel's <c>latest.json</c> (sdk/update/latest.schema.json) as the core read it, in the file's own
+/// camelCase keys like a theme's.
+/// </summary>
+public sealed record UpdateRelease(
+    [property: JsonPropertyName("schemaVersion")] uint SchemaVersion,
+    string Channel,
+    string Version,
+    string Published,
+    UpdateZip Zip,
+    UpdateNotes Notes,
+    UpdateRequires? Requires = null);
+
+/// <summary>
+/// The updater's state: the fields of <c>update_state</c> and <c>update_state_changed</c> (docs/ipc.md,
+/// "Updates"). Times are milliseconds since 1970-01-01 UTC.
+/// </summary>
+public sealed record UpdateStatus(
+    string State,
+    string Current,
+    string Channel,
+    string? Reason = null,
+    string? Message = null,
+    UpdateRelease? Latest = null,
+    string? NotesUrl = null,
+    string? Notes = null,
+    ulong? CheckedAtMs = null,
+    ulong? SnoozedUntilMs = null,
+    string? Previous = null,
+    string? Installed = null,
+    string? InstallDir = null);
+
+/// <summary>
+/// Reply to every update request: the updater's state. On the wire its fields stand next to <c>id</c> and
+/// <c>type</c>, as <see cref="UpdateStatus"/>'s (<see cref="FlatUpdateStatusConverter{T}"/>).
+/// </summary>
+[JsonConverter(typeof(UpdateStateReplyConverter))]
+public sealed record UpdateStateReply(UpdateStatus Status) : CoreReply;
+
+/// <summary>
+/// Reads and writes a message whose fields are an <see cref="UpdateStatus"/>'s, flat beside
+/// <c>id</c> and <c>type</c>, which the status ignores; <c>update_state</c> and
+/// <c>update_state_changed</c> share the shape.
+/// </summary>
+public abstract class FlatUpdateStatusConverter<T> : JsonConverter<T>
+{
+    private protected abstract T Wrap(UpdateStatus status);
+
+    private protected abstract UpdateStatus Unwrap(T message);
+
+    /// <inheritdoc/>
+    public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        Wrap(JsonSerializer.Deserialize(ref reader, ProtocolJson.Default.UpdateStatus)
+            ?? throw new JsonException("an update state must be a JSON object"));
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) =>
+        JsonSerializer.Serialize(writer, Unwrap(value), ProtocolJson.Default.UpdateStatus);
+}
+
+/// <summary>Reads <c>update_state</c> as <see cref="UpdateStateReply"/>.</summary>
+public sealed class UpdateStateReplyConverter : FlatUpdateStatusConverter<UpdateStateReply>
+{
+    private protected override UpdateStateReply Wrap(UpdateStatus status) => new(status);
+
+    private protected override UpdateStatus Unwrap(UpdateStateReply message) => message.Status;
+}

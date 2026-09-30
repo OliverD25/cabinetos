@@ -62,7 +62,7 @@ public class EndToEndTests
 
             var welcome = await client.HelloAsync();
             // Version 13: window_state (Phases 12 to 14), after 12's sub-phase 11a requests.
-            Assert.Equal(13u, welcome.ProtocolVersion);
+            Assert.Equal(14u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);

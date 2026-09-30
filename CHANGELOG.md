@@ -26,7 +26,7 @@ The first version, built on 2026-09-28 and not released yet. It becomes
 - An optional indexer service that reads the NTFS master file table and change journal, for instant search of whole volumes (`install.ps1 -AllUsers -Indexer`).
 - Core Plugins: WebAssembly components in a sandbox, with only the capabilities granted in a review dialog; a plugin that crashes is stopped while CabinetOS keeps running.
 - Tool Extensions: web pages in WebView2, each in a browser process of its own and without network access. Markdown Preview is the first, opt-in, in the release's `extras` folder.
-- An integrated terminal (Ctrl+`) with PowerShell, Command Prompt and WSL profiles, which follows the active pane's folder. A fourth profile, `claude`, runs Claude Code on the user's own login; it is not a shell, so `followsPane: false` keeps the folder sync from typing into it. `cabinetos-cli` (and `cab` in a release) is on the `PATH` of every terminal.
+- An integrated terminal (Ctrl+\`) with PowerShell, Command Prompt and WSL profiles, which follows the active pane's folder. A fourth profile, `claude`, runs Claude Code on the user's own login; it is not a shell, so `followsPane: false` keeps the folder sync from typing into it. `cabinetos-cli` (and `cab` in a release) is on the `PATH` of every terminal.
 - Colour themes in JSON (accent, Mica tint, palette, terminal colours), applied live, with a theme picker (Ctrl+K Ctrl+T). Default, Nord, Catppuccin Mocha and Rose Pine Moon are built in; Default follows Windows' light or dark mode.
 - A marketplace view that installs plugins, themes and tools from a static index and checks each download's SHA-256. No public index exists yet.
 - `cabinetos-cli`, which reaches the core's functions from a terminal.
