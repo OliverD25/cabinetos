@@ -61,6 +61,15 @@ public sealed class PaneTab
     /// <summary>The names of the marked rows. Valid while the tab is behind.</summary>
     public IReadOnlyList<string> MarkedNames { get; set; } = [];
 
+    /// <summary>How far down its list the tab was scrolled, in pixels. Valid while the tab is behind.</summary>
+    public double ScrollOffset { get; set; }
+
+    /// <summary>
+    /// The text of the tab's find widget (Ctrl+F; docs/ui.md, "Find in pane"),
+    /// which filters its list; null while the widget is closed. Valid while the tab is behind.
+    /// </summary>
+    public string? FindQuery { get; set; }
+
     /// <summary>What the tab says: the folder's name, or the file's name for a tool.</summary>
     public string Title => IsTool ? System.IO.Path.GetFileName(Path) : DisplayFormat.FolderName(Path);
 

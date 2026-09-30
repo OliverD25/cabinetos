@@ -49,18 +49,23 @@ public sealed class PendingCursorKeys
     /// <summary>
     /// Where <paramref name="key"/> moves the cursor of <paramref name="selection"/>,
     /// and how it selects on the way (<see cref="SelectionModel.KeyMode"/>): the
-    /// same as the key made at once. A page is <paramref name="rowsPerPage"/> rows.
+    /// same as the key made at once. A page is <paramref name="rowsPerPage"/> rows;
+    /// under a find filter, rows and pages count the shown rows only.
     /// </summary>
     public static (int Index, SelectMode Mode) Target(SelectionModel selection, CursorKey key, bool shift, bool ctrl, int rowsPerPage)
     {
-        var focus = selection.Focus;
         var mode = selection.KeyMode(shift, ctrl);
-        return key switch
+        var step = key switch
         {
-            CursorKey.Up => (focus - 1, mode),
-            CursorKey.Down => (focus + 1, mode),
-            CursorKey.PageUp => (focus - rowsPerPage, mode),
-            _ => (focus + rowsPerPage, mode),
+            CursorKey.Up => -1,
+            CursorKey.Down => 1,
+            CursorKey.PageUp => -rowsPerPage,
+            _ => rowsPerPage,
         };
+        if (!selection.IsFiltered)
+        {
+            return (selection.Focus + step, mode);
+        }
+        return (selection.IndexAt(Math.Max(0, selection.PositionOf(selection.Focus)) + step), mode);
     }
 }

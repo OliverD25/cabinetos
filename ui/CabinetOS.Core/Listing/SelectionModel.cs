@@ -44,10 +44,18 @@ public enum SelectionStyle
 /// which toggles the focused row and moves down without touching the others.
 /// In <see cref="SelectionStyle.Commander"/> style the keys mark as Total
 /// Commander's do (<see cref="KeyMode"/>); the mouse keeps the Windows rules.
+/// A find filter (<see cref="SetVisible"/>; docs/ui.md, "Find in pane") shows
+/// only some rows: the selected rows it hides are kept aside and come back
+/// when it ends, and while it holds every key, click and command sees only
+/// the rows it shows.
 /// </summary>
 public sealed class SelectionModel
 {
     private readonly HashSet<int> _selected = [];
+    // Selected rows a filter hides: out of every count and command until the filter ends.
+    private readonly HashSet<int> _parked = [];
+    private int[]? _visible;
+    private int _focusBeforeFilter = -1;
 
     /// <summary>Raised after every change.</summary>
     public event Action? Changed;
@@ -75,6 +83,110 @@ public sealed class SelectionModel
 
     /// <summary>Whether row <paramref name="index"/> is selected.</summary>
     public bool IsSelected(int index) => _selected.Contains(index);
+
+    /// <summary>Whether a find filter shows only some rows.</summary>
+    public bool IsFiltered => _visible is not null;
+
+    /// <summary>The rows the filter shows, in listing order; null without a filter.</summary>
+    public IReadOnlyList<int>? Visible => _visible;
+
+    /// <summary>How many rows are shown: the filter's, else all of them.</summary>
+    public int ShownCount => _visible?.Length ?? Count;
+
+    /// <summary>Every selected row, the ones a filter hides too (what a refresh or a tab keeps).</summary>
+    public IEnumerable<int> AllSelected => _parked.Count == 0 ? _selected : _selected.Concat(_parked);
+
+    /// <summary>Whether row <paramref name="index"/> is in the listing and not hidden by a filter.</summary>
+    public bool IsShown(int index) =>
+        (uint)index < (uint)Count && (_visible is null || Array.BinarySearch(_visible, index) >= 0);
+
+    /// <summary>The row shown at <paramref name="position"/> (held to the shown rows), or -1 when none is shown.</summary>
+    public int IndexAt(int position)
+    {
+        if (ShownCount == 0)
+        {
+            return -1;
+        }
+        position = Math.Clamp(position, 0, ShownCount - 1);
+        return _visible is null ? position : _visible[position];
+    }
+
+    /// <summary>Where row <paramref name="index"/> is among the shown rows, or -1 when a filter hides it.</summary>
+    public int PositionOf(int index)
+    {
+        if (_visible is null)
+        {
+            return index;
+        }
+        var position = Array.BinarySearch(_visible, index);
+        return position >= 0 ? position : -1;
+    }
+
+    /// <summary>
+    /// Shows only <paramref name="visible"/> (listing indexes), or every row
+    /// again (null). The marked rows the filter hides are kept aside, out of
+    /// every count and command, and come back when it ends. A hidden cursor
+    /// moves to the nearest shown row; in the Windows style the cursor's own
+    /// selection (the row selected alone, no mark) goes with it. A filter
+    /// that showed no row gives the cursor back where it was.
+    /// </summary>
+    public void SetVisible(IEnumerable<int>? visible)
+    {
+        foreach (var index in _parked)
+        {
+            _selected.Add(index);
+        }
+        _parked.Clear();
+        if (visible is null)
+        {
+            if (_visible is not null && Focus < 0 && Count > 0)
+            {
+                Focus = Math.Clamp(_focusBeforeFilter, 0, Count - 1);
+                Anchor = Focus;
+                if (Style == SelectionStyle.Windows && _selected.Count == 0)
+                {
+                    _selected.Add(Focus);
+                }
+            }
+            _visible = null;
+            Raise();
+            return;
+        }
+        if (_visible is null)
+        {
+            _focusBeforeFilter = Focus;
+        }
+        var cursorOnly = Style == SelectionStyle.Windows && !HasMarks;
+        _visible = [.. visible.Where(i => (uint)i < (uint)Count).Distinct().Order()];
+        if (cursorOnly)
+        {
+            if (!IsShown(Focus))
+            {
+                _selected.Clear();
+            }
+        }
+        else
+        {
+            foreach (var index in _selected.Where(i => !IsShown(i)).ToList())
+            {
+                _selected.Remove(index);
+                _parked.Add(index);
+            }
+        }
+        if (!IsShown(Focus))
+        {
+            Focus = Nearest(Focus);
+            if (cursorOnly && Focus >= 0)
+            {
+                _selected.Add(Focus);
+            }
+        }
+        if (!IsShown(Anchor))
+        {
+            Anchor = Focus;
+        }
+        Raise();
+    }
 
     /// <summary>
     /// Whether any row is marked: any selected row, except, in the Windows
@@ -130,6 +242,8 @@ public sealed class SelectionModel
     {
         Count = Math.Max(0, count);
         _selected.Clear();
+        _parked.Clear();
+        _visible = null;
         Focus = Count == 0 ? -1 : Math.Clamp(focus, 0, Count - 1);
         Anchor = Focus;
         if (Focus >= 0 && Style == SelectionStyle.Windows)
@@ -149,6 +263,8 @@ public sealed class SelectionModel
     {
         Count = Math.Max(0, count);
         _selected.Clear();
+        _parked.Clear();
+        _visible = null;
         foreach (var index in selected)
         {
             if ((uint)index < (uint)Count)
@@ -165,14 +281,21 @@ public sealed class SelectionModel
         Raise();
     }
 
-    /// <summary>Moves the focus to <paramref name="index"/> (clamped) and selects by <paramref name="mode"/>.</summary>
+    /// <summary>
+    /// Moves the focus to <paramref name="index"/> (clamped; under a filter,
+    /// the nearest shown row) and selects by <paramref name="mode"/>.
+    /// </summary>
     public void MoveTo(int index, SelectMode mode)
     {
-        if (Count == 0)
+        if (ShownCount == 0)
         {
             return;
         }
         index = Math.Clamp(index, 0, Count - 1);
+        if (!IsShown(index))
+        {
+            index = Nearest(index);
+        }
         switch (mode)
         {
             case SelectMode.Single:
@@ -194,7 +317,7 @@ public sealed class SelectionModel
     /// <summary>Ctrl+Click: toggles one row and moves the focus and the anchor there.</summary>
     public void Toggle(int index)
     {
-        if ((uint)index >= (uint)Count)
+        if (!IsShown(index))
         {
             return;
         }
@@ -218,15 +341,15 @@ public sealed class SelectionModel
         {
             _selected.Add(Focus);
         }
-        Focus = Math.Min(Focus + 1, Count - 1);
+        Focus = IndexAt(PositionOf(Focus) + 1);
         Anchor = Focus;
         Raise();
     }
 
-    /// <summary>Ctrl+A: every row; the focus stays.</summary>
+    /// <summary>Ctrl+A: every shown row; the focus stays.</summary>
     public void SelectAll()
     {
-        for (var i = 0; i < Count; i++)
+        foreach (var i in Shown())
         {
             _selected.Add(i);
         }
@@ -267,7 +390,7 @@ public sealed class SelectionModel
     public void Invert(Func<int, bool> isFolder)
     {
         DropCursorSelection();
-        for (var i = 0; i < Count; i++)
+        foreach (var i in Shown())
         {
             if (!isFolder(i) && !_selected.Add(i))
             {
@@ -297,7 +420,7 @@ public sealed class SelectionModel
         }
         foreach (var index in indexes)
         {
-            if ((uint)index >= (uint)Count)
+            if (!IsShown(index))
             {
                 continue;
             }
@@ -327,19 +450,29 @@ public sealed class SelectionModel
         var (low, high) = from <= to ? (from, to) : (to, from);
         for (var i = low; i <= high; i++)
         {
-            _selected.Add(i);
+            if (_visible is null || IsShown(i))
+            {
+                _selected.Add(i);
+            }
         }
     }
 
     // The rows from `from` towards `to`: without `to`, unless the move goes through it or cannot
     // move at all. The row it leaves decides: unmarked, they are marked; marked, they are unmarked.
+    // Under a filter the rows are the shown ones, in the order they are shown.
     private void MarkOnTheWay(int from, int to, bool through)
     {
         var mark = !_selected.Contains(from);
-        var step = to >= from ? 1 : -1;
-        var last = through || to == from ? to : to - step;
-        for (var i = from; ; i += step)
+        var (start, end) = (PositionOf(from), PositionOf(to));
+        if (start < 0 || end < 0)
         {
+            return;
+        }
+        var step = end >= start ? 1 : -1;
+        var last = through || end == start ? end : end - step;
+        for (var p = start; ; p += step)
+        {
+            var i = IndexAt(p);
             if (mark)
             {
                 _selected.Add(i);
@@ -348,11 +481,34 @@ public sealed class SelectionModel
             {
                 _selected.Remove(i);
             }
-            if (i == last)
+            if (p == last)
             {
                 break;
             }
         }
+    }
+
+    // The shown rows, in listing order.
+    private IEnumerable<int> Shown() => _visible ?? Enumerable.Range(0, Count);
+
+    // The shown row at or after `index`, else the last one before it; -1 when none is shown.
+    private int Nearest(int index)
+    {
+        if (_visible is null)
+        {
+            return Count == 0 ? -1 : Math.Clamp(index, 0, Count - 1);
+        }
+        if (_visible.Length == 0)
+        {
+            return -1;
+        }
+        var at = Array.BinarySearch(_visible, Math.Max(0, index));
+        if (at >= 0)
+        {
+            return _visible[at];
+        }
+        var next = ~at;
+        return next < _visible.Length ? _visible[next] : _visible[^1];
     }
 
     private void Raise() => Changed?.Invoke();
