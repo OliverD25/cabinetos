@@ -1118,6 +1118,22 @@ Shot $h "$ShotDir\edge-deleted-live.png"
 # with each command and what started it. The hamburger and a crumb are found by their accessible names, as a
 # screen reader finds them, and clicked with the real mouse.
 function ShellLines([string]$message) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match "`"$message`"" } | ForEach-Object { $_ | ConvertFrom-Json }) }
+# The window's log writer works in its own thread: a line can reach the file some time after the window logged it, longer
+# than a fixed sleep. A check therefore reads a line only after it has come. This polls every 200 ms until there are more
+# lines of the message than $before (the count taken before the key or click) and gives the last one, or $null when none
+# came within $seconds. $until (optional) says which last line is the wanted one, for a message the window logs once per
+# key and may skip when a newer key comes (find filtered); when it never holds, the last line is still given, so the
+# check shows what the window said.
+function WaitShellLines([string]$message, [int]$before, [int]$seconds = 5, [scriptblock]$until = $null) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ($true) {
+    $lines = @(ShellLines $message)
+    $last = if ($lines.Count -gt $before) { $lines[$lines.Count - 1] } else { $null }
+    if ($last -and (-not $until -or (& $until $last))) { return $last }
+    if ((Get-Date) -ge $deadline) { return $last }
+    Start-Sleep -Milliseconds 200
+  }
+}
 function ShellElement([string]$name) {
   [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
     (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $name)))
@@ -1126,8 +1142,38 @@ function ClickElement($element) {
   $r = $element.Current.BoundingRectangle
   [Live]::Click([int]($r.Left + $r.Width / 2), [int]($r.Top + $r.Height / 2))
 }
+# An element by its accessible name in any top-level window of the app (the main window and any window of its own that a
+# flyout or a popup makes), waiting up to $seconds for it, since a dropdown opens with an animation. The desktop's children
+# are picked by the app's process ID first, so the search never walks another program's UI tree.
+function AppElement([string]$name, [double]$seconds = 0) {
+  $ae = [System.Windows.Automation.AutomationElement]
+  $mine = New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, [int]$script:p.Id)
+  $named = New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $name)
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ($true) {
+    foreach ($window in $ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $mine)) {
+      $found = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $named)
+      if ($found) { return $found }
+    }
+    if ((Get-Date) -ge $deadline) { return $null }
+    Start-Sleep -Milliseconds 100
+  }
+}
+# True when no such element is left in the app, waiting up to $seconds for it to go.
+function AppElementGone([string]$name, [double]$seconds = 1.5) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ($true) {
+    if (-not (AppElement $name)) { return $true }
+    if ((Get-Date) -ge $deadline) { return $false }
+    Start-Sleep -Milliseconds 100
+  }
+}
 $sh = "$files\shell16"
-New-Item -ItemType Directory -Force "$sh\alpha", "$sh\beta\deep" | Out-Null
+# The workspace is the git repository that holds the active folder, else that folder, and Quick Open searches the workspace.
+# A fake repository (a .git folder with a HEAD file, no git process; the core reads that file) makes shell16 the workspace:
+# from alpha, Quick Open then finds target-16.md in beta\deep, and the pill shows the branch.
+New-Item -ItemType Directory -Force "$sh\alpha", "$sh\beta\deep", "$sh\.git" | Out-Null
+[System.IO.File]::WriteAllText("$sh\.git\HEAD", "ref: refs/heads/live-16`n")
 Set-Content -LiteralPath "$sh\alpha\notes-16.txt" -Value "x" -NoNewline
 Set-Content -LiteralPath "$sh\alpha\other-16.txt" -Value "x" -NoNewline
 Set-Content -LiteralPath "$sh\beta\deep\target-16.md" -Value "x" -NoNewline
@@ -1140,16 +1186,19 @@ ClickLeftPane
 
 Step "16: Ctrl+F, 'other', Enter, Esc: one row while the text is there, the cursor on it, every row after Esc"
 $opened = (ShellLines 'find opened').Count
+$filters = (ShellLines 'find filtered').Count
 [Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
 [Live]::Type("other"); Start-Sleep -Milliseconds 800
-$filtered = ShellLines 'find filtered' | Select-Object -Last 1
-"16: the find opened: $((ShellLines 'find opened').Count -gt $opened)"
-"16: the pane shows one row of two: $($filtered.fields.matches -eq 1 -and $filtered.fields.rows -eq 2)"
+# "rows" is the rows shown after the filter (the folder has two); "matches" is how many names hold the text.
+$filtered = WaitShellLines 'find filtered' $filters -until { param($line) $line.fields.query_length -eq 5 }
+"16: the find opened: $([bool](WaitShellLines 'find opened' $opened))"
+"16: the pane shows one row while the text is there: $($filtered.fields.matches -eq 1 -and $filtered.fields.rows -eq 1)"
 Shot $h "$ShotDir\shell16-find-live.png"
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 500
 "16: Enter put the cursor on the match: $((SelectionText) -match 'other-16')"
+$closes = (ShellLines 'find closed').Count
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
-$closed = ShellLines 'find closed' | Select-Object -Last 1
+$closed = WaitShellLines 'find closed' $closes
 "16: Esc closed the find and every row shows: $($closed.fields.rows -eq 2)"
 "16: the cursor stayed on the match: $((SelectionText) -match 'other-16')"
 
@@ -1159,7 +1208,9 @@ $shown = (ShellLines 'quick open shown').Count
 [Live]::Type("target-16"); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\shell16-quick-open-live.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
-"16: Quick Open showed: $((ShellLines 'quick open shown').Count -gt $shown)"
+$quickOpen = WaitShellLines 'quick open shown' $shown
+"16: Quick Open showed: $([bool]$quickOpen)"
+"16: the workspace pill shows the branch, live-16: $($quickOpen.fields.branch -eq 'live-16')"
 "16: Esc left the pane where it was: $((SelectionText) -match 'other-16')"
 
 Step "16: Ctrl+P, type, Enter: the file's folder in the pane, the file under the cursor"
@@ -1169,9 +1220,10 @@ Step "16: Ctrl+P, type, Enter: the file's folder in the pane, the file under the
 "16: Enter opened the row in the pane: $((SelectionText) -match 'target-16')"
 
 Step "16: Alt+Left: Back in the left pane"
+$commands = (ShellLines 'command executed').Count
 [Live]::Press($VK.Alt, $VK.Left); Start-Sleep -Milliseconds 1000
-$back = ShellLines 'command executed' | Where-Object { $_.fields.command -eq 'go.back' } | Select-Object -Last 1
-"16: Alt+Left ran go.back from a key: $($back.fields.trigger -eq 'key')"
+$back = WaitShellLines 'command executed' $commands
+"16: Alt+Left ran go.back from a key: $($back.fields.command -eq 'go.back' -and $back.fields.trigger -eq 'key')"
 "16: the pane is back in alpha: $((SelectionText) -match 'notes-16|other-16')"
 
 Step "16: the hamburger, clicked by its accessible name; a click outside closes it; again, and Esc closes it"
@@ -1180,14 +1232,17 @@ $menu = ShellElement 'Menu'
 if ($menu) {
   $menus = (ShellLines 'menu shown').Count
   ClickElement $menu; Start-Sleep -Milliseconds 700
-  "16: the menu showed: $((ShellLines 'menu shown').Count -gt $menus)"
-  "16: its first row is New Tab: $([bool](ShellElement 'New Tab'))"
+  "16: the menu showed: $([bool](WaitShellLines 'menu shown' $menus))"
+  $row = AppElement 'New Tab' 2
+  "16: its first row is New Tab: $([bool]$row)"
   Shot $h "$ShotDir\shell16-menu-live.png"
   ClickLeftPane
-  "16: a click outside closed it: $(-not (ShellElement 'New Tab'))"
+  # Each close counts only when the row was there before it: a row that was never found would "close" at once.
+  "16: a click outside closed it: $([bool]$row -and (AppElementGone 'New Tab'))"
   ClickElement $menu; Start-Sleep -Milliseconds 700
+  $again = AppElement 'New Tab' 2
   [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
-  "16: Esc closed it: $(-not (ShellElement 'New Tab'))"
+  "16: Esc closed it: $([bool]$again -and (AppElementGone 'New Tab'))"
 }
 
 Step "16: a click on the shell16 crumb takes the pane there"
@@ -1195,7 +1250,7 @@ $crumb = ShellElement $sh
 "16: the breadcrumb row has a crumb for shell16: $([bool]$crumb)"
 if ($crumb) {
   ClickElement $crumb; Start-Sleep -Milliseconds 1000
-  "16: the pane is in shell16: $((SelectionText) -match 'alpha|beta')"
+  "16: the pane is in shell16: $((SelectionText) -match '\.git|alpha|beta')"
   Shot $h "$ShotDir\shell16-crumb-live.png"
 }
 

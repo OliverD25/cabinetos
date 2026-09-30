@@ -1013,7 +1013,13 @@ ctrl+enter|down|esc`.
 - The live check's section 16 presses the keys and clicks for real: Ctrl+L
   and Enter, Ctrl+F with a text, Enter and Esc, Ctrl+P with Esc and with
   Enter, Alt+Left, the hamburger found by its accessible name and closed by
-  a click outside and by Esc, and a click on a crumb.
+  a click outside and by Esc, and a click on a crumb. Its folder `shell16`
+  holds a fake repository (a `.git\HEAD` with `ref: refs/heads/live-16`), so
+  it is the workspace: Quick Open in `alpha` finds a file in `beta\deep`,
+  Enter shows that folder, Alt+Left comes back, and the log line of Quick
+  Open carries the branch `live-16`. The window's log writer works in its
+  own thread, so the section reads each log line only after it has come
+  (`WaitShellLines`, up to 5 s) and never right after a fixed sleep.
 
 ### Where the shell differs from the handout
 
