@@ -73,17 +73,29 @@
               "-NoLogo"
             ],
             "command": "pwsh.exe",
+            "followsPane": true,
             "name": "pwsh"
           },
           {
             "args": [],
             "command": "cmd.exe",
+            "followsPane": true,
             "name": "cmd"
           },
           {
             "args": [],
             "command": "wsl.exe",
+            "followsPane": true,
             "name": "wsl"
+          },
+          {
+            "args": [
+              "--append-system-prompt",
+              "You run inside the CabinetOS file manager's integrated terminal. Its command line is on the PATH as cabinetos-cli (also as cab). `cabinetos-cli state --json` prints both panes: their tabs, cursor and marked files. `cabinetos-cli --help` lists the rest. For the marked files, prefer its copy, move and delete: they run as jobs, and `cabinetos-cli undo --last` reverses the last one."
+            ],
+            "command": "claude.exe",
+            "followsPane": false,
+            "name": "claude"
           }
         ]
       }
@@ -504,17 +516,29 @@
                 "-NoLogo"
               ],
               "command": "pwsh.exe",
+              "followsPane": true,
               "name": "pwsh"
             },
             {
               "args": [],
               "command": "cmd.exe",
+              "followsPane": true,
               "name": "cmd"
             },
             {
               "args": [],
               "command": "wsl.exe",
+              "followsPane": true,
               "name": "wsl"
+            },
+            {
+              "args": [
+                "--append-system-prompt",
+                "You run inside the CabinetOS file manager's integrated terminal. Its command line is on the PATH as cabinetos-cli (also as cab). `cabinetos-cli state --json` prints both panes: their tabs, cursor and marked files. `cabinetos-cli --help` lists the rest. For the marked files, prefer its copy, move and delete: they run as jobs, and `cabinetos-cli undo --last` reverses the last one."
+              ],
+              "command": "claude.exe",
+              "followsPane": false,
+              "name": "claude"
             }
           ],
           "items": {
@@ -539,6 +563,11 @@
         "command": {
           "description": "The program, for example `pwsh.exe`.",
           "type": "string"
+        },
+        "followsPane": {
+          "description": "Whether the window types a change-directory line into it when the\nactive pane changes folder. `false` for a program that is not a\nshell: the line would be its input.",
+          "type": "boolean",
+          "default": true
         },
         "name": {
           "description": "A unique name, for example `pwsh`.",

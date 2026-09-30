@@ -351,6 +351,69 @@ fn typed_input_reaches_the_shell() {
     });
 }
 
+/// Whether `entry` (one folder of a `PATH`) names `folder`.
+fn is_folder(entry: &str, folder: &str) -> bool {
+    entry
+        .trim()
+        .trim_end_matches('\\')
+        .eq_ignore_ascii_case(folder.trim_end_matches('\\'))
+}
+
+/// The core's own folder holds `cabinetos-cli`; here the core is this test
+/// binary, so its folder must be one of the shell's `PATH` entries.
+///
+/// `cargo test` puts this folder on `PATH` itself, which would make the
+/// check pass without the core adding anything. So the test runs itself
+/// once more (`CABINETOS_PATH_CHILD`) with that folder taken out of `PATH`.
+#[test]
+fn the_cores_folder_is_on_the_shells_path() {
+    let exe = std::env::current_exe().unwrap();
+    let core_folder = exe.parent().unwrap().to_path_buf();
+    let wanted = shown(&core_folder);
+    if std::env::var_os("CABINETOS_PATH_CHILD").is_none() {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let kept: Vec<PathBuf> = std::env::split_paths(&inherited)
+            .filter(|entry| !is_folder(&shown(entry), &wanted))
+            .collect();
+        let output = Command::new(&exe)
+            .args(["--exact", "the_cores_folder_is_on_the_shells_path"])
+            .args(["--test-threads=1", "--nocapture"])
+            .env("PATH", std::env::join_paths(kept).unwrap())
+            .env("CABINETOS_PATH_CHILD", "1")
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && text.contains("1 passed"),
+            "{text}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    // Here the core's folder is not in the core's own `PATH`.
+    let own = std::env::var_os("PATH").unwrap_or_default();
+    assert!(
+        !std::env::split_paths(&own).any(|entry| is_folder(&shown(&entry), &wanted)),
+        "the child must start without the folder"
+    );
+
+    let dir = scratch("path");
+    let harness = Harness::new();
+    // A wide console keeps a long `PATH` on one line.
+    let opened = harness.open(&cmd(), dir.path(), 4000, 25);
+    let mut client = harness.attach(&opened);
+    harness.read_until(&mut client, at_prompt);
+
+    client.forget();
+    harness.send(&mut client, "echo %PATH%\r");
+    harness.read_until(&mut client, |output| {
+        output
+            .lines()
+            .flat_map(|line| line.split(';'))
+            .any(|entry| is_folder(entry, &wanted))
+    });
+}
+
 #[test]
 fn resizing_changes_the_width_the_shell_sees() {
     let dir = scratch("resize");

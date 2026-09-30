@@ -342,8 +342,18 @@ pub(crate) fn start(
     drop((input_read, output_write));
 
     let session_text = id.to_string();
+    let mut inherited: Vec<_> = std::env::vars_os().collect();
+    // The core's own folder holds `cabinetos-cli` (and `cab` in a release),
+    // so the shell can run the command line of the window it sits in.
+    if let Some(folder) = std::env::current_exe()
+        .ok()
+        .as_deref()
+        .and_then(Path::parent)
+    {
+        shell::append_to_path(&mut inherited, folder);
+    }
     let environment = shell::environment_block(
-        std::env::vars_os(),
+        inherited,
         &[
             ("TERM", "xterm-256color"),
             ("CABINETOS_SESSION", &session_text),

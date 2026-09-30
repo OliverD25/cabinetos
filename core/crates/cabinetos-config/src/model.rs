@@ -294,19 +294,37 @@ pub struct TerminalConfig {
     pub profiles: Vec<TerminalProfile>,
 }
 
+/// The note the `claude` profile adds to Claude Code's system prompt: where
+/// it runs, and the command line it can reach from there. One line, at most
+/// 60 words.
+const CLAUDE_NOTE: &str = "You run inside the CabinetOS file manager's integrated terminal. \
+Its command line is on the PATH as cabinetos-cli (also as cab). \
+`cabinetos-cli state --json` prints both panes: their tabs, cursor and marked files. \
+`cabinetos-cli --help` lists the rest. \
+For the marked files, prefer its copy, move and delete: they run as jobs, \
+and `cabinetos-cli undo --last` reverses the last one.";
+
 impl Default for TerminalConfig {
     fn default() -> Self {
-        let profile = |name: &str, command: &str, args: &[&str]| TerminalProfile {
-            name: name.to_owned(),
-            command: command.to_owned(),
-            args: args.iter().map(|arg| (*arg).to_owned()).collect(),
-        };
+        let profile =
+            |name: &str, command: &str, args: &[&str], follows_pane: bool| TerminalProfile {
+                name: name.to_owned(),
+                command: command.to_owned(),
+                args: args.iter().map(|arg| (*arg).to_owned()).collect(),
+                follows_pane,
+            };
         Self {
             default_profile: "pwsh".to_owned(),
             profiles: vec![
-                profile("pwsh", "pwsh.exe", &["-NoLogo"]),
-                profile("cmd", "cmd.exe", &[]),
-                profile("wsl", "wsl.exe", &[]),
+                profile("pwsh", "pwsh.exe", &["-NoLogo"], true),
+                profile("cmd", "cmd.exe", &[], true),
+                profile("wsl", "wsl.exe", &[], true),
+                profile(
+                    "claude",
+                    "claude.exe",
+                    &["--append-system-prompt", CLAUDE_NOTE],
+                    false,
+                ),
             ],
         }
     }
@@ -324,6 +342,17 @@ pub struct TerminalProfile {
     /// Its arguments.
     #[serde(default)]
     pub args: Vec<String>,
+    /// Whether the window types a change-directory line into it when the
+    /// active pane changes folder. `false` for a program that is not a
+    /// shell: the line would be its input.
+    #[serde(default = "follows_pane_by_default")]
+    pub follows_pane: bool,
+}
+
+/// A profile that leaves `followsPane` out is a shell, as before the key
+/// existed.
+fn follows_pane_by_default() -> bool {
+    true
 }
 
 /// One change to a key binding.
@@ -518,11 +547,51 @@ mod tests {
             .iter()
             .map(|p| p.name.as_str())
             .collect();
-        assert_eq!(names, ["pwsh", "cmd", "wsl"]);
+        assert_eq!(names, ["pwsh", "cmd", "wsl", "claude"]);
+        let follows: Vec<bool> = config
+            .terminal
+            .profiles
+            .iter()
+            .map(|p| p.follows_pane)
+            .collect();
+        assert_eq!(follows, [true, true, true, false]);
+        let claude = &config.terminal.profiles[3];
+        assert_eq!(claude.command, "claude.exe");
+        assert_eq!(claude.args[0], "--append-system-prompt");
+        assert_eq!(claude.args.len(), 2);
+        let note = &claude.args[1];
+        assert!(!note.contains(['\n', '\r']), "one line: {note}");
+        assert!(note.split_whitespace().count() <= 60, "{note}");
         assert!(config.keybindings.is_empty());
         assert_eq!(config.logging.level, LogLevel::Info);
         assert_eq!(config.marketplace.index, DEFAULT_MARKETPLACE_INDEX);
         assert!(!config.marketplace.allow_insecure);
+    }
+
+    #[test]
+    fn a_profile_follows_the_pane_unless_it_says_not() {
+        let terminal: TerminalConfig = serde_json::from_str(
+            r#"{"profiles": [
+                {"name": "a", "command": "a.exe"},
+                {"name": "b", "command": "b.exe", "followsPane": false},
+                {"name": "c", "command": "c.exe", "followsPane": true}
+            ], "defaultProfile": "a"}"#,
+        )
+        .unwrap();
+        let follows: Vec<bool> = terminal.profiles.iter().map(|p| p.follows_pane).collect();
+        assert_eq!(follows, [true, false, true]);
+        // The key is always written out, like `args`.
+        let text = serde_json::to_string(&terminal.profiles[0]).unwrap();
+        assert_eq!(
+            text,
+            r#"{"name":"a","command":"a.exe","args":[],"followsPane":true}"#
+        );
+        let error = serde_json::from_str::<TerminalProfile>(
+            r#"{"name": "a", "command": "a.exe", "followsPane": "yes"}"#,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("invalid type: string"), "{error}");
     }
 
     #[test]

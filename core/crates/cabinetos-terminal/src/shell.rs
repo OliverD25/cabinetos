@@ -183,6 +183,41 @@ pub(crate) fn environment_block(
     block
 }
 
+/// Adds `folder` at the end of the `PATH` among `variables`, unless `PATH`
+/// already lists it (compared without case, a trailing backslash ignored).
+/// Without a `PATH`, or with an empty one, it becomes `folder` alone. The
+/// variable keeps the spelling of its name (Windows says `Path`).
+pub(crate) fn append_to_path(variables: &mut Vec<(OsString, OsString)>, folder: &Path) {
+    let folder = folder.as_os_str();
+    let slot = variables
+        .iter_mut()
+        .find(|(name, _)| sort_key(name) == sort_key(OsStr::new("PATH")));
+    let Some((_, value)) = slot else {
+        variables.push((OsString::from("PATH"), folder.to_owned()));
+        return;
+    };
+    let wanted = folder_key(folder);
+    let text = value.to_string_lossy();
+    if text
+        .split(';')
+        .any(|entry| folder_key(OsStr::new(entry)) == wanted)
+    {
+        return;
+    }
+    let ended = text.is_empty() || text.ends_with(';');
+    if !ended {
+        value.push(";");
+    }
+    value.push(folder);
+}
+
+/// A folder as `PATH` entries are compared: lower case, without a trailing
+/// backslash.
+fn folder_key(folder: &OsStr) -> String {
+    let text = folder.to_string_lossy().to_lowercase();
+    text.trim_end_matches('\\').to_owned()
+}
+
 /// Names compare without case: ASCII letters count as upper case.
 fn sort_key(name: &OsStr) -> Vec<u16> {
     name.encode_wide()
@@ -350,5 +385,57 @@ mod tests {
             ]
         );
         assert_eq!(environment_block([], &[]), [0, 0]);
+    }
+
+    fn variables(pairs: &[(&str, &str)]) -> Vec<(OsString, OsString)> {
+        pairs
+            .iter()
+            .map(|(name, value)| (OsString::from(name), OsString::from(value)))
+            .collect()
+    }
+
+    #[test]
+    fn the_cores_folder_goes_at_the_end_of_path_once() {
+        let folder = Path::new(r"D:\Apps\CabinetOS");
+        let mut inherited = variables(&[("TERM", "dumb"), ("Path", r"C:\Windows;C:\bin")]);
+        append_to_path(&mut inherited, folder);
+        assert_eq!(
+            inherited,
+            variables(&[
+                ("TERM", "dumb"),
+                ("Path", r"C:\Windows;C:\bin;D:\Apps\CabinetOS")
+            ])
+        );
+        // Already listed: no change, however the entry is spelled.
+        for listed in [
+            r"D:\Apps\CabinetOS",
+            r"d:\apps\cabinetos\",
+            r"C:\bin;D:\APPS\CabinetOS\;C:\Windows",
+        ] {
+            let mut inherited = variables(&[("PATH", listed)]);
+            append_to_path(&mut inherited, folder);
+            assert_eq!(inherited, variables(&[("PATH", listed)]));
+        }
+        // A folder that only starts like a listed one is another folder.
+        let mut inherited = variables(&[("PATH", r"D:\Apps\CabinetOS2")]);
+        append_to_path(&mut inherited, folder);
+        assert_eq!(
+            inherited,
+            variables(&[("PATH", r"D:\Apps\CabinetOS2;D:\Apps\CabinetOS")])
+        );
+    }
+
+    #[test]
+    fn a_missing_empty_or_semicolon_ended_path_gets_the_folder_without_a_gap() {
+        let folder = Path::new(r"D:\Apps\CabinetOS");
+        let mut none = Vec::new();
+        append_to_path(&mut none, folder);
+        assert_eq!(none, variables(&[("PATH", r"D:\Apps\CabinetOS")]));
+        let mut empty = variables(&[("Path", "")]);
+        append_to_path(&mut empty, folder);
+        assert_eq!(empty, variables(&[("Path", r"D:\Apps\CabinetOS")]));
+        let mut ended = variables(&[("Path", r"C:\bin;")]);
+        append_to_path(&mut ended, folder);
+        assert_eq!(ended, variables(&[("Path", r"C:\bin;D:\Apps\CabinetOS")]));
     }
 }

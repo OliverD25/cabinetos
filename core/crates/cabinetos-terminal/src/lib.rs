@@ -5,7 +5,8 @@
 //!   a pseudo-console of the asked size with two pipes (input to the shell,
 //!   output from it), and starts the program attached to it in the asked
 //!   folder, with the core's environment plus `TERM=xterm-256color` and
-//!   `CABINETOS_SESSION=<id>`.
+//!   `CABINETOS_SESSION=<id>`, and the core's own folder added at the end
+//!   of `PATH`, so `cabinetos-cli` runs from any of its shells.
 //! - Each session's bytes travel on a byte pipe of its own,
 //!   `\\.\pipe\cabinetos-term-<random>`: raw bytes, no framing, both ways,
 //!   one client at a time, the current user only and no remote clients (the

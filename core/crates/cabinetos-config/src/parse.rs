@@ -278,7 +278,7 @@ mod tests {
         let config = parse(r#"{ "ui": { "layout": "rail" } }"#).unwrap();
         assert_eq!(config.ui.layout, Layout::Rail);
         assert!(config.ui.dual_pane);
-        assert_eq!(config.terminal.profiles.len(), 3);
+        assert_eq!(config.terminal.profiles.len(), 4);
     }
 
     #[test]
@@ -344,6 +344,17 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.message.contains("two terminal profiles"), "{error}");
+
+        let error = parse(
+            r#"{"terminal": {"profiles": [{"name": "a", "command": "a.exe", "followsPane": "yes"}], "defaultProfile": "a"}}"#,
+        )
+        .unwrap_err();
+        assert!(error.message.contains("invalid type: string"), "{error}");
+        let config = parse(
+            r#"{"terminal": {"profiles": [{"name": "a", "command": "a.exe"}], "defaultProfile": "a"}}"#,
+        )
+        .unwrap();
+        assert!(config.terminal.profiles[0].follows_pane);
     }
 
     #[test]
