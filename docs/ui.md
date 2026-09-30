@@ -385,8 +385,9 @@ background thread, while WinUI builds the window (about a second on the
 development PC). The protocol's JSON tables are built on another
 background thread at the same moment. So when the window is built, the
 core has its pipe open and the first answer is not held up: the start to
-both folders shown went from about 1.7 s to about 1.3 s in the speed
-review of 2026-10-01 ([log/2026-10-01/speed-review.md](log/2026-10-01/speed-review.md)).
+both folders shown went from about 1.33 s to about 1.1 s (medians of five
+release runs) in the speed review of 2026-10-01
+([log/2026-10-01/speed-review.md](log/2026-10-01/speed-review.md)).
 The window says `hello` once it is built, as before.
 
 Closing the window hides it at once, sends `shutdown`, closes the pipe
