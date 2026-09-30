@@ -1,0 +1,18 @@
+[package]
+name = "cabinetos-cli-args"
+description = "The command line's arguments as clap definitions, shared by cabinetos-cli and the AI agent extension."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Without the default features (colour, suggestions, terminal-size help
+# wrapping): the crate must also build for wasm32-wasip2, where the agent
+# plugin uses it.
+clap = { version = "4.6", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
+
+[lints]
+workspace = true

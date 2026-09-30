@@ -523,16 +523,45 @@ impl Session {
             Request::PreviewApply { preview } => {
                 let services = Arc::clone(&self.services);
                 self.spawn_reply(id, span, kind, move || {
+                    let owner = services
+                        .previews
+                        .get(&preview)
+                        .ok()
+                        .map(|found| found.owner);
                     match services.previews.apply(&preview, &services.jobs) {
-                        Ok(jobs) => Response::JobsStarted { jobs },
+                        Ok(jobs) => {
+                            // Whoever applied it, the plugin that proposed it hears which
+                            // jobs ran, so it can undo them (docs/plugins.md, "Previews").
+                            tell_proposer(
+                                &services,
+                                owner.as_deref(),
+                                "preview-applied",
+                                &serde_json::json!({ "preview": preview, "jobs": jobs }),
+                            );
+                            Response::JobsStarted { jobs }
+                        }
                         Err(failure) => failure_reply(failure),
                     }
                 });
                 None
             }
             Request::PreviewCancel { preview } => {
+                let owner = self
+                    .services
+                    .previews
+                    .get(&preview)
+                    .ok()
+                    .map(|found| found.owner);
                 Some(match self.services.previews.cancel(&preview) {
-                    Ok(()) => Response::Ok,
+                    Ok(()) => {
+                        tell_proposer(
+                            &self.services,
+                            owner.as_deref(),
+                            "preview-cancelled",
+                            &serde_json::json!({ "preview": preview }),
+                        );
+                        Response::Ok
+                    }
                     Err(failure) => failure_reply(failure),
                 })
             }
@@ -1894,6 +1923,18 @@ pub(crate) async fn run_plugin_request(
             PLUGIN_REQUEST_TIMEOUT.as_secs()
         ))
     })
+}
+
+/// Tells the plugin that proposed a preview (its owner is `plugin:<id>`)
+/// what became of it, as an event it gets in `on-event`. A preview a window
+/// proposed has no plugin to tell.
+fn tell_proposer(services: &Services, owner: Option<&str>, name: &str, payload: &Value) {
+    if let (Some(plugin_id), Some(plugins)) = (
+        owner.and_then(|owner| owner.strip_prefix("plugin:")),
+        &services.plugins,
+    ) {
+        plugins.send_event(plugin_id, name, payload.to_string());
+    }
 }
 
 fn no_such_plugin(plugin_id: &str) -> Response {

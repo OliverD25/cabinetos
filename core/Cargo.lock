@@ -180,6 +180,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "cabinetos-cli-args",
  "cabinetos-commands",
  "cabinetos-config",
  "cabinetos-diag",
@@ -192,6 +193,13 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "cabinetos-cli-args"
+version = "0.1.0"
+dependencies = [
+ "clap",
 ]
 
 [[package]]

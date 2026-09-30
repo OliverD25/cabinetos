@@ -929,6 +929,21 @@ async fn a_plugin_proposes_a_preview_and_undoes_it_through_core_requests() {
     let Response::JobsStarted { jobs } = applied else {
         panic!("{applied:?}")
     };
+    // The plugin that proposed it hears which jobs ran, whoever applied it.
+    let told = next_event(
+        &mut events,
+        |event| matches!(event, Event::PluginEvent { name, .. } if name == "preview-applied"),
+    )
+    .await;
+    let Event::PluginEvent {
+        plugin_id, payload, ..
+    } = told
+    else {
+        unreachable!()
+    };
+    assert_eq!(plugin_id, "requester");
+    let payload: Value = serde_json::from_str(&payload).unwrap();
+    assert_eq!(payload["jobs"], json!(jobs), "{payload}");
     let renamed = files.path().join("vacation_a.txt");
     let deadline = Instant::now() + SETTLE_DEADLINE;
     while !renamed.exists() {

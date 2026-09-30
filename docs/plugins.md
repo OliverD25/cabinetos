@@ -383,6 +383,8 @@ folder:
 | `folder-changed` | `path` (the watched folder), `changes` in the order Windows reported them, and `overflow` |
 | `folder-unwatched` | `path` and `message`: the watch ended by itself, for example because the folder was deleted |
 | `settings-changed` | `{}`: the plugin's own `settings` changed (see "Settings") |
+| `preview-applied` | `preview` and `jobs`: a preview this plugin proposed (`preview_listing` in `core-request`) was applied, by a window or by the plugin itself; `jobs` are the jobs it ran, in order, so the plugin can undo them one by one, last first |
+| `preview-cancelled` | `preview`: a preview this plugin proposed was cancelled (`preview_cancel`); one that expires unapplied is not told |
 
 - `kind` is `created`, `modified`, `removed` or `renamed`; `old_path` is
   set only for `renamed`. A file moved in from another folder is

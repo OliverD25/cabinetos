@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 base64.workspace = true
+cabinetos-cli-args.workspace = true
 cabinetos-commands.workspace = true
 cabinetos-config.workspace = true
 cabinetos-diag.workspace = true

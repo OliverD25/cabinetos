@@ -897,6 +897,16 @@ impl PluginHost {
         Ok(())
     }
 
+    /// Tells a running plugin something as an event (`on-event`): what
+    /// became of a preview it proposed, for one. Dropped when the plugin is
+    /// not running. Never waits.
+    pub fn send_event(&self, plugin_id: &str, name: &str, payload: String) {
+        let slots = lock(&self.inner.slots);
+        if let Some(worker) = slots.get(plugin_id).and_then(|slot| slot.worker.as_ref()) {
+            HostInner::queue_event(plugin_id, worker, name, payload);
+        }
+    }
+
     /// Whether the plugin is installed.
     #[must_use]
     pub fn contains(&self, id: &str) -> bool {
