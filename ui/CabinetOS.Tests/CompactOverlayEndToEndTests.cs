@@ -214,10 +214,11 @@ public class CompactOverlayEndToEndTests
 
     /// <summary>
     /// Resizing the drawer saves the size in <c>ui.compactOverlay</c> half a second after the last resize (the test
-    /// resizes the window as a user's drag would: through Windows), and the next entry opens at it.
+    /// resizes the window as a user's drag would: through Windows), and the next entry opens at it. An edit of the
+    /// file while the drawer is on resizes it at once, and the window does not save that size again.
     /// </summary>
     [Fact]
-    public async Task Resizing_the_drawer_saves_its_size_and_the_next_entry_opens_at_it()
+    public async Task Resizing_the_drawer_saves_its_size_the_next_entry_opens_at_it_and_an_edit_of_the_file_resizes_it()
     {
         var (run, root, data) = Prepare("compact-resize", """{ "version": 1, "ui": { "dualPane": true } }""");
         try
@@ -234,7 +235,8 @@ public class CompactOverlayEndToEndTests
                 "cmd:view.toggleCompactOverlay",
                 "wait:1500",
                 "cmd:view.toggleCompactOverlay",
-                "wait:2500",
+                // The test edits the file in this time, as an editor would.
+                "wait:7000",
                 "cmd:view.toggleCompactOverlay",
                 "wait:1000",
                 "shot:back"));
@@ -264,9 +266,20 @@ public class CompactOverlayEndToEndTests
             Assert.True(Field(second, "saved").GetBoolean());
             AssertNear(520, NativeWindow.Bounds(window).WidthDips, 1, "the second entry's width on screen");
 
+            // A hand edit while the drawer is on: the window takes the size from the file at once.
+            var file = JsonNode.Parse(ReadFile(configPath))!;
+            file["ui"]!["compactOverlay"] = new JsonObject { ["width"] = 440, ["height"] = 560 };
+            File.WriteAllText(configPath, file.ToJsonString());
+            var followed = await run.WaitForLineAsync("resize", "compact overlay follows the configuration");
+            Assert.Equal((440, 560), (Field(followed, "width").GetInt32(), Field(followed, "height").GetInt32()));
+            await Task.Delay(300);
+            var edited = NativeWindow.Bounds(window);
+            AssertNear(440, edited.WidthDips, 1, "the width after the edit of the file");
+            AssertNear(560, edited.HeightDips, 1, "the height after the edit of the file");
+
             var logs = await run.FinishAsync("resize", process, "back");
             Assert.Equal(2, logs.Count(l => Message(l) == "compact overlay left"));
-            // Entering again is not a resize: nothing more was saved.
+            // Entering again and following the file are not resizes by the user: nothing more was saved.
             Assert.Single(logs, l => Message(l) == "compact overlay size saved");
             Assert.False(NativeWindow.IsTopmost(window));
         }

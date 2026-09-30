@@ -1114,9 +1114,9 @@ through the chord machine. `CompactOverlayEndToEndTests` (opt-in, with
 `CABINETOS_UI_E2E=1`) runs a real window: it reads the window's topmost style
 and rectangle from Windows while the drawer is on, reads the file for the
 three layout keys during the mode, resizes the window through Windows and
-reads the saved size, and starts the drawer again at it. The live check's
-compact overlay section presses Ctrl+Alt+Up with real keys and reads the same
-style and rectangle.
+reads the saved size, starts the drawer again at it, and edits the file to see
+the drawer follow. The live check's compact overlay section presses
+Ctrl+Alt+Up with real keys and reads the same style and rectangle.
 
 ## The command palette
 
