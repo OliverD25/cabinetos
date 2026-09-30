@@ -337,6 +337,11 @@ machine works like this:
    - otherwise the key goes on to whatever has focus (typing, for example).
 2. **Waiting.** The next combination, if it comes within `chord_window_ms`,
    ends the wait:
+   - if it is a single key of the Immutable System Tier, the tier keeps
+     it: Esc only ends the wait (nothing runs, no notice), and
+     Ctrl+Shift+P ends it and opens the palette. They win over a chord
+     that ends with them. Until 2026-10-01 both were reported as a chord
+     that is not bound;
    - if it completes a chord that starts with the first half, the UI runs
      that command;
    - otherwise nothing runs, and the key is not passed on. The status bar

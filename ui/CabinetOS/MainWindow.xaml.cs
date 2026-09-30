@@ -2469,7 +2469,7 @@ public sealed partial class MainWindow : Window
                 e.Handled = true;
                 _ = _router.ExecuteAsync(run.Command, KeyArguments(run.Command, run.Keys), "key", TakeKeyTrace());
                 break;
-            case KeyOutcome.Pending or KeyOutcome.Held:
+            case KeyOutcome.Pending or KeyOutcome.Held or KeyOutcome.Cancelled:
                 e.Handled = true;
                 break;
             case KeyOutcome.NotBound notBound:

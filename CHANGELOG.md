@@ -29,6 +29,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Esc while a chord waits for its second key ends the wait, and Ctrl+Shift+P there ends it and opens the command palette. Both used to be reported as a chord that is not bound, and nothing happened.
 - Tab stays inside the permissions review while it is open, as in the plugin list, instead of moving the keyboard to the window under it.
 - A shortcut held down runs once. Holding Ctrl+Shift+P, Ctrl+` or Ctrl+B a moment too long made the palette, the terminal or the sidebar open and close again and again. Ctrl+Tab, Ctrl+Shift+Tab, Insert, Alt+Left, Alt+Right and Alt+Up still repeat while held.
 - Tab switches panes again after a click on a button of the top row. The click left the keyboard on the button, and Tab walked from button to button. The buttons of the top row, the status bar, the breadcrumbs, the tab strips and the dock no longer take the keyboard from a click.

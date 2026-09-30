@@ -134,6 +134,29 @@ public class ChordStateMachineTests
     }
 
     [Fact]
+    public void Esc_during_a_chord_s_wait_ends_the_wait_and_runs_nothing()
+    {
+        var changes = 0;
+        _keys.PendingChanged += () => changes++;
+        Press("ctrl+k");
+        var cancelled = Assert.IsType<KeyOutcome.Cancelled>(Press("escape"));
+        Assert.Equal(Combo("ctrl+k"), cancelled.First);
+        Assert.Null(_keys.PendingFirst);
+        Assert.Equal(2, changes);
+        // From idle, Esc is the way out of an overlay again.
+        Assert.Equal("overlay.close", Assert.IsType<KeyOutcome.Run>(Press("escape")).Command);
+    }
+
+    [Fact]
+    public void The_palette_s_key_during_a_chord_s_wait_ends_the_wait_and_opens_the_palette()
+    {
+        Press("ctrl+k", Typing);
+        var run = Assert.IsType<KeyOutcome.Run>(Press("ctrl+shift+p", Typing));
+        Assert.Equal(("palette.show", "ctrl+shift+p"), (run.Command, run.Keys.ToString()));
+        Assert.Null(_keys.PendingFirst);
+    }
+
+    [Fact]
     public void A_binding_whose_context_holds_wins_over_one_without()
     {
         Assert.Equal("test.inPalette", Assert.IsType<KeyOutcome.Run>(Press("f2", [KeyContexts.PaletteOpen])).Command);

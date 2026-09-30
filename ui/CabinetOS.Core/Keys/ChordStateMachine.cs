@@ -26,6 +26,9 @@ public abstract record KeyOutcome
     /// (<see cref="ChordStateMachine.RepeatingCommands"/>): nothing runs, the key is consumed.
     /// </summary>
     public sealed record Held(string Command) : KeyOutcome;
+
+    /// <summary>Esc ended the wait for the second half of the chord that starts with <paramref name="First"/>: nothing runs, the key is consumed.</summary>
+    public sealed record Cancelled(KeyCombo First) : KeyOutcome;
 }
 
 /// <summary>What the status bar says about a chord's second half that ran nothing (docs/keybindings.md, "Chords").</summary>
@@ -111,6 +114,9 @@ public sealed class ChordStateMachine(Func<long> nowMilliseconds)
 {
     private static readonly KeyOutcome.PassThrough PassThroughOutcome = new();
 
+    // The tier's way out of an overlay (Esc), which during a chord's wait is the way out of the wait.
+    private const string OverlayClose = "overlay.close";
+
     /// <summary>
     /// The commands a key held down runs again on each of Windows' repeats (docs/keybindings.md, "Keys held
     /// down"): the next and the previous tab, Insert (it marks the row and moves the cursor down), and Back,
@@ -157,6 +163,12 @@ public sealed class ChordStateMachine(Func<long> nowMilliseconds)
                 return new KeyOutcome.Pending(first);
             }
             ClearPending();
+            // The Immutable System Tier keeps its keys during a wait too: Esc only ends the wait, Ctrl+Shift+P ends it
+            // and opens the palette. They win over a chord that ends with them, so there is always a way out.
+            if (_keymap.Bindings.FirstOrDefault(b => !b.Keys.IsChord && b.Keys.First == combo && _keymap.Immutable.Contains(b.Command)) is { } tier)
+            {
+                return tier.Command == OverlayClose ? new KeyOutcome.Cancelled(first) : new KeyOutcome.Run(tier.Command, tier.Keys);
+            }
             var chord = Best(combo, contexts, b => b.Keys.IsChord && b.Keys.First == first && b.Keys.Second == combo);
             return chord is null
                 ? new KeyOutcome.NotBound(first, combo, _keymap.Bindings.FirstOrDefault(b => b.Keys.IsChord && b.Keys.First == first && b.Keys.Second == combo))

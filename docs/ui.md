@@ -464,7 +464,8 @@ Every key press goes first to the window (`PreviewKeyDown`), then to the
 - A binding runs its command through the router; the first half of a chord
   waits up to `chord_window_ms` and the status bar says so
   ("Ctrl+K was pressed. Waiting for the second key…"); a second half that
-  completes nothing runs nothing and is reported.
+  completes nothing runs nothing and is reported. Esc during the wait only
+  ends it; Ctrl+Shift+P ends it and opens the palette.
 - Contexts: `filesView` (a file pane has the focus), `paletteOpen`,
   `textInput` (a text box has the focus). A binding with a `when` that holds
   wins over one without.
