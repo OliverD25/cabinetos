@@ -89,22 +89,18 @@ internal sealed class ContextMenuFlyout
 
     /// <summary>
     /// Shows <paramref name="view"/> at <paramref name="at"/> (the window's coordinates) over
-    /// <paramref name="target"/>, the pane.
+    /// <paramref name="target"/>, the pane. Returns true when its shape was built for this opening.
     /// </summary>
-    public void Show(FrameworkElement target, Point at, ContextMenuView view)
+    public bool Show(FrameworkElement target, Point at, ContextMenuView view)
     {
         _shown?.Hide();
         _pending = null;
         var shape = Shape(view);
-        if (!_built.TryGetValue(shape, out var built))
+        _built.TryGetValue(shape, out var built);
+        var isNew = built is null;
+        if (built is null)
         {
-            built = Build(view);
-            _built[shape] = built;
-            if (_recent.Count >= KeptShapes && _recent.Last is { } oldest)
-            {
-                _built.Remove(oldest.Value);
-                _recent.RemoveLast();
-            }
+            built = Keep(shape, Build(view));
         }
         else
         {
@@ -133,6 +129,36 @@ internal sealed class ContextMenuFlyout
         {
             _pending = (target, position);
         }
+        return isNew;
+    }
+
+    /// <summary>
+    /// Builds <paramref name="view"/>'s shape without showing it, so its first opening costs no build: the window
+    /// prepares its common shapes while it is idle after start. Returns false when the shape was built already, or
+    /// when the kept shapes are full and this one would push out a shape the user opened.
+    /// </summary>
+    public bool Prepare(ContextMenuView view)
+    {
+        var shape = Shape(view);
+        if (_built.ContainsKey(shape) || _recent.Count >= KeptShapes)
+        {
+            return false;
+        }
+        Keep(shape, Build(view));
+        // Last in the order: a shape the user opens is kept before a prepared one that was never opened.
+        _recent.AddLast(shape);
+        return true;
+    }
+
+    private Built Keep(string shape, Built built)
+    {
+        if (_recent.Count >= KeptShapes && _recent.Last is { } oldest)
+        {
+            _built.Remove(oldest.Value);
+            _recent.RemoveLast();
+        }
+        _built[shape] = built;
+        return built;
     }
 
     private void ShowNow(Built built, FrameworkElement target, Point position)

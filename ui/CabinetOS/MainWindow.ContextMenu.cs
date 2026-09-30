@@ -30,6 +30,9 @@ public sealed partial class MainWindow
     private readonly HashSet<string> _menuWarned = new(StringComparer.Ordinal);
     private ContextMenuConfig _menuConfig = ContextMenuConfig.Defaults;
 
+    // How long after the first folders are shown the menu's shapes are built: the start's own requests and frames go first.
+    private static readonly TimeSpan PrepareMenusAfter = TimeSpan.FromMilliseconds(750);
+
     // The pane the open menu is about, and what it was opened on: a plugin's entry gets that pane's paths when it runs.
     private (int Pane, ContextMenuFacts Facts)? _menuFor;
 
@@ -129,7 +132,7 @@ public sealed partial class MainWindow
         }
         _menuFor = (paneIndex, facts);
         _menuAt = (position, at is null);
-        _contextMenu.Show(view, position, menu);
+        var built = _contextMenu.Show(view, position, menu);
         // The point asked, and for the keyboard the row it hangs under, against "context menu placed" (where WinUI put it).
         List<LogField> fields =
         [
@@ -140,6 +143,7 @@ public sealed partial class MainWindow
             new("x", Math.Round(position.X, 1)),
             new("y", Math.Round(position.Y, 1)),
             new("build_ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2)),
+            new("built", built),
         ];
         if (at is null)
         {
@@ -147,6 +151,49 @@ public sealed partial class MainWindow
             fields.AddRange([new("row_left", Math.Round(left, 1)), new("row_top", Math.Round(top, 1)), new("row_bottom", Math.Round(bottom, 1))]);
         }
         Diag.Info(MenuTarget, "context menu shown", [.. fields]);
+    }
+
+    // The first opening of a menu shape builds its flyout, which costs more than a frame (docs/log/2026-10-01/speed-review.md):
+    // the common shapes are built once the window has shown its first folders, one a dispatcher turn at low priority, so a
+    // key or a frame never waits behind more than one of them.
+    private async Task PrepareContextMenusSoonAsync()
+    {
+        await Task.Delay(PrepareMenusAfter);
+        var kinds = new Queue<MenuTargetKind>([MenuTargetKind.File, MenuTargetKind.Folder, MenuTargetKind.Background, MenuTargetKind.MultiSelect]);
+        void Next()
+        {
+            if (_closing || kinds.Count == 0)
+            {
+                return;
+            }
+            var kind = kinds.Dequeue();
+            var started = Stopwatch.GetTimestamp();
+            var built = _contextMenu.Prepare(ContextMenuModel.Build(_menuConfig, PreparedFacts(kind), _router.Commands, KeysOf));
+            Diag.Info(MenuTarget, "context menu prepared", new LogField("target", kind.ToString()), new LogField("built", built),
+                new LogField("ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 2)));
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Next);
+        }
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Next);
+    }
+
+    // The facts of a shape most right-clicks in the active pane give: a name without an extension matches no filter.
+    private ContextMenuFacts PreparedFacts(MenuTargetKind kind)
+    {
+        var facts = MenuFacts(Active, -1);
+        var entry = Path.Join(Active.Path, kind == MenuTargetKind.Folder ? "folder" : "file");
+        return kind switch
+        {
+            MenuTargetKind.File => facts with { Kind = kind, EntryPath = entry, SelectedCount = 1 },
+            MenuTargetKind.Folder => facts with { Kind = kind, EntryPath = entry, EntryIsFolder = true, SelectedCount = 1 },
+            MenuTargetKind.MultiSelect => facts with
+            {
+                Kind = kind,
+                EntryPath = entry,
+                SelectedCount = 2,
+                Selection = () => new SelectionExtensions(new HashSet<string>(), AnyFolder: false, AnyWithout: true),
+            },
+            _ => facts,
+        };
     }
 
     // Where the menu's content lies, in the window's content coordinates (what the point asked for is in the same ones).

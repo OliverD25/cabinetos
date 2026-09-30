@@ -511,6 +511,59 @@ public class ContextMenuEndToEndTests
     }
 
     /// <summary>
+    /// The speed review of 2026-10-01: the window builds the menu's common shapes (a file, a folder, the
+    /// pane's space, several rows) while it is idle after start, so the first right-click on each finds
+    /// its flyout built and builds nothing ("built": false).
+    /// </summary>
+    [Fact]
+    public async Task The_first_menu_of_a_file_a_folder_and_the_space_finds_its_flyout_built_at_start()
+    {
+        var (run, root, data) = Prepare("menu-prepared");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(data, "gamma"));
+            // Both panes start in the data folder, where the shapes are prepared.
+            File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["version"] = 1,
+                ["ui"] = new Dictionary<string, object> { ["dualPane"] = true, ["lastPaths"] = new[] { data, data } },
+            }));
+            var process = run.Start("prepared", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                "wait:500",
+                "menu:alpha.txt",
+                "wait:500",
+                "cmd:overlay.close",
+                "wait:300",
+                "menu:gamma",
+                "wait:500",
+                "cmd:overlay.close",
+                "wait:300",
+                "menu:*",
+                "wait:500",
+                "cmd:overlay.close",
+                "wait:300",
+                "shot:done"));
+            var logs = await run.FinishAsync("prepared", process, "done");
+
+            var prepared = logs.Where(l => Message(l) == "context menu prepared").ToList();
+            Assert.Equal(["File", "Folder", "Background", "MultiSelect"], prepared.Select(l => Field(l, "target").GetString()));
+            // The default menus give the rows one shape: the first row's preparing builds it, the others find it.
+            Assert.True(Field(prepared[0], "built").GetBoolean());
+            var shown = logs.Where(l => Message(l) == "context menu shown").ToList();
+            Assert.Equal(["File", "Folder", "Background"], shown.Select(l => Field(l, "target").GetString()));
+            Assert.True(Timestamp(prepared[^1]) < Timestamp(shown[0]), "the shapes were prepared before the first right-click");
+            Assert.All(shown, l => Assert.False(Field(l, "built").GetBoolean(), $"a first right-click built its menu: {l}"));
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
     /// The frame measurement, alone: another test's window on the same desktop takes the processor and
     /// the GPU, and its load shows in this window's frames (one 35 ms frame in the full run of
     /// 2026-09-30, none when the test ran by itself).

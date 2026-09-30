@@ -361,6 +361,7 @@ public sealed partial class MainWindow : Window
         }
         ShowNotice("");
         await LoadAsync(firstStart: true);
+        _ = PrepareContextMenusSoonAsync();
         if (_selfTestCrash)
         {
             CrashForSelfTest();

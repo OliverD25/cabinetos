@@ -903,7 +903,16 @@ about 30 ms and then a 60 ms frame (measured 2026-09-30). So the window
 keeps one flyout per menu shape (the same entries, titles, icons and keys),
 up to six shapes. The same shape again only has its entries' enabled state
 set: about 6 ms, with no frame over 33 ms. The first opening of a shape in
-a window's run still costs one long frame, about 45 to 60 ms. A menu asked
+a window's run still costs one long frame, about 45 to 60 ms. So the
+common shapes (a file, a folder, the pane's space, several rows) are built
+0.75 s after the first folders are shown, one a dispatcher turn at low
+priority ("context menu prepared" in the log, with its time), and the
+first right-click only shows them: in the speed review of 2026-10-01 the
+first menu's synchronous part went from 36 to 24 ms and its longest frame
+gap from 96 to 75 ms. What stays is WinUI's own work at a flyout's first
+showing (one frame of about 65 to 70 ms of UI-thread work), which cannot
+be done ahead without showing the menu. "context menu shown" says with
+`built` whether the opening had to build its shape. A menu asked
 for while the previous one is still closing waits for it to be gone,
 because WinUI ignores a flyout that is shown again while it is closing,
 and then one turn of the window's dispatcher more: shown again from
@@ -914,7 +923,8 @@ menu opened" when WinUI has the menu on screen, not only asked for.
 
 **Logs** (Article 12). "context menu shown" has the target, the quick
 actions, the items, `keyboard`, `x` and `y` (the point asked for, in the
-window's content DIPs) and `build_ms`; from the keyboard it also has
+window's content DIPs), `build_ms` and `built` (whether this opening had
+to build its shape's flyout); from the keyboard it also has
 `row_left`, `row_top` and `row_bottom`, the focused row's name column and its
 top and bottom in the same coordinates. "context menu placed" follows it a
 few frames later, once WinUI has laid the menu out: `left`, `top`, `width`
