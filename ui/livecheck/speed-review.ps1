@@ -11,10 +11,12 @@
 #   list-folders  the same for 10,000 folders
 #   tabs          tab:next between a tab on 100,000 files and one on 10,000 folders
 #   theme         Commander Compact and back, over 100,000 files and 3,000 entries
+#   picker        the theme picker's live preview moved over the shipped themes, over the same folders
 #   menu          the context menu of a file, a folder and the background, the first and the second opening
 #   quick-open    Quick Open on the 100,000-file folder with three texts
 #   find          Find in pane on the 100,000-file listing, typed one letter at a time
 #   market        the marketplace's first view on a local index (sdk/marketplace/build-index.ps1)
+#   idle-start    a window on two small folders, nothing done: 60 s of idle CPU and the working sets
 #   session       the above in one window without frame stats; then 60 s of idle CPU and the working sets
 #
 # Before each run it waits while another CabinetOS window runs (other agents' tests share the machine), up to
@@ -23,17 +25,23 @@
 # kept under <Out>\<scenario>-<n>\ and the numbers go to <Out>\results.json and the screen. Needs the release
 # builds of the window and the core. Runs in Windows PowerShell 5.1 and PowerShell 7.
 #
+# -Variants compares builds of the window run by run, in turn, so a machine that gets busier or quieter treats
+# them alike: "before=<exe>;after=<exe>", or "<window exe>|<core exe>" for a variant with a core of its own. Each
+# variant's runs go under <Out>\<variant>\.
+#
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\speed-review.ps1 -Runs 3
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\speed-review.ps1 -Scenarios menu -Runs 5
 param(
   [string]$Exe = "$PSScriptRoot\..\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64\CabinetOS.exe",
   [string]$Core = "$PSScriptRoot\..\..\core\target\release\cabinetos-core.exe",
   [string]$Root = "$env:TEMP\cabinetos-speed-review",
-  [string[]]$Scenarios = @('start-small', 'start-home', 'list-files', 'list-folders', 'tabs', 'theme', 'menu', 'quick-open', 'find', 'market', 'session'),
+  [string[]]$Scenarios = @('start-small', 'start-home', 'list-files', 'list-folders', 'tabs', 'theme', 'picker', 'menu', 'quick-open', 'find', 'market', 'idle-start', 'session'),
   [int]$Runs = 3,
   [string]$Out = "",
   [int]$Tries = 40,
-  [int]$IdleSeconds = 60
+  [int]$IdleSeconds = 60,
+  [int]$Resident = 10,
+  [string]$Variants = ""
 )
 $ErrorActionPreference = 'Stop'
 # powershell -File passes "a,b" as one text.
@@ -64,11 +72,12 @@ function Measure-Load([int]$Milliseconds) {
   [Math]::Round(100 * ($b[0] - $a[0]) / [double]($b[1] - $a[1]), 1)
 }
 
-# Waits while another CabinetOS window runs; true when the run has to share the machine after all.
+# Waits while another CabinetOS window runs; true when the run has to share the machine after all. A window that has
+# run for -Resident minutes already (one someone keeps open to work in) is not waited for, only counted as sharing.
 function Wait-Alone {
   for ($try = 1; $try -le $Tries; $try++) {
-    $others = @(Get-Process -Name CabinetOS -ErrorAction SilentlyContinue)
-    if ($others.Count -eq 0) { return $false }
+    $others = @(Get-Process -Name CabinetOS -ErrorAction SilentlyContinue | Where-Object { ((Get-Date) - $_.StartTime).TotalMinutes -lt $Resident })
+    if ($others.Count -eq 0) { break }
     Write-Host ("  {0} other CabinetOS window(s) run; waiting 60 s ({1} of {2})" -f $others.Count, $try, $Tries)
     Start-Sleep -Seconds 60
   }
@@ -85,8 +94,8 @@ function Build-MarketIndex {
 }
 
 # One window: a fresh scratch configuration, the steps, the logs kept. Returns what the analysis needs.
-function Invoke-Run([string]$Scenario, [int]$N, [string]$Steps, [hashtable]$Config, [bool]$FrameStats, [string]$Log = "", [bool]$Idle = $false) {
-  $dir = "$Out\$Scenario-$N"
+function Invoke-Run([string]$Exe, [string]$CoreExe, [string]$Folder, [string]$Scenario, [int]$N, [string]$Steps, [hashtable]$Config, [bool]$FrameStats, [string]$Log = "", [bool]$Idle = $false) {
+  $dir = "$Folder\$Scenario-$N"
   $work = "$Root\work"
   if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
   [void](New-Item -ItemType Directory -Force "$work\config", "$work\logs", "$work\shots", $dir)
@@ -94,7 +103,7 @@ function Invoke-Run([string]$Scenario, [int]$N, [string]$Steps, [hashtable]$Conf
   [System.IO.File]::WriteAllText("$work\config\cabinetos.json", ($Config | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding $false))
   $shared = Wait-Alone
   $load = Measure-Load 2000
-  $env:CABINETOS_CORE_EXE = $Core
+  $env:CABINETOS_CORE_EXE = $CoreExe
   $env:CABINETOS_CONFIG = "$work\config\cabinetos.json"
   $env:CABINETOS_LOG_DIR = "$work\logs"
   foreach ($pair in @(('THEMES', 'themes'), ('UNDO', 'undo'), ('PLUGINS', 'plugins'), ('PLUGINS_DATA', 'plugins-data'), ('MARKETPLACE', 'marketplace'),
@@ -110,7 +119,8 @@ function Invoke-Run([string]$Scenario, [int]$N, [string]$Steps, [hashtable]$Conf
   $deadline = (Get-Date).AddSeconds(180)
   while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath "$work\shots\done.png") -and -not $p.HasExited) { Start-Sleep -Milliseconds 200 }
   $done = Test-Path -LiteralPath "$work\shots\done.png"
-  $idle = $null
+  # Not $idle: PowerShell names ignore case, and that is the parameter $Idle.
+  $idleNumbers = $null
   if ($Idle -and $done -and -not $p.HasExited) {
     $corePid = (Read-Log "$work\logs\ui.*.jsonl" | Where-Object { $_.message -eq 'core started' } | Select-Object -First 1).fields.pid
     $coreProcess = Get-Process -Id $corePid -ErrorAction SilentlyContinue
@@ -119,7 +129,7 @@ function Invoke-Run([string]$Scenario, [int]$N, [string]$Steps, [hashtable]$Conf
     $machineBefore = [SpeedReviewCpu]::Read()
     Start-Sleep -Seconds $IdleSeconds
     $p.Refresh(); $coreProcess.Refresh(); $machineAfter = [SpeedReviewCpu]::Read()
-    $idle = [ordered]@{
+    $idleNumbers = [ordered]@{
       seconds = $IdleSeconds
       ui_cpu_ms = [Math]::Round(($p.TotalProcessorTime - $uiBefore).TotalMilliseconds, 1)
       core_cpu_ms = [Math]::Round(($coreProcess.TotalProcessorTime - $coreBefore).TotalMilliseconds, 1)
@@ -138,7 +148,7 @@ function Invoke-Run([string]$Scenario, [int]$N, [string]$Steps, [hashtable]$Conf
   $shared = $shared -or (@(Get-Process -Name CabinetOS -ErrorAction SilentlyContinue).Count -gt 0)
   Start-Sleep -Milliseconds 500
   Copy-Item -Path "$work\logs\*.jsonl" -Destination $dir
-  [pscustomobject]@{ Scenario = $Scenario; N = $N; Dir = $dir; StartedUtc = $startedUtc; Done = $done; Shared = $shared; LoadBefore = $load; Idle = $idle }
+  [pscustomobject]@{ Scenario = $Scenario; N = $N; Dir = $dir; StartedUtc = $startedUtc; Done = $done; Shared = $shared; LoadBefore = $load; Idle = $idleNumbers }
 }
 
 function TsUtc($ts) {
@@ -151,6 +161,12 @@ function Read-Log([string]$Pattern) {
       $line = $_ | ConvertFrom-Json
       $line | Add-Member -NotePropertyName at -NotePropertyValue (TsUtc $line.ts) -PassThru
     })
+}
+
+function Pct($values, [double]$p) {
+  $sorted = @($values | Sort-Object)
+  if ($sorted.Count -eq 0) { return $null }
+  $sorted[[int][Math]::Min($sorted.Count - 1, [Math]::Floor($p * ($sorted.Count - 1) + 0.5))]
 }
 
 function Ms($from, $to) { [Math]::Round(($to - $from).TotalMilliseconds, 1) }
@@ -234,8 +250,9 @@ function Analyze($run) {
       $switches = @()
       foreach ($command in @($ui | Where-Object { $_.message -eq 'command executed' -and $_.fields.command -eq 'tab.next' })) {
         $shown = $ui | Where-Object { $_.message -eq 'tab shown' -and $_.at -ge $command.at } | Select-Object -First 1
-        $listing = $ui | Where-Object { $_.message -eq 'listing shown' -and $_.at -ge $command.at -and $_.at -le $command.at.AddSeconds(2) } | Select-Object -First 1
-        $lists = @($ui | Where-Object { $_.message -eq 'request sent' -and $_.fields.request -eq 'list_directory' -and $_.at -ge $command.at -and $_.at -le $command.at.AddSeconds(2) }).Count
+        # The next switch comes 1.8 s after this one.
+        $listing = $ui | Where-Object { $_.message -eq 'listing shown' -and $_.at -ge $command.at -and $_.at -le $command.at.AddMilliseconds(1500) } | Select-Object -First 1
+        $lists = @($ui | Where-Object { $_.message -eq 'request sent' -and $_.fields.request -eq 'list_directory' -and $_.at -ge $command.at -and $_.at -le $command.at.AddMilliseconds(1500) }).Count
         $switches += [ordered]@{
           to = if ($shown) { Split-Path -Leaf $shown.fields.path } else { $null }
           tab_shown_ms = if ($shown) { Ms $command.at $shown.at } else { $null }
@@ -248,18 +265,33 @@ function Analyze($run) {
     }
     'theme' {
       $changes = @()
-      foreach ($sent in @($ui | Where-Object { $_.message -eq 'request sent' -and $_.fields.request -eq 'set_value' })) {
-        $metrics = $ui | Where-Object { $_.message -eq 'metrics applied' -and $_.at -ge $sent.at } | Select-Object -First 1
-        $theme = $ui | Where-Object { $_.message -eq 'theme applied' -and $_.at -ge $sent.at } | Select-Object -First 1
-        $end = @($metrics.at, $theme.at) | Sort-Object | Select-Object -Last 1
+      # Each theme step after the start's: from the set_value that asked for it to the later of its two lines.
+      foreach ($theme in @($ui | Where-Object { $_.message -eq 'theme applied' } | Select-Object -Skip 1)) {
+        $sent = $ui | Where-Object { $_.message -eq 'request sent' -and $_.fields.request -eq 'set_value' -and $_.at -le $theme.at -and $_.at -ge $theme.at.AddSeconds(-2) } | Select-Object -Last 1
+        if (-not $sent) { continue }
+        $metrics = $ui | Where-Object { $_.message -eq 'metrics applied' -and $_.at -ge $sent.at -and $_.at -le $theme.at.AddSeconds(1) } | Select-Object -First 1
+        $end = if ($metrics -and $metrics.at -gt $theme.at) { $metrics.at } else { $theme.at }
         $changes += [ordered]@{
           theme = $theme.fields.theme
-          metrics_applied_ms = Ms $sent.at $metrics.at
+          metrics_applied_ms = if ($metrics) { Ms $sent.at $metrics.at } else { $null }
           theme_applied_ms = Ms $sent.at $theme.at
           frames = Frames $ui $sent.at $end.AddMilliseconds(500)
         }
       }
       $r.changes = $changes
+    }
+    'picker' {
+      $previews = @()
+      foreach ($shown in @($ui | Where-Object { $_.message -eq 'theme previewed' })) {
+        $sent = $ui | Where-Object { $_.message -eq 'request sent' -and $_.fields.request -eq 'get_theme' -and $_.at -le $shown.at -and $_.at -ge $shown.at.AddSeconds(-1) } | Select-Object -Last 1
+        $from = if ($sent) { $sent.at } else { $shown.at }
+        $previews += [ordered]@{
+          theme = $shown.fields.theme
+          previewed_ms = if ($sent) { Ms $sent.at $shown.at } else { $null }
+          frames = Frames $ui $from $shown.at.AddMilliseconds(500)
+        }
+      }
+      $r.previews = $previews
     }
     'menu' {
       $opens = @()
@@ -320,6 +352,7 @@ function Analyze($run) {
       $r.cards = if ($cards) { $cards.fields.cards } else { $null }
       if ($command) { $r.frames = Frames $ui $command.at $(if ($cards) { $cards.at } else { $command.at.AddMilliseconds(1500) }) }
     }
+    'idle-start' { $r.idle = $run.Idle }
     'session' { $r.idle = $run.Idle }
   }
   $r
@@ -327,6 +360,9 @@ function Analyze($run) {
 
 $marketIndex = Build-MarketIndex
 $compactOn = "theme:commander-compact;wait:1000;theme:default;wait:1000"
+# Each row is brought into view first (select:), as the cursor keys bring it: a keyboard menu for a row out of view ended
+# the window before d5ce4e5.
+$menus = "select:IMG_0.jpg;wait:400;menu:;wait:1000;cmd:overlay.close;wait:600;select:IMG_0;wait:400;menu:;wait:1000;cmd:overlay.close;wait:600;menu:*;wait:1000;cmd:overlay.close;wait:600"
 $plans = @{
   'start-small'  = @{ Steps = 'wait:2500;shot:done'; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $false }
   'start-home'   = @{ Steps = 'wait:2500;shot:done'; Config = @{ ui = @{ lastPaths = @($home3k, $small) } }; Frames = $false }
@@ -334,48 +370,59 @@ $plans = @{
   'list-folders' = @{ Steps = "size:1400x900;pane:0;wait:1000;path:$folders;wait:4000;scroll:20;wait:1500;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $true }
   'tabs'         = @{ Steps = "size:1400x900;pane:0;path:$files;wait:3000;tab:new;path:$folders;wait:3000;tab:next;wait:1500;tab:next;wait:1500;tab:next;wait:1500;tab:next;wait:1500;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $true }
   'theme'        = @{ Steps = "size:1400x900;pane:1;path:$home3k;pane:0;path:$files;wait:3000;$compactOn;$compactOn;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $true }
-  'menu'         = @{ Steps = "size:1400x900;pane:0;path:$home3k;wait:2500;menu:IMG_0.jpg;wait:1000;cmd:overlay.close;wait:600;menu:IMG_0;wait:1000;cmd:overlay.close;wait:600;menu:*;wait:1000;cmd:overlay.close;wait:600;menu:IMG_0.jpg;wait:1000;cmd:overlay.close;wait:600;menu:IMG_0;wait:1000;cmd:overlay.close;wait:600;menu:*;wait:1000;cmd:overlay.close;wait:600;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $true }
+  'picker'       = @{ Steps = "size:1400x900;pane:1;path:$home3k;pane:0;path:$files;wait:3000;cmd:preferences.selectColorTheme;wait:1500;pick:1;wait:800;pick:2;wait:800;pick:3;wait:800;pick:4;wait:800;pick:0;wait:800;cmd:overlay.close;wait:800;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $true }
+  'menu'         = @{ Steps = "size:1400x900;pane:0;path:$home3k;wait:2500;$menus;$menus;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $true }
   'quick-open'   = @{ Steps = "size:1400x900;pane:0;path:$files;wait:3000;quick-open:dat;wait:1500;quick-open:IMG77;wait:1500;quick-open:фото9;wait:1500;cmd:overlay.close;wait:500;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $true; Log = 'info,cabinetos_ui::quick_open=debug' }
   'find'         = @{ Steps = "size:1400x900;pane:0;path:$files;wait:3000;find:r;find:re;find:rep;find:repo;find:repor;wait:1000;cmd:overlay.close;wait:1000;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $true }
   'market'       = @{ Steps = "size:1400x900;wait:2000;cmd:marketplace.browse;wait:3000;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) }; marketplace = @{ index = $marketIndex } }; Frames = $true }
-  'session'      = @{ Steps = "size:1400x900;pane:0;path:$files;wait:3000;scroll:20;wait:500;tab:new;path:$folders;wait:3000;tab:next;wait:1500;tab:next;wait:1000;$compactOn;pane:1;path:$home3k;wait:1500;menu:IMG_0.jpg;wait:800;cmd:overlay.close;menu:IMG_0;wait:800;cmd:overlay.close;menu:*;wait:800;cmd:overlay.close;pane:0;tab:next;wait:1500;quick-open:dat;wait:1000;cmd:overlay.close;find:rep;wait:1000;cmd:overlay.close;cmd:marketplace.browse;wait:2000;cmd:marketplace.browse;wait:1000;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) }; marketplace = @{ index = $marketIndex } }; Frames = $false; Idle = $true }
+  'idle-start'   = @{ Steps = 'wait:2500;shot:done'; Config = @{ ui = @{ lastPaths = @($small, $small) } }; Frames = $false; Idle = $true }
+  'session'      = @{ Steps = "size:1400x900;pane:0;path:$files;wait:3000;scroll:20;wait:500;tab:new;path:$folders;wait:3000;tab:next;wait:1500;tab:next;wait:1000;$compactOn;pane:1;path:$home3k;wait:1500;select:IMG_0.jpg;wait:300;menu:;wait:800;cmd:overlay.close;select:IMG_0;wait:300;menu:;wait:800;cmd:overlay.close;menu:*;wait:800;cmd:overlay.close;pane:0;tab:next;wait:1500;quick-open:dat;wait:1000;cmd:overlay.close;find:rep;wait:1000;cmd:overlay.close;cmd:marketplace.browse;wait:2000;cmd:marketplace.browse;wait:1000;shot:done"; Config = @{ ui = @{ lastPaths = @($small, $small) }; marketplace = @{ index = $marketIndex } }; Frames = $false; Idle = $true }
 }
 
+$builds = @()
+if ($Variants) {
+  foreach ($pair in ($Variants -split ';' | Where-Object { $_ })) {
+    $name, $path = $pair -split '=', 2
+    $window, $ownCore = $path -split '\|', 2
+    $builds += [pscustomobject]@{ Name = $name; Exe = [System.IO.Path]::GetFullPath($window); Core = $(if ($ownCore) { [System.IO.Path]::GetFullPath($ownCore) } else { $Core }); Folder = "$Out\$name" }
+  }
+} else {
+  $builds += [pscustomobject]@{ Name = ''; Exe = $Exe; Core = $Core; Folder = $Out }
+}
 $all = @()
 foreach ($scenario in $Scenarios) {
   $plan = $plans[$scenario]
   if (-not $plan) { "no scenario $scenario"; continue }
   for ($n = 1; $n -le $Runs; $n++) {
-    "{0} run {1} of {2}" -f $scenario, $n, $Runs
-    $run = Invoke-Run $scenario $n $plan.Steps $plan.Config $plan.Frames $(if ($plan.Log) { $plan.Log } else { '' }) ([bool]$plan.Idle)
-    $result = Analyze $run
-    $all += $result
-    ($result | ConvertTo-Json -Depth 8 -Compress)
+    foreach ($build in $builds) {
+      "{0} run {1} of {2} {3}" -f $scenario, $n, $Runs, $build.Name
+      $run = Invoke-Run $build.Exe $build.Core $build.Folder $scenario $n $plan.Steps $plan.Config $plan.Frames $(if ($plan.Log) { $plan.Log } else { '' }) ([bool]$plan.Idle)
+      try { $result = Analyze $run } catch { $result = [ordered]@{ scenario = $scenario; run = $n; error = "$_" } }
+      $result.variant = $build.Name
+      $all += $result
+      ($result | ConvertTo-Json -Depth 8 -Compress)
+    }
   }
 }
 ($all | ConvertTo-Json -Depth 8) | Set-Content -LiteralPath "$Out\results.json" -Encoding UTF8
 
+foreach ($build in $builds) {
 # Request latencies by type over every run's window log: the round trip the window measured, and the core's own time.
 $trips = @{}
 $handled = @{}
-foreach ($file in Get-ChildItem -Path $Out -Recurse -Filter 'ui.*.jsonl') {
+foreach ($file in Get-ChildItem -Path $build.Folder -Recurse -Filter 'ui.*.jsonl') {
   foreach ($line in (Read-Log $file.FullName | Where-Object { $_.message -eq 'reply received' })) {
     $type = [string]$line.fields.request
     if (-not $trips.ContainsKey($type)) { $trips[$type] = New-Object System.Collections.Generic.List[double] }
     $trips[$type].Add($line.fields.elapsed_us / 1000.0)
   }
 }
-foreach ($file in Get-ChildItem -Path $Out -Recurse -Filter 'core.*.jsonl') {
+foreach ($file in Get-ChildItem -Path $build.Folder -Recurse -Filter 'core.*.jsonl') {
   foreach ($line in (Read-Log $file.FullName | Where-Object { $_.message -eq 'request handled' })) {
     $type = [string]$line.fields.request
     if (-not $handled.ContainsKey($type)) { $handled[$type] = New-Object System.Collections.Generic.List[double] }
     $handled[$type].Add($line.fields.elapsed_us / 1000.0)
   }
-}
-function Pct($values, [double]$p) {
-  $sorted = @($values | Sort-Object)
-  if ($sorted.Count -eq 0) { return $null }
-  $sorted[[int][Math]::Min($sorted.Count - 1, [Math]::Floor($p * ($sorted.Count - 1) + 0.5))]
 }
 $latency = foreach ($type in (@($trips.Keys) + @($handled.Keys) | Sort-Object -Unique)) {
   $t = $trips[$type]; $h = $handled[$type]
@@ -391,11 +438,12 @@ $latency = foreach ($type in (@($trips.Keys) + @($handled.Keys) | Sort-Object -U
     core_max_ms = if ($h) { [Math]::Round((Pct $h 1), 2) } else { $null }
   }
 }
-($latency | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath "$Out\latency.json" -Encoding UTF8
+($latency | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath "$($build.Folder)\latency.json" -Encoding UTF8
 ""
-"request latencies (window round trip / the core's own time), ms:"
+"request latencies {0}(window round trip / the core's own time), ms:" -f $(if ($build.Name) { "of $($build.Name) " } else { '' })
 "| request | count | median | p95 | max | core count | core median | core p95 | core max |"
 "|---|---|---|---|---|---|---|---|---|"
 foreach ($l in $latency) { "| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} |" -f $l.request, $l.count, $l.median_ms, $l.p95_ms, $l.max_ms, $l.core_count, $l.core_median_ms, $l.core_p95_ms, $l.core_max_ms }
+}
 ""
 "results: $Out\results.json and latency.json; each run's logs under $Out"
