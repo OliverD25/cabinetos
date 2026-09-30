@@ -66,3 +66,48 @@ Could not do:
 Side effects:
 - Two of my Enter presses opened scratch files (alpha.txt, beta.txt) as two new tabs in the Notepad that was already running. Each holds "x"; they can be closed without saving.
 - Other coders' test windows kept taking the front all night. My driver waited for its own window before every key and brought it back without pressing a key.
+
+---
+
+## Round two, as reported
+
+Keys audit round two (Phase 19d) is done. Everything is pushed to main (1973fe6, then 95832ca). The worktree is clean.
+
+Commits (rebased onto 19f; rebase was clean):
+- 02817cb P1: rule A (in a text box, a bound key that types nothing runs; the box keeps its typing and editing keys, in `TextInputKeys.StaysWithBox`). Rule B (the active pane's find box and address box also count as `filesView`, in `CurrentContexts`). Docs: keybindings.md "Contexts" → "Text boxes"; ui.md (the find box, the address box, Quick Open, the Search field, the compact overlay key).
+- 0e6b24f P3: a key held down runs its command once (`KeyOutcome.Held`). The commands that repeat are in `ChordStateMachine.RepeatingCommands`. The page scripts (terminal.js, ToolKeyScript) pass a held key only once.
+- a332407 P5: the review's card has `TabFocusNavigation="Cycle"`, applied by reading. No test opens the review (it needs a plugin that asks for a capability).
+- bc36551 P6: during a chord's wait, Esc only ends the wait (`KeyOutcome.Cancelled`), and Ctrl+Shift+P ends it and opens the palette.
+- c2a8d8a P7: `_paletteBackToPage` / `WayBackToToolPage`: when the palette closes, the keyboard goes back to the tool page it was opened from (a pane's tab or the sidebar).
+- 0c0a8af live check: F5 is pressed only when the log shows both panes on the fixture. 1973fe6: escaped the backtick in the changelog (UpdateTests caught it). 95832ca: "Round two" section in keys-audit-report.md, plus the README row.
+- P2 and P4 stay proposals. P4 is now easier to hit (found by reading): Ctrl+K Ctrl+T works in every box, and opening the theme picker does not close the palette, Quick Open or a prompt, so the picker opens on top of them.
+
+Verification:
+- Build with `-warnaserror`: 0 warnings.
+- Fast tests: 1103 passed, 32 skipped, of 1135.
+- Full end-to-end run, with a release core built from main after the rebase: 1134 of 1135. The one failure, `CompactOverlayEndToEndTests.The_dock_comes_back...`, passed 2 of 3 runs alone. It uses only `cmd:` steps (no keys) and was already flaky in round one.
+- New unit tests: a table of 74 keys (26 run, 48 stay with the box), the pane's boxes, the held keys (`palette.show` and `view.toggleSidebar` ignored on repeat, `tab.next` kept), the repeat list, and Esc / Ctrl+Shift+P during a wait.
+- New end-to-end tests:
+  - Find box: a letter filters, F5 copies the cursor row, Ctrl+A leaves the pane's marks as they were, Ctrl+T and Ctrl+W open and close a tab.
+  - Palette from the page: after Esc and after a chosen command, the keyboard is back on the page. This test fails with the fix switched off.
+- Live check keys section, run alone with real keys in PowerShell 5.1: 14 of 14 True. check-scripts passes in PowerShell 7.6 and 5.1.
+
+Decisions (what — because — undo):
+- AltGr (Ctrl+Alt) with a character key stays with the box — many layouts type with it — `(true,true)=>false`. So Ctrl+Alt+P and 19f's new Ctrl+Alt+C do not run from a box. Ctrl+Alt+Up does.
+- Alt with a digit stays — Alt with keypad digits types a character by its code — `(false,true)=>false`.
+- Ctrl+Insert stays — the box copies with it — remove it from `CtrlEditing`.
+- Plain or Shift keys not in your lists stay (Insert, PageUp, PageDown, keypad operators, Shift+Delete) — the rule runs only Ctrl/Alt/Win combinations and the function keys; Shift+Delete must never delete files from a find box.
+- Other Ctrl combinations run (Ctrl+Up, Ctrl+PageDown, Ctrl+Enter, Ctrl+Space) — a one-line box does nothing with them — add them to `CtrlEditing`. Ctrl+Shift+X and Ctrl+Shift+C stay, because the rule keeps "Shift with any of those".
+- Win with any key runs — a box types nothing with it.
+- A chord is judged by its first half — once the wait starts, the second key belongs to the chord.
+- Rule B covers only the active pane's boxes — F5 in the other pane's box would copy from the wrong pane.
+- Rule A covers every box, including the rename box. So Alt+Left or Ctrl+L now runs while a name is typed in place.
+- The commands that repeat: tab.next, tab.previous, edit.toggleSelection (Insert), go.back, go.forward, go.up — Insert moves the cursor down, and Back/Forward/Up move through folders the way the arrows move through rows. No scroll command is bound in the registry. Undo: edit `RepeatingCommands`.
+- A page passes a held key once, whatever its command — the pages pass back only toggles and ways out.
+- The tier's single keys win over a chord that ends with them — there is always a way out. Undo: check chords first in `OnKey`.
+- P7 also covers sidebar tool pages. If the page is gone or hidden, the keyboard goes to the active pane.
+- No DONE file for the real-key runs — it was a night run, and a Notepad window in front would stop other agents' checks.
+
+Side effect: the first real-key run of the section alone had the right pane on `C:\Users\Admin\Documents` (a Tab did not switch panes). F5 copied `Documents\Ableton` (69 files, 470 KB) into `%TEMP%\cabinetos-ui-test\keys-section-2\files\keys20-other`. Documents was only read, nothing in it changed. The copy is still in %TEMP% and was not deleted, because deleting files is a hard stop. The step now uses Ctrl+Right and the log check above, and the second run was clean. (The planning session removed that copy under the creator's standing rule for stale test data, and logged it in `_io`.)
+
+Not done: none of the requested items is missing. P5 has no test, as explained above.
