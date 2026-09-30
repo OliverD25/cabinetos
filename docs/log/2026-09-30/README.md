@@ -31,6 +31,7 @@ is a plan paragraph with its commits.
 | [phase-14-window-report.md](phase-14-window-report.md) | shell, Sonnet | Phase 14: the window's parts | 401d439 to d6e2de7; 767 UI tests; live check section 14's drag True |
 | [phase-14b-e-extension-report.md](phase-14b-e-extension-report.md) | extension, Sonnet | the two core additions; Phase 14b to 14e, the Agent extension | 3887a4c to 9e8d8e5; 722 core tests, 90 plugin tests |
 | [phase-13-rail-report.md](phase-13-rail-report.md) | shell, Sonnet | Phase 13: the activity rail and the modular sidebar; a tool page runs its plugin's commands; the live check's "ask" step | 68ee1f0 to 1a05a5c; 839 UI tests; whole-script live check 105 True, 0 False |
+| [scroll-item5-report.md](scroll-item5-report.md) | shell, Opus | the scroll-gap investigation; the heavy-logging window and the crash offer seen with real keys | 61f044d, 58fa975, c5ed4c8; 848 UI tests; the default theme at 0 % of frames over 20 ms; the report [scroll-gaps.md](scroll-gaps.md) |
 
 The extension agent's earlier per-item reports (item 2b, item 3) never
 reached the planning session; its final hand-back above carries the run's
@@ -39,8 +40,10 @@ hold the rest. A request to send them again was refused twice by an API
 safeguard, so the lesson is recorded: reports are handed back at the time,
 never asked for again word for word.
 
-Reports still to come when this file was last written: the rail and the
-sidebar (Phase 13), and the scroll-gap investigation.
+Every item of the night is reported above. One follow-up ran after the
+list was complete: in the rail layout the folder tree was empty at start
+until a key opened it, found by the real-key check of the heavy-logging
+window; its report is added below when it lands.
 
 Other records of the night: the live-check runs in
 [../2026-09-28/live-check.md](../2026-09-28/live-check.md) (run 5 and the
