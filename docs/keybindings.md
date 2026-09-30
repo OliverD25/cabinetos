@@ -22,7 +22,7 @@ is started. A command has:
 | `id` | `view.toggleDualPane` | `category.verbObject`, unique |
 | `category`, `title` | `View`, `Toggle Dual Pane` | What the palette shows: `View: Toggle Dual Pane` |
 | `default_keys` | `delete`, `f8` | Its keys before the user changes anything, in the order the palette shows them; may be empty. Several keys share the command's `when` |
-| `source` | `core` | Who provides it: the core, or a plugin (`{"kind":"plugin","id":…}`) |
+| `source` | `core` | Who provides it: the core, a plugin (`{"kind":"plugin","id":…}`), or an entry of `programs` in the configuration (`{"kind":"program","name":…}`) |
 | `target` | `ui` | Who runs it: the UI, or the core |
 | `when` | `filesView` | The context of its bindings; none means everywhere |
 | `immutable` | `true` | Part of the Immutable System Tier (below) |
@@ -127,6 +127,8 @@ The core's commands, in palette order:
 | `quickOpen.show` | Go: Quick Open… | `ctrl+p` | | UI |
 | `menu.show` | View: Show Menu | | | UI |
 | `settings.open` | Preferences: Open Settings | `ctrl+comma` | | UI |
+| `menu.showShell` | File: Show Windows Context Menu | `ctrl+shift+f10` | `filesView` | UI |
+| `menu.edit` | Preferences: Edit Context Menu… | | | UI |
 | `window.new` | Window: New Window | `ctrl+n` | | UI |
 | `help.about` | Help: About CabinetOS | | | UI |
 | `diagnostics.toggleHeavy` | Diagnostics: Toggle Heavy Logging | | | UI |
@@ -189,6 +191,19 @@ The core's commands, in palette order:
   test allows a camelCase category, as `quickOpen` is one. None of these
   keys was bound before in the same context, and the Immutable System Tier
   is unchanged.
+- `menu.showShell` and `menu.edit` are Phase 18's, the context menu from the
+  configuration ([ui.md](ui.md), "The context menu"). `menu.showShell`
+  opens Windows' own menu of the focused row when `contextMenu.shellMenu` is
+  on, and CabinetOS's menu when it is off, as Shift+right-click does;
+  `ctrl+shift+f10` was bound to nothing before. `menu.edit` is the menu's
+  last row, "Edit Menu…", and opens `cabinetos.json` as `settings.open`
+  does; it has no key.
+- Each entry of `programs` in the configuration ([config.md](config.md),
+  "Programs") adds the command `program.<name>`: category `Programs`, its
+  `title`, no default keys, context `filesView`, run by the core. A binding
+  in `keybindings` gives it keys like any other command:
+  `{"command": "program.code", "keys": "ctrl+alt+c"}`. When the entry
+  goes, its command goes, and a binding to it is left out with a warning.
 - In the rail layout ([ui.md](ui.md), "The activity rail and the sidebar")
   `view.showExplorer` (`ctrl+shift+e`) and `view.showSearch`
   (`ctrl+shift+f`) show the views of the sidebar and put the keyboard in
@@ -229,7 +244,7 @@ The core's commands, in palette order:
   command (`keys.rebind`). Two commands may share keys only this way
   ("Contexts" below).
 - Every command here runs in the UI. The core runs only the plugins'
-  commands; asking it to run a UI command (`execute_command`) returns
+  commands and the programs' (`program.<name>`); asking it to run a UI command (`execute_command`) returns
   `command_routed`, and the core does nothing. The file commands are the
   shell's too: it starts their jobs itself (`start_job`) and makes a folder
   with `create_directory`. `help.about` is the window's About view, which

@@ -6,6 +6,16 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The right-click menu comes from `contextMenu` in `cabinetos.json`: for the empty space, a file, a folder and a selection of several rows, each with its row of icons and its list, and rows shown only for some file extensions. "Edit Menu…" at the end opens the file.
+- Programs of your own (`programs` in `cabinetos.json`) become commands (`program.<name>`) for the menu, a key or the palette. `{path}`, `{selection}` and `{cwd}` in their arguments stand for the cursor row, the selection and the folder.
+- Windows' own context menu (Open with, Send to, what other programs add) with Shift+right-click or Ctrl+Shift+F10, when `contextMenu.shellMenu` is on.
+
+### Changed
+
+- The right-click menu is WinUI's command bar menu, as Windows 11's Explorer shows it: the icons in a row at the top, the keys on the right of each row.
+
 ## [0.1.0] - 2026-09-30
 
 The first version. How it is built, signed and published:

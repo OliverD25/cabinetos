@@ -508,6 +508,7 @@ core-request: func(json: string) -> result<string, string>;
   | `execute_command` | Runs any command; one of the plugin's own would wait for the plugin's thread, which waits for the answer |
   | `install_extension`, `uninstall_extension` | Change the code the core runs |
   | `update_check`, `update_download`, `update_apply`, `update_rollback`, `update_snooze` | Change the code the core runs, or steer the update that does (`update_status` only reads, and is allowed) |
+  | `shell_menu`, `shell_menu_invoke` | Windows' own menu runs other programs' handlers with the user's rights, outside the sandbox |
 
   A manifest that lists one of these still loads (the core logs a warning),
   and the request is refused when the plugin sends it.

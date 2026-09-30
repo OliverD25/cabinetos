@@ -134,6 +134,10 @@ while you type.
 | `panes.sort.descending` | `true`, `false` | `false` | Reverse the order |
 | `panes.selection` | `windows`, `commander` | `windows` | How the keyboard marks rows. `windows`: as in Explorer, a key that moves the cursor selects the row it moves to. `commander`: as in Total Commander, keys that move the cursor keep the marks, Shift with them marks the rows passed over, a new listing starts with nothing marked, and commands act on the marked rows, or on the cursor row when none is marked. The mouse keeps the Windows rules in both |
 | `files.editor` | `null`, or `{ "command", "args" }` | `null` | The program `file.edit` (F4) opens a file with; the file's path is added as the last argument. `null`: Windows' own edit verb for the file's type, else Notepad. `command` is a full path, or a program name found on the `PATH`, as for a terminal profile, never the current folder; it may not be empty. `args` may be left out |
+| `programs` | list of `{ "name", "title", "command", "args" }` | empty | Programs of your own that the context menu, a key or the palette starts, each as the command `program.<name>` ("Programs" below) |
+| `contextMenu.shellMenu` | `true`, `false` | `false` | Shift+right-click and `menu.showShell` (Ctrl+Shift+F10) open Windows' own menu (Open with, Send to, what other programs add). `false`: they open CabinetOS's menu ("The context menu" below) |
+| `contextMenu.<target>.quickActions` | list of command IDs | the menus of Phase 5 | The icon row at the top of the menu, left to right. `<target>` is `background`, `file`, `folder` or `multiSelect` |
+| `contextMenu.<target>.items` | list of `{ "command", "extensions" }` or `{ "separator": true }` | the menus of Phase 5 | The menu's rows, top to bottom |
 | `terminal.defaultProfile` | a profile `name` | `pwsh` | The shell a new terminal starts with when the client names none; must name one of the profiles |
 | `terminal.profiles` | list of `{ "name", "command", "args", "followsPane" }` | pwsh, cmd, wsl, claude | The programs a terminal can run. Names must be unique; `args` and `followsPane` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). `followsPane` (default `true`): whether the window types a change-directory line into the session when the active pane changes folder; `false` for a program that is not a shell, such as `claude`. |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
@@ -194,9 +198,107 @@ Who uses what:
   ([terminal.md](terminal.md)).
 - `files.editor`: the core, at each `edit_path` ([ipc.md](ipc.md), "Files
   and folders").
+- `programs`: the core, at once. Each entry becomes the command
+  `program.<name>`, which the palette lists and a key can be bound to; the
+  core starts the program when the command runs, with the paths of the
+  window's state at that moment. A removed entry's command goes; a key
+  bound to it is then left out of the keymap with a warning, as for any
+  command that does not exist.
+- `contextMenu`: the UI, at the next right-click; it builds the menu from
+  the settings it holds and reads no file. `contextMenu.shellMenu` is also
+  read by the core, which refuses `shell_menu` with `shell_menu_off` while
+  it is off ([ipc.md](ipc.md), "Windows' context menu").
 - `panes.selection`: the UI, at once; the core only checks, stores and
   announces it.
 - `ui`: the UI (Phase 5). The core only checks, stores and announces it.
+
+### The context menu
+
+`contextMenu` says what the right-click menu shows (Phase 18, [ADR
+0015](decisions/0015-user-programs-and-the-shell-menu.md); [ui.md](ui.md),
+"The context menu"). It has one entry per target: `background` (the pane's
+empty space), `file` (one file), `folder` (one folder) and `multiSelect` (a
+row inside a selection of several rows). Each target has:
+
+- `quickActions`: command IDs for the icon row at the top, left to right.
+  Each shows its icon, with its title and keys as a tooltip.
+- `items`: the rows, top to bottom. A row is `{"command": "<id>"}`, or
+  `{"separator": true}` for a divider line. A command row may add
+  `"extensions": [".md", ".txt"]`: it then shows only for files with one of
+  those extensions (each with its dot; case does not matter). With several
+  rows selected, every selected row must be such a file.
+
+A target or a list that is left out keeps its default, so adding a row to
+`items` keeps the icon row; a list that is written is exactly that list
+(an empty list is empty). The defaults
+are the menus of Phase 5:
+
+```json
+"contextMenu": {
+  "shellMenu": false,
+  "background": { "quickActions": [], "items": [
+    { "command": "edit.paste" }, { "command": "file.newFolder" }, { "command": "sidebar.pin" } ] },
+  "file": { "quickActions": ["edit.cut", "edit.copy", "edit.paste", "file.rename", "file.delete"], "items": [
+    { "command": "pane.openSelected" }, { "command": "file.openInOtherPane" },
+    { "command": "file.copyToOtherPane" }, { "command": "terminal.new" } ] }
+}
+```
+
+`folder` and `multiSelect` have the same lists as `file`. After the rows the
+window always adds the plugins' file commands (on rows only), Properties,
+and "Edit Menu…" (`menu.edit`, which opens this file), so a menu cannot
+lose them. A command ID is not checked against the commands when the file
+is read, because a plugin's commands come and go with the plugin: an ID no
+command has is left out of the menu, with a warning in the window's log.
+The core checks the shape: each row is a command or a divider, not both;
+a divider has no `extensions`; an extension is a dot and a name with no
+other dot, no folder separator and no spaces around it. A mistake is
+reported with its line and where it is, for example
+``contextMenu.file.items[1]: `md` is not an extension``.
+
+### Programs
+
+`programs` lists programs of your own, for example an editor:
+
+```json
+"programs": [
+  { "name": "code", "title": "Open in VS Code", "command": "C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe", "args": ["{selection}"] },
+  { "name": "diff", "title": "Compare", "command": "C:\\Tools\\WinMerge\\WinMergeU.exe", "args": ["{selection}"] }
+],
+"contextMenu": {
+  "file": { "items": [ { "command": "pane.openSelected" }, { "command": "program.code" } ] },
+  "multiSelect": { "items": [ { "command": "program.diff" } ] }
+}
+```
+
+- `name`: a lower-case letter, then lower-case letters, digits and `-`.
+  It must be unique. The program is the command `program.<name>`, in the
+  palette's Programs group; a key can be bound to it in `keybindings`
+  ([keybindings.md](keybindings.md)). It has no default keys.
+- `title`: what the menu and the palette show; the `name` when it is left
+  out or empty.
+- `command`: a full path, or a program name found on the `PATH`, as for
+  `files.editor` and the terminal profiles; never the current folder. It
+  may not be empty.
+- `args`: the arguments, each one argument however many spaces it has.
+  Three tokens stand for what the window shows when the command runs:
+  `{path}` is the active pane's cursor row, `{selection}` its marked rows
+  (or the cursor row when none is marked), and `{cwd}` the active pane's
+  folder. `{path}` and `{cwd}` may be part of an argument
+  (`"--file={path}"`); `{selection}` must be a whole argument, and becomes
+  one argument per path. A brace that does not make one of these three
+  words is plain text; another word in braces, such as `{file}`, is an
+  error of the file.
+
+The core starts the program, never the window: the window sends what it
+shows (`window_state`), and the core fills in the tokens from that, finds
+the program, and starts it in the active pane's folder through Windows, as
+`files.editor` is started. Nothing but a listed program can start this way.
+A command line longer than 30,000 characters (Windows takes 32,767; many
+selected files make it long) is refused with `command_line_too_long`, and
+a token with nothing to stand for (no cursor row, nothing selected) with
+`program_refused`. Each refusal is in the core's log with the program's
+name ([ipc.md](ipc.md), "Configuration, commands and keybindings").
 
 ## Editing by hand
 

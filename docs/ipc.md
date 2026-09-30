@@ -143,7 +143,13 @@ ignore. Phase 16 added `workspace_info` with its reply `workspace_info`
 added `update_status`, `update_check`, `update_download`, `update_apply`,
 `update_rollback` and `update_snooze` with the reply `update_state`, the
 events `update_state_changed` and `update_progress`, and the error code
-`update_error` ("Updates").
+`update_error` ("Updates"). Version 15 (Phase 18, the context menu) added
+Windows' own menu: `shell_menu` with its reply `shell_menu`,
+`shell_menu_invoke`, and the error codes `shell_menu_error`,
+`no_such_menu` and `shell_menu_off` ("Windows' context menu"); and the
+user's programs: the command source kind `program`, and the error codes
+`unknown_program`, `program_refused` and `command_line_too_long`
+("Configuration, commands and keybindings").
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -219,6 +225,8 @@ as absent from an older core.
 | `save_log_bundle` | `minutes` (1 to 1,440; default 10) | `log_bundle` (`path`), once the zip is written ([diagnostics.md](diagnostics.md), "Bundles") |
 | `undo_job` | `job` (optional: the newest job not undone yet) | `undo_started` (`job_id`, `undoes`, `left`) |
 | `workspace_info` | `path` (absolute; need not exist) | `workspace_info` (`root`, `branch`) ("What the window shows") |
+| `shell_menu` | `paths` (absolute, at least one, all in one folder) | `shell_menu` (`menu_id`, `items`) ("Windows' context menu") |
+| `shell_menu_invoke` | `menu_id`, `item_id` | `ok`, once the item has run, or after 5 s while it still runs |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -253,12 +261,18 @@ Any request can instead get `error` with a `code` and a `message`:
 | `marketplace_error` | The index cannot be read or is refused (plain `http:` without `marketplace.allowInsecure`, another `schemaVersion`), a download failed or is not what its kind needs, the files cannot be put in place, or the theme to uninstall is in effect. |
 | `hash_mismatch` | The download's SHA-256 is not the one the index gives. It was deleted, and nothing was installed. |
 | `incompatible` | The extension needs a newer CabinetOS (`minCoreVersion`). |
-| `no_window` | No client told the core what its window shows (`window_state`), or not the client named. |
+| `no_window` | No client told the core what its window shows (`window_state`), or not the client named. Also `program.<name>` when no window has sent its state: its `{path}`, `{selection}` and `{cwd}` have nothing to stand for. |
 | `no_such_preview` | No preview has that ID: it was applied, cancelled or expired, or never made. |
 | `too_many_previews` | The client (or plugin) has 20 previews alive; apply or cancel one first. |
 | `no_such_secret` | No secret has that name. |
 | `secret_error` | The secret's name is not 1 to 128 letters, digits, `-`, `_` and `.`; its value is empty or longer than 2,560 bytes; or the Credential Manager refused. |
 | `not_undoable` | `undo_job`: the job deleted (to the Recycle Bin or for good), was undone already, still runs, or did nothing that can be reversed; the message says which and what to do instead. |
+| `unknown_program` | `execute_command` of `program.<name>`, and no entry of `programs` has that name. |
+| `program_refused` | A program did not start: its `command` is neither a file nor a program on the `PATH`, a token has nothing to stand for (no cursor row for `{path}`, nothing selected for `{selection}`), or Windows refused. The message names the program and says which. |
+| `command_line_too_long` | A program's command line would be longer than 30,000 characters (Windows takes 32,767): usually `{selection}` over many files. |
+| `shell_menu_error` | Windows' menu could not be built (a path that is not there, not absolute, or not in the same folder as the others; Windows took longer than 3 s; a handler failed) or its item failed. |
+| `no_such_menu` | No menu of this connection has that `menu_id`: an item of it ran already, a newer menu replaced it, or its 30 s are over. |
+| `shell_menu_off` | `shell_menu` while `contextMenu.shellMenu` is off: the window shows its own menu instead. |
 | `update_error` | An update step cannot run or failed: this install does not update itself (a development build, an all-users install, a folder the user cannot change), nothing is downloaded or no newer version is known, no previous version to roll back to, another step runs (in this core or another window's), or the step failed; the message says which. `hash_mismatch` is the download whose SHA-256 is not the one `latest.json` gives. |
 
 Requests on one connection are independent: `list_directory`,
@@ -269,8 +283,9 @@ Requests on one connection are independent: `list_directory`,
 `execute_command` for a plugin's command, `search`, `index_status`,
 `terminal_open`, `terminal_close`, `terminal_sync_cwd`, `list_themes`,
 `get_theme` of a named theme, `list_tools`, the marketplace requests,
-`preview_listing`, `open_preview`, `preview_apply`, the secret requests and
-the update steps run in the background, so a slow directory, plugin, search or shell does not hold up
+`preview_listing`, `open_preview`, `preview_apply`, the secret requests,
+the update steps, `execute_command` for a program, `shell_menu` and
+`shell_menu_invoke` run in the background, so a slow directory, plugin, search or shell does not hold up
 the next request, and their replies may come in any order. Match replies to
 requests by `id`.
 
@@ -911,8 +926,9 @@ the chord state machine with `chord_window_ms` (keybindings.md, "Chords").
 {"id":"01M…","type":"search_results","hits":[{"id":"view.toggleDualPane","score":137}]}
 ```
 
-`source` is `{"kind":"core"}` or
-`{"kind":"plugin","id":"reader","name":"Reader"}`. The palette shows
+`source` is `{"kind":"core"}`,
+`{"kind":"plugin","id":"reader","name":"Reader"}`, or, for an entry of
+`programs` (protocol 15), `{"kind":"program","name":"code"}`. The palette shows
 `category: title` and the `keys`, and a plugin's `name` as a badge; the
 ranking is in keybindings.md, "Palette search". `score` only orders the
 hits.
@@ -938,6 +954,23 @@ Cancelling the prompt runs nothing.
 {"id":"01M…","type":"execute_command","command":"view.toggleSidebar"}
 {"id":"01M…","type":"command_routed","target":"ui"}
 ```
+
+A program's command is `program.<name>` for each entry of `programs`
+([config.md](config.md), "Programs"): category `Programs`, target `core`,
+`when` `filesView`, no default keys. The core starts the program with the
+paths of the window state the connection sent last (`window_state`; for a
+client that sent none, such as the command line, the newest of any
+window), and answers with where the program is:
+
+```json
+{"id":"01M…","type":"execute_command","command":"program.code"}
+{"id":"01M…","type":"command_result","result":{"program":"code","started":"C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"}}
+```
+
+Only a program listed in `programs` starts this way. Refusals come as
+`error` with `unknown_program`, `program_refused`,
+`command_line_too_long` or `no_window`, and each is in the core's log at
+warn level with the program's name.
 
 The field is `command`, not `id`, because `id` is already the request's own
 ID in the same object. The core runs a plugin's command and answers
@@ -1690,6 +1723,53 @@ Dumb UI Rule), so it asks the core:
   together, on its blocking pool; it never runs git. A folder that is not
   there is walked up like any other.
 - A path that is not absolute is `invalid_path`. It needs no `hello`.
+
+## Windows' context menu
+
+With `contextMenu.shellMenu` on ([config.md](config.md), "The context
+menu"), Shift+right-click in the window opens the menu Explorer shows for
+the files (Phase 18, [ADR 0015](decisions/0015-user-programs-and-the-shell-menu.md)).
+The shell builds it from COM objects that must stay on the thread that made
+them, so the core gives each menu a thread of its own and keeps it there
+until an item runs or 30 s pass. The window only shows the texts.
+
+```json
+{"id":"01Q…","type":"shell_menu","paths":["C:\\work\\report.txt"]}
+{"id":"01Q…","type":"shell_menu","menu_id":7,"items":[
+ {"id":1,"text":"Open","separator":false},
+ {"id":0,"text":"","separator":true},
+ {"id":0,"text":"Send to","separator":false,"items":[{"id":31,"text":"Desktop (create shortcut)","separator":false}]},
+ {"id":24,"text":"Copy","separator":false}]}
+{"id":"01R…","type":"shell_menu_invoke","menu_id":7,"item_id":24}
+{"id":"01R…","type":"ok"}
+```
+
+- `paths` are the files or folders the menu is for: absolute, and all in
+  one folder, as Explorer's menu is. The window sends at most 1,000.
+- Each item has `id` (what `shell_menu_invoke` takes; `0` for a divider and
+  for an item that only opens a submenu), `text` (without the `&` of its
+  access key and without the shortcut after a tab) and `separator`. A
+  submenu's items are in `items`, one level deep; `items` is left out when
+  there are none. Items a program draws itself, greyed items and items
+  without text are left out, and so are dividers at the ends or next to
+  another divider.
+- The core fills the submenus that are filled only when they open (Send
+  to, Open with) before it answers. When Windows takes longer than 3 s,
+  the answer is `shell_menu_error`.
+- `shell_menu_invoke` runs the item as Explorer does when it is clicked,
+  and releases the menu: a menu runs one item at most. The answer comes
+  when the item is done, or after 5 s while it still runs (a dialog it
+  opened stays open). The thread starts OLE, so Cut and Copy put the files
+  on Windows' clipboard, and the clipboard keeps them after the thread
+  ends.
+- A menu belongs to the connection that asked for it: another connection's
+  `menu_id` is `no_such_menu`. A new `shell_menu` releases the
+  connection's earlier menus, and so does the end of the connection. It
+  needs no `hello`.
+- With `contextMenu.shellMenu` off the answer is `shell_menu_off`, and the
+  window shows its own menu.
+- Plugins can never ask for either request ([plugins.md](plugins.md),
+  "Asking the core"): a menu's items run programs with the user's rights.
 
 ## Trying it by hand
 
