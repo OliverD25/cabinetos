@@ -28,6 +28,8 @@ pub struct FakeHost {
     pub http_answers: RefCell<VecDeque<Result<HttpResponse, String>>>,
     pub now: Cell<u64>,
     pub watched: RefCell<Vec<String>>,
+    /// Folders the core refuses to let the plugin watch.
+    pub unwatchable: RefCell<Vec<String>>,
     pub logs: RefCell<Vec<(Level, String)>>,
     preview_number: Cell<u64>,
 }
@@ -47,6 +49,7 @@ impl FakeHost {
             // 2026-09-30 01:02:03 UTC.
             now: Cell::new(1_790_730_123_000),
             watched: RefCell::default(),
+            unwatchable: RefCell::default(),
             logs: RefCell::default(),
             preview_number: Cell::new(0),
         }
@@ -210,6 +213,9 @@ impl Host for FakeHost {
     }
 
     fn watch(&self, path: &str) -> Result<(), String> {
+        if self.unwatchable.borrow().iter().any(|known| known == path) {
+            return Err(format!("{path} is outside the roots the plugin may watch"));
+        }
         let mut watched = self.watched.borrow_mut();
         if !watched.iter().any(|known| known == path) {
             watched.push(path.to_owned());

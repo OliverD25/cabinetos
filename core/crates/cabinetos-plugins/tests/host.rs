@@ -1156,11 +1156,17 @@ fn a_change_of_a_plugin_s_settings_is_told_to_it_and_does_not_restart_it() {
 /// The Agent's plugin as WebAssembly, with the fake provider that gives
 /// `replies` one after the other, and `files` as the one folder it may
 /// read. Its data folder gets the replies before it starts.
-fn agent(setup: &Setup, files: &Path, replies: &[String], tier: u8) -> PluginHost {
+fn agent(
+    setup: &Setup,
+    files: &Path,
+    replies: &[String],
+    tier: u8,
+    rules: &serde_json::Value,
+) -> PluginHost {
     let root = files.display().to_string();
     setup.edit_manifest("agent", |manifest| {
         for capability in manifest["capabilities"].as_array_mut().unwrap() {
-            if capability["name"] == "fs:read" {
+            if capability["name"] == "fs:read" || capability["name"] == "fs:watch" {
                 capability["roots"] = serde_json::json!([root]);
             }
         }
@@ -1173,7 +1179,7 @@ fn agent(setup: &Setup, files: &Path, replies: &[String], tier: u8) -> PluginHos
     )
     .unwrap();
     *setup.recorder.agent_settings.lock().unwrap() =
-        Some(serde_json::json!({ "provider": "fake", "tier": tier }).to_string());
+        Some(serde_json::json!({ "provider": "fake", "tier": tier, "rules": rules }).to_string());
     let host = setup.host(|_| {});
     host.load_all(&grants(&[(
         "agent",
@@ -1182,6 +1188,7 @@ fn agent(setup: &Setup, files: &Path, replies: &[String], tier: u8) -> PluginHos
             "config:read",
             "events:emit",
             "fs:read",
+            "fs:watch",
             "net",
             "core:request",
         ],
@@ -1253,7 +1260,7 @@ fn the_agent_looks_by_fs_read_proposes_a_preview_and_undoes_it_once_the_window_a
         format!("First I look.\n```\nls \"{root}\"\n```"),
         format!("Renaming it.\n```\nrename \"{root}\\old.txt\" new.txt\n```"),
     ];
-    let host = agent(&setup, &files, &replies, 2);
+    let host = agent(&setup, &files, &replies, 2, &serde_json::json!([]));
 
     let answer = agent_command(
         &host,
@@ -1348,7 +1355,7 @@ fn at_tier_three_the_agent_applies_at_once_and_undoes_the_last_job_first() {
     let replies = [format!(
         "Done.\n```\nrename \"{root}\\old.txt\" new.txt\n```"
     )];
-    let host = agent(&setup, &files, &replies, 3);
+    let host = agent(&setup, &files, &replies, 3, &serde_json::json!([]));
 
     let answer = agent_command(
         &host,
@@ -1398,4 +1405,134 @@ fn at_tier_three_the_agent_applies_at_once_and_undoes_the_last_job_first() {
         [12, 11],
         "the job that started last is undone first"
     );
+}
+
+/// Waits until the agent has sent an event of that name, and returns its
+/// payloads so far.
+fn wait_for_agent_event(recorder: &Recorder, wanted: &str) -> Vec<serde_json::Value> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let found: Vec<serde_json::Value> = recorder
+            .events()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::PluginEvent {
+                    plugin_id,
+                    name,
+                    payload,
+                } if plugin_id == "agent" && name == wanted => {
+                    Some(serde_json::from_str(&payload).unwrap())
+                }
+                _ => None,
+            })
+            .collect();
+        if !found.is_empty() {
+            return found;
+        }
+        assert!(Instant::now() < deadline, "no {wanted} from the agent");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
+fn a_new_file_in_a_watched_folder_is_one_call_to_the_model_and_a_preview_at_tier_two() {
+    let setup = Setup::new(&["agent"]);
+    let files = agent_files(&setup);
+    let root = files.display().to_string();
+    let replies = [format!(
+        "A folder for it.\n```\nmkdir \"{root}\\2026\"\n```"
+    )];
+    // A rule of the settings: the agent watches the folder from its start.
+    let rules = serde_json::json!([{ "folder": root, "rule": "put each new file in a folder of its year" }]);
+    let host = agent(&setup, &files, &replies, 2, &rules);
+
+    std::fs::write(files.join("fresh.txt"), "hello").unwrap();
+    let previews = wait_for_agent_event(&setup.recorder, "agent.preview");
+    assert_eq!(previews, [serde_json::json!({ "preview": "preview-1" })]);
+
+    let requests = agent_requests(&setup.recorder);
+    let listing: Vec<_> = requests
+        .iter()
+        .filter(|request| request["type"] == "preview_listing")
+        .collect();
+    assert_eq!(listing.len(), 1, "{requests:?}");
+    assert_eq!(
+        listing[0]["rows"],
+        serde_json::json!([{ "path": format!("{root}\\2026\\"), "kind": "create", "to": null }])
+    );
+    assert!(
+        requests
+            .iter()
+            .all(|request| request["type"] != "preview_apply"),
+        "tier 2: only the user applies it"
+    );
+    // One call to the model, given the rule and the file by name and by describe.
+    let asked = agent_lines(&setup, "fake-requests");
+    assert_eq!(asked.len(), 1);
+    let asked: serde_json::Value = serde_json::from_str(&asked[0]).unwrap();
+    let message = asked["messages"][0]["content"].as_str().unwrap();
+    assert!(
+        message.contains("put each new file in a folder of its year"),
+        "{message}"
+    );
+    assert!(
+        message.contains("fresh.txt") && message.contains("TXT File"),
+        "{message}"
+    );
+    let reply = wait_for_agent_event(&setup.recorder, "agent.reply");
+    assert_eq!(reply[0]["source"], "rule");
+    let notice = wait_for_agent_event(&setup.recorder, "agent.notice");
+    assert!(
+        notice[0]["notice"]
+            .as_str()
+            .unwrap()
+            .contains("wait for you"),
+        "{notice:?}"
+    );
+    assert!(active(&state(&host, "agent")));
+}
+
+#[test]
+fn a_rule_made_with_a_command_is_kept_in_the_plugin_s_folder_and_watches_at_once() {
+    let setup = Setup::new(&["agent"]);
+    let files = agent_files(&setup);
+    let inbox = files.join("Inbox");
+    std::fs::create_dir_all(&inbox).unwrap();
+    let replies = ["Nothing to do for it.".to_owned()];
+    let host = agent(&setup, &files, &replies, 2, &serde_json::json!([]));
+
+    // A folder the plugin may not watch is refused by the core, and nothing is kept.
+    let outside = std::env::temp_dir().display().to_string();
+    let refused = agent_command(
+        &host,
+        "agent.rule.add",
+        &serde_json::json!({ "folder": outside, "rule": "x", "input": "x" }),
+    )
+    .unwrap_err();
+    assert!(
+        refused.contains("outside the folders you may use"),
+        "{refused}"
+    );
+    assert!(!setup.data().join("agent").join("rules.json").exists());
+
+    let added = agent_command(
+        &host,
+        "agent.rule.add",
+        &serde_json::json!({ "input": format!("\"{}\" leave it alone", inbox.display()) }),
+    )
+    .unwrap();
+    assert_eq!(added["rules"][0]["status"], "watching");
+    assert!(setup.data().join("agent").join("rules.json").is_file());
+
+    std::fs::write(inbox.join("new.txt"), "x").unwrap();
+    let replies = wait_for_agent_event(&setup.recorder, "agent.reply");
+    assert_eq!(replies[0]["text"], "Nothing to do for it.");
+    assert_eq!(replies[0]["source"], "rule");
+    let removed = agent_command(
+        &host,
+        "agent.rule.remove",
+        &serde_json::json!({ "folder": inbox.display().to_string() }),
+    )
+    .unwrap();
+    assert_eq!(removed["rules"], serde_json::json!([]));
 }

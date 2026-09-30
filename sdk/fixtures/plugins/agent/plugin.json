@@ -3,7 +3,7 @@
   "name": "CabinetOS Agent",
   "version": "0.1.0",
   "author": "CabinetOS",
-  "description": "Works the file manager for you through the same command line you have, and shows every change as a preview before it happens.",
+  "description": "Works the file manager for you through the same command line you have, and shows every change as a preview before it happens. It can also watch folders and deal with each new file by a rule you write.",
   "apiVersion": "0.2.0",
   "minCoreVersion": "0.1.0",
   "capabilities": [
@@ -25,6 +25,13 @@
         "%USERPROFILE%"
       ],
       "reason": "Lists the folders you ask about: names, sizes and dates. It reads no file contents. It never changes a file itself: changes go through the core as a preview."
+    },
+    {
+      "name": "fs:watch",
+      "roots": [
+        "%USERPROFILE%"
+      ],
+      "reason": "Hears about new files in the folders you give a watch rule, so that the agent can deal with each one by your rule. It gets names, not contents, and it may read them only where fs:read allows."
     },
     {
       "name": "net",
@@ -89,6 +96,42 @@
     {
       "id": "agent.audit",
       "title": "Agent: Show the Audit Log",
+      "category": "Agent",
+      "defaultKeys": []
+    },
+    {
+      "id": "agent.rule.add",
+      "title": "Agent: Add a Watch Rule",
+      "category": "Agent",
+      "defaultKeys": [],
+      "input": {
+        "title": "Agent: Add a Watch Rule",
+        "placeholder": "Folder, then what to do with each new file: C:\\Inbox sort by year"
+      }
+    },
+    {
+      "id": "agent.rule.remove",
+      "title": "Agent: Remove a Watch Rule",
+      "category": "Agent",
+      "defaultKeys": [],
+      "input": {
+        "title": "Agent: Remove a Watch Rule",
+        "placeholder": "The folder of the rule"
+      }
+    },
+    {
+      "id": "agent.rule.resume",
+      "title": "Agent: Resume a Watch Rule",
+      "category": "Agent",
+      "defaultKeys": [],
+      "input": {
+        "title": "Agent: Resume a Watch Rule",
+        "placeholder": "The folder of the paused rule"
+      }
+    },
+    {
+      "id": "agent.rule.list",
+      "title": "Agent: List the Watch Rules",
       "category": "Agent",
       "defaultKeys": []
     }

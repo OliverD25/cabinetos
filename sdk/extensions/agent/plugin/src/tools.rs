@@ -114,11 +114,22 @@ fn modified_text(entry: &DirEntry) -> String {
 }
 
 fn ls_text(path: &str, entries: Vec<DirEntry>, long: bool, sort: SortArg, desc: bool) -> String {
+    ls_text_limited(path, entries, long, sort, desc, MAX_LS_LINES)
+}
+
+fn ls_text_limited(
+    path: &str,
+    entries: Vec<DirEntry>,
+    long: bool,
+    sort: SortArg,
+    desc: bool,
+    limit: usize,
+) -> String {
     let total = entries.len();
     let entries = sorted(entries, sort, desc);
     let mut lines: Vec<String> = entries
         .iter()
-        .take(MAX_LS_LINES)
+        .take(limit)
         .map(|entry| {
             let glyph = if entry.is_dir { 'd' } else { 'f' };
             if long {
@@ -137,10 +148,10 @@ fn ls_text(path: &str, entries: Vec<DirEntry>, long: bool, sort: SortArg, desc: 
             }
         })
         .collect();
-    if total > MAX_LS_LINES {
+    if total > limit {
         lines.push(format!(
-            "... {} more entries not shown (describe {path} --from {MAX_LS_LINES} lists them)",
-            total - MAX_LS_LINES
+            "... {} more entries not shown (describe {path} --from {limit} lists them)",
+            total - limit
         ));
     }
     lines.push(format!("{total} entries in {path}"));
@@ -158,6 +169,51 @@ fn type_name(entry: &DirEntry) -> String {
     }
 }
 
+/// The most entries of a folder a watch rule's request shows the model.
+pub const MAX_BRIEF_LINES: usize = 60;
+
+/// What a rule's request shows of a folder: the names, cut short.
+pub fn folder_brief(host: &dyn Host, folder: &str) -> Result<String, String> {
+    let entries = host.read_dir(folder)?;
+    Ok(ls_text_limited(
+        folder,
+        entries,
+        false,
+        SortArg::Name,
+        false,
+        MAX_BRIEF_LINES,
+    ))
+}
+
+/// One file of a folder: whether it is a folder, and the line `describe`
+/// gives it. `None` when the folder has no entry of that name any more.
+pub fn describe_entry(
+    host: &dyn Host,
+    folder: &str,
+    name: &str,
+) -> Result<Option<(bool, String)>, String> {
+    let entries = sorted(host.read_dir(folder)?, SortArg::Name, false);
+    Ok(entries
+        .iter()
+        .enumerate()
+        .find(|(_, entry)| entry.name.eq_ignore_ascii_case(name))
+        .map(|(index, entry)| (entry.is_dir, describe_row(index, entry))))
+}
+
+fn describe_row(index: usize, entry: &DirEntry) -> String {
+    let size = if entry.is_dir {
+        "-".to_owned()
+    } else {
+        size_text(entry.size)
+    };
+    format!(
+        "{index}: {} | {} | {size} | {}",
+        entry.name,
+        type_name(entry),
+        modified_text(entry)
+    )
+}
+
 fn describe_text(path: &str, entries: Vec<DirEntry>, from: u32, count: u32) -> String {
     let total = entries.len();
     let entries = sorted(entries, SortArg::Name, false);
@@ -167,19 +223,7 @@ fn describe_text(path: &str, entries: Vec<DirEntry>, from: u32, count: u32) -> S
         .enumerate()
         .skip(start)
         .take(usize::try_from(count).unwrap_or(0))
-        .map(|(index, entry)| {
-            let size = if entry.is_dir {
-                "-".to_owned()
-            } else {
-                size_text(entry.size)
-            };
-            format!(
-                "{index}: {} | {} | {size} | {}",
-                entry.name,
-                type_name(entry),
-                modified_text(entry)
-            )
-        })
+        .map(|(index, entry)| describe_row(index, entry))
         .collect();
     lines.push(format!(
         "entries {start} to {} of {total} in {path}",

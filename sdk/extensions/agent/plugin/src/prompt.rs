@@ -6,7 +6,7 @@
 use crate::cmdline::{READ_COMMANDS, WRITE_COMMANDS};
 use crate::tier::Tier;
 
-/// The system prompt's text, with `{{roots}}`, `{{tier}}` and
+/// The system prompt's text, with `{{roots}}`, `{{rounds}}`, `{{tier}}` and
 /// `{{reference}}` to fill in.
 pub const TEMPLATE: &str = include_str!("../prompt.md");
 
@@ -26,11 +26,25 @@ pub fn command_names(tier: Tier) -> Vec<&'static str> {
         .collect()
 }
 
-/// The system prompt for a tier and the folders the agent may use.
+/// What the model is told about its rounds: a request may look and look
+/// again; a watch rule has one round, so that a new file costs one call.
+fn rounds_text(rounds: usize) -> String {
+    if rounds == 1 {
+        "This time you have one round only, so nothing you look at comes back to you: do not use `ls`, `describe`, `search` or `state`. Use what the message gives you and send the commands that change files now, or answer with words only when nothing needs to be done.".to_owned()
+    } else {
+        format!(
+            "You have at most {rounds} rounds, so ask for what you need in as few rounds as you can."
+        )
+    }
+}
+
+/// The system prompt for a tier, the folders the agent may use and the
+/// number of rounds the model has.
 #[must_use]
-pub fn system_prompt(tier: Tier, roots: &[String]) -> String {
+pub fn system_prompt(tier: Tier, roots: &[String], rounds: usize) -> String {
     TEMPLATE
         .replace("{{roots}}", &roots.join(", "))
+        .replace("{{rounds}}", &rounds_text(rounds))
         .replace("{{tier}}", tier.about())
         .replace(
             "{{reference}}",
@@ -102,7 +116,7 @@ mod tests {
 
     #[test]
     fn the_system_prompt_names_the_folders_the_tier_and_every_command_the_model_may_use() {
-        let prompt = system_prompt(Tier::Diff, &roots());
+        let prompt = system_prompt(Tier::Diff, &roots(), 3);
         assert!(!prompt.contains("{{"), "every placeholder is filled");
         assert!(prompt.contains(r"C:\Users\Me"));
         assert!(prompt.contains("Diff and approve"));
@@ -118,8 +132,8 @@ mod tests {
         assert!(!prompt.contains("Usage: cab undo"), "undo only at tier 3");
         assert!(!prompt.contains("--pipe"), "no way to reach a core");
         assert!(!prompt.contains("Usage: cab shutdown"));
-        assert!(system_prompt(Tier::Autonomous, &roots()).contains("Usage: cab undo"));
-        assert!(system_prompt(Tier::Advisor, &roots()).contains("Advisor"));
+        assert!(system_prompt(Tier::Autonomous, &roots(), 3).contains("Usage: cab undo"));
+        assert!(system_prompt(Tier::Advisor, &roots(), 3).contains("Advisor"));
     }
 
     #[test]

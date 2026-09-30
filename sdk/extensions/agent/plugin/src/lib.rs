@@ -19,11 +19,13 @@ pub mod paths;
 pub mod plan;
 pub mod prompt;
 pub mod provider;
+pub mod rules;
 pub mod settings;
 pub mod state;
 pub mod tier;
 pub mod time;
 pub mod tools;
+pub mod watch;
 
 #[cfg(test)]
 mod testing;

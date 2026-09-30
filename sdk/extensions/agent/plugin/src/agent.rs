@@ -14,6 +14,7 @@ use crate::host::{Host, Level};
 use crate::plan::{self, Row};
 use crate::prompt;
 use crate::provider::{self, Completion, Message};
+use crate::rules::{self, RuleBook};
 use crate::settings::Settings;
 use crate::state::{self, Applied, Saved};
 use crate::tier::{Decision, Tier};
@@ -35,6 +36,16 @@ pub enum Source {
 }
 
 impl Source {
+    /// How many times the model may answer: a watch rule gets one, so a
+    /// new file costs one call to the model, never more.
+    #[must_use]
+    pub fn rounds(self) -> usize {
+        match self {
+            Self::Rule => 1,
+            Self::Ask | Self::Chat => MAX_ROUNDS,
+        }
+    }
+
     /// The word in the audit log.
     #[must_use]
     pub fn word(self) -> &'static str {
@@ -86,6 +97,9 @@ pub struct Outcome {
     pub jobs: Vec<u64>,
     /// The changes in words, one per row.
     pub changes: Vec<String>,
+    /// The paths the changes make new (a rename's new name, a copy's
+    /// file): a watch rule ignores the events its own changes cause.
+    pub targets: Vec<String>,
     /// A line for the status bar, when something was done for the user.
     pub notice: Option<String>,
     /// The tier it ran under, 1 to 3.
@@ -117,6 +131,8 @@ pub struct Agent {
     /// The tier `settings.tier` had when last read: a change of it wins
     /// over what `agent.tier` set.
     settings_tier: Option<Tier>,
+    /// The watch rules (`watch.rs`).
+    pub rules: RuleBook,
 }
 
 /// What a round of the model's reply leads to.
@@ -138,6 +154,7 @@ impl Agent {
             saved: state::load(host),
             pending_preview: None,
             settings_tier: None,
+            rules: RuleBook::new(rules::load(host)),
         }
     }
 
@@ -250,20 +267,24 @@ impl Agent {
         entry: &mut Entry,
     ) -> Result<Outcome, String> {
         let provider = provider::make(settings, host, &self.fake_cursor)?;
-        let window = tools::window_state(host);
-        let window_text = window.as_ref().map(tools::state_text);
-        entry.state = window;
-        let system = prompt::system_prompt(tier, &self.roots);
-        let mut messages = vec![Message::user(prompt::user_message(
-            task.prompt,
-            window_text.as_deref(),
-            task.selected,
-        ))];
+        let rounds = task.source.rounds();
+        let system = prompt::system_prompt(tier, &self.roots, rounds);
+        // A watch rule is not about what the window shows, and its message
+        // says everything the model gets to know.
+        let first = if task.source == Source::Rule {
+            task.prompt.to_owned()
+        } else {
+            let window = tools::window_state(host);
+            let window_text = window.as_ref().map(tools::state_text);
+            entry.state = window;
+            prompt::user_message(task.prompt, window_text.as_deref(), task.selected)
+        };
+        let mut messages = vec![Message::user(first)];
         let mut outcome = Outcome {
             tier: tier.number(),
             ..Outcome::default()
         };
-        for round in 1..=MAX_ROUNDS {
+        for round in 1..=rounds {
             let reply = provider.complete(
                 host,
                 &Completion {
@@ -394,10 +415,12 @@ impl Agent {
             writes.clear();
         }
         if must_answer {
-            if round < MAX_ROUNDS {
+            let rounds = task.source.rounds();
+            if round < rounds {
                 next = Next::Ask(prompt::results_message(&results, &notes));
             } else {
-                outcome.text = format!("{} (Stopped after {MAX_ROUNDS} rounds.)", outcome.text)
+                let plural = if rounds == 1 { "" } else { "s" };
+                outcome.text = format!("{} (Stopped after {rounds} round{plural}.)", outcome.text)
                     .trim()
                     .to_owned();
             }
@@ -464,11 +487,14 @@ impl Agent {
                 rows.len(),
                 plan::MAX_ROWS
             );
-            return self.refused(&row_places, statuses, &message, round);
+            return self.refused(task, &row_places, statuses, &message, round);
         }
 
-        // One pending preview at a time: the last proposal replaces it.
-        if let Some(old) = self.pending_preview.take() {
+        // One pending preview at a time: the last proposal replaces it. A
+        // watch rule proposes for a file of its own, and leaves the one the
+        // user is looking at alone.
+        let by_rule = task.source == Source::Rule;
+        if !by_rule && let Some(old) = self.pending_preview.take() {
             let _ = host.core_request(&json!({ "type": "preview_cancel", "preview": old }));
         }
         let reply = host.core_request(&json!({
@@ -478,6 +504,7 @@ impl Agent {
         }))?;
         if let Some(error) = tools::reply_error(&reply) {
             return self.refused(
+                task,
                 &row_places,
                 statuses,
                 &format!("the core refused the changes: {error}"),
@@ -488,8 +515,11 @@ impl Agent {
             return Err("the core's answer to preview_listing named no preview".to_owned());
         };
         outcome.changes = rows.iter().map(plan::describe).collect();
+        outcome.targets = rows.iter().filter_map(Row::target).collect();
         outcome.preview = Some(preview.clone());
-        self.pending_preview = Some(preview.clone());
+        if !by_rule {
+            self.pending_preview = Some(preview.clone());
+        }
 
         if tier.decide(Access::Write) == Decision::Apply {
             let applied =
@@ -506,7 +536,9 @@ impl Agent {
                 .flatten()
                 .filter_map(Value::as_u64)
                 .collect();
-            self.pending_preview = None;
+            if !by_rule {
+                self.pending_preview = None;
+            }
             self.saved.last = Some(Applied {
                 preview: preview.clone(),
                 jobs: jobs.clone(),
@@ -533,6 +565,7 @@ impl Agent {
     /// correct them while it has rounds left.
     fn refused(
         &self,
+        task: &Task<'_>,
         row_places: &[usize],
         statuses: &mut [CommandOutcome],
         message: &str,
@@ -541,7 +574,7 @@ impl Agent {
         for place in row_places {
             statuses[*place].status = format!("error: {message}");
         }
-        if round < MAX_ROUNDS {
+        if round < task.source.rounds() {
             let results: Vec<(String, Result<String, String>)> = row_places
                 .iter()
                 .map(|place| (statuses[*place].line.clone(), Err(message.to_owned())))

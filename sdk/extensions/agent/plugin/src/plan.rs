@@ -29,6 +29,22 @@ impl Row {
     pub fn to_json(&self) -> Value {
         json!({ "path": self.path, "kind": self.kind, "to": self.to })
     }
+
+    /// The path the change makes new: a rename's new path, the file in the
+    /// folder of a move or copy, a created path. `None` for a delete.
+    #[must_use]
+    pub fn target(&self) -> Option<String> {
+        match (self.kind, self.to.as_deref()) {
+            ("rename", Some(name)) => {
+                paths::parent(&self.path).map(|folder| paths::join(&folder, name))
+            }
+            ("move" | "copy", Some(folder)) => {
+                Some(paths::join(folder, paths::file_name(&self.path)))
+            }
+            ("create", _) => Some(self.path.trim_end_matches('\\').to_owned()),
+            _ => None,
+        }
+    }
 }
 
 /// The rows one write command stands for. `undo` has none: it is not a

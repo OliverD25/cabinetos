@@ -50,6 +50,13 @@ pub fn has_dot_parts(path: &str) -> bool {
         .any(|part| part == ".." || part == ".")
 }
 
+/// Whether two paths name the same place, without regard to case, to
+/// separators, or to a separator at the end.
+#[must_use]
+pub fn same(a: &str, b: &str) -> bool {
+    normalize(a).eq_ignore_ascii_case(&normalize(b))
+}
+
 /// Whether `path` is `root` or lies under it, without regard to case.
 #[must_use]
 pub fn is_under(path: &str, root: &str) -> bool {

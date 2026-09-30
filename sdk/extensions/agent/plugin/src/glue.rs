@@ -162,7 +162,16 @@ impl Guest for AgentPlugin {
             .iter()
             .map(|root| paths::from_guest(root))
             .collect();
-        let agent = Agent::new(&WasmHost, roots, ctx.watch_roots);
+        let mut agent = Agent::new(&WasmHost, roots, ctx.watch_roots);
+        // The watch rules start watching now; one that cannot is told to the
+        // user, as a line in the log and in the status bar.
+        for text in agent.sync_rules(&WasmHost) {
+            WasmHost.log(Level::Warn, &text);
+            WasmHost.emit(
+                "agent.notice",
+                &serde_json::json!({ "notice": text }).to_string(),
+            );
+        }
         AGENT.with(|slot| *slot.borrow_mut() = Some(agent));
         Ok(())
     }
