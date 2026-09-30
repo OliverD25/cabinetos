@@ -60,6 +60,10 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
   each commit.
 - Unsafe Rust only in the crates that talk to Windows (`ipc`, `fs`, `jobs`,
   `index`), every `unsafe` block with a `// SAFETY:` comment.
+- Project skills live in `.claude/skills/`. `heavy-logging` says when and
+  how to use the heavy logging mode to find a fault (a key that did
+  nothing, a job that did not do what was asked, a stall, a crash) and how
+  to read the chain of one action; read it before chasing such a fault.
 - Implementation goes to the `coder` agent once the plan is concrete; small
   fixes are done directly.
 
