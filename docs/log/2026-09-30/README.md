@@ -34,6 +34,7 @@ is a plan paragraph with its commits.
 | [scroll-item5-report.md](scroll-item5-report.md) | shell, Opus | the scroll-gap investigation; the heavy-logging window and the crash offer seen with real keys | 61f044d, 58fa975, c5ed4c8; 848 UI tests; the default theme at 0 % of frames over 20 ms; the report [scroll-gaps.md](scroll-gaps.md) |
 | [rail-tree-at-start-report.md](rail-tree-at-start-report.md) | shell, Sonnet | the follow-up: the rail's folder tree empty at start | ca72efc; 849 UI tests; the whole live check with real keys exit 0, 106 True, 0 False, the scroll goal met |
 | [claude-code-in-the-terminal.md](claude-code-in-the-terminal.md) | daytime: a coder on Sonnet, the planning session's checks | the `claude` terminal profile, `followsPane`, the core's folder on every session's `PATH`; Claude Code checked headless and with real keys; the Agent extension against a local model | 2f0af70 to 72a4bbc; 726 core, 852 window; the probe `claude-terminal.ps1` every check True |
+| [phase-16-shell-redesign-report.md](phase-16-shell-redesign-report.md) | daytime: a coder on Opus, the planning session's checks | Phase 16, the shell redesign: one top row, per-pane breadcrumbs, find in pane, Quick Open; the git read moved into the core | ffcdea3 to ff2f84d, 2656e01; 735 core, 890 window; the live check 118 True, 6 False in the new section 16 (evidence faults, under fix); the Claude Code probe every check True |
 
 The extension agent's earlier per-item reports (item 2b, item 3) never
 reached the planning session; its final hand-back above carries the run's
