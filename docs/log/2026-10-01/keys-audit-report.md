@@ -246,3 +246,134 @@ Ctrl+W part with physical keys.
 - Once, the first character typed by the driver into the address box
   arrived as "È" instead of "C" (injected Unicode characters). It did not
   happen again and is not a key binding matter.
+
+## Round two
+
+The planning session's decision: build P1 with both of its rules, and P3,
+P5, P6 and P7. P2 and P4 stay proposals. The same coder built them in the
+same worktree, on 2026-10-01 from 02:00.
+
+### What changed
+
+| # | Now | Commit |
+|---|---|---|
+| P1 | In a text box a bound key that types nothing runs; the box keeps the keys that type or edit (rule A). The active pane's find box and address box are `filesView` too, so F5, Ctrl+T and Ctrl+F3 act on the pane from there (rule B) | 02817cb |
+| P3 | A key held down runs its command once; its repeats run nothing. Six commands repeat: `tab.next`, `tab.previous`, `edit.toggleSelection` (Insert), `go.back`, `go.forward`, `go.up` | 0e6b24f |
+| P5 | Tab stays inside the permissions review (`TabFocusNavigation="Cycle"`, by reading) | a332407 |
+| P6 | During a chord's wait Esc only ends the wait; Ctrl+Shift+P ends it and opens the palette | bc36551 |
+| P7 | The palette opened from a tool's page (a pane's tab or the sidebar) gives the keyboard back to that page | c2a8d8a |
+| live check | The keys section checks the find-box keys and a held Ctrl+B; F5 copies only between the fixture's folders | 02817cb, 0e6b24f, 0c0a8af |
+
+The rules are written in [keybindings.md](../../keybindings.md) ("Keys
+held down", "Text boxes" under "Contexts", and step 2 of "Chords") and in
+[ui.md](../../ui.md) (the find box, the address box, Quick Open, the
+Search field, the compact overlay's key, the tool pages, the palette).
+
+### Decisions the plan did not cover
+
+Each is "what, because, undo".
+
+- **AltGr with a character stays with the box.** Ctrl+Alt with a letter,
+  a digit or a punctuation key types characters on many layouts (Polish,
+  German, Ukrainian Enhanced). Undo: `(true, true) => false` in
+  `TextInputKeys.StaysWithBox`. So Ctrl+Alt+P (`terminal.insertPath`) and
+  the column view's new Ctrl+Alt+C do not run from a box. Ctrl+Alt+Up
+  (the compact overlay) runs: an arrow types nothing.
+- **Alt with a digit stays with the box.** Alt with the keypad's digits
+  types a character by its code, and the grammar names those digits like
+  the top row's. Undo: `(false, true) => false`.
+- **Ctrl+Insert stays with the box.** A box copies with it, as with
+  Ctrl+C. Undo: take `insert` out of `CtrlEditing`.
+- **Every key without Ctrl, Alt or Win stays with the box**, the function
+  keys aside: also Insert, PageUp, PageDown, the keypad's operators and
+  Shift+Delete, which the creator's lists did not name. The rule runs only
+  combinations and function keys, and Shift+Delete cuts text in a box: it
+  must never delete files from a find box. Undo: none needed.
+- **The other Ctrl combinations run:** Ctrl+Up, Ctrl+Down, Ctrl+PageUp,
+  Ctrl+PageDown, Ctrl+Enter, Ctrl+Space, Ctrl with the keypad's operators.
+  A one-line box does nothing with them. Undo: add them to `CtrlEditing`.
+  Ctrl+Shift+X (the marketplace) and Ctrl+Shift+C (copy full path) stay
+  with the box, because the rule gives it Shift with each of its edit
+  keys.
+- **Win with any key runs.** A box types nothing with Win. Undo: return
+  true for Win in `StaysWithBox`.
+- **A chord goes by its first half.** Once Ctrl+K has started the wait,
+  the second key belongs to the chord, so Ctrl+K V works in the find box.
+  Undo: judge the second half in `Applies`.
+- **Rule B is for the active pane only.** The other pane's find box and
+  address box are text input only: the pane's commands act on the active
+  pane, so F5 in the other pane's box would copy from the wrong pane.
+  Undo: add the other pane's boxes in `CurrentContexts` and make that pane
+  active.
+- **Rule A covers every box**, the rename box, the palette, Quick Open and
+  the prompts included. So Alt+Left or Ctrl+L while a name is typed in
+  place now runs; the rename ends as it does on any change of listing.
+  Ctrl+P in Quick Open closes it (`quickOpen.show` toggles), and in the
+  palette it switches to Quick Open, as in VS Code.
+- **The six commands that repeat.** The registry binds no scroll command
+  (PageUp and PageDown are the list's own keys). Insert marks the row and
+  moves the cursor down; Back, Forward and Up move through folders as the
+  arrows move through rows, change nothing, and repeat in Explorer too.
+  Undo: edit `ChordStateMachine.RepeatingCommands`.
+- **A web page passes a held key once, whatever its command.** The pages
+  pass back only the toggles and ways out, and do not know the list.
+  Undo: take out the `event.repeat` checks in `terminal.js` and
+  `ToolKeyScript`.
+- **The tier's single keys win over a chord that ends with them** during
+  a wait, so there is always a way out. Ctrl+K pressed during a Ctrl+K
+  wait still ends it with the notice. Undo: look for the chord before the
+  tier in the waiting branch of `OnKey`.
+- **P7 covers the sidebar's tool pages too**, and a page that is gone or
+  hidden by then sends the keyboard to the active pane. Undo:
+  `WayBackToToolPage` returns null for the sidebar.
+- **No DONE file for the real-key runs.** The section ran alone twice at
+  night; a Notepad window in front would stop other agents' checks. Undo:
+  run the whole live check through `run-livecheck.ps1`.
+
+### Evidence
+
+- The UI builds with `-warnaserror`: 0 warnings. The fast tests: 1103
+  passed, 32 end-to-end skipped, of 1135.
+- The full run with the end-to-end tests, on a release core built from
+  main after the rebase onto the column view: 1134 of 1135.
+  `CompactOverlayEndToEndTests.The_dock_comes_back_with_its_terminal...`
+  failed once and then passed 2 of 3 alone; it drives only `cmd:` steps,
+  no keys, and was flaky in round one too.
+- New tests: in `ChordStateMachineTests` the text-box table (74 keys: 26
+  run, 48 stay, each against a binding without context and one of
+  `filesView`), the pane's own boxes, the held key (Ctrl+Shift+P and
+  Ctrl+B held run nothing, Ctrl+Tab repeats), the repeat list, Esc and
+  Ctrl+Shift+P during a wait. End to end: in the find box a letter
+  filters, F5 copies the cursor row, Ctrl+A selects the box's text and
+  leaves the pane's selection, Ctrl+T and Ctrl+W open and close a tab;
+  and the palette from a Markdown Preview in the other pane gives the
+  keyboard back to the page on Esc and after "Toggle Sidebar". That test
+  failed with the fix switched off (the keyboard went to `FilePane`).
+- The live check's keys section, alone on the Debug build in Windows
+  PowerShell 5.1 with real keys: 14 of 14 True. The Ukrainian layout was
+  switched for the window only and switched back (04090409).
+- `build/check-scripts.ps1`: the live check parses in PowerShell 7.6.6 and
+  5.1.
+
+### Side effect of the first real-key run
+
+The first run of the section on its own had the right pane on
+`C:\Users\Admin\Documents`: the live check sets the right pane in an
+earlier section, and a Tab that did not switch panes put the find there.
+F5 then copied the folder `Ableton` (69 files, 470 KB) from Documents into
+the run's scratch folder
+`%TEMP%\cabinetos-ui-test\keys-section-2\files\keys20-other`. Documents
+was only read. The copy is still in `%TEMP%`: deleting files was outside
+this run's rules. The step now shows the fixture's folder `sub` in the
+right pane with Ctrl+Right and presses F5 only when the log says both
+panes are the fixture's (0c0a8af); the second run was clean.
+
+### Still open
+
+- **P2** (keys inside a tool page) and **P4** (overlays stack) stay
+  proposals. P4 is now easier to reach: Ctrl+K Ctrl+T works in every box,
+  and opening the theme picker closes neither the palette, Quick Open nor
+  a prompt, so from their boxes the picker opens over them (by reading).
+  P4's one helper that closes the other overlays would cover it.
+- No test opens the permissions review (P5): that needs a plugin that
+  asks for a capability.
