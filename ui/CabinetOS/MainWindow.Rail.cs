@@ -324,7 +324,9 @@ public sealed partial class MainWindow
         }
         _reveal?.Cancel();
         var cancellation = _reveal = new CancellationTokenSource();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var node = await _tree.RevealAsync(path, cancellation.Token);
+        var revealMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         if (cancellation.IsCancellationRequested)
         {
             return;
@@ -337,11 +339,14 @@ public sealed partial class MainWindow
             }
             return;
         }
-        Diag.Info(RailTarget, "the tree shows a folder", new LogField("path", node.Path), new LogField("rows", _tree.Rows.Count));
+        Diag.Info(RailTarget, "the tree shows a folder", new LogField("path", node.Path), new LogField("rows", _tree.Rows.Count),
+            new LogField("reveal_ms", Math.Round(revealMs, 1)));
         // The rows the reveal opened are laid out before the list scrolls to the one it marked.
         DispatcherQueue.TryEnqueue(() =>
         {
+            var scrolling = System.Diagnostics.Stopwatch.GetTimestamp();
             SidebarView.Tree.ScrollTo(node);
+            Diag.Info(RailTarget, "the tree scrolled to a folder", new LogField("scroll_ms", Math.Round(System.Diagnostics.Stopwatch.GetElapsedTime(scrolling).TotalMilliseconds, 1)));
             if (focus)
             {
                 _tree.SetCursor(node);

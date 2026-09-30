@@ -1476,6 +1476,17 @@ public sealed partial class MainWindow : Window
             FocusActivePane();
             EndAddressEdit();
         }
+        else if (_railLayout && (IsFocusWithin(Rail) || (_sidebarOpen && IsFocusWithin(SidebarHost))))
+        {
+            // Esc in the rail layout's rail or sidebar (a button, the tree, the search field or one of its hits) gives the
+            // keyboard back to the pane, and a search ends as it does anywhere. The window's key handler takes Esc
+            // before the tree's and the field's own handlers see it (it runs first, as the tunnelling PreviewKeyDown).
+            if (!EndSearch(focusPane: true))
+            {
+                FocusPaneOrEditor();
+            }
+            Diag.Info(Target, "Esc gave the keyboard from the rail layout's sidebar back to the pane");
+        }
         else if (!EndSearch(focusPane: true) && _transfers.IsFlyoutOpen)
         {
             // What the flyout's minimize button does: a running job folds into the pill, an ended one closes.
