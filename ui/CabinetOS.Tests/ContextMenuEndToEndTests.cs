@@ -142,7 +142,109 @@ public class ContextMenuEndToEndTests
                 && Field(l, "code").GetString() == "unknown_program");
             // The ID no command has is logged once, though the file menu opened twice.
             Assert.Single(logs, l => Message(l) == "context menu entry left out: no command has this ID" && Field(l, "command").GetString() == "hex.view");
-            Assert.Contains(logs, l => Message(l) == "windows menu shown");
+            var windowsShown = Assert.Single(logs, l => Message(l) == "windows menu shown");
+            // Windows' menu hangs from the focused row as well: its corner is where it was asked for. WinUI moves a menu this
+            // long up only when the screen is too low for it, so the top may also lie above the point, never below it.
+            var windowsPlaced = Assert.Single(logs, l => Message(l) == "windows menu placed");
+            var (askedX, askedY) = (Field(windowsShown, "x").GetDouble(), Field(windowsShown, "y").GetDouble());
+            Assert.InRange(Field(windowsPlaced, "left").GetDouble(), askedX - 2, askedX + 2);
+            Assert.InRange(Field(windowsPlaced, "top").GetDouble(), double.MinValue, askedY + 2);
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
+    /// The menu opens with its top-left corner at the point, as Explorer's does (docs/ui.md, "The context
+    /// menu"): a pointer menu at (300, 200) lies there, and a keyboard menu hangs under the focused row, at the
+    /// name column's left edge. In a small window the menu that does not fit below the point ends at it, and
+    /// the one that does not fit on the right ends at it on the left. "context menu placed" says where WinUI
+    /// drew the menu (the icon row's popup and the list's, joined), in the window's coordinates like the
+    /// points asked for.
+    /// </summary>
+    [Fact]
+    public async Task The_menu_opens_with_its_corner_at_the_point_and_flips_before_the_windows_edge()
+    {
+        var (run, root, data) = Prepare("menu-place");
+        try
+        {
+            var process = run.Start("place", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "menu-at:alpha.txt|300,200",
+                "wait:900",
+                "cmd:overlay.close",
+                "wait:500",
+                "menu:beta.txt",
+                "wait:900",
+                "cmd:overlay.close",
+                "wait:500",
+                // The first showing of this shape near an edge is placed from an estimate of its size, the ones after from the measured one.
+                "size:900x420",
+                "wait:800",
+                "menu-at:beta.txt|300,400",
+                "wait:900",
+                "cmd:overlay.close",
+                "wait:500",
+                "menu-at:beta.txt|850,150",
+                "wait:900",
+                "cmd:overlay.close",
+                "wait:500",
+                "menu-at:beta.txt|850,400",
+                "wait:900",
+                "cmd:overlay.close",
+                "wait:500",
+                "menu-at:beta.txt|300,400",
+                "wait:900",
+                "cmd:overlay.close",
+                "wait:500",
+                "shot:done"));
+            var logs = await run.FinishAsync("place", process, "done");
+
+            var shown = logs.Where(l => Message(l) == "context menu shown").ToList();
+            var placed = logs.Where(l => Message(l) == "context menu placed").ToList();
+            Assert.Equal(6, shown.Count);
+            Assert.Equal(6, placed.Count);
+            var window = logs.Last(l => Message(l) == "window sized");
+            var (windowWidth, windowHeight) = (Field(window, "width").GetDouble(), Field(window, "height").GetDouble());
+            double Number(string line, string name) => Field(line, name).GetDouble();
+            double Right(string line) => Number(line, "left") + Number(line, "width");
+            double Bottom(string line) => Number(line, "top") + Number(line, "height");
+
+            // A pointer menu in the upper part of the list: the corner is the point.
+            Assert.False(Field(shown[0], "keyboard").GetBoolean());
+            Assert.Equal((300.0, 200.0), (Number(shown[0], "x"), Number(shown[0], "y")));
+            Assert.InRange(Number(placed[0], "left"), 298, 302);
+            Assert.InRange(Number(placed[0], "top"), 198, 202);
+            // A keyboard menu: the corner is the row's bottom-left, at the name column's left edge.
+            Assert.True(Field(shown[1], "keyboard").GetBoolean());
+            Assert.InRange(Number(placed[1], "left"), Number(shown[1], "row_left") - 2, Number(shown[1], "row_left") + 2);
+            Assert.InRange(Number(placed[1], "top"), Number(shown[1], "row_bottom") - 2, Number(shown[1], "row_bottom") + 2);
+            Assert.True(Number(shown[1], "row_top") < Number(shown[1], "row_bottom"));
+            // Near the bottom of the small window: above the point, its bottom at it, the whole menu in the window.
+            Assert.InRange(Bottom(placed[2]), 398, 402);
+            Assert.True(Number(placed[2], "top") >= 0 && Number(placed[2], "top") < 400, placed[2]);
+            Assert.InRange(Number(placed[2], "left"), 298, 302);
+            // Near the right edge: to the left of the point, its right edge at it.
+            Assert.InRange(Right(placed[3]), 848, 852);
+            Assert.InRange(Number(placed[3], "top"), 148, 152);
+            Assert.True(Right(placed[3]) <= windowWidth, placed[3]);
+            // Near the corner: both.
+            Assert.InRange(Right(placed[4]), 848, 852);
+            Assert.InRange(Bottom(placed[4]), 398, 402);
+            // The same menu again, now from the size WinUI measured.
+            Assert.InRange(Bottom(placed[5]), 398, 402);
+            Assert.All(placed.Skip(2), line =>
+            {
+                Assert.True(Number(line, "left") >= 0 && Right(line) <= windowWidth && Number(line, "top") >= 0 && Bottom(line) <= windowHeight, line);
+            });
         }
         finally
         {
