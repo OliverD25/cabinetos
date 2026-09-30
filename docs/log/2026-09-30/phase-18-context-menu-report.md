@@ -135,3 +135,82 @@ now accepts the folder's name, confirmed by the next full run.
 Step 2, the edit mode inside the menu, went to a coder on Opus at 20:56,
 since step 1's window behaviour was verified with real keys by the
 20:38 run.
+
+## Step 2, the edit mode inside the menu: the coder's hand-back (coder on Opus, 21:42)
+
+Commits, all pushed with normal pushes after a rebase: acc0e30 ui: the
+context menu's edit model, pure and tested; 1e65d4e window: "Edit Menu…"
+turns the right-click menu into its edit mode (the surface, its keys and
+Done and Cancel share two files, so one commit); 6bbf78c tests: the edit
+mode end to end, and over 100,000 selected rows; fbe0736 live check:
+section 18 edits the file menu inside the menu; db7d0f3 docs;
+4e20903 window: the edit mode's drop does not hang on the order of two
+pointer events.
+
+Checks: the window's build with warnings as errors (0 warnings); 963 of
+963 window tests with the end-to-end tests on (1 min 26 s, started when
+no CabinetOS window ran); the context-menu classes alone 50 of 50;
+`check-scripts.ps1` in both PowerShells, also after the rebase onto the
+live-check fix. No core change, so the five core checks were not run;
+the release core was built for the end-to-end tests.
+
+Beyond the tests: the Debug window driven with the snapshot aid (the
+edit mode opens where the menu was, the prompt opens over it, the
+empty-space menu works too); a real save (the core wrote
+`contextMenu.file.items` and logged the change); a refused save (the
+file broken and restored from a script: the notice showed, the mode
+stayed open); the first "Edit Menu…" builds in 20 to 22 ms, later ones
+in about 5 ms. Not verified by the coder: the real mouse and keys, the
+real pointer drag, the light theme.
+
+Decisions (what — because — undo):
+
+1. The edit surface is an in-window overlay (`Views\ContextMenuEditor`,
+   a transparent scrim), not a flyout — a click outside must be
+   swallowed, the prompt must open over it, and the snapshot aid cannot
+   draw a WinUI flyout — undo: the same content in a Flyout with its
+   Closing cancelled.
+2. Placed at the chosen menu button's bounds, width the larger of the
+   menu's and 280 px, the pointer or the row as the fallback anchor —
+   each row gains a handle and an X — undo: `MinPanelWidth`, `Show()`.
+3. The 120 ms entrance of the Phase 16 dropdowns, no jiggle — undo: the
+   Storyboard in the XAML.
+4. `menu.edit` from the palette or a key edits the focused row's menu at
+   its Shift+F10 place — no menu is open then — undo: `EditMenu()` in
+   `MainWindow.ContextMenu.cs`.
+5. Done with no change closes without `set_value` — undo: `DoneAsync`.
+6. "Open the file" leaves the mode unsaved and runs `settings.open` —
+   the file and the mode must not both change the list — undo: the
+   `OpenFile` lambda.
+7. Every entry of `items` is a row, unknown IDs greyed with "no command
+   has this ID" — so they can be removed — undo: the model's constructor.
+8. "Add Command…" offers the files-view commands, `program.*` and every
+   plugin command, without Properties, Edit Menu… and rows already
+   listed, sorted by title, the prompt row showing the ID — undo:
+   `Addable()`.
+9. While open, the mode holds the keyboard like a dialog: no window
+   binding runs, so Delete never reaches `file.delete`; arrows,
+   Alt+arrows and Delete act only with the focus in the rows — undo: the
+   block in `HandleWindowKey`.
+10. An edit of the same list in the file while the mode is open is
+    overwritten by Done — undo: compare with `_menuConfig` before
+    sending.
+11. A refused save logs "menu edit refused" at warn; the notice reads
+    "The menu was not saved: <the core's message>".
+12. A drop commits on whichever comes first, `PointerReleased` or
+    `PointerCaptureLost` with the button up.
+13. New snapshot-aid steps `menu-edit-key:<keys>`,
+    `menu-edit-drag:<title>|<title>`, `until:config-error`; the shell
+    state line gains `menu_edit` and `menu_edit_target`.
+14. The live check puts the program back with a second edit (Insert,
+    the prompt, Enter, a real drag, Alt+Down and Alt+Up, Ctrl+S), not
+    with the CLI — so the real keyboard and the real drag are covered.
+
+Found on the way, a step 1 fault: a menu of a shape whose flyout is
+still closing never comes on screen again, and every later menu of that
+shape stays pending, because `ContextMenuFlyout.OnClosed` re-shows the
+same cached flyout inside its own Closed handler, which WinUI drops
+(checked with UI Automation). The coder's own end-to-end test waited
+600 ms between menus to avoid it. Sent back to the same coder with a
+test to reproduce it first. Also left: the comment in the core's
+registry near `menu.edit` still says it opens the file.
