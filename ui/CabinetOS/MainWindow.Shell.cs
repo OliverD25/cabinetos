@@ -137,6 +137,10 @@ public sealed partial class MainWindow
     {
         _router.RegisterUiHandler("menu.show", invocation => ShowShellMenu(fromKeyboard: invocation.Trigger is not ("button" or "mouse")));
         _router.RegisterUiHandler("settings.open", invocation => OpenSettingsAsync(invocation.RequestId));
+        // Ctrl+K W keeps its binding and now opens the pill's dropdown, so the keyboard reaches it (Article 7).
+        _router.RegisterUiHandler("workspace.switch", invocation => ShowWorkspaceMenu(fromKeyboard: invocation.Trigger is not ("button" or "mouse")));
+        _router.RegisterLocal("workspace.openFolder", _ =>
+            ShowNotice("Workspaces arrive in a later version. Until then the workspace is the repository that holds the active folder."));
     }
 
     // ----- The hamburger menu and the workspace dropdown -----
@@ -174,9 +178,10 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// The workspace pill's dropdown: the workspaces (only "Default" until
-    /// workspaces exist, with its branch), a divider, and "Open folder as
-    /// workspace…", which runs workspace.switch (Ctrl+K W, unchanged).
+    /// The workspace pill's dropdown, also on Ctrl+K W (workspace.switch):
+    /// the workspaces (only "Default" until workspaces exist, with its
+    /// branch), a divider, and "Open folder as workspace…", which says that
+    /// workspaces arrive in a later version.
     /// </summary>
     private void ShowWorkspaceMenu(bool fromKeyboard)
     {
@@ -190,7 +195,7 @@ public sealed partial class MainWindow
             new(MenuEntryKind.Item, WorkspaceName.Text, "\uE73E", Keys: _repository?.Branch,
                 Tooltip: _repository is { } repository ? repository.Root : "The only workspace until workspaces arrive"),
             MenuEntry.Separator,
-            new(MenuEntryKind.Item, "Open folder as workspace…", "\uE8DA", "workspace.switch", Keys: KeysOf("workspace.switch")),
+            new(MenuEntryKind.Item, "Open folder as workspace…", "\uE8DA", "workspace.openFolder"),
         };
         FileMenu.Show(Below(WorkspacePillFrame), [], items, fromKeyboard, WindowMetrics.Current.DropdownRowHeight);
         Diag.Info(ShellTarget, "workspace menu shown", new LogField("branch", _repository?.Branch ?? ""));

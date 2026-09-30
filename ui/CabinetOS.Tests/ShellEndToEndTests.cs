@@ -258,6 +258,10 @@ public class ShellEndToEndTests
                 "wait:300",
                 "shell:workspace",
                 "cmd:overlay.close",
+                // Ctrl+K W opens the same dropdown from the keyboard.
+                "cmd:workspace.switch",
+                "shell:workspace-key",
+                "cmd:overlay.close",
                 // A click on a crumb goes there; Back comes back; Ctrl+L makes the row a text box, Esc ends it.
                 $"click:{projects}",
                 "wait:400",
@@ -280,6 +284,7 @@ public class ShellEndToEndTests
                 state.GetProperty("menu").GetString()));
             State(logs, "menu-closed", state => Assert.Equal("", state.GetProperty("menu").GetString()));
             State(logs, "workspace", state => Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString()));
+            State(logs, "workspace-key", state => Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString()));
             State(logs, "crumb", state =>
             {
                 Assert.Equal(projects, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
