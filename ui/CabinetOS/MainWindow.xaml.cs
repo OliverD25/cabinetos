@@ -71,8 +71,10 @@ public sealed partial class MainWindow : Window
     private readonly string? _toolsDir;
     private UiSettings _settings = UiSettings.Defaults;
 
-    // How often the configuration was read: the snapshot aid's until:config waits for the next one.
+    // How often the configuration was read, and how often the core found an error in the file: the snapshot aid's
+    // until:config and until:config-error wait for the next one.
     private int _configReads;
+    private int _configErrors;
     private ShellState _shell = ShellState.Empty;
     private bool _dual = true;
     private bool _sidebarOpen = true;
@@ -432,6 +434,14 @@ public sealed partial class MainWindow : Window
                     OnShellMenuRequested(_paneViews[_active], MenuRowForStep(step.Argument), null);
                     await Task.Delay(1500);
                     break;
+                case "menu-edit-key":
+                    // A key in the menu's edit mode, as the window passes a real one: "alt+down", "delete", "insert".
+                    if (KeyCombo.TryParse(step.Argument, out var editKey))
+                    {
+                        MenuEditorView.HandleKey(editKey.Value);
+                    }
+                    await Task.Delay(300);
+                    break;
                 case "menu-click":
                     if (!_contextMenu.Click(step.Argument))
                     {
@@ -729,12 +739,14 @@ public sealed partial class MainWindow : Window
     private async Task WaitUntilAsync(string condition)
     {
         var configReads = _configReads;
+        var configErrors = _configErrors;
         for (var waited = 0; waited < 20_000; waited += 100)
         {
             var met = condition switch
             {
                 // The configuration was read again: an edit of the file, from outside, arrived.
                 "config" => _configReads > configReads,
+                "config-error" => _configErrors > configErrors,
                 "conflict" => _transfers.Conflicts.Current is not null,
                 "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
                 "terminal" => _terminal.Shown is { Pipe: not null },
@@ -1011,6 +1023,7 @@ public sealed partial class MainWindow : Window
                 _ = ReadConfigSafelyAsync();
                 break;
             case ConfigErrorEvent error:
+                _configErrors++;
                 var where = error.Line is { } line ? $" line {line}, column {error.Column}" : "";
                 ShowNotice($"cabinetos.json{where}: {error.Message}", isError: true);
                 break;

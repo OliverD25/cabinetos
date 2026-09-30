@@ -152,6 +152,153 @@ public class ContextMenuEndToEndTests
     }
 
     /// <summary>
+    /// Phase 18, step 2: "Edit Menu…" turns the file menu into its edit mode. A row goes with its X,
+    /// a command comes through "Add Command…" (Insert) and moves with Alt+Up, Delete takes it out,
+    /// and "Done" saves the list through the core: the file holds it and the next menu shows it. A
+    /// save the core refuses (the file has an error) keeps the edit mode open with a notice; Esc and
+    /// the palette's way out leave without saving; from the palette, <c>menu.edit</c> edits the
+    /// focused row's menu.
+    /// </summary>
+    [Fact]
+    public async Task The_menu_is_edited_inside_the_menu_and_saved_through_the_core()
+    {
+        var (run, root, data) = Prepare("menu-edit");
+        try
+        {
+            var configPath = Path.Combine(root, "config", "cabinetos.json");
+            var process = run.Start("edit", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "menu:alpha.txt",
+                "wait:600",
+                "menu-click:Edit Menu…",
+                "wait:500",
+                "shell:editing",
+                // The row's X, pressed through its automation peer as a screen reader would.
+                "click:Remove Open in Terminal",
+                "shell:removed",
+                "menu-edit-key:insert",
+                "wait:300",
+                "type:New folder",
+                "wait:300",
+                "accept",
+                "wait:300",
+                "shell:added",
+                "menu-edit-key:alt+up",
+                "shell:moved",
+                "menu-edit-key:delete",
+                "shell:deleted",
+                "click:Done",
+                "until:config",
+                "wait:300",
+                "shell:saved",
+                // Each menu gets its time on screen, and its time to close: the same menu asked for again while it is
+                // still closing does not come back (step 1's flyout; see the Phase 18 step 2 report).
+                "menu:alpha.txt",
+                "wait:600",
+                "shell:after",
+                "cmd:overlay.close",
+                "wait:600",
+                // The file gets an error while the list is edited: the core refuses the save.
+                "menu:alpha.txt",
+                "wait:600",
+                "menu-click:Edit Menu…",
+                "wait:500",
+                "click:Remove Copy to other pane",
+                "shell:break-the-file",
+                "until:config-error",
+                "click:Done",
+                "wait:1000",
+                "shell:refused",
+                // The test puts the file back; the core says it is valid again.
+                "until:config",
+                "click:Done",
+                "wait:1000",
+                "shell:saved-again",
+                // Esc leaves without saving.
+                "menu:alpha.txt",
+                "wait:600",
+                "menu-click:Edit Menu…",
+                "wait:500",
+                "menu-edit-key:delete",
+                "shell:before-esc",
+                "menu-edit-key:escape",
+                "shell:after-esc",
+                "menu:alpha.txt",
+                "wait:600",
+                "shell:unchanged",
+                "cmd:overlay.close",
+                // From the palette there is no open menu: the focused row's is edited; overlay.close leaves it.
+                "cmd:menu.edit",
+                "wait:300",
+                "shell:from-palette",
+                "cmd:overlay.close",
+                "shell:closed",
+                "shot:done"));
+            await run.WaitForStateAsync("edit", "saved");
+            var afterFirstSave = File.ReadAllText(configPath);
+            await run.WaitForStateAsync("edit", "break-the-file");
+            File.WriteAllText(configPath, "{ \"version\": 1, \"ui\": ");
+            await run.WaitForStateAsync("edit", "refused");
+            File.WriteAllText(configPath, afterFirstSave);
+            var logs = await run.FinishAsync("edit", process, "done");
+
+            State(logs, "editing", state =>
+            {
+                Assert.Equal("File menu", state.GetProperty("menu_edit_target").GetString());
+                Assert.Equal("Open|Open in other pane|Copy to other pane|Open in Terminal", state.GetProperty("menu_edit").GetString());
+                // The menu turned into the edit mode: it is not open as well.
+                Assert.Equal("", state.GetProperty("context_menu").GetString());
+            });
+            State(logs, "removed", state => Assert.Equal("Open|Open in other pane|Copy to other pane", state.GetProperty("menu_edit").GetString()));
+            State(logs, "added", state => Assert.Equal("Open|Open in other pane|Copy to other pane|New folder", state.GetProperty("menu_edit").GetString()));
+            State(logs, "moved", state => Assert.Equal("Open|Open in other pane|New folder|Copy to other pane", state.GetProperty("menu_edit").GetString()));
+            State(logs, "deleted", state => Assert.Equal("Open|Open in other pane|Copy to other pane", state.GetProperty("menu_edit").GetString()));
+            State(logs, "saved", state => Assert.Equal("", state.GetProperty("menu_edit").GetString()));
+            State(logs, "after", state => Assert.Equal("Open|Open in other pane|Copy to other pane|Properties|Edit Menu…", state.GetProperty("context_menu").GetString()));
+
+            // Refused: the edit mode stays, with its rows, and the status bar says why.
+            State(logs, "refused", state => Assert.Equal("Open|Open in other pane", state.GetProperty("menu_edit").GetString()));
+            var refused = Assert.Single(logs, l => Message(l) == "menu edit refused");
+            Assert.Equal("config_error", Field(refused, "code").GetString());
+            Assert.Contains(logs, l => Message(l) == "notice shown" && Field(l, "text").GetString()!.StartsWith("The menu was not saved:", StringComparison.Ordinal)
+                && Field(l, "error").GetBoolean());
+            State(logs, "saved-again", state => Assert.Equal("", state.GetProperty("menu_edit").GetString()));
+
+            State(logs, "before-esc", state => Assert.Equal("Open in other pane", state.GetProperty("menu_edit").GetString()));
+            State(logs, "after-esc", state => Assert.Equal("", state.GetProperty("menu_edit").GetString()));
+            State(logs, "unchanged", state => Assert.Equal("Open|Open in other pane|Properties|Edit Menu…", state.GetProperty("context_menu").GetString()));
+            State(logs, "from-palette", state =>
+            {
+                Assert.Equal("File menu", state.GetProperty("menu_edit_target").GetString());
+                Assert.Equal("Open|Open in other pane", state.GetProperty("menu_edit").GetString());
+            });
+            State(logs, "closed", state => Assert.Equal("", state.GetProperty("menu_edit").GetString()));
+
+            Assert.Equal(["contextMenu.file.items", "contextMenu.file.items"],
+                logs.Where(l => Message(l) == "menu edit saved").Select(l => Field(l, "path").GetString()));
+            Assert.Equal([true, true, false, false], logs.Where(l => Message(l) == "menu edit closed").Select(l => Field(l, "saved").GetBoolean()));
+
+            // The core wrote the list in the defaults' shape; the other targets kept theirs.
+            using var config = JsonDocument.Parse(File.ReadAllText(configPath));
+            var menu = config.RootElement.GetProperty("contextMenu");
+            Assert.Equal("""[{"command":"pane.openSelected"},{"command":"file.openInOtherPane"}]""", JsonSerializer.Serialize(menu.GetProperty("file").GetProperty("items")));
+            Assert.Equal(4, menu.GetProperty("folder").GetProperty("items").GetArrayLength());
+            var core = Lines(Directory.GetFiles(Path.Combine(root, "logs-edit"), "core.*.jsonl").Single());
+            Assert.Equal(2, core.Count(l => Message(l) == "configuration changed" && Field(l, "changed").GetString()!.Contains("contextMenu.file.items", StringComparison.Ordinal)));
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
     /// The frame measurement, alone: another test's window on the same desktop takes the processor and
     /// the GPU, and its load shows in this window's frames (one 35 ms frame in the full run of
     /// 2026-09-30, none when the test ran by itself).
@@ -207,6 +354,70 @@ public class ContextMenuEndToEndTests
                 var slow = logs.Where(l => Message(l) == "slow frame" && Timestamp(l) > before && Timestamp(l) <= open
                     && Field(l, "busy_ms").GetDouble() > 33).ToList();
                 Assert.True(slow.Count == 0, $"frames with over 33 ms of UI-thread work while the menu opened:\n{string.Join('\n', slow)}\n"
+                    + string.Join('\n', logs.Where(l => Timestamp(l) > before && Timestamp(l) <= open)));
+            }
+            finally
+            {
+                run.Stop();
+                Repo.RemoveTempFolder(root);
+            }
+        }
+
+        /// <summary>
+        /// The edit mode over the 100,000 selected rows of the bench folder: entering it adds no frame
+        /// with more than 33 ms of UI-thread work. The first entering of the process builds the
+        /// surface's templates, as the menu's first opening does, so it is done once in the small
+        /// folder first and its time logged.
+        /// </summary>
+        [Fact]
+        public async Task Entering_the_edit_mode_over_100000_selected_rows_adds_no_slow_frame()
+        {
+            var bench = Path.Combine(Path.GetTempPath(), "cabinetos-bench", "100000");
+            if (!File.Exists(bench + ".complete"))
+            {
+                Assert.Skip($"Needs the bench folder {bench}: cargo bench -p cabinetos-fs --bench list_directory makes it.");
+            }
+            var (run, root, data) = Prepare("menu-edit-bench");
+            try
+            {
+                var process = run.Start("edit-bench", string.Join(';',
+                    "size:1200x700",
+                    "pane:0",
+                    $"path:{data}",
+                    "wait:500",
+                    "menu:alpha.txt",
+                    "wait:800",
+                    "menu-click:Edit Menu…",
+                    "wait:800",
+                    "cmd:overlay.close",
+                    $"path:{bench}",
+                    "wait:3000",
+                    "selectall",
+                    "wait:1500",
+                    "menu:",
+                    "wait:1500",
+                    "shell:before",
+                    "menu-click:Edit Menu…",
+                    "wait:1500",
+                    "shell:open",
+                    "cmd:overlay.close",
+                    "wait:500",
+                    "shot:done"), frameStats: true);
+                var logs = await run.FinishAsync("edit-bench", process, "done");
+
+                DateTime At(string label) => Timestamp(logs.Single(l => Message(l) == "shell state" && Field(l, "label").GetString() == label));
+                var (before, open) = (At("before"), At("open"));
+                State(logs, "open", state =>
+                {
+                    Assert.Equal("Selection menu", state.GetProperty("menu_edit_target").GetString());
+                    Assert.StartsWith("Open|", state.GetProperty("menu_edit").GetString());
+                });
+                var shown = logs.Where(l => Message(l) == "menu edit shown").ToList();
+                Assert.Equal(2, shown.Count);
+                Assert.Equal("MultiSelect", Field(shown[1], "target").GetString());
+                var slow = logs.Where(l => Message(l) == "slow frame" && Timestamp(l) > before && Timestamp(l) <= open
+                    && Field(l, "busy_ms").GetDouble() > 33).ToList();
+                Assert.True(slow.Count == 0, $"frames with over 33 ms of UI-thread work while the edit mode opened:\n{string.Join('\n', slow)}\n"
                     + string.Join('\n', logs.Where(l => Timestamp(l) > before && Timestamp(l) <= open)));
             }
             finally

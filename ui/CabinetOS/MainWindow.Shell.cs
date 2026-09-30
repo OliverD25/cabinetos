@@ -380,6 +380,8 @@ public sealed partial class MainWindow
             new("menu", FileMenu.Describe()),
             new("context_menu", _contextMenu.DescribeItems()),
             new("context_quick", _contextMenu.DescribeQuickActions()),
+            new("menu_edit", MenuEditorView.Describe()),
+            new("menu_edit_target", MenuEditorView.Model?.TargetName ?? ""),
             new("windows_menu", _windowsMenu.Describe()),
             new("branch", WorkspaceBranch.Visibility == Visibility.Visible ? WorkspaceBranch.Text : ""),
             new("active_pane", _active),
