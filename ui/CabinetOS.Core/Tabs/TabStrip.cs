@@ -195,7 +195,7 @@ public sealed class TabStrip
             {
                 active = items.Count;
             }
-            items.Add(new TabItemConfig(_tabs[i].Path, _tabs[i].Locked));
+            items.Add(new TabItemConfig(_tabs[i].Path, _tabs[i].Locked, _tabs[i].Mode));
         }
         return new PaneTabsConfig(items, active);
     }

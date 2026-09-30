@@ -3,8 +3,8 @@ using System.Text.Json;
 
 namespace CabinetOS.Core.Tabs;
 
-/// <summary>One saved tab: the folder it shows and whether it is locked (<c>ui.tabs</c>, docs/config.md).</summary>
-public sealed record TabItemConfig(string Path, bool Locked);
+/// <summary>One saved tab: the folder it shows, whether it is locked, and whether it shows columns (<c>ui.tabs</c>, docs/config.md).</summary>
+public sealed record TabItemConfig(string Path, bool Locked, TabMode Mode = TabMode.Files);
 
 /// <summary>One pane's saved tabs and the one in front.</summary>
 public sealed record PaneTabsConfig(IReadOnlyList<TabItemConfig> Items, int Active)
@@ -21,7 +21,7 @@ public sealed record PaneTabsConfig(IReadOnlyList<TabItemConfig> Items, int Acti
     public TabStrip? ToStrip() =>
         Items.Count == 0
             ? null
-            : new TabStrip(Items.Select(item => new PaneTab(item.Path, item.Locked)), Math.Clamp(Active, 0, Items.Count - 1));
+            : new TabStrip(Items.Select(item => new PaneTab(item.Path, item.Locked, item.Mode)), Math.Clamp(Active, 0, Items.Count - 1));
 }
 
 /// <summary>
@@ -33,6 +33,9 @@ public sealed record TabsConfig(PaneTabsConfig Left, PaneTabsConfig Right)
 {
     /// <summary>The setting, as <c>set_value</c> and <c>config_changed</c> name it.</summary>
     public const string Key = "ui.tabs";
+
+    /// <summary>A saved tab's <c>mode</c> in the column view; the list has none.</summary>
+    public const string ColumnsMode = "columns";
 
     /// <summary>Nothing saved.</summary>
     public static readonly TabsConfig Empty = new(PaneTabsConfig.Empty, PaneTabsConfig.Empty);
@@ -68,7 +71,9 @@ public sealed record TabsConfig(PaneTabsConfig Left, PaneTabsConfig Right)
                 && item.TryGetProperty("path", out var path) && path.ValueKind == JsonValueKind.String && path.GetString() is { Length: > 0 } text)
             {
                 var locked = item.TryGetProperty("locked", out var flag) && flag.ValueKind == JsonValueKind.True;
-                list.Add(new TabItemConfig(text, locked));
+                // Left out, or a mode this window does not know: the list.
+                var columns = item.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String && mode.GetString() == ColumnsMode;
+                list.Add(new TabItemConfig(text, locked, columns ? TabMode.Columns : TabMode.Files));
             }
         }
         var active = pane.TryGetProperty("active", out var front) && front.ValueKind == JsonValueKind.Number && front.TryGetInt32(out var index) ? index : 0;
@@ -99,6 +104,11 @@ public sealed record TabsConfig(PaneTabsConfig Left, PaneTabsConfig Right)
             writer.WriteStartObject();
             writer.WriteString("path", item.Path);
             writer.WriteBoolean("locked", item.Locked);
+            // A list tab is written without a mode, as the core writes it back.
+            if (item.Mode == TabMode.Columns)
+            {
+                writer.WriteString("mode", ColumnsMode);
+            }
             writer.WriteEndObject();
         }
         writer.WriteEndArray();

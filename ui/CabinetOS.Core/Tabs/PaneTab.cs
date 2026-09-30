@@ -11,11 +11,12 @@ namespace CabinetOS.Core.Tabs;
 /// </summary>
 public sealed class PaneTab
 {
-    /// <summary>A tab that shows the folder <paramref name="folder"/>.</summary>
-    public PaneTab(string folder, bool locked = false)
+    /// <summary>A tab that shows the folder <paramref name="folder"/>, as the list or as columns.</summary>
+    public PaneTab(string folder, bool locked = false, TabMode mode = TabMode.Files)
     {
         Path = folder;
         Locked = locked;
+        Mode = mode;
     }
 
     private PaneTab(string file, string tool, string toolName)
@@ -36,6 +37,13 @@ public sealed class PaneTab
     /// tab instead (Total Commander's rule).
     /// </summary>
     public bool Locked { get; set; }
+
+    /// <summary>
+    /// How a folder tab shows its folder: the list, or the column view
+    /// (ADR 0016), where <see cref="Path"/> is the deepest column's folder.
+    /// A tool tab has no mode.
+    /// </summary>
+    public TabMode Mode { get; set; }
 
     /// <summary>The Tool Extension's ID, or null for a folder.</summary>
     public string? Tool { get; }
@@ -73,6 +81,16 @@ public sealed class PaneTab
     /// <summary>What the tab says: the folder's name, or the file's name for a tool.</summary>
     public string Title => IsTool ? System.IO.Path.GetFileName(Path) : DisplayFormat.FolderName(Path);
 
-    /// <summary>A copy of a folder tab for a new tab: same folder and order, fresh history, not locked.</summary>
-    public PaneTab Duplicate(string? folder = null) => new(folder ?? Path) { Sort = Sort };
+    /// <summary>A copy of a folder tab for a new tab: same folder, order and mode, fresh history, not locked.</summary>
+    public PaneTab Duplicate(string? folder = null) => new(folder ?? Path, mode: Mode) { Sort = Sort };
+}
+
+/// <summary>How a pane's folder tab shows its folder (<c>ui.tabs</c>' <c>mode</c>, docs/config.md).</summary>
+public enum TabMode
+{
+    /// <summary>The list: a row per entry with its name, date, type and size.</summary>
+    Files,
+
+    /// <summary>The column view: the folder and the folders opened from it side by side, names only (ADR 0016).</summary>
+    Columns,
 }

@@ -7,7 +7,12 @@ namespace CabinetOS.Core.Tabs;
 /// <param name="Active">The tab in front.</param>
 /// <param name="Cursor">The full path of the row the cursor is on, or null.</param>
 /// <param name="Marked">The full paths of the marked rows, in the pane's order.</param>
-public sealed record PaneSnapshot(IReadOnlyList<PaneTab> Tabs, int Active, string? Cursor, IReadOnlyList<string> Marked);
+/// <param name="FrontFolder">
+/// The folder the tab in front reports instead of its own path, or null: in
+/// the column view (ADR 0016) the column with the keyboard, whose rows the
+/// cursor and the marks are.
+/// </param>
+public sealed record PaneSnapshot(IReadOnlyList<PaneTab> Tabs, int Active, string? Cursor, IReadOnlyList<string> Marked, string? FrontFolder = null);
 
 /// <summary>
 /// Builds the <c>window_state</c> request (docs/ipc.md, "What the window
@@ -27,7 +32,7 @@ public static class WindowStateBuilder
         new(activePane == 0 ? "left" : "right", new WindowPanesState(Pane(left), Pane(right)));
 
     private static WindowPaneState Pane(PaneSnapshot pane) => new(
-        [.. pane.Tabs.Select(tab => new WindowTabState(tab.Path, tab.Locked, tab.Tool))],
+        [.. pane.Tabs.Select((tab, index) => new WindowTabState(index == pane.Active && pane.FrontFolder is { } front ? front : tab.Path, tab.Locked, tab.Tool))],
         (uint)Math.Max(0, pane.Active),
         pane.Cursor,
         [.. pane.Marked.Take(MaxMarked)]);
