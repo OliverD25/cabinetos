@@ -316,10 +316,9 @@ public sealed partial class MainWindow
             ShowNotice("A pane keeps its last folder tab: open another tab first (Ctrl+T).");
             return;
         }
-        if (to == 1 && !_dual)
+        if (to == 1 && !EnsureDual())
         {
-            ApplyDual(true);
-            _ = PersistAsync(ShellState.DualPaneKey, true);
+            return;
         }
         // The pane's own state goes with the tab: its history, order, cursor and marks.
         if (_held[from] == tab)

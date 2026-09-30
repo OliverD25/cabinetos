@@ -109,6 +109,10 @@ public sealed partial class MainWindow
 
     private async Task ShowDockAsync(string requestId)
     {
+        if (RefuseInCompact("terminal"))
+        {
+            return;
+        }
         SetDockVisible(true);
         if (_terminal.Tabs.Count == 0)
         {
@@ -125,6 +129,10 @@ public sealed partial class MainWindow
 
     private async Task NewTerminalAsync(string? profile, string? folder, string requestId)
     {
+        if (RefuseInCompact("terminal"))
+        {
+            return;
+        }
         SetDockVisible(true);
         if (_terminal.Tabs.Count == 0)
         {

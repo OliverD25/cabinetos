@@ -164,6 +164,7 @@ public sealed partial class MainWindow : Window
         SetUpMarket();
         SetUpRail();
         SetUpColumns();
+        SetUpCompact();
 
         Palette.Model = _palette;
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
@@ -939,7 +940,10 @@ public sealed partial class MainWindow : Window
                 // Another window, or a hand edit of cabinetos.json: this window follows and writes nothing back.
                 Diag.Info(Target, "dual pane follows the configuration", new LogField("dual", settings.DualPane));
             }
-            ApplyDual(settings.DualPane);
+            if (!HoldDualForCompact(settings.DualPane))
+            {
+                ApplyDual(settings.DualPane);
+            }
         }
         if ((firstStart || settings.Sidebar != previous.Sidebar) && !IsOwnWrite(ShellState.SidebarKey, settings.Sidebar))
         {
@@ -947,7 +951,10 @@ public sealed partial class MainWindow : Window
             {
                 Diag.Info(Target, "the sidebar follows the configuration", new LogField("sidebar", settings.Sidebar));
             }
-            ApplySidebar(settings.Sidebar);
+            if (!HoldSidebarForCompact(settings.Sidebar))
+            {
+                ApplySidebar(settings.Sidebar);
+            }
         }
         UpdateLayoutText();
         if (firstStart || settings.Layout != previous.Layout)
@@ -958,6 +965,7 @@ public sealed partial class MainWindow : Window
         ApplyStoredDockSize(settings);
         ApplyRailSettings(settings, previous, firstStart);
         ApplyColumnSettings(settings);
+        ApplyCompactSettings(settings, previous);
         if (firstStart || settings.Selection != previous.Selection)
         {
             // panes.selection applies at once: the marks stay, only the keys mark differently.
@@ -1320,6 +1328,10 @@ public sealed partial class MainWindow : Window
         _router.RegisterUiHandler("keys.open", _ => _palette.Open());
         _router.RegisterUiHandler("view.toggleDualPane", invocation =>
         {
+            if (RefuseInCompact("dual pane"))
+            {
+                return;
+            }
             // The user chose a layout: it stays when a preview closes.
             _previewMadeDual = false;
             ApplyDual(!_dual);
@@ -1328,6 +1340,10 @@ public sealed partial class MainWindow : Window
         _router.RegisterUiHandler("view.focusOtherPane", _ => FocusOtherPane());
         _router.RegisterUiHandler("view.toggleSidebar", invocation =>
         {
+            if (RefuseInCompact("sidebar"))
+            {
+                return;
+            }
             ApplySidebar(!_sidebarOpen);
             _ = PersistAsync(ShellState.SidebarKey, _sidebarOpen);
         });
@@ -1409,6 +1425,7 @@ public sealed partial class MainWindow : Window
         RegisterMarketCommands();
         RegisterRailCommands();
         RegisterColumnCommands();
+        RegisterCompactCommands();
         RegisterAboutCommand();
 
         _router.Completed += OnCommandCompleted;
@@ -1788,10 +1805,9 @@ public sealed partial class MainWindow : Window
             ShowNotice("Open in other pane opens folders.");
             return;
         }
-        if (!_dual)
+        if (!EnsureDual())
         {
-            ApplyDual(true);
-            _ = PersistAsync(ShellState.DualPaneKey, true);
+            return;
         }
         await Other.NavigateAsync(entry.Path, invocation.RequestId);
     }
@@ -2196,10 +2212,11 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ApplyDual(bool dual)
+    // keepTools: the compact overlay hides the right pane for a while and keeps its tools and previews for the way back.
+    private void ApplyDual(bool dual, bool keepTools = false)
     {
         _dual = dual;
-        if (!dual)
+        if (!dual && !keepTools)
         {
             // The right pane goes away, and its tool tabs with it (the tool's process ends).
             CloseToolTabs(1, focusPane: false);

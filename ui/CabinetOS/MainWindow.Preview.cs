@@ -131,6 +131,11 @@ public sealed partial class MainWindow
             // A new proposal replaces the one still waiting for an answer: that one is dropped, not applied.
             await CancelPreviewAsync(quiet: true);
         }
+        if (_compact is not null)
+        {
+            // The drawer has one pane and the proposal waits for an answer in the other: the window leaves the drawer first.
+            LeaveCompactOverlay();
+        }
         if (!_dual)
         {
             // The preview needs the other pane: single-pane mode shows two panes while it waits.

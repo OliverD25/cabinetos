@@ -131,6 +131,11 @@ public sealed partial class MainWindow
     // The status bar's layout: a density preset's name before it ("Commander Compact · Terminal: bottom").
     private void UpdateLayoutText()
     {
+        if (_compact is not null)
+        {
+            LayoutText.Text = CompactStatusText();
+            return;
+        }
         var layout = _settings.Layout switch
         {
             "right" => "Terminal: right",

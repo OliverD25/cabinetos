@@ -94,10 +94,9 @@ public sealed partial class MainWindow
     {
         CloseQuickOpen(returnFocus: false);
         var target = otherPane ? 1 - _active : _active;
-        if (otherPane && !_dual)
+        if (otherPane && !EnsureDual())
         {
-            ApplyDual(true);
-            _ = PersistAsync(ShellState.DualPaneKey, true);
+            return;
         }
         if (target != _active)
         {

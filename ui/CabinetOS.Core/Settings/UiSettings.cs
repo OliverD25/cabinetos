@@ -19,6 +19,7 @@ namespace CabinetOS.Core.Settings;
 /// A core that does not know them leaves them out, and the window keeps them in memory.
 /// <see cref="Columns"/> is <c>ui.columns</c>: the file panes' Modified, Type and Size widths, or null for the theme's.
 /// <see cref="FolderSizes"/> is <c>panes.folderSizes</c>: whether every folder of a listing is measured when it opens.
+/// <see cref="CompactOverlay"/> is <c>ui.compactOverlay</c>: the drawer's size the user last resized it to, or null for 480 by 640.
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -37,7 +38,8 @@ public sealed record UiSettings(
     string? SidebarView = null,
     bool SidebarAutoReveal = true,
     ColumnWidths? Columns = null,
-    bool FolderSizes = false)
+    bool FolderSizes = false,
+    CompactSize? CompactOverlay = null)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -69,7 +71,8 @@ public sealed record UiSettings(
             String(ui, "sidebarView"),
             Bool(ui, "sidebarAutoReveal") ?? Defaults.SidebarAutoReveal,
             ColumnLayout.FromConfig(config),
-            Bool(panes, "folderSizes") ?? Defaults.FolderSizes);
+            Bool(panes, "folderSizes") ?? Defaults.FolderSizes,
+            CompactOverlayLayout.FromConfig(config));
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).

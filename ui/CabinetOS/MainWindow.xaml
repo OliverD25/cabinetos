@@ -545,6 +545,7 @@
                         </StackPanel>
                     </Button>
                     <TextBlock
+                        x:Name="EncodingText"
                         Grid.Column="5"
                         VerticalAlignment="Center"
                         FontSize="11"

@@ -110,7 +110,7 @@ public sealed partial class MainWindow
     {
         _railLayout = rail;
         _searchInSidebar = false;
-        Rail.Visibility = rail ? Visibility.Visible : Visibility.Collapsed;
+        Rail.Visibility = rail && _compact is null ? Visibility.Visible : Visibility.Collapsed;
         SidebarView.ShowTree = rail;
         ReapplyWidths();
         UpdateSidebarChrome();
@@ -186,6 +186,10 @@ public sealed partial class MainWindow
 
     private void ShowSidebarView(string id, bool focus)
     {
+        if (RefuseInCompact("sidebar"))
+        {
+            return;
+        }
         if (!_rail.IsSidebarView(id))
         {
             id = RailModel.Explorer;
@@ -241,6 +245,10 @@ public sealed partial class MainWindow
 
     private void ShowExplorer()
     {
+        if (RefuseInCompact("sidebar"))
+        {
+            return;
+        }
         if (!_railLayout)
         {
             // The other layouts have the sidebar only: open it, and put the keyboard on its first folder.
@@ -262,6 +270,10 @@ public sealed partial class MainWindow
 
     private Task ShowSearchView()
     {
+        if (RefuseInCompact("sidebar"))
+        {
+            return Task.CompletedTask;
+        }
         if (!_railLayout)
         {
             // Without a rail the Search view shows in the sidebar's place until the search is left.
@@ -316,6 +328,10 @@ public sealed partial class MainWindow
 
     private async Task LocateActiveFolderAsync()
     {
+        if (RefuseInCompact("sidebar"))
+        {
+            return;
+        }
         if (!_railLayout)
         {
             ShowNotice("The folder tree is in the rail layout (ui.layout: rail).");

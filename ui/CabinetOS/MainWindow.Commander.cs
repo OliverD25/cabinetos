@@ -235,10 +235,9 @@ public sealed partial class MainWindow
             ShowNotice("No drives to choose from: this core does not list volumes.");
             return;
         }
-        if (paneIndex == 1 && !_dual)
+        if (paneIndex == 1 && !EnsureDual())
         {
-            ApplyDual(true);
-            _ = PersistAsync(ShellState.DualPaneKey, true);
+            return;
         }
         var pane = _panes[paneIndex];
         var view = _paneViews[paneIndex];
@@ -766,10 +765,9 @@ public sealed partial class MainWindow
         {
             return;
         }
-        if (target == 1 && !_dual)
+        if (target == 1 && !EnsureDual())
         {
-            ApplyDual(true);
-            _ = PersistAsync(ShellState.DualPaneKey, true);
+            return;
         }
         await _panes[target].NavigateAsync(folder, invocation.RequestId);
     }
