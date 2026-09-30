@@ -971,6 +971,10 @@
           "type": "boolean",
           "default": false
         },
+        "mode": {
+          "description": "How the tab shows its folder: `files`, the list, or `columns`, the\ncolumn view (ADR 0016). Left out: `files`.",
+          "$ref": "#/$defs/TabMode"
+        },
         "path": {
           "description": "The folder the tab shows, as an absolute path.",
           "type": "string"
@@ -979,6 +983,21 @@
       "additionalProperties": false,
       "required": [
         "path"
+      ]
+    },
+    "TabMode": {
+      "description": "How a pane's folder tab shows its folder.",
+      "oneOf": [
+        {
+          "description": "The list: a row per entry with its name, date, type and size.",
+          "type": "string",
+          "const": "files"
+        },
+        {
+          "description": "The column view: the folder and the folders opened from it side by\nside, each a column of names.",
+          "type": "string",
+          "const": "columns"
+        }
       ]
     },
     "TabsConfig": {

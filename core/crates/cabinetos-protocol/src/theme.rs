@@ -483,6 +483,8 @@ metrics! {
         "The space between a file row's icon and its name.";
     secondary_font_size "secondaryFontSize" Px [8.0, 32.0] 12.0 => 11.0,
         "The text size of a file row's Modified, Type and Size columns.";
+    column_view_width "columnViewWidth" Px [120.0, 600.0] 220.0 => 180.0,
+        "The width of each column of a pane's column view (a tab in the columns mode).";
     // Editors
     editor_tab_height "editorTabHeight" Px [14.0, 80.0] 36.0 => 26.0,
         "The height of the editor's tab strip.";

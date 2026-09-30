@@ -1006,7 +1006,7 @@ mod tests {
             "left": {
                 "items": [
                     {"path": r"C:\x", "locked": false},
-                    {"path": paths[0], "locked": true},
+                    {"path": paths[0], "locked": true, "mode": "columns"},
                 ],
                 "active": 1
             },
@@ -1028,6 +1028,14 @@ mod tests {
         assert_eq!(reopened.config().ui.tabs, store.config().ui.tabs);
         assert_eq!(reopened.config().ui.tabs.left.items[1].path, paths[0]);
         assert!(reopened.config().ui.tabs.left.items[1].locked);
+        assert_eq!(
+            reopened.config().ui.tabs.left.items[1].mode,
+            crate::TabMode::Columns
+        );
+        assert_eq!(
+            reopened.config().ui.tabs.left.items[0].mode,
+            crate::TabMode::Files
+        );
         assert_eq!(reopened.config().ui.tabs.right.items[0].path, paths[4]);
         // An index past the end is refused, and the file stays as it was.
         let before = std::fs::read_to_string(&path).unwrap();

@@ -116,6 +116,7 @@
     "rowRadius": 0,
     "rowIconGap": 6,
     "secondaryFontSize": 11,
+    "columnViewWidth": 180,
     "editorTabHeight": 26,
     "markdownPaddingY": 14,
     "markdownPaddingX": 20,

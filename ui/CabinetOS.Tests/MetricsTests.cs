@@ -30,7 +30,7 @@ public partial class MetricsTests
         using var schema = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo.Root, "sdk", "themes", "theme.schema.json")));
         var properties = schema.RootElement.GetProperty("$defs").GetProperty("Metrics").GetProperty("properties");
         var names = properties.EnumerateObject().Select(p => p.Name).ToList();
-        Assert.Equal(87, names.Count);
+        Assert.Equal(88, names.Count);
         Assert.Equal(names.Order(StringComparer.Ordinal), MetricsMapper.Specs.Select(s => s.Name).Order(StringComparer.Ordinal));
 
         var defaults = MetricsMapper.Map(null);
@@ -62,7 +62,7 @@ public partial class MetricsTests
     {
         var compact = Shipped("commander-compact");
         Assert.NotNull(compact.Metrics);
-        Assert.Equal(87, compact.Metrics.Count);
+        Assert.Equal(88, compact.Metrics.Count);
 
         var look = ThemeMapper.Map(compact, DesignAccent);
         var metrics = look.Metrics;
@@ -79,6 +79,8 @@ public partial class MetricsTests
         Assert.Equal((12.0, 1.3, 20.0, 24.0, 0.0, 0.0), (metrics.FontSize, metrics.LineHeight, metrics.RowHeight, metrics.PaneHeaderHeight, metrics.Gap, metrics.RadiusSurface));
         Assert.Equal((1.6, 0.9, 0.7, 60.0, 8.0), (metrics.NameColumnWeight, metrics.ModifiedColumnWeight, metrics.TypeColumnWeight, metrics.SizeColumnWidth, metrics.ColumnGap));
         Assert.Equal(22.0, metrics.PinnedRowHeight());
+        // The column view's columns (ADR 0016): narrower in the dense look.
+        Assert.Equal(180.0, metrics.ColumnViewWidth);
         // clamp(150px, 17%, 190px) and clamp(100px, 26%, 200px).
         Assert.Equal(924 * 0.17, metrics.SidebarWidth(924), 6);
         Assert.Equal((150.0, 190.0), (metrics.SidebarWidth(700), metrics.SidebarWidth(1600)));
@@ -98,6 +100,7 @@ public partial class MetricsTests
         Assert.Equal(ChromeLook.None, back.Chrome);
         Assert.Null(back.Mica);
         Assert.Equal((30.0, 13.0, 32.0), (back.Metrics.RowHeight, back.Metrics.FontSize, back.Metrics.PinnedRowHeight()));
+        Assert.Equal(220.0, back.Metrics.ColumnViewWidth);
         // The design's clamp(180px, 20%, 224px) and clamp(120px, 30%, 240px).
         Assert.Equal((180.0, 200.0, 224.0), (back.Metrics.SidebarWidth(800), back.Metrics.SidebarWidth(1000), back.Metrics.SidebarWidth(2000)));
         Assert.Equal((120.0, 150.0, 240.0), (back.Metrics.BottomDockHeight(300), back.Metrics.BottomDockHeight(500), back.Metrics.BottomDockHeight(1000)));

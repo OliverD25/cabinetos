@@ -2418,6 +2418,12 @@
           "maximum": 64,
           "minimum": 0
         },
+        "columnViewWidth": {
+          "description": "The width of each column of a pane's column view (a tab in the columns mode). Whole pixels from 120 to 600; left out, 220.",
+          "type": "integer",
+          "maximum": 600,
+          "minimum": 120
+        },
         "commandBarHeight": {
           "description": "The height of the command bar of the shell before Phase 16; the top row replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 48.",
           "type": "integer",

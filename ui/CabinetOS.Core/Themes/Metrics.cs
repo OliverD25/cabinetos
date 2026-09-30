@@ -132,6 +132,7 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
     public double RowRadius => this["rowRadius"];
     public double RowIconGap => this["rowIconGap"];
     public double SecondaryFontSize => this["secondaryFontSize"];
+    public double ColumnViewWidth => this["columnViewWidth"];
 
     // ----- Editors -----
     public double EditorTabHeight => this["editorTabHeight"];
@@ -285,6 +286,7 @@ public static class MetricsMapper
         Px("rowRadius", 0, 16, 4),
         Px("rowIconGap", 0, 48, 10),
         Px("secondaryFontSize", 8, 32, 12),
+        Px("columnViewWidth", 120, 600, 220),
         // Editors
         Px("editorTabHeight", 14, 80, 36),
         Px("markdownPaddingY", 0, 64, 28),

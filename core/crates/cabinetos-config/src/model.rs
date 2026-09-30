@@ -230,6 +230,32 @@ pub struct TabEntry {
     /// a new tab instead.
     #[serde(default)]
     pub locked: bool,
+    /// How the tab shows its folder: `files`, the list, or `columns`, the
+    /// column view (ADR 0016). Left out: `files`.
+    #[serde(default, skip_serializing_if = "TabMode::is_files")]
+    pub mode: TabMode,
+}
+
+/// How a pane's folder tab shows its folder.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub enum TabMode {
+    /// The list: a row per entry with its name, date, type and size.
+    #[default]
+    Files,
+    /// The column view: the folder and the folders opened from it side by
+    /// side, each a column of names.
+    Columns,
+}
+
+impl TabMode {
+    /// Whether this is the list, the mode a tab has when the file says none.
+    #[must_use]
+    #[allow(clippy::trivially_copy_pass_by_ref)] // serde's skip_serializing_if passes a reference
+    pub const fn is_files(&self) -> bool {
+        matches!(self, Self::Files)
+    }
 }
 
 /// The Tool Dock's size, in pixels, for each place it can sit. `null`: the
@@ -785,7 +811,7 @@ mod tests {
     #[test]
     fn tabs_are_read_with_their_defaults_and_unknown_keys_refused() {
         let ui: UiConfig = serde_json::from_str(
-            r#"{"tabs": {"left": {"items": [{"path": "C:\\x", "locked": true}, {"path": "D:\\y"}], "active": 1}}}"#,
+            r#"{"tabs": {"left": {"items": [{"path": "C:\\x", "locked": true}, {"path": "D:\\y", "mode": "columns"}], "active": 1}}}"#,
         )
         .unwrap();
         assert_eq!(
@@ -793,21 +819,36 @@ mod tests {
             [
                 TabEntry {
                     path: r"C:\x".to_owned(),
-                    locked: true
+                    locked: true,
+                    mode: TabMode::Files
                 },
                 TabEntry {
                     path: r"D:\y".to_owned(),
-                    locked: false
+                    locked: false,
+                    mode: TabMode::Columns
                 }
             ]
         );
         assert_eq!(ui.tabs.left.active, 1);
         assert_eq!(ui.tabs.right, PaneTabs::default());
+        // A list tab is written without a mode, as the window writes it; a
+        // column tab says so.
+        assert_eq!(
+            serde_json::to_value(&ui.tabs.left.items).unwrap(),
+            serde_json::json!([
+                {"path": r"C:\x", "locked": true},
+                {"path": r"D:\y", "locked": false, "mode": "columns"}
+            ])
+        );
         for (bad, expected) in [
             (r#"{"tabs": {"middle": {}}}"#, "unknown field `middle`"),
             (
                 r#"{"tabs": {"left": {"items": [{"path": "C:\\", "pinned": true}]}}}"#,
                 "unknown field `pinned`",
+            ),
+            (
+                r#"{"tabs": {"left": {"items": [{"path": "C:\\", "mode": "tree"}]}}}"#,
+                "unknown variant `tree`",
             ),
             (
                 r#"{"tabs": {"left": {"items": [{}]}}}"#,
