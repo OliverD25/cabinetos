@@ -17,6 +17,7 @@ namespace CabinetOS.Core.Settings;
 /// <see cref="SidebarView"/> (<c>ui.sidebarView</c>: <c>explorer</c>, <c>search</c> or a tool's ID) and
 /// <see cref="SidebarAutoReveal"/> (<c>ui.sidebarAutoReveal</c>: whether the folder tree follows the active pane).
 /// A core that does not know them leaves them out, and the window keeps them in memory.
+/// <see cref="Columns"/> is <c>ui.columns</c>: the file panes' Modified, Type and Size widths, or null for the theme's.
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -33,7 +34,8 @@ public sealed record UiSettings(
     IReadOnlyList<string>? Rail = null,
     double? SidebarWidth = null,
     string? SidebarView = null,
-    bool SidebarAutoReveal = true)
+    bool SidebarAutoReveal = true,
+    ColumnWidths? Columns = null)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -63,7 +65,8 @@ public sealed record UiSettings(
             Strings(ui, "rail"),
             Pixels(ui, "sidebarWidth"),
             String(ui, "sidebarView"),
-            Bool(ui, "sidebarAutoReveal") ?? Defaults.SidebarAutoReveal);
+            Bool(ui, "sidebarAutoReveal") ?? Defaults.SidebarAutoReveal,
+            ColumnLayout.FromConfig(config));
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).
