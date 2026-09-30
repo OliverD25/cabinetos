@@ -1,5 +1,7 @@
 using System.Text.Json;
+using CabinetOS.Core.Keys;
 using CabinetOS.Core.Presentation;
+using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
 using CabinetOS.Tests.Support;
 
@@ -108,6 +110,23 @@ public class CompactOverlayTests
         using var config = JsonDocument.Parse("""{"version":1,"ui":{"compactOverlay":""" + json + "}}");
         Assert.True(Schemas.Config.Evaluate(config.RootElement).IsValid);
         Assert.Equal(new CompactSize(520, 700), UiSettings.FromConfig(config.RootElement).CompactOverlay);
+    }
+
+    // The window's key path (ComboFor, then the machine) for the key the command is seeded on: it runs in a pane and with
+    // nothing focused; like every ordinary shortcut it leaves a text box its keys (the address box, a name, the palette's field).
+    [Fact]
+    public void Ctrl_Alt_Up_is_the_combination_the_window_makes_of_the_key_and_the_machine_runs_the_command_for_it_outside_text_boxes()
+    {
+        var machine = new ChordStateMachine(() => 0);
+        machine.SetKeymap(Keymap.From(new KeymapData(1000, [new KeymapBinding("ctrl+alt+up", "view.toggleCompactOverlay", null)], [])));
+        var combo = KeyNames.ComboFor(0x26, KeyModifiers.Ctrl | KeyModifiers.Alt)!.Value;
+        Assert.Equal("ctrl+alt+up", combo.ToString());
+        Assert.Equal("Ctrl+Alt+Up", combo.ToDisplay());
+        foreach (var contexts in new[] { new HashSet<string>(), [KeyContexts.FilesView] })
+        {
+            Assert.Equal("view.toggleCompactOverlay", Assert.IsType<KeyOutcome.Run>(machine.OnKey(combo, contexts)).Command);
+        }
+        Assert.IsType<KeyOutcome.PassThrough>(machine.OnKey(combo, new HashSet<string> { KeyContexts.TextInput }));
     }
 
     [Fact]
