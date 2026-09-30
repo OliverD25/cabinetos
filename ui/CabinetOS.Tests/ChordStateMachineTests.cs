@@ -126,6 +126,43 @@ public class ChordStateMachineTests
     }
 
     [Fact]
+    public void A_first_half_held_down_keeps_the_wait_while_windows_repeats_it()
+    {
+        Assert.IsType<KeyOutcome.Pending>(Press("ctrl+k"));
+        // Windows repeats a held key after its delay (250 to 1000 ms): the repeats are the same press.
+        for (var i = 0; i < 3; i++)
+        {
+            _now += 40;
+            Assert.Equal(Combo("ctrl+k"), Assert.IsType<KeyOutcome.Pending>(_keys.OnKey(Combo("ctrl+k"), Nothing, repeat: true)).First);
+        }
+        Assert.Equal("workspace.switch", Assert.IsType<KeyOutcome.Run>(Press("ctrl+w")).Command);
+        Assert.Null(_keys.PendingFirst);
+    }
+
+    [Fact]
+    public void The_wait_counts_from_the_last_repeat_of_a_first_half_held_down()
+    {
+        var changes = 0;
+        _keys.PendingChanged += () => changes++;
+        Press("ctrl+k");
+        _now += 900;
+        _keys.OnKey(Combo("ctrl+k"), Nothing, repeat: true);
+        _now += 900;
+        Assert.False(_keys.ExpireIfDue());
+        Assert.Equal("keys.open", Assert.IsType<KeyOutcome.Run>(Press("ctrl+s")).Command);
+        // Each repeat restarts the wait, so the window's timer and the status bar start again too.
+        Assert.Equal(3, changes);
+    }
+
+    [Fact]
+    public void A_repeated_key_that_is_not_the_waiting_first_half_still_ends_the_wait()
+    {
+        Press("ctrl+k");
+        Assert.IsType<KeyOutcome.NotBound>(_keys.OnKey(Combo("x"), Nothing, repeat: true));
+        Assert.Null(_keys.PendingFirst);
+    }
+
+    [Fact]
     public void A_chord_that_timed_out_can_be_started_again_and_its_window_counts_from_the_new_press()
     {
         Press("ctrl+k");

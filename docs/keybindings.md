@@ -336,6 +336,11 @@ machine works like this:
      says the chord is not bound.
    If no combination comes within `chord_window_ms`, the wait ends and
    nothing runs.
+   A first half held down is not a second half: Windows repeats a held
+   key after its delay (250 to 1000 ms), and each repeat of the first
+   half keeps the wait and starts `chord_window_ms` again. Until
+   2026-10-01 the first repeat ended the wait as "Ctrl+K Ctrl+K is not
+   bound", so a chord worked or failed by how long Ctrl+K was held.
 3. Back to idle.
 
 No combination is ever both the first half of a chord and a binding on its

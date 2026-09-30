@@ -2437,7 +2437,7 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
-        switch (_keys.OnKey(combo, CurrentContexts()))
+        switch (_keys.OnKey(combo, CurrentContexts(), e.KeyStatus.WasKeyDown))
         {
             case KeyOutcome.Run run:
                 e.Handled = true;

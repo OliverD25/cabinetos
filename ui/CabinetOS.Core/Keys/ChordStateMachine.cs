@@ -53,12 +53,22 @@ public sealed class ChordStateMachine(Func<long> nowMilliseconds)
         ClearPending();
     }
 
-    /// <summary>Handles one combination pressed while <paramref name="contexts"/> hold.</summary>
-    public KeyOutcome OnKey(KeyCombo combo, IReadOnlySet<string> contexts)
+    /// <summary>
+    /// Handles one combination pressed while <paramref name="contexts"/> hold.
+    /// <paramref name="repeat"/> says Windows repeats a key held down.
+    /// </summary>
+    public KeyOutcome OnKey(KeyCombo combo, IReadOnlySet<string> contexts, bool repeat = false)
     {
         ExpireIfDue();
         if (_pending is { } first)
         {
+            if (repeat && combo == first)
+            {
+                // The first half is still held: the same press, not the second half. The wait starts again.
+                _pendingSince = nowMilliseconds();
+                PendingChanged?.Invoke();
+                return new KeyOutcome.Pending(first);
+            }
             ClearPending();
             var chord = Best(combo, contexts, b => b.Keys.IsChord && b.Keys.First == first && b.Keys.Second == combo);
             return chord is null ? new KeyOutcome.NotBound(first, combo) : new KeyOutcome.Run(chord.Command, chord.Keys);
