@@ -62,6 +62,8 @@ public sealed partial class FileContextMenu : UserControl
     ];
 
     private readonly Storyboard _entrance;
+    private double? _rowHeight;
+    private string _described = "";
 
     /// <summary>Creates the menu, hidden.</summary>
     public FileContextMenu()
@@ -87,12 +89,19 @@ public sealed partial class FileContextMenu : UserControl
     /// <summary>Whether the menu is on screen.</summary>
     public bool IsOpen => Visibility == Visibility.Visible;
 
+    /// <summary>The rows' titles as shown ("|" between them), for the snapshot aid's log; empty while closed.</summary>
+    public string Describe() => IsOpen ? _described : "";
+
     /// <summary>
     /// Shows the menu at <paramref name="at"/> (window coordinates), kept inside
     /// the window. From the keyboard, the first row shows the focus rectangle.
+    /// The top row's dropdowns pass their own <paramref name="rowHeight"/>
+    /// (the theme's dropdownRowHeight); the context menu's is menuRowHeight.
     /// </summary>
-    public void Show(Point at, IReadOnlyList<MenuEntry> strip, IReadOnlyList<MenuEntry> items, bool fromKeyboard = false)
+    public void Show(Point at, IReadOnlyList<MenuEntry> strip, IReadOnlyList<MenuEntry> items, bool fromKeyboard = false, double? rowHeight = null)
     {
+        _rowHeight = rowHeight;
+        _described = string.Join("|", items.Where(i => i.Kind == MenuEntryKind.Item).Select(i => i.Title));
         Build(strip, items);
         Visibility = Visibility.Visible;
         Panel.Measure(new Size(Panel.Width, double.PositiveInfinity));
@@ -228,7 +237,7 @@ public sealed partial class FileContextMenu : UserControl
             Content = row,
             IsEnabled = entry.IsEnabled,
             Style = (Style)Resources["MenuItemStyle"],
-            Height = m.MenuRowHeight,
+            Height = _rowHeight ?? m.MenuRowHeight,
             CornerRadius = WindowMetrics.Corners(m.RadiusControl),
             FontSize = m.FontSize,
         };

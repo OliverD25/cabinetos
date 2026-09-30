@@ -234,6 +234,73 @@ public class ShellEndToEndTests
         }
     }
 
+    [Fact]
+    public async Task The_menus_come_from_the_registry_the_crumbs_navigate_and_settings_open_with_the_editor()
+    {
+        // An editor found nowhere: Settings must say so and open nothing else, so no Notepad opens here.
+        var (run, root, data) = Prepare("shell-menus",
+            """{ "version": 1, "ui": { "dualPane": true }, "files": { "editor": { "command": "cabinetos-no-such-editor.exe", "args": [] } } }""");
+        try
+        {
+            var deep = Directory.CreateDirectory(Path.Combine(data, "Users", "dev", "Projects", "fileforge")).FullName;
+            var projects = Path.GetDirectoryName(deep)!;
+            var process = run.Start("menus", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{deep}",
+                // The hamburger, found by its accessible name as a screen reader finds it; Esc closes it.
+                "click:Menu",
+                "wait:300",
+                "shell:menu",
+                "cmd:overlay.close",
+                "shell:menu-closed",
+                "click:Workspace Default",
+                "wait:300",
+                "shell:workspace",
+                "cmd:overlay.close",
+                // A click on a crumb goes there; Back comes back; Ctrl+L makes the row a text box, Esc ends it.
+                $"click:{projects}",
+                "wait:400",
+                "shell:crumb",
+                "click:Back",
+                "wait:400",
+                "shell:back",
+                "cmd:go.toPath",
+                "shell:editing",
+                "cmd:overlay.close",
+                "shell:edited",
+                "cmd:settings.open",
+                "wait:1000",
+                "shot:done"));
+            var logs = await run.FinishAsync("menus", process, "done");
+
+            // The registry's titles, as the palette shows them: a rename there shows here too.
+            State(logs, "menu", state => Assert.Equal(
+                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Browse Plugins and Themes|Open Keyboard Shortcuts",
+                state.GetProperty("menu").GetString()));
+            State(logs, "menu-closed", state => Assert.Equal("", state.GetProperty("menu").GetString()));
+            State(logs, "workspace", state => Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString()));
+            State(logs, "crumb", state =>
+            {
+                Assert.Equal(projects, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
+                Assert.Equal("back - up", state.GetProperty("pane0_nav").GetString());
+            });
+            State(logs, "back", state =>
+            {
+                Assert.Equal(deep, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
+                Assert.Equal("back forward up", state.GetProperty("pane0_nav").GetString());
+            });
+            State(logs, "editing", state => Assert.True(state.GetProperty("pane0_editing").GetBoolean()));
+            State(logs, "edited", state => Assert.False(state.GetProperty("pane0_editing").GetBoolean()));
+            Assert.Contains(logs, l => Message(l) == "notice shown" && Field(l, "text").GetString()!.StartsWith("Cannot edit cabinetos.json", StringComparison.Ordinal));
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
     // "left+width" of the command center, as the shell state logs it.
     private static (double Left, double Width) Center(JsonElement state)
     {

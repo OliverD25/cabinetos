@@ -1320,6 +1320,7 @@ public sealed partial class MainWindow : Window
         RegisterSearchCommands();
         RegisterFindCommands();
         RegisterQuickOpenCommands();
+        RegisterShellCommands();
         RegisterPluginCommands();
         RegisterToolCommands();
         RegisterThemeCommands();

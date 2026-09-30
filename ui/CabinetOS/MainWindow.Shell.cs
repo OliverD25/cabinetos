@@ -1,5 +1,6 @@
 using System.Globalization;
 using CabinetOS.Core.Diagnostics;
+using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Shell;
 using CabinetOS.Services;
 using CabinetOS.Views;
@@ -40,6 +41,7 @@ public sealed partial class MainWindow
             _crumbViews[i].RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         }
         MenuButton.Click += (_, _) => _ = _router.ExecuteAsync("menu.show", trigger: "button");
+        WorkspacePill.Click += (_, _) => ShowWorkspaceMenu(fromKeyboard: false);
         CommandCenter.Click += (_, _) => _ = _router.ExecuteAsync("quickOpen.show", trigger: "button");
         SettingsButton.Click += (_, _) => _ = _router.ExecuteAsync("settings.open", trigger: "button");
         _palette.Opened += UpdatePaletteButton;
@@ -130,6 +132,91 @@ public sealed partial class MainWindow
     private void UpdateDualButton() => DualIcon.Foreground = ThemeResources.Brush(_dual ? "CbAccentBrush" : "CbTextSecondaryBrush");
 
     private void UpdatePaletteButton() => PaletteIcon.Foreground = ThemeResources.Brush(_palette.IsOpen ? "CbAccentBrush" : "CbTextSecondaryBrush");
+
+    private void RegisterShellCommands()
+    {
+        _router.RegisterUiHandler("menu.show", invocation => ShowShellMenu(fromKeyboard: invocation.Trigger is not ("button" or "mouse")));
+        _router.RegisterUiHandler("settings.open", invocation => OpenSettingsAsync(invocation.RequestId));
+    }
+
+    // ----- The hamburger menu and the workspace dropdown -----
+
+    // Glyphs for the hamburger's commands (Segoe Fluent Icons); a command without one shows none.
+    private static string? MenuGlyph(string commandId) => commandId switch
+    {
+        "tab.new" => "\uE710",
+        "file.newFolder" => "\uE8F4",
+        "search.focus" => "\uE721",
+        "go.toPath" => "\uE8AD",
+        "view.toggleSidebar" => "\uE89F",
+        "marketplace.browse" => "\uE719",
+        "keys.open" => "\uE765",
+        _ => null,
+    };
+
+    /// <summary>
+    /// The hamburger (SHELL_REDESIGN.md §1): the common commands with their
+    /// titles and keys as the registry has them now (ShellMenu), in the
+    /// acrylic menu under the button. A click outside or Esc closes it.
+    /// </summary>
+    private void ShowShellMenu(bool fromKeyboard)
+    {
+        if (FileMenu.IsOpen)
+        {
+            FileMenu.Close();
+            return;
+        }
+        var items = ShellMenu.Build(_router.Commands)
+            .Select(item => new MenuEntry(MenuEntryKind.Item, item.Title, MenuGlyph(item.CommandId), item.CommandId, Keys: item.Keys))
+            .ToList();
+        FileMenu.Show(Below(MenuButton), [], items, fromKeyboard, WindowMetrics.Current.DropdownRowHeight);
+        Diag.Info(ShellTarget, "menu shown", new LogField("items", items.Count));
+    }
+
+    /// <summary>
+    /// The workspace pill's dropdown: the workspaces (only "Default" until
+    /// workspaces exist, with its branch), a divider, and "Open folder as
+    /// workspace…", which runs workspace.switch (Ctrl+K W, unchanged).
+    /// </summary>
+    private void ShowWorkspaceMenu(bool fromKeyboard)
+    {
+        if (FileMenu.IsOpen)
+        {
+            FileMenu.Close();
+            return;
+        }
+        var items = new List<MenuEntry>
+        {
+            new(MenuEntryKind.Item, WorkspaceName.Text, "\uE73E", Keys: _repository?.Branch,
+                Tooltip: _repository is { } repository ? repository.Root : "The only workspace until workspaces arrive"),
+            MenuEntry.Separator,
+            new(MenuEntryKind.Item, "Open folder as workspace…", "\uE8DA", "workspace.switch", Keys: KeysOf("workspace.switch")),
+        };
+        FileMenu.Show(Below(WorkspacePillFrame), [], items, fromKeyboard, WindowMetrics.Current.DropdownRowHeight);
+        Diag.Info(ShellTarget, "workspace menu shown", new LogField("branch", _repository?.Branch ?? ""));
+    }
+
+    // The point under a top-row control's left edge, in the window's coordinates: where its dropdown opens.
+    private static Point Below(FrameworkElement trigger) =>
+        trigger.TransformToVisual(null).TransformPoint(new Point(0, trigger.ActualHeight + 4));
+
+    /// <summary>
+    /// Settings (Ctrl+,; SHELL_REDESIGN.md §5): cabinetos.json opens for
+    /// editing with the program F4 uses (files.editor, the type's edit verb,
+    /// or Notepad; the core picks). The core says where the file is.
+    /// </summary>
+    private async Task OpenSettingsAsync(string requestId)
+    {
+        switch (await RequestSafelyAsync(new GetConfigRequest { Id = requestId }))
+        {
+            case ConfigReply { Path.Length: > 0 } config:
+                await EditPathAsync(config.Path, "cabinetos.json", requestId);
+                break;
+            case ErrorReply error:
+                ShowNotice($"Cannot find cabinetos.json: {error.Message}", isError: true);
+                break;
+        }
+    }
 
     // ----- The workspace pill -----
 
@@ -257,6 +344,7 @@ public sealed partial class MainWindow
             new("quick_open_rows", string.Join("|", _quickOpen.Rows.Take(10).Select(r => r.Folder.Length > 0 ? $"{r.Name} ({r.Folder})" : r.Name))),
             new("quick_open_highlight", _quickOpen.Highlight),
             new("palette_open", _palette.IsOpen),
+            new("menu", FileMenu.Describe()),
             new("branch", WorkspaceBranch.Visibility == Visibility.Visible ? WorkspaceBranch.Text : ""),
             new("active_pane", _active),
         };
@@ -266,6 +354,7 @@ public sealed partial class MainWindow
             fields.Add(new($"pane{i}_path", pane.Path));
             fields.Add(new($"pane{i}_crumbs", _crumbViews[i].Text));
             fields.Add(new($"pane{i}_nav", _crumbViews[i].NavText));
+            fields.Add(new($"pane{i}_editing", _crumbViews[i].IsEditing));
             fields.Add(new($"pane{i}_shown", pane.ShownCount));
             fields.Add(new($"pane{i}_count", pane.Count));
             fields.Add(new($"pane{i}_selected", string.Join("|", pane.SelectedNames().Take(20))));
