@@ -154,6 +154,8 @@ public sealed partial class ToolDock : UserControl
             Padding = new Thickness(10, 0, 4, 0),
             CornerRadius = WindowMetrics.Corners(m.RadiusControl),
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            AllowFocusOnInteraction = false,
+            IsTabStop = false,
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(select, $"{tab.Profile}, session {tab.SessionId}");
         select.Click += (_, _) => Run("terminal.show", CommandArgs.Object(("session", tab.SessionId)));
@@ -168,6 +170,8 @@ public sealed partial class ToolDock : UserControl
             Padding = new Thickness(0),
             Margin = new Thickness(0, 0, 4, 0),
             VerticalAlignment = VerticalAlignment.Center,
+            AllowFocusOnInteraction = false,
+            IsTabStop = false,
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(close, $"Close {tab.Profile}");
         ToolTipService.SetToolTip(close, "Close this shell");

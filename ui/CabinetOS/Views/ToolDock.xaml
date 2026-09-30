@@ -49,7 +49,9 @@
                         x:Name="NewButton"
                         Grid.Column="1"
                         Padding="0"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.Name="New terminal"
+                        IsTabStop="False"
                         Style="{StaticResource CbDockTabButtonStyle}"
                         ToolTipService.ToolTip="New terminal">
                         <FontIcon FontSize="12" Glyph="&#xE710;" />
@@ -60,7 +62,9 @@
                         Width="20"
                         MinWidth="20"
                         Padding="0"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.Name="Other shells"
+                        IsTabStop="False"
                         Style="{StaticResource CbDockTabButtonStyle}"
                         ToolTipService.ToolTip="Other shells">
                         <FontIcon FontSize="9" Glyph="&#xE70D;" />
@@ -85,7 +89,9 @@
                         Height="24"
                         MinWidth="24"
                         Padding="0"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.Name="Hide the terminal"
+                        IsTabStop="False"
                         Style="{StaticResource CbDockTabButtonStyle}"
                         ToolTipService.ToolTip="Hide the terminal">
                         <FontIcon FontSize="9" Glyph="&#xE711;" />

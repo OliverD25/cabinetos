@@ -164,6 +164,8 @@ public sealed partial class ActivityRail : UserControl
         content.Children.Add(new Grid { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Children = { icon } });
         content.Children.Add(dot);
         content.Children.Add(spinner);
+        // A click never takes the keyboard (the pane keeps it, so Tab still switches panes). The button stays a tab stop:
+        // Up, Down and Shift+Up/Down work on it once the keyboard is walked here, and FocusButton needs it focusable.
         var button = new Button
         {
             Style = (Style)Application.Current.Resources["CbSubtleButtonStyle"],
@@ -171,6 +173,7 @@ public sealed partial class ActivityRail : UserControl
             Height = 36,
             MinWidth = 36,
             HorizontalAlignment = HorizontalAlignment.Center,
+            AllowFocusOnInteraction = false,
             Content = content,
             Tag = rail,
         };

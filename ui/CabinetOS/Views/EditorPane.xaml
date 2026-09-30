@@ -66,7 +66,9 @@
                                 MinWidth="20"
                                 Margin="4,0,0,0"
                                 Padding="0"
+                                AllowFocusOnInteraction="False"
                                 AutomationProperties.Name="Close"
+                                IsTabStop="False"
                                 Style="{StaticResource CbDockTabButtonStyle}"
                                 ToolTipService.ToolTip="Close: back to the folder">
                                 <FontIcon FontSize="8" Glyph="&#xE711;" />
@@ -101,9 +103,11 @@
                             x:Name="TerminalButton"
                             Height="26"
                             Padding="10,0"
+                            AllowFocusOnInteraction="False"
                             Background="{ThemeResource CbPillFillBrush}"
                             Content="Open in Terminal"
                             FontSize="12"
+                            IsTabStop="False"
                             Style="{StaticResource CbDockTabButtonStyle}"
                             ToolTipService.ToolTip="A shell in this file's folder" />
                     </StackPanel>

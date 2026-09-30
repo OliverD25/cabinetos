@@ -34,6 +34,7 @@
                     MinWidth="0"
                     AllowFocusOnInteraction="False"
                     AutomationProperties.Name="Back"
+                    IsTabStop="False"
                     Style="{StaticResource CbSubtleButtonStyle}"
                     ToolTipService.ToolTip="Back (Alt+Left)">
                     <FontIcon FontSize="10" Glyph="&#xE72B;" />
@@ -45,6 +46,7 @@
                     MinWidth="0"
                     AllowFocusOnInteraction="False"
                     AutomationProperties.Name="Forward"
+                    IsTabStop="False"
                     Style="{StaticResource CbSubtleButtonStyle}"
                     ToolTipService.ToolTip="Forward (Alt+Right)">
                     <FontIcon FontSize="10" Glyph="&#xE72A;" />
@@ -56,6 +58,7 @@
                     MinWidth="0"
                     AllowFocusOnInteraction="False"
                     AutomationProperties.Name="Up"
+                    IsTabStop="False"
                     Style="{StaticResource CbSubtleButtonStyle}"
                     ToolTipService.ToolTip="Up (Backspace)">
                     <FontIcon FontSize="10" Glyph="&#xE74A;" />

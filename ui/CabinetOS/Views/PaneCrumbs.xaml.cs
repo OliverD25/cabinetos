@@ -157,6 +157,7 @@ public sealed partial class PaneCrumbs : UserControl
                 MinWidth = 0,
                 Padding = new Thickness(4, 0, 4, 0),
                 AllowFocusOnInteraction = false,
+                IsTabStop = false,
                 Foreground = ThemeResources.Brush(last ? "CbTextPrimaryBrush" : "CbCrumbTextBrush"),
                 Tag = segment.Path,
             };

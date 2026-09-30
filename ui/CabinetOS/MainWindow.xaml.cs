@@ -655,7 +655,8 @@ public sealed partial class MainWindow : Window
                 && peer.GetName() == name
                 && peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke) is Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider invoke)
             {
-                button.Focus(FocusState.Keyboard);
+                // Best effort: the window's chrome buttons refuse the keyboard (IsTabStop off, as under a real click), and the press goes on.
+                _ = button.Focus(FocusState.Keyboard);
                 invoke.Invoke();
                 return;
             }

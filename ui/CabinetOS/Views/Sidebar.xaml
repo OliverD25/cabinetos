@@ -31,6 +31,7 @@
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="vm:PinnedItem">
                             <Button
+                                AllowFocusOnInteraction="False"
                                 AutomationProperties.Name="{x:Bind Name}"
                                 Click="OnPinnedClick"
                                 RightTapped="OnPinnedRightTapped"
@@ -81,6 +82,7 @@
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="vm:DriveItem">
                                 <Button
+                                    AllowFocusOnInteraction="False"
                                     AutomationProperties.Name="{x:Bind Name}"
                                     Click="OnDriveClick"
                                     Style="{StaticResource CbSidebarRowButtonStyle}"

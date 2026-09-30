@@ -37,7 +37,9 @@
                             x:Name="MenuButton"
                             Width="36"
                             Height="36"
+                            AllowFocusOnInteraction="False"
                             AutomationProperties.Name="Menu"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             ToolTipService.ToolTip="Menu">
                             <Grid>
@@ -72,8 +74,10 @@
                                 x:Name="WorkspacePill"
                                 Height="24"
                                 Padding="8,0"
+                                AllowFocusOnInteraction="False"
                                 AutomationProperties.Name="Workspace"
                                 CornerRadius="4"
+                                IsTabStop="False"
                                 Style="{StaticResource CbSubtleButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Ellipse
@@ -120,8 +124,10 @@
                                 HorizontalAlignment="Stretch"
                                 VerticalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
+                                AllowFocusOnInteraction="False"
                                 AutomationProperties.Name="Quick Open"
                                 CornerRadius="3"
+                                IsTabStop="False"
                                 Style="{StaticResource CbSubtleButtonStyle}"
                                 ToolTipService.ToolTip="Quick Open (Ctrl+P)">
                                 <Grid ColumnSpacing="8">
@@ -166,7 +172,9 @@
                             x:Name="DualButton"
                             Width="36"
                             Height="36"
+                            AllowFocusOnInteraction="False"
                             AutomationProperties.Name="Toggle dual pane"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             ToolTipService.ToolTip="Toggle dual pane (Ctrl+Shift+D)">
                             <FontIcon
@@ -178,7 +186,9 @@
                             x:Name="TerminalButton"
                             Width="36"
                             Height="36"
+                            AllowFocusOnInteraction="False"
                             AutomationProperties.Name="Toggle terminal"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             ToolTipService.ToolTip="Toggle terminal (Ctrl+`)">
                             <FontIcon
@@ -190,7 +200,9 @@
                             x:Name="MarketplaceButton"
                             Width="36"
                             Height="36"
+                            AllowFocusOnInteraction="False"
                             AutomationProperties.Name="Marketplace"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             ToolTipService.ToolTip="Marketplace (Ctrl+Shift+X)">
                             <FontIcon
@@ -202,7 +214,9 @@
                             x:Name="PaletteButton"
                             Width="36"
                             Height="36"
+                            AllowFocusOnInteraction="False"
                             AutomationProperties.Name="Command palette"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             ToolTipService.ToolTip="Command palette (Ctrl+Shift+P)">
                             <FontIcon
@@ -219,7 +233,9 @@
                             x:Name="SettingsButton"
                             Width="36"
                             Height="36"
+                            AllowFocusOnInteraction="False"
                             AutomationProperties.Name="Settings"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             ToolTipService.ToolTip="Settings (Ctrl+,)">
                             <FontIcon FontSize="14" Glyph="&#xE713;" />
@@ -428,6 +444,7 @@
                             AutomationProperties.Name="Open crash folder"
                             Background="{ThemeResource CbPillFillBrush}"
                             CornerRadius="10"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             Visibility="Collapsed">
                             <TextBlock
@@ -445,6 +462,7 @@
                             AllowFocusOnInteraction="False"
                             Background="{ThemeResource CbPillFillBrush}"
                             CornerRadius="10"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             Visibility="Collapsed">
                             <TextBlock
@@ -464,6 +482,7 @@
                             AllowFocusOnInteraction="False"
                             Background="{ThemeResource CbPillFillBrush}"
                             CornerRadius="10"
+                            IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
                             Visibility="Collapsed">
                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -501,6 +520,7 @@
                         AutomationProperties.Name="Show the transfer"
                         Background="{ThemeResource CbPillFillBrush}"
                         CornerRadius="10"
+                        IsTabStop="False"
                         Style="{StaticResource CbSubtleButtonStyle}"
                         ToolTipService.ToolTip="Show the transfer"
                         Visibility="Collapsed">
@@ -542,9 +562,11 @@
                         Height="18"
                         MinWidth="0"
                         Padding="6,1"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.Name="Command palette"
                         Background="{ThemeResource CbHoverFillBrush}"
                         CornerRadius="3"
+                        IsTabStop="False"
                         Style="{StaticResource CbSubtleButtonStyle}">
                         <TextBlock
                             FontFamily="{StaticResource CbMonoFont}"
