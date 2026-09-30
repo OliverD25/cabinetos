@@ -1,6 +1,7 @@
 using System.Reflection;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Platform;
+using CabinetOS.Core.Protocol;
 using CabinetOS.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -46,6 +47,9 @@ public static class Program
 
         Diag.Info("cabinetos_ui::app", "starting",
             new LogField("version", Version), new LogField("os", os.ToString()), new LogField("pid", Environment.ProcessId));
+        // Beside WinUI's own start: the protocol's tables (not on the pipe's reader at the core's first reply), and the core.
+        _ = Task.Run(MessageCodec.Warm);
+        CoreSession.StartEarly();
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(_ignored =>
         {

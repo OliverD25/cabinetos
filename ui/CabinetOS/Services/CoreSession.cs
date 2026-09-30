@@ -14,6 +14,9 @@ public sealed class CoreSession : ICoreChannel
 {
     private const string Target = "cabinetos_ui::session";
 
+    // The core started at process start (StartEarly), taken by the first StartAsync.
+    private static Task<CoreConnection?>? s_early;
+
     private CoreConnection? _connection;
     private bool _stopping;
 
@@ -33,24 +36,27 @@ public sealed class CoreSession : ICoreChannel
     public int? CoreProcessId => _connection?.Process is { HasExited: false } process ? process.Id : null;
 
     /// <summary>
+    /// Finds, starts and connects the core on a background thread at process start, so it is ready
+    /// when the window has been built: the window takes about a second to build, the core about
+    /// 100 ms to open its pipe (docs/log/2026-10-01/speed-review.md). The first <see cref="StartAsync"/>
+    /// takes the connection, or the failure; a core that was not found is looked for again there,
+    /// which reports where it looked.
+    /// </summary>
+    public static void StartEarly() => s_early = Task.Run(async () =>
+    {
+        var exe = CoreLauncher.Find(AppContext.BaseDirectory, Environment.GetEnvironmentVariable, File.Exists);
+        return exe is null ? null : await CoreLauncher.StartAsync(exe, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+    });
+
+    /// <summary>
     /// Finds and starts the core, connects and says hello. Call it on the UI
     /// thread: the event pump then continues there.
     /// </summary>
     /// <exception cref="CoreLaunchException">No core was found, or it did not start.</exception>
     public async Task StartAsync()
     {
-        var directory = AppContext.BaseDirectory;
-        // Probing the candidate paths is file I/O: off the UI thread (brief §1).
-        var exe = await Task.Run(() => CoreLauncher.Find(directory, Environment.GetEnvironmentVariable, File.Exists));
-        if (exe is null)
-        {
-            var looked = string.Join(Environment.NewLine, await Task.Run(() => CoreLauncher.Candidates(directory, Environment.GetEnvironmentVariable, File.Exists)));
-            throw new CoreLaunchException(
-                $"CabinetOS could not find {CoreLauncher.CoreExeName}. It looked in:{Environment.NewLine}{looked}{Environment.NewLine}{Environment.NewLine}" +
-                $"Build the core (cargo build -p cabinetos-core in core\\), or set {CoreLauncher.CoreExeEnv} to its full path.");
-        }
-
-        var connection = await CoreLauncher.StartAsync(exe, TimeSpan.FromSeconds(10));
+        var early = Interlocked.Exchange(ref s_early, null);
+        var connection = (early is null ? null : await early) ?? await LaunchAsync();
         try
         {
             var welcome = await connection.Client.HelloAsync();
@@ -66,6 +72,22 @@ public sealed class CoreSession : ICoreChannel
         }
         _connection = connection;
         _ = PumpAsync(connection);
+    }
+
+    private static async Task<CoreConnection> LaunchAsync()
+    {
+        var directory = AppContext.BaseDirectory;
+        // Probing the candidate paths is file I/O: off the UI thread (brief §1).
+        var exe = await Task.Run(() => CoreLauncher.Find(directory, Environment.GetEnvironmentVariable, File.Exists));
+        if (exe is null)
+        {
+            var looked = string.Join(Environment.NewLine, await Task.Run(() => CoreLauncher.Candidates(directory, Environment.GetEnvironmentVariable, File.Exists)));
+            throw new CoreLaunchException(
+                $"CabinetOS could not find {CoreLauncher.CoreExeName}. It looked in:{Environment.NewLine}{looked}{Environment.NewLine}{Environment.NewLine}" +
+                $"Build the core (cargo build -p cabinetos-core in core\\), or set {CoreLauncher.CoreExeEnv} to its full path.");
+        }
+
+        return await CoreLauncher.StartAsync(exe, TimeSpan.FromSeconds(10));
     }
 
     /// <inheritdoc/>

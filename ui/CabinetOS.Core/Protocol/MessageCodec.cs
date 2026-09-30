@@ -108,6 +108,17 @@ public static class MessageCodec
         ["shell_menu"] = ProtocolJson.Default.ShellMenuReply,
     }.ToFrozenDictionary();
 
+    /// <summary>
+    /// Builds the codec's tables and the JSON metadata they hold, and encodes one request. The first reply would
+    /// otherwise build them on the pipe's reader, which held the core's first answer back by about 140 ms at start
+    /// (docs/log/2026-10-01/speed-review.md). The window calls it on a background thread while it builds its window.
+    /// </summary>
+    public static void Warm()
+    {
+        _ = Known.Count;
+        _ = Encode(new HelloRequest(0, "warm"));
+    }
+
     /// <summary>The request as UTF-8 JSON, <c>id</c> and <c>type</c> first.</summary>
     public static byte[] Encode(CoreRequest request) =>
         JsonSerializer.SerializeToUtf8Bytes(request, request.GetType(), ProtocolJson.Default);

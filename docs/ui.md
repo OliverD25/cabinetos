@@ -380,6 +380,15 @@ a dialog with the places it looked and the core's last error lines, with
 starts a new one, at most three times a minute, and lists both folders
 again.
 
+The first core is started as soon as the window's process starts, on a
+background thread, while WinUI builds the window (about a second on the
+development PC). The protocol's JSON tables are built on another
+background thread at the same moment. So when the window is built, the
+core has its pipe open and the first answer is not held up: the start to
+both folders shown went from about 1.7 s to about 1.3 s in the speed
+review of 2026-10-01 ([log/2026-10-01/speed-review.md](log/2026-10-01/speed-review.md)).
+The window says `hello` once it is built, as before.
+
 Closing the window hides it at once, sends `shutdown`, closes the pipe
 (the core waits up to 2 s for open connections before it exits, so keeping
 it open would cost that), and waits up to 2 s for the process. A core that

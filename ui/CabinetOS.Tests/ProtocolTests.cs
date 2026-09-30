@@ -585,6 +585,21 @@ public class ProtocolTests
         Assert.ThrowsAny<JsonException>(() => MessageCodec.Decode("[1,2]"u8));
     }
 
+    /// <summary>
+    /// The window warms the codec on a background thread at process start (the speed review of 2026-10-01): it
+    /// may run beside the pipe's reader, and the reader's first reply decodes as it would without it.
+    /// </summary>
+    [Fact]
+    public async Task Warming_the_codec_beside_the_first_decode_changes_nothing_it_decodes()
+    {
+        var warming = Enumerable.Range(0, 4).Select(_ => Task.Run(MessageCodec.Warm)).ToArray();
+        var message = MessageCodec.Decode("""{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"welcome","protocol_version":15,"core_version":"0.1.0"}"""u8);
+        await Task.WhenAll(warming);
+
+        Assert.Equal(new WelcomeReply(15, "0.1.0"), message.Body);
+        Assert.False(message.IsEvent);
+    }
+
     [Fact]
     public void Fields_may_come_before_id_and_type()
     {
