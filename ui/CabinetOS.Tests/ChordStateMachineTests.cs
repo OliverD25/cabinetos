@@ -29,6 +29,7 @@ public class ChordStateMachineTests
             new KeymapBinding("f2", "test.everywhere", null),
             new KeymapBinding("f2", "test.inPalette", KeyContexts.PaletteOpen),
             new KeymapBinding("ctrl+k v", "editor.openMarkdownPreview", KeyContexts.FilesView),
+            new KeymapBinding("ctrl+tab", "tab.next", KeyContexts.FilesView),
         ],
         ["palette.show", "overlay.close", "keys.open"])));
     }
@@ -178,6 +179,29 @@ public class ChordStateMachineTests
         Assert.Equal("keys.open", Assert.IsType<KeyOutcome.Run>(Press("ctrl+s")).Command);
         // Each repeat restarts the wait, so the window's timer and the status bar start again too.
         Assert.Equal(3, changes);
+    }
+
+    [Fact]
+    public void A_key_held_down_runs_its_command_once_unless_the_command_is_meant_to_repeat()
+    {
+        // The first press runs; Windows' repeats (WasKeyDown) of a toggle run nothing and go nowhere else.
+        Assert.Equal("palette.show", Assert.IsType<KeyOutcome.Run>(Press("ctrl+shift+p")).Command);
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.Equal("palette.show", Assert.IsType<KeyOutcome.Held>(_keys.OnKey(Combo("ctrl+shift+p"), Palette, repeat: true)).Command);
+            Assert.Equal("view.toggleSidebar", Assert.IsType<KeyOutcome.Held>(_keys.OnKey(Combo("ctrl+b"), Nothing, repeat: true)).Command);
+            Assert.Equal("tab.next", Assert.IsType<KeyOutcome.Run>(_keys.OnKey(Combo("ctrl+tab"), Files, repeat: true)).Command);
+        }
+        // A key nobody bound repeats as it always did: a letter typed, an arrow in the list.
+        Assert.IsType<KeyOutcome.PassThrough>(_keys.OnKey(Combo("down"), Files, repeat: true));
+        Assert.IsType<KeyOutcome.PassThrough>(_keys.OnKey(Combo("x"), Typing, repeat: true));
+    }
+
+    [Fact]
+    public void The_commands_that_repeat_are_moving_through_tabs_rows_and_folders()
+    {
+        Assert.Equal(new[] { "edit.toggleSelection", "go.back", "go.forward", "go.up", "tab.next", "tab.previous" },
+            ChordStateMachine.RepeatingCommands.Order(StringComparer.Ordinal));
     }
 
     [Fact]

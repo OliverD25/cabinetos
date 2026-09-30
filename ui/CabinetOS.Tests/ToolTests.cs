@@ -285,6 +285,8 @@ public class ToolTests
         Assert.Contains("\"192\":\"backquote\"", script);
         Assert.Contains("\"80\":\"p\"", script);
         Assert.Contains("'key'", script);
+        // A key held down is passed on once (docs/keybindings.md, "Keys held down").
+        Assert.Contains("if (!event.repeat)", script);
         // The keys as a JSON array (the serializer writes "+" as +, which is "+" in JavaScript too).
         var start = script.IndexOf("new Set(", StringComparison.Ordinal) + "new Set(".Length;
         var keys = JsonSerializer.Deserialize<string[]>(script[start..script.IndexOf(");", start, StringComparison.Ordinal)]);

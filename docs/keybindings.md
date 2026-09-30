@@ -359,6 +359,20 @@ No combination is ever both the first half of a chord and a binding on its
 own (the core refuses such a keymap, below). So in step 1 the UI never has to
 guess whether to run a command now or wait.
 
+**Keys held down.** Windows repeats a key that is held down. A bound key
+runs its command once per press, and its repeats run nothing and go
+nowhere else. So holding Ctrl+Shift+P, Ctrl+` or Ctrl+B a moment too long
+no longer opens and closes the palette, the terminal or the sidebar again
+and again. Six commands are meant to repeat, and they run on every repeat:
+`tab.next` and `tab.previous` (Ctrl+Tab, Ctrl+Shift+Tab), `edit.toggleSelection`
+(Insert marks the row and moves the cursor down), and `go.back`,
+`go.forward` and `go.up` (Alt+Left, Alt+Right, Alt+Up move through folders
+as the arrows move through rows). The list is `ChordStateMachine.RepeatingCommands`
+in the UI. A key nobody bound repeats as before: a letter typed into a box,
+an arrow in the list. A key a web page passes back to the window (the
+terminal, a tool) is passed once, whatever its command. This is the rule
+since 2026-10-01.
+
 **Contexts.** A binding with a `when` applies only while that context holds;
 a binding without one applies everywhere. When both kinds match the same
 keys, the one with the `when` wins: it is the more specific. The core treats

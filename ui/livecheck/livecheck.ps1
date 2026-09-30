@@ -1816,7 +1816,7 @@ $configAfter = ConfigUi
 # ----- keys (docs/log/2026-10-01/keys-audit-report.md) -----
 # The states where a key did nothing or the wrong thing until the keys audit of 2026-10-01, with real keys: Tab and Enter in
 # a dialog, Tab into a tool tab in the other pane, Tab in the theme picker, Ctrl+K held until Windows repeats it before a
-# chord's second half, and the pane's keys in its find box. Then the window's own keyboard layout goes to Ukrainian for
+# chord's second half, a toggle held down, and the pane's keys in its find box. Then the window's own keyboard layout goes to Ukrainian for
 # Ctrl+T and Ctrl+W pressed as physical keys, and back. The cursor rests on a folder before each overlay, so a key that
 # escaped one would open a folder, never a file in its program.
 function CommandCount([string]$command) { @(ShellLines 'command executed' | Where-Object { $_.fields.command -eq $command }).Count }
@@ -1879,6 +1879,13 @@ $notBound = NoticeCount 'is not bound'
 [Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 700
 "keys: the held Ctrl+K and Ctrl+T ran the picker, and no chord was called not bound: $((CommandCount 'preferences.selectColorTheme') -gt $pickers -and (NoticeCount 'is not bound') -eq $notBound)"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+
+Step "keys: Ctrl+B held until Windows repeats it: the sidebar toggles once; Ctrl+B again puts it back"
+$toggles = CommandCount 'view.toggleSidebar'
+[Live]::Hold($VK.Ctrl, $VK.B, 6, 40); Start-Sleep -Milliseconds 600
+$heldToggles = (CommandCount 'view.toggleSidebar') - $toggles
+[Live]::Press($VK.Ctrl, $VK.B); Start-Sleep -Milliseconds 600
+"keys: six key-downs of a held Ctrl+B ran view.toggleSidebar $heldToggles time(s): $($heldToggles -eq 1)"
 
 # The find box is the pane's (keybindings.md, "Contexts"): the pane's keys that type nothing act on the pane from it, and
 # the box keeps its typing and editing keys. The other pane goes to a folder of the fixture first, for F5's copy.

@@ -20,6 +20,12 @@ public abstract record KeyOutcome
 
     /// <summary>No binding: the key goes on to whatever has focus.</summary>
     public sealed record PassThrough : KeyOutcome;
+
+    /// <summary>
+    /// Windows repeats a key held down, and <paramref name="Command"/> runs once per press
+    /// (<see cref="ChordStateMachine.RepeatingCommands"/>): nothing runs, the key is consumed.
+    /// </summary>
+    public sealed record Held(string Command) : KeyOutcome;
 }
 
 /// <summary>What the status bar says about a chord's second half that ran nothing (docs/keybindings.md, "Chords").</summary>
@@ -105,6 +111,15 @@ public sealed class ChordStateMachine(Func<long> nowMilliseconds)
 {
     private static readonly KeyOutcome.PassThrough PassThroughOutcome = new();
 
+    /// <summary>
+    /// The commands a key held down runs again on each of Windows' repeats (docs/keybindings.md, "Keys held
+    /// down"): the next and the previous tab, Insert (it marks the row and moves the cursor down), and Back,
+    /// Forward and Up, which move through folders as the arrows move through rows. Any other command runs once
+    /// per press, so a toggle held a moment too long does not flicker.
+    /// </summary>
+    public static readonly IReadOnlySet<string> RepeatingCommands = FrozenSet.ToFrozenSet(
+        ["tab.next", "tab.previous", "edit.toggleSelection", "go.back", "go.forward", "go.up"], StringComparer.Ordinal);
+
     private Keymap _keymap = Keymap.Empty;
     private KeyCombo? _pending;
     private long _pendingSince;
@@ -157,7 +172,13 @@ public sealed class ChordStateMachine(Func<long> nowMilliseconds)
         }
 
         var single = Best(combo, contexts, b => !b.Keys.IsChord && b.Keys.First == combo);
-        return single is null ? PassThroughOutcome : new KeyOutcome.Run(single.Command, single.Keys);
+        if (single is null)
+        {
+            return PassThroughOutcome;
+        }
+        return repeat && !RepeatingCommands.Contains(single.Command)
+            ? new KeyOutcome.Held(single.Command)
+            : new KeyOutcome.Run(single.Command, single.Keys);
     }
 
     /// <summary>

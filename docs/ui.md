@@ -154,7 +154,8 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   into a Markdown Preview in the other pane (its page must have the
   keyboard), Tab and Enter in the theme picker (the theme applies, nothing
   opens in the pane), Ctrl+K held until Windows repeats it and then Ctrl+T
-  (the picker opens). Then the find box, with the other pane on a folder
+  (the picker opens), Ctrl+B held for six key-downs (the sidebar toggles
+  once). Then the find box, with the other pane on a folder
   of the fixture: a letter filters, Enter finds, F5 copies the cursor row
   (the file must be in the other folder), Ctrl+A selects the box's text
   (the next letter replaces it), Ctrl+T and Ctrl+W open and close a tab,
@@ -478,6 +479,9 @@ Every key press goes first to the window (`PreviewKeyDown`), then to the
   `textInput`, so F5 or Ctrl+T there acts on the pane. The rename box sits
   inside the pane but is text input only: F5 does not start a copy while a
   name is being typed.
+- A key held down runs its command once: Windows' repeats run nothing,
+  except for the commands meant to repeat (Ctrl+Tab, Ctrl+Shift+Tab,
+  Insert, Alt+Left, Alt+Right, Alt+Up; keybindings.md, "Keys held down").
 - A key nobody bound goes on to the focused control. In a pane, that is
   the list keys every Windows list has (the rows marked "the pane" below);
   they are not commands.

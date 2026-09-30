@@ -98,7 +98,10 @@
     const keys = combo(event);
     if (keys && passKeys.has(keys)) {
       event.preventDefault();
-      post({ type: 'key', keys });
+      // The keys passed on are the window's toggles and ways out: a key held down runs its command once.
+      if (!event.repeat) {
+        post({ type: 'key', keys });
+      }
       return false;
     }
     // Ctrl+C copies when text is selected, as in Windows Terminal; otherwise it goes to the shell.
@@ -267,7 +270,9 @@
     const keys = combo(event);
     if (keys && passKeys.has(keys)) {
       event.preventDefault();
-      post({ type: 'key', keys });
+      if (!event.repeat) {
+        post({ type: 'key', keys });
+      }
     }
   });
 

@@ -43,7 +43,10 @@ public static class ToolKeyScript
                 if (keys.has(combo)) {
                   event.preventDefault();
                   event.stopImmediatePropagation();
-                  webview.postMessage(JSON.stringify({ type: 'key', keys: combo }));
+                  // The keys passed on are the window's toggles and ways out: a key held down runs its command once.
+                  if (!event.repeat) {
+                    webview.postMessage(JSON.stringify({ type: 'key', keys: combo }));
+                  }
                 }
               }, true);
             })();
