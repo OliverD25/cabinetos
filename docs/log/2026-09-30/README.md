@@ -29,10 +29,17 @@ is a plan paragraph with its commits.
 | [phase-12-tabs-report.md](phase-12-tabs-report.md) | shell, Sonnet | Phase 12: tabs per pane | 725328f to 80c204b; 676 UI tests; live check section 12 all True |
 | [phase-14a-core-report.md](phase-14a-core-report.md) | core, Opus | the public index as the default; `ui.tabs`; Phase 14a, protocol 13 | 349a59f, 77c1169, 46c644c to 4feb72f; 700 core tests |
 | [phase-14-window-report.md](phase-14-window-report.md) | shell, Sonnet | Phase 14: the window's parts | 401d439 to d6e2de7; 767 UI tests; live check section 14's drag True |
+| [phase-14b-e-extension-report.md](phase-14b-e-extension-report.md) | extension, Sonnet | the two core additions; Phase 14b to 14e, the Agent extension | 3887a4c to 9e8d8e5; 722 core tests, 90 plugin tests |
 
-Reports still to come when this file was first written: the extension
-itself (Phase 14b to 14e), the rail and the sidebar (Phase 13), and the
-scroll-gap investigation.
+The extension agent's earlier per-item reports (item 2b, item 3) never
+reached the planning session; its final hand-back above carries the run's
+summary, and the commit messages and [extensions/agent.md](../../extensions/agent.md)
+hold the rest. A request to send them again was refused twice by an API
+safeguard, so the lesson is recorded: reports are handed back at the time,
+never asked for again word for word.
+
+Reports still to come when this file was last written: the rail and the
+sidebar (Phase 13), and the scroll-gap investigation.
 
 Other records of the night: the live-check runs in
 [../2026-09-28/live-check.md](../2026-09-28/live-check.md) (run 5 and the
