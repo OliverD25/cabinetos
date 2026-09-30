@@ -113,6 +113,14 @@ public static class KeyNames
     public static string? FromVirtualKey(int virtualKey) =>
         VirtualKeys.TryGetValue(virtualKey, out var name) ? name : null;
 
+    /// <summary>
+    /// The virtual-key code that makes the key name <paramref name="name"/>
+    /// (a digit's is the main keyboard's, not the keypad's), or null for a
+    /// name the grammar does not have.
+    /// </summary>
+    public static int? VirtualKeyFor(string name) =>
+        VirtualKeys.Where(pair => pair.Value == name).Select(pair => (int?)pair.Key).Min();
+
     /// <summary>Every virtual-key code the grammar names, and its name (for the pages' key scripts).</summary>
     public static IReadOnlyDictionary<int, string> VirtualKeyNames => VirtualKeys;
 

@@ -10,3 +10,8 @@ GetClassName
 GetCurrentThreadId
 GetWindowRect
 ClientToScreen
+FindWindowEx
+PostMessage
+GetKeyboardState
+SetKeyboardState
+MapVirtualKey

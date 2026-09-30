@@ -83,6 +83,23 @@ public class KeyTests
     [InlineData(0x65, "5")]
     public void Virtual_keys_map_to_grammar_names(int virtualKey, string name) => Assert.Equal(name, KeyNames.FromVirtualKey(virtualKey));
 
+    [Theory]
+    [InlineData("t", 0x54)]
+    [InlineData("backquote", 0xC0)]
+    [InlineData("tab", 0x09)]
+    [InlineData("f10", 0x79)]
+    [InlineData("numpaddivide", 0x6F)]
+    // The main keyboard's digit, not the keypad's.
+    [InlineData("1", 0x31)]
+    public void A_key_name_gives_back_the_virtual_key_that_makes_it(string name, int virtualKey)
+    {
+        Assert.Equal(virtualKey, KeyNames.VirtualKeyFor(name));
+        Assert.Equal(name, KeyNames.FromVirtualKey(virtualKey));
+    }
+
+    [Fact]
+    public void A_name_the_grammar_does_not_have_gives_no_virtual_key() => Assert.Null(KeyNames.VirtualKeyFor("nope"));
+
     [Fact]
     public void A_keypad_key_makes_a_combination_the_keymap_can_hold()
     {

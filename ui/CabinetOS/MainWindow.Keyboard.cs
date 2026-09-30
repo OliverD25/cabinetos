@@ -191,6 +191,59 @@ public sealed partial class MainWindow
             && y >= top + (bounds.Y * scale) && y < top + (bounds.Bottom * scale);
     }
 
+    // The snapshot aid's key:<keys> step. Each combination goes the way a real key comes: as key messages to the
+    // window's input window, so WinUI routes it as it routes a real one (the window's PreviewKeyDown, the focused
+    // control, Tab's move between controls, a dialog's buttons). The modifiers are down in the UI thread's key state
+    // while the messages are handled, as held keys would be, so the window need not be in front and no key reaches
+    // another program. "key:ctrl+k ctrl+t" presses a chord's two halves.
+    private async Task PressKeysForSnapshotAsync(string keys)
+    {
+        var site = WindowsPlatform.FindDescendant(WinRT.Interop.WindowNative.GetWindowHandle(this), "InputSiteWindowClass");
+        foreach (var part in keys.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (site == 0 || !KeyCombo.TryParse(part, out var parsed) || KeyNames.VirtualKeyFor(parsed.Value.Key) is not { } key)
+            {
+                Diag.Info("cabinetos_ui::snapshot", "key: cannot press that", new LogField("keys", part), new LogField("input_window", site != 0));
+                return;
+            }
+            var combo = parsed.Value;
+            var modifiers = new List<int>(4);
+            if ((combo.Modifiers & KeyModifiers.Ctrl) != 0) modifiers.Add(0x11);
+            if ((combo.Modifiers & KeyModifiers.Shift) != 0) modifiers.Add(0x10);
+            if ((combo.Modifiers & KeyModifiers.Alt) != 0) modifiers.Add(0x12);
+            if ((combo.Modifiers & KeyModifiers.Win) != 0) modifiers.Add(0x5B);
+            var saved = WindowsPlatform.KeyState();
+            var held = (byte[])saved.Clone();
+            foreach (var modifier in modifiers)
+            {
+                held[modifier] = 0x80;
+                // The left key too: Windows reports a held modifier as the generic key and the side it is on.
+                if (modifier is 0x11 or 0x10 or 0x12)
+                {
+                    held[modifier switch { 0x11 => 0xA2, 0x10 => 0xA0, _ => 0xA4 }] = 0x80;
+                }
+            }
+            WindowsPlatform.SetKeyState(held);
+            var alt = false;
+            foreach (var modifier in modifiers)
+            {
+                WindowsPlatform.PostKey(site, modifier, up: false, alt);
+                alt |= modifier == 0x12;
+            }
+            WindowsPlatform.PostKey(site, key, up: false, alt);
+            WindowsPlatform.PostKey(site, key, up: true, alt);
+            for (var i = modifiers.Count - 1; i >= 0; i--)
+            {
+                alt &= modifiers[i] != 0x12;
+                WindowsPlatform.PostKey(site, modifiers[i], up: true, alt);
+            }
+            // The messages are handled on this thread while it waits; then the keys are up again.
+            await Task.Delay(150);
+            WindowsPlatform.SetKeyState(saved);
+            Diag.Info("cabinetos_ui::snapshot", "key sent", new LogField("keys", combo.ToString()));
+        }
+    }
+
     // The same report a moment later, once WebView2 has moved the keys (it does so on its own time).
     private void LogKeyboardSoon(string moment)
     {

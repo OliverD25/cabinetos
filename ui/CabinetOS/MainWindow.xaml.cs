@@ -550,6 +550,9 @@ public sealed partial class MainWindow : Window
                 case "focus":
                     LogFocusForSnapshot(step.Argument);
                     break;
+                case "key":
+                    await PressKeysForSnapshotAsync(step.Argument);
+                    break;
                 case "tooltip":
                     await OpenToolTipForSnapshotAsync(step.Argument);
                     break;
@@ -724,7 +727,7 @@ public sealed partial class MainWindow : Window
             : IsWithin(focused, RootGrid) ? "window"
             : "elsewhere";
         Diag.Info("cabinetos_ui::snapshot", "keyboard focus", new LogField("label", label), new LogField("element", focused?.GetType().Name ?? "none"),
-            new LogField("name", name), new LogField("within", within));
+            new LogField("name", name), new LogField("x_name", (focused as FrameworkElement)?.Name ?? ""), new LogField("within", within));
         LogKeyboard(label);
 
         static bool IsWithin(DependencyObject element, DependencyObject container)
@@ -2359,9 +2362,15 @@ public sealed partial class MainWindow : Window
     {
         if (_openDialog is { } dialog)
         {
-            // The keyboard is under an open dialog (keys in the dialog do not come here): nothing
-            // under it reacts. Esc closes the dialog, as it would there; any other key takes the
-            // keyboard back into it.
+            if (IsFocusWithin(dialog))
+            {
+                // A key in the dialog passes here on its way in (WinUI routes the popup's keys through the
+                // window's root): Tab, the arrows, Enter and Space are the dialog's buttons', Esc its own
+                // (ShowDialogAsync), and no binding of the window runs.
+                return;
+            }
+            // The keyboard is under an open dialog: nothing under it reacts. Esc closes the dialog, as it
+            // would there; any other key takes the keyboard back into it.
             e.Handled = true;
             Diag.Info(Target, "key held by a dialog", new LogField("key", e.Key.ToString()), new LogField("dialog", dialog.Title as string ?? ""));
             if (e.Key == VirtualKey.Escape)
