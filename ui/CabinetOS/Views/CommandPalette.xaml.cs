@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using CabinetOS.Core.Shell;
 using CabinetOS.Services;
 using CabinetOS.ViewModels;
 using Microsoft.UI.Dispatching;
@@ -58,6 +59,9 @@ public sealed partial class CommandPalette : UserControl
 
     /// <summary>Runs a command through the window's router: (command, args, trigger).</summary>
     public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
+
+    /// <summary>Backspace in the empty box: back to Quick Open's files (Phase 16; PaletteInput.AfterBackspace).</summary>
+    public event Action? FilesRequested;
 
     /// <summary>Gives the keyboard back (to the pane, or the shell it came from) when the palette closes.</summary>
     public Action? ReturnFocus { get; set; }
@@ -164,6 +168,10 @@ public sealed partial class CommandPalette : UserControl
                 break;
             case VirtualKey.Tab:
                 // The palette keeps the focus while it is open.
+                break;
+            case VirtualKey.Back when !_model.IsRecording
+                && PaletteInput.AfterBackspace(PaletteMode.Commands, Input.Text) == PaletteMode.Files && Input.SelectionLength == 0:
+                FilesRequested?.Invoke();
                 break;
             default:
                 return;

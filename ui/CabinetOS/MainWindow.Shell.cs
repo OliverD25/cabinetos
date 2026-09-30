@@ -25,6 +25,12 @@ public sealed partial class MainWindow
     private CommandCenterPlace _centerPlace = new(false, 0, 0);
     private string _dragRegions = "";
 
+    // The workspace until workspaces exist (docs/ui.md, "The top row"): the repository that holds the active folder, for
+    // the pill's branch and Quick Open's folder. Looked up off the UI thread whenever the active folder changes.
+    private GitRepository? _repository;
+    private string _repositoryFor = "";
+    private int _repositoryAsked;
+
     private void SetUpShell()
     {
         _crumbViews = [LeftCrumbs, RightCrumbs];
@@ -43,6 +49,7 @@ public sealed partial class MainWindow
         TopLeft.SizeChanged += (_, _) => LayOutTopRow();
         TopRight.SizeChanged += (_, _) => LayOutTopRow();
         CommandCenterFrame.SizeChanged += (_, _) => UpdateDragRegions();
+        ShowBranch();
     }
 
     // ----- The top row -----
@@ -124,6 +131,54 @@ public sealed partial class MainWindow
 
     private void UpdatePaletteButton() => PaletteIcon.Foreground = ThemeResources.Brush(_palette.IsOpen ? "CbAccentBrush" : "CbTextSecondaryBrush");
 
+    // ----- The workspace pill -----
+
+    /// <summary>The folder Quick Open searches: the repository that holds the active folder, else the active folder.</summary>
+    private string WorkspaceRoot()
+    {
+        var folder = Active.Path;
+        return _repository is { } repository && string.Equals(_repositoryFor, folder, StringComparison.OrdinalIgnoreCase)
+            ? repository.Root
+            : folder;
+    }
+
+    /// <summary>
+    /// Looks for the repository of the active folder on a background thread
+    /// (one small file read, a few existence checks) and shows its branch in
+    /// the pill. Runs when the active folder changes and when the window
+    /// comes to the front, so a branch switched in a terminal shows.
+    /// </summary>
+    private async Task UpdateWorkspaceAsync()
+    {
+        var folder = Active.Path;
+        var asked = ++_repositoryAsked;
+        var repository = folder.Length == 0 ? null : await Task.Run(() => GitBranch.FindRepository(folder));
+        if (asked != _repositoryAsked)
+        {
+            return;
+        }
+        var changed = repository != _repository;
+        _repositoryFor = folder;
+        _repository = repository;
+        if (changed)
+        {
+            ShowBranch();
+            Diag.Info(ShellTarget, "workspace pill shows a branch", new LogField("repository", repository is not null),
+                new LogField("branch", repository?.Branch ?? ""));
+        }
+    }
+
+    // The pill: the workspace's name, and the branch in the mono font when the active folder is in a repository on one.
+    private void ShowBranch()
+    {
+        var branch = _repository?.Branch;
+        WorkspaceBranch.Text = branch ?? "";
+        WorkspaceBranch.Visibility = branch is null ? Visibility.Collapsed : Visibility.Visible;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(WorkspacePill,
+            branch is null ? $"Workspace {WorkspaceName.Text}" : $"Workspace {WorkspaceName.Text}, branch {branch}");
+        ToolTipService.SetToolTip(WorkspacePill, _repository is { } repository ? $"{WorkspaceName.Text} · {repository.Root}" : WorkspaceName.Text);
+    }
+
     // ----- The breadcrumb rows -----
 
     /// <summary>Each pane's breadcrumb row shows its folder; the active pane's row is tinted.</summary>
@@ -197,6 +252,11 @@ public sealed partial class MainWindow
             new("left_cluster_end", Math.Round(TopLeft.ActualWidth, 1)),
             new("right_cluster_start", Math.Round(TopRowGrid.ActualWidth - TopRight.ActualWidth, 1)),
             new("workspace", WorkspaceName.Text),
+            new("workspace_root", WorkspaceRoot()),
+            new("quick_open", _quickOpen.IsOpen),
+            new("quick_open_rows", string.Join("|", _quickOpen.Rows.Take(10).Select(r => r.Folder.Length > 0 ? $"{r.Name} ({r.Folder})" : r.Name))),
+            new("quick_open_highlight", _quickOpen.Highlight),
+            new("palette_open", _palette.IsOpen),
             new("branch", WorkspaceBranch.Visibility == Visibility.Visible ? WorkspaceBranch.Text : ""),
             new("active_pane", _active),
         };

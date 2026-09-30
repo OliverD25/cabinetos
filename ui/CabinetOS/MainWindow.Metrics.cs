@@ -59,6 +59,8 @@ public sealed partial class MainWindow
         CommandCenterFrame.Height = m.CommandCenterHeight;
         CommandCenterFrame.CornerRadius = WindowMetrics.Corners(m.CommandCenterRadius);
         CommandCenter.CornerRadius = WindowMetrics.Corners(Math.Max(0, m.CommandCenterRadius - 1));
+        // Inside the frame's 1 px border: the subtle button style's own 32 px would push the text down and be cut.
+        CommandCenter.Height = Math.Max(0, m.CommandCenterHeight - 2);
         foreach (var crumbs in _crumbViews)
         {
             crumbs.ApplyMetrics();

@@ -199,6 +199,93 @@ public class ShellTests
         }
     }
 
+    [Fact]
+    public void The_repository_is_found_from_a_folder_inside_it_and_is_absent_outside_one()
+    {
+        var root = Repo.NewTempFolder("git-find");
+        try
+        {
+            var repo = Directory.CreateDirectory(Path.Combine(root, "repo")).FullName;
+            Directory.CreateDirectory(Path.Combine(repo, ".git"));
+            File.WriteAllText(Path.Combine(repo, ".git", "HEAD"), "ref: refs/heads/phase-16\n");
+            var deep = Directory.CreateDirectory(Path.Combine(repo, "src", "ui")).FullName;
+
+            Assert.Equal(new GitRepository(repo, "phase-16"), GitBranch.FindRepository(deep));
+            Assert.Equal(new GitRepository(repo, "phase-16"), GitBranch.FindRepository(repo + @"\"));
+            // A worktree's .git is a file: the repository is there, its branch is not shown.
+            var worktree = Directory.CreateDirectory(Path.Combine(root, "worktree", "docs")).FullName;
+            File.WriteAllText(Path.Combine(root, "worktree", ".git"), "gitdir: E:/elsewhere/.git/worktrees/x\n");
+            Assert.Equal(new GitRepository(Path.Combine(root, "worktree"), null), GitBranch.FindRepository(worktree));
+            // Outside any repository (the temp folder is not in one): nothing.
+            Assert.Null(GitBranch.FindRepository(Directory.CreateDirectory(Path.Combine(root, "plain")).FullName));
+            Assert.Null(GitBranch.FindRepository(""));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    // ----- Quick Open -----
+
+    private static FileSearchResultsReply Hits(params string[] paths) =>
+        new([.. paths.Select(p => new FileHit(p.TrimEnd('\\'), p.EndsWith('\\') ? "directory" : "file"))], FileSearchResultsReply.FromIndex, 120, true);
+
+    [Fact]
+    public async Task Quick_Open_asks_the_core_under_the_workspace_and_shows_names_with_their_folders()
+    {
+        var core = new FakeChannel(_ => Hits(@"C:\repo\docs\ui.md", @"C:\repo\src\ui\", @"C:\repo\README.md"));
+        var model = new QuickOpenModel(core);
+        model.Open(@"C:\repo");
+
+        Assert.True(await model.SearchAsync("  ui "));
+
+        var sent = Assert.IsType<SearchRequest>(Assert.Single(core.Requests));
+        Assert.Equal(("ui", @"C:\repo", 50u), (sent.Query, sent.Root, sent.Limit));
+        Assert.Equal(
+            [new QuickOpenRow(@"C:\repo\docs\ui.md", "ui.md", @"repo\docs", false), new QuickOpenRow(@"C:\repo\src\ui", "ui", @"repo\src", true), new QuickOpenRow(@"C:\repo\README.md", "README.md", "repo", false)],
+            model.Rows);
+        Assert.Equal((0, "3 results"), (model.Highlight, model.CountText));
+        model.MoveHighlight(5);
+        Assert.Equal(@"C:\repo\README.md", model.Highlighted?.Path);
+        model.MoveHighlight(-9);
+        Assert.Equal(0, model.Highlight);
+    }
+
+    [Fact]
+    public async Task Quick_Open_sends_nothing_for_blank_text_and_drops_answers_that_came_too_late()
+    {
+        var answers = new Queue<CoreReply>([Hits(@"C:\a.txt"), new ErrorReply(ErrorCodes.Io, "the index is gone")]);
+        var core = new FakeChannel(_ => answers.Dequeue());
+        var model = new QuickOpenModel(core);
+        model.Open("");
+
+        Assert.True(await model.SearchAsync("   "));
+        Assert.Empty(core.Requests);
+        Assert.Equal((-1, ""), (model.Highlight, model.CountText));
+
+        // No workspace: every indexed volume. An error shows where the count goes.
+        Assert.True(await model.SearchAsync("a"));
+        Assert.Null(Assert.IsType<SearchRequest>(core.Requests[0]).Root);
+        Assert.True(await model.SearchAsync("ab"));
+        Assert.Equal(("the index is gone", -1), (model.CountText, model.Highlight));
+
+        // An answer for a Quick Open that closed meanwhile is dropped.
+        var late = new TaskCompletionSource<CoreReply>();
+        var slow = new QuickOpenModel(new SlowChannel(late.Task));
+        slow.Open(@"C:\");
+        var asking = slow.SearchAsync("x");
+        slow.Close();
+        late.SetResult(Hits(@"C:\x.txt"));
+        Assert.False(await asking);
+        Assert.Empty(slow.Rows);
+    }
+
+    private sealed class SlowChannel(Task<CoreReply> reply) : ICoreChannel
+    {
+        public Task<CoreReply> RequestAsync(CoreRequest request, CancellationToken cancellationToken = default) => reply;
+    }
+
     // ----- Find in pane -----
 
     private static SelectionModel Selection(int count, int focus = 0, SelectionStyle style = SelectionStyle.Windows)

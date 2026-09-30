@@ -520,6 +520,7 @@
         <views:FileContextMenu x:Name="FileMenu" />
 
         <views:CommandPalette x:Name="Palette" Visibility="Collapsed" />
+        <views:QuickOpen x:Name="QuickOpenView" />
 
         <!-- The pattern box and the pinned folders list, in the palette's frame. -->
         <views:PromptBox x:Name="PromptView" Visibility="Collapsed" />

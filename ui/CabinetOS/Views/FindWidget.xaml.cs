@@ -30,6 +30,7 @@ public sealed partial class FindWidget : UserControl
             }
         };
         Input.KeyDown += OnInputKeyDown;
+        Input.Loaded += (_, _) => HideClearButton();
         CloseButton.Click += (_, _) => CloseRequested?.Invoke();
         ApplyMetrics();
     }
@@ -138,6 +139,36 @@ public sealed partial class FindWidget : UserControl
                 ListRequested?.Invoke();
                 break;
         }
+    }
+
+    // WinUI's box shows a clear button (×) of its own while it has the keyboard: beside the widget's close × that
+    // makes two crosses, so the box's is taken away (as the pane's rename box does).
+    private void HideClearButton()
+    {
+        Input.ApplyTemplate();
+        if (FindPart(Input, "DeleteButton") is Button clear)
+        {
+            clear.MaxWidth = 0;
+            clear.IsTabStop = false;
+            clear.IsHitTestVisible = false;
+        }
+    }
+
+    private static DependencyObject? FindPart(DependencyObject parent, string name)
+    {
+        for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is FrameworkElement { Name: var childName } && childName == name)
+            {
+                return child;
+            }
+            if (FindPart(child, name) is { } found)
+            {
+                return found;
+            }
+        }
+        return null;
     }
 
     private bool IsWithin(DependencyObject element)

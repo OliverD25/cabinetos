@@ -152,6 +152,7 @@ public sealed partial class MainWindow : Window
         SetUpTabs();
         SetUpShell();
         SetUpFind();
+        SetUpQuickOpen();
         SetUpPreview();
         SetUpMarket();
         SetUpRail();
@@ -190,6 +191,11 @@ public sealed partial class MainWindow : Window
             if (e.WindowActivationState == WindowActivationState.Deactivated)
             {
                 _keys.Reset();
+            }
+            else if (_panes[_active].Path.Length > 0)
+            {
+                // A branch switched in a terminal while the window was behind shows when it comes back.
+                _ = UpdateWorkspaceAsync();
             }
         };
         RootGrid.Loaded += OnLoaded;
@@ -448,6 +454,9 @@ public sealed partial class MainWindow : Window
                     break;
                 case "find" or "find-key":
                     await RunFindStepAsync(step.Kind, step.Argument);
+                    break;
+                case "quick-open" or "quick-open-key":
+                    await RunQuickOpenStepAsync(step.Kind, step.Argument);
                     break;
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
@@ -1310,6 +1319,7 @@ public sealed partial class MainWindow : Window
         RegisterTerminalCommands();
         RegisterSearchCommands();
         RegisterFindCommands();
+        RegisterQuickOpenCommands();
         RegisterPluginCommands();
         RegisterToolCommands();
         RegisterThemeCommands();
@@ -1449,6 +1459,8 @@ public sealed partial class MainWindow : Window
             EndAddressEdit();
             FileMenu.Close();
             PromptView.Cancel();
+            // One overlay at a time: Ctrl+Shift+P from Quick Open shows the commands instead.
+            CloseQuickOpen(returnFocus: false);
             // Ctrl+Shift+P from a shell: the keyboard goes back there when the palette closes.
             _paletteFromTerminal = Dock.HasTerminalFocus;
             _palette.Open();
@@ -1482,6 +1494,10 @@ public sealed partial class MainWindow : Window
         if (_palette.IsOpen)
         {
             _palette.Close();
+        }
+        else if (_quickOpen.IsOpen)
+        {
+            CloseQuickOpen(returnFocus: true);
         }
         else if (PromptView.IsOpen)
         {
@@ -2233,6 +2249,7 @@ public sealed partial class MainWindow : Window
         ScheduleToolContext();
         UpdateTabRows();
         ScheduleWindowState();
+        _ = UpdateWorkspaceAsync();
     }
 
     private void OnPaneChanged(object? sender, PropertyChangedEventArgs e)
@@ -2273,6 +2290,7 @@ public sealed partial class MainWindow : Window
                 _sidebar.SetActivePath(Active.Path);
                 _terminal.SetActiveFolder(Active.Path);
                 ScheduleToolContext();
+                _ = UpdateWorkspaceAsync();
                 break;
             case nameof(PaneModel.Count) or nameof(PaneModel.Selection) or nameof(PaneModel.Rows):
                 UpdateStatus();

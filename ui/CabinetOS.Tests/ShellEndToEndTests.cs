@@ -147,6 +147,93 @@ public class ShellEndToEndTests
         }
     }
 
+    [Fact]
+    public async Task Quick_Open_finds_in_the_repository_opens_here_or_in_the_other_pane_and_switches_to_commands()
+    {
+        var (run, root, data) = Prepare("shell-quick-open");
+        try
+        {
+            // A repository on a branch: the pill shows it, and Quick Open searches the whole repository from a folder in it.
+            var project = Directory.CreateDirectory(Path.Combine(data, "proj")).FullName;
+            Directory.CreateDirectory(Path.Combine(project, ".git"));
+            File.WriteAllText(Path.Combine(project, ".git", "HEAD"), "ref: refs/heads/phase-16\n");
+            var docs = Directory.CreateDirectory(Path.Combine(project, "docs")).FullName;
+            File.WriteAllText(Path.Combine(docs, "notes.md"), "x");
+            var app = Directory.CreateDirectory(Path.Combine(project, "src", "app")).FullName;
+            File.WriteAllText(Path.Combine(app, "main.rs"), "x");
+            var process = run.Start("quick", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{Path.Combine(project, "src")}",
+                "wait:500",
+                "shell:pill",
+                "quick-open:notes",
+                "shell:typed",
+                "quick-open-key:enter",
+                "shell:opened",
+                "quick-open:main.rs",
+                "quick-open-key:ctrl+enter",
+                "shell:other",
+                "quick-open:>tab",
+                "wait:300",
+                "shell:switched",
+                "cmd:overlay.close",
+                "pane:1",
+                $"path:{data}",
+                "wait:500",
+                "shell:no-repository",
+                "shot:done"));
+            var logs = await run.FinishAsync("quick", process, "done");
+
+            State(logs, "pill", state =>
+            {
+                Assert.Equal("phase-16", state.GetProperty("branch").GetString());
+                Assert.Equal(project, state.GetProperty("workspace_root").GetString(), ignoreCase: true);
+            });
+            State(logs, "typed", state =>
+            {
+                Assert.True(state.GetProperty("quick_open").GetBoolean());
+                Assert.StartsWith(@"notes.md (proj\docs)", state.GetProperty("quick_open_rows").GetString());
+                Assert.Equal(0, state.GetProperty("quick_open_highlight").GetInt32());
+            });
+            State(logs, "opened", state =>
+            {
+                // Enter: the file's folder in the active pane, the file under the cursor, Quick Open gone.
+                Assert.False(state.GetProperty("quick_open").GetBoolean());
+                Assert.Equal(0, state.GetProperty("active_pane").GetInt32());
+                Assert.Equal(docs, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
+                Assert.Equal("notes.md", state.GetProperty("pane0_cursor").GetString());
+            });
+            State(logs, "other", state =>
+            {
+                // Ctrl+Enter: the other pane, which becomes the active one.
+                Assert.Equal(1, state.GetProperty("active_pane").GetInt32());
+                Assert.Equal(app, state.GetProperty("pane1_path").GetString(), ignoreCase: true);
+                Assert.Equal("main.rs", state.GetProperty("pane1_cursor").GetString());
+                Assert.Equal(docs, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
+            });
+            State(logs, "switched", state =>
+            {
+                // ">" typed first: the command palette with the rest of the text.
+                Assert.False(state.GetProperty("quick_open").GetBoolean());
+                Assert.True(state.GetProperty("palette_open").GetBoolean());
+            });
+            State(logs, "no-repository", state =>
+            {
+                Assert.Equal("", state.GetProperty("branch").GetString());
+                Assert.Equal(data, state.GetProperty("workspace_root").GetString(), ignoreCase: true);
+            });
+            Assert.Contains(logs, l => Message(l) == "quick open shown");
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
     // "left+width" of the command center, as the shell state logs it.
     private static (double Left, double Width) Center(JsonElement state)
     {

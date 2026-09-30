@@ -1,4 +1,9 @@
+using CabinetOS.Core.Presentation;
+
 namespace CabinetOS.Core.Shell;
+
+/// <summary>A git repository as the top row sees it: the folder that holds its <c>.git</c>, and its branch (null: none shown).</summary>
+public sealed record GitRepository(string Root, string? Branch);
 
 /// <summary>
 /// The branch the workspace pill shows (docs/ui.md, "The top row"): the name
@@ -27,6 +32,42 @@ public static class GitBranch
         }
         var name = line[Prefix.Length..].Trim();
         return name.Length > 0 ? name : null;
+    }
+
+    /// <summary>
+    /// The repository that holds <paramref name="folder"/>: the nearest
+    /// folder at or above it with a <c>.git</c> folder or file, and the branch
+    /// its HEAD names. Null outside a repository. Until workspaces exist
+    /// (docs/ui.md, "The top row"), this is what the workspace pill and Quick
+    /// Open take for the workspace. Blocks on the disk, so the window calls it
+    /// on a background thread; it reads one small file and asks whether
+    /// <c>.git</c> exists once per folder on the way up.
+    /// </summary>
+    public static GitRepository? FindRepository(string folder)
+    {
+        // C:\repo\ is C:\repo; a drive's root keeps its backslash.
+        var start = folder.TrimEnd('\\', '/');
+        if (start.EndsWith(':'))
+        {
+            start += '\\';
+        }
+        for (var current = start; !string.IsNullOrEmpty(current); current = DisplayFormat.Parent(current))
+        {
+            string git;
+            try
+            {
+                git = System.IO.Path.Combine(current, ".git");
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+            if (Directory.Exists(git) || File.Exists(git))
+            {
+                return new GitRepository(current, Read(current));
+            }
+        }
+        return null;
     }
 
     /// <summary>
