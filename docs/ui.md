@@ -3116,6 +3116,8 @@ the core's events.
   `editor.*`, Ctrl+`, Ctrl+Shift+D) closes the view first, so that what it
   does can be seen.
 - **Logs.** Target `cabinetos_ui::market`: "marketplace shown",
+  "marketplace cards shown" at the first frame after an opening's first
+  cards were laid out (`cards`, and `ms` since the opening),
   "marketplace index read" with the source and the number of items,
   "marketplace index not read" with the reason, "plugin installed and
   granted" with its version, "source page opened".

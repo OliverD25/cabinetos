@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Market;
 using CabinetOS.Core.Plugins;
 using CabinetOS.Core.Protocol;
@@ -31,6 +33,9 @@ public sealed partial class MarketplaceView : UserControl
     private List<string> _order = [];
     private MarketplaceModel? _model;
     private MarketItem? _detailItem;
+
+    // An opening that showed no card yet: its first cards are logged at the frame that draws them (Article 12).
+    private long _openedTicks;
 
     /// <summary>Creates the view, hidden.</summary>
     public MarketplaceView()
@@ -135,6 +140,7 @@ public sealed partial class MarketplaceView : UserControl
     public void Open()
     {
         Visibility = Visibility.Visible;
+        _openedTicks = Cards.Children.Count == 0 ? Stopwatch.GetTimestamp() : 0;
         Render();
         SearchField.Focus(FocusState.Programmatic);
     }
@@ -266,11 +272,35 @@ public sealed partial class MarketplaceView : UserControl
             }
             _cards = cards;
             _order = order;
+            if (_openedTicks != 0 && Cards.Children.Count > 0)
+            {
+                LogFirstCards(_openedTicks, Cards.Children.Count);
+                _openedTicks = 0;
+            }
         }
         foreach (var item in items)
         {
             _cards[item.Id].Update(model.SelectedId == item.Id, StateLine(model, item));
         }
+    }
+
+    // "marketplace cards shown": from the opening to the first frame after the cards were laid out, as "listing shown" is.
+    private void LogFirstCards(long opened, int count)
+    {
+        void OnFrame(object? sender, object e)
+        {
+            if (IsOpen && Cards.ActualHeight <= 0 && Stopwatch.GetElapsedTime(opened) < TimeSpan.FromSeconds(5))
+            {
+                return;
+            }
+            CompositionTarget.Rendering -= OnFrame;
+            if (IsOpen)
+            {
+                Diag.Info("cabinetos_ui::market", "marketplace cards shown", new LogField("cards", count),
+                    new LogField("ms", Math.Round(Stopwatch.GetElapsedTime(opened).TotalMilliseconds, 1)));
+            }
+        }
+        CompositionTarget.Rendering += OnFrame;
     }
 
     // What a card says about itself in its footer: installing, an update, installed, applied.
