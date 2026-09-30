@@ -737,6 +737,68 @@ keys; the guides (ui.md, keybindings.md, config.md, the themes) and the
 CHANGELOG. Handed to a coder on Opus on 2026-09-30; the first release
 (Phase 10) waits for it.
 
+### Phase 17 — In-app updates (the creator's request of 2026-09-30, the desk card "In-app updates"; started the same day)
+
+The creator asked for updates from inside the app: an Update button, the
+update running in the app with progress shown, the release notes of the
+version shown to the user, and never the install menus again. Today there
+is nothing for it: Phase 10 ships a zip with `install.ps1`, and "no
+automatic updates and no Settings > Apps entry" is a known gap (ADR 0009).
+Two question rounds on 2026-09-30, every answer the recommended one:
+
+1. **Source.** The zip and its SHA-256 on the public repository's GitHub
+   Releases; a small `latest.json` per channel on the marketplace site
+   (`oliverd25.github.io/cabinetos-marketplace/update/<channel>/`), an
+   address the app already trusts, with the newest version, the zip's
+   address, its hash, the notes' address and the runtimes it needs.
+2. **Flow.** A quiet check once a day at start and on demand; the zip
+   downloads in the background with a status-bar pill; a dialog shows the
+   version and its release notes with Restart now / Later; the swap
+   happens at that restart; the previous version stays for a rollback
+   command.
+3. **Channels.** `update.channel`: `stable` (default) or `preview`, each
+   with its own `latest.json`.
+4. **Scope.** The per-user install (`%LOCALAPPDATA%\Programs\CabinetOS`)
+   is what the in-app update serves; an all-users install keeps winget or
+   the installer, and the app says so. The installer allows the indexer
+   service only with the all-users install, so a per-user install has no
+   service to replace; the elevation branch the creator accepted is not
+   needed until an installer allows a per-user service.
+5. **Notes.** The CHANGELOG section of the version, published as
+   `notes.md` next to the zip and rendered in the dialog, with a link to
+   the full changelog: one source of truth.
+6. **Later.** Snoozes a day; a dot with the waiting version on the menu
+   and in About; the palette's update command any time; no popup at every
+   start.
+7. **Order.** The updater is built first, in parallel with Phase 16; the
+   first release is cut with it inside, so version one can update itself.
+8. **Apps entry.** The per-user install registers in Settings > Apps
+   (version, publisher, uninstall) under the user's hive, no elevation,
+   and the updater keeps the version current.
+
+Decided by the planning session: full zips, no delta downloads; HTTPS
+only and the hash from `latest.json` as the guard, an Authenticode check
+when the creator signs; the swap is rename-first (the running files are
+moved to `previous\`, the new ones copied in, the old ones kept one
+version back), so a failed copy leaves the old version intact; the
+updater refuses to touch a folder without `release.json` next to the
+core, so a development build never overwrites itself. Consistency:
+Article 6 (`update.*` in cabinetos.json), Article 7 (`update.check`,
+`update.apply`, `update.rollback`, `update.showNotes` are commands),
+Article 10 (product infrastructure like the marketplace, small, in the
+core; one dialog and one pill in the window), Article 12 (every step
+logged with the trace id), Article 2 (the source is the public
+repository). Done when: `latest.json` and `notes.md` come out of the
+release script with a schema and a test; the core checks, downloads with
+progress, verifies, stages, swaps and rolls back, all against a local
+`file:` source in tests, including a swap while a program of the install
+runs; the CLI has `update`; the window shows the pill, the dialog with the
+rendered notes, the badge and the snooze; the Apps entry appears and
+disappears with install and uninstall; ADR 0014 and the guides
+(release.md with the publish steps, config.md, ipc.md, ui.md) are
+written. Handed to a coder on Opus on 2026-09-30, the window's part last,
+after Phase 16 lands.
+
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
