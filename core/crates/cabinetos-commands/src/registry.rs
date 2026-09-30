@@ -81,7 +81,7 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 109] = [
+const SEED: [Seed; 110] = [
     seed(
         "palette.show",
         "View",
@@ -144,6 +144,16 @@ const SEED: [Seed; 109] = [
         "View",
         "Toggle Sidebar",
         &["ctrl+b"],
+        UI,
+        None,
+    ),
+    // A small always-on-top drawer (`ui.compactOverlay` is its size): Files'
+    // key for it.
+    seed(
+        "view.toggleCompactOverlay",
+        "View",
+        "Toggle Compact Overlay",
+        &["ctrl+alt+up"],
         UI,
         None,
     ),
@@ -927,10 +937,34 @@ mod tests {
         );
     }
 
+    /// Phase 19c: the compact overlay runs in the window from anywhere, on
+    /// Files' key, and no other command has that key.
+    #[test]
+    fn the_compact_overlay_command_is_seeded_on_a_key_of_its_own() {
+        let registry = CommandRegistry::core();
+        let command = registry.get("view.toggleCompactOverlay").unwrap();
+        assert_eq!(
+            (command.category.as_str(), command.title.as_str()),
+            ("View", "Toggle Compact Overlay")
+        );
+        assert_eq!(command.target, CommandTarget::Ui);
+        assert_eq!(command.source, CommandSource::Core);
+        assert_eq!(command.when, None);
+        assert!(!command.immutable);
+        assert_eq!(texts(&command.default_keys), ["ctrl+alt+up"]);
+        let sharing: Vec<&str> = registry
+            .commands()
+            .iter()
+            .filter(|other| texts(&other.default_keys).contains(&"ctrl+alt+up".to_owned()))
+            .map(|other| other.id.as_str())
+            .collect();
+        assert_eq!(sharing, ["view.toggleCompactOverlay"]);
+    }
+
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 109);
+        assert_eq!(registry.commands().len(), 110);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -942,6 +976,7 @@ mod tests {
         };
         assert_eq!(keys("view.toggleDualPane"), ["ctrl+shift+d"]);
         assert_eq!(keys("view.toggleTerminal"), ["ctrl+backquote"]);
+        assert_eq!(keys("view.toggleCompactOverlay"), ["ctrl+alt+up"]);
         assert_eq!(keys("file.copyToOtherPane"), ["f5"]);
         // PLAN.md conflict E: the command list's chord wins over the
         // sidebar hint "Ctrl+K W".

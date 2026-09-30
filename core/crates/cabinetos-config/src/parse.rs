@@ -8,8 +8,8 @@ use cabinetos_commands::KeymapError;
 use crate::locate::{Segment, locate, position};
 use crate::menu::check_extension;
 use crate::{
-    Config, FORMAT_VERSION, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, MenuItem, is_program_name,
-    parse_arg,
+    Config, FORMAT_VERSION, MAX_COLUMN_WIDTH, MAX_COMPACT_SIZE, MIN_COLUMN_WIDTH, MIN_COMPACT_SIZE,
+    MenuItem, is_program_name, parse_arg,
 };
 
 /// A configuration file that cannot be used. The settings in effect stay as
@@ -204,6 +204,7 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
         }
     }
     check_columns(text, config)?;
+    check_compact_overlay(text, config)?;
     check_programs(text, config)?;
     check_menu_extensions(text, config)?;
     let profiles = &config.terminal.profiles;
@@ -261,6 +262,30 @@ fn check_columns(text: &str, config: &Config) -> Result<(), ConfigError> {
                 ],
                 format!(
                     "ui.columns.{column} is {width}; a column is from {MIN_COLUMN_WIDTH} to {MAX_COLUMN_WIDTH} pixels wide"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// `ui.compactOverlay`: each side in whole pixels from 240 to 4000, so a
+/// hand edit cannot make a drawer too small to use or larger than a screen.
+fn check_compact_overlay(text: &str, config: &Config) -> Result<(), ConfigError> {
+    let Some(overlay) = &config.ui.compact_overlay else {
+        return Ok(());
+    };
+    for (side, size) in [("width", overlay.width), ("height", overlay.height)] {
+        if !(MIN_COMPACT_SIZE..=MAX_COMPACT_SIZE).contains(&size) {
+            return Err(ConfigError::at(
+                text,
+                &[
+                    Segment::Key("ui"),
+                    Segment::Key("compactOverlay"),
+                    Segment::Key(side),
+                ],
+                format!(
+                    "ui.compactOverlay.{side} is {size}; the compact overlay is from {MIN_COMPACT_SIZE} to {MAX_COMPACT_SIZE} pixels"
                 ),
             ));
         }
@@ -608,6 +633,50 @@ mod tests {
             (
                 r#"{"ui": {"columns": {"modified": 120, "type": 90, "size": 64, "name": 300}}}"#,
                 "unknown field `name`",
+            ),
+        ] {
+            let error = parse(bad).unwrap_err();
+            assert!(error.message.contains(expected), "{bad}: {error}");
+        }
+    }
+
+    #[test]
+    fn the_compact_overlay_is_whole_pixels_from_240_to_4000() {
+        let config =
+            parse(r#"{"ui": {"compactOverlay": {"width": 240, "height": 4000}}}"#).unwrap();
+        let overlay = config.ui.compact_overlay.unwrap();
+        assert_eq!((overlay.width, overlay.height), (240, 4000));
+        assert_eq!(
+            parse(r#"{"ui": {"compactOverlay": null}}"#)
+                .unwrap()
+                .ui
+                .compact_overlay,
+            None
+        );
+        let text = "{\n  \"ui\": {\n    \"compactOverlay\": {\n      \"width\": 480,\n      \"height\": 239\n    }\n  }\n}";
+        let error = parse(text).unwrap_err();
+        assert!(
+            error.message.contains("ui.compactOverlay.height is 239")
+                && error.message.contains("240 to 4000"),
+            "{error}"
+        );
+        assert_eq!(error.line, Some(5), "{error}");
+        for (bad, expected) in [
+            (
+                r#"{"ui": {"compactOverlay": {"width": 4001, "height": 640}}}"#,
+                "ui.compactOverlay.width is 4001",
+            ),
+            (
+                r#"{"ui": {"compactOverlay": {"width": 480.5, "height": 640}}}"#,
+                "invalid type: floating point",
+            ),
+            (
+                r#"{"ui": {"compactOverlay": {"width": 480}}}"#,
+                "missing field `height`",
+            ),
+            (
+                r#"{"ui": {"compactOverlay": {"width": 480, "height": 640, "top": 0}}}"#,
+                "unknown field `top`",
             ),
         ] {
             let error = parse(bad).unwrap_err();

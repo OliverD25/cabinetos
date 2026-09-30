@@ -25,6 +25,14 @@ pub const DEFAULT_MARKETPLACE_INDEX: &str =
 /// The narrowest a column of `ui.columns` may be set, in pixels.
 pub const MIN_COLUMN_WIDTH: u32 = 24;
 
+/// The smallest width or height `ui.compactOverlay` may be set to, in
+/// device-independent pixels.
+pub const MIN_COMPACT_SIZE: u32 = 240;
+
+/// The largest width or height `ui.compactOverlay` may be set to, in
+/// device-independent pixels.
+pub const MAX_COMPACT_SIZE: u32 = 4000;
+
 /// The widest a column of `ui.columns` may be set, in pixels.
 pub const MAX_COLUMN_WIDTH: u32 = 2000;
 
@@ -150,6 +158,24 @@ pub struct UiConfig {
     /// Name column takes the rest. `null`: the theme's widths. The window
     /// owns them; the core only checks and stores them.
     pub columns: Option<ColumnWidths>,
+    /// The size of the compact overlay (`view.toggleCompactOverlay`) as the
+    /// user last resized it, so the drawer opens that size again. `null`:
+    /// 480 by 640. The window owns it; the core only checks and stores it.
+    pub compact_overlay: Option<CompactOverlay>,
+}
+
+/// The size of the compact overlay, in device-independent pixels, each a
+/// whole number from 240 to 4000.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CompactOverlay {
+    /// The window's width.
+    #[cfg_attr(feature = "schema", schemars(range(min = MIN_COMPACT_SIZE, max = MAX_COMPACT_SIZE)))]
+    pub width: u32,
+    /// The window's height.
+    #[cfg_attr(feature = "schema", schemars(range(min = MIN_COMPACT_SIZE, max = MAX_COMPACT_SIZE)))]
+    pub height: u32,
 }
 
 /// A file pane's column widths in pixels, each a whole number from 24 to
@@ -234,6 +260,7 @@ impl Default for UiConfig {
             sidebar_view: "explorer".to_owned(),
             sidebar_auto_reveal: true,
             columns: None,
+            compact_overlay: None,
         }
     }
 }
@@ -607,6 +634,7 @@ mod tests {
         );
         assert_eq!(config.ui.tabs, TabsConfig::default());
         assert_eq!(config.ui.columns, None, "the theme's column widths");
+        assert_eq!(config.ui.compact_overlay, None, "480 by 640");
         assert!(config.ui.tabs.left.items.is_empty() && config.ui.tabs.right.items.is_empty());
         assert_eq!(
             (config.ui.tabs.left.active, config.ui.tabs.right.active),
@@ -832,6 +860,20 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&fitted.columns).unwrap(),
             r#"{"modified":150,"type":96,"size":70}"#
+        );
+        assert!(
+            text.contains("\"columns\":null,\"compactOverlay\":null"),
+            "{text}"
+        );
+        let drawer: UiConfig =
+            serde_json::from_str(r#"{"compactOverlay": {"width": 400, "height": 500}}"#).unwrap();
+        assert_eq!(
+            serde_json::to_string(&drawer.compact_overlay).unwrap(),
+            r#"{"width":400,"height":500}"#
+        );
+        assert!(
+            serde_json::from_str::<UiConfig>(r#"{"compactOverlay": {"width": 400}}"#).is_err(),
+            "both sides are needed"
         );
         assert!(text.contains("\"showHidden\":false"));
         assert!(text.contains("\"selection\":\"windows\""), "{text}");

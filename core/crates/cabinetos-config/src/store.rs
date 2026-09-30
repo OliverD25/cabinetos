@@ -506,7 +506,7 @@ fn content_hash(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ColumnWidths, Layout};
+    use crate::{ColumnWidths, CompactOverlay, Layout};
 
     fn temp_config() -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().unwrap();
@@ -1162,6 +1162,66 @@ mod tests {
         assert_eq!(store.config().ui.columns, None);
         let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(file["ui"]["columns"], Value::Null);
+    }
+
+    #[test]
+    fn the_compact_overlay_size_round_trips_through_the_file() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(store.config().ui.compact_overlay, None, "null: 480 by 640");
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["compactOverlay"], Value::Null);
+
+        let size = serde_json::json!({"width": 420, "height": 560});
+        assert_eq!(
+            store
+                .set_value("ui.compactOverlay", size.clone(), accept)
+                .unwrap(),
+            ["ui.compactOverlay"]
+        );
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["compactOverlay"], size);
+        let (reopened, opened) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(opened, Opened::Loaded);
+        assert_eq!(
+            reopened.config().ui.compact_overlay,
+            Some(CompactOverlay {
+                width: 420,
+                height: 560
+            })
+        );
+
+        // A size out of bounds, a fraction or a missing side is refused, and the file stays as it was.
+        let before = std::fs::read_to_string(&path).unwrap();
+        for value in [
+            serde_json::json!({"width": 239, "height": 560}),
+            serde_json::json!({"width": 420, "height": 4001}),
+            serde_json::json!({"width": 420.5, "height": 560}),
+            serde_json::json!({"width": 420}),
+            serde_json::json!("small"),
+        ] {
+            let result = store.set_value("ui.compactOverlay", value.clone(), accept);
+            let Err(UpdateError::Rejected(rejection)) = result else {
+                panic!("{value}: {result:?}")
+            };
+            assert!(
+                rejection.message.contains("ui.compactOverlay"),
+                "{value}: {}",
+                rejection.message
+            );
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+
+        // Back to 480 by 640 with `null`.
+        assert_eq!(
+            store
+                .set_value("ui.compactOverlay", Value::Null, accept)
+                .unwrap(),
+            ["ui.compactOverlay"]
+        );
+        assert_eq!(store.config().ui.compact_overlay, None);
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["compactOverlay"], Value::Null);
     }
 
     #[test]
