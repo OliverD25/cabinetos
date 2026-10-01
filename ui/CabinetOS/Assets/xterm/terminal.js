@@ -105,15 +105,18 @@
       return false;
     }
     // Ctrl+C copies when text is selected, as in Windows Terminal; otherwise it goes to the shell.
-    if (keys === 'ctrl+c' && term.hasSelection()) {
-      navigator.clipboard.writeText(term.getSelection()).catch(() => {});
-      term.clearSelection();
+    // Ctrl+Shift+C always copies (nothing without a selection) and never reaches the shell.
+    if ((keys === 'ctrl+c' && term.hasSelection()) || keys === 'ctrl+shift+c') {
+      if (term.hasSelection()) {
+        navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+        term.clearSelection();
+      }
       event.preventDefault();
       return false;
     }
-    // Ctrl+V: the browser's own paste event reaches xterm.js, which sends the text
-    // (bracketed when the shell asked for it) instead of a ^V.
-    if (keys === 'ctrl+v') {
+    // Ctrl+V and Ctrl+Shift+V: the browser's own paste event (Ctrl+Shift+V pastes as plain text)
+    // reaches xterm.js, which sends the text (bracketed when the shell asked for it) instead of a ^V.
+    if (keys === 'ctrl+v' || keys === 'ctrl+shift+v') {
       return false;
     }
     return true;
