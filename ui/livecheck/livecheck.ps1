@@ -462,7 +462,7 @@ trap {
       if (-not $script:p.WaitForExit(8000)) { $script:p.Kill(); [void]$script:p.WaitForExit(3000) }
       "the run's window closed: $($script:p.HasExited)"
       Start-Sleep -Milliseconds 1000
-      foreach ($c in @(Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"core started"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields.pid })) {
+      foreach ($c in @(UiObjects '"core started"' | ForEach-Object { $_.fields.pid })) {
         $core = Get-Process -Id $c -ErrorAction SilentlyContinue
         if ($core -and $core.ProcessName -eq 'cabinetos-core') { $core.Kill(); "the core $c was still running after the window; ended" }
       }
@@ -550,7 +550,7 @@ Step "pagedown done"
 Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\scrolled.png"
 # The frame table of the hold: the window's per-second lines that ended while the key was held.
-$seconds = @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | ForEach-Object { $_ | ConvertFrom-Json } |
+$seconds = @(UiObjects '"frame stats"' |
   Where-Object { $_.message -eq 'frame stats' -and (TsUtc $_.ts) -gt $holdStart.AddSeconds(1) -and (TsUtc $_.ts) -le $holdEnd.AddSeconds(1) })
 "| second (UTC) | frames | worst | over 20 ms | over 33 ms | UI work over 16.7 ms | UI work | rows' measure |"
 "|---|---|---|---|---|---|---|---|"
@@ -636,7 +636,7 @@ Step "Ctrl+Backquote while the dialog is open: nothing may run under it"
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 800
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 700
 Shot $h "$ShotDir\phase-5b-properties-closed.png"
-$log = Get-Content "$root\logs\ui.*.jsonl"
+$log = UiAll
 "Esc closed the dialog: $([bool]($log | Where-Object { $_ -match '"dialog closed"' }))"
 "no command ran while the dialog was open: $(NothingRanUnderDialog $log)"
 
@@ -686,7 +686,7 @@ Step "Ctrl+K V on readme.md: the same file, in the open preview"
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 [Live]::Press($VK.V); Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\phase-5c-markdown-chord.png"
-$ready = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool ready"' }).Count
+$ready = UiCount '"tool ready"'
 "the preview said ready for each open (2 expected): $ready"
 
 # The preview stays open in the right pane through sub-phase 11a's Ctrl+Alt+P: the terminal then shows
@@ -728,7 +728,7 @@ Step "11a: Space on photos: marked in place and measured"
 Step "11a: Alt+Shift+Enter: every folder measured"
 [Live]::Press($VK.Alt, $VK.Shift, $VK.Enter); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\11a-folder-sizes-live.png"
-$measures = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"request sent"' -and $_ -match '"measure_paths"' }).Count
+$measures = @(UiLines '"request sent"' | Where-Object { $_ -match '"measure_paths"' }).Count
 "measure_paths sent (2 expected): $measures"
 
 # ----- 19b: folder sizes for every folder of a listing (docs/ui.md, "Folder sizes") -----
@@ -787,7 +787,7 @@ GoPath $tc 1000
 Step "11a: F3 on run.cmd: the status bar says no tool shows it; nothing runs it"
 [Live]::Press($VK.End); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.F3); Start-Sleep -Milliseconds 800
-"F3 said so: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"notice shown"' -and $_ -match 'No installed tool shows run.cmd' }))"
+"F3 said so: $([bool](UiLines '"notice shown"' | Where-Object { $_ -match 'No installed tool shows run.cmd' }))"
 
 Step "11a: F4 on a.txt: the stand-in editor gets it, not Notepad"
 [Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
@@ -824,7 +824,7 @@ $handedBefore = (HandedToTerminal).Count
 # after each hand-over and up to four times, and its log writer works in its own thread.
 PressUntil { [Live]::Press($VK.Ctrl, $VK.Alt, $VK.P) } '"a page has the keyboard".*"page":"terminal"' 3000 12000 -what 'the terminal'
 Shot $h "$ShotDir\11a-terminal-path-live.png"
-"the path was typed: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"paths typed at the prompt"' -and $_ -match 'OkReply' }))"
+"the path was typed: $([bool](UiLines '"paths typed at the prompt"' | Where-Object { $_ -match 'OkReply' }))"
 # The preview is open in the right pane (phase 5c left it there). The window checks where Windows
 # sends the keys after it gave the terminal the keyboard, and hands them over again when WinUI left
 # them in the window ("a page has the keyboard" with the hand-overs it took).
@@ -833,19 +833,19 @@ $handed = HandedToTerminal | Select-Object -Skip $handedBefore | Select-Object -
 # Esc clears the typed line in pwsh; Ctrl+Backquote gives the keyboard back to the pane (the page
 # passes it to the window, which runs view.toggleTerminal).
 function ToggleCount { @(UiLines '"command executed"' | Where-Object { $_ -match 'view\.toggleTerminal' }).Count }
-$lostBefore = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a key the page did not get"' }).Count
+$lostBefore = UiCount '"a key the page did not get"'
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 300
 $toggles = ToggleCount
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
 "Ctrl+Backquote reached the window after Ctrl+Alt+P, the preview open in the other pane: $((ToggleCount) -gt $toggles)"
-"keys the window had to take for the page (0 expected): $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a key the page did not get"' }).Count - $lostBefore)"
+"keys the window had to take for the page (0 expected): $((UiCount '"a key the page did not get"') - $lostBefore)"
 
 Step "11a: close the preview, so the later sections find two file panes"
-$closed = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count
+$closed = UiCount '"tool closed"'
 OpenPalette 500
 [Live]::Type("Close Editor"); Start-Sleep -Milliseconds 700
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 800
-"the preview closed: $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count -gt $closed)"
+"the preview closed: $((UiCount '"tool closed"') -gt $closed)"
 
 Step "11a: Ctrl+\: the drive's root"
 [Live]::Press($VK.Ctrl, $VK.Backslash); Start-Sleep -Milliseconds 1200
@@ -873,11 +873,11 @@ Shot $h "$ShotDir\11a-swapped-live.png"
 # The keyboard is in the pane: Ctrl+Backquote hides the terminal Ctrl+Alt+P showed, and the pane keeps the keys.
 $toggles = ToggleCount
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 800
-$owner = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"keyboard owner"' -and $_ -match 'terminal hidden' } | Select-Object -Last 1
+$owner = UiLines '"keyboard owner"' | Where-Object { $_ -match 'terminal hidden' } | Select-Object -Last 1
 $ownerFields = if ($owner) { ($owner | ConvertFrom-Json).fields } else { $null }
 "Ctrl+Backquote hid the terminal: $((ToggleCount) -gt $toggles)"
 "then the keys go to $(if ($ownerFields) { "$($ownerFields.element), $($ownerFields.keys_to)" } else { '(not logged)' }), the pane: $([bool]($ownerFields -and $ownerFields.element -eq 'FilePane' -and $ownerFields.keys_to -eq 'window'))"
-$ran = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields.command }
+$ran = UiObjects '"command executed"' | ForEach-Object { $_.fields.command }
 foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPattern", "edit.invertSelection", "edit.unselectAll", "edit.toggleSelectionInPlace",
   "file.calculateAllFolderSizes", "go.root", "go.chooseDriveLeft", "view.swapPanes", "file.view", "file.edit", "file.newTextFile", "terminal.insertPath") {
   "  ran $command from a key: $($ran -contains $command)"
@@ -1001,7 +1001,7 @@ if ($f5) { ([System.Windows.Automation.InvokePattern]$f5.GetCurrentPattern([Syst
 Start-Sleep -Milliseconds 2500
 Shot $h "$ShotDir\compact-f5-live.png"
 "the bar's F5 copied the file: $(Test-Path -LiteralPath "$cc\dst\cabinetos-live-check-f5.txt")"
-"the bar ran file.copyToOtherPane: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' -and $_ -match 'file\.copyToOtherPane' -and $_ -match '"trigger":"fkeyBar"' }))"
+"the bar ran file.copyToOtherPane: $([bool](UiLines '"command executed"' | Where-Object { $_ -match 'file\.copyToOtherPane' -and $_ -match '"trigger":"fkeyBar"' }))"
 
 # Speed review, proposal B: the list keeps half a screen of rows made above and below its view (Repeater.VerticalCacheLength
 # 0.5, not WinUI's 2). A fast drag of the scroll bar's thumb must not leave empty rows on screen. The thumb is found through UI
@@ -1585,7 +1585,7 @@ Step "edge: Enter on deep notes.md: the status bar says why the preview cannot s
 if ((SelectionText) -notmatch 'deep') { "the long path's pane was not active (status: $(SelectionText)); Tab once more"; [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400; [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300 }
 [Live]::Press($VK.Down); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\edge-preview-refused-live.png"
-$notice = Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"notice shown"' -and $_ -match 'deep notes.md' }
+$notice = UiLines '"notice shown"' | Where-Object { $_ -match 'deep notes.md' }
 "the status bar said why: $([bool]$notice)"
 
 Step "edge: Shift+Delete on the junction, Delete permanently through UI Automation"
@@ -2286,19 +2286,19 @@ Step "close"
 $script:h = $null
 [void]$p.CloseMainWindow(); [void]$p.WaitForExit(8000)
 Start-Sleep -Milliseconds 500
-$corePids = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"core started"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields.pid }
+$corePids = UiObjects '"core started"' | ForEach-Object { $_.fields.pid }
 "app exited: $($p.HasExited), code $($p.ExitCode); cores this app started: $($corePids -join ',')"
 foreach ($c in $corePids) { "core $c exited with the window: $(-not [bool](Get-Process -Id $c -ErrorAction SilentlyContinue))" }
 "all cabinetos-core processes now (other agents may run their own): '$((Get-Process cabinetos-core -ErrorAction SilentlyContinue).Id -join ',')'"
 $config = Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json
 "config keybindings:"; $config.keybindings | ConvertTo-Json -Compress
 "config ui.lastPaths: $($config.ui.lastPaths -join ' | '); ui.dualPane: $($config.ui.dualPane)"
-$ui = Get-Content "$root\logs\ui.*.jsonl"
+$ui = UiAll
 $job = $ui | Where-Object { $_ -match '"job started"' } | Select-Object -First 1
 if ($job) {
   $id = ($job | ConvertFrom-Json).request_id
   "one start_job, request_id $id, in the UI log:"; $ui | Where-Object { $_ -match $id }
-  "and in the core log:"; Get-Content "$root\logs\core.*.jsonl" | Where-Object { $_ -match $id }
+  "and in the core log:"; (LogOf 'core').Lines($id)
 }
 Step "done"
 if ($Strict -and -not $Virtual -and -not $script:scrollGoal) { "STRICT: the $(if ($Panel) { 'panel' } else { 'scroll' }) goal was not met"; exit 1 }
