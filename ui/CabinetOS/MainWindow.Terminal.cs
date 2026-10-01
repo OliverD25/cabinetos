@@ -265,6 +265,9 @@ public sealed partial class MainWindow
             case { Length: > 0 } text:
                 _terminal.Paste(session, text);
                 break;
+            default:
+                Diag.Info(TerminalTarget, "terminal paste: the clipboard holds no text", new LogField("session_id", session));
+                break;
         }
     }
 

@@ -2382,10 +2382,21 @@ Start-Sleep -Milliseconds 300
 Step "21: Ctrl+Shift+V in the terminal pastes a command; Enter runs it, and it writes a file"
 # Ctrl+Shift+W gave the keyboard to the tab that came to the front.
 $pasted = "$t21\pasted-21.txt"
+# 11a's Ctrl+Alt+P left its path on this shell's prompt (its Esc did not clear it in the runs of 2026-10-02), and a paste
+# behind it is no command. Ctrl+C with nothing selected goes to the shell, which drops the line and shows a new prompt.
+[Live]::Press($VK.Ctrl, $VK.C); Start-Sleep -Milliseconds 600
 [System.Windows.Forms.Clipboard]::SetText("Set-Content -LiteralPath '$pasted' -Value 21")
+$pasteLines = '"(terminal paste asked|terminal pasted|terminal paste: the clipboard holds no text|a key the page did not get)"'
+$pasteBefore = UiCount $pasteLines
 [Live]::Press($VK.Ctrl, $VK.Shift, $VK.V); Start-Sleep -Milliseconds 600
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 "21: Ctrl+Shift+V pasted the command and Enter wrote the file: $(Test-Path -LiteralPath $pasted)"
+if (-not (Test-Path -LiteralPath $pasted)) {
+  # What the window did with the key: the page asks for the clipboard, the window pastes, or the key never reached the page.
+  @(ShellLines 'terminal paste asked|terminal pasted|terminal paste: the clipboard holds no text|a key the page did not get' | Select-Object -Skip $pasteBefore) |
+    ForEach-Object { "21:   the window: $($_.message) $($_.fields | ConvertTo-Json -Compress)" }
+  "21:   the window's paste lines after the key: $((UiCount $pasteLines) - $pasteBefore)"
+}
 
 Step "21: Clear-Host and an echo, a drag over the text, then Ctrl+Shift+C: the selection is on the clipboard"
 # xx- in front: a selection that starts a column late still holds copy-21.

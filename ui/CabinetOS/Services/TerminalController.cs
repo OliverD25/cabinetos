@@ -576,7 +576,9 @@ internal sealed class TerminalController
                 }
                 break;
             case "paste":
-                if (Find(message.Session) is { Running: true })
+                var running = Find(message.Session) is { Running: true };
+                Diag.Info(Target, "terminal paste asked", new LogField("session_id", message.Session), new LogField("running", running));
+                if (running)
                 {
                     PasteRequested?.Invoke(message.Session);
                 }
@@ -592,7 +594,7 @@ internal sealed class TerminalController
             return;
         }
         _page.Post(TerminalPageMessages.Paste(tab.SessionId, text));
-        Diag.Debug(Target, "terminal paste", new LogField("session_id", tab.SessionId), new LogField("chars", text.Length));
+        Diag.Info(Target, "terminal pasted", new LogField("session_id", tab.SessionId), new LogField("chars", text.Length));
     }
 
     private void OnPageReady()
