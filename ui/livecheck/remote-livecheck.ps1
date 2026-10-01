@@ -11,16 +11,21 @@
 # the machine's name in the file name; prints DONE.md. Needs the Release window and the release core built on
 # this PC (docs/ui.md, "The live check"). Runs in Windows PowerShell 5.1 and PowerShell 7.
 #
+# -Branch names the branch to send (main when left out): a git worktree sends its own branch, which must be a
+# fast-forward of what the machine's clone has. -Io names the folder for the output, for a worktree elsewhere.
+#
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-livecheck.ps1
 #   remote-livecheck.ps1 -SkipBuilds      # the machine already has the current builds
 #   remote-livecheck.ps1 -Machine omen -RemoteRepo C:\Dev\cabinetos\cabinetos
+#   remote-livecheck.ps1 -Branch my-branch -Io E:\path\to\_io\live-check
 param(
   [string]$Machine = 'omen',
   [string]$RemoteRepo = 'C:\Dev\cabinetos\cabinetos',
   [string]$Task = 'CabinetOS-LiveCheck',
   [int]$WaitMinutes = 20,
   [switch]$SkipBuilds,
-  [string]$Io = ''
+  [string]$Io = '',
+  [string]$Branch = 'main'
 )
 $ErrorActionPreference = 'Stop'
 # Git's own ssh reads HOME for ~/.ssh, and a Git Bash points HOME elsewhere; the Windows user's folder is the one.
@@ -49,13 +54,13 @@ if (-not $name) { throw "no answer from $Machine over ssh" }
 
 # 1. The commits the machine lacks, as a bundle; its clone comes from a bundle too, so it has no GitHub login.
 $theirs = (Remote "git -C $RemoteRepo rev-parse HEAD") | Select-Object -Last 1
-$ours = (& git -C $repo rev-parse main).Trim()
+$ours = (& git -C $repo rev-parse $Branch).Trim()
 if ($theirs -ne $ours) {
   $bundle = Join-Path $env:TEMP 'cabinetos-remote.bundle'
-  & git -C $repo bundle create $bundle "$theirs..main" 2>&1 | Out-Null
-  if ($LASTEXITCODE -ne 0) { & git -C $repo bundle create $bundle main 2>&1 | Out-Null }
+  & git -C $repo bundle create $bundle "$theirs..$Branch" 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { & git -C $repo bundle create $bundle $Branch 2>&1 | Out-Null }
   Send $bundle "$remoteRepoFwd/../_io/inbox/cabinetos.bundle"
-  Remote "git -C $RemoteRepo pull -q --ff-only ../_io/inbox/cabinetos.bundle main; git -C $RemoteRepo log --oneline -1" | Select-Object -Last 1
+  Remote "git -C $RemoteRepo pull -q --ff-only ../_io/inbox/cabinetos.bundle $Branch; git -C $RemoteRepo log --oneline -1" | Select-Object -Last 1
 } else {
   "the clone is at $ours already"
 }
