@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using CabinetOS.Core.Ipc;
+using CabinetOS.Core.Presentation;
 using CabinetOS.Tests.Support;
 
 namespace CabinetOS.Tests;
@@ -56,11 +57,12 @@ public class PageKeyboardEndToEndTests
                 from = marker + 1;
                 var has = block.Count(l => Message(l) == "a page has the keyboard" && Field(l, "page").GetString() == "terminal");
                 var owner = logs.Skip(marker).FirstOrDefault(l => Message(l) == "keyboard owner" && Field(l, "moment").GetString() == label);
-                var keysTo = owner is null ? "(not logged)" : Field(owner, "keys_to").GetString();
-                var wrong = has == 0 || keysTo != "terminal" || block.Any(l => Message(l) == "a page did not get the keyboard");
+                // The input window that has the keys, as Windows reports it: Chromium's when the page has them.
+                var inputWindow = owner is null ? "(not logged)" : Field(owner, "window_class").GetString();
+                var wrong = has == 0 || !PageKeyboard.IsPageWindow(inputWindow) || block.Any(l => Message(l) == "a page did not get the keyboard");
                 if (wrong)
                 {
-                    problems.Add($"round {round}: {has} lines \"a page has the keyboard\", the keys go to {keysTo}\n{Shell(block)}");
+                    problems.Add($"round {round}: {has} lines \"a page has the keyboard\", the keys go to the input window {inputWindow}\n{Shell(block)}");
                 }
             }
             Assert.True(problems.Count == 0,
