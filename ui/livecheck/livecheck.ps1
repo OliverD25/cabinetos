@@ -30,6 +30,7 @@ param(
   [switch]$Panel
 )
 $ErrorActionPreference = 'Stop'
+$runStart = Get-Date
 $Exe = [System.IO.Path]::GetFullPath($Exe)
 $Core = [System.IO.Path]::GetFullPath($Core)
 foreach ($needed in $Exe, $Core) { if (-not (Test-Path -LiteralPath $needed)) { "STOP: $needed is missing: build it first (docs/ui.md, 'The live check')"; exit 1 } }
@@ -490,8 +491,12 @@ Shot $h "$ShotDir\single.png"
 [Live]::Press($VK.Ctrl, $VK.Shift, $VK.D); Start-Sleep -Milliseconds 500
 
 Step "tab to the other pane and back"
+$focusMoves = '"command executed".*"command":"view\.focusOtherPane"'
+$focusBefore = UiCount $focusMoves
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
+[void](WaitUi $focusMoves ($focusBefore + 1) (Get-Date) 0 2000)
+"tab to the other pane and back: Tab twice ran view.focusOtherPane twice: $((UiCount $focusMoves) -eq $focusBefore + 2)"
 
 Step "enter the selected folder, then backspace"
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 900
@@ -2301,4 +2306,6 @@ if ($job) {
   "and in the core log:"; (LogOf 'core').Lines($id)
 }
 Step "done"
+$took = (Get-Date) - $runStart
+"the run took {0:hh\:mm\:ss} ({1:N0} s)" -f $took, $took.TotalSeconds
 if ($Strict -and -not $Virtual -and -not $script:scrollGoal) { "STRICT: the $(if ($Panel) { 'panel' } else { 'scroll' }) goal was not met"; exit 1 }
