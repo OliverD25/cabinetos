@@ -65,6 +65,14 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
   creator's rule of 2026-10-01. A `DONE.md` in Notepad says when they are
   free again. Scripts that press no key (the speed runner, the snapshot
   steps) need no countdown.
+- While the creator works at this PC, nothing that opens CabinetOS windows
+  runs here: not the live check, not the end-to-end suite, not the speed
+  runner. Those runs go to the Omen laptop (`ui/livecheck/remote-livecheck.ps1`
+  for the live check; the test and speed runs follow once the laptop has
+  the .NET SDK), or wait for the night or for the creator's word. The
+  creator's rule of 2026-10-01: a morning of coders' test windows spawning
+  made this PC unusable. Coders' handouts carry this rule; the fast test
+  run (no end-to-end tests) opens no window and is always fine.
 - Unsafe Rust only in the crates that talk to Windows (`ipc`, `fs`, `jobs`,
   `index`), every `unsafe` block with a `// SAFETY:` comment.
 - Project skills live in `.claude/skills/`. `heavy-logging` says when and
