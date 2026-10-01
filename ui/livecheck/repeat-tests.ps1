@@ -4,7 +4,10 @@
 # (remote-tests.ps1 builds it; run that first with the same filter). The load is -Burn busy processes. Each loops at
 # -BurnPriority (Normal, AboveNormal or High) until -BurnMinutes pass or this script ends. A thread that wakes after a
 # wait gets a boost over busy threads of its own priority, so Normal busy processes slow a window less than a full test
-# suite does; AboveNormal ones starve it the way a suite of windows does. The exit code is the number of runs that did not pass.
+# suite does; AboveNormal ones starve it the way a suite of windows does (32 of them on 16 logical processors starved
+# everything, this script too: one run took 28 minutes). -Cover puts a black full-screen window in front of everything
+# for the whole script: the test windows are then hidden behind it, as when someone works at the machine, and Windows
+# stops drawing a window nobody sees. The exit code is the number of runs that did not pass.
 #
 # On the Omen laptop, through remote-script.ps1 (the windows need its desktop):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-script.ps1 -Script ui\livecheck\repeat-tests.ps1 -Args '-Filter "FullyQualifiedName~The_top_row_fits" -Times 5 -Burn 24 -BurnPriority AboveNormal' -Branch <branch>
@@ -13,7 +16,8 @@ param(
   [int]$Times = 5,
   [int]$Burn = 0,
   [ValidateSet('Normal', 'AboveNormal', 'High')][string]$BurnPriority = 'Normal',
-  [int]$BurnMinutes = 30
+  [int]$BurnMinutes = 30,
+  [switch]$Cover
 )
 $ErrorActionPreference = 'Continue'
 $ui = Split-Path $PSScriptRoot -Parent
@@ -22,8 +26,15 @@ $env:CABINETOS_UI_E2E = '1'
 $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
 if (Test-Path -LiteralPath $core) { $env:CABINETOS_CORE_EXE = $core }
 $burners = @()
+$cover = $null
 $failedRuns = 0
 try {
+  if ($Cover) {
+    $form = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.Form; $f.FormBorderStyle = "None"; $f.WindowState = "Maximized"; $f.TopMost = $true; $f.BackColor = "Black"; $f.ShowInTaskbar = $false; $t = New-Object System.Windows.Forms.Timer; $t.Interval = ' + ($BurnMinutes * 60000) + '; $t.Add_Tick({ $f.Close() }); $t.Start(); [void]$f.ShowDialog()'
+    $cover = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($form))
+    "cover: a full-screen window in front of the others"
+    Start-Sleep -Seconds 3
+  }
   $busy = "`$end = (Get-Date).AddMinutes($BurnMinutes); while ((Get-Date) -lt `$end) { }"
   for ($i = 0; $i -lt $Burn; $i++) {
     $burner = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-Command', $busy
@@ -56,5 +67,6 @@ try {
   "summary: $($Times - $failedRuns) of $Times runs passed"
 } finally {
   foreach ($burner in $burners) { try { $burner.Kill() } catch { } }
+  if ($cover) { try { $cover.Kill() } catch { } }
 }
 exit $failedRuns
