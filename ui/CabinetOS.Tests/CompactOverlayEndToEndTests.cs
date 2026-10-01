@@ -174,7 +174,8 @@ public class CompactOverlayEndToEndTests
                 $"path:{data}",
                 "wait:500",
                 "cmd:view.toggleTerminal",
-                "wait:3000",
+                // The shell is up when its pipe is connected: a fixed 3 s was a guess that a loaded machine could miss.
+                "until:terminal",
                 "cmd:view.toggleCompactOverlay",
                 "wait:1000",
                 "cmd:view.toggleTerminal",
@@ -189,11 +190,16 @@ public class CompactOverlayEndToEndTests
             Assert.True(Field(entered, "dock").GetBoolean(), "the terminal's dock was shown when the drawer began");
             var window = NativeWindow.Find(process.Id);
             Assert.NotEqual(0, window);
-            Assert.True(NativeWindow.IsTopmost(window));
+            // This check failed right after the "entered" line in three full runs on 2026-10-01 and was not reproduced in 50
+            // runs here, quiet or loaded. Windows' side of the drawer is waited for, and a failure says what the log and the
+            // process's windows were.
+            await WaitForAsync(() => NativeWindow.IsTopmost(window) || process.HasExited, "the drawer's window to be topmost", TimeSpan.FromSeconds(10));
+            Assert.True(NativeWindow.IsTopmost(window), $"the drawer is topmost; {Describe(run, "dock", process)}");
             await Task.Delay(1500);
             AssertLayoutUntouched(configPath, "while the drawer is on");
             var left = await run.WaitForLineAsync("dock", "compact overlay left");
-            Assert.False(NativeWindow.IsTopmost(window));
+            await WaitForAsync(() => !NativeWindow.IsTopmost(window) || process.HasExited, "the window to stop being topmost after the drawer", TimeSpan.FromSeconds(10));
+            Assert.False(NativeWindow.IsTopmost(window), $"the window is not topmost after the drawer; {Describe(run, "dock", process)}");
             Assert.True(Field(left, "dock").GetBoolean(), "the dock is shown again");
             Assert.True(Field(left, "dual").GetBoolean());
             Assert.True(Field(left, "sidebar").GetBoolean());
@@ -272,7 +278,8 @@ public class CompactOverlayEndToEndTests
             File.WriteAllText(configPath, file.ToJsonString());
             var followed = await run.WaitForLineAsync("resize", "compact overlay follows the configuration");
             Assert.Equal((440, 560), (Field(followed, "width").GetInt32(), Field(followed, "height").GetInt32()));
-            await Task.Delay(300);
+            await WaitForAsync(() => Math.Abs(440 - NativeWindow.Bounds(window).WidthDips) <= 1 && Math.Abs(560 - NativeWindow.Bounds(window).HeightDips) <= 1,
+                "the drawer to be 440 by 560 on screen after the edit of the file", TimeSpan.FromSeconds(10));
             var edited = NativeWindow.Bounds(window);
             AssertNear(440, edited.WidthDips, 1, "the width after the edit of the file");
             AssertNear(560, edited.HeightDips, 1, "the height after the edit of the file");
@@ -289,6 +296,11 @@ public class CompactOverlayEndToEndTests
             Repo.RemoveTempFolder(root);
         }
     }
+
+    // What the window's log and Windows say about it, for a check of the drawer's style that failed.
+    private static string Describe(Run run, string name, Process process) =>
+        $"the window logged {run.Count(name, "compact overlay entered")} \"entered\" and {run.Count(name, "compact overlay left")} \"left\" lines; "
+        + (process.HasExited ? $"its process has exited with code {process.ExitCode}" : $"its windows: {NativeWindow.Describe(process.Id)}");
 
     private static void AssertNear(double expected, double actual, double tolerance, string what) =>
         Assert.True(Math.Abs(expected - actual) <= tolerance, $"{what}: expected {expected} within {tolerance}, was {actual}");
@@ -317,7 +329,7 @@ public class CompactOverlayEndToEndTests
                 using var reader = new StreamReader(stream);
                 return reader.ReadToEnd();
             }
-            catch (IOException) when (attempt < 10)
+            catch (IOException) when (attempt < 100)
             {
                 Thread.Sleep(100);
             }
@@ -360,6 +372,22 @@ public class CompactOverlayEndToEndTests
         }
 
         public static bool IsTopmost(nint hwnd) => (GetWindowLongPtr(hwnd, ExStyle) & Topmost) != 0;
+
+        // Every top-level window of the process, hidden ones too: its handle, title, whether it shows and its extended style.
+        public static string Describe(int processId)
+        {
+            var found = new List<string>();
+            EnumWindows((hwnd, _) =>
+            {
+                GetWindowThreadProcessId(hwnd, out var owner);
+                if (owner == processId)
+                {
+                    found.Add($"[{hwnd} \"{Title(hwnd)}\" visible={IsWindowVisible(hwnd)} exstyle=0x{GetWindowLongPtr(hwnd, ExStyle):X}]");
+                }
+                return true;
+            }, 0);
+            return string.Join(' ', found);
+        }
 
         public static Place Bounds(nint hwnd)
         {
