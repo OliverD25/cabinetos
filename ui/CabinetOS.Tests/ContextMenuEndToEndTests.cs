@@ -671,9 +671,9 @@ public class ContextMenuEndToEndTests
 
         private const int Attempts = 3;
 
-        // Whether the machine is calm: under 35 % busy (Task Manager's CPU, all processors) over one second, a quiet machine
-        // is under 5 % and a full suite beside this one 40 to 55 %. Gives up after 30 s and returns the last reading: a machine
-        // that is never calm is measured anyway, and the failure says how busy it was.
+        // Whether the machine is calm: under 35 % busy (Task Manager's CPU, all processors) over one second. The main PC idles at
+        // 13 to 19 % with its other sessions, and a full suite beside this test is at 40 to 55 % in its first minute. Gives up after
+        // 30 s and returns the last reading: a machine that is never calm is measured anyway, and the failure says how busy it was.
         private static async Task<double> WaitForCalmAsync()
         {
             var deadline = DateTime.UtcNow.AddSeconds(30);
