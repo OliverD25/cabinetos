@@ -535,6 +535,21 @@ UI asks for those for the rows it shows, a screenful at a time.
 - The core keeps the last 2,000 PNGs by key and size. The first icon of a
   program may take long, as the shell loads it from the file (up to about
   a second, measured in a debug build); icons are drawn one at a time.
+- The core draws icons ahead (`icons.rs`), on its blocking threads and
+  never before a reply: `folder` and `generic` right after it starts, and
+  after each `list_directory` reply the kinds of that listing's first
+  entries (its `folder`, `generic` and `ext:` keys, each once, at most 24,
+  none for `.exe`, `.ico` and `.lnk` files, whose `path:` key stands for one
+  file). A kind is drawn in the sizes `get_icon` was asked for so far, or in
+  all four before the first request. A `get_icon` that comes meanwhile finds
+  the PNG, or waits for the one drawing in progress and goes first. A
+  batch that drew something logs one debug line, `icons drawn ahead`, with
+  `why` (`core start` or `listing`), the `keys`, how many icons were `drawn`,
+  `cached` or `failed`, and `took_ms`. The first drawing in a process takes
+  about 35 ms (the shell starts its image lists), and the next ones 1 to
+  45 ms by type (a type with a handler, such as `.png`, loads its resources
+  first). Until 2026-10-01 a key was drawn only when it was asked for: a
+  median of 25 ms in the core (waiting for the lock included), up to 171 ms.
 - An unknown key is `not_found`; a failure of the shell is `io` with its
   message.
 

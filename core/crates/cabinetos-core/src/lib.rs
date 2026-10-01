@@ -27,6 +27,7 @@
 
 mod connection;
 mod events;
+mod icons;
 mod listing;
 mod market;
 mod measure;
@@ -275,6 +276,10 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
     let previews = preview::Previews::start(&events);
     // Dropping the watcher at the end stops it.
     let _drives = volumes::watch(Arc::clone(&events));
+    let hydrator = Arc::new(cabinetos_fs::Hydrator::new());
+    // The window asks for these first, and the shell draws one icon at a
+    // time: they are drawn now, while the window builds itself.
+    icons::at_start(&hydrator, &shutdown);
     let services = Arc::new(Services {
         settings,
         jobs,
@@ -282,7 +287,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         plugins,
         indexer: search::IndexerLink::from_env(),
         terminals,
-        hydrator: Arc::new(cabinetos_fs::Hydrator::new()),
+        hydrator,
         themes,
         market,
         windows: window::WindowStates::default(),

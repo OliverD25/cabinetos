@@ -28,12 +28,23 @@
 //! shrinking the 32-pixel one by a quarter. The icon's pixels are read with
 //! `GetIconInfo` and `GetDIBits` and encoded as a PNG; the PNGs are cached
 //! per key and size.
+//!
+//! **Drawing ahead.** A new core has no PNGs, and the shell draws one icon at
+//! a time (the speed review measured a median of 25 ms in the core), so a
+//! window that asks for six kinds of icon waits for the sixth until the
+//! other five are drawn. [`Hydrator::draw_ahead`] draws keys before
+//! they are asked for, on a thread of the caller's, in the sizes the window
+//! has asked for so far (all of [`ICON_SIZES`] until it has asked for one).
+//! A request that comes meanwhile goes first: it waits for the drawing in
+//! progress, not for the rest.
 
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::io;
 use std::path::Path;
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use cabinetos_protocol::EntryDetail;
 use windows::Win32::Graphics::Gdi::{
@@ -70,6 +81,14 @@ pub const ICONS_KEPT: usize = 2_000;
 /// Type names kept, one per extension.
 const TYPE_NAMES_KEPT: usize = 4_096;
 
+/// The most keys [`Hydrator::icon_keys_of`] names for one listing: the kinds
+/// of the first screens are what the window asks for first.
+pub const ICON_KEYS_PER_LISTING: usize = 24;
+
+/// The most entries [`Hydrator::icon_keys_of`] reads, so that a folder of
+/// 100,000 names with few kinds does not have its names read for nothing.
+const ICON_KEYS_SCAN: usize = 5_000;
+
 /// `path:` keys kept, each with its path. A key forgotten here is
 /// `not_found` until its folder is described again.
 const PATHS_KEPT: usize = 16_384;
@@ -87,6 +106,22 @@ pub struct Hydrator {
     type_names: Mutex<Bounded<TypeKey, String>>,
     paths: Mutex<Bounded<String, String>>,
     icons: Mutex<IconCache>,
+    /// The sizes `icon_png` was asked for: bit `n` is `ICON_SIZES[n]`.
+    sizes_asked: AtomicU8,
+    /// Requests of `icon_png` waiting for the drawing lock; drawing ahead
+    /// lets them go first.
+    waiting: AtomicUsize,
+}
+
+/// What [`Hydrator::draw_ahead`] did, in icons (a key at one size).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DrawnAhead {
+    /// Drawn now.
+    pub drawn: usize,
+    /// Already in the cache.
+    pub cached: usize,
+    /// The shell could not draw them.
+    pub failed: usize,
 }
 
 /// What a type name depends on.
@@ -122,6 +157,8 @@ impl Hydrator {
             type_names: Mutex::new(Bounded::new(TYPE_NAMES_KEPT)),
             paths: Mutex::new(Bounded::new(PATHS_KEPT)),
             icons: Mutex::new(Bounded::new(ICONS_KEPT)),
+            sizes_asked: AtomicU8::new(0),
+            waiting: AtomicUsize::new(0),
         }
     }
 
@@ -219,6 +256,15 @@ impl Hydrator {
                 reason: format!("icons come in 16, 24, 32 or 48 pixels, not {size}"),
             });
         }
+        if let Some(index) = ICON_SIZES.iter().position(|&kept| kept == size) {
+            self.sizes_asked.fetch_or(1 << index, Ordering::Relaxed);
+        }
+        self.icon(key, size, true)
+    }
+
+    /// The icon, from the cache or drawn. A request (`urgent`) tells the
+    /// drawing ahead to wait while it waits for the lock.
+    fn icon(&self, key: &str, size: u32, urgent: bool) -> Result<Arc<[u8]>, FsError> {
         let cached = (key.to_owned(), size);
         if let Some(png) = lock(&self.icons).get(&cached) {
             return Ok(png);
@@ -229,12 +275,96 @@ impl Hydrator {
             source: io::Error::other(message),
         };
         let png: Arc<[u8]> = {
-            let _one_at_a_time = lock(&DRAWING);
+            let _one_at_a_time = self.lock_drawing(urgent);
             let rgba = draw_icon(&source, size).map_err(failed)?;
             encode_png(&rgba, size).map_err(failed)?.into()
         };
         lock(&self.icons).insert(cached, Arc::clone(&png));
         Ok(png)
+    }
+
+    fn lock_drawing(&self, urgent: bool) -> MutexGuard<'static, ()> {
+        if urgent {
+            self.waiting.fetch_add(1, Ordering::SeqCst);
+        }
+        let guard = lock(&DRAWING);
+        if urgent {
+            self.waiting.fetch_sub(1, Ordering::SeqCst);
+        }
+        guard
+    }
+
+    /// Draws the icons of `keys` that are not in the cache, one at a time, so
+    /// that [`Hydrator::icon_png`] finds them (the window asks for an icon
+    /// 25 ms or more after its rows, and the shell draws one at a time). The
+    /// sizes are those `icon_png` was asked for so far, or all of
+    /// [`ICON_SIZES`] before the first request; each key's sizes are decided
+    /// again when its turn comes. A request for an icon goes first: this
+    /// waits while one is waiting for the lock. `stop` is asked before each
+    /// icon. Blocking: call it on a thread that may take a second.
+    pub fn draw_ahead(&self, keys: &[String], stop: impl Fn() -> bool) -> DrawnAhead {
+        let mut done = DrawnAhead::default();
+        for key in keys {
+            for size in self.sizes_to_draw() {
+                while self.waiting.load(Ordering::SeqCst) > 0 && !stop() {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                if stop() {
+                    return done;
+                }
+                if lock(&self.icons).get(&(key.clone(), size)).is_some() {
+                    done.cached += 1;
+                } else if self.icon(key, size, false).is_ok() {
+                    done.drawn += 1;
+                } else {
+                    done.failed += 1;
+                }
+            }
+        }
+        done
+    }
+
+    /// The sizes to draw ahead: the ones asked for, else all.
+    fn sizes_to_draw(&self) -> Vec<u32> {
+        let asked = self.sizes_asked.load(Ordering::Relaxed);
+        ICON_SIZES
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| asked == 0 || asked & (1 << index) != 0)
+            .map(|(_, &size)| size)
+            .collect()
+    }
+
+    /// The icon keys that [`Hydrator::describe`] gives the first entries of
+    /// the listing in `section`, each once, in the listing's order: `folder`,
+    /// `generic` and `ext:<extension>`, at most [`ICON_KEYS_PER_LISTING`].
+    /// A file with an icon of its own (`.exe`, `.ico`, `.lnk`) is left out:
+    /// its key stands for one file, and its icon is read from the file.
+    pub fn icon_keys_of(section: &[u8]) -> Result<Vec<String>, LayoutError> {
+        let reader = ListingReader::new(section)?;
+        let mut keys: Vec<String> = Vec::new();
+        for index in 0..reader.len().min(ICON_KEYS_SCAN) {
+            if keys.len() >= ICON_KEYS_PER_LISTING {
+                break;
+            }
+            let entry = reader.entry(index)?;
+            let key = if entry.meta.attributes & attributes::DIRECTORY != 0 {
+                "folder".to_owned()
+            } else if let Some(extension) = extension(&entry.name) {
+                if OWN_ICON.contains(&extension.as_str())
+                    && entry.meta.attributes & attributes::NOT_ON_DISK == 0
+                {
+                    continue;
+                }
+                format!("ext:{extension}")
+            } else {
+                "generic".to_owned()
+            };
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        Ok(keys)
     }
 
     fn icon_source(&self, key: &str) -> Result<IconSource, FsError> {
@@ -892,6 +1022,123 @@ mod tests {
             let png = hydrator.icon_png(key, 16).unwrap();
             assert!(!png.is_empty());
         }
+    }
+
+    #[test]
+    fn drawing_ahead_fills_the_cache_in_every_size_until_a_size_is_asked_for() {
+        let hydrator = Hydrator::new();
+        let keys: Vec<String> = ["folder", "generic", "ext:.txt"]
+            .map(str::to_owned)
+            .to_vec();
+
+        let done = hydrator.draw_ahead(&keys, || false);
+
+        assert_eq!(
+            done,
+            DrawnAhead {
+                drawn: 12,
+                cached: 0,
+                failed: 0
+            }
+        );
+        for key in &keys {
+            for size in ICON_SIZES {
+                assert!(
+                    lock(&hydrator.icons).get(&(key.clone(), size)).is_some(),
+                    "{key} at {size}"
+                );
+            }
+        }
+        // Asked again, nothing is drawn.
+        let again = hydrator.draw_ahead(&keys, || false);
+        assert_eq!(
+            (again.drawn, again.cached, again.failed),
+            (0, 12, 0),
+            "{again:?}"
+        );
+        // A request now finds the PNG that was drawn ahead: the cache hands
+        // out one shared buffer.
+        let first = hydrator.icon_png("folder", 24).unwrap();
+        assert!(Arc::ptr_eq(
+            &first,
+            &hydrator.icon_png("folder", 24).unwrap()
+        ));
+    }
+
+    #[test]
+    fn drawing_ahead_follows_the_sizes_the_window_asks_for_and_stops_when_told() {
+        let hydrator = Hydrator::new();
+        // The window asks for 24 (a screen at 150 %): the rest is not drawn.
+        hydrator.icon_png("folder", 24).unwrap();
+        let keys = vec!["ext:.md".to_owned(), "ext:.rs".to_owned()];
+        let done = hydrator.draw_ahead(&keys, || false);
+        assert_eq!((done.drawn, done.cached, done.failed), (2, 0, 0));
+        for key in &keys {
+            for size in ICON_SIZES {
+                assert_eq!(
+                    lock(&hydrator.icons).get(&(key.clone(), size)).is_some(),
+                    size == 24,
+                    "{key} at {size}"
+                );
+            }
+        }
+        // A request for another size too: both are drawn from then on.
+        hydrator.icon_png("folder", 32).unwrap();
+        let more = hydrator.draw_ahead(&["ext:.json".to_owned()], || false);
+        assert_eq!(more.drawn, 2);
+
+        let stopped = hydrator.draw_ahead(&["ext:.toml".to_owned()], || true);
+        assert_eq!(stopped, DrawnAhead::default());
+        assert!(
+            lock(&hydrator.icons)
+                .get(&("ext:.toml".to_owned(), 24))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn a_key_the_shell_cannot_draw_is_counted_and_the_rest_go_on() {
+        let hydrator = Hydrator::new();
+        hydrator.icon_png("folder", 16).unwrap();
+        let keys = vec![
+            "path:0123456789abcdef".to_owned(),
+            "nope".to_owned(),
+            "ext:.txt".to_owned(),
+        ];
+        let done = hydrator.draw_ahead(&keys, || false);
+        assert_eq!((done.drawn, done.cached, done.failed), (1, 0, 2));
+    }
+
+    #[test]
+    fn a_listings_icon_keys_are_its_kinds_in_its_order_without_files_with_an_icon_of_their_own() {
+        let dir = scratch();
+        let section = section_of(dir.path());
+        // The folder, the text file, the file without an extension; the
+        // program's key stands for that one file.
+        assert_eq!(
+            Hydrator::icon_keys_of(&section).unwrap(),
+            ["folder", "ext:.txt", "generic"]
+        );
+        // A program not on this disk has its extension's icon, like any file.
+        let cloud = section_with(&[
+            ("a.exe", 0x40_0000 | 0x20),
+            ("b.txt", 0x20),
+            ("c.txt", 0x20),
+            ("d.ico", 0x20),
+        ]);
+        assert_eq!(
+            Hydrator::icon_keys_of(&cloud).unwrap(),
+            ["ext:.exe", "ext:.txt"]
+        );
+        // At most ICON_KEYS_PER_LISTING, the first kinds of the listing.
+        let names: Vec<String> = (0..40).map(|n| format!("f.k{n:02}")).collect();
+        let many = section_with(&names.iter().map(|n| (n.as_str(), 0x20)).collect::<Vec<_>>());
+        let keys = Hydrator::icon_keys_of(&many).unwrap();
+        assert_eq!(keys.len(), ICON_KEYS_PER_LISTING);
+        assert_eq!(
+            (keys[0].as_str(), keys[23].as_str()),
+            ("ext:.k00", "ext:.k23")
+        );
     }
 
     #[test]

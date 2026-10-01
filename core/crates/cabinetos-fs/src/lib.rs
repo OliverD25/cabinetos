@@ -81,7 +81,7 @@ use cabinetos_protocol::shm::{EntryKind, ListingMeta};
 
 pub use drives::DriveWatcher;
 pub use error::FsError;
-pub use hydrate::{Hydrator, ICON_SIZES, ICONS_KEPT};
+pub use hydrate::{DrawnAhead, Hydrator, ICON_KEYS_PER_LISTING, ICON_SIZES, ICONS_KEPT};
 pub use measure::{MeasureError, Tree, measure_tree};
 pub use open::{
     Editor, check_editable, command_line, edit_path, open_path, show_properties, start_program,

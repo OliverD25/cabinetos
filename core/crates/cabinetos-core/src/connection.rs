@@ -49,7 +49,7 @@ use crate::listing::{self, CurrentSection, Failure, Published, WatchedListing};
 use crate::plugins::check_grants;
 use crate::settings::{Settings, every_section};
 use crate::{CORE_VERSION, Rejection, decode_request, terminal, volumes};
-use crate::{measure, search};
+use crate::{icons, measure, search};
 
 /// How long the writer may take to send what is still queued when the
 /// connection ends.
@@ -1903,6 +1903,12 @@ impl Session {
         }
 
         let current = CurrentSection::new(1, published.section);
+        // After the reply is queued: the kinds of this listing's icons are
+        // drawn while the window asks for its rows' details. A plugin's
+        // request has no window to show them to.
+        if !self.in_process {
+            icons::for_listing(&self.services.hydrator, &self.shutdown, current.get().1);
+        }
         let refresh = watch.map(|(directory_watcher, changes)| {
             let listing = WatchedListing {
                 listing_id,

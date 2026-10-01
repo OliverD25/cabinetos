@@ -23,7 +23,7 @@ const EVENT_DEADLINE: Duration = Duration::from_secs(2);
 struct Core {
     child: Child,
     pipe: PipeName,
-    _log_dir: TempDir,
+    log_dir: TempDir,
 }
 
 impl Drop for Core {
@@ -34,9 +34,15 @@ impl Drop for Core {
 }
 
 fn start_core() -> Core {
+    start_core_logging(None)
+}
+
+/// A core that logs at `level` (`debug`, say) instead of its default.
+fn start_core_logging(level: Option<&str>) -> Core {
     let log_dir = tempfile::tempdir().unwrap();
     let pipe = PipeName::random();
-    let child = Command::new(CORE_EXE)
+    let mut command = Command::new(CORE_EXE);
+    command
         .args(["--pipe", pipe.token()])
         .env("CABINETOS_LOG_DIR", log_dir.path())
         // Never the real plugins folder, whatever is installed there.
@@ -48,17 +54,19 @@ fn start_core() -> Core {
         .env("CABINETOS_THEMES_DIR", log_dir.path().join("themes"))
         .env("CABINETOS_UNDO_DIR", log_dir.path().join("undo"))
         .env("CABINETOS_CONFIG", log_dir.path().join("cabinetos.json"))
-        .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
+        .stderr(Stdio::null());
+    match level {
+        Some(level) => command.env("CABINETOS_LOG", level),
+        None => command.env_remove("CABINETOS_LOG"),
+    };
+    let child = command.spawn().unwrap();
     Core {
         child,
         pipe,
-        _log_dir: log_dir,
+        log_dir,
     }
 }
 
@@ -335,4 +343,81 @@ async fn volume_info_describes_the_system_drive() {
     assert!(details.drive_letter.is_some());
     assert_eq!(details.filesystem, "NTFS");
     assert!(details.total_bytes > 0);
+}
+
+/// The core's debug lines that say icons were drawn ahead: the reason (`core
+/// start` or `listing`) and the keys, as the log has them.
+fn icon_batches(core: &Core) -> Vec<(String, String)> {
+    let mut batches = Vec::new();
+    for entry in fs::read_dir(core.log_dir.path()).unwrap() {
+        let path = entry.unwrap().path();
+        if path
+            .extension()
+            .is_none_or(|extension| extension != "jsonl")
+        {
+            continue;
+        }
+        // The core is writing: a half-written last line is not a line yet.
+        for line in fs::read_to_string(&path).unwrap_or_default().lines() {
+            let Ok(line) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            if line["message"] == "icons drawn ahead" {
+                batches.push((
+                    line["fields"]["why"].as_str().unwrap().to_owned(),
+                    line["fields"]["keys"].as_str().unwrap().to_owned(),
+                ));
+            }
+        }
+    }
+    batches
+}
+
+#[tokio::test]
+async fn the_core_draws_icons_ahead_at_its_start_and_after_each_listing() {
+    let dir = tempfile::tempdir().unwrap();
+    for name in ["a.zzq1", "b.zzq1", "c.zzq2", "README"] {
+        File::create(dir.path().join(name)).unwrap();
+    }
+    fs::create_dir(dir.path().join("sub")).unwrap();
+    let core = start_core_logging(Some("debug"));
+    let mut client = greeted(&core).await;
+
+    let reply = client.request(list(dir.path(), false)).await.unwrap();
+    assert!(matches!(reply.body, Response::ListingOpened { .. }));
+
+    // The start's batch is the folder's icon and the file without an
+    // extension; the listing's is its kinds, once each, in its order.
+    let until = Instant::now() + Duration::from_secs(10);
+    let batches = loop {
+        let batches = icon_batches(&core);
+        if batches.len() >= 2 || Instant::now() > until {
+            break batches;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert!(
+        batches.contains(&("core start".to_owned(), "folder generic".to_owned())),
+        "{batches:?}"
+    );
+    assert!(
+        batches.contains(&(
+            "listing".to_owned(),
+            "folder ext:.zzq1 ext:.zzq2 generic".to_owned()
+        )),
+        "{batches:?}"
+    );
+
+    // A request for one of them answers, drawn ahead or not.
+    let icon = client
+        .request(Request::GetIcon {
+            key: "ext:.zzq1".to_owned(),
+            size: 24,
+        })
+        .await
+        .unwrap();
+    assert!(
+        matches!(icon.body, Response::Icon { size: 24, .. }),
+        "{icon:?}"
+    );
 }

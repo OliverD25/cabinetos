@@ -444,7 +444,10 @@ names and icons"):
   key. The size is the smallest the core offers that covers 16 px at the
   screen's scale: 16 at 100 %, 24 up to 150 %, 32 up to 200 %, 48 above.
   On a screen with another scale, rows ask for the new size and show the
-  old one until it arrives.
+  old one until it arrives. The core has often drawn them already: it draws
+  `folder` and `generic` when it starts, and the kinds of a listing right
+  after that listing's reply ([ipc.md](ipc.md), "Type names and icons"), so
+  a request mostly finds the PNG made.
 - A core before protocol 9 answers `unknown_request`; the built-in text
   and glyphs then stay, until a restarted core is asked again.
 - Where the shell answers a program identifier instead of a name
