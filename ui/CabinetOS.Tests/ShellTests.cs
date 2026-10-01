@@ -222,6 +222,63 @@ public class ShellTests
         public Task<CoreReply> RequestAsync(CoreRequest request, CancellationToken cancellationToken = default) => reply;
     }
 
+    private static FileSearchResultsReply Walked(bool complete, params string[] paths) =>
+        new([.. paths.Select(p => new FileHit(p, "file"))], FileSearchResultsReply.FromWalk, 2_000_000, complete);
+
+    [Fact]
+    public async Task Quick_Open_says_when_the_walk_stopped_at_its_limit_with_no_rows_and_with_rows()
+    {
+        var answers = new Queue<CoreReply>([Walked(false), Walked(false, @"C:\repo\a.txt"), Walked(true), Walked(true, @"C:\repo\a.txt")]);
+        var model = new QuickOpenModel(new FakeChannel(_ => answers.Dequeue()));
+        model.Open(@"C:\repo");
+        Assert.Null(model.Note);
+
+        // "0 results" alone would say there is no such name; the walk did not look at every name.
+        Assert.True(await model.SearchAsync("zz"));
+        Assert.Equal(("0 results", false), (model.CountText, model.Complete));
+        Assert.Equal(
+            "Nothing found, but not every name was searched: the search stopped at its limit of 2 s or 200,000 entries. The indexer (docs/indexer.md) searches whole volumes.",
+            model.Note);
+
+        Assert.True(await model.SearchAsync("a"));
+        Assert.Equal("1 result", model.CountText);
+        Assert.Equal(
+            "Not every name was searched: the search stopped at its limit of 2 s or 200,000 entries. The indexer (docs/indexer.md) searches whole volumes.",
+            model.Note);
+
+        // A complete answer has no note, with rows or without.
+        Assert.True(await model.SearchAsync("zzz"));
+        Assert.Equal((true, null), (model.Complete, model.Note));
+        Assert.True(await model.SearchAsync("b"));
+        Assert.Null(model.Note);
+    }
+
+    [Fact]
+    public async Task Quick_Open_has_no_note_for_an_index_that_is_complete_blank_text_an_error_or_a_new_start()
+    {
+        var indexing = new FileSearchResultsReply([], FileSearchResultsReply.FromIndex, 900, false);
+        var answers = new Queue<CoreReply>([indexing, new ErrorReply(ErrorCodes.Io, "the index is gone"), Walked(false), Walked(false)]);
+        var model = new QuickOpenModel(new FakeChannel(_ => answers.Dequeue()));
+        model.Open(@"C:\repo");
+
+        // The index too: a volume that is still being indexed is not searched yet.
+        Assert.True(await model.SearchAsync("a"));
+        Assert.Equal("Nothing found, but not every name was searched: a volume is still being indexed.", model.Note);
+
+        // An error says its own words, and the old answer's note is gone.
+        Assert.True(await model.SearchAsync("ab"));
+        Assert.Equal(("the index is gone", null), (model.CountText, model.Note));
+
+        // Blank text asks for nothing and clears the note; so does opening again.
+        Assert.True(await model.SearchAsync("abc"));
+        Assert.NotNull(model.Note);
+        Assert.True(await model.SearchAsync("   "));
+        Assert.Equal((true, null), (model.Complete, model.Note));
+        Assert.True(await model.SearchAsync("abc"));
+        model.Open(@"C:\repo");
+        Assert.Equal((true, null), (model.Complete, model.Note));
+    }
+
     // ----- Find in pane -----
 
     private static SelectionModel Selection(int count, int focus = 0, SelectionStyle style = SelectionStyle.Windows)

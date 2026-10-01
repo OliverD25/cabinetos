@@ -29,6 +29,7 @@ public sealed partial class QuickOpen : UserControl
     private readonly List<Grid> _rows = [];
     private QuickOpenModel? _model;
     private IReadOnlyList<QuickOpenRow>? _shownRows;
+    private string? _shownNote;
     private int _shownHighlight = -1;
 
     // The text the window put in the box: TextBox raises TextChanged later, so the change it causes is known by its text.
@@ -101,6 +102,7 @@ public sealed partial class QuickOpen : UserControl
     {
         SetText("");
         _shownRows = null;
+        _shownNote = null;
         Visibility = Visibility.Visible;
         _entrance.Begin();
         Render();
@@ -194,7 +196,8 @@ public sealed partial class QuickOpen : UserControl
     private static bool IsCtrlDown() =>
         (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
 
-    // The rows are made again when the model has new ones (at most 50); a new highlight only repaints two of them.
+    // The rows are made again when the model has new ones (at most 50) or another note (an empty answer is one shared
+    // list, so its note is compared too); a new highlight only repaints two of them.
     private void Render()
     {
         if (_model is null)
@@ -202,9 +205,10 @@ public sealed partial class QuickOpen : UserControl
             return;
         }
         CountText.Text = _model.CountText;
-        if (!ReferenceEquals(_shownRows, _model.Rows))
+        if (!ReferenceEquals(_shownRows, _model.Rows) || _shownNote != _model.Note)
         {
             _shownRows = _model.Rows;
+            _shownNote = _model.Note;
             _shownHighlight = -1;
             List.Children.Clear();
             _rows.Clear();
@@ -223,6 +227,18 @@ public sealed partial class QuickOpen : UserControl
                     Foreground = ThemeResources.Brush("CbTextTertiaryBrush"),
                     Text = _model.Root.Length > 0 ? $"Finds files and folders in {_model.Root}" : "Finds files and folders on the indexed volumes",
                     TextTrimming = TextTrimming.CharacterEllipsis,
+                });
+            }
+            if (_shownNote is { } note)
+            {
+                // What the search did not reach, with the rows or without them: "0 results" must not stand alone.
+                List.Children.Add(new TextBlock
+                {
+                    Margin = new Thickness(10, 6, 10, 8),
+                    FontSize = 12,
+                    Foreground = ThemeResources.Brush("CbTextTertiaryBrush"),
+                    Text = note,
+                    TextWrapping = TextWrapping.Wrap,
                 });
             }
         }

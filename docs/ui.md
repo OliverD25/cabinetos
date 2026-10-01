@@ -1550,6 +1550,17 @@ mono font, its folder from the workspace's own name down.
   with the rest of the text. **Backspace** in the palette's empty box comes
   back to Quick Open (`PaletteInput`). Ctrl+Shift+P still opens the
   commands at once.
+- When the answer is not complete (`complete: false`: the core's walk
+  stopped at its limit of 2 s or 200,000 entries, or a volume is still being
+  indexed), a line under the rows says so, with rows or without:
+  "Nothing found, but not every name was searched: the search stopped at its
+  limit of 2 s or 200,000 entries. The indexer (docs/indexer.md) searches
+  whole volumes." A bare "0 results" would say there is no such name. More
+  letters do not help, because a walk that stopped goes the same way and
+  stops at the same place; the indexer reaches further
+  (`QuickOpenModel.Note`). Until 2026-10-01 the walk stopped after 20,000
+  entries, so a name after the first 20,000 of a large folder was never
+  found.
 - Esc or a click outside closes it, and the keyboard goes back to the pane.
   Its box is a text box, so it keeps the keys that type or edit, and a key
   without a context that types nothing runs ("Keys, contexts and
@@ -2079,7 +2090,7 @@ nothing.
   "Search: {query} · {n} hits · {index or walk} · {time}", and its tooltip
   names what was searched.
 - Under the title, a note says whether the answer is complete: complete,
-  or incomplete because a walk stopped at its limit (2 s or 20,000
+  or incomplete because a walk stopped at its limit (2 s or 200,000
   entries) or a volume is still being indexed. With 100 hits it adds that
   only the first 100 are shown. When the source is `walk`, it adds that the
   index is not running, and that docs/indexer.md, "Running it", says how to

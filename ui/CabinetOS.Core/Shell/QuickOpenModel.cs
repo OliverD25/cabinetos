@@ -2,6 +2,7 @@ using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
+using CabinetOS.Core.Search;
 
 namespace CabinetOS.Core.Shell;
 
@@ -46,6 +47,35 @@ public sealed class QuickOpenModel(ICoreChannel core)
     /// <summary>Why the last search failed, or null.</summary>
     public string? Error { get; private set; }
 
+    /// <summary>
+    /// False when the last answer did not cover everything: the core's walk stopped at its limit, or a
+    /// volume is still being indexed (<c>complete: false</c>). True while nothing is answered.
+    /// </summary>
+    public bool Complete { get; private set; } = true;
+
+    private string _source = "";
+
+    /// <summary>
+    /// A line for under the rows when the answer is not complete, or null: what was not searched, and what
+    /// helps. It is there with no rows too, so "0 results" never stands alone for names the search did not reach.
+    /// Typing more does not help: a walk that stopped goes the same way and stops at the same place.
+    /// </summary>
+    public string? Note
+    {
+        get
+        {
+            if (Complete || Error is not null || PaletteInput.FileQuery(Query) is null)
+            {
+                return null;
+            }
+            var why = SearchNotes.Reason(_source);
+            var line = Rows.Count == 0
+                ? $"Nothing found, but not every name was searched: {why}."
+                : $"Not every name was searched: {why}.";
+            return _source == FileSearchResultsReply.FromWalk ? $"{line} The indexer (docs/indexer.md) searches whole volumes." : line;
+        }
+    }
+
     /// <summary>The highlighted row, or null.</summary>
     public QuickOpenRow? Highlighted => Highlight >= 0 && Highlight < Rows.Count ? Rows[Highlight] : null;
 
@@ -63,6 +93,7 @@ public sealed class QuickOpenModel(ICoreChannel core)
         Rows = [];
         Highlight = -1;
         Error = null;
+        Complete = true;
         Changed?.Invoke();
     }
 
@@ -94,6 +125,7 @@ public sealed class QuickOpenModel(ICoreChannel core)
             Rows = [];
             Highlight = -1;
             Error = null;
+            Complete = true;
             Changed?.Invoke();
             return true;
         }
@@ -115,16 +147,20 @@ public sealed class QuickOpenModel(ICoreChannel core)
             case FileSearchResultsReply results:
                 Rows = [.. results.Hits.Select(hit => Row(hit, Root))];
                 Error = null;
+                Complete = results.Complete;
+                _source = results.Source;
                 Diag.Debug(Target, "quick open results", new LogField("rows", Rows.Count), new LogField("source", results.Source),
-                    new LogField("took_us", results.TookUs));
+                    new LogField("took_us", results.TookUs), new LogField("complete", results.Complete));
                 break;
             case ErrorReply error:
                 Rows = [];
                 Error = error.Message;
+                Complete = true;
                 break;
             default:
                 Rows = [];
                 Error = "The core gave an answer Quick Open does not know.";
+                Complete = true;
                 break;
         }
         Highlight = Rows.Count > 0 ? 0 : -1;

@@ -111,7 +111,7 @@ public class SearchTests
         await search;
 
         Assert.Equal("Search: a · 100 hits · walk · 1.2 ms", _search.Header);
-        Assert.StartsWith("Incomplete: the search stopped at its limit of 2 s or 20,000 entries.", _search.Note);
+        Assert.StartsWith("Incomplete: the search stopped at its limit of 2 s or 200,000 entries.", _search.Note);
         Assert.Contains("Only the first 100 hits are shown", _search.Note);
         Assert.Contains("The index is not running", _search.Note);
         Assert.Contains("docs/indexer.md", _search.Note);

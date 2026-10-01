@@ -219,7 +219,7 @@ public sealed class SearchModel(ICoreChannel core, Func<long> nowMilliseconds)
             var note = results.Complete
                 ? $"Complete: all of {Scope} was searched."
                 : walked
-                    ? "Incomplete: the search stopped at its limit of 2 s or 20,000 entries."
+                    ? $"Incomplete: the search stopped at its limit of {SearchNotes.WalkLimits}."
                     : "Incomplete: a volume is still being indexed.";
             if (results.Hits.Count >= Limit)
             {
