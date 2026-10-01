@@ -72,7 +72,9 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
   the .NET SDK), or wait for the night or for the creator's word. The
   creator's rule of 2026-10-01: a morning of coders' test windows spawning
   made this PC unusable. Coders' handouts carry this rule; the fast test
-  run (no end-to-end tests) opens no window and is always fine.
+  run (no end-to-end tests) opens no window and is always fine. While the
+  creator is away (they say so: `/sleep-mode`, "I will be away"), this PC
+  may run them again, long runs finished before the time they named.
 - Unsafe Rust only in the crates that talk to Windows (`ipc`, `fs`, `jobs`,
   `index`), every `unsafe` block with a `// SAFETY:` comment.
 - Project skills live in `.claude/skills/`. `heavy-logging` says when and
