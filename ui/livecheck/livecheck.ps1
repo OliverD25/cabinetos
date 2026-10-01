@@ -1007,13 +1007,34 @@ PressUntil { [Live]::Press($VK.V) } '"tool ready".*readme\.md' 2500 10000 -what 
 "14: the preview page is ready in the other pane: $([bool](PluginLog '"tool ready"' | Where-Object { $_ -match 'readme.md' }))"
 Shot $h "$ShotDir\drag14-page-live.png"
 
+# The leftmost element of a name that is on the screen, in any window of the app: here the left pane's row.
+function LeftmostShown([string]$name) {
+  $ae = [System.Windows.Automation.AutomationElement]
+  $mine = New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, [int]$script:p.Id)
+  $named = New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $name)
+  $found = foreach ($window in $ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $mine)) {
+    $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $named) | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.BoundingRectangle.Width -gt 0 }
+  }
+  $found | Sort-Object { $_.Current.BoundingRectangle.Left } | Select-Object -First 1
+}
+
 Step "14: drag: the first row of the left pane (a.txt) over the right pane's page, and let go"
-# Rows start about 15 % down the window and the row's name about 17 % across it; the page fills the right half.
+# The row is found by UI Automation, as a screen reader finds it: fractions of the window put the press in the sidebar of
+# a smaller window (the Omen laptop's, 1520 x 828 at 125 %, 2026-10-01). The page fills the right pane, past 60 % across.
 $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$rect, 16)
 $w = $rect.Right - $rect.Left; $ht = $rect.Bottom - $rect.Top
+$row = LeftmostShown 'a.txt'
+if ($row) {
+  $rr = $row.Current.BoundingRectangle
+  $fromX = [int]($rr.Left + [Math]::Min($rr.Width / 2, 40 * $scale)); $fromY = [int]($rr.Top + $rr.Height / 2)
+  Step "14: drag: a.txt found by UI Automation ($($row.Current.ControlType.ProgrammaticName)); the press at $fromX,$fromY"
+} else {
+  $fromX = [int]($rect.Left + $w * 0.17); $fromY = [int]($rect.Top + $ht * 0.149)
+  Step "14: drag: a.txt not found by UI Automation; the press at $fromX,$fromY, 17 % across and 15 % down the window"
+}
 $before = @(PluginLog '"paths dropped on a tool"').Count
 $startedBefore = @(PluginLog '"row drag started"').Count
-[Live]::Drag([int]($rect.Left + $w * 0.17), [int]($rect.Top + $ht * 0.149), [int]($rect.Left + $w * 0.72), [int]($rect.Top + $ht * 0.5))
+[Live]::Drag($fromX, $fromY, [int]($rect.Left + $w * 0.72), [int]($rect.Top + $ht * 0.5))
 Start-Sleep -Milliseconds 1200
 "14: the row drag started in the pane: $(@(PluginLog '"row drag started"').Count -eq $startedBefore + 1)"
 $dropped = @(PluginLog '"paths dropped on a tool"')
