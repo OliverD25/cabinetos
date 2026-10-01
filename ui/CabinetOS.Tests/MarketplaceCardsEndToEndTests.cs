@@ -99,6 +99,39 @@ public class MarketplaceCardsEndToEndTests
         Assert.Contains(logs.Skip(began), l => Message(l) == "marketplace cards complete" && Field(l, "cards").GetInt32() == 40);
     }
 
+    [Fact]
+    public async Task The_view_is_prepared_after_start_before_any_marketplace_command_and_the_first_opening_logs_its_cards()
+    {
+        // The window prepares the view while it is idle after start, after the menu shapes; nothing here is input.
+        var logs = await RunAsync("prepared", string.Join(';',
+            "size:1400x900",
+            "wait:2500",
+            "cmd:marketplace.browse",
+            "wait:2000",
+            "market:complete",
+            "shot:done"));
+
+        var prepared = Assert.Single(logs, l => Message(l) == "marketplace view prepared");
+        Assert.True(Field(prepared, "ms").GetDouble() > 0);
+        var at = logs.IndexOf(prepared);
+        // After the first folders were on screen and after the menu shapes, before the marketplace's command.
+        Assert.InRange(logs.FindIndex(l => Message(l) == "listing shown"), 0, at - 1);
+        Assert.InRange(logs.FindLastIndex(l => Message(l) == "context menu prepared"), 0, at - 1);
+        var command = logs.FindIndex(l => Message(l) == "command executed" && Text(l, "command") == "marketplace.browse");
+        Assert.True(at < command, "the view was prepared before the marketplace's command");
+        // Preparing reads no index: the core is asked only at the opening.
+        Assert.DoesNotContain(logs.Take(command), l => Message(l) == "request sent" && Text(l, "request") == "marketplace_refresh");
+
+        // The first opening afterwards makes its cards as before: a screenful at once, then all 120 in the index's order.
+        var shown = Assert.Single(logs, l => Message(l) == "marketplace cards shown");
+        Assert.True(logs.IndexOf(shown) > command);
+        Assert.InRange(Field(shown, "cards").GetInt32(), 4, 119);
+        Assert.Equal(120, Field(shown, "total").GetInt32());
+        Assert.Equal(120, Field(Assert.Single(logs, l => Message(l) == "marketplace cards complete"), "cards").GetInt32());
+        var complete = Cards(logs, "complete");
+        Assert.Equal(Ids, Text(complete, "ids").Split(','));
+    }
+
     // A window on a scratch configuration whose marketplace.index is a local index of the 120 items; returns its log lines.
     private static async Task<List<string>> RunAsync(string purpose, string steps)
     {

@@ -162,8 +162,14 @@ public sealed partial class MainWindow
         var kinds = new Queue<MenuTargetKind>([MenuTargetKind.File, MenuTargetKind.Folder, MenuTargetKind.Background, MenuTargetKind.MultiSelect]);
         void Next()
         {
-            if (_closing || kinds.Count == 0)
+            if (_closing)
             {
+                return;
+            }
+            if (kinds.Count == 0)
+            {
+                // The same idle slot, one turn after the last shape.
+                PrepareMarketplaceWhenQuiet();
                 return;
             }
             var kind = kinds.Dequeue();

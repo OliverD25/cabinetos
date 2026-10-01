@@ -2,11 +2,13 @@ using CabinetOS.Core.Commands;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Market;
 using CabinetOS.Core.Plugins;
+using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Services;
 using CabinetOS.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
 namespace CabinetOS;
@@ -20,10 +22,19 @@ public sealed partial class MainWindow
     private MarketplaceModel _market = null!;
     private bool _marketRead;
 
+    // When the window last had a key or the pointer: the marketplace view is prepared only in a quiet moment.
+    private readonly InputQuiet _quiet = new(() => Environment.TickCount64);
+
     private void SetUpMarket()
     {
         _market = new MarketplaceModel(_session);
         MarketView.Model = _market;
+        // Every key and pointer event over the window, handled or not; a move counts too, as a drag of a scroll bar is moves.
+        RootGrid.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler((_, _) => _quiet.Touch()), handledEventsToo: true);
+        foreach (var pointer in new[] { UIElement.PointerPressedEvent, UIElement.PointerMovedEvent, UIElement.PointerWheelChangedEvent })
+        {
+            RootGrid.AddHandler(pointer, new PointerEventHandler((_, _) => _quiet.Touch()), handledEventsToo: true);
+        }
         MarketView.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         MarketplaceButton.Click += (_, _) => _ = _router.ExecuteAsync("marketplace.browse", trigger: "button");
         _themes.Applied += _ => _market.SetCurrentTheme(_themes.Theme?.Id);
@@ -99,6 +110,29 @@ public sealed partial class MainWindow
         MarketView.Close();
         UpdateMarketButton();
         Diag.Info(MarketTarget, "marketplace closed");
+    }
+
+    // The marketplace view's first layout made one frame of 54 to 81 ms at its first opening (docs/log/2026-10-01/
+    // speed-items-ce-report.md). It is done ahead, hidden, after the menu shapes (in their idle slot, a low-priority
+    // dispatcher turn) and only once the window had no key or pointer for a moment; input in between puts it off again.
+    private void PrepareMarketplaceWhenQuiet()
+    {
+        if (_closing || MarketView.IsOpen)
+        {
+            return;
+        }
+        if (_quiet.WaitMs is > 0 and var wait)
+        {
+            _ = PrepareMarketplaceLaterAsync(wait);
+            return;
+        }
+        MarketView.PrepareLayout();
+    }
+
+    private async Task PrepareMarketplaceLaterAsync(long waitMs)
+    {
+        await Task.Delay(TimeSpan.FromMilliseconds(waitMs));
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, PrepareMarketplaceWhenQuiet);
     }
 
     private void UpdateMarketButton()

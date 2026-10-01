@@ -48,6 +48,12 @@ public sealed partial class MarketplaceView : UserControl
     private bool _waitingForLayout;
     private bool _layoutWaited;
 
+    // Laid out once already, prepared while hidden or shown: the first layout's work is done.
+    private bool _prepared;
+
+    // A layout pass came after the last opening, so the view's sizes are this window's.
+    private bool _laidOutSinceOpen;
+
     /// <summary>Creates the view, hidden.</summary>
     public MarketplaceView()
     {
@@ -150,10 +156,58 @@ public sealed partial class MarketplaceView : UserControl
     /// <summary>Shows the marketplace; the keyboard goes to the search field.</summary>
     public void Open()
     {
+        _prepared = true;
         Visibility = Visibility.Visible;
+        // The sizes the view kept while hidden may be another window size's: cards are counted after this opening's layout.
+        _laidOutSinceOpen = false;
+        LayoutUpdated += OnFirstLayoutSinceOpen;
         _openedTicks = Cards.Children.Count == 0 ? Stopwatch.GetTimestamp() : 0;
         Render();
         SearchField.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>
+    /// Makes and lays out the hidden view once, so its first opening does
+    /// not apply its templates and measure its parts in one long frame (the
+    /// window does this while idle after start). The nav, the toolbar, the
+    /// notice, the cards' scroller and one sample card are made and laid out
+    /// in this dispatcher turn, and the view is hidden again before the next
+    /// frame: nothing is drawn, the index is not read, and no card of it is
+    /// made. Logs "marketplace view prepared" with the milliseconds it took.
+    /// False when the view was shown or prepared already.
+    /// </summary>
+    public bool PrepareLayout()
+    {
+        if (IsOpen || _model is null || _prepared)
+        {
+            return false;
+        }
+        _prepared = true;
+        var started = Stopwatch.GetTimestamp();
+        Visibility = Visibility.Visible;
+        Render();
+        // The first opening shows the notice ("Reading the marketplace index…"), then the cards' scroller: both, and one
+        // sample card, so the card's template and texts are made once too.
+        CardScroller.Visibility = Visibility.Visible;
+        NoticePanel.Visibility = Visibility.Visible;
+        var sample = new Card(SampleItem(), _cardStyle, _ => { });
+        SizeCard(sample.Root);
+        Cards.Children.Add(sample.Root);
+        UpdateLayout();
+        Cards.Children.Remove(sample.Root);
+        Visibility = Visibility.Collapsed;
+        Diag.Info("cabinetos_ui::market", "marketplace view prepared", new LogField("ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1)));
+        return true;
+    }
+
+    // A card's every part (the verified check, the rating, the installs), for PrepareLayout; it names no real extension.
+    private static MarketItem SampleItem()
+    {
+        using var manifest = JsonDocument.Parse("{}");
+        return new MarketItem("sample", ExtensionKinds.Plugin, "Sample", new MarketAuthor("CabinetOS", true, null), "1.0.0",
+            "A card laid out while the window is idle, so the first opening finds its parts made once.", 1,
+            new MarketDownload("sample.zip", new string('0', 64)), manifest.RootElement.Clone(), "0.1.0", "MIT",
+            Rating: new MarketRating(5, 1), Installs: 1);
     }
 
     /// <summary>Hides the marketplace.</summary>
@@ -271,7 +325,7 @@ public sealed partial class MarketplaceView : UserControl
         var items = model.Items;
         if (!_slices.Holds(items))
         {
-            if (CardArea.ActualWidth <= 0 && items.Count > 0 && !_layoutWaited)
+            if ((!_laidOutSinceOpen || CardArea.ActualWidth <= 0) && items.Count > 0 && !_layoutWaited)
             {
                 WaitForLayout();
                 return;
@@ -286,8 +340,14 @@ public sealed partial class MarketplaceView : UserControl
         }
     }
 
-    // The index came before the view's first layout: the cards wait for the frame after it, so the view's own layout
-    // and the cards do not share one frame, and the view's size says how many cards fill it.
+    private void OnFirstLayoutSinceOpen(object? sender, object e)
+    {
+        LayoutUpdated -= OnFirstLayoutSinceOpen;
+        _laidOutSinceOpen = true;
+    }
+
+    // The index came before this opening's layout: the cards wait for the frame after it, so the view's own layout
+    // and the cards do not share one frame, and the view's size now says how many cards fill it.
     private void WaitForLayout()
     {
         if (_waitingForLayout)
@@ -298,7 +358,7 @@ public sealed partial class MarketplaceView : UserControl
         var since = Stopwatch.GetTimestamp();
         void OnFrame(object? sender, object e)
         {
-            if (IsOpen && CardArea.ActualWidth <= 0 && Stopwatch.GetElapsedTime(since) < TimeSpan.FromSeconds(1))
+            if (IsOpen && (!_laidOutSinceOpen || CardArea.ActualWidth <= 0) && Stopwatch.GetElapsedTime(since) < TimeSpan.FromSeconds(1))
             {
                 return;
             }
