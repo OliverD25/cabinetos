@@ -883,7 +883,7 @@ $owner = UiLines '"keyboard owner"' | Where-Object { $_ -match 'terminal hidden'
 $ownerFields = if ($owner) { ($owner | ConvertFrom-Json).fields } else { $null }
 # The window's own word: Ctrl+Backquote in the pane the terminal gave the keyboard back to hides the dock (docs/ui.md,
 # "The terminal"); a count of the command alone also counts a Ctrl+Backquote that gave the terminal the keyboard.
-$summoned = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"terminal summoned"' } | Select-Object -Last 1
+$summoned = UiLast '"terminal summoned"'
 $summonedAction = if ($summoned) { ($summoned | ConvertFrom-Json).fields.action } else { '(not logged)' }
 "Ctrl+Backquote hid the terminal (the window chose $summonedAction): $((ToggleCount) -gt $toggles -and $summonedAction -eq 'Hide')"
 "then the keys go to $(if ($ownerFields) { "$($ownerFields.element), $($ownerFields.keys_to)" } else { '(not logged)' }), the pane: $([bool]($ownerFields -and $ownerFields.element -eq 'FilePane' -and $ownerFields.keys_to -eq 'window'))"
