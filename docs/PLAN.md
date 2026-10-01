@@ -1212,6 +1212,82 @@ with `-Virtual` (72f6b3d: the frame-time checks answer "not measured in a
 VM", neither True nor False), the output landing straight in
 `_io\live-check` here. The VM's runner proved itself the same afternoon after four attempts, each with a cause now handled or written down (a `net use` that waited for credentials nobody would type, a guest control that answered nothing after a probe during a run, the WebView2 processes a killed window leaves behind, which hold the run's folder: `vm-livecheck.ps1 -Restart`). Its first full run reached 71 True and 3 False (`run-2026-10-01-1505-cabinetos-vm.txt`): the three in the "ask" section, where the plugin's preview did not come within the five seconds the check allows and Enter then opened `photo1.jpg` in Photos, which stopped the run before section 13; two steps that parse the window's whole log took 8 and 12 minutes there (seconds on this PC), so a VM run is about 25 minutes, with the log parsing the time to cut next. While the VM stays this slow, the laptop is the better second machine. The four end-to-end tests that fail under load went to a coder on Sonnet in the afternoon (307cc82..ef0232b, the report in [log/2026-10-01/e2e-fixed-waits-report.md](log/2026-10-01/e2e-fixed-waits-report.md)): three fixed and proven under a second suite and a 40-process load (the rail tree's look now waits for the first row on the screen; the menu reopen waits for the menu on screen and judges the overlap by log events, not by 50 ms; the edit-mode frame test starts the window up to three times and waits for a calm machine, since a 32 ms garbage collection lands in the measured frame on a loaded one); the dock test could not be made to fail and got a defence and a clearer message; the window's own test aids changed with them (the rail's logged look, `ContextMenuFlyout.IsSettled`). The full suite: 1193 of 1193 on a quiet machine, 1192 of 1193 on the final code with the shell test `The_top_row_fits_924_px...` failing, a flaky test outside the four that failed in 8 of 12 loaded runs and is the next to look at. The laptop's scroll gaps were run down the same evening ([log/2026-10-01/scroll-gaps-laptop.md](log/2026-10-01/scroll-gaps-laptop.md), seven runs of `scroll-keys.ps1` there through the new `remote-script.ps1`): they are a wait of the laptop's display path, which sleeps between pages and wakes in about 80 ms (the gaps come with no key at all, and a second window redrawing the screen every 7 ms makes the same hold meet the goal in full: 637 frames, none over 33 ms, 1.3 % over 20 ms), not the window's drawing. The creator chose the second way the same evening, and a coder on Sonnet built `-Panel` (9dbd2ab..fa8188c, the report in [log/2026-10-01/panel-switch-report.md](log/2026-10-01/panel-switch-report.md)): the gap numbers are still printed, the goal is judged by the frames' UI work (`busy_over_20ms` and `busy_over_33ms` in the window's frame stats), the laptop's wrapper passes it, and two laptop runs met it (0 and 1 frame with UI work over 20 ms of 255 and 300, none over 33 ms) with the rest of the check as before. Still for the creator: whether to run the two settings tests (the panel at 60 Hz, CabinetOS on the GTX); The two product points from the laptop runs were fixed the same evening by a coder on Sonnet (41f2069..2e60f73, [log/2026-10-01/tree-faults-report.md](log/2026-10-01/tree-faults-report.md)): a pick in the folder tree ran `go.toPath` twice because the window listened to the tree's event twice, once through the sidebar and once directly; and the tree now follows the active pane into a folder under a hidden one, showing the path's hidden folders dimmed and no other hidden folder (the planning session's call, Article 4; the creator may change the dim's strength, one constant), with 23 new unit tests and two end-to-end tests, 35 of 35 rail and sidebar tests on the laptop in three runs.
 
+### Phase 20 — Shell redesign v2: the quiet top row, the sidebar header, the pane toolbar and path rows (the creator's `docs/design/SHELL_REDESIGN.md` v2, 2026-10-01)
+
+The creator's v2 of the shell specification replaces v1 (Phase 16) where
+the two differ, for every theme. The top row gets quiet: the menu, the app
+icon, the title "CabinetOS · folder" (the active pane's tab in front), the
+empty drag space, a small Quick Open chip (Ctrl+P) and the view buttons;
+the workspace pill and the centred command center go. The workspace
+switcher becomes the sidebar's first row (a dot, the name, the branch, a
+chevron), its dropdown at the row's width, Ctrl+K Ctrl+W unchanged. Each
+pane's breadcrumb row splits in two: a toolbar row (Back, Forward, Up, a
+drive chip that opens the drive list, the drive's free space, Find, Open
+with…) and a path row (crumbs that collapse after 5 parts in dual mode and
+8 in single, a filter label `*.*` or `*query*`, Ctrl+L). The tab strip
+becomes a recessed band, the tab in front a card in the toolbar's fill so
+the two read as one surface, dividers between the other tabs, a folder
+glyph on every tab, no accent line. The find widget drops from the toolbar
+row's right end over the path row. Themes may set the new heights, and
+Commander Compact sets the values the handout gives in brackets. Reference
+build: `docs/design/CabinetOS Compact.dc.html` (Commander Compact's
+metrics); the handout: [design/SHELL_REDESIGN.md](design/SHELL_REDESIGN.md).
+
+Consistency: Article 3 (a calm title row as Windows 11 apps have, the tab
+and its toolbar one surface), Article 4 (the find, the drive list and the
+workspace dropdown appear on demand; the filter label only shows a state),
+Article 5 (the dual panes are untouched; each pane's rows are its own),
+Article 6 (every new size is a theme metric, in the schema and in the
+JSON), Article 7 (every new control runs a command with a key or the
+pane's own command; Tab still switches panes because the new chrome
+refuses the keyboard; no binding changes), Article 10 (no new feature in
+the core: the free space is the sidebar's `list_volumes`, the branch the
+core's `workspace_info`; the core gets five metric declarations, nothing
+else). Decisions made where the handout was silent: the taskbar's title
+stays "CabinetOS" (the tests and the compact drawer find the window by
+it); Open with… keeps its place in the toolbar but stays hidden, by the
+creator's call of 2026-09-30, until a second editor exists; the toolbar's
+Find runs a window-only `search.toggle` with the pane's index, and the
+filter label runs `search.focus`, which now takes `{"pane": n}`; picking
+the workspace goes to its root in the left pane (`go.toPath` with
+`{"pane": 0}`); with the sidebar hidden, the dropdown opens under the top
+row at the panes' left edge; the heights of the tab in front and the other
+tabs follow `tabRow` (`TabLook.Heights`: 32 and 26 px at 36, the
+handout's numbers, 26 and 22 at 28); the band is drawn around the tab in
+front, never under it, so no seam shows; no soft shadow above the tab
+(WinUI 3 has no box shadow for a plain element); the free space changes
+with the volume list, not with each copy; the old metrics of the pill,
+the command center and the breadcrumb row are still accepted and size
+nothing, so themes written before stay valid. Done when the handout's §7
+acceptance list passes with a test for each item; the window tests for
+the collapse rule, the filter label, the drive chip, the title's room, the
+tab look; the end-to-end tests for the top row at 924 and 620 px, the
+toolbars, the five- and seven-part paths, the shared fill, the find's
+place, the workspace row and its dropdown; the live check's section 16
+clicking the toolbar's Up, the drive chip, the workspace row and the
+Quick Open chip with the real mouse; the guides (ui.md, themes.md,
+keybindings.md) and the CHANGELOG. Handed to a coder on Opus on
+2026-10-01, evening.
+
+**Status (2026-10-02, 01:05): built and checked, not merged.** On the
+branch `shell-v2`, ef0c09e..9ccad5d and this plan's commit, rebased on
+main's 17e4c83, by a coder on Opus; merging into main is the planning
+session's step. The checks: the five core checks green (813 passed,
+6 ignored); the window built with warnings as errors, 0 warnings; 1239
+window tests, 1195 passed and 44 end-to-end tests skipped in the fast
+run after the rebase, and 1239 of 1239 passed in the full run with the
+end-to-end tests (00:16 to 00:19, before the last rebase, which brought
+docs and scripts only); the live check with real keys on the Release
+build of 00:55 (`run-2026-10-02-0055-shell-v2.txt`): 209 True, 0 False,
+section 16's new real clicks (the toolbar's Up, the drive chip and Esc,
+the workspace row and its dropdown at 224 px, the Quick Open chip) all
+True, the scroll goal met. The decisions the handout did not cover, with
+their undo, are in the coder's hand-back; the ones to know: the taskbar's
+title stays "CabinetOS", Open with… stays hidden, every folder tab has
+the folder glyph (v2 is newer than the call of 2026-09-30), and the old
+metrics of the pill, the command center and the breadcrumb row are still
+accepted and size nothing.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
