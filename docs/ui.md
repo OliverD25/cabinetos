@@ -124,7 +124,9 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   "The terminal", "Handing the keyboard to the page"), Commander Compact chosen in the theme picker with its
   keys (the window's log must say 20 px rows; Tab must never land on a
   function key; F5 pressed through the bar's button by its accessible name
-  must copy a file) and switched back, the tabs ("Tabs"), what plugins ask of
+  must copy a file; the scroll bar's thumb thrown from the top to the bottom
+  of the 100,000-entry folder must leave no empty rows in the screenshot) and
+  switched back, the tabs ("Tabs"), what plugins ask of
   the window (a row dragged onto a tool's page; the Agent installed through
   the marketplace with its fake provider, asked to rename three files, the
   preview applied with Enter: "What plugins ask of the window"), section 13,
@@ -3479,6 +3481,21 @@ Together, 20 s at 30 presses a second: 1,207 frames, none over 20 ms,
 the worst 17.8 ms, 258 ms of UI-thread work a second. With heavy logging
 on (5 s): none over 20 ms, the worst 17.6 ms.
 
+Since 2026-10-01 the list keeps half a screen of rows made above and below
+its view (`Repeater.VerticalCacheLength` 0.5 in `FilePane`; WinUI's default
+is 2), in every theme. A change of density, Commander Compact's 20 px rows
+against the default's 30, measures every made row again in one frame, and
+fewer made rows cost less there (the speed review, finding 3). Measured
+2026-10-01 with `speed-review.ps1`, 4 runs each way over 100,000 files and
+3,000 entries, medians before and after: the frozen frame of the change to
+Commander Compact 106 to 79 ms (its UI work 54 to 35 ms), of the change back
+to Default 89 to 65 ms (27 to 16 ms of work); the scroll of the 100,000-file
+folder, frames over 20 ms 5.2 to 2.5 %. What a fast drag of the scroll
+bar's thumb shows is checked by the live check, which throws the thumb from
+the top to the bottom over the 100,000-entry folder in Commander Compact and
+takes a screenshot (`compact-scrollbar-drag-live.png`); the rows in it must
+all have their texts.
+
 On 2026-09-29, without keys:
 
 - **A row sets only the values that changed** (`Shown<T>` in `FileRow`):
@@ -3538,7 +3555,7 @@ Tried and dropped, each measured the same way:
   Its first PageDown still takes one frame of 60 to 77 ms, 10 to 42 ms
   of it the rows' own measure; why the rows made ahead do not cover it
   there is not known yet. An overscan of 0.5 screens took it to 1.0 to
-  6.3 % in three runs; it is not in the build (the report says why).
+  6.3 % in three runs; it is in the build since 2026-10-01 (above).
 - No ETW trace (Windows' own event recording, which would show where
   inside WinUI the time goes): `wpr` needs an elevated prompt. The
   display's refresh rate was not changed; it runs at 59 Hz.

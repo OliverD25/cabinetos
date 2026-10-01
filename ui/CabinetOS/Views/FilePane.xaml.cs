@@ -31,6 +31,9 @@ public sealed partial class FilePane : UserControl
 {
     private const string Target = "cabinetos_ui::pane";
 
+    // Screens of rows the list keeps made above and below its view: ItemsRepeater's VerticalCacheLength.
+    private const double RowCacheScreens = 0.5;
+
     private readonly HashSet<FileRow> _realized = [];
     // The theme's rowHeight, and the list's inset: 4 px inside a card, none under hairlines.
     private double _rowHeight = 30;
@@ -63,6 +66,9 @@ public sealed partial class FilePane : UserControl
         InitializeComponent();
         _rows = new RowFactory((DataTemplate)Resources["RowTemplate"], DispatcherQueue);
         Repeater.ItemTemplate = _rows;
+        // Half a screen of rows kept made above and below the view, not WinUI's two (speed review, finding 3): a density change
+        // (Commander Compact's 20 px rows) measures every made row again, and a fast scroll-bar drag still finds rows to show.
+        Repeater.VerticalCacheLength = RowCacheScreens;
         Repeater.ElementPrepared += OnElementPrepared;
         Repeater.ElementClearing += OnElementClearing;
         Repeater.Tapped += OnRowTapped;

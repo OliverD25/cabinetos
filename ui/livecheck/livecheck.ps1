@@ -127,6 +127,17 @@ public static class Live {
     Thread.Sleep(300);
     Send(up);
   }
+  // A scroll bar's thumb thrown from one end to the other: the pointer rests at (x,y1) first so the bar can widen
+  // under it, presses, runs to (x,y2) in four moves 8 ms apart (the whole throw takes under 100 ms), and lets go.
+  public static void Throw(int x, int y1, int y2) {
+    var down = new INPUT { type = 0 }; down.u.mi.dwFlags = 0x0002;
+    var up = new INPUT { type = 0 }; up.u.mi.dwFlags = 0x0004;
+    MoveTo(x, y1); Thread.Sleep(600);
+    Send(down); Thread.Sleep(80);
+    for (int i = 1; i <= 4; i++) { MoveTo(x, y1 + (y2 - y1) * i / 4); Thread.Sleep(8); }
+    Thread.Sleep(60);
+    Send(up);
+  }
   public static void Front(IntPtr h) { Send(Key(0x12, false), Key(0x12, true)); ShowWindow(h, 9); SetForegroundWindow(h); }
   [DllImport("kernel32.dll")] static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
   // Busy and all processor time of the machine so far, over all logical processors (kernel time includes idle).
@@ -779,6 +790,44 @@ Start-Sleep -Milliseconds 2500
 Shot $h "$ShotDir\compact-f5-live.png"
 "the bar's F5 copied the file: $(Test-Path -LiteralPath "$cc\dst\cabinetos-live-check-f5.txt")"
 "the bar ran file.copyToOtherPane: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' -and $_ -match 'file\.copyToOtherPane' -and $_ -match '"trigger":"fkeyBar"' }))"
+
+# Speed review, proposal B: the list keeps half a screen of rows made above and below its view (Repeater.VerticalCacheLength
+# 0.5, not WinUI's 2). A fast drag of the scroll bar's thumb must not leave empty rows on screen. The thumb is found through UI
+# Automation after the pointer rests on the bar (it widens only then), else estimated from the list's right edge and top; the
+# list's own scroll position, read back through UI Automation, says whether the throw reached the end. Then LOOK at the shot:
+# every row of the list must have its name and size, with no empty band.
+Step "compact: Commander Compact over the 100,000-file folder, the scroll bar's thumb thrown from the top to the bottom"
+ClickLeftPane
+[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
+[Live]::Type("$env:TEMP\cabinetos-bench\100000"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2500
+$metrics = LastMetrics
+"compact: the theme in effect is $($metrics.theme), rows $($metrics.row_height) px (commander-compact and 20 expected): $($metrics.theme -eq 'commander-compact' -and $metrics.row_height -eq 20)"
+$scrollables = [System.Windows.Automation.AutomationElement]::FromHandle($h).FindAll([System.Windows.Automation.TreeScope]::Descendants,
+  (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::IsScrollPatternAvailableProperty, $true)))
+$bigList = @($scrollables | Where-Object { ([System.Windows.Automation.ScrollPattern]$_.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)).Current.VerticallyScrollable } |
+  Sort-Object { ([System.Windows.Automation.ScrollPattern]$_.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)).Current.VerticalViewSize })[0]
+if ($bigList) {
+  $scrollPattern = [System.Windows.Automation.ScrollPattern]$bigList.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)
+  $lr = $bigList.Current.BoundingRectangle
+  $dpiScale = [Live]::GetDpiForWindow($h) / 96.0
+  $barX = [int]($lr.Right - 6 * $dpiScale); $barTop = [int]($lr.Top + 20 * $dpiScale); $barBottom = [int]($lr.Bottom - 2 * $dpiScale)
+  # The bar widens only while the pointer is on it; then its thumb is a child of the scroll bar.
+  [Live]::MoveTo($barX, $barTop); Start-Sleep -Milliseconds 800
+  $thumb = $bigList.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Thumb)))
+  if ($thumb -and -not $thumb.Current.BoundingRectangle.IsEmpty) {
+    $tr = $thumb.Current.BoundingRectangle
+    $barX = [int]($tr.Left + $tr.Width / 2); $barTop = [int]($tr.Top + $tr.Height / 2)
+    "compact: the scroll bar's thumb found through UI Automation at x $barX, y $barTop"
+  } else { "compact: no thumb in the automation tree; estimated at x $barX, y $barTop (the list's right edge $([int]$lr.Right), top $([int]$lr.Top), scale $dpiScale)" }
+  $percentBefore = $scrollPattern.Current.VerticalScrollPercent
+  [Live]::Throw($barX, $barTop, $barBottom)
+  Start-Sleep -Milliseconds 1000
+  $percentAfter = $scrollPattern.Current.VerticalScrollPercent
+  "compact: the thumb thrown from the top to the bottom took the list from $([Math]::Round($percentBefore, 2)) % to $([Math]::Round($percentAfter, 2)) % (over 90 expected): $($percentAfter -gt 90)"
+  Shot $h "$ShotDir\compact-scrollbar-drag-live.png"
+  [void][Live]::SetCursorPos(2, 2)
+} else { "compact: no scrollable list found in the automation tree: False" }
 
 Step "compact: Ctrl+K Ctrl+T, Home, Down, Down to Default, Enter"
 [void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
