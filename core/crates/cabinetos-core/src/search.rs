@@ -5,10 +5,11 @@
 //! per connection (a named pipe connects in microseconds). When the indexer
 //! does not answer, the core waits a while before asking again (1 s, then
 //! doubling to 30 s), and says so once in its log. Meanwhile it walks one
-//! folder tree itself with the NT enumeration, for about 2 s and 20,000
+//! folder tree itself with the NT enumeration, for about 2 s and 200,000
 //! entries, and ranks the hits the way the indexer does. The limits are
 //! checked before each folder; a folder is read whole, so one slow folder
 //! (a network share that stopped answering) can hold the walk longer.
+//! `complete` is false in the reply when either limit ended the walk.
 
 use std::collections::VecDeque;
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -49,10 +50,14 @@ pub(crate) struct WalkLimits {
     pub(crate) entries: usize,
 }
 
-/// The limits the core uses: a walk never holds up the user for long.
+/// The limits the core uses: a walk never holds up the user for long. The
+/// time is what ends a walk; the entry count is only a ceiling on its memory.
+/// Listing 100,000 names takes about 60 ms, so a limit of 20,000 entries
+/// (the first one) ended the walk of a large folder long before the time did,
+/// and the names after them were never found.
 pub(crate) const WALK_LIMITS: WalkLimits = WalkLimits {
     time: Duration::from_secs(2),
-    entries: 20_000,
+    entries: 200_000,
 };
 
 /// The core's way to the indexer.
@@ -503,6 +508,37 @@ mod tests {
         let all = walk(&root, &Matcher::new("file-").unwrap(), 1000, WALK_LIMITS).unwrap();
         assert!(all.complete);
         assert_eq!(all.hits.len(), 100);
+    }
+
+    #[test]
+    fn a_walk_finds_a_name_past_the_first_20000_entries() {
+        let root = std::env::temp_dir().join("cabinetos-index-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("walk-large")
+            .tempdir_in(root)
+            .unwrap();
+        for n in 0..25_000 {
+            std::fs::File::create(dir.path().join(format!("file-{n:05}.bin"))).unwrap();
+        }
+        // The listing is sorted by name, so this one is entry 25,001.
+        std::fs::File::create(dir.path().join("zz-needle.txt")).unwrap();
+        let root = dir.path().display().to_string();
+        let needle = Matcher::new("needle").unwrap();
+
+        // What the first limit did: stopped before the name, and said so.
+        let old = WalkLimits {
+            time: Duration::from_secs(60),
+            entries: 20_000,
+        };
+        let outcome = walk(&root, &needle, 10, old).unwrap();
+        assert!(outcome.hits.is_empty());
+        assert!(!outcome.complete);
+
+        let outcome = walk(&root, &needle, 10, WALK_LIMITS).unwrap();
+        assert_eq!(names(&outcome), ["zz-needle.txt"]);
+        assert!(outcome.complete);
+        assert_eq!(outcome.visited, 25_001);
     }
 
     #[test]

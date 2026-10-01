@@ -1212,9 +1212,12 @@ runs, and in one folder tree when it does not ([indexer.md](indexer.md)).
   this connection listed last, else at the user's profile folder.
 - `source` is `index` (the indexer answered) or `walk` (the core walked
   folders: no indexer answered within 200 ms, or it cannot search under
-  that root). A walk stops after 2 s or 20,000 entries.
+  that root). A walk stops after 2 s or 200,000 entries.
 - `complete` is `false` when the search could not cover everything: a
-  walk stopped at a limit, or a volume is still being indexed.
+  walk stopped at either limit, or a volume is still being indexed. A client
+  must not show an empty `hits` list of an incomplete reply as "no results":
+  the names it did not reach may match (the window's Quick Open and Search
+  view say so, [ui.md](ui.md) "Quick Open").
 - `kind` is `file` or `directory`; `frn` is the NTFS file reference number, a
   64-bit unsigned integer (it can exceed 2^53), absent when unknown.
 - An empty query gets `protocol_error`; a root that does not exist gets

@@ -276,11 +276,14 @@ core:
 
 - walks one folder tree itself, breadth first, with the NT enumeration of
   [ipc.md](ipc.md) "Listing a directory", without following links, for
-  about 2 s and 20,000 entries (`complete: false` when a limit stops it), and
-  ranks the hits the same way. The limits are checked before each folder,
-  and a folder is always read whole, so one slow folder can hold the walk
-  past 2 s: a huge one, or a network folder whose server stopped answering
-  (Windows waits for its network timeout);
+  about 2 s and 200,000 entries (`complete: false` when either limit stops
+  it), and ranks the hits the same way. Listing a folder is fast (100,000
+  names in about 60 ms), so in practice the 2 s ends a walk and the entry
+  count only caps its memory; until 2026-10-01 the count was 20,000, which
+  ended the walk of a large folder before the time did. The limits are
+  checked before each folder, and a folder is always read whole, so one slow
+  folder can hold the walk past 2 s: a huge one, or a network folder whose
+  server stopped answering (Windows waits for its network timeout);
 - starts the walk at the search's `root`, else at the folder the connection
   listed last, else at the user's profile folder;
 - says so once in its log, at INFO, and waits 1 s before asking the indexer

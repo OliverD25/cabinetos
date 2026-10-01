@@ -222,7 +222,7 @@ pub enum Command {
         action: EventsAction,
     },
     /// Search files and folders by name: the indexer's index when it runs,
-    /// else a walk of one folder tree (at most 2 s and 20,000 entries).
+    /// else a walk of one folder tree (at most 2 s and 200,000 entries).
     Search {
         /// Text the names must contain, compared without case.
         query: String,
