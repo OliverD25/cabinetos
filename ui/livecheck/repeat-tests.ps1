@@ -26,12 +26,12 @@ $env:CABINETOS_UI_E2E = '1'
 $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
 if (Test-Path -LiteralPath $core) { $env:CABINETOS_CORE_EXE = $core }
 $burners = @()
-$cover = $null
+$coverWindow = $null
 $failedRuns = 0
 try {
   if ($Cover) {
     $form = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.Form; $f.FormBorderStyle = "None"; $f.WindowState = "Maximized"; $f.TopMost = $true; $f.BackColor = "Black"; $f.ShowInTaskbar = $false; $t = New-Object System.Windows.Forms.Timer; $t.Interval = ' + ($BurnMinutes * 60000) + '; $t.Add_Tick({ $f.Close() }); $t.Start(); [void]$f.ShowDialog()'
-    $cover = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($form))
+    $coverWindow = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($form))
     "cover: a full-screen window in front of the others"
     Start-Sleep -Seconds 3
   }
@@ -67,6 +67,6 @@ try {
   "summary: $($Times - $failedRuns) of $Times runs passed"
 } finally {
   foreach ($burner in $burners) { try { $burner.Kill() } catch { } }
-  if ($cover) { try { $cover.Kill() } catch { } }
+  if ($coverWindow) { try { $coverWindow.Kill() } catch { } }
 }
 exit $failedRuns
