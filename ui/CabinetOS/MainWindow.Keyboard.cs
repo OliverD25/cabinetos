@@ -45,39 +45,47 @@ public sealed partial class MainWindow
         return true;
     }
 
-    private void CheckPageKeysSoon(WebView2 view, string page, Func<bool> stillWanted, Action? afterFocus, int handOver, int attempt)
+    // The check of one hand-over, PageKeyboard.CheckAfter after it. It waits on a task's timer and not on a DispatcherQueueTimer
+    // that nothing refers to: such a timer may be collected before it ticks (the rail's tree look had the same fault), and the
+    // check then never runs. The live check of 2026-10-01 on the laptop lost the second check of a hand-over that way: the log
+    // had "handing it over again" and no later line, and the window never said whether the page had the keyboard. The
+    // window test that hands the terminal the keyboard 20 times lost one check in 20 rounds on a quiet laptop.
+    // Every check now ends with a line: the page has the keyboard, the window gave up, or the hand-over ended for a reason.
+    private async void CheckPageKeysSoon(WebView2 view, string page, Func<bool> stillWanted, Action? afterFocus, int handOver, int attempt)
     {
-        var timer = DispatcherQueue.CreateTimer();
-        timer.IsRepeating = false;
-        timer.Interval = PageKeyboard.CheckAfter;
         _pageChecksPending++;
-        timer.Tick += (_, _) =>
+        await Task.Delay(PageKeyboard.CheckAfter);
+        _pageChecksPending--;
+        if (handOver != _pageHandOver)
         {
-            _pageChecksPending--;
-            if (handOver != _pageHandOver)
-            {
-                return;
-            }
-            var xamlOnPage = RootGrid.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is WebView2 focused && focused == view;
-            var keys = WindowsPlatform.KeyboardFocus(_uiThreadId);
-            switch (PageKeyboard.Next(stillWanted(), xamlOnPage, keys?.Class, attempt))
-            {
-                case PageKeyboardStep.Done:
-                    Diag.Info(Target, "a page has the keyboard", new LogField("page", page), new LogField("hand_overs", attempt + 1));
-                    break;
-                case PageKeyboardStep.HandOverAgain:
-                    Diag.Info(Target, "a page did not get the keyboard; handing it over again", new LogField("page", page),
-                        new LogField("attempt", attempt + 1), new LogField("window_class", keys?.Class ?? ""));
-                    HandOverAgain(view, afterFocus);
-                    CheckPageKeysSoon(view, page, stillWanted, afterFocus, handOver, attempt + 1);
-                    break;
-                case PageKeyboardStep.GiveUp:
-                    Diag.Warn(Target, "a page did not get the keyboard", new LogField("page", page), new LogField("hand_overs", attempt + 1),
-                        new LogField("window_class", keys?.Class ?? ""));
-                    break;
-            }
-        };
-        timer.Start();
+            Diag.Info(Target, "a page's hand-over ended: a newer hand-over took over", new LogField("page", page), new LogField("hand_over", handOver),
+                new LogField("attempt", attempt + 1));
+            return;
+        }
+        var wanted = stillWanted();
+        var xamlOnPage = RootGrid.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is WebView2 focused && focused == view;
+        var keys = WindowsPlatform.KeyboardFocus(_uiThreadId);
+        switch (PageKeyboard.Next(wanted, xamlOnPage, keys?.Class, attempt))
+        {
+            case PageKeyboardStep.Done:
+                Diag.Info(Target, "a page has the keyboard", new LogField("page", page), new LogField("hand_overs", attempt + 1));
+                break;
+            case PageKeyboardStep.HandOverAgain:
+                Diag.Info(Target, "a page did not get the keyboard; handing it over again", new LogField("page", page),
+                    new LogField("attempt", attempt + 1), new LogField("window_class", keys?.Class ?? ""));
+                HandOverAgain(view, afterFocus);
+                CheckPageKeysSoon(view, page, stillWanted, afterFocus, handOver, attempt + 1);
+                break;
+            case PageKeyboardStep.GiveUp:
+                Diag.Warn(Target, "a page did not get the keyboard", new LogField("page", page), new LogField("hand_overs", attempt + 1),
+                    new LogField("window_class", keys?.Class ?? ""));
+                break;
+            default:
+                // Nobody wants the keys in the page any more: the user went on, as they may.
+                Diag.Info(Target, "a page's hand-over ended: the keyboard is wanted elsewhere", new LogField("page", page), new LogField("attempt", attempt + 1),
+                    new LogField("page_wanted", wanted), new LogField("xaml_focus_on_page", xamlOnPage));
+                break;
+        }
     }
 
     // WinUI moves the keys into a page only as XAML's focus arrives there (WebView2's GotFocus), and
@@ -305,12 +313,10 @@ public sealed partial class MainWindow
     }
 
     // The same report a moment later, once WebView2 has moved the keys (it does so on its own time).
-    private void LogKeyboardSoon(string moment)
+    // A task's timer, for the reason given at CheckPageKeysSoon.
+    private async void LogKeyboardSoon(string moment)
     {
-        var timer = DispatcherQueue.CreateTimer();
-        timer.IsRepeating = false;
-        timer.Interval = TimeSpan.FromMilliseconds(300);
-        timer.Tick += (_, _) => LogKeyboard(moment);
-        timer.Start();
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+        LogKeyboard(moment);
     }
 }
