@@ -1086,7 +1086,9 @@ cause of the creator's "they don't work all the time"); a held key runs
 its command once; Esc and Ctrl+Shift+P keep their tier's meaning during a
 chord's wait; the palette gives the keyboard back to the tool page it was
 opened from. P2 (a tool page hands back the tab keys) and P4 (overlays
-stack, and Esc closes the wrong one first) stay proposals. 19e, by a coder
+stack, and Esc closes the wrong one first) were built in the afternoon
+(109435f, bb6fa2a; the evidence in round three of the audit, 4dfca43),
+with the terminal keeping Ctrl+W and Ctrl+T and Tab staying the page's. 19e, by a coder
 on Opus (f85db52..a15411c, the numbers in
 [log/2026-10-01/speed-review.md](log/2026-10-01/speed-review.md)): one
 crash fixed (the keyboard's menu on a row out of view ended the window),
@@ -1175,6 +1177,45 @@ Noticed and left: Quick Open's walk collects every match before it cuts
 to 50 (a bounded heap would fix it); several end-to-end tests wait a fixed
 time and fail under load; the sidebar-tree test at a rail start failed in
 every full run on the loaded machine and passed on the quiet one.
+
+**Status (2026-10-01, afternoon): the machines for the live check, and
+the leftovers closed.** Quick Open's walk now keeps only the best 50
+while it walks (f308b71, a bounded heap). Two rules in CLAUDE.md, from the
+creator's morning at a PC whose keyboard the coders' runs kept taking: a
+countdown window shows five seconds before any run takes the keyboard and
+mouse (`ui/livecheck/countdown.ps1`, cfe3b42), and while the creator
+works at this PC nothing that opens CabinetOS windows runs here; such runs
+go to another machine, or wait for the night or for the creator's word
+that they are away (e17cfc4, 5b13a24). Two other machines run the live
+check now ([ui.md](ui.md), "The live check on another machine" and "The
+live check in a virtual machine"). The creator's Omen laptop, over SSH:
+`remote-livecheck.ps1` sends the commits as a bundle and this PC's builds,
+starts a scheduled task there (a process started over SSH has no desktop)
+and brings the output home; a portability pass by a coder on Opus
+(7bd88ff..38cff8f, the report in
+[log/2026-10-01/live-check-portability-report.md](log/2026-10-01/live-check-portability-report.md))
+made the check run on a stock machine with no Rust: the Agent plugin from
+the committed fixture, the bench folders by `bench-folders.ps1`, the edge
+fixture's long name through `\\?\`, hidden AppData folders, the drag by
+UI Automation, a `trap` that closes the run's own window on a thrown
+command (d0279e3). The laptop's run of 14:34 on 72f6b3d: 209 True,
+0 False, every section to its end; the scroll goal not met there (16.2 %
+of frames over 20 ms, worst 109.5 ms, a gap of about 90 ms every 150 ms
+after the UI thread's work, which matches this PC's), because the
+laptop's 144 Hz screen is driven by its integrated Radeon, not the GTX.
+`remote-tests.ps1` (d1e2d60) runs the window's tests there the same way.
+A VirtualBox VM "CabinetOS-LiveCheck" on this PC (Windows 11 Pro, a stock
+user, the project's root as its shared folder X:, set up through guest
+control only): `vm-livecheck.ps1` starts `vm-guest.ps1` on the VM's
+desktop, which copies the tree and the builds from X: and runs the check
+with `-Virtual` (72f6b3d: the frame-time checks answer "not measured in a
+VM", neither True nor False), the output landing straight in
+`_io\live-check` here. The VM's runner proved itself the same afternoon after four attempts, each with a cause now handled or written down (a `net use` that waited for credentials nobody would type, a guest control that answered nothing after a probe during a run, the WebView2 processes a killed window leaves behind, which hold the run's folder: `vm-livecheck.ps1 -Restart`). Its first full run reached 71 True and 3 False (`run-2026-10-01-1505-cabinetos-vm.txt`): the three in the "ask" section, where the plugin's preview did not come within the five seconds the check allows and Enter then opened `photo1.jpg` in Photos, which stopped the run before section 13; two steps that parse the window's whole log took 8 and 12 minutes there (seconds on this PC), so a VM run is about 25 minutes, with the log parsing the time to cut next. While the VM stays this slow, the laptop is the better second machine. The four end-to-end tests that fail under load went to a coder on Sonnet in the afternoon (`log/2026-10-01/e2e-fixed-waits-report.md` when it lands). For the creator: whether the scroll goal must hold on an
+integrated GPU (then it is a drawing fault, Article 1), or one laptop run
+with CabinetOS set to "High performance" in Windows' graphics settings;
+and two product points from the laptop runs: Enter in the folder tree
+runs `go.toPath` twice, and the tree stops at the nearest visible parent
+folder when `panes.showHidden` is off.
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 

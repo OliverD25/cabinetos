@@ -243,6 +243,17 @@ What else the machine needs, and what the script and the check do about it
   that dies on an error closes its own window and core (a `trap` in
   `livecheck.ps1`), with a STOP line that `DONE.md` shows.
 
+`remote-tests.ps1` runs the window's tests on the laptop the same way,
+so the end-to-end tests' windows open there: it sends the commits as a
+bundle, copies this PC's release core when the clone has none, writes the
+request (a `--filter`, whether the end-to-end tests run) into the
+laptop's `_io\inbox`, starts the task `CabinetOS-Tests` (its wrapper sets
+the per-user .NET SDK's variables, builds with warnings as errors and runs
+`dotnet test`), waits for `DONE-tests.md`, and copies the output into
+`_io\test-runs` here as `tests-<time>-<machine>.txt`. First run
+2026-10-01: `-Filter "FullyQualifiedName~KeysEndToEnd" -EndToEnd`, 8 of 8
+passed there, the build and the tests in three minutes.
+
 **A virtual machine** (the VirtualBox VM, for example) runs the check with
 `-Virtual` (`run-livecheck.ps1 -Virtual` passes it on to `livecheck.ps1`).
 Its frames come from a virtual graphics card, so the checks that judge frame
@@ -251,6 +262,55 @@ times, today the scroll goal line ("no frame over 33 ms, under 5 % over
 yes or no; `-Strict` does not judge them, and `DONE.md` counts them apart,
 neither True nor False. Every other check stays as strict as on a real
 machine.
+
+#### The live check in a virtual machine
+
+`vm-livecheck.ps1` runs the live check inside the VirtualBox VM
+"CabinetOS-LiveCheck" on this PC (made 2026-10-01: VirtualBox 7.2, Windows
+11 Pro, 4 CPUs, 8 GB, a 1920x1080 screen, the user `cabinetos` logged in on
+its own at start), so this PC's keyboard and mouse stay free: the VM has
+its own, and a run there is a run on a stock Windows with nothing of this
+PC's setup. The VM sees the project's root folder on this PC as the shared
+folder `X:`, so it reads the repository from `X:\cabinetos` and writes the
+run's output straight into `X:\_io\live-check`, which is `_io\live-check`
+here; nothing is copied over a network and the VM holds no clone. The VM
+has the per-user .NET runtime and PowerShell 7 in its user's LocalAppData,
+the Ukrainian keyboard layout, no sleep, and no popups (`_io\vm\vm-setup.ps1`
+did that once; `_io\vm\vm-user.txt` holds the user's password, which the
+script reads and never prints).
+
+What the script does: starts the VM when it is off (headless, so no window
+on this PC) and waits for its desktop; through VirtualBox's guest control
+(`VBoxManage guestcontrol run`), starts `vm-guest.ps1` of this repository
+in the VM's own session (a process started by guest control runs on the
+VM's desktop, so the VM needs no scheduled task, unlike the laptop);
+`vm-guest.ps1` copies the repository's tree and its Release window and
+release core from `X:` onto the VM's own disk, `C:\cabinetos\cabinetos`,
+puts the Agent plugin and the bench's folders in place as the laptop script
+does, and runs `run-livecheck.ps1` there with `-Virtual`, `-NoCountdown`
+and `-MinimizeOthers`; this script waits for the run's `DONE.md` in
+`_io\live-check` here, takes a screenshot of the VM's screen next to it
+(`vm-screen-<time>.png`), and prints `DONE.md`. The output is
+`run-<time>.txt` as for a run on this PC, and `vm-progress.txt` says how
+far the VM got, the first thing to read when `DONE.md` does not come. A
+git worktree runs its own tree: every checkout under the project's root is
+under `X:` too, and the script hands the VM the path of the repository it
+is in. The VM is a stock machine with no Rust and no .NET SDK, so the
+builds of this PC are what it runs; build them first (the Release window
+and the release core). A VM's frames come from a virtual graphics card,
+which is what `-Virtual` is for (above). The first run in a VM makes the
+bench's folders there, which took about seven minutes more than a later
+run (the 100,000 files in 135 s on the virtual disk, 2026-10-01).
+`-Restart` restarts the VM first (the power button, then a hard power-off
+when the VM ignores it, as it did every time on 2026-10-01). It is the one
+cure seen for two things: a guest control that answers "Error starting
+guest session" to everything (it did so twice that day, each time after a
+guest command that did not return), and the WebView2 processes a killed
+window leaves behind, which cannot be ended, hold the run's folder, and
+stop the next run at once with "The process cannot access the file".
+The screenshot the script takes at the end is made inside the VM, from
+its own desktop: VirtualBox's own screenshot of a headless VM with 3D
+acceleration is a stale frame.
 
 `run-livecheck.ps1` first shows the countdown window of `countdown.ps1`
 (5 seconds, a sound, always on top: "The live check takes the keyboard and
