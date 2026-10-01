@@ -187,6 +187,23 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   Every check True on 2026-09-30
   ([log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md)).
 
+#### The live check on another machine
+
+`remote-livecheck.ps1` runs the live check on another Windows machine over
+SSH, so this PC's keyboard and mouse stay free: the creator's Omen laptop
+(`omen` in this PC's SSH config, set up 2026-10-01). The machine holds a
+clone of the repository made from a git bundle (it has no GitHub login), a
+scheduled task `CabinetOS-LiveCheck` that starts `run-livecheck.ps1` in the
+logged-in session (a process started over SSH gets no desktop; the task is
+what gives it one), the .NET Desktop Runtime and the Windows App Runtime the
+window needs, and the Ukrainian keyboard layout; it builds nothing. The
+script sends the commits the clone lacks as a bundle, copies this PC's
+Release window and release core into the clone's build paths, starts the
+task, waits for the run's `DONE.md`, and copies the run's output into
+`_io\live-check` here as `run-<time>-<machine>.txt`. The machine must be
+logged in and unlocked; its own countdown window shows there first. The
+frame numbers of such a run come from that machine's graphics card.
+
 `run-livecheck.ps1` first shows the countdown window of `countdown.ps1`
 (5 seconds, a sound, always on top: "The live check takes the keyboard and
 mouse in 5"; Esc or its button cancels the run, `-NoCountdown` skips it for
