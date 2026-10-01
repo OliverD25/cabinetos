@@ -212,6 +212,12 @@ the window's UI work (`-Panel`, below).
 its own; it must be a fast-forward of what the clone has), and `-Io <folder>`
 names where the output lands.
 
+The three remote scripts first make sure someone is signed in on the
+machine (`quser` shows an Active session): a window run needs a signed-in
+desktop, and after a Windows Update restart nobody is signed in (the laptop
+restarted itself at 00:41 on 2026-10-02 for the September update). They stop
+with "nobody is signed in" instead of starting a task that would fail late.
+
 What else the machine needs, and what the script and the check do about it
 (the portability pass of 2026-10-01,
 [log/2026-10-01/live-check-portability-report.md](log/2026-10-01/live-check-portability-report.md)):

@@ -52,6 +52,10 @@ function Remote([string]$command) {
 function Send([string]$local, [string]$remote) { & scp -q -r -F $sshConfig -o BatchMode=yes $local "${Machine}:$remote"; if ($LASTEXITCODE -ne 0) { throw "scp to $Machine failed for $local" } }
 
 $name = (Remote 'hostname') | Select-Object -Last 1
+# A window run needs a signed-in desktop there: after a Windows Update restart nobody is signed in (2026-10-02,
+# 00:41), and the task would fail late. quser lists the sessions; an "Active" one is signed in, locked or not.
+$signedIn = (Remote "(quser 2>&1 | Select-String ' Active ' | Out-String).Trim()") | Select-Object -Last 1
+if (-not $signedIn) { throw "nobody is signed in on $Machine (quser shows no Active session): a window run needs a signed-in desktop; sign in there and run again" }
 "machine: $name, repo there: $RemoteRepo, branch: $Branch, script: $Script $Args$(if ($Env) { " (env $Env)" })"
 
 # 1. The commits, as a bundle; the clone there comes from a bundle too, so it has no GitHub login.
