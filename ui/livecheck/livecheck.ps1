@@ -67,6 +67,11 @@ public static class Live {
     for (int i = 0; i < downs; i++) { Send(Key(vk, false)); Thread.Sleep(gapMs); }
     Send(Key(vk, true)); Thread.Sleep(20); Send(Key(modifier, true));
   }
+  public static void Hold(ushort modifier, ushort modifier2, ushort vk, int downs, int gapMs) {
+    Send(Key(modifier, false)); Thread.Sleep(20); Send(Key(modifier2, false)); Thread.Sleep(20);
+    for (int i = 0; i < downs; i++) { Send(Key(vk, false)); Thread.Sleep(gapMs); }
+    Send(Key(vk, true)); Thread.Sleep(20); Send(Key(modifier2, true)); Thread.Sleep(20); Send(Key(modifier, true));
+  }
   [DllImport("user32.dll")] static extern uint MapVirtualKeyEx(uint code, uint type, IntPtr hkl);
   // Physical keys: each key but the modifiers goes as the scan code of the key where the US layout has it, so the window's own
   // keyboard layout decides the virtual key, as it does for a hand on the keyboard.
@@ -531,12 +536,12 @@ Set-Content -LiteralPath "$fs19\note.txt" -Value "x" -NoNewline
 Step "19b: the palette, Toggle Folder Sizes, Enter"
 ToggleFolderSizesFromPalette
 "19b: panes.folderSizes is true in the file: $((FolderSizesInFile) -eq $true)"
-$follows = (FolderSizeLines 'folder sizes follow the configuration')
+$follows = @(FolderSizeLines 'folder sizes follow the configuration')
 "19b: the window followed the file ($(@($follows | ForEach-Object { $_.fields.on }) -join ',')): $($follows.Count -gt 0 -and $follows[-1].fields.on -eq $true)"
 
 Step "19b: Ctrl+L to a folder with two folders: both are counted with no key"
-$asked19 = (FolderSizeLines 'folder sizes asked').Count
-$counted19 = (FolderSizeLines 'folder sizes counted').Count
+$asked19 = @(FolderSizeLines 'folder sizes asked').Count
+$counted19 = @(FolderSizeLines 'folder sizes counted').Count
 ClickLeftPane
 [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
 [Live]::Type($fs19); [Live]::Press($VK.Enter)
@@ -548,13 +553,13 @@ Shot $h "$ShotDir\19b-folder-sizes-live.png"
 "19b: the count ended for 2 folders with 10000 bytes ($($done19.fields.folders) folders, $($done19.fields.bytes) bytes, cancelled $($done19.fields.cancelled)): $($done19.fields.folders -eq 2 -and $done19.fields.bytes -eq 10000 -and -not $done19.fields.cancelled)"
 
 Step "19b: the palette, Toggle Folder Sizes again; then back to the folder of 11a"
-$asksWhileOn = (FolderSizeLines 'folder sizes asked').Count
+$asksWhileOn = @(FolderSizeLines 'folder sizes asked').Count
 ToggleFolderSizesFromPalette
 "19b: panes.folderSizes is false in the file again: $((FolderSizesInFile) -eq $false)"
 ClickLeftPane
 [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
 [Live]::Type($tc); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
-"19b: with the setting off, opening the folder of 11a asked for nothing: $((FolderSizeLines 'folder sizes asked').Count -eq $asksWhileOn)"
+"19b: with the setting off, opening the folder of 11a asked for nothing: $(@(FolderSizeLines 'folder sizes asked').Count -eq $asksWhileOn)"
 
 Step "11a: F3 on run.cmd: the status bar says no tool shows it; nothing runs it"
 [Live]::Press($VK.End); Start-Sleep -Milliseconds 300
@@ -890,11 +895,11 @@ Step "14: drag: the first row of the left pane (a.txt) over the right pane's pag
 # Rows start about 15 % down the window and the row's name about 17 % across it; the page fills the right half.
 $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$rect, 16)
 $w = $rect.Right - $rect.Left; $ht = $rect.Bottom - $rect.Top
-$before = (PluginLog '"paths dropped on a tool"').Count
-$startedBefore = (PluginLog '"row drag started"').Count
+$before = @(PluginLog '"paths dropped on a tool"').Count
+$startedBefore = @(PluginLog '"row drag started"').Count
 [Live]::Drag([int]($rect.Left + $w * 0.17), [int]($rect.Top + $ht * 0.149), [int]($rect.Left + $w * 0.72), [int]($rect.Top + $ht * 0.5))
 Start-Sleep -Milliseconds 1200
-"14: the row drag started in the pane: $((PluginLog '"row drag started"').Count -eq $startedBefore + 1)"
+"14: the row drag started in the pane: $(@(PluginLog '"row drag started"').Count -eq $startedBefore + 1)"
 $dropped = @(PluginLog '"paths dropped on a tool"')
 "14: the drop reached the tool's page as paths-dropped: $($dropped.Count -eq $before + 1)"
 if ($dropped.Count -gt 0) { "14: it carried one path: $((($dropped | Select-Object -Last 1) | ConvertFrom-Json).fields.paths -eq 1)" }
@@ -1020,13 +1025,13 @@ Set-Content -LiteralPath "$rl\note.txt" -Value "note" -NoNewline
 Set-Content -LiteralPath "$rl\beta\sub\s.txt" -Value "s" -NoNewline
 $origUi = ConfigUi
 $origSidebar = if ($null -ne $origUi.sidebar) { [bool]$origUi.sidebar } else { $true }
-$warnBefore = (UiLines '"level":"(WARN|WARNING|ERROR)"').Count
+$warnBefore = @(UiLines '"level":"(WARN|WARNING|ERROR)"').Count
 
 Step "13: the configuration says ui.layout: rail; the rail and the folder tree appear"
-$before = (UiLines '"the rail layout is on"').Count
+$before = @(UiLines '"the rail layout is on"').Count
 SetUiConfig @{ layout = 'rail'; sidebar = $true }
 Start-Sleep -Milliseconds 2500
-"13: the window switched to the rail layout: $((UiLines '"the rail layout is on"').Count -gt $before)"
+"13: the window switched to the rail layout: $(@(UiLines '"the rail layout is on"').Count -gt $before)"
 ClickLeftPane
 [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
 [Live]::Type($rl); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1800
@@ -1085,9 +1090,9 @@ Shot $h "$ShotDir\rail13-tree-keys-live.png"
 # tree again; Esc must give it back: the window's own key handler takes Esc first, and says so when it moved the keyboard.
 Step "13: Ctrl+Shift+E puts the keyboard in the tree; Esc gives it back to the pane; Backspace goes up"
 [Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 800
-$gave = (UiLines 'Esc gave the keyboard from the rail layout').Count
+$gave = @(UiLines 'Esc gave the keyboard from the rail layout').Count
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
-"13: Esc in the tree gave the keyboard back to the pane: $((UiLines 'Esc gave the keyboard from the rail layout').Count -eq $gave + 1)"
+"13: Esc in the tree gave the keyboard back to the pane: $(@(UiLines 'Esc gave the keyboard from the rail layout').Count -eq $gave + 1)"
 [Live]::Press($VK.Back); Start-Sleep -Milliseconds 1500
 $f = LastFields '"listing shown"'
 "13: Backspace went up to beta: $($f.path -eq "$rl\beta")"
@@ -1109,10 +1114,10 @@ LockTreeFromPalette
 "13: the tree is unlocked, the status bar said so: $((NoticeCount 'follows the active folder again') -eq $follows + 1)"
 
 Step "13: the mouse on the Quick Notes button: the tool's own page shows in the sidebar"
-$started = (UiLines '"a sidebar page started"').Count
+$started = @(UiLines '"a sidebar page started"').Count
 ClickRail 'Quick Notes'
 Start-Sleep -Milliseconds 5000
-"13: the page started (once): $((UiLines '"a sidebar page started"').Count -eq $started + 1)"
+"13: the page started (once): $(@(UiLines '"a sidebar page started"').Count -eq $started + 1)"
 $f = LastFields '"the sidebar shows a view"'
 "13: the sidebar shows quick-notes: $($f.view -eq 'quick-notes')"
 $f = LastFields '"a rail button was pressed"'
@@ -1142,13 +1147,13 @@ $f = LastFields '"the sidebar shows a view"'
 "13: the sidebar is open on the Explorer again: $($f.view -eq 'explorer' -and $f.open -eq $true)"
 
 Step "13: the mouse on the Marketplace button opens it; a second click closes it"
-$shown = (UiLines '"marketplace shown"').Count
-$closed = (UiLines '"marketplace closed"').Count
+$shown = @(UiLines '"marketplace shown"').Count
+$closed = @(UiLines '"marketplace closed"').Count
 ClickRail 'Marketplace'; Start-Sleep -Milliseconds 2500
-"13: the marketplace opened: $((UiLines '"marketplace shown"').Count -eq $shown + 1)"
+"13: the marketplace opened: $(@(UiLines '"marketplace shown"').Count -eq $shown + 1)"
 Shot $h "$ShotDir\rail13-marketplace-live.png"
 ClickRail 'Marketplace'; Start-Sleep -Milliseconds 1500
-"13: the second click closed it: $((UiLines '"marketplace closed"').Count -eq $closed + 1)"
+"13: the second click closed it: $(@(UiLines '"marketplace closed"').Count -eq $closed + 1)"
 
 Step "13: the mouse on the active Explorer button closes the sidebar; Ctrl+Alt+B opens it"
 [Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 900
@@ -1196,13 +1201,13 @@ $f = LastFields '"the sidebar shows a view"'
 "13: Ctrl+Alt+B opened it at the remembered width: $($f.open -eq $true -and [math]::Abs([int]$f.width - 300) -le 4)"
 
 Step "13: the configuration says ui.layout: classic again; the rail goes"
-$off = (UiLines '"the rail layout is off"').Count
+$off = @(UiLines '"the rail layout is off"').Count
 SetUiConfig @{ layout = 'classic'; sidebar = $origSidebar; sidebarWidth = $null; sidebarView = 'explorer' }
 Start-Sleep -Milliseconds 2500
-"13: the window is back in the classic layout: $((UiLines '"the rail layout is off"').Count -gt $off)"
+"13: the window is back in the classic layout: $(@(UiLines '"the rail layout is off"').Count -gt $off)"
 Shot $h "$ShotDir\rail13-classic-back-live.png"
 ClickLeftPane
-"13: no warning or error line in the window's log during this section: $((UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warnBefore)"
+"13: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warnBefore)"
 
 # ----- Edge cases (docs/ui.md, "Edge cases"): the shared fixture, with real keys -----
 # The fixture has links, so it lives outside $root: only its own script removes it (rmdir, which
@@ -1346,8 +1351,8 @@ ClickLeftPane
 "16: Ctrl+L and Enter went there: $((SelectionText) -match 'notes-16|other-16')"
 
 Step "16: Ctrl+F, 'other', Enter, Esc: one row while the text is there, the cursor on it, every row after Esc"
-$opened = (ShellLines 'find opened').Count
-$filters = (ShellLines 'find filtered').Count
+$opened = @(ShellLines 'find opened').Count
+$filters = @(ShellLines 'find filtered').Count
 [Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
 [Live]::Type("other"); Start-Sleep -Milliseconds 800
 # "rows" is the rows shown after the filter (the folder has two); "matches" is how many names hold the text.
@@ -1357,14 +1362,14 @@ $filtered = WaitShellLines 'find filtered' $filters -until { param($line) $line.
 Shot $h "$ShotDir\shell16-find-live.png"
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 500
 "16: Enter put the cursor on the match: $((SelectionText) -match 'other-16')"
-$closes = (ShellLines 'find closed').Count
+$closes = @(ShellLines 'find closed').Count
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
 $closed = WaitShellLines 'find closed' $closes
 "16: Esc closed the find and every row shows: $($closed.fields.rows -eq 2)"
 "16: the cursor stayed on the match: $((SelectionText) -match 'other-16')"
 
 Step "16: Ctrl+P, type, Esc: Quick Open shows and goes, the pane stays"
-$shown = (ShellLines 'quick open shown').Count
+$shown = @(ShellLines 'quick open shown').Count
 [Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Milliseconds 500
 [Live]::Type("target-16"); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\shell16-quick-open-live.png"
@@ -1381,7 +1386,7 @@ Step "16: Ctrl+P, type, Enter: the file's folder in the pane, the file under the
 "16: Enter opened the row in the pane: $((SelectionText) -match 'target-16')"
 
 Step "16: Alt+Left: Back in the left pane"
-$commands = (ShellLines 'command executed').Count
+$commands = @(ShellLines 'command executed').Count
 [Live]::Press($VK.Alt, $VK.Left); Start-Sleep -Milliseconds 1000
 $back = WaitShellLines 'command executed' $commands
 "16: Alt+Left ran go.back from a key: $($back.fields.command -eq 'go.back' -and $back.fields.trigger -eq 'key')"
@@ -1391,7 +1396,7 @@ Step "16: the hamburger, clicked by its accessible name; a click outside closes 
 $menu = ShellElement 'Menu'
 "16: the top row has a button named Menu: $([bool]$menu)"
 if ($menu) {
-  $menus = (ShellLines 'menu shown').Count
+  $menus = @(ShellLines 'menu shown').Count
   ClickElement $menu; Start-Sleep -Milliseconds 700
   "16: the menu showed: $([bool](WaitShellLines 'menu shown' $menus))"
   $row = AppElement 'New Tab' 2
@@ -1474,7 +1479,7 @@ Copy-Item -LiteralPath $stub -Destination $recorder
 $editMenu = "Edit Menu$([char]0x2026)"
 
 Step "18: the configuration gets a program, a file menu and Windows' menu"
-$changes = (ShellLines 'configuration changed').Count
+$changes = @(ShellLines 'configuration changed').Count
 $cfgPath = "$root\config\cabinetos.json"
 $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $program = @{ name = 'live18'; title = 'Live 18 Recorder'; command = 'wscript.exe'; args = [string[]]@('//B', '//Nologo', $recorder, '{path}') }
@@ -1499,9 +1504,9 @@ Step "18: a right-click on a row: the file menu, the program in it; a click on t
 $x, $y = LeftPanePoint
 [Live]::Click($x, $y); Start-Sleep -Milliseconds 400
 $row = if ((SelectionText) -match 'row-\d+\.txt') { $Matches[0] } else { '' }
-$shown = (ShellLines 'context menu shown').Count
-$warned = (ShellLines 'context menu entry left out: no command has this ID').Count
-$placedBefore = (ShellLines 'context menu placed').Count
+$shown = @(ShellLines 'context menu shown').Count
+$warned = @(ShellLines 'context menu entry left out: no command has this ID').Count
+$placedBefore = @(ShellLines 'context menu placed').Count
 [Live]::RightClick($x, $y, $false)
 $menu = WaitShellLines 'context menu shown' $shown
 "18: the row under the pointer, $row, got the file menu: $($row -ne '' -and $menu.fields.target -eq 'File' -and -not $menu.fields.keyboard)"
@@ -1525,7 +1530,7 @@ $leftOut = WaitShellLines 'context menu entry left out: no command has this ID' 
 "18: the ID no command has is left out, with a warning: $($leftOut.fields.command -eq 'nothing.here18')"
 Shot $h "$ShotDir\18-file-menu-live.png"
 if ($entry) {
-  $closes = (ShellLines 'context menu closed').Count
+  $closes = @(ShellLines 'context menu closed').Count
   ClickElement $entry
   "18: the menu closed: $([bool](WaitShellLines 'context menu closed' $closes))"
   # The recorder writes its line a moment after the menu closes, and the file exists before the line is complete: the
@@ -1542,22 +1547,22 @@ if ($entry) {
 }
 
 Step "18: Shift+F10: the same menu from the keyboard; Esc closes it"
-$shown = (ShellLines 'context menu shown').Count
+$shown = @(ShellLines 'context menu shown').Count
 [Live]::Press($VK.Shift, $VK.F10)
 $menu = WaitShellLines 'context menu shown' $shown
 $again = AppElement 'Live 18 Recorder' 2
 "18: Shift+F10 opened the file menu, from the keyboard: $($menu.fields.target -eq 'File' -and $menu.fields.keyboard -and [bool]$again)"
-$closes = (ShellLines 'context menu closed').Count
+$closes = @(ShellLines 'context menu closed').Count
 [Live]::Press($VK.Esc)
 "18: Esc closed it: $([bool](WaitShellLines 'context menu closed' $closes) -and (AppElementGone 'Live 18 Recorder'))"
 
 Step "18: Edit Menu... on the file menu: the edit mode in the menu's place; a click outside leaves it open"
-$shown = (ShellLines 'context menu shown').Count
+$shown = @(ShellLines 'context menu shown').Count
 [Live]::RightClick($x, $y, $false)
 [void](WaitShellLines 'context menu shown' $shown)
 $edit = AppElement $editMenu 2
-$editShown = (ShellLines 'menu edit shown').Count
-$closes = (ShellLines 'menu edit closed').Count
+$editShown = @(ShellLines 'menu edit shown').Count
+$closes = @(ShellLines 'menu edit closed').Count
 if ($edit) { ClickElement $edit }
 $editing = WaitShellLines 'menu edit shown' $editShown
 "18: $editMenu turned the file menu into its edit mode, where the menu was: $($editing.fields.target -eq 'File' -and $editing.fields.in_menu_place)"
@@ -1566,10 +1571,10 @@ Shot $h "$ShotDir\18-edit-mode-live.png"
 # Low in the right pane, away from the edit mode: the click is swallowed, and nothing closes.
 $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$rect, 16)
 [Live]::Click([int]($rect.Left + ($rect.Right - $rect.Left) * 0.85), [int]($rect.Top + ($rect.Bottom - $rect.Top) * 0.85)); Start-Sleep -Milliseconds 600
-"18: a click outside left it open: $((ShellLines 'menu edit closed').Count -eq $closes -and [bool](AppElement 'Editing: File menu'))"
+"18: a click outside left it open: $(@(ShellLines 'menu edit closed').Count -eq $closes -and [bool](AppElement 'Editing: File menu'))"
 
 Step "18: the program's X, then Done: the core writes the list, and the next right-click has no program"
-$steps = (ShellLines 'menu edit step').Count
+$steps = @(ShellLines 'menu edit step').Count
 $remove = AppElement 'Remove Live 18 Recorder' 2
 if ($remove) { ClickElement $remove }
 $step = WaitShellLines 'menu edit step' $steps
@@ -1581,21 +1586,21 @@ $closed = WaitShellLines 'menu edit closed' $closes
 "18: Done saved and closed the edit mode: $($closed.fields.saved -eq $true)"
 "18: the core logged the change of contextMenu.file.items: $([bool](WaitCoreMenuChange $changes18))"
 "18: the file's list lost the program ($((FileMenuItems) -join ', ')): $(((FileMenuItems) -join '|') -eq 'nothing.here18|-|pane.openSelected')"
-$shown = (ShellLines 'context menu shown').Count
+$shown = @(ShellLines 'context menu shown').Count
 [Live]::RightClick($x, $y, $false)
 $menu = WaitShellLines 'context menu shown' $shown
 $lastRow = AppElement $editMenu 2
 "18: the next right-click shows the file menu without the program: $($menu.fields.target -eq 'File' -and [bool]$lastRow -and -not (AppElement 'Live 18 Recorder'))"
 
 Step "18: a second edit puts the program back: Insert, the prompt, Enter, a drag with the real mouse, Alt+Down, Alt+Up, Ctrl+S"
-$editShown = (ShellLines 'menu edit shown').Count
+$editShown = @(ShellLines 'menu edit shown').Count
 if ($lastRow) { ClickElement $lastRow }
 [void](WaitShellLines 'menu edit shown' $editShown)
-$prompts = (ShellLines 'prompt shown').Count
+$prompts = @(ShellLines 'prompt shown').Count
 [Live]::Press($VK.Insert)
 "18: Insert opened Add Command...'s prompt: $([bool](WaitShellLines 'prompt shown' $prompts))"
 Start-Sleep -Milliseconds 300
-$steps = (ShellLines 'menu edit step').Count
+$steps = @(ShellLines 'menu edit step').Count
 [Live]::Type('Live 18'); Start-Sleep -Milliseconds 500
 [Live]::Press($VK.Enter)
 $added = WaitShellLines 'menu edit step' $steps
@@ -1604,20 +1609,20 @@ $from = AppElement 'Live 18 Recorder' 1
 $onto = AppElement 'nothing.here18' 1
 if ($from -and $onto) {
   $a = $from.Current.BoundingRectangle; $b = $onto.Current.BoundingRectangle
-  $steps = (ShellLines 'menu edit step').Count
+  $steps = @(ShellLines 'menu edit step').Count
   [Live]::Drag([int]($a.Left + 8), [int]($a.Top + $a.Height / 2), [int]($a.Left + 8), [int]($b.Top + $b.Height / 2))
   $dragged = WaitShellLines 'menu edit step' $steps
   "18: a drag put the program first ($($dragged.fields.rows)): $($dragged.fields.step -eq 'drag' -and $dragged.fields.rows -eq 'Live 18 Recorder|nothing.here18|-|Open')"
 } else {
   "18: the rows to drag were found: False"
 }
-$steps = (ShellLines 'menu edit step').Count
+$steps = @(ShellLines 'menu edit step').Count
 [Live]::Press($VK.Alt, $VK.Down)
 $down = WaitShellLines 'menu edit step' $steps
 [Live]::Press($VK.Alt, $VK.Up)
 $up = WaitShellLines 'menu edit step' ($steps + 1)
 "18: Alt+Down moved the focused row down and Alt+Up back: $($down.fields.rows -eq 'nothing.here18|Live 18 Recorder|-|Open' -and $up.fields.rows -eq 'Live 18 Recorder|nothing.here18|-|Open')"
-$closes = (ShellLines 'menu edit closed').Count
+$closes = @(ShellLines 'menu edit closed').Count
 $changes18 = @(CoreMenuChanges).Count
 [Live]::Press($VK.Ctrl, $VK.S)
 $closed = WaitShellLines 'menu edit closed' $closes
@@ -1627,7 +1632,7 @@ Shot $h "$ShotDir\18-after-edit-live.png"
 
 Step "18: Shift+right-click on the row: Windows' own menu; its Copy puts the file on the clipboard"
 [System.Windows.Forms.Clipboard]::SetText("cabinetos live check 18")
-$windows = (ShellLines 'windows menu shown').Count
+$windows = @(ShellLines 'windows menu shown').Count
 [Live]::RightClick($x, $y, $true)
 # The core builds Windows' menu: the first one takes the shell's handlers a moment to load.
 $windowsMenu = WaitShellLines 'windows menu shown' $windows 8
@@ -1636,7 +1641,7 @@ $copy = MenuItemElement 'Copy'
 "18: it has Copy: $([bool]$copy)"
 Shot $h "$ShotDir\18-windows-menu-live.png"
 if ($copy) {
-  $runs = (ShellLines 'windows menu item run').Count
+  $runs = @(ShellLines 'windows menu item run').Count
   ClickElement $copy
   "18: the core ran the item: $([bool](WaitShellLines 'windows menu item run' $runs))"
   Start-Sleep -Milliseconds 500
@@ -1648,13 +1653,13 @@ if ($copy) {
 
 Step "18: a right-click on the empty space: the folder's menu"
 GoLeftPane "$m18\bg18"
-$shown = (ShellLines 'context menu shown').Count
+$shown = @(ShellLines 'context menu shown').Count
 [Live]::RightClick($x, $y, $false)
 $menu = WaitShellLines 'context menu shown' $shown
 $newFolder = AppElement 'New folder' 2
 "18: the empty space got the folder menu, with New folder: $($menu.fields.target -eq 'Background' -and [bool]$newFolder)"
 Shot $h "$ShotDir\18-background-menu-live.png"
-$closes = (ShellLines 'context menu closed').Count
+$closes = @(ShellLines 'context menu closed').Count
 [Live]::Press($VK.Esc)
 "18: Esc closed it: $([bool](WaitShellLines 'context menu closed' $closes) -and (AppElementGone 'New folder'))"
 
@@ -1693,8 +1698,8 @@ if ($modifiedHeading -and $typeHeading) {
   $oldModified = ($t0.Left - $m0.Left) / $scale
   $gripX = [int]($t0.Left - 1); $gripY = [int]($t0.Top + $t0.Height / 2)
   Step "19: Modified is $([Math]::Round($oldModified, 1)) px wide; the grip at $gripX,$gripY"
-  $changes = (ShellLines 'columns changed').Count
-  $saves = (ShellLines 'columns saved').Count
+  $changes = @(ShellLines 'columns changed').Count
+  $saves = @(ShellLines 'columns saved').Count
   [Live]::Drag($gripX, $gripY, [int]($gripX + 40 * $scale), $gripY)
   $dragged = ColumnsChanged 'drag' $changes
   $saved = WaitShellLines 'columns saved' $saves
@@ -1706,7 +1711,7 @@ if ($modifiedHeading -and $typeHeading) {
   Shot $h "$ShotDir\19-dragged-live.png"
 
   Step "19: a double-click on the Type heading fits Type to its widest text on screen"
-  $changes = (ShellLines 'columns changed').Count
+  $changes = @(ShellLines 'columns changed').Count
   $x19 = [int]($t1.Left + $t1.Width / 2); $y19 = [int]($t1.Top + $t1.Height / 2)
   [Live]::Click($x19, $y19); [Live]::Click($x19, $y19)
   $fit = ColumnsChanged 'fit' $changes
@@ -1718,8 +1723,8 @@ if ($modifiedHeading -and $typeHeading) {
 }
 
 Step "19: the palette's Reset Column Widths gives the theme's widths back"
-$changes = (ShellLines 'columns changed').Count
-$saves = (ShellLines 'columns saved').Count
+$changes = @(ShellLines 'columns changed').Count
+$saves = @(ShellLines 'columns saved').Count
 [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
 [Live]::Type("reset column widths"); Start-Sleep -Milliseconds 700
 [Live]::Press($VK.Enter)
@@ -1741,13 +1746,13 @@ foreach ($file in "$c20\top.txt", "$c20\a\a.txt", "$c20\a\b\b.txt", "$c20\a\b\c\
 
 Step "20: the left pane in a folder three levels deep; Ctrl+Alt+C shows its tab as columns"
 GoLeftPane $c20
-$entered = (ShellLines 'column view entered').Count
+$entered = @(ShellLines 'column view entered').Count
 [Live]::Press($VK.Ctrl, $VK.Alt, $VK.C)
 $in = WaitShellLines 'column view entered' $entered
 "20: Ctrl+Alt+C entered the column view at the folder ($($in.fields.path)): $([bool]$in -and $in.fields.path -eq $c20)"
 
 Step "20: Enter on the folder row a, then on b: two columns open to the right"
-$opened = (ShellLines 'column opened').Count
+$opened = @(ShellLines 'column opened').Count
 [Live]::Press($VK.Enter)
 $first20 = WaitShellLines 'column opened' $opened
 [Live]::Press($VK.Enter)
@@ -1758,7 +1763,7 @@ $three20 = WaitShellLines 'column view changed' 0 5 { param($line) $line.fields.
 Shot $h "$ShotDir\columns-live.png"
 
 Step "20: Left twice: the keyboard goes back to the first column; the three columns stay"
-$changes = (ShellLines 'column view changed').Count
+$changes = @(ShellLines 'column view changed').Count
 [Live]::Press($VK.Left)
 [void](WaitShellLines 'column view changed' $changes)
 [Live]::Press($VK.Left)
@@ -1766,8 +1771,8 @@ $back20 = WaitShellLines 'column view changed' ($changes + 1) 5 { param($line) $
 "20: the keyboard is in the first column, three columns still shown, the tab still at b (keyboard $($back20.fields.keyboard), depth $($back20.fields.depth), path $($back20.fields.path)): $($back20.fields.keyboard -eq 1 -and $back20.fields.depth -eq 3 -and $back20.fields.path -eq "$c20\a\b")"
 
 Step "20: Ctrl+Alt+C again: the list of the deepest folder, the other columns' listings released"
-$left20 = (ShellLines 'column view left').Count
-$released = (ShellLines 'column released').Count
+$left20 = @(ShellLines 'column view left').Count
+$released = @(ShellLines 'column released').Count
 [Live]::Press($VK.Ctrl, $VK.Alt, $VK.C)
 $out20 = WaitShellLines 'column view left' $left20
 Start-Sleep -Milliseconds 500
@@ -1786,7 +1791,7 @@ function WindowRect { $r = New-Object Live+RECT; [void][Live]::DwmGetWindowAttri
 Step "compact overlay: Ctrl+Alt+Up makes the window a small always-on-top drawer"
 $full = WindowRect
 $configBefore = ConfigUi
-$enteredBefore = (ShellLines 'compact overlay entered').Count
+$enteredBefore = @(ShellLines 'compact overlay entered').Count
 [Live]::Press($VK.Ctrl, $VK.Alt, $VK.Up); Start-Sleep -Milliseconds 800
 $entered = WaitShellLines 'compact overlay entered' $enteredBefore
 $small = WindowRect
@@ -1800,7 +1805,7 @@ $modeText = @([System.Windows.Automation.AutomationElement]::FromHandle($script:
 "compact overlay: the status bar names the mode and the key to leave it ('$($modeText -join ' | ')'): $($modeText.Count -ge 1 -and $modeText[0] -like '*Ctrl+Alt+Up*')"
 
 Step "compact overlay: Ctrl+Alt+Up again brings the window back"
-$leftBefore = (ShellLines 'compact overlay left').Count
+$leftBefore = @(ShellLines 'compact overlay left').Count
 [Live]::Press($VK.Ctrl, $VK.Alt, $VK.Up); Start-Sleep -Milliseconds 800
 $left = WaitShellLines 'compact overlay left' $leftBefore
 $back = WindowRect
@@ -1829,9 +1834,9 @@ Step "keys: Shift+Delete on b.txt, then Tab and Enter: the dialog's Delete perma
 GoLeftPane $k20
 # Rows: sub, a.txt, b.txt, notes.md.
 [Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
-$held = (ShellLines 'key held by a dialog').Count
-$closedBefore = (ShellLines 'dialog closed').Count
-$shownBefore = (ShellLines 'dialog shown').Count
+$held = @(ShellLines 'key held by a dialog').Count
+$closedBefore = @(ShellLines 'dialog closed').Count
+$shownBefore = @(ShellLines 'dialog shown').Count
 [Live]::Press($VK.Shift, $VK.Delete)
 $shown = WaitShellLines 'dialog shown' $shownBefore
 Start-Sleep -Milliseconds 600
@@ -1840,22 +1845,22 @@ Step "keys: Tab, Enter in the dialog"
 [Live]::Press($VK.Enter)
 $closed = WaitShellLines 'dialog closed' $closedBefore
 Start-Sleep -Milliseconds 1500
-"keys: Tab and Enter answered the dialog '$($shown.fields.title)' with Delete permanently (result $($closed.fields.result)), no key held: $($closed.fields.result -eq 'Primary' -and (ShellLines 'key held by a dialog').Count -eq $held -and -not (Test-Path -LiteralPath "$k20\b.txt"))"
+"keys: Tab and Enter answered the dialog '$($shown.fields.title)' with Delete permanently (result $($closed.fields.result)), no key held: $($closed.fields.result -eq 'Primary' -and @(ShellLines 'key held by a dialog').Count -eq $held -and -not (Test-Path -LiteralPath "$k20\b.txt"))"
 
 Step "keys: Enter on notes.md opens it in the other pane; Tab gives that page the keyboard"
 # Rows: sub, a.txt, notes.md.
 [Live]::Press($VK.End); Start-Sleep -Milliseconds 300
-$opened = (ShellLines 'file opened in a tool').Count
+$opened = @(ShellLines 'file opened in a tool').Count
 [Live]::Press($VK.Enter)
 [void](WaitShellLines 'file opened in a tool' $opened 8)
 Start-Sleep -Milliseconds 800
-$handed = (ShellLines 'a page has the keyboard').Count
+$handed = @(ShellLines 'a page has the keyboard').Count
 $tabs = CommandCount 'view.focusOtherPane'
 [Live]::Press($VK.Tab)
 $page = WaitShellLines 'a page has the keyboard' $handed 5 { param($line) $line.fields.page -like 'tool:*' }
 "keys: Tab ran view.focusOtherPane and the preview's page has the keyboard ($($page.fields.page)): $((CommandCount 'view.focusOtherPane') -gt $tabs -and $page.fields.page -like 'tool:*')"
 Step "keys: the palette's Close Editor, from inside the page, closes the preview"
-$toolsClosed = (ShellLines 'tool closed').Count
+$toolsClosed = @(ShellLines 'tool closed').Count
 [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
 [Live]::Type("Close Editor"); Start-Sleep -Milliseconds 700
 [Live]::Press($VK.Enter)
@@ -1880,12 +1885,15 @@ $notBound = NoticeCount 'is not bound'
 "keys: the held Ctrl+K and Ctrl+T ran the picker, and no chord was called not bound: $((CommandCount 'preferences.selectColorTheme') -gt $pickers -and (NoticeCount 'is not bound') -eq $notBound)"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
 
-Step "keys: Ctrl+B held until Windows repeats it: the sidebar toggles once; Ctrl+B again puts it back"
-$toggles = CommandCount 'view.toggleSidebar'
-[Live]::Hold($VK.Ctrl, $VK.B, 6, 40); Start-Sleep -Milliseconds 600
-$heldToggles = (CommandCount 'view.toggleSidebar') - $toggles
-[Live]::Press($VK.Ctrl, $VK.B); Start-Sleep -Milliseconds 600
-"keys: six key-downs of a held Ctrl+B ran view.toggleSidebar $heldToggles time(s): $($heldToggles -eq 1)"
+# The palette's key is the one held: it is in the Immutable System Tier, so no earlier section can have rebound it. The
+# sidebar's Ctrl+B was held here until 2026-10-01, and ran nothing: the rebind step near the start of the run moves
+# View: Toggle Sidebar to Ctrl+Alt+B, and the run's configuration keeps that.
+Step "keys: Ctrl+Shift+P held until Windows repeats it: the palette opens once; Esc closes it"
+$shows = CommandCount 'palette.show'
+[Live]::Hold($VK.Ctrl, $VK.Shift, $VK.P, 6, 40); Start-Sleep -Milliseconds 600
+$heldShows = (CommandCount 'palette.show') - $shows
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+"keys: six key-downs of a held Ctrl+Shift+P ran palette.show $heldShows time(s): $($heldShows -eq 1)"
 
 # The find box is the pane's (keybindings.md, "Contexts"): the pane's keys that type nothing act on the pane from it, and
 # the box keeps its typing and editing keys. F5 copies into the other pane, so that pane must show the fixture: Ctrl+Right
