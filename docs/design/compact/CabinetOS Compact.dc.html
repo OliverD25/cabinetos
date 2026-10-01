@@ -23,58 +23,31 @@ input:focus{outline:none}
 </helmet>
 <div style="height:100vh;display:flex;flex-direction:column;font-family:'Open Sans','Segoe UI Variable','Segoe UI',sans-serif;font-size:12px;color:#fff;background:{{ backdrop }};position:relative;overflow:hidden;user-select:none;line-height:1.3" onMouseDown="{{ closeTransient }}">
 
-<!-- Title bar -->
-<div style="height:30px;display:flex;align-items:center;flex:none">
-  <div style="display:flex;align-items:center;gap:10px;padding:0 14px;height:100%">
-    <img src="./icons/cabinetos-16.svg" width="16" height="16" alt="" style="display:block">
-    <span style="font-size:12px;color:rgba(255,255,255,.786)">CabinetOS</span>
-  </div>
-  <div style="display:flex;align-items:flex-end;height:100%;gap:2px;padding-left:6px">
-    <sc-for list="{{ workspaces }}" as="w" hint-placeholder-count="3">
-      <div onClick="{{ w.pick }}" style="height:24px;display:flex;align-items:center;gap:6px;padding:0 10px;border-radius:3px 3px 0 0;background:{{ w.bg }};color:{{ w.color }};font-size:11px;cursor:default;min-width:80px;white-space:nowrap">
-        <span style="width:8px;height:8px;border-radius:50%;background:{{ w.dot }}"></span>{{ w.name }}
-      </div>
-    </sc-for>
-    <div style="height:24px;width:24px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);border-radius:3px;cursor:default" style-hover="background:rgba(255,255,255,.06)">+</div>
-  </div>
+<!-- Top bar (single row) -->
+<div style="height:32px;display:flex;align-items:center;gap:2px;padding:0 0 0 4px;flex:none;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);position:relative">
+  <div onClick="{{ toggleMenu }}" title="Menu" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8);cursor:default" style-hover="background:rgba(255,255,255,.08)"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.3"/></svg></div>
+  <img src="./icons/cabinetos-16.svg" width="16" height="16" alt="" style="display:block;margin:0 6px 0 4px">
+  <div style="display:flex;align-items:center;gap:6px;padding:0 4px;color:rgba(255,255,255,.85);white-space:nowrap"><span style="font-weight:600">CabinetOS</span><span style="color:rgba(255,255,255,.35)">·</span><span style="color:rgba(255,255,255,.6)">{{ activeFolderName }}</span></div>
   <div style="flex:1"></div>
+  <div onClick="{{ openQuickOpen }}" title="Quick open (Ctrl+P) · type > for commands" style="height:22px;display:flex;align-items:center;gap:6px;padding:0 8px;border-radius:2px;color:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.08);margin-right:6px;cursor:default" style-hover="background:rgba(255,255,255,.08);color:#fff"><svg width="13" height="13" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3"/></svg><span style="font-family:'Fira Code',monospace;font-size:10px">Ctrl+P</span></div>
+  <div onClick="{{ toggleDual }}" title="Toggle dual pane (Ctrl+Shift+D)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ dualColor }};cursor:default" style-hover="background:rgba(255,255,255,.08)"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg></div>
+  <div onClick="{{ toggleTerm }}" title="Toggle terminal (Ctrl+`)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ termColor }};cursor:default" style-hover="background:rgba(255,255,255,.08)"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6l2 2-2 2M8 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></div>
+  <div onClick="{{ toggleMarket }}" title="Marketplace (Ctrl+Shift+X)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ marketColor }};cursor:default" style-hover="background:rgba(255,255,255,.08)"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6.5l1-3.5h10l1 3.5M2 6.5v7h12v-7M2 6.5h12M6 13.5v-4h4v4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></div>
+  <div onClick="{{ openPalette }}" title="Command palette (Ctrl+Shift+P)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.786);cursor:default" style-hover="background:rgba(255,255,255,.08)"><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="12.5" r="1.3" fill="currentColor"/></svg></div>
+  <div onClick="{{ openSettings }}" title="Settings (Ctrl+,)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.786);cursor:default" style-hover="background:rgba(255,255,255,.08)"><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.3"/></svg></div>
+  <div style="width:1px;height:16px;background:rgba(255,255,255,.1);margin:0 6px"></div>
   <div style="display:flex;height:100%">
     <div style="width:40px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8)" style-hover="background:rgba(255,255,255,.08)"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg></div>
     <div style="width:40px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8)" style-hover="background:rgba(255,255,255,.08)"><svg width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor"/></svg></div>
     <div style="width:40px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8)" style-hover="background:#c42b1c;color:#fff"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"/></svg></div>
   </div>
-</div>
-
-<!-- Command bar -->
-<div style="height:32px;display:flex;align-items:center;gap:2px;padding:0 4px;flex:none;border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03)">
-  <div onClick="{{ goBack }}" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.786);cursor:default" style-hover="background:rgba(255,255,255,.06)"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></div>
-  <div style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.363)"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></div>
-  <div onClick="{{ goUp }}" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.786);cursor:default" style-hover="background:rgba(255,255,255,.06)"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 10l5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></div>
-  <div style="flex:1;height:24px;margin:0 4px;border-radius:2px;background:rgba(255,255,255,.0605);border:1px solid rgba(255,255,255,.0698);border-bottom-color:rgba(255,255,255,.2);display:flex;align-items:center;padding:0 6px 0 10px;gap:2px;overflow:hidden">
-    <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="4">
-      <div onClick="{{ c.go }}" style="display:flex;align-items:center;gap:2px;color:rgba(255,255,255,.9);white-space:nowrap">
-        <span style="padding:2px 6px;border-radius:3px;cursor:default" style-hover="background:rgba(255,255,255,.08)">{{ c.label }}</span>
-        <sc-if value="{{ c.sep }}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/></svg></sc-if>
-      </div>
-    </sc-for>
-  </div>
-  <div style="width:clamp(120px,22%,240px);height:24px;border-radius:2px;background:rgba(255,255,255,.0605);border:1px solid rgba(255,255,255,.0698);border-bottom-color:rgba(255,255,255,.2);display:flex;align-items:center;padding:0 10px;gap:8px;color:rgba(255,255,255,.544)">
-    <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3"/></svg>
-    <span style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search {{ activeFolderName }}</span>
-  </div>
-  <div style="width:1px;height:16px;background:rgba(255,255,255,.1);margin:0 4px"></div>
-  <div onClick="{{ toggleDual }}" title="Toggle dual pane (Ctrl+Shift+D)" style="height:26px;padding:0 8px;border-radius:2px;display:flex;align-items:center;gap:6px;color:{{ dualColor }};cursor:default;font-size:12px" style-hover="background:rgba(255,255,255,.06)">
-    <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg>{{ dualLabel }}
-  </div>
-  <div onClick="{{ toggleTerm }}" title="Toggle terminal (Ctrl+`)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ termColor }};cursor:default" style-hover="background:rgba(255,255,255,.06)">
-    <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6l2 2-2 2M8 10.5h3.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
-  </div>
-  <div onClick="{{ toggleMarket }}" title="Marketplace (Ctrl+Shift+X)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ marketColor }};cursor:default" style-hover="background:rgba(255,255,255,.06)">
-    <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6.5l1-3.5h10l1 3.5M2 6.5v7h12v-7M2 6.5h12M6 13.5v-4h4v4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
-  </div>
-  <div onClick="{{ openPalette }}" title="Command palette (Ctrl+Shift+P)" style="width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.786);cursor:default" style-hover="background:rgba(255,255,255,.06)">
-    <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="12.5" r="1.3" fill="currentColor"/></svg>
-  </div>
+  <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+    <div onMouseDown="{{ stop }}" style="position:absolute;left:4px;top:30px;width:200px;background:rgba(38,38,38,.98);border:1px solid rgba(255,255,255,.14);border-radius:3px;box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:30;padding:4px 0">
+      <sc-for list="{{ menuItems }}" as="m" hint-placeholder-count="6">
+        <div onClick="{{ m.run }}" style="height:26px;display:flex;align-items:center;padding:0 10px;color:rgba(255,255,255,.85);cursor:default" style-hover="background:rgba(255,255,255,.08)"><span style="flex:1">{{ m.name }}</span><span style="font-family:'Fira Code',monospace;font-size:10px;color:rgba(255,255,255,.4)">{{ m.key }}</span></div>
+      </sc-for>
+    </div>
+  </sc-if>
 </div>
 
 <!-- Body -->
@@ -92,16 +65,22 @@ input:focus{outline:none}
   </sc-if>
 
   <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
-    <div style="width:clamp(150px,17%,190px);flex:none;display:flex;flex-direction:column;gap:0;overflow:auto;padding:2px 0;border-right:1px solid rgba(255,255,255,.08)">
-      <div style="padding:4px 8px 2px;font-size:10px;font-weight:600;color:rgba(255,255,255,.544);text-transform:uppercase;letter-spacing:.06em;display:flex;justify-content:space-between;align-items:center">Workspaces<span style="font-weight:400;text-transform:none;letter-spacing:0;color:rgba(255,255,255,.4);white-space:nowrap">Ctrl+K W</span></div>
-      <sc-for list="{{ workspaces }}" as="w" hint-placeholder-count="3">
-        <div onClick="{{ w.pick }}" style="height:22px;margin:0;padding:0 8px;border-radius:0;display:flex;align-items:center;gap:6px;background:{{ w.sideBg }};position:relative;cursor:default" style-hover="background:rgba(255,255,255,.06)">
-          <span style="position:absolute;left:0;top:3px;width:2px;height:16px;border-radius:3px;background:{{ w.bar }}"></span>
-          <span style="width:8px;height:8px;border-radius:50%;background:{{ w.dot }}"></span>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ w.name }}</span>
-          <span style="font-size:11px;color:rgba(255,255,255,.4);font-family:'Fira Code',monospace;white-space:nowrap">{{ w.branch }}</span>
+    <div style="width:clamp(150px,17%,190px);flex:none;display:flex;flex-direction:column;gap:0;overflow:visible;padding:0 0 2px;border-right:1px solid rgba(255,255,255,.08)">
+      <div style="position:relative;flex:none">
+        <div onClick="{{ toggleWsMenu }}" title="Switch workspace (Ctrl+K W)" style="height:26px;display:flex;align-items:center;gap:6px;padding:0 8px;background:{{ wsPillBg }};border-bottom:1px solid rgba(255,255,255,.08);color:#fff;cursor:default" style-hover="filter:brightness(1.15)">
+          <span style="width:8px;height:8px;border-radius:50%;background:{{ wsDot }};flex:none"></span><span style="font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ wsName }}</span><span style="font-family:'Fira Code',monospace;font-size:10px;color:rgba(255,255,255,.5)">{{ activeBranch }}</span><svg width="10" height="10" viewBox="0 0 10 10" style="flex:none"><path d="M2 4l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
         </div>
+  <sc-if value="{{ wsMenuOpen }}" hint-placeholder-val="{{ false }}">
+    <div onMouseDown="{{ stop }}" style="position:absolute;left:0;right:0;top:26px;min-width:220px;background:rgba(38,38,38,.98);border:1px solid rgba(255,255,255,.14);border-radius:3px;box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:30;padding:4px 0">
+      <div style="padding:4px 10px 2px;font-size:10px;font-weight:600;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.06em">Workspaces</div>
+      <sc-for list="{{ workspaces }}" as="w" hint-placeholder-count="3">
+        <div onClick="{{ w.pick }}" style="height:26px;display:flex;align-items:center;gap:8px;padding:0 10px;background:{{ w.sideBg }};cursor:default" style-hover="background:rgba(255,255,255,.08)"><span style="width:8px;height:8px;border-radius:50%;background:{{ w.dot }}"></span><span style="flex:1">{{ w.name }}</span><span style="font-family:'Fira Code',monospace;font-size:10px;color:rgba(255,255,255,.45)">{{ w.branch }}</span></div>
       </sc-for>
+      <div style="height:1px;background:rgba(255,255,255,.08);margin:4px 0"></div>
+      <div style="height:26px;display:flex;align-items:center;gap:8px;padding:0 10px;color:rgba(255,255,255,.75);cursor:default" style-hover="background:rgba(255,255,255,.08)">+ Open folder as workspace…</div>
+    </div>
+  </sc-if>
+      </div>
       <div style="padding:8px 8px 2px;font-size:10px;font-weight:600;color:rgba(255,255,255,.544);text-transform:uppercase;letter-spacing:.06em">Pinned</div>
       <sc-for list="{{ pinned }}" as="p" hint-placeholder-count="4">
         <div onClick="{{ p.go }}" style="height:22px;margin:0;padding:0 8px;border-radius:0;display:flex;align-items:center;gap:6px;cursor:default;position:relative;background:{{ p.bg }}" style-hover="background:rgba(255,255,255,.06)">
@@ -133,10 +112,48 @@ input:focus{outline:none}
           <sc-for list="{{ paneList }}" as="pane" hint-placeholder-count="2">
             <div onMouseDown="{{ pane.focus }}" style="flex:1;min-width:0;display:flex;flex-direction:column;border-radius:0;background:rgba(255,255,255,.0512);border:1px solid {{ pane.border }};margin:0 0 0 -1px;overflow:hidden">
               <sc-if value="{{ pane.isFiles }}" hint-placeholder-val="{{ true }}">
-                <div style="height:24px;display:flex;align-items:center;padding:0 4px 0 8px;gap:6px;border-bottom:1px solid rgba(255,255,255,.08);background:{{ pane.headBg }}">
-                  <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:{{ pane.titleColor }}">{{ pane.folderName }}</span>
-                  <span style="font-size:11px;color:rgba(255,255,255,.5);font-family:'Fira Code',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%">{{ pane.path }}</span>
-                  <div onClick="{{ pane.openEditorHint }}" style="width:20px;height:20px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6)" style-hover="background:rgba(255,255,255,.08)"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.3"/></svg></div>
+                <div style="height:28px;display:flex;align-items:flex-end;padding:0 4px;gap:0;background:rgba(0,0,0,.18);overflow:hidden;position:relative">
+                  <div style="position:absolute;left:0;right:0;bottom:0;height:1px;background:rgba(255,255,255,.08)"></div>
+                  <sc-for list="{{ pane.tabs }}" as="tab" hint-placeholder-count="2">
+                    <div onClick="{{ tab.pick }}" onAuxClick="{{ tab.close }}" title="{{ tab.path }}" style="position:relative;height:{{ tab.h }};display:flex;align-items:center;gap:7px;padding:0 6px 0 9px;min-width:0;max-width:170px;margin-bottom:{{ tab.mb }};border-radius:6px 6px 0 0;background:{{ tab.bg }};box-shadow:{{ tab.shadow }};color:{{ tab.color }};font-weight:{{ tab.weight }};cursor:default;white-space:nowrap;z-index:{{ tab.z }}" style-hover="background:{{ tab.hoverBg }};color:#fff">
+                      <svg width="14" height="14" viewBox="0 0 16 16" style="flex:none;opacity:{{ tab.iconOpacity }}"><path d="M1.5 4.5a1 1 0 0 1 1-1h3.2l1.5 1.5h5.8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-10.5a1 1 0 0 1-1-1z" fill="#f2c063"/><path d="M1.5 7h13v5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" fill="#f8d98a"/></svg>
+                      <span style="overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">{{ tab.name }}</span>
+                      <span onClick="{{ tab.close }}" title="Close tab (Ctrl+W)" style="width:16px;height:16px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55);opacity:{{ tab.closeOpacity }};flex:none" style-hover="background:rgba(255,255,255,.14);color:#fff;opacity:1"><svg width="8" height="8" viewBox="0 0 8 8"><path d="M1 1l6 6M7 1L1 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></span>
+                      <sc-if value="{{ tab.divider }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:0;top:6px;bottom:6px;width:1px;background:rgba(255,255,255,.1)"></span></sc-if>
+                    </div>
+                  </sc-for>
+                  <div onClick="{{ pane.newTab }}" title="New tab (Ctrl+T)" style="width:24px;height:22px;margin:0 0 3px 2px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55);cursor:default;flex:none" style-hover="background:rgba(255,255,255,.08);color:#fff"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></div>
+                  <div style="flex:1"></div>
+                </div>
+                <div style="height:24px;display:flex;align-items:center;padding:0 4px;gap:1px;background:{{ pane.tabFill }};flex:none;position:relative">
+                  <span title="Back (Alt+Left)" style="width:22px;height:20px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8);cursor:default;flex:none" style-hover="background:rgba(255,255,255,.1)"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                  <span title="Forward (Alt+Right)" style="width:22px;height:20px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);flex:none"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                  <span onClick="{{ pane.goUp }}" title="Up (Backspace)" style="width:22px;height:20px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8);cursor:default;flex:none" style-hover="background:rgba(255,255,255,.1)"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M3 10l5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span>
+                  <span style="width:1px;height:14px;background:rgba(255,255,255,.12);margin:0 4px;flex:none"></span>
+                  <span onClick="{{ pane.switchDrive }}" title="Switch drive (Alt+F1)" style="height:20px;padding:0 6px;border-radius:2px;display:flex;align-items:center;gap:4px;color:rgba(255,255,255,.85);font-family:'Fira Code',monospace;font-size:11px;cursor:default;flex:none" style-hover="background:rgba(255,255,255,.1)"><svg width="12" height="12" viewBox="0 0 16 16"><rect x="1.5" y="4.5" width="13" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="11.5" cy="8" r="1" fill="currentColor"/></svg>{{ pane.drive }}<svg width="8" height="8" viewBox="0 0 10 10"><path d="M2 4l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></span>
+                  <span style="flex:1"></span>
+                  <span style="font-size:11px;color:rgba(255,255,255,.5);font-family:'Fira Code',monospace;white-space:nowrap">{{ pane.driveFree }}</span>
+                  <span style="width:1px;height:14px;background:rgba(255,255,255,.12);margin:0 4px;flex:none"></span>
+                  <span onClick="{{ pane.toggleSearch }}" title="Find in pane (Ctrl+F)" style="width:22px;height:20px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:{{ pane.searchColor }};cursor:default;flex:none" style-hover="background:rgba(255,255,255,.1)"><svg width="12" height="12" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3"/></svg></span>
+                  <span onClick="{{ pane.openEditorHint }}" title="Open with…" style="width:22px;height:20px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);cursor:default;flex:none" style-hover="background:rgba(255,255,255,.1)"><svg width="12" height="12" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.3"/></svg></span>
+                  <sc-if value="{{ pane.searchOpen }}" hint-placeholder-val="{{ false }}">
+                    <div style="position:absolute;right:4px;top:24px;height:22px;display:flex;align-items:center;gap:4px;padding:0 4px;background:rgba(38,38,38,.98);border:1px solid rgba(255,255,255,.14);border-top:none;border-radius:0 0 2px 2px;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:2">
+                      <svg width="13" height="13" viewBox="0 0 16 16" style="color:rgba(255,255,255,.55)"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3"/></svg>
+                      <input ref="{{ pane.searchRef }}" value="{{ pane.searchQ }}" onChange="{{ pane.onSearch }}" placeholder="Find in {{ pane.folderName }}" spellcheck="false" style="width:150px;height:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:2px;color:#fff;font:inherit;font-family:'Noto Sans','Segoe UI Variable',sans-serif;font-size:11px;padding:0 5px;outline:none"></input>
+                      <span style="font-family:'Noto Sans','Segoe UI Variable',sans-serif;color:rgba(255,255,255,.5);white-space:nowrap;min-width:40px;text-align:right">{{ pane.searchCount }}</span>
+                      <div onClick="{{ pane.closeSearch }}" style="width:16px;height:16px;border-radius:2px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:12px;cursor:default;font-family:'Noto Sans',sans-serif" style-hover="background:rgba(255,255,255,.15);color:#fff">×</div>
+                    </div>
+                  </sc-if>
+                </div>
+                <div style="height:20px;display:flex;align-items:center;padding:0 8px;gap:1px;border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);font-family:'Fira Code',monospace;font-size:11px;overflow:hidden;flex:none">
+                  <sc-for list="{{ pane.crumbs }}" as="c" hint-placeholder-count="3">
+                    <div onClick="{{ c.go }}" title="{{ c.title }}" style="display:flex;align-items:center;gap:1px;white-space:nowrap;flex:none">
+                      <span style="padding:1px 4px;border-radius:2px;cursor:default;color:{{ c.color }}" style-hover="background:rgba(255,255,255,.1);color:#fff">{{ c.label }}</span>
+                      <sc-if value="{{ c.sep }}" hint-placeholder-val="{{ true }}"><span style="color:rgba(255,255,255,.35)">›</span></sc-if>
+                    </div>
+                  </sc-for>
+                  <span style="flex:1"></span>
+                  <span style="color:rgba(255,255,255,.35);white-space:nowrap">{{ pane.filterLabel }}</span>
                 </div>
                 <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,.9fr) minmax(0,.7fr) 60px;column-gap:8px;padding:2px 8px;font-size:11px;color:rgba(255,255,255,.55);border-bottom:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03)">
                   <span>Name</span><span>Modified</span><span>Type</span><span style="text-align:right">Size</span>
@@ -503,6 +520,10 @@ const COMMANDS = [
   {id:'move',cat:'File',name:'Move to Other Pane',sc:[['F6']]},
   {id:'newfolder',cat:'File',name:'New Folder',sc:[['F7']]},
   {id:'goto',cat:'Go',name:'Go to Path…',sc:[['Ctrl','L']]},
+  {id:'find',cat:'View',name:'Find in Pane',sc:[['Ctrl','F']]},
+  {id:'quick',cat:'Go',name:'Quick Open…',sc:[['Ctrl','P']]},
+  {id:'newtab',cat:'View',name:'New Tab in Pane',sc:[['Ctrl','T']]},
+  {id:'closetab',cat:'View',name:'Close Tab',sc:[['Ctrl','W']]},
   {id:'md',cat:'Editor',name:'Open Markdown Preview',sc:[['Ctrl','K'],['V']],plugin:'Markdown Preview+'},
   {id:'hex',cat:'Editor',name:'Open as Hex',sc:[['Ctrl','K'],['H']],plugin:'Hex Editor Pro'},
   {id:'market',cat:'Marketplace',name:'Browse Plugins and Themes',sc:[['Ctrl','Shift','X']]},
@@ -523,13 +544,13 @@ const nameOf = p => { const parts=p.split('\\').filter(Boolean); return parts[pa
 class Component extends DCLogic {
   constructor(props){
     super(props);
-    this.paletteRef = React.createRef();
+    this.paletteRef = React.createRef(); this.searchRefs=[React.createRef(),React.createRef()];
     this.state = {
       view:'files', dual:true, termOpen:null, activePane:0, sidebarOpen:true,
-      panes:[{path:'C:\\Users\\dev\\Projects\\fileforge',sel:'README.md',mode:'files',file:null},{path:'D:\\Backup',sel:null,mode:'files',file:null}],
+      panes:[{path:'C:\\Users\\dev\\Projects\\fileforge',sel:'README.md',mode:'files',file:null,tabs:['C:\\Users\\dev\\Projects\\fileforge','C:\\Users\\dev\\Downloads'],tab:0,search:null},{path:'D:\\Backup',sel:null,mode:'files',file:null,tabs:['D:\\Backup'],tab:0,search:null}],
       palette:{open:false,q:'',idx:0,hover:-1,recording:null,combos:[]}, shortcuts:{},
       ctx:null, transfer:null, term:{lines:[{t:'CabinetOS terminal · cwd follows the active pane',color:'rgba(255,255,255,.45)'}],input:''},
-      mk:{tab:'discover',selected:null,review:null,installed:{mdp:true,hex:true,gitlens:true},q:''}, themeId:'default', workspace:0,
+      mk:{tab:'discover',selected:null,review:null,installed:{mdp:true,hex:true,gitlens:true},q:''}, themeId:'default', workspace:0, wsMenu:false, menu:false,
     };
   }
   componentDidMount(){ this.onKey=e=>this.handleKey(e); window.addEventListener('keydown',this.onKey,true); }
@@ -543,7 +564,11 @@ class Component extends DCLogic {
 
   setPalette(patch){ this.setState(s=>({palette:{...s.palette,...patch}})); }
   setPane(i,patch){ this.setState(s=>({panes:s.panes.map((p,j)=>j===i?{...p,...patch}:p)})); }
-  navigate(i,path){ this.setPane(i,{path,sel:null,mode:'files',file:null}); }
+  navigate(i,path){ this.setState(s=>({panes:s.panes.map((p,j)=>{ if(j!==i) return p; const tabs=[...(p.tabs||[p.path])]; tabs[p.tab||0]=path; return {...p,path,tabs,sel:null,mode:'files',file:null,search:null}; })})); }
+  pickTab(i,t){ this.setState(s=>({activePane:i,panes:s.panes.map((p,j)=>j===i?{...p,tab:t,path:p.tabs[t],sel:null,mode:'files',file:null,search:null}:p)})); }
+  newTab(i){ this.setState(s=>({activePane:i,panes:s.panes.map((p,j)=>{ if(j!==i) return p; const tabs=[...p.tabs,p.path]; return {...p,tabs,tab:tabs.length-1,sel:null,mode:'files',file:null,search:null}; })})); }
+  closeTab(i,t){ this.setState(s=>({panes:s.panes.map((p,j)=>{ if(j!==i||p.tabs.length<=1) return p; const tabs=p.tabs.filter((_,k)=>k!==t); const tab=Math.min(p.tab>t?p.tab-1:p.tab,tabs.length-1); return {...p,tabs,tab,path:tabs[tab],sel:null,search:null}; })})); }
+  toggleSearch(i,force){ this.setState(s=>({panes:s.panes.map((p,j)=>j===i?{...p,search:(force===undefined?p.search===null:force)?'':null}:p)}),()=>{ const r=this.searchRefs&&this.searchRefs[i]; if(r&&r.current) r.current.focus(); }); }
   otherPane(){ return this.state.dual ? 1-this.state.activePane : this.state.activePane; }
   openFile(item,paneIdx){
     const ext=item.n.split('.').pop().toLowerCase();
@@ -577,6 +602,7 @@ class Component extends DCLogic {
   }
   execCommand(id){
     const acts={
+      find:()=>this.toggleSearch(this.state.activePane,true), newtab:()=>this.newTab(this.state.activePane), closetab:()=>this.closeTab(this.state.activePane,this.state.panes[this.state.activePane].tab),
       dual:()=>this.toggleDual(), term:()=>this.setState({termOpen:!this.termOpen}), focus:()=>this.setState(s=>({activePane:s.dual?1-s.activePane:0})),
       sidebar:()=>this.setState(s=>({sidebarOpen:!s.sidebarOpen})), copy:()=>this.startTransfer(), move:()=>this.startTransfer(),
       market:()=>this.setState({view:'market'}), theme:()=>this.setState(s=>({view:'market',mk:{...s.mk,tab:'themes',selected:null}})),
@@ -606,6 +632,8 @@ class Component extends DCLogic {
     }
     const k=e.key.toLowerCase();
     if(e.ctrlKey&&e.shiftKey&&k==='p'){ e.preventDefault(); this.setPalette({open:!palette.open,q:'',idx:0}); return; }
+    if(e.ctrlKey&&!e.shiftKey&&k==='p'){ e.preventDefault(); this.setPalette({open:!palette.open,q:'',idx:0}); return; }
+    if(e.key==='Escape'&&!this.state.mk.review&&!palette.open&&!this.state.ctx&&this.state.panes[this.state.activePane].search!==null){ this.toggleSearch(this.state.activePane,false); return; }
     if(e.key==='Escape'){ if(this.state.mk.review) this.setState(s=>({mk:{...s.mk,review:null}})); else if(palette.open) this.setPalette({open:false}); else if(this.state.ctx) this.setState({ctx:null}); else if(this.state.mk.selected) this.setState(s=>({mk:{...s.mk,selected:null}})); return; }
     if(palette.open){
       const items=this.filteredCommands();
@@ -614,7 +642,11 @@ class Component extends DCLogic {
       else if(e.key==='Enter'){ e.preventDefault(); const c=items[palette.idx]; if(c) this.execCommand(c.id); }
       return;
     }
+    if(e.key==='Escape'&&this.state.panes[this.state.activePane].search!==null){ this.toggleSearch(this.state.activePane,false); return; }
     if(e.target&&e.target.tagName==='INPUT') return;
+    if(e.ctrlKey&&!e.shiftKey&&k==='f'&&this.state.view==='files'){ e.preventDefault(); this.toggleSearch(this.state.activePane); return; }
+    if(e.ctrlKey&&!e.shiftKey&&k==='t'&&this.state.view==='files'){ e.preventDefault(); this.newTab(this.state.activePane); return; }
+    if(e.ctrlKey&&!e.shiftKey&&k==='w'&&this.state.view==='files'){ e.preventDefault(); const p=this.state.panes[this.state.activePane]; this.closeTab(this.state.activePane,p.tab); return; }
     if(e.ctrlKey&&e.key==='`'){ e.preventDefault(); this.setState({termOpen:!this.termOpen}); }
     else if(e.ctrlKey&&e.shiftKey&&k==='d'){ e.preventDefault(); this.toggleDual(); }
     else if(e.ctrlKey&&e.shiftKey&&k==='x'){ e.preventDefault(); this.setState(s=>({view:s.view==='market'?'files':'market'})); }
@@ -631,7 +663,7 @@ class Component extends DCLogic {
     const stop=e=>e.stopPropagation();
     const pill=on=>on?accent:'transparent';
 
-    const workspaces=WORKSPACES.map((w,i)=>{const on=i===s.workspace;return {...w,pick:()=>{this.setState({workspace:i,view:'files'});this.navigate(0,w.path);},bg:on?'rgba(255,255,255,.08)':'transparent',color:on?'#fff':'rgba(255,255,255,.6)',sideBg:on?'rgba(255,255,255,.06)':'transparent',bar:pill(on)}});
+    const workspaces=WORKSPACES.map((w,i)=>{const on=i===s.workspace;return {...w,pick:()=>{this.setState({workspace:i,view:'files',wsMenu:false});this.navigate(0,w.path);},bg:on?'rgba(255,255,255,.08)':'transparent',color:on?'#fff':'rgba(255,255,255,.6)',sideBg:on?'rgba(255,255,255,.06)':'transparent',bar:pill(on)}});
     const pinned=['C:\\Users\\dev\\Desktop','C:\\Users\\dev\\Downloads','C:\\Users\\dev\\Documents','C:\\Users\\dev\\Projects'].map(p=>({name:nameOf(p),go:()=>{this.setState({view:'files'});this.navigate(s.activePane,p);},bg:active.path===p?'rgba(255,255,255,.06)':'transparent',bar:pill(active.path===p)}));
     const drives=[{name:'Local Disk (C:)',path:'C:\\',free:'118 GB',pct:'76%',barColor:accent},{name:'Data (D:)',path:'D:\\',free:'1.4 TB',pct:'31%',barColor:accent}].map(d=>({...d,go:()=>{this.setState({view:'files'});this.navigate(s.activePane,d.path);}}));
     const tags=[{name:'Design',color:'#f2c063',n:12},{name:'Urgent',color:'#e0705e',n:3},{name:'Review',color:'#60cdff',n:8},{name:'Archive',color:'#c9b6ff',n:41}];
@@ -643,13 +675,27 @@ class Component extends DCLogic {
     const paneCount=s.dual?2:1;
     const paneList=s.panes.slice(0,paneCount).map((p,i)=>{
       const on=i===s.activePane&&s.dual;
-      const items=FS[p.path]||[];
+      const allItems=FS[p.path]||[];
+      const q=(p.search||'').toLowerCase();
+      const items=q?allItems.filter(it=>it.n.toLowerCase().includes(q)):allItems;
       const stripes=this.props.rowStripes??true;
+      const paneOn=on||!s.dual;
+      const tabFill=paneOn?'rgba(255,255,255,.09)':'rgba(255,255,255,.05)';
+      const curIdx=p.tab||0;
+      const tabs=(p.tabs||[p.path]).map((tp,t)=>{const cur=t===curIdx;const many=p.tabs.length>1;return {path:tp,name:nameOf(tp),pick:()=>this.pickTab(i,t),close:e=>{e.stopPropagation();e.preventDefault();this.closeTab(i,t);},
+        h:cur?'26px':'22px',mb:cur?'0':'3px',bg:cur?tabFill:'transparent',hoverBg:cur?tabFill:'rgba(255,255,255,.05)',shadow:cur?(paneOn?'inset 0 1px 0 rgba(255,255,255,.12), 0 -1px 4px rgba(0,0,0,.2)':'inset 0 1px 0 rgba(255,255,255,.08)'):'none',
+        color:cur?'#fff':'rgba(255,255,255,.6)',weight:cur?600:400,z:cur?2:1,iconOpacity:cur?1:.6,closeOpacity:cur&&many?1:0,divider:!cur&&t!==curIdx-1&&t<p.tabs.length-1};});
+      const parts=p.path.split('\\').filter(Boolean);
+      const mk=(ci,label)=>{const target=ci===0?parts[0]+'\\':parts.slice(0,ci+1).join('\\');const last=ci===parts.length-1;return {label,title:target,sep:!last,color:last?'#fff':'rgba(255,255,255,.7)',go:()=>this.navigate(i,target)};};
+      const maxCrumbs=s.dual?5:8;
+      const crumbs=parts.length<=maxCrumbs?parts.map((c,ci)=>mk(ci,c)):[mk(0,parts[0]),{...mk(parts.length-3,'…'),color:'rgba(255,255,255,.5)'},...parts.slice(-2).map((c,k)=>mk(parts.length-2+k,c))];
       const rows=items.map((it,ri)=>{const ext=it.d?'':it.n.split('.').pop().toLowerCase();const selected=p.sel===it.n;return {...it,d:!!it.d,f:!it.d,tag:it.tag||false,m:it.m||'',t:it.d?'Folder':(it.t||''),s:it.s||'',iconColor:EXT_COLORS[ext]||'rgba(255,255,255,.6)',color:selected?'#fff':'rgba(255,255,255,.9)',bg:selected?'rgba(255,255,255,.12)':(stripes&&ri%2?'rgba(255,255,255,.025)':'transparent'),bar:pill(selected),
         select:()=>this.setState(x=>({activePane:i,panes:x.panes.map((q,j)=>j===i?{...q,sel:it.n}:q)})),
         open:()=>{ if(it.d) this.navigate(i,joinPath(p.path,it.n)); else this.openFile(it,i); },
         ctx:e=>{e.preventDefault();this.setState(x=>({activePane:i,ctx:{x:Math.min(e.clientX,window.innerWidth-270),y:Math.min(e.clientY,window.innerHeight-380),item:it,pane:i},panes:x.panes.map((q,j)=>j===i?{...q,sel:it.n}:q)}))}}});
-      return {path:p.path,folderName:nameOf(p.path),isFiles:p.mode==='files',isEditor:p.mode!=='files',isMd:p.mode==='md',isHex:p.mode==='hex',editorFile:p.file||'',editorIconColor:p.mode==='md'?'#60cdff':'#6ccb5f',editorProvider:p.mode==='md'?'Markdown Preview+':'Hex Editor Pro',rows,empty:items.length===0,
+      return {path:p.path,folderName:nameOf(p.path),tabs,tabFill,crumbs,newTab:()=>this.newTab(i),goUp:()=>this.navigate(i,parentOf(p.path)),drive:p.path.slice(0,2),driveFree:p.path.startsWith('C')?'118 GB free':'1.4 TB free',switchDrive:()=>this.navigate(i,p.path.startsWith('C')?'D:\\':'C:\\'),toggleSearch:()=>this.toggleSearch(i),searchColor:p.search!==null?accent:'rgba(255,255,255,.7)',filterLabel:q?('*'+q+'*'):'*.*',showHint:(on||!s.dual)&&p.search===null,
+        searchOpen:p.search!==null,searchQ:p.search||'',searchRef:this.searchRefs[i],onSearch:e=>{const v=e.target.value;this.setState(x=>({panes:x.panes.map((pp,j)=>j===i?{...pp,search:v}:pp)}));},closeSearch:()=>this.toggleSearch(i,false),searchCount:q?(items.length+' of '+allItems.length):'',
+        isFiles:p.mode==='files',isEditor:p.mode!=='files',isMd:p.mode==='md',isHex:p.mode==='hex',editorFile:p.file||'',editorIconColor:p.mode==='md'?'#60cdff':'#6ccb5f',editorProvider:p.mode==='md'?'Markdown Preview+':'Hex Editor Pro',rows,empty:items.length===0&&!q,
         border:on?'rgba(255,255,255,.18)':'rgba(255,255,255,.08)',headBg:on||!s.dual?'rgba(255,255,255,.06)':'transparent',titleColor:on||!s.dual?'#fff':'rgba(255,255,255,.7)',
         focus:()=>{ if(s.activePane!==i) this.setState({activePane:i}); },
         closeEditor:()=>this.setPane(i,{mode:'files',file:null}),
@@ -697,13 +743,18 @@ class Component extends DCLogic {
       
     ];
     return {
-      accent, backdrop:this.theme.tint||'rgba(32,32,32,.94)', fkeys, showFkeys:this.props.fkeyBar??true, stop, closeTransient:()=>{ if(s.ctx) this.setState({ctx:null}); },
+      accent, backdrop:this.theme.tint||'rgba(32,32,32,.94)', fkeys, showFkeys:this.props.fkeyBar??true, stop, closeTransient:()=>{ if(s.ctx||s.wsMenu||s.menu) this.setState({ctx:null,wsMenu:false,menu:false}); },
+      toggleWsMenu:e=>{e.stopPropagation();this.setState(x=>({wsMenu:!x.wsMenu,menu:false}));}, wsMenuOpen:s.wsMenu, wsName:WORKSPACES[s.workspace].name, wsDot:WORKSPACES[s.workspace].dot, wsPillBg:`color-mix(in srgb, ${accent} 18%, transparent)`, wsPillColor:'#fff',
+      toggleMenu:e=>{e.stopPropagation();this.setState(x=>({menu:!x.menu,wsMenu:false}));}, menuOpen:s.menu,
+      menuItems:[{name:'New Tab',key:'Ctrl+T',id:'newtab'},{name:'New Folder',key:'F7',id:'newfolder'},{name:'Find in Pane',key:'Ctrl+F',id:'find'},{name:'Go to Path…',key:'Ctrl+L',id:'goto'},{name:'Toggle Sidebar',key:'Ctrl+B',id:'sidebar'},{name:'Marketplace',key:'Ctrl+Shift+X',id:'market'},{name:'Keyboard Shortcuts',key:'Ctrl+K Ctrl+S',id:'keys'}].map(m=>({...m,run:()=>{this.setState({menu:false});this.execCommand(m.id);}})),
+      openQuickOpen:()=>this.setPalette({open:true,q:'',idx:0,hover:-1}), openSettings:()=>this.setPalette({open:true,q:'preferences',idx:0,hover:-1}),
       workspaces,pinned,drives,tags,railItems,crumbs,paneList,hexRows:HEX,
       activeFolderName:nameOf(active.path), activeBranch:WORKSPACES[s.workspace].branch,
       isRail:layout==='rail', showSidebar:s.sidebarOpen&&(layout!=='rail'||true)&&s.sidebarOpen, isFiles, isMarket,
       termRight:isFiles&&termOpen&&layout==='right', termBottom:isFiles&&termOpen&&layout!=='right', termFolderName:nameOf(active.path),
       termLines:s.term.lines, termInput:s.term.input, prompt:this.promptFor(), onTermInput:e=>this.setState(x=>({term:{...x.term,input:e.target.value}})), onTermKey:e=>{ if(e.key==='Enter') this.runTerm(); },
       goBack:()=>{}, goUp:()=>this.navigate(s.activePane,parentOf(active.path)),
+      toggleSearch:()=>this.toggleSearch(s.activePane), searchColor:active.search!==null?accent:'rgba(255,255,255,.786)',
       toggleDual:()=>this.toggleDual(), dualLabel:s.dual?'Dual':'Single', dualColor:s.dual?accent:'rgba(255,255,255,.786)',
       toggleTerm:()=>this.setState({termOpen:!termOpen}), termColor:termOpen?accent:'rgba(255,255,255,.786)',
       toggleMarket:()=>this.setState(x=>({view:x.view==='market'?'files':'market'})), marketColor:isMarket?accent:'rgba(255,255,255,.786)',

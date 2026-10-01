@@ -21,11 +21,17 @@ This is the design handout for CabinetOS, received from the creator on
   page `CabinetOS Compact.dc.html`; the theme that ships from it is
   [../themes.md](../themes.md), "Metrics and chrome".
 
-- The shell redesign of Phase 16 (the creator's `SHELL_REDESIGN.md`,
-  received 2026-09-30 and kept in `_io` next to the repository) replaces
-  this handout's title bar, command bar and pane header with one top row
-  and a tab strip and a breadcrumb row per pane. Where the window differs
-  from the redesign: [../ui.md](../ui.md), "The shell".
+- [SHELL_REDESIGN.md](SHELL_REDESIGN.md) is the shell redesign, **v2 of
+  2026-10-01**, fetched from the creator's Claude Design session the same
+  evening. It replaces this handout's title bar, command bar and pane
+  header with one quiet top row, a workspace header in the sidebar, and
+  per pane a tab strip, a toolbar row and a path row. Its v1 of
+  2026-09-30 (a workspace pill and a command center in the top row, the
+  nav buttons in the breadcrumb row) was built as Phase 16 and is kept
+  in `_io` next to the repository. `compact/CabinetOS Compact.dc.html`
+  is v2's reference build (replaced the same evening; the 2026-09-29
+  page is in `_io/design/Compact_Theme/`). Where the window differs from
+  the redesign: [../ui.md](../ui.md), "The shell".
 
 Where the handout disagrees with the Constitution or the brief, the
 consistency check in [../PLAN.md](../PLAN.md) section 4 records the conflict
