@@ -797,6 +797,9 @@ public sealed partial class MainWindow : Window
                 "terminal" => _terminal.Shown is { Pipe: not null },
                 "search" => _search.Phase is SearchPhase.Done or SearchPhase.Failed,
                 "tool" => AllToolHosts().Any(h => h.IsReady),
+                // The right-click menu is on screen (a newer one no longer waits for the one before it), or it is gone.
+                "menu" => _contextMenu.IsSettled,
+                "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,
                 _ => true,
             };
             if (met)

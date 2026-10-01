@@ -273,19 +273,21 @@ public class ContextMenuEndToEndTests
                 $"path:{data}",
                 "wait:500",
                 "menu:alpha.txt",
-                "wait:600",
+                // Each menu is waited for until WinUI has it on screen: a loaded machine closes and opens a flyout seconds late
+                // (a Closed that came 3 s after its Hide in a run beside two full suites), and a fixed time was a guess.
+                "until:menu",
                 "shell:first",
                 // No step waits between these two: the second menu is asked for while the first one closes.
                 "cmd:overlay.close",
                 "menu:alpha.txt",
-                "wait:1000",
+                "until:menu",
                 "shell:second",
                 "cmd:overlay.close",
                 "menu:alpha.txt",
-                "wait:1000",
+                "until:menu",
                 "shell:third",
                 "cmd:overlay.close",
-                "wait:600",
+                "until:menu-closed",
                 "shell:closed",
                 "shot:done"));
             var logs = await run.FinishAsync("reopen", process, "done");
@@ -300,12 +302,18 @@ public class ContextMenuEndToEndTests
                 });
             }
             State(logs, "closed", state => Assert.False(state.GetProperty("context_menu_on_screen").GetBoolean()));
-            // The second and the third close the one before them: the shown lines come within 50 ms of the close.
-            var closes = logs.Where(l => Message(l) == "command executed" && Field(l, "command").GetString() == "overlay.close").Select(Timestamp).ToList();
-            var shown = logs.Where(l => Message(l) == "context menu shown").Select(Timestamp).ToList();
+            // The second and the third are asked for while the flyout before them still closes: the window logs "context menu closed"
+            // when WinUI's Closed comes and no newer menu waits for it, so that line must not lie between the close and the next
+            // request. The time between the two lines says nothing about it: it is the UI thread's work for the menu, 15 ms on a
+            // quiet machine and 52 and 53 ms in two runs beside two full suites.
+            var closes = Positions(logs, l => Message(l) == "command executed" && Field(l, "command").GetString() == "overlay.close");
+            var shown = Positions(logs, l => Message(l) == "context menu shown");
             Assert.Equal(3, shown.Count);
-            Assert.InRange((shown[1] - closes[0]).TotalMilliseconds, 0, 50);
-            Assert.InRange((shown[2] - closes[1]).TotalMilliseconds, 0, 50);
+            foreach (var i in new[] { 0, 1 })
+            {
+                Assert.True(closes[i] < shown[i + 1], $"the {(i == 0 ? "second" : "third")} menu was asked for before the close of the one before it");
+                Assert.DoesNotContain(logs.Skip(closes[i]).Take(shown[i + 1] - closes[i]), l => Message(l) == "context menu closed");
+            }
             Assert.Equal(3, logs.Count(l => Message(l) == "context menu opened"));
         }
         finally
@@ -795,6 +803,10 @@ public class ContextMenuEndToEndTests
         File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), """{ "version": 1, "ui": { "dualPane": true } }""");
         return (new Run(root, exe, core), root, data);
     }
+
+    // Where in the log the lines that match are, oldest first: a line's place says what came before what, whatever the clock says.
+    private static List<int> Positions(List<string> logs, Func<string, bool> match) =>
+        [.. logs.Select((line, index) => (line, index)).Where(p => match(p.line)).Select(p => p.index)];
 
     private static void State(List<string> logs, string label, Action<JsonElement> check)
     {

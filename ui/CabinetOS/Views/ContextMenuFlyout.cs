@@ -76,6 +76,12 @@ internal sealed class ContextMenuFlyout
     public bool IsOpen => _front is not null;
 
     /// <summary>
+    /// Whether the menu in front is on screen and no newer one waits for the flyout before it to close: the snapshot aid's
+    /// <c>until:menu</c>. <see cref="IsOnScreen"/> alone stays true while a menu that is closing is being replaced.
+    /// </summary>
+    public bool IsSettled => _onScreen is not null && _pending is null && !_turnQueued;
+
+    /// <summary>
     /// Where the menu's buttons were (the window's coordinates) when an entry was chosen, so "Edit
     /// Menu…" can put its edit mode in the same place; null when WinUI had not laid them out.
     /// </summary>
