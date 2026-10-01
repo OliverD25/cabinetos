@@ -123,6 +123,7 @@
                                 ToolTipService.ToolTip="{x:Bind views:FolderTreeView.Tip(Path, Error), Mode=OneWay}">
                                 <StackPanel
                                     VerticalAlignment="Center"
+                                    Opacity="{x:Bind views:FolderTreeView.NameOpacityOf(IsHidden), Mode=OneWay}"
                                     Orientation="Horizontal"
                                     Spacing="8">
                                     <views:FolderGlyph VerticalAlignment="Center" />

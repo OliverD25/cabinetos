@@ -282,15 +282,50 @@ public class WarmPagesTests
 /// <summary>The folder tree: lazy reads, one per open row, a reveal that leaves the other rows alone.</summary>
 public class FolderTreeTests
 {
-    // A source that answers from a table, records every request and its token, and can hold an answer back.
+    // A source that answers from a table, records every request and its token, and can hold an answer back. Its hidden folders
+    // (AddHidden) are left out of the ordinary read and are in the read that asks for them.
     private sealed class FakeFolders : IFolderSource
     {
         private readonly Dictionary<string, List<string[]>> _answers = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, TaskCompletionSource<FolderListing>> _held = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string[]> _hidden = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, TaskCompletionSource<FolderListing>> _heldAll = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Exception> _failAll = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _refuseAll = new(StringComparer.OrdinalIgnoreCase);
 
         public List<string> Asked { get; } = [];
 
+        // The requests that asked for the hidden folders too, in order.
+        public List<string> AskedAll { get; } = [];
+
         public Dictionary<string, CancellationToken> Tokens { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, CancellationToken> TokensAll { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // The hidden folders of a path: the same names again replace them.
+        public FakeFolders AddHidden(string path, params string[] names)
+        {
+            _hidden[path] = names;
+            return this;
+        }
+
+        // The next read with the hidden folders for the path is held back until the test answers it.
+        public TaskCompletionSource<FolderListing> HoldAll(string path) =>
+            _heldAll[path] = new TaskCompletionSource<FolderListing>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Every read with the hidden folders for the path throws.
+        public FakeFolders FailAll(string path, Exception error)
+        {
+            _failAll[path] = error;
+            return this;
+        }
+
+        // Every read with the hidden folders for the path is answered with a reason and no folders.
+        public FakeFolders RefuseAll(string path, string reason)
+        {
+            _refuseAll[path] = reason;
+            return this;
+        }
 
         // The answers to the 1st, 2nd... request for the path; the last one repeats.
         public FakeFolders AddAnswers(string path, params string[][] answers)
@@ -317,6 +352,34 @@ public class FolderTreeTests
             return _answers.TryGetValue(path, out var answers)
                 ? new FolderListing(answers[Math.Min(times, answers.Count - 1)])
                 : FolderListing.Failed("Access is denied.");
+        }
+
+        // What the latest ordinary read answered and the hidden names, in the source's own order: by name, ignoring case.
+        public async Task<FolderListing> ListIncludingHiddenAsync(string path, CancellationToken cancellationToken)
+        {
+            AskedAll.Add(path);
+            TokensAll[path] = cancellationToken;
+            if (_failAll.TryGetValue(path, out var failure))
+            {
+                throw failure;
+            }
+            if (_refuseAll.TryGetValue(path, out var reason))
+            {
+                return FolderListing.Failed(reason);
+            }
+            if (_heldAll.Remove(path, out var held))
+            {
+                using var registration = cancellationToken.Register(() => held.TrySetCanceled(cancellationToken));
+                return await held.Task;
+            }
+            if (!_answers.TryGetValue(path, out var answers) && !_hidden.ContainsKey(path))
+            {
+                return FolderListing.Failed("Access is denied.");
+            }
+            var reads = Asked.Count(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+            var visible = answers is null ? [] : answers[Math.Clamp(reads - 1, 0, answers.Count - 1)];
+            var all = visible.Concat(_hidden.GetValueOrDefault(path) ?? []).OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
+            return new FolderListing([.. all]);
         }
     }
 
@@ -575,7 +638,8 @@ public class FolderTreeTests
     [Fact]
     public async Task A_folder_that_is_gone_after_a_new_read_loses_its_row_and_takes_the_marks_with_it()
     {
-        var folders = new FakeFolders().Add(@"C:\", "A", "B").Add(@"C:\A", "x");
+        // A is on the disk for the first read of C:\ and gone for the second, whichever way it is read (the held answer is the second).
+        var folders = new FakeFolders().AddAnswers(@"C:\", ["A", "B"], ["B"]).Add(@"C:\A", "x");
         var tree = Tree(folders);
         await tree.RevealAsync(@"C:\A\x");
         Assert.Equal(@"C:\A\x", tree.Current!.Path);
@@ -664,6 +728,464 @@ public class FolderTreeTests
 
         Assert.Equal(["C:", "  Users", "  Windows", "E:"], Names(tree));
     }
+
+    // ----- Folders on the pane's path that are hidden (panes.showHidden off) -----
+
+    // A stock Windows: AppData is hidden, and with panes.showHidden off the listing of the user's folder leaves it out, and so
+    // does the listing of AppData for Microsoft. ".config" is a hidden folder beside AppData that no path goes through.
+    private static FakeFolders HiddenDisk() => new FakeFolders()
+        .Add(@"C:\", "Users", "Windows")
+        .Add(@"C:\Users", "Admin", "Public")
+        .Add(@"C:\Users\Admin", "Desktop", "Documents")
+        .AddHidden(@"C:\Users\Admin", ".config", "AppData")
+        .Add(@"C:\Users\Admin\AppData", "Local", "Roaming")
+        .AddHidden(@"C:\Users\Admin\AppData", "Microsoft")
+        .Add(@"C:\Users\Admin\AppData\Local", "Programs", "Temp")
+        .Add(@"C:\Users\Admin\AppData\Local\Temp", "run1", "run2")
+        .Add(@"C:\Users\Admin\AppData\Roaming", "Code");
+
+    // The rows, a hidden folder's name with a star.
+    private static string[] Shown(FolderTreeModel tree) =>
+        tree.Rows.Select(r => new string(' ', r.Depth * 2) + r.Name + (r.IsHidden ? "*" : "")).ToArray();
+
+    private const string Run1 = @"C:\Users\Admin\AppData\Local\Temp\run1";
+
+    private static readonly string[] WithoutAppData = ["C:", "  Users", "    Admin", "      Desktop", "      Documents", "    Public", "  Windows", "D:"];
+
+    [Fact]
+    public async Task A_path_under_a_hidden_folder_shows_that_folder_dim_and_marks_the_folder_of_the_pane()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+
+        var run1 = await tree.RevealAsync(Run1);
+
+        Assert.Equal(Run1, run1!.Path);
+        Assert.Same(run1, tree.Current);
+        Assert.Equal(
+            ["C:", "  Users", "    Admin", "      AppData*", "        Local", "          Programs", "          Temp", "            run1", "            run2",
+             "        Roaming", "      Desktop", "      Documents", "    Public", "  Windows", "D:"],
+            Shown(tree));
+        // The hidden folder was asked for once, in the folder that holds it; every folder was read in the ordinary way as before.
+        Assert.Equal([@"C:\Users\Admin"], folders.AskedAll);
+        Assert.Equal(7, tree.Requests);
+        Assert.False(tree.Find(@"C:\Users\Admin\AppData\Local")!.IsHidden);
+    }
+
+    [Fact]
+    public async Task Every_other_hidden_folder_stays_out_beside_the_path_and_under_the_hidden_folder_on_it()
+    {
+        var tree = Tree(HiddenDisk());
+
+        await tree.RevealAsync(Run1);
+
+        Assert.Equal(["AppData"], tree.Rows.Where(r => r.IsHidden).Select(r => r.Name));
+        Assert.Null(tree.Find(@"C:\Users\Admin\.config"));
+        Assert.Null(tree.Find(@"C:\Users\Admin\AppData\Microsoft"));
+
+        // Opening the hidden folder again reads it in the ordinary way: Microsoft is not on the path and stays out.
+        var appData = tree.Find(@"C:\Users\Admin\AppData")!;
+        tree.Collapse(appData);
+        await tree.ExpandAsync(appData);
+        Assert.Equal(["Local", "Roaming"], tree.Rows.Where(r => r.Parent == appData).Select(r => r.Name));
+    }
+
+    [Fact]
+    public async Task A_hidden_folder_on_the_path_is_found_whatever_case_the_path_has()
+    {
+        var tree = Tree(HiddenDisk());
+
+        var node = await tree.RevealAsync(@"c:\USERS\admin\appdata\LOCAL\");
+
+        Assert.Equal(@"C:\Users\Admin\AppData\Local", node!.Path);
+        Assert.Equal("AppData", tree.Find(@"C:\Users\Admin\AppData")!.Name);
+        Assert.True(tree.Find(@"C:\Users\Admin\AppData")!.IsHidden);
+    }
+
+    [Fact]
+    public async Task A_hidden_folder_can_be_the_folder_of_the_pane_itself()
+    {
+        var tree = Tree(HiddenDisk());
+
+        var appData = await tree.RevealAsync(@"C:\Users\Admin\AppData");
+
+        Assert.True(appData!.IsHidden);
+        Assert.Same(appData, tree.Current);
+        Assert.False(appData.IsExpanded);
+        Assert.Equal(["C:", "  Users", "    Admin", "      AppData*", "      Desktop", "      Documents", "    Public", "  Windows", "D:"], Shown(tree));
+    }
+
+    [Fact]
+    public async Task The_hidden_folder_goes_with_its_rows_and_marks_when_the_pane_leaves_its_path()
+    {
+        var tree = Tree(HiddenDisk());
+        var run1 = await tree.RevealAsync(Run1);
+        tree.SetCursor(run1);
+
+        var documents = await tree.RevealAsync(@"C:\Users\Admin\Documents");
+
+        Assert.Equal(WithoutAppData, Shown(tree));
+        Assert.Null(tree.Find(@"C:\Users\Admin\AppData"));
+        Assert.Same(documents, tree.Current);
+        Assert.False(run1!.IsCurrent);
+        // The cursor was inside the hidden folder: it goes to the folder that held it.
+        Assert.Same(tree.Find(@"C:\Users\Admin"), tree.Cursor);
+        // Leaving asks nothing: the rows that stay were read already.
+        Assert.Equal(7, tree.Requests);
+    }
+
+    [Fact]
+    public async Task The_hidden_folder_comes_back_when_the_pane_returns_and_shows_only_what_is_on_the_new_path()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+        await tree.RevealAsync(Run1);
+        await tree.RevealAsync(@"C:\Users\Admin\Documents");
+
+        var code = await tree.RevealAsync(@"C:\Users\Admin\AppData\Roaming\Code");
+
+        Assert.Equal(@"C:\Users\Admin\AppData\Roaming\Code", code!.Path);
+        Assert.Equal(["AppData"], tree.Rows.Where(r => r.IsHidden).Select(r => r.Name));
+        Assert.Equal(2, folders.AskedAll.Count);
+        // Local was not on the way this time: it is a closed row, as the folder was read new.
+        Assert.Equal(
+            ["C:", "  Users", "    Admin", "      AppData*", "        Local", "        Roaming", "          Code", "      Desktop", "      Documents", "    Public", "  Windows", "D:"],
+            Shown(tree));
+    }
+
+    [Fact]
+    public async Task Reading_the_parent_again_while_the_pane_is_still_in_the_hidden_folder_keeps_it_and_its_open_rows()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+        await tree.RevealAsync(Run1);
+        var before = Shown(tree);
+        var appData = tree.Find(@"C:\Users\Admin\AppData")!;
+        var admin = tree.Find(@"C:\Users\Admin")!;
+
+        tree.Collapse(admin);
+        await tree.ExpandAsync(admin);
+
+        Assert.Equal(before, Shown(tree));
+        Assert.Same(appData, tree.Find(@"C:\Users\Admin\AppData"));
+        Assert.Equal(Run1, tree.Current!.Path);
+        Assert.Equal(2, folders.AskedAll.Count);
+    }
+
+    [Fact]
+    public async Task With_the_setting_on_the_listing_has_the_folder_and_the_tree_marks_nothing_and_asks_nothing_more()
+    {
+        var folders = new FakeFolders()
+            .Add(@"C:\", "Users")
+            .Add(@"C:\Users", "Admin")
+            .Add(@"C:\Users\Admin", "AppData", "Desktop")
+            .Add(@"C:\Users\Admin\AppData", "Local")
+            .Add(@"C:\Users\Admin\AppData\Local", "Temp")
+            .Add(@"C:\Users\Admin\AppData\Local\Temp", "run1");
+        var tree = Tree(folders);
+
+        var run1 = await tree.RevealAsync(Run1);
+
+        Assert.Equal(Run1, run1!.Path);
+        Assert.All(tree.Rows, r => Assert.False(r.IsHidden));
+        Assert.Empty(folders.AskedAll);
+        Assert.Equal(6, tree.Requests);
+
+        // Nothing goes when the pane leaves, either: these are ordinary rows.
+        await tree.RevealAsync(@"C:\Users\Admin\Desktop");
+        Assert.NotNull(tree.Find(Run1));
+    }
+
+    [Fact]
+    public async Task A_path_that_is_open_when_the_setting_goes_off_keeps_its_folders_when_a_parent_is_read_again()
+    {
+        // The first read of Admin has AppData (the setting was on); the later ones leave it out (it is off).
+        var folders = HiddenDisk()
+            .AddAnswers(@"C:\Users\Admin", ["AppData", "Desktop", "Documents"], ["Desktop", "Documents"]);
+        var tree = Tree(folders);
+        await tree.RevealAsync(Run1);
+        var appData = tree.Find(@"C:\Users\Admin\AppData")!;
+        var raised = new List<string?>();
+        appData.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        Assert.False(appData.IsHidden);
+
+        var admin = tree.Find(@"C:\Users\Admin")!;
+        tree.Collapse(admin);
+        await tree.ExpandAsync(admin);
+
+        // The folder stays, with the rows that were open under it, and is now a hidden one.
+        Assert.Same(appData, tree.Find(@"C:\Users\Admin\AppData"));
+        Assert.True(appData.IsHidden);
+        Assert.Contains(nameof(FolderNode.IsHidden), raised);
+        Assert.Equal(Run1, tree.Current!.Path);
+        Assert.Equal(
+            ["C:", "  Users", "    Admin", "      AppData*", "        Local", "          Programs", "          Temp", "            run1", "            run2",
+             "        Roaming", "      Desktop", "      Documents", "    Public", "  Windows", "D:"],
+            Shown(tree));
+
+        // The pane leaves: the hidden folder goes as any hidden folder does.
+        await tree.RevealAsync(@"C:\Users\Admin\Documents");
+        Assert.Null(tree.Find(@"C:\Users\Admin\AppData"));
+    }
+
+    [Fact]
+    public async Task A_folder_that_was_hidden_and_is_shown_by_the_setting_is_an_ordinary_row_again()
+    {
+        var folders = HiddenDisk()
+            .AddAnswers(@"C:\Users\Admin", ["Desktop", "Documents"], ["AppData", "Desktop", "Documents"]);
+        var tree = Tree(folders);
+        await tree.RevealAsync(Run1);
+        var appData = tree.Find(@"C:\Users\Admin\AppData")!;
+        Assert.True(appData.IsHidden);
+
+        var admin = tree.Find(@"C:\Users\Admin")!;
+        tree.Collapse(admin);
+        await tree.ExpandAsync(admin);
+
+        Assert.Same(appData, tree.Find(@"C:\Users\Admin\AppData"));
+        Assert.False(appData.IsHidden);
+        // The listing has it now: it is not asked for again, and it stays when the pane leaves.
+        Assert.Single(folders.AskedAll);
+        await tree.RevealAsync(@"C:\Users\Admin\Documents");
+        Assert.Same(appData, tree.Find(@"C:\Users\Admin\AppData"));
+    }
+
+    [Fact]
+    public async Task Two_hidden_folders_in_a_row_both_show_and_go_together()
+    {
+        var folders = new FakeFolders()
+            .Add(@"C:\", "Users")
+            .AddHidden(@"C:\", "Hidden1")
+            .Add(@"C:\Hidden1")
+            .AddHidden(@"C:\Hidden1", "Hidden2")
+            .Add(@"C:\Hidden1\Hidden2", "work")
+            .Add(@"C:\Users", "Admin");
+        var tree = Tree(folders);
+
+        var work = await tree.RevealAsync(@"C:\Hidden1\Hidden2\work");
+
+        Assert.Same(work, tree.Current);
+        Assert.Equal(["C:", "  Hidden1*", "    Hidden2*", "      work", "  Users", "D:"], Shown(tree));
+        Assert.Equal([@"C:\", @"C:\Hidden1"], folders.AskedAll);
+
+        await tree.RevealAsync(@"C:\Users");
+        Assert.Equal(["C:", "  Users", "D:"], Shown(tree));
+    }
+
+    [Fact]
+    public async Task Hidden_folders_side_by_side_show_one_at_a_time_as_the_pane_moves_between_them()
+    {
+        var folders = new FakeFolders()
+            .Add(@"C:\")
+            .AddHidden(@"C:\", "H1", "H2")
+            .Add(@"C:\H1", "a")
+            .Add(@"C:\H2", "b");
+        var tree = Tree(folders);
+        await tree.RevealAsync(@"C:\H1\a");
+        Assert.Equal(["C:", "  H1*", "    a", "D:"], Shown(tree));
+
+        await tree.RevealAsync(@"C:\H2\b");
+
+        // H1 goes with its rows when the pane leaves it; H2 comes in its place.
+        Assert.Equal(["C:", "  H2*", "    b", "D:"], Shown(tree));
+    }
+
+    [Fact]
+    public async Task Revealing_a_drive_itself_drops_the_hidden_folders_and_asks_nothing()
+    {
+        var tree = Tree(HiddenDisk());
+        await tree.RevealAsync(Run1);
+        var requests = tree.Requests;
+
+        var drive = await tree.RevealAsync(@"C:\");
+
+        Assert.Same(tree.Rows[0], drive);
+        Assert.Same(drive, tree.Current);
+        Assert.Equal(WithoutAppData, Shown(tree));
+        Assert.Equal(requests, tree.Requests);
+    }
+
+    [Fact]
+    public async Task A_path_with_no_hidden_folder_on_it_asks_for_none()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+
+        await tree.RevealAsync(@"C:\");
+        await tree.RevealAsync(@"C:\Windows");
+        await tree.RevealAsync(@"C:\Users\Admin\Documents");
+
+        Assert.Empty(folders.AskedAll);
+    }
+
+    [Fact]
+    public async Task A_hidden_folder_that_is_not_on_the_disk_marks_the_nearest_folder_and_leaves_no_row()
+    {
+        // Admin has no AppData, hidden or not.
+        var folders = new FakeFolders()
+            .Add(@"C:\", "Users")
+            .Add(@"C:\Users", "Admin")
+            .Add(@"C:\Users\Admin", "Desktop");
+        var tree = Tree(folders);
+
+        var found = await tree.RevealAsync(Run1);
+
+        Assert.Equal(@"C:\Users\Admin", found!.Path);
+        Assert.Same(found, tree.Current);
+        Assert.Equal(["C:", "  Users", "    Admin", "      Desktop", "D:"], Shown(tree));
+        // The hidden listing is asked for only in Admin, and no more often than Admin was read.
+        Assert.All(folders.AskedAll, p => Assert.Equal(@"C:\Users\Admin", p));
+        Assert.InRange(folders.AskedAll.Count, 1, folders.Asked.Count(p => p == @"C:\Users\Admin"));
+    }
+
+    [Fact]
+    public async Task A_hidden_folder_that_is_deleted_while_the_pane_is_in_it_loses_its_row_and_its_marks_at_the_next_read()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+        var run1 = await tree.RevealAsync(Run1);
+        tree.SetCursor(run1);
+        // Gone from the disk: the hidden list of Admin has only .config now.
+        folders.AddHidden(@"C:\Users\Admin", ".config");
+        var admin = tree.Find(@"C:\Users\Admin")!;
+
+        tree.Collapse(admin);
+        await tree.ExpandAsync(admin);
+
+        Assert.Equal(WithoutAppData, Shown(tree));
+        Assert.Null(tree.Current);
+        Assert.Same(admin, tree.Cursor);
+    }
+
+    [Fact]
+    public async Task A_hidden_folder_made_after_the_last_read_is_found_by_reading_its_parent_once_more()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+        await tree.RevealAsync(@"C:\Users\Admin\Documents");
+        Assert.Empty(folders.AskedAll);
+        folders.AddHidden(@"C:\Users\Admin", ".config", "AppData", "NewHidden").Add(@"C:\Users\Admin\NewHidden", "inside");
+
+        var inside = await tree.RevealAsync(@"C:\Users\Admin\NewHidden\inside");
+
+        Assert.Equal(@"C:\Users\Admin\NewHidden\inside", inside!.Path);
+        Assert.Equal(["NewHidden"], tree.Rows.Where(r => r.IsHidden).Select(r => r.Name));
+        Assert.Equal(
+            ["C:", "  Users", "    Admin", "      Desktop", "      Documents", "      NewHidden*", "        inside", "    Public", "  Windows", "D:"],
+            Shown(tree));
+    }
+
+    [Fact]
+    public async Task A_hidden_read_that_fails_leaves_the_nearest_folder_marked_and_no_row()
+    {
+        var folders = HiddenDisk().FailAll(@"C:\Users\Admin", new IOException("The network path was not found."));
+        var tree = Tree(folders);
+
+        var found = await tree.RevealAsync(Run1);
+
+        Assert.Equal(@"C:\Users\Admin", found!.Path);
+        Assert.Same(found, tree.Current);
+        Assert.Null(tree.Find(@"C:\Users\Admin\AppData"));
+        // The ordinary read of the folder worked: it has no error, and its rows show.
+        Assert.Null(found.Error);
+        Assert.False(found.IsLoading);
+        Assert.Equal(WithoutAppData, Shown(tree));
+    }
+
+    [Fact]
+    public async Task A_hidden_read_that_the_source_refuses_leaves_the_nearest_folder_marked_and_the_folder_without_an_error()
+    {
+        var folders = HiddenDisk().RefuseAll(@"C:\Users\Admin", "Access is denied.");
+        var tree = Tree(folders);
+
+        var found = await tree.RevealAsync(Run1);
+
+        Assert.Equal(@"C:\Users\Admin", found!.Path);
+        Assert.Null(found.Error);
+        Assert.True(found.HasChildren);
+        Assert.Equal(WithoutAppData, Shown(tree));
+    }
+
+    [Fact]
+    public async Task A_newer_reveal_stops_an_older_one_from_adding_a_hidden_folder_for_a_path_the_pane_left()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+        var held = folders.HoldAll(@"C:\Users\Admin");
+        using var older = new CancellationTokenSource();
+
+        // The older reveal waits for the hidden read of Admin; the pane goes to Documents meanwhile.
+        var first = tree.RevealAsync(Run1, older.Token);
+        older.Cancel();
+        var second = tree.RevealAsync(@"C:\Users\Admin\Documents");
+        held.SetResult(new FolderListing([".config", "AppData", "Desktop", "Documents"]));
+
+        Assert.Null(await first);
+        Assert.Equal(@"C:\Users\Admin\Documents", (await second)!.Path);
+        Assert.Null(tree.Find(@"C:\Users\Admin\AppData"));
+        Assert.Equal(WithoutAppData, Shown(tree));
+    }
+
+    [Fact]
+    public async Task Closing_a_row_abandons_its_hidden_read_too()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+        folders.HoldAll(@"C:\Users\Admin");
+
+        var revealing = tree.RevealAsync(Run1);
+        var admin = tree.Find(@"C:\Users\Admin")!;
+        Assert.True(admin.IsLoading);
+        Assert.False(folders.TokensAll[@"C:\Users\Admin"].IsCancellationRequested);
+
+        tree.Collapse(admin);
+
+        Assert.True(folders.TokensAll[@"C:\Users\Admin"].IsCancellationRequested);
+        Assert.False(admin.IsLoading);
+        Assert.Null(await revealing);
+        Assert.Null(tree.Current);
+        Assert.Equal(["C:", "  Users", "    Admin", "    Public", "  Windows", "D:"], Shown(tree));
+    }
+
+    [Fact]
+    public async Task A_path_on_no_drive_drops_the_hidden_folders_that_showed()
+    {
+        var tree = Tree(HiddenDisk());
+        await tree.RevealAsync(Run1);
+
+        Assert.Null(await tree.RevealAsync(@"\\server\share\folder"));
+
+        Assert.Null(tree.Current);
+        Assert.Equal(WithoutAppData, Shown(tree));
+    }
+
+    [Fact]
+    public async Task The_hidden_folder_stays_while_the_pane_moves_inside_it_and_goes_when_the_pane_leaves_it()
+    {
+        var folders = HiddenDisk();
+        var tree = Tree(folders);
+        await tree.RevealAsync(Run1);
+        var appData = tree.Find(@"C:\Users\Admin\AppData")!;
+
+        // Each move inside AppData goes through the look at hidden rows, and the row stays, read once.
+        await tree.RevealAsync(@"C:\Users\Admin\AppData\Local\Temp\run2");
+        await tree.RevealAsync(@"C:\Users\Admin\AppData\Roaming");
+        await tree.RevealAsync(@"C:\Users\Admin\AppData");
+        Assert.Same(appData, tree.Find(@"C:\Users\Admin\AppData"));
+        Assert.True(appData.IsHidden);
+        Assert.Single(folders.AskedAll);
+
+        await tree.RevealAsync(@"C:\Users\Admin\Desktop");
+        Assert.Null(tree.Find(@"C:\Users\Admin\AppData"));
+
+        // And once nothing hidden shows, moving about asks nothing and drops nothing.
+        var requests = tree.Requests;
+        await tree.RevealAsync(@"C:\Users\Admin\Documents");
+        await tree.RevealAsync(@"C:\Windows");
+        Assert.Equal(requests, tree.Requests);
+        Assert.Single(folders.AskedAll);
+    }
+
 
     [Theory]
     [InlineData("C:", @"C:\")]

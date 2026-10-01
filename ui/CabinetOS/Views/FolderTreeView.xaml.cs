@@ -233,6 +233,14 @@ public sealed partial class FolderTreeView : UserControl
     /// <summary>A row with no sub-folders keeps its chevron's place and shows none.</summary>
     public static double ChevronOpacity(bool hasChildren) => hasChildren ? 1 : 0;
 
+    /// <summary>
+    /// The icon and the name of a hidden folder are dim: the tree shows it only because the active pane is in it. The window's
+    /// panes draw hidden entries as the others, so this is the only place the look exists.
+    /// </summary>
+    public static double NameOpacityOf(bool isHidden) => isHidden ? HiddenOpacity : 1;
+
+    private const double HiddenOpacity = 0.55;
+
     /// <summary>The tooltip: the folder's path, and why it could not be read when it could not.</summary>
     public static string Tip(string path, string? error) => error is null ? path : $"{path}\n{error}";
 

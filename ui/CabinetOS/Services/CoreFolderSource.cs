@@ -12,17 +12,25 @@ namespace CabinetOS.Services;
 /// folder. The listing lives in shared memory; the folder names are read from
 /// it off the UI thread and the listing is closed at once. A folder that
 /// the core refuses (no access, gone) is an answer with a reason, not an
-/// exception, so the tree can say why the row stays closed.
+/// exception, so the tree can say why the row stays closed. The hidden
+/// entries are left out as <c>panes.showHidden</c> says, except for the
+/// one read that asks for them (<see cref="ListIncludingHiddenAsync"/>).
 /// </summary>
 internal sealed class CoreFolderSource(ICoreChannel core) : IFolderSource
 {
     private const string Target = "cabinetos_ui::tree";
 
     /// <inheritdoc/>
-    public async Task<FolderListing> ListAsync(string path, CancellationToken cancellationToken)
+    public Task<FolderListing> ListAsync(string path, CancellationToken cancellationToken) => ReadAsync(path, null, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<FolderListing> ListIncludingHiddenAsync(string path, CancellationToken cancellationToken) => ReadAsync(path, true, cancellationToken);
+
+    // includeHidden null leaves it to panes.showHidden, as a pane's listing does.
+    private async Task<FolderListing> ReadAsync(string path, bool? includeHidden, CancellationToken cancellationToken)
     {
-        // The tree's own order, whatever the panes are sorted by; hidden entries as panes.showHidden says.
-        var request = new ListDirectoryRequest(path) { Watch = false, Sort = new SortSpec("name", false) };
+        // The tree's own order, whatever the panes are sorted by.
+        var request = new ListDirectoryRequest(path) { Watch = false, Sort = new SortSpec("name", false), IncludeHidden = includeHidden };
         CoreReply reply;
         try
         {

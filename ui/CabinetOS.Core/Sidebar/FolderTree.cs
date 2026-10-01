@@ -19,8 +19,14 @@ public sealed record FolderListing(IReadOnlyList<string> Names, string? Error = 
 /// </summary>
 public interface IFolderSource
 {
-    /// <summary>The sub-folders of <paramref name="path"/>.</summary>
+    /// <summary>The sub-folders of <paramref name="path"/>; the hidden ones are left out as <c>panes.showHidden</c> says.</summary>
     Task<FolderListing> ListAsync(string path, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The sub-folders of <paramref name="path"/> with the hidden ones too, whatever <c>panes.showHidden</c> says. The tree asks
+    /// only for a folder that the active pane is in and that <see cref="ListAsync"/> did not list.
+    /// </summary>
+    Task<FolderListing> ListIncludingHiddenAsync(string path, CancellationToken cancellationToken);
 }
 
 /// <summary>One folder of the tree: a row of the Explorer view.</summary>
@@ -186,13 +192,22 @@ public sealed class FolderRows : ObservableCollection<FolderNode>
 /// rows in order, so a list can show it as it is and follow its changes.
 /// The model follows the active pane on <see cref="RevealAsync"/>: it expands
 /// the path down to the folder and marks it, and leaves every other row as
-/// it was. It runs on the UI thread; nothing here waits for the core.
+/// it was. A folder on that path that the source left out because it is hidden
+/// is read anyway and shown as a hidden row (<see cref="FolderNode.IsHidden"/>);
+/// no other hidden folder shows, and a hidden row goes when the pane leaves its
+/// path. It runs on the UI thread; nothing here waits for the core.
 /// </summary>
 public sealed class FolderTreeModel(IFolderSource source)
 {
     private readonly List<FolderNode> _roots = [];
     private FolderNode? _current;
     private FolderNode? _cursor;
+
+    // The path of the last reveal: the folders on it show even when they are hidden.
+    private string? _followed;
+
+    // Whether a row may be hidden: false lets a reveal skip the look for hidden rows to drop (every folder change goes through it).
+    private bool _mayHaveHidden;
 
     /// <summary>The rows that show, top to bottom; changes are reported one row at a time.</summary>
     public FolderRows Rows { get; } = [];
@@ -319,7 +334,9 @@ public sealed class FolderTreeModel(IFolderSource source)
     /// <summary>
     /// Shows <paramref name="path"/> in the tree: expands the folders on the way
     /// (reading each one that was not read yet), marks the row as the current
-    /// one and returns it. Rows beside the path are not touched. A folder that
+    /// one and returns it. Rows beside the path are not touched, except the
+    /// hidden folders that the tree showed for an earlier path, which go. A
+    /// folder that is hidden shows while it is on the path. A folder that
     /// is not on the disk yet (created after the last read) is looked for by
     /// reading its parent once more; when it is still not there the deepest
     /// row on the way is marked. Null when no drive holds the path.
@@ -327,6 +344,8 @@ public sealed class FolderTreeModel(IFolderSource source)
     public async Task<FolderNode?> RevealAsync(string path, CancellationToken cancellationToken = default)
     {
         var normal = Normalize(path);
+        _followed = normal;
+        DropHiddenOffPath();
         var root = _roots.FirstOrDefault(r => IsUnder(r.Path, normal));
         if (root is null)
         {
@@ -497,9 +516,22 @@ public sealed class FolderTreeModel(IFolderSource source)
         node.IsLoading = true;
         Requests++;
         FolderListing? listing;
+        IReadOnlyList<string>? names = null;
+        string? hiddenName = null;
         try
         {
             listing = await source.ListAsync(node.Path, cancellation.Token);
+            if (listing.Error is null)
+            {
+                names = listing.Names;
+                if (await ReadHiddenOnPathAsync(node, listing.Names, cancellation.Token) is { } hidden)
+                {
+                    var withHidden = new List<string>(listing.Names);
+                    withHidden.Insert(Math.Min(hidden.Position, withHidden.Count), hidden.Name);
+                    names = withHidden;
+                    hiddenName = hidden.Name;
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -531,12 +563,49 @@ public sealed class FolderTreeModel(IFolderSource source)
             return;
         }
         node.Error = null;
-        Merge(node, listing.Names);
+        Merge(node, names ?? listing.Names, hiddenName);
+    }
+
+    // A hidden folder of a read and the place the listing has it: after this many of the names that were read.
+    private readonly record struct HiddenFolder(string Name, int Position);
+
+    // The active pane's path may go through a folder of this node that the read left out because it is hidden. The folder is then
+    // read again with the hidden ones too. Returns the folder and where the listing has it among the names that were read, or null
+    // when the path does not go through a missing folder, the folder is not there, or the pane has gone elsewhere.
+    private async Task<HiddenFolder?> ReadHiddenOnPathAsync(FolderNode node, IReadOnlyList<string> names, CancellationToken cancellationToken)
+    {
+        if (NextOnPath(node) is not { } wanted || names.Any(n => SameName(n, wanted)))
+        {
+            return null;
+        }
+        Requests++;
+        FolderListing all;
+        try
+        {
+            all = await source.ListIncludingHiddenAsync(node.Path, cancellationToken);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+        if (all.Error is not null || cancellationToken.IsCancellationRequested
+            || NextOnPath(node) is not { } still || !SameName(still, wanted))
+        {
+            return null;
+        }
+        var found = all.Names.FirstOrDefault(n => SameName(n, wanted));
+        if (found is null)
+        {
+            return null;
+        }
+        var read = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        return new HiddenFolder(found, all.Names.TakeWhile(n => !SameName(n, found)).Count(read.Contains));
     }
 
     // The read names become the node's sub-folders: a row that was there keeps its state (open, read),
     // a new folder gets a row, a folder that is gone loses its row. The visible rows under the node follow.
-    private void Merge(FolderNode node, IReadOnlyList<string> names)
+    // The folder named hiddenName is hidden and shows only because the pane's path goes through it.
+    private void Merge(FolderNode node, IReadOnlyList<string> names, string? hiddenName)
     {
         var existing = new Dictionary<string, FolderNode>(StringComparer.OrdinalIgnoreCase);
         foreach (var child in node.Children ?? [])
@@ -551,9 +620,19 @@ public sealed class FolderTreeModel(IFolderSource source)
             {
                 continue;
             }
-            children.Add(existing.GetValueOrDefault(name) ?? new FolderNode(Combine(node.Path, name), name, node.Depth + 1, node));
+            var child = existing.GetValueOrDefault(name) ?? new FolderNode(Combine(node.Path, name), name, node.Depth + 1, node);
+            child.IsHidden = hiddenName is not null && SameName(name, hiddenName);
+            _mayHaveHidden |= child.IsHidden;
+            children.Add(child);
         }
-        foreach (var gone in existing.Values.Where(e => !children.Contains(e)))
+        ReplaceChildren(node, children);
+    }
+
+    // Gives a node its sub-folders: a folder that is gone takes the marks with it (the cursor goes to the node), and the visible
+    // rows under the node follow.
+    private void ReplaceChildren(FolderNode node, List<FolderNode> children)
+    {
+        foreach (var gone in (node.Children ?? []).Where(e => !children.Contains(e)))
         {
             CancelLoads(gone);
             if (_current is { } current && IsInside(current, gone))
@@ -576,6 +655,52 @@ public sealed class FolderTreeModel(IFolderSource source)
         if (shown)
         {
             InsertBelow(node);
+        }
+    }
+
+    // A hidden folder shows only while the active pane is in it or below it. The next reveal drops the hidden rows that are not on
+    // its path, and everything under them.
+    private void DropHiddenOffPath()
+    {
+        if (!_mayHaveHidden)
+        {
+            return;
+        }
+        // Set again below for each hidden row that stays.
+        _mayHaveHidden = false;
+        foreach (var root in _roots)
+        {
+            DropHiddenBelow(root);
+        }
+    }
+
+    private void DropHiddenBelow(FolderNode node)
+    {
+        if (node.Children is not { } children)
+        {
+            return;
+        }
+        List<FolderNode>? kept = null;
+        for (var i = 0; i < children.Count; i++)
+        {
+            var child = children[i];
+            if (child.IsHidden && !(_followed is { } path && IsUnder(child.Path, path)))
+            {
+                // The first row to go: the rows before it stay.
+                kept ??= children.Take(i).ToList();
+                continue;
+            }
+            _mayHaveHidden |= child.IsHidden;
+            kept?.Add(child);
+        }
+        if (kept is not null)
+        {
+            ReplaceChildren(node, kept);
+            children = kept;
+        }
+        foreach (var child in children)
+        {
+            DropHiddenBelow(child);
         }
     }
 
@@ -641,6 +766,22 @@ public sealed class FolderTreeModel(IFolderSource source)
     private static string Combine(string parent, string name) => parent.EndsWith('\\') ? parent + name : parent + "\\" + name;
 
     private static bool SamePath(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private static bool SameName(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    // The name of the folder under a node that the followed path goes through; null when the path does not go through the node or
+    // ends at it.
+    private string? NextOnPath(FolderNode node)
+    {
+        if (_followed is not { } path || SamePath(node.Path, path) || !IsUnder(node.Path, path))
+        {
+            return null;
+        }
+        var below = path[(node.Path.EndsWith('\\') ? node.Path.Length : node.Path.Length + 1)..];
+        var end = below.IndexOf('\\');
+        var name = end < 0 ? below : below[..end];
+        return name.Length > 0 ? name : null;
+    }
 
     private static bool IsUnder(string root, string path) =>
         SamePath(root, path) || path.StartsWith(root.EndsWith('\\') ? root : root + "\\", StringComparison.OrdinalIgnoreCase);
