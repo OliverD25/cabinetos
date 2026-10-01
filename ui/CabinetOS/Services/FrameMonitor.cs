@@ -220,6 +220,8 @@ public sealed class FrameMonitor
             new("gaps_over_20ms", summary.Over20),
             new("gaps_over_33ms", summary.Over33),
             new("busy_over_16ms", summary.BusyOver16),
+            new("busy_over_20ms", summary.BusyOver20),
+            new("busy_over_33ms", summary.BusyOver33),
             // Sums over the second, so seconds add up: ms per frame is a sum divided by frames.
             new("work_ms", Math.Round(all.WorkMs * all.Frames, 1)),
             new("busy_ms", Math.Round(_second.BusySum(), 1)),

@@ -96,6 +96,30 @@ public class FrameTableTests
         Assert.Equal(7, FrameTable.Busy(new FrameSample(33.3, 5, parts, LayoutInFrameMs: 10)), 3);
     }
 
+    [Fact]
+    public void Frames_whose_ui_thread_work_passes_20_and_33_ms_are_counted_with_the_limits_of_the_gaps()
+    {
+        // A laptop's display path can hold a frame back for 80 ms while the UI thread works 8 ms: the gaps
+        // are huge, the work is small, and the panel goal (livecheck.ps1 -Panel) judges the work.
+        var table = new FrameTable();
+        table.Add(new FrameSample(80, 8, Parts()));
+        table.Add(new FrameSample(80, 8, Parts()));
+        // Work is WinUI's frame time plus the parts that run outside it: 12 + 9 (details) = 21 ms.
+        table.Add(new FrameSample(17, 12, Parts(details: 9)));
+        // Exactly 20 ms is not over 20 ms; 33.3 ms is over 20 ms and not yet a dropped pair of frames (33.4 ms).
+        table.Add(new FrameSample(17, 20, Parts()));
+        table.Add(new FrameSample(17, 33.3, Parts()));
+        table.Add(new FrameSample(17, 33.4, Parts()));
+        table.Add(new FrameSample(17, 50, Parts()));
+
+        var summary = table.Summarize();
+
+        Assert.Equal(7, summary.Frames);
+        Assert.Equal((4, 2), (summary.BusyOver20, summary.BusyOver33));
+        // The gaps see only the two frames the display path held back.
+        Assert.Equal((2, 2), (summary.Over20, summary.Over33));
+    }
+
     [Theory]
     [InlineData("150", true, 150, 0)]
     [InlineData("150/2", true, 150, 2)]

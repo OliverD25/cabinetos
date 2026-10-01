@@ -104,7 +104,7 @@ public sealed record FrameColumn(int Frames, double GapMs, double WorkMs, double
 
 /// <summary>What a run of frames came to: the counts the goal is about, and where the time went.</summary>
 public sealed record FrameSummary(int Frames, int Over20, int Over33, double Median, double P95, double Worst,
-    FrameColumn All, FrameColumn Slow, FrameColumn WorstFrame, int BusyOver16 = 0, double BusiestMs = 0)
+    FrameColumn All, FrameColumn Slow, FrameColumn WorstFrame, int BusyOver16 = 0, double BusiestMs = 0, int BusyOver20 = 0, int BusyOver33 = 0)
 {
     /// <summary>One frame at 60 Hz: UI-thread work beyond it drops a frame on a 60 Hz display.</summary>
     public const double FrameAt60HzMs = 16.7;
@@ -158,7 +158,10 @@ public sealed class FrameTable
             Column(_frames.Where(f => f.GapMs > FrameSummary.SlowMs).ToList()),
             Column([worst]),
             busy.Count(ms => ms > FrameSummary.FrameAt60HzMs),
-            busy.Max());
+            busy.Max(),
+            // The same limits as the gaps: the live check's panel goal asks them of the UI-thread work instead.
+            busy.Count(ms => ms > FrameSummary.SlowMs),
+            busy.Count(ms => ms >= FrameSummary.DroppedMs));
     }
 
     /// <summary>
