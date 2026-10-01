@@ -113,12 +113,18 @@ public sealed partial class MainWindow
 
     // The last run crashed while heavy mode was on if a crash-*.zip is newer than the last start
     // (CrashNotice). The folder is read off the UI thread (brief section 1); the offer stays in the
-    // status bar until it is used, since a notice would be gone in five seconds.
+    // status bar until it is used, since a notice would be gone in five seconds. A run that started and
+    // never wrote its clean end (a native failure of WinUI leaves no crash trace) is one line in the log
+    // and nothing on screen: it is for the next look at the log (Article 12), not a question for the user.
     private async Task OfferCrashBundleAsync()
     {
         var directory = Diag.Writer?.Directory ?? Diag.DefaultDirectory();
-        var bundle = await Task.Run(() => CrashNotice.CheckAtStart(directory, DateTime.UtcNow));
-        if (bundle is null)
+        var check = await Task.Run(() => CrashNotice.CheckAtStart(directory, DateTime.UtcNow));
+        if (check.UncleanStartUtc is { } started)
+        {
+            Diag.Warn(Target, "previous run ended without closing", new LogField("started_utc", started.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        if (check.CrashBundle is not { } bundle)
         {
             return;
         }

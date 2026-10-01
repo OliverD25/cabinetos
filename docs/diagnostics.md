@@ -15,7 +15,7 @@ The Rust processes (core, indexer, CLI) get all of this from the
 | Log files | One per process and UTC day: `core.2026-09-28.jsonl`, `indexer.<date>.jsonl`, `ui.<date>.jsonl` (Phase 5). The CLI writes `cli.<date>.jsonl` only when it is given `--log-dir`. The indexer running as a service writes to `%ProgramData%\CabinetOS\logs` instead ([indexer.md](indexer.md)). |
 | Crash traces | `crash-<YYYYMMDDTHHMMSSmmmZ>.json` in the same directory, for example `crash-20260928T010203004Z.json` |
 | Bundles | `bundle-<YYYYMMDDTHHMMSSmmmZ>.zip`, made on request, and `crash-<YYYYMMDDTHHMMSSmmmZ>.zip`, made by the panic hook (the window's crash hook too) while heavy mode is on ("Bundles", below). Never deleted by CabinetOS. |
-| Last start | `ui.last-start`: the UTC time of the window's last start, one line, so the next start can tell whether a crash bundle is new ("Bundles", below). |
+| Last start | `ui.last-start`: the UTC time of the window's last start, its process ID and, once the window has closed, the time it did, one line each. The next start tells from it whether a crash bundle is new ("Bundles", below) and whether the last run ended without closing ("Crash traces", below). |
 | Heavy log files | Only while heavy mode is on ("Heavy mode", below): `heavy-<process>.<date>.jsonl`, for example `heavy-core.2026-09-29.jsonl`, and `heavy-core.2026-09-29.1.jsonl` for the next part of the same day. At most 2 GiB for all of them together. |
 
 - **Other directory.** `--log-dir <path>` on `cabinetos-core` and
@@ -279,6 +279,26 @@ To see one without a real bug:
 `cabinetos-core --self-test-panic --log-dir <some directory>`. It logs
 `about to panic (self-test)` and then panics with `self-test panic`.
 
+### A run that ended without closing
+
+A native end of the window, such as a WinUI fail-fast (`0xc000027b` in
+`CoreMessagingXP.dll`, which Windows' Application log records), runs none of
+the window's crash hooks: there is no crash trace and the log just stops. So
+the window notes its clean end, and the next start says when it is missing.
+The marker `ui.last-start` ("Where the files are") has three lines: the
+start's UTC time, `pid <process ID>`, and `closed <UTC time>`, which the
+window writes when `Application.Start` has returned, as its last act before
+`exited`. At the next start, a marker that has a pid and no `closed` line
+means the last run did not close, unless that process is still running (a
+second window; the process is told from a later process with the same ID by its
+start time). The window then writes one WARN line, `previous run ended
+without closing`, with `started_utc` as its field, and shows nothing on
+screen: it is for the next look at the log, not a question for the user.
+A marker an older window wrote has only the time and says nothing. A
+window's close is written only over its own marker, so two windows at once
+keep to the one that started last; if the other one ended without closing,
+that is not noticed.
+
 ## Bundles
 
 A bundle is one zip with what someone needs to find a problem: the last
@@ -313,7 +333,8 @@ half a zip is deleted so that it is not offered later.
 
 **The offer at the next start.** At every start the window reads the time of
 its last start from `ui.last-start`, a small file in the log folder, and
-writes the new time. If a `crash-*.zip` there is newer than the last start
+writes the new time (and its process ID: "A run that ended without closing",
+above). If a `crash-*.zip` there is newer than the last start
 (the core's zips count too), the status bar shows "Open crash folder" until it
 is used, and the notice line says why; the core opens the folder with
 `open_path`. When no last start is recorded, a zip of the last 24 hours counts.

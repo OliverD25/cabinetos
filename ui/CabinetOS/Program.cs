@@ -67,6 +67,8 @@ public static class Program
                 throw;
             }
         });
+        // Only a run that gets here has closed: a native end of the window never reaches this line, and the next start says so.
+        CrashNotice.MarkClosed(Diag.Writer?.Directory ?? Diag.DefaultDirectory(), DateTime.UtcNow);
         Diag.Info("cabinetos_ui::app", "exited");
         Diag.Shutdown();
         return 0;

@@ -347,10 +347,10 @@ public class LogBundleTests
 
             Assert.Equal(At, CrashNotice.ReadMarker(dir));
             var start = At.AddHours(1);
-            Assert.Equal(newest, CrashNotice.CheckAtStart(dir, start));
+            Assert.Equal(newest, CrashNotice.CheckAtStart(dir, start).CrashBundle);
             // The start was recorded: the same zip is not offered again.
             Assert.Equal(start, CrashNotice.ReadMarker(dir));
-            Assert.Null(CrashNotice.CheckAtStart(dir, start.AddMinutes(1)));
+            Assert.Null(CrashNotice.CheckAtStart(dir, start.AddMinutes(1)).CrashBundle);
         }
         finally
         {
@@ -367,8 +367,126 @@ public class LogBundleTests
             var recent = Zip(dir, "crash-20260928T000000000Z.zip", At.AddHours(-3));
             Zip(dir, "crash-20260926T000000000Z.zip", At.AddHours(-60));
             Assert.Null(CrashNotice.ReadMarker(dir));
-            Assert.Equal(recent, CrashNotice.CheckAtStart(dir, At));
+            Assert.Equal(recent, CrashNotice.CheckAtStart(dir, At).CrashBundle);
             Assert.True(File.Exists(Path.Combine(dir, CrashNotice.MarkerName)));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(dir);
+        }
+    }
+
+    // ----- The previous run that ended without closing -----
+
+    // A process ID no process has: the run that wrote the marker is gone.
+    private const int NoSuchProcess = int.MaxValue;
+
+    private static string MarkerText(string dir) => File.ReadAllText(Path.Combine(dir, CrashNotice.MarkerName));
+
+    [Fact]
+    public void A_marker_with_a_start_and_no_clean_end_of_a_process_that_is_gone_says_the_run_ended_without_closing()
+    {
+        var dir = Repo.NewTempFolder("bundle");
+        try
+        {
+            CrashNotice.WriteMarker(dir, At, NoSuchProcess);
+
+            var check = CrashNotice.CheckAtStart(dir, At.AddHours(1));
+
+            Assert.Equal(At, check.UncleanStartUtc);
+            // This start is recorded with its own process, and nothing is said about it yet.
+            var now = CrashNotice.ReadRun(dir)!;
+            Assert.Equal((At.AddHours(1), Environment.ProcessId, (DateTime?)null), (now.StartedUtc, now.ProcessId, now.ClosedUtc));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(dir);
+        }
+    }
+
+    [Fact]
+    public void A_marker_with_a_clean_end_says_nothing()
+    {
+        var dir = Repo.NewTempFolder("bundle");
+        try
+        {
+            CrashNotice.WriteMarker(dir, At, NoSuchProcess, closedUtc: At.AddMinutes(30));
+
+            Assert.Null(CrashNotice.CheckAtStart(dir, At.AddHours(1)).UncleanStartUtc);
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(dir);
+        }
+    }
+
+    [Fact]
+    public void A_marker_with_a_start_and_no_end_of_a_run_that_is_still_going_says_nothing_because_it_is_another_window()
+    {
+        var dir = Repo.NewTempFolder("bundle");
+        try
+        {
+            // This process runs, and it started before the marker's time.
+            CrashNotice.WriteMarker(dir, DateTime.UtcNow, Environment.ProcessId);
+            Assert.Null(CrashNotice.CheckAtStart(dir, DateTime.UtcNow.AddSeconds(1), processId: 4242).UncleanStartUtc);
+
+            // The same process ID after the marker's time is another process that was given it: the run is gone.
+            CrashNotice.WriteMarker(dir, DateTime.UtcNow.AddDays(-1), Environment.ProcessId);
+            Assert.NotNull(CrashNotice.CheckAtStart(dir, DateTime.UtcNow, processId: 4242).UncleanStartUtc);
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(dir);
+        }
+    }
+
+    [Fact]
+    public void A_marker_an_older_window_wrote_or_none_or_a_broken_one_says_nothing()
+    {
+        var dir = Repo.NewTempFolder("bundle");
+        try
+        {
+            // No marker: a first start.
+            Assert.Null(CrashNotice.CheckAtStart(dir, At).UncleanStartUtc);
+            // Only a time, as before the clean end was written: nothing says it did not close.
+            CrashNotice.WriteMarker(dir, At);
+            Assert.Equal(At.ToString("O", System.Globalization.CultureInfo.InvariantCulture), MarkerText(dir));
+            Assert.Null(CrashNotice.CheckAtStart(dir, At.AddHours(1), processId: 4242).UncleanStartUtc);
+            // Broken text, or a time with a pid that is not a number.
+            File.WriteAllText(Path.Combine(dir, CrashNotice.MarkerName), "not a time");
+            Assert.Null(CrashNotice.CheckAtStart(dir, At.AddHours(2), processId: 4242).UncleanStartUtc);
+            File.WriteAllText(Path.Combine(dir, CrashNotice.MarkerName), "2026-09-28T00:00:00.0000000Z\r\npid abc");
+            Assert.Null(CrashNotice.CheckAtStart(dir, At.AddHours(3), processId: 4242).UncleanStartUtc);
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(dir);
+        }
+    }
+
+    [Fact]
+    public void A_clean_close_writes_the_end_into_this_run_s_marker_and_leaves_another_window_s_marker_alone()
+    {
+        var dir = Repo.NewTempFolder("bundle");
+        try
+        {
+            CrashNotice.CheckAtStart(dir, At, processId: 100);
+            Assert.Equal((At, 100, (DateTime?)null), (CrashNotice.ReadRun(dir)!.StartedUtc, CrashNotice.ReadRun(dir)!.ProcessId, CrashNotice.ReadRun(dir)!.ClosedUtc));
+
+            // Another window started and wrote its marker; the first one's close is not recorded over it.
+            CrashNotice.CheckAtStart(dir, At.AddMinutes(1), processId: 200);
+            CrashNotice.MarkClosed(dir, At.AddMinutes(2), processId: 100);
+            Assert.Null(CrashNotice.ReadRun(dir)!.ClosedUtc);
+
+            CrashNotice.MarkClosed(dir, At.AddMinutes(3), processId: 200);
+            var run = CrashNotice.ReadRun(dir)!;
+            Assert.Equal((At.AddMinutes(1), 200, (DateTime?)At.AddMinutes(3)), (run.StartedUtc, run.ProcessId, run.ClosedUtc));
+            Assert.Equal(3, MarkerText(dir).Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
+            // The next start reads it as a clean end.
+            Assert.Null(CrashNotice.CheckAtStart(dir, At.AddMinutes(10), processId: 300).UncleanStartUtc);
+
+            // No marker, or a folder that is not there: closing writes nothing and does not fail.
+            CrashNotice.MarkClosed(Path.Combine(dir, "no such folder"), At);
         }
         finally
         {
@@ -382,11 +500,11 @@ public class LogBundleTests
         var dir = Repo.NewTempFolder("bundle");
         try
         {
-            Assert.Null(CrashNotice.CheckAtStart(dir, At));
+            Assert.Null(CrashNotice.CheckAtStart(dir, At).CrashBundle);
             File.WriteAllText(Path.Combine(dir, CrashNotice.MarkerName), "not a time");
             Assert.Null(CrashNotice.ReadMarker(dir));
-            Assert.Null(CrashNotice.CheckAtStart(dir, At.AddMinutes(1)));
-            Assert.Null(CrashNotice.CheckAtStart(Path.Combine(dir, "no such folder"), At));
+            Assert.Null(CrashNotice.CheckAtStart(dir, At.AddMinutes(1)).CrashBundle);
+            Assert.Null(CrashNotice.CheckAtStart(Path.Combine(dir, "no such folder"), At).CrashBundle);
         }
         finally
         {

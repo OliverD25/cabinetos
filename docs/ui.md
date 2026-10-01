@@ -366,7 +366,12 @@ next start the window looks for a `crash-*.zip` newer than its last start
 `ui.last-start` in the log folder) and, if there is one, shows an "Open crash
 folder" button in the status bar, in front of the pill, until it is clicked
 (the button runs `diagnostics.openCrashFolder`, a command of the window's own
-that the palette does not list, and the core opens the folder).
+that the palette does not list, and the core opens the folder). The same
+file says whether the last run closed: the window writes the end into it
+when it exits, and a start that finds a run without that end, and no such
+process running, logs one WARN line, `previous run ended without closing`
+(a native failure of WinUI leaves no crash trace; [diagnostics.md](diagnostics.md),
+"A run that ended without closing"). Nothing is shown on screen for it.
 
 ## Starting the core
 

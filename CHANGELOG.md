@@ -37,7 +37,8 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Quick Open and the search of a folder find names after the first 20,000 entries of a large folder, such as `IMG77` in a folder of 100,000 files. The core's walk without the indexer now stops after 2 s or 200,000 entries, not 20,000. When it still stops early, Quick Open says "Not every name was searched" under its rows, also when there are none, instead of a bare "0 results".
+- A run of the window that ended without closing, as a native failure of WinUI does without a crash trace, is noted in the log at the next start: a WARN line, `previous run ended without closing`, with the time that run started. Nothing is shown on screen. The window now writes its clean end into `ui.last-start`, in the log folder.
+- Quick Open and the search of a folder find names after the first 20,000 entries of a large folder, such as one of 100,000 files. The core's walk without the indexer now stops after 2 s or 200,000 entries, not 20,000. When it still stops early, Quick Open says "Not every name was searched" under its rows, also when there are none, instead of a bare "0 results".
 - The command palette opened from a tool's page, such as a Markdown Preview, gives the keyboard back to that page when it closes, as it does for the terminal. It used to give it to the active pane's list.
 - Esc while a chord waits for its second key ends the wait, and Ctrl+Shift+P there ends it and opens the command palette. Both used to be reported as a chord that is not bound, and nothing happened.
 - Tab stays inside the permissions review while it is open, as in the plugin list, instead of moving the keyboard to the window under it.
