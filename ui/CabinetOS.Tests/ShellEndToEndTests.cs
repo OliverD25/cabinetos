@@ -168,6 +168,11 @@ public class ShellEndToEndTests
                 Assert.Equal(deep, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
                 Assert.Equal("C: › … › Projects › fileforge", state.GetProperty("pane0_crumbs").GetString());
                 Assert.Equal("many | *fileforge", state.GetProperty("pane0_tabs").GetString());
+                // §7: the tab in front and the toolbar row under it share one fill, so they read as one surface.
+                Assert.Equal(state.GetProperty("pane0_toolbar_fill").GetString(), state.GetProperty("pane0_tab_fill").GetString());
+                Assert.StartsWith("CbFrontTabFillBrush ", state.GetProperty("pane0_tab_fill").GetString());
+                Assert.Equal(state.GetProperty("pane1_toolbar_fill").GetString(), state.GetProperty("pane1_tab_fill").GetString());
+                Assert.Equal("folder | *folder,close,32", state.GetProperty("pane0_tab_look").GetString());
             });
             State(logs, "first-again", state =>
             {

@@ -91,7 +91,7 @@ public class TabsEndToEndTests
             }
 
             // Second run: the same configuration; the row shows the three tabs again, the last in front, without a step to open them.
-            var second = Start("second", "pane:0;tabs:restored;wait:1000;shot:restored");
+            var second = Start("second", "pane:0;wait:500;tabs:restored;wait:1000;shot:restored");
             await WaitForAsync(() => File.Exists(Shot("second", "restored")), "the second window's snapshot", TimeSpan.FromSeconds(60));
             second.CloseMainWindow();
             Assert.True(second.WaitForExit(15_000), "the second window did not close");
@@ -101,6 +101,11 @@ public class TabsEndToEndTests
             // The row as the window shows it: the tab in front marked with *, the lock in brackets.
             Assert.Equal("one | two | *three (locked)", Field(shown, "left").GetString());
             Assert.Equal("one | *two", Field(shown, "right").GetString());
+            // How v2 draws them: a folder before each name (the lock in its place on a locked tab), a divider between the
+            // tabs behind but none next to the tab in front, the × on the tab in front of a pane with more than one tab,
+            // and that tab a 32 px card on the default look's 36 px strip.
+            Assert.Equal("folder,divider | folder | *lock,close,32", Field(shown, "left_look").GetString());
+            Assert.Equal("folder | *folder,close,32", Field(shown, "right_look").GetString());
             Assert.DoesNotContain(logs, l => Message(l) is "a tab could not show its folder");
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-second"), "crash-*.json"));
         }

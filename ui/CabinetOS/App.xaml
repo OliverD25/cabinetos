@@ -89,8 +89,7 @@
             <!-- The shell of Phase 16: hairlines at the theme's hairlineOpacity, the workspace pill, the tab strip, the breadcrumb row, the find widget. -->
             <SolidColorBrush x:Key="CbShellHairlineBrush" Color="#0FFFFFFF" />
             <SolidColorBrush x:Key="CbWorkspacePillFillBrush" Color="#2E60CDFF" />
-            <SolidColorBrush x:Key="CbTabFrontBarInactiveBrush" Color="#4DFFFFFF" />
-            <SolidColorBrush x:Key="CbTabInactiveTextBrush" Color="#A6FFFFFF" />
+            <SolidColorBrush x:Key="CbTabInactiveTextBrush" Color="#99FFFFFF" />
             <SolidColorBrush x:Key="CbCrumbSeparatorBrush" Color="#59FFFFFF" />
             <SolidColorBrush x:Key="CbCrumbTextBrush" Color="#B3FFFFFF" />
             <SolidColorBrush x:Key="CbCrumbSegmentHoverBrush" Color="#1AFFFFFF" />
@@ -104,6 +103,11 @@
             <SolidColorBrush x:Key="CbFrontTabInactiveFillBrush" Color="#0DFFFFFF" />
             <SolidColorBrush x:Key="CbToolbarDividerBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="CbFreeSpaceTextBrush" Color="#80FFFFFF" />
+            <!-- The tab strip of v2: the recessed band (black 18 %), a tab behind under the pointer (5 %), the card's top highlight (12 %), the dividers (10 %). -->
+            <SolidColorBrush x:Key="CbTabBandFillBrush" Color="#2E000000" />
+            <SolidColorBrush x:Key="CbTabHoverFillBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="CbTabHighlightBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="CbTabDividerBrush" Color="#1AFFFFFF" />
 
             <!-- A 1 px lighter bottom edge, as on a Fluent text field. -->
             <LinearGradientBrush x:Key="CbFieldStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">

@@ -422,13 +422,13 @@ public sealed partial class MainWindow
         ScheduleWindowState();
     }
 
-    // The accent line belongs to the row of the active pane; a tab may move only while the other pane shows. The top row's
-    // title follows the active pane's tab in front.
+    // The active pane's tab in front has the brighter fill, as its toolbar row; a tab may move only while the other pane
+    // shows. The top row's title follows the active pane's tab in front.
     private void UpdateTabRows()
     {
         for (var i = 0; i < _tabViews.Length; i++)
         {
-            _tabViews[i].ShowsAccent = _dual && i == _active || !_dual && i == 0;
+            _tabViews[i].IsActivePane = _dual && i == _active || !_dual && i == 0;
             _tabViews[i].CanMoveToOtherPane = _dual;
         }
         UpdateTitle();
@@ -577,6 +577,7 @@ public sealed partial class MainWindow
     // tabs:<label>: what each pane's row shows, in the log, for the checks that read it.
     private void LogTabsForSnapshot(string label) =>
         Diag.Info("cabinetos_ui::snapshot", "tabs shown", new LogField("label", label), new LogField("left", _tabViews[0].Describe()),
-            new LogField("right", _tabViews[1].Describe()), new LogField("left_row", Math.Round(_tabViews[0].RowHeight, 1)),
+            new LogField("right", _tabViews[1].Describe()), new LogField("left_look", _tabViews[0].DescribeLook()),
+            new LogField("right_look", _tabViews[1].DescribeLook()), new LogField("left_row", Math.Round(_tabViews[0].RowHeight, 1)),
             new LogField("right_row", Math.Round(_tabViews[1].RowHeight, 1)), new LogField("active_pane", _active));
 }

@@ -123,15 +123,13 @@ public static class ThemeMapper
             ["CbFkeyFillBrush"] = Text(0x0D),
             ["CbFkeyHoverFillBrush"] = Text(0x1F),
             ["CbFkeyLabelBrush"] = Text(0xCC),
-            // The shell of Phase 16 (the creator's SHELL_REDESIGN.md): the lines under the top row, the
-            // tab strips and the breadcrumb rows at the theme's hairlineOpacity; the workspace pill's
-            // accent at 18 %; a tab strip's front bar in the inactive pane (30 %) and its tabs behind
-            // (65 %); the active pane's breadcrumb row (the accent at 6 %), its separators (35 %), its
-            // segments before the last (70 %) and their hover (10 %); the find widget's border (14 %).
+            // The shell (the creator's SHELL_REDESIGN.md): the lines under the top row, the tab strips and
+            // the path rows at the theme's hairlineOpacity; the sidebar's workspace row on the accent at
+            // 18 %; a tab strip's tabs behind (60 %); the path row's separators (35 %), its segments before
+            // the last (70 %) and their hover (10 %); the find widget's border (14 %).
             ["CbShellHairlineBrush"] = Text((byte)Math.Round(metrics.HairlineOpacity * 255)),
             ["CbWorkspacePillFillBrush"] = accent.WithAlpha(0x2E),
-            ["CbTabFrontBarInactiveBrush"] = Text(0x4D),
-            ["CbTabInactiveTextBrush"] = Text(0xA6),
+            ["CbTabInactiveTextBrush"] = Text(0x99),
             ["CbCrumbSeparatorBrush"] = Text(0x59),
             ["CbCrumbTextBrush"] = Text(0xB3),
             ["CbCrumbSegmentHoverBrush"] = Text(0x1A),
@@ -144,6 +142,12 @@ public static class ThemeMapper
             ["CbFrontTabInactiveFillBrush"] = Text(0x0D),
             ["CbToolbarDividerBrush"] = Text(0x1F),
             ["CbFreeSpaceTextBrush"] = Text(0x80),
+            // The tab strip of v2: a band recessed under black 18 % (a lighter shade in light mode, where 18 % reads as a bar),
+            // a tab behind under the pointer at 5 %, the card's top highlight at 12 %, the dividers between tabs at 10 %.
+            ["CbTabBandFillBrush"] = new Argb(isLight ? (byte)0x0F : (byte)0x2E, 0, 0, 0),
+            ["CbTabHoverFillBrush"] = Text(0x0D),
+            ["CbTabHighlightBrush"] = Text(0x1F),
+            ["CbTabDividerBrush"] = Text(0x1A),
         };
 
         // The palette's Acrylic alpha is how much luminosity it lays over the blur (0xB8, the design's .72);

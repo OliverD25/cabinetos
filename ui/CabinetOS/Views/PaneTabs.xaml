@@ -6,16 +6,17 @@
     AllowFocusOnInteraction="False"
     IsTabStop="False">
     <!--
-      A pane's tab strip (Phases 12 and 16; docs/ui.md, "Tabs"): the window's own strip, drawn as the design draws it, not
-      WinUI's TabView. The tabs are built in code (PaneTabs.xaml.cs) and lie in a row that scrolls sideways when they do
-      not fit, with the "+" after the last one (when they do not fit it leaves the row and stays at the strip's end, in
-      PinnedAdd). "Open with…" is in the pane's toolbar row since v2 of the shell redesign (PaneCrumbs).
-      The keyboard never rests on the strip: the pane keeps it, so the keys stay the pane's (IsTabStop,
-      AllowFocusOnInteraction on every element that could take it); Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+1 to Ctrl+9 do what
-      its clicks do. The height is the theme's tabRow.
+      A pane's tab strip (Phases 12 and 16, and v2 of the shell redesign; docs/ui.md, "Tabs in the shell"): the window's own
+      strip, not WinUI's TabView. A recessed band (black 18 %, a 1 px line at its bottom, 4 px at its sides) with the tabs
+      standing on its bottom edge: the tab in front is a card in the fill of the toolbar row under it, so the two read as one
+      surface with no seam; the band is drawn around it, never under it. The tabs are built in code (PaneTabs.xaml.cs) and lie
+      in a row that scrolls sideways when they do not fit, with the "+" after the last one (when they do not fit it leaves the
+      row and stays at the strip's end, in PinnedAdd). The keyboard never rests on the strip: the pane keeps it, so the keys
+      stay the pane's (IsTabStop, AllowFocusOnInteraction on every element that could take it); Ctrl+T, Ctrl+W, Ctrl+Tab and
+      Ctrl+1 to Ctrl+9 do what its clicks do. The height is the theme's tabRow.
     -->
     <UserControl.Resources>
-        <!-- A glyph as a button, with no box: the tab's × and the strip's "+". It rests at white 50 % and turns white on hover. -->
+        <!-- A glyph as a button: the tab's x and the strip's "+". It rests at white 55 % and turns white on a white 10 % fill under the pointer. -->
         <Style x:Key="TabGlyphButtonStyle" TargetType="Button">
             <Setter Property="Foreground" Value="{ThemeResource CbTextTertiaryBrush}" />
             <Setter Property="Background" Value="Transparent" />
@@ -29,7 +30,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Grid x:Name="Root" Background="Transparent">
+                        <Grid
+                            x:Name="Root"
+                            Background="Transparent"
+                            CornerRadius="{TemplateBinding CornerRadius}">
                             <ContentPresenter
                                 x:Name="Presenter"
                                 HorizontalAlignment="Center"
@@ -41,11 +45,13 @@
                                     <VisualState x:Name="Normal" />
                                     <VisualState x:Name="PointerOver">
                                         <VisualState.Setters>
+                                            <Setter Target="Root.Background" Value="{ThemeResource CbCloseHoverFillBrush}" />
                                             <Setter Target="Presenter.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Pressed">
                                         <VisualState.Setters>
+                                            <Setter Target="Root.Background" Value="{ThemeResource CbCloseHoverFillBrush}" />
                                             <Setter Target="Presenter.Foreground" Value="{ThemeResource CbTextPrimaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
@@ -57,38 +63,72 @@
             </Setter>
         </Style>
     </UserControl.Resources>
-    <Border
-        x:Name="Frame"
-        Background="{ThemeResource CbBarFillBrush}"
-        BorderBrush="{ThemeResource CbShellHairlineBrush}"
-        BorderThickness="0,0,0,1">
-        <Grid x:Name="Root">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <ScrollViewer
-                x:Name="Scroller"
-                AllowFocusOnInteraction="False"
-                HorizontalScrollBarVisibility="Hidden"
-                HorizontalScrollMode="Enabled"
-                IsTabStop="False"
-                VerticalScrollBarVisibility="Disabled"
-                VerticalScrollMode="Disabled">
-                <StackPanel x:Name="TabList" Orientation="Horizontal">
-                    <!-- The tabs come before it, in code. The code moves it to PinnedAdd while the tabs overflow. -->
+    <Grid x:Name="Root" Height="36">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <ScrollViewer
+            x:Name="Scroller"
+            AllowFocusOnInteraction="False"
+            HorizontalScrollBarVisibility="Hidden"
+            HorizontalScrollMode="Enabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Disabled"
+            VerticalScrollMode="Disabled">
+            <!-- At least as wide as the strip, so the band reaches its end; each piece draws the band and its bottom line. -->
+            <Grid x:Name="TabRow">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border
+                    x:Name="LeftPad"
+                    Width="4"
+                    Background="{ThemeResource CbTabBandFillBrush}"
+                    BorderBrush="{ThemeResource CbShellHairlineBrush}"
+                    BorderThickness="0,0,0,1" />
+                <!-- The tabs, in code. -->
+                <StackPanel
+                    x:Name="TabList"
+                    Grid.Column="1"
+                    Orientation="Horizontal" />
+                <Border
+                    x:Name="AddCell"
+                    Grid.Column="2"
+                    Background="{ThemeResource CbTabBandFillBrush}"
+                    BorderBrush="{ThemeResource CbShellHairlineBrush}"
+                    BorderThickness="0,0,0,1">
+                    <!-- The code moves it to PinnedAdd while the tabs overflow. -->
                     <Button
                         x:Name="AddButton"
                         Width="24"
+                        Height="22"
+                        Margin="2,0,0,3"
+                        VerticalAlignment="Bottom"
                         AllowFocusOnInteraction="False"
                         AutomationProperties.Name="New tab"
+                        CornerRadius="4"
                         IsTabStop="False"
                         Style="{StaticResource TabGlyphButtonStyle}">
-                        <FontIcon FontSize="12" Glyph="&#xE710;" />
+                        <FontIcon FontSize="10" Glyph="&#xE710;" />
                     </Button>
-                </StackPanel>
-            </ScrollViewer>
-            <Border x:Name="PinnedAdd" Grid.Column="1" />
-        </Grid>
-    </Border>
+                </Border>
+                <Border
+                    x:Name="Filler"
+                    Grid.Column="3"
+                    Background="{ThemeResource CbTabBandFillBrush}"
+                    BorderBrush="{ThemeResource CbShellHairlineBrush}"
+                    BorderThickness="0,0,0,1" />
+            </Grid>
+        </ScrollViewer>
+        <Border
+            x:Name="PinnedAdd"
+            Grid.Column="1"
+            Background="{ThemeResource CbTabBandFillBrush}"
+            BorderBrush="{ThemeResource CbShellHairlineBrush}"
+            BorderThickness="0,0,0,1" />
+    </Grid>
 </UserControl>

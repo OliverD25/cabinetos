@@ -319,6 +319,51 @@ public class TabTests
         AssertValid(Encode(request));
     }
 
+    // ----- The look of v2 of the shell redesign (SHELL_REDESIGN.md §2, "Tab strip") -----
+
+    [Fact]
+    public void The_tab_in_front_stands_on_the_strip_and_the_others_are_lower_by_the_handouts_heights()
+    {
+        // The default look's 36 px strip: a 32 px card and 26 px tabs 3 px above its edge; Commander Compact's 28: 26 and 22.
+        Assert.Equal(new TabHeights(32, 26, 3), TabLook.Heights(36));
+        Assert.Equal(new TabHeights(26, 22, 3), TabLook.Heights(28));
+        // A theme of Phase 16 (32 and 24 px strips) gets the same rule, and the lowest strip still draws both.
+        Assert.Equal(new TabHeights(29, 24, 3), TabLook.Heights(32));
+        Assert.Equal(new TabHeights(23, 20, 3), TabLook.Heights(24));
+        Assert.Equal(new TabHeights(14, 12, 3), TabLook.Heights(14));
+    }
+
+    [Fact]
+    public void Dividers_stand_between_the_tabs_behind_but_never_next_to_the_tab_in_front_nor_after_the_last()
+    {
+        static bool[] Dividers(int front, int count) => [.. Enumerable.Range(0, count).Select(i => TabLook.Divider(i, front, count))];
+
+        Assert.Equal([true, false, false, true, false], Dividers(front: 2, count: 5));
+        Assert.Equal([false, true, true, false], Dividers(front: 0, count: 4));
+        Assert.Equal([true, true, false, false], Dividers(front: 3, count: 4));
+        Assert.Equal([false], Dividers(front: 0, count: 1));
+    }
+
+    [Fact]
+    public void Only_the_tab_in_front_shows_its_close_button_and_only_while_the_pane_has_more_than_one_tab()
+    {
+        var strip = Strip(@"C:\a");
+        Assert.False(TabLook.ShowsClose(isFront: true, strip.CanClose(0)));
+        strip.Add(new PaneTab(@"C:\b"));
+        Assert.True(TabLook.ShowsClose(isFront: true, strip.CanClose(1)));
+        // A tab behind closes with a middle click or its menu, not with a button of its own.
+        Assert.False(TabLook.ShowsClose(isFront: false, strip.CanClose(0)));
+    }
+
+    [Fact]
+    public void A_folder_tab_shows_a_folder_a_locked_one_its_lock_and_a_tool_tab_its_tool()
+    {
+        Assert.Equal(TabGlyph.Folder, TabLook.Glyph(new PaneTab(@"C:\work")));
+        Assert.Equal(TabGlyph.Lock, TabLook.Glyph(new PaneTab(@"C:\work", locked: true)));
+        Assert.Equal(TabGlyph.Folder, TabLook.Glyph(new PaneTab(@"C:\work", mode: TabMode.Columns)));
+        Assert.Equal(TabGlyph.Tool, TabLook.Glyph(PaneTab.ForTool(@"C:\work\README.md", "markdown-preview", "Markdown Preview")));
+    }
+
     [Fact]
     public void The_strip_is_the_windows_own_row_and_nothing_in_its_markup_can_take_the_keyboard()
     {
@@ -326,8 +371,11 @@ public class TabTests
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         var markup = XDocument.Load(Path.Combine(Repo.Root, "ui", "CabinetOS", "Views", "PaneTabs.xaml"));
 
-        // WinUI's TabView drew the grey rounded block with a bar floating over it; the design has a flat tab.
+        // WinUI's TabView drew the grey rounded block with a bar floating over it; the design has its own card.
         Assert.DoesNotContain(markup.Descendants(), e => e.Name.LocalName is "TabView" or "TabViewItem");
+        // v2: the band is drawn piece by piece (never under the card in front), and no tab has an accent line.
+        Assert.Equal(4, markup.Descendants().Count(e => (string?)e.Attribute("Background") == "{ThemeResource CbTabBandFillBrush}"));
+        Assert.DoesNotContain(markup.Descendants(), e => e.Attributes().Any(a => a.Value.Contains("CbAccentBrush", StringComparison.Ordinal)));
 
         // The pane keeps the keys: a control of the strip is out of the tab order and takes no focus from a click.
         HashSet<string> focusable = ["UserControl", "ScrollViewer", "Button", "ToggleButton", "RepeatButton", "HyperlinkButton", "TextBox", "ComboBox", "ListView", "GridView", "CheckBox", "RadioButton", "Slider"];

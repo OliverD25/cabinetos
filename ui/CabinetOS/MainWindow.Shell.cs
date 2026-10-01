@@ -504,6 +504,8 @@ public sealed partial class MainWindow
             fields.Add(new($"pane{i}_drive", _crumbViews[i].DriveShown.Drive));
             fields.Add(new($"pane{i}_free", _crumbViews[i].DriveShown.Free));
             fields.Add(new($"pane{i}_toolbar_fill", BrushText(_crumbViews[i].ToolbarFillKey)));
+            fields.Add(new($"pane{i}_tab_fill", BrushText(_tabViews[i].FrontFillKey)));
+            fields.Add(new($"pane{i}_tab_look", _tabViews[i].DescribeLook()));
             // The listings the pane holds: one per column in the column view (ADR 0016), so a dropped column's is seen to go.
             fields.Add(new($"pane{i}_listings", ListingCount(i)));
             fields.Add(new($"pane{i}_columns", _columnViews[i]?.Count ?? 0));
