@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using CabinetOS.Core.Ipc;
+using CabinetOS.Core.Presentation;
 using CabinetOS.Tests.Support;
 
 namespace CabinetOS.Tests;
@@ -313,6 +314,98 @@ public class RailEndToEndTests
             Repo.RemoveTempFolder(root);
         }
     }
+
+    // Found by the live check on the Omen laptop on 2026-10-01: Enter in the folder tree ran go.toPath twice, 1 ms apart. The window
+    // subscribed to the tree's pick twice (the tree's own event, and the sidebar's, which re-raises it); the pinned folders and the
+    // drives had one subscription. The window logs "command executed" for every run, so the runs between two "rail state" lines are
+    // counted, for each way of picking a folder. The run shows hidden entries: its folders lie under %TEMP%, and a stock Windows hides
+    // AppData, which would keep the tree from reaching them (that is the next test's fault, and must not decide this one).
+    // The drive and the pinned folder come first: their rows lie at the top of the sidebar, and a tree scrolled down to a deep folder
+    // leaves them undrawn, where the click step cannot find them.
+    [Fact]
+    public async Task Every_way_of_picking_a_folder_in_the_sidebar_runs_go_toPath_once()
+    {
+        var (run, root, data) = Prepare("rail-pick", "{}");
+        try
+        {
+            var clickTarget = Path.Combine(data, "a", "click-target");
+            var enterTarget = Path.Combine(data, "a", "sub");
+            var pinned = Path.Combine(root, "elsewhere", "pinned-folder");
+            Directory.CreateDirectory(clickTarget);
+            Directory.CreateDirectory(pinned);
+            var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            var driveRoot = Path.GetPathRoot(windows)!;
+            var driveName = DisplayFormat.DriveName(driveRoot[..1].ToUpperInvariant(), new DriveInfo(driveRoot).VolumeLabel);
+            File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"),
+                JsonSerializer.Serialize(new { ui = new { layout = "rail", pinned = new[] { pinned } }, panes = new { showHidden = true } }));
+
+            // The pane starts at the Windows folder, so the drive's row takes it somewhere else. After the pinned folder the tree has
+            // scrolled to it; tree: opens a, which holds click-target and sub, and scrolls there. Enter then goes one row down from
+            // click-target (the folder the click took the pane to) to sub, with the keyboard in the tree.
+            var process = run.Start("run", string.Join(';',
+                "size:1400x800",
+                $"path:{windows}",
+                "wait:800",
+                "rail-state:start",
+                $"click:{driveName}",
+                "wait:300",
+                "rail-state:drive",
+                "click:pinned-folder",
+                "wait:300",
+                "rail-state:pinned",
+                $"tree:{Path.Combine(data, "a")}",
+                "wait:500",
+                "click:click-target",
+                "wait:300",
+                "rail-state:tree-click",
+                "cmd:view.showExplorer",
+                "key:Down",
+                "key:Enter",
+                "wait:300",
+                "rail-state:tree-enter",
+                "shot:done"));
+            await WaitForAsync(() => LogFiles.Ui(Path.Combine(root, "logs-run")).Any(l => Message(l) == "listing shown" && SamePath(Field(l, "path").GetString()!, enterTarget)),
+                "the pane to show the folder Enter in the tree took it to", TimeSpan.FromSeconds(60));
+            var logs = await run.FinishAsync("run", process, "done");
+
+            Assert.DoesNotContain(logs, l => Message(l) == "snapshot click: no shown button has that name");
+            Assert.Equal(1, SidebarRuns(logs, "start", "drive"));
+            Assert.Equal(1, SidebarRuns(logs, "drive", "pinned"));
+            Assert.Equal(1, SidebarRuns(logs, "pinned", "tree-click"));
+            Assert.Equal(1, SidebarRuns(logs, "tree-click", "tree-enter"));
+
+            // Each pick took the pane where it was meant to: the drive, the pinned folder, the folder clicked, the folder Enter chose.
+            var shown = logs.Where(l => Message(l) == "listing shown").Select(l => Field(l, "path").GetString()!).ToList();
+            var searchFrom = 0;
+            foreach (var expected in new[] { driveRoot, pinned, clickTarget, enterTarget })
+            {
+                var at = shown.FindIndex(searchFrom, p => SamePath(p, expected));
+                Assert.True(at >= 0, $"the pane never showed {expected} after the earlier picks; it showed: {string.Join(" | ", shown)}");
+                searchFrom = at + 1;
+            }
+        }
+        finally
+        {
+            foreach (var process in run.Started.Where(p => !p.HasExited))
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    // How many times the sidebar ran go.toPath between two "rail state" lines (the window's log, in the order it was written).
+    private static int SidebarRuns(List<string> logs, string first, string last)
+    {
+        var start = logs.FindIndex(l => Message(l) == "rail state" && Field(l, "label").GetString() == first);
+        var end = logs.FindIndex(l => Message(l) == "rail state" && Field(l, "label").GetString() == last);
+        Assert.True(start >= 0 && end > start, $"the log has no \"rail state\" lines {first} and {last}, in this order");
+        return logs.Skip(start).Take(end - start).Count(l => Message(l) == "command executed"
+            && Field(l, "command").GetString() == "go.toPath" && Field(l, "trigger").GetString() == "sidebar");
+    }
+
+    private static bool SamePath(string a, string b) =>
+        string.Equals(a.TrimEnd('\\'), b.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
     private static void State(List<string> logs, string label, Action<JsonElement> check)
     {
