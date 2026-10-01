@@ -1,6 +1,9 @@
 # CabinetOS · Shell redesign: single-row top bar, per-pane tabs, pane toolbar, scoped find
 
-Status: v2, 2026-10-01. Supersedes v1 (workspace pill + centered command center; nav buttons inside the path row).
+## Changelog
+- v2 · 2026-10-01 · quiet top bar (menu · app name · tools), workspace switcher in sidebar header, redesigned tabs, pane toolbar row + path row, filter label
+- v1 · 2026-10-01 · single-row top bar with workspace pill and centered command center, per-pane tabs, breadcrumb row with nav, Find-in-pane, Quick Open
+
 
 Applies to every theme. Themes still own metrics and colors; this document changes the shell's structure. Metrics below are given for the default theme with the Commander Compact value in brackets where it differs. Reference build: `CabinetOS Compact.dc.html` (compact metrics).
 

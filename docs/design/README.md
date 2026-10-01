@@ -1,7 +1,11 @@
-# Handoff: FileForge — Windows 11 developer-first file manager
+# Handoff: CabinetOS — Windows 11 developer-first file manager
+
+## Changelog
+- v1 · initial design reference
+
 
 ## Overview
-FileForge is a native Windows 11 file manager that combines Total Commander's dual-pane operations with VS Code's workspaces, integrated terminal, command palette and plugin system. This package contains the interactive design prototype plus the design handout and describes every screen, interaction, state and token needed to implement it.
+CabinetOS is a native Windows 11 file manager that combines Total Commander's dual-pane operations with VS Code's workspaces, integrated terminal, command palette and plugin system. This package contains the interactive design prototype plus the design handout and describes every screen, interaction, state and token needed to implement it.
 
 ## About the design files
 The files in this bundle are **design references built in HTML**. They show intended look and behavior; they are not production code to copy. The task is to **recreate these designs in the target codebase's environment** (WinUI 3 / Windows App SDK is the intended target; if the project has no UI stack yet, choose WinUI 3 with C# or Rust via windows-rs) using its native controls, Mica/Acrylic materials and Fluent styling. Behavior described here should be implemented with the platform's real APIs (file system, ConPTY terminal, WebAssembly runtime for plugins).
@@ -12,8 +16,8 @@ Fonts: the prototype substitutes Open Sans and Fira Code because Segoe UI Variab
 **High-fidelity.** Layout, spacing, colors, materials, typography scale and interactions are final intent. Match them closely using WinUI's native equivalents (ListView with Fluent selection visuals, CommandBar, ContentDialog, TeachingTip/Flyout, etc.). Where WinUI already provides an idiomatic control, prefer it over hand-drawing.
 
 ## Files
-- `FileForge.dc.html` — the clickable prototype (single file; template + logic). Open in a browser. Tweaks: `layout` (classic | right | rail), `terminalOpen`, `accent`.
-- `FileForge Handout.dc.html` + `doc-page.js` — the design handout (principles, tokens, views, keybindings, trust model, open questions). Printable.
+- `CabinetOS.dc.html` — the clickable prototype (single file; template + logic). Open in a browser. Tweaks: `layout` (classic | right | rail), `terminalOpen`, `accent`.
+- `CabinetOS Handout.dc.html` + `doc-page.js` — the design handout (principles, tokens, views, keybindings, trust model, open questions). Printable.
 - `support.js` — runtime for the prototype files; not part of the design.
 
 ---
@@ -65,7 +69,7 @@ Fonts: the prototype substitutes Open Sans and Fira Code because Segoe UI Variab
 ## Screens / views
 
 ### 1. Window chrome
-- **Title bar (40 px)**: app icon 18 px (accent→#8A5CF6 gradient, 5 px radius), "FileForge" 12 px secondary, then **workspace tabs** (32 px tall, 8 px top radii, active rgba(255,255,255,.08) white text, inactive .6 text, 8 px color dot per workspace, min-width 96 px, "+" button). Right: minimize / maximize / close caption buttons (46 px wide, hover rgba(255,255,255,.08), close hover #C42B1C).
+- **Title bar (40 px)**: app icon 18 px (accent→#8A5CF6 gradient, 5 px radius), "CabinetOS" 12 px secondary, then **workspace tabs** (32 px tall, 8 px top radii, active rgba(255,255,255,.08) white text, inactive .6 text, 8 px color dot per workspace, min-width 96 px, "+" button). Right: minimize / maximize / close caption buttons (46 px wide, hover rgba(255,255,255,.08), close hover #C42B1C).
 - **Command bar (48 px)**: back, forward (disabled .363), up buttons; **breadcrumb address bar** (flex 1, 32 px, control fill, each crumb hoverable, chevron separators, clicking a crumb navigates); **search field** (width clamp(120px,22%,240px), placeholder "Search {folder}"); divider; **Dual/Single toggle** (icon + label, accent when dual); **terminal toggle** (accent when open); **marketplace button** (accent when in marketplace); **palette button** (⋮ glyph).
 - **Status bar (26 px)**: "{n} items", "1 selected · {name}", spacer, transfer pill (see §6), git branch of active workspace, "UTF-8", layout label, "Ctrl+Shift+P" keycap (clickable → palette).
 
@@ -154,4 +158,6 @@ Shortcuts are ignored while focus is in a text input (terminal, search), except 
 - Progress bar width: 400 ms linear.
 
 ## Assets
-No bitmap assets. Icons in the prototype are inline placeholder SVGs; replace with Segoe Fluent Icons (folder, document, chevrons, search, split view, terminal, store, more, edit/pencil, close, minimize, maximize, git branch). Workspace/plugin icons are colored tiles with 1–2 letter glyphs; plugins should supply their own icons.
+**App icon**: `icons/cabinetos.svg` is the master (256). Size-specific cuts `cabinetos-16/24/32/48.svg` simplify the badge and thicken the prompt; matching PNGs are included. Use these for the .ico, Start tile and title bar. The prototype title bar already loads `icons/cabinetos-16.svg`.
+
+Other than the icon, no bitmap assets. Icons in the prototype are inline placeholder SVGs; replace with Segoe Fluent Icons (folder, document, chevrons, search, split view, terminal, store, more, edit/pencil, close, minimize, maximize, git branch). Workspace/plugin icons are colored tiles with 1–2 letter glyphs; plugins should supply their own icons.

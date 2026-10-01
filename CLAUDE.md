@@ -31,8 +31,10 @@ must be consistent with it.
 - [docs/decisions/](docs/decisions/README.md) holds one ADR per decision. A new
   decision gets a new file and a row in the index; an old record is superseded,
   never rewritten.
-- [docs/design/](docs/design/ABOUT.md) is the design handout. "FileForge" in it
-  is the design codename; the product is CabinetOS.
+- [docs/design/](docs/design/ABOUT.md) is the committed mirror of the handout
+  folder of the creator's Claude Design session. Before any design-driven
+  work, the sync rule of the `design-handouts` skill runs: fetch, compare the
+  changelog headers, update the folder, commit, report before app code.
 
 ## Repository layout
 
@@ -81,9 +83,9 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
   how to use the heavy logging mode to find a fault (a key that did
   nothing, a job that did not do what was asked, a stall, a crash) and how
   to read the chain of one action; read it before chasing such a fault.
-  `design-handouts` says how a brief or a design page comes from the
-  creator's Claude Design session into `_io/design/claude-design/` and
-  onto the desk, read-only and only on the creator's word.
+  `design-handouts` says how the design session's documents come into
+  `docs/design/` (the creator's sync rule of 2026-10-01) and onto the
+  desk, read-only towards the session.
 - Implementation goes to the `coder` agent once the plan is concrete; small
   fixes are done directly.
 

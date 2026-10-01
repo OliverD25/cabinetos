@@ -3104,7 +3104,7 @@ window out again, without a restart. A theme without `metrics` gives the
 default look's sizes, so switching back to `default` restores every size.
 A theme never changes a command, a key or where things are: the rule of
 the Commander Compact handout
-([design/compact/COMPACT_THEME.md](design/compact/COMPACT_THEME.md),
+([design/COMPACT_THEME.md](design/COMPACT_THEME.md),
 "Scope"). Constitution Articles 3, 6 and 8.
 
 - **How.** `MetricsMapper` (in `CabinetOS.Core`, tested) is one table:

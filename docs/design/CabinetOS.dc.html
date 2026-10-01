@@ -26,8 +26,8 @@ input:focus{outline:none}
 <!-- Title bar -->
 <div style="height:40px;display:flex;align-items:center;flex:none">
   <div style="display:flex;align-items:center;gap:10px;padding:0 14px;height:100%">
-    <div style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,{{ accent }},#8a5cf6)"></div>
-    <span style="font-size:12px;color:rgba(255,255,255,.786)">FileForge</span>
+    <img src="./icons/cabinetos-16.svg" width="16" height="16" alt="" style="display:block">
+    <span style="font-size:12px;color:rgba(255,255,255,.786)">CabinetOS</span>
   </div>
   <div style="display:flex;align-items:flex-end;height:100%;gap:2px;padding-left:6px">
     <sc-for list="{{ workspaces }}" as="w" hint-placeholder-count="3">
@@ -178,7 +178,7 @@ input:focus{outline:none}
                 <sc-if value="{{ pane.isMd }}" hint-placeholder-val="{{ false }}">
                   <div style="flex:1;overflow:auto;padding:28px 40px;user-select:text;line-height:1.6;color:rgba(255,255,255,.86)">
                     <div style="max-width:680px">
-                      <h1 style="font-size:26px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em">FileForge</h1>
+                      <h1 style="font-size:26px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em">CabinetOS</h1>
                       <p style="margin:0 0 18px;color:rgba(255,255,255,.6)">A developer-first file manager for Windows 11. Dual panes, workspaces, an integrated terminal and a WebAssembly plugin system, wrapped in Fluent.</p>
                       <div style="display:flex;gap:6px;margin-bottom:22px">
                         <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:rgba(96,205,255,.15);color:#9ad9ff;font-family:'Fira Code',monospace">build passing</span>
@@ -186,7 +186,7 @@ input:focus{outline:none}
                         <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-family:'Fira Code',monospace">MIT</span>
                       </div>
                       <h2 style="font-size:17px;font-weight:600;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1)">Getting started</h2>
-                      <pre style="margin:0 0 18px;padding:12px 14px;border-radius:6px;background:rgba(0,0,0,.35);font-family:'Fira Code',monospace;font-size:12px;color:#d7e3f4;overflow:auto">winget install FileForge.FileForge
+                      <pre style="margin:0 0 18px;padding:12px 14px;border-radius:6px;background:rgba(0,0,0,.35);font-family:'Fira Code',monospace;font-size:12px;color:#d7e3f4;overflow:auto">winget install CabinetOS.CabinetOS
 cargo run --release -- --workspace .</pre>
                       <h2 style="font-size:17px;font-weight:600;margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1)">Concepts</h2>
                       <ul style="margin:0 0 18px;padding-left:20px">
@@ -464,7 +464,7 @@ const FS = {
   'C:\\Users\\dev\\Projects': [{n:'fileforge',d:1,m:'Today 09:12',tag:'#60cdff'},{n:'blog',d:1,m:'Sat 11:20'},{n:'dotfiles',d:1,m:'2 Sep 2026'},{n:'scratch',d:1,m:'18 Sep 2026'}],
   'C:\\Users\\dev\\Projects\\fileforge': [
     {n:'.git',d:1,m:'Today 09:12'},{n:'assets',d:1,m:'Yesterday 17:44'},{n:'docs',d:1,m:'Mon 10:05'},{n:'src',d:1,m:'Today 09:11'},{n:'target',d:1,m:'Today 09:12'},
-    {n:'.gitignore',t:'Text',s:'412 B',m:'2 Sep 2026'},{n:'Cargo.toml',t:'TOML',s:'1.8 KB',m:'Mon 10:05'},{n:'Cargo.lock',t:'Lock file',s:'96 KB',m:'Mon 10:05'},{n:'core.dll',t:'DLL',s:'2.7 MB',m:'Today 09:12'},{n:'fileforge.exe',t:'Application',s:'14.3 MB',m:'Today 09:12'},{n:'LICENSE',t:'File',s:'1.1 KB',m:'3 Jan 2026'},{n:'README.md',t:'Markdown',s:'6.2 KB',m:'Today 08:58',tag:'#f2c063'}],
+    {n:'.gitignore',t:'Text',s:'412 B',m:'2 Sep 2026'},{n:'Cargo.toml',t:'TOML',s:'1.8 KB',m:'Mon 10:05'},{n:'Cargo.lock',t:'Lock file',s:'96 KB',m:'Mon 10:05'},{n:'core.dll',t:'DLL',s:'2.7 MB',m:'Today 09:12'},{n:'cabinetos.exe',t:'Application',s:'14.3 MB',m:'Today 09:12'},{n:'LICENSE',t:'File',s:'1.1 KB',m:'3 Jan 2026'},{n:'README.md',t:'Markdown',s:'6.2 KB',m:'Today 08:58',tag:'#f2c063'}],
   'C:\\Users\\dev\\Projects\\fileforge\\src': [{n:'ui',d:1,m:'Today 09:11'},{n:'plugins',d:1,m:'Yesterday 16:20'},{n:'commands.rs',t:'Rust',s:'18 KB',m:'Today 09:11'},{n:'fs_watch.rs',t:'Rust',s:'6 KB',m:'Mon 13:40'},{n:'main.rs',t:'Rust',s:'3 KB',m:'Mon 10:05'},{n:'palette.rs',t:'Rust',s:'11 KB',m:'Today 08:20'},{n:'terminal.rs',t:'Rust',s:'9 KB',m:'Yesterday 18:02'}],
   'C:\\Users\\dev\\Projects\\fileforge\\docs': [{n:'plugins.md',t:'Markdown',s:'12 KB',m:'Mon 10:05'},{n:'themes.md',t:'Markdown',s:'4 KB',m:'Mon 10:05'},{n:'keybindings.md',t:'Markdown',s:'7 KB',m:'Sat 09:00'}],
   'C:\\Users\\dev\\Downloads': [{n:'setup-wsl.exe',t:'Application',s:'88 MB',m:'Today 09:31'},{n:'font-pack.zip',t:'ZIP archive',s:'12 MB',m:'Yesterday'},{n:'invoice-0926.pdf',t:'PDF',s:'214 KB',m:'Yesterday',tag:'#e0705e'}],
@@ -474,16 +474,16 @@ const FS = {
 const EXT_COLORS = {md:'#60cdff',rs:'#f0906c',toml:'#c9b6ff',exe:'#6ccb5f',dll:'#6ccb5f',bin:'#e0705e',zip:'#f2c063',pdf:'#e0705e',lock:'rgba(255,255,255,.5)'};
 const LEVEL = {low:'#6ccb5f',medium:'#f2c063',high:'#f27a6c'};
 const PLUGINS = [
-  {id:'gitlens',name:'Git Lens for FileForge',author:'Ada Reyes',verified:true,kind:'plugin',rating:'4.8',reviews:'2.1K',installs:'128K',size:'1.2 MB',version:'3.4.0',iconBg:'#f0906c',glyph:'GL',desc:'Branch, blame and history inline in your file panes.',long:'Shows the current branch per workspace, colors changed files, and adds history and blame actions to the context menu. Uses the git binary on your PATH.',perms:[{name:'Read workspace files',level:'low',why:'To detect repositories and status.'},{name:'Run processes: git',level:'medium',why:'Executes git commands in the workspace.'}]},
+  {id:'gitlens',name:'Git Lens for CabinetOS',author:'Ada Reyes',verified:true,kind:'plugin',rating:'4.8',reviews:'2.1K',installs:'128K',size:'1.2 MB',version:'3.4.0',iconBg:'#f0906c',glyph:'GL',desc:'Branch, blame and history inline in your file panes.',long:'Shows the current branch per workspace, colors changed files, and adds history and blame actions to the context menu. Uses the git binary on your PATH.',perms:[{name:'Read workspace files',level:'low',why:'To detect repositories and status.'},{name:'Run processes: git',level:'medium',why:'Executes git commands in the workspace.'}]},
   {id:'7z',name:'7-Zip Bridge',author:'Archive Tools Collective',verified:false,kind:'plugin',rating:'4.6',reviews:'890',installs:'64K',size:'840 KB',version:'1.9.2',iconBg:'#f2c063',glyph:'7z',desc:'Compress and extract 40+ archive formats from the context menu.',long:'Adds Compress, Extract here and Extract to folder actions. Streams large archives without blocking the UI.',perms:[{name:'Read and write files',level:'medium',why:'To create and extract archives.'},{name:'Run processes: 7z.exe',level:'medium',why:'Uses the 7-Zip CLI when installed.'}]},
   {id:'hex',name:'Hex Editor Pro',author:'Tomás Weil',verified:true,kind:'plugin',rating:'4.9',reviews:'1.4K',installs:'92K',size:'610 KB',version:'2.1.0',iconBg:'#c9b6ff',glyph:'0x',desc:'Inspect and patch binaries in a pane. PE and ELF aware.',long:'Opens any file as hex in a pane. Structure overlays for PE, ELF and common image headers. Edits are staged until you save.',perms:[{name:'Read files you open',level:'low',why:'Only files opened in the editor.'},{name:'Write files you open',level:'medium',why:'To save patched bytes.'}]},
-  {id:'mdp',name:'Markdown Preview+',author:'FileForge Team',verified:true,kind:'plugin',rating:'4.7',reviews:'3.3K',installs:'210K',size:'380 KB',version:'1.12.0',iconBg:'#60cdff',glyph:'M↓',desc:'Rendered markdown with Mermaid, math and a synced outline.',long:'Replaces a pane with a rendered view. Follows the selection in the opposite pane so browsing docs feels like reading.',perms:[{name:'Read files you open',level:'low',why:'Only the markdown file and its images.'}]},
+  {id:'mdp',name:'Markdown Preview+',author:'CabinetOS Team',verified:true,kind:'plugin',rating:'4.7',reviews:'3.3K',installs:'210K',size:'380 KB',version:'1.12.0',iconBg:'#60cdff',glyph:'M↓',desc:'Rendered markdown with Mermaid, math and a synced outline.',long:'Replaces a pane with a rendered view. Follows the selection in the opposite pane so browsing docs feels like reading.',perms:[{name:'Read files you open',level:'low',why:'Only the markdown file and its images.'}]},
   {id:'sync',name:'Cloud Sync: S3 & OneDrive',author:'Northwind Labs',verified:false,kind:'plugin',rating:'4.2',reviews:'412',installs:'31K',size:'2.9 MB',version:'0.8.1',iconBg:'#8ad2b8',glyph:'S3',desc:'Mount buckets and OneDrive folders as drives in the sidebar.',long:'Presents remote storage as a drive. Uploads and downloads show up in the transfer flyout like local copies.',perms:[{name:'Network access',level:'high',why:'Talks to storage APIs over HTTPS.'},{name:'Credential store',level:'high',why:'Saves tokens in Windows Credential Manager.'},{name:'Read and write files',level:'medium',why:'To sync selected folders.'}]},
   {id:'img',name:'Image Toolkit',author:'Priya Natarajan',verified:true,kind:'plugin',rating:'4.5',reviews:'760',installs:'48K',size:'1.6 MB',version:'2.0.3',iconBg:'#f5a8c9',glyph:'IM',desc:'Thumbnails, quick resize and format conversion, all in WASM.',long:'Pure WebAssembly image codecs. No native dependencies, no network.',perms:[{name:'Read files you open',level:'low',why:'To decode images.'}]},
   {id:'nord',name:'Nord Frost',author:'Arctic Ice Studio',verified:true,kind:'theme',rating:'4.9',reviews:'5.2K',installs:'340K',size:'12 KB',version:'2.3.0',iconBg:'#88c0d0',glyph:'N',desc:'Cool, bluish palette. Calm contrast for long sessions.',long:'Full theme: Mica tint, accent, terminal palette and syntax colors.',accent:'#88c0d0',tint:'rgba(46,52,64,.88)',perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
   {id:'mocha',name:'Catppuccin Mocha',author:'Catppuccin',verified:true,kind:'theme',rating:'4.9',reviews:'7.8K',installs:'512K',size:'14 KB',version:'1.7.1',iconBg:'#cba6f7',glyph:'C',desc:'Soothing pastel theme for the high-spirited.',long:'Full theme with the Mocha flavor. Accent defaults to Mauve.',accent:'#cba6f7',tint:'rgba(30,30,46,.9)',perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
   {id:'rose',name:'Rosé Pine Moon',author:'Rosé Pine',verified:false,kind:'theme',rating:'4.8',reviews:'2.6K',installs:'190K',size:'11 KB',version:'1.4.0',iconBg:'#ebbcba',glyph:'R',desc:'All natural pine, faux fur and a bit of soho vibes.',long:'Muted, warm dark theme.',accent:'#ebbcba',tint:'rgba(35,33,54,.9)',perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
-  {id:'default',name:'Windows Default',author:'FileForge Team',verified:true,kind:'theme',rating:'4.4',reviews:'1.1K',installs:'1.2M',size:'8 KB',version:'1.0.0',iconBg:'#60cdff',glyph:'W',desc:'System accent, Mica backdrop. The theme you started with.',long:'Follows the Windows accent color.',accent:null,tint:null,perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
+  {id:'default',name:'Windows Default',author:'CabinetOS Team',verified:true,kind:'theme',rating:'4.4',reviews:'1.1K',installs:'1.2M',size:'8 KB',version:'1.0.0',iconBg:'#60cdff',glyph:'W',desc:'System accent, Mica backdrop. The theme you started with.',long:'Follows the Windows accent color.',accent:null,tint:null,perms:[{name:'Apply colors',level:'low',why:'Themes cannot read files or run code.'}]},
 ];
 const COMMANDS = [
   {id:'dual',cat:'View',name:'Toggle Dual Pane',sc:[['Ctrl','Shift','D']]},
@@ -519,7 +519,7 @@ class Component extends DCLogic {
       view:'files', dual:true, termOpen:null, activePane:0, sidebarOpen:true,
       panes:[{path:'C:\\Users\\dev\\Projects\\fileforge',sel:'README.md',mode:'files',file:null},{path:'D:\\Backup',sel:null,mode:'files',file:null}],
       palette:{open:false,q:'',idx:0,hover:-1,recording:null,combos:[]}, shortcuts:{},
-      ctx:null, transfer:null, term:{lines:[{t:'FileForge terminal · cwd follows the active pane',color:'rgba(255,255,255,.45)'}],input:''},
+      ctx:null, transfer:null, term:{lines:[{t:'CabinetOS terminal · cwd follows the active pane',color:'rgba(255,255,255,.45)'}],input:''},
       mk:{tab:'discover',selected:null,review:null,installed:{mdp:true,hex:true,gitlens:true},q:''}, themeId:'default', workspace:0,
     };
   }
@@ -554,7 +554,7 @@ class Component extends DCLogic {
     if(c==='ls'||c==='dir') out=items.map(i=>(i.d?'d  ':'-  ')+i.n.padEnd(22)+(i.s||'')).join('\n');
     else if(c==='cd'&&args[0]){ const t=args[0]==='..'?parentOf(path):joinPath(path,args[0]); if(FS[t]||args[0]==='..'){ this.navigate(activePane,t); out=''; } else out=`cd: no such directory: ${args[0]}`; }
     else if(c==='pwd') out=path;
-    else if(c==='cargo') out='   Compiling fileforge v0.9.2\n    Finished release [optimized] target(s) in 4.21s';
+    else if(c==='cargo') out='   Compiling cabinetos v0.9.2\n    Finished release [optimized] target(s) in 4.21s';
     else if(c==='git') out='On branch main\nnothing to commit, working tree clean';
     else out=`${c}: The term '${c}' is not recognized as a name of a cmdlet or program.`;
     this.setState(s=>({term:{lines:[...s.term.lines,{t:`PS ${path}> ${cmd}`,color:'#fff'},...(out?[{t:out,color:'rgba(255,255,255,.7)'}]:[])],input:''}}));
@@ -571,10 +571,10 @@ class Component extends DCLogic {
       dual:()=>this.toggleDual(), term:()=>this.setState({termOpen:!this.termOpen}), focus:()=>this.setState(s=>({activePane:s.dual?1-s.activePane:0})),
       sidebar:()=>this.setState(s=>({sidebarOpen:!s.sidebarOpen})), copy:()=>this.startTransfer(), move:()=>this.startTransfer(),
       market:()=>this.setState({view:'market'}), theme:()=>this.setState(s=>({view:'market',mk:{...s.mk,tab:'themes',selected:null}})),
-      md:()=>this.openFile({n:'README.md'},0), hex:()=>this.openFile({n:'fileforge.exe'},0),
+      md:()=>this.openFile({n:'README.md'},0), hex:()=>this.openFile({n:'cabinetos.exe'},0),
       newfolder:()=>this.pushTerm('mkdir "New folder"','Created New folder'), gitcommit:()=>this.pushTerm('git commit','[main 3f2a9c1] Update palette keybindings\n 2 files changed, 41 insertions(+)'),
       gitlog:()=>this.pushTerm('git log --oneline -3 -- README.md','3f2a9c1 Update readme\n9b1d0e4 Add plugin docs\n1c0ffee Initial commit'),
-      compress:()=>this.pushTerm('7z a selection.7z .','Everything is Ok'), task:()=>this.pushTerm('cargo build --release','   Compiling fileforge v0.9.2\n    Finished release [optimized] in 4.21s'),
+      compress:()=>this.pushTerm('7z a selection.7z .','Everything is Ok'), task:()=>this.pushTerm('cargo build --release','   Compiling cabinetos v0.9.2\n    Finished release [optimized] in 4.21s'),
       ws:()=>this.setState(s=>({workspace:(s.workspace+1)%WORKSPACES.length})), goto:()=>this.pushTerm('cd ..',''), keys:()=>this.pushTerm('code keybindings.json','')
     };
     this.setPalette({open:false,q:'',idx:0,recording:null,combos:[]});

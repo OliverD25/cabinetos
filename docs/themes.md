@@ -151,7 +151,7 @@ with the default background show `palette.terminalBackground`.
 A theme may change colours, sizes, and whether some elements of the window
 are there. It never changes a command, a key or the layout: the rule of the
 Commander Compact handout
-([design/compact/COMPACT_THEME.md](design/compact/COMPACT_THEME.md),
+([design/COMPACT_THEME.md](design/COMPACT_THEME.md),
 "Scope"). So besides its colours a theme may have two objects, both
 optional:
 
@@ -345,7 +345,7 @@ optional ([ipc.md](ipc.md), "What changes the version").
 | ID | Name | Accent | Mica tint | Source of the colours |
 |---|---|---|---|---|
 | `default` | Default | the Windows accent | plain Mica | The design tokens of [design/README.md](design/README.md); the terminal uses the Windows console's Campbell scheme. Its kind is `system` |
-| `commander-compact` | Commander Compact | the Windows accent | plain Mica | The default theme's colours, with the handout's acrylic tint, and every metric and chrome element of [design/compact/COMPACT_THEME.md](design/compact/COMPACT_THEME.md). Its kind is `system` |
+| `commander-compact` | Commander Compact | the Windows accent | plain Mica | The default theme's colours, with the handout's acrylic tint, and every metric and chrome element of [design/COMPACT_THEME.md](design/COMPACT_THEME.md). Its kind is `system` |
 | `nord` | Nord | `#88C0D0` | `#2E3440` at 0.88 | The Nord palette (MIT) |
 | `catppuccin-mocha` | Catppuccin Mocha | `#CBA6F7` | `#1E1E2E` at 0.9 | The Catppuccin Mocha palette (MIT) |
 | `rose-pine-moon` | Rosé Pine Moon | `#EBBCBA` | `#232136` at 0.9 | The Rosé Pine Moon palette (MIT) |

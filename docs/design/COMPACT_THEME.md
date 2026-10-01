@@ -1,5 +1,9 @@
 # CabinetOS · Commander Compact theme
 
+## Changelog
+- v1 · 2026-10-01 · Commander Compact density preset, F-key bar, row stripes
+
+
 Density preset for CabinetOS modelled on Total Commander: hairline separators instead of floating cards, 20 px file rows, striped lists, an F-key bar. Same Fluent palette, fonts and behaviour as the default theme; only metrics, radii and separators change. Reference build: `CabinetOS Compact.dc.html`.
 
 ## Scope
