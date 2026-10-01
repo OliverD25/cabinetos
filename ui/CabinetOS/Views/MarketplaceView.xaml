@@ -116,7 +116,7 @@
                 </StackPanel>
             </Border>
 
-            <Grid Grid.Column="1">
+            <Grid x:Name="CardArea" Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />

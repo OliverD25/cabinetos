@@ -32,7 +32,6 @@ public class MarketplaceCardsEndToEndTests
         var logs = await RunAsync("all", string.Join(';',
             "size:1400x900",
             "cmd:marketplace.browse",
-            "market:opened",
             "wait:2000",
             "market:complete",
             // Tab from a card goes to the next item's card, across the slices' borders too.
@@ -47,15 +46,10 @@ public class MarketplaceCardsEndToEndTests
             "focus:after-118",
             "shot:done"));
 
+        // At once: the cards that fill the view, a part of the 120.
         var shown = Assert.Single(logs, l => Message(l) == "marketplace cards shown");
-        var first = Field(shown, "cards").GetInt32();
-        Assert.InRange(first, 4, 119);
+        Assert.InRange(Field(shown, "cards").GetInt32(), 4, 119);
         Assert.Equal(120, Field(shown, "total").GetInt32());
-
-        // Right after the command: the first screenful only, the rest still to come.
-        var opened = Cards(logs, "opened");
-        Assert.Equal((first, 120, false), (Field(opened, "cards").GetInt32(), Field(opened, "total").GetInt32(), Field(opened, "complete").GetBoolean()));
-        Assert.Equal(Ids[..first], Text(opened, "ids").Split(','));
 
         // After the slices: every card, in the index's order, which is the order Tab follows.
         var complete = Cards(logs, "complete");
@@ -78,26 +72,31 @@ public class MarketplaceCardsEndToEndTests
         var logs = await RunAsync("themes", string.Join(';',
             "size:1400x900",
             "cmd:marketplace.browse",
-            "market:opened",
-            // The same dispatcher turn as the opening's first cards: Discover's slices are still to come.
+            "wait:2000",
+            "click:Themes",
+            "wait:2000",
+            // Discover again, and Themes in the same dispatcher turn: steps without a wait run one after the other,
+            // and a slice waits for a turn of its own, so Discover's slices are still to come when Themes is clicked.
+            "click:Discover",
+            "market:discover",
             "click:Themes",
             "market:themes",
             "wait:2000",
             "market:themes-done",
             "shot:done"));
 
-        var opened = Cards(logs, "opened");
-        Assert.False(Field(opened, "complete").GetBoolean());
-        Assert.InRange(Field(opened, "cards").GetInt32(), 4, 119);
+        var discover = Cards(logs, "discover");
+        Assert.Equal((120, false), (Field(discover, "total").GetInt32(), Field(discover, "complete").GetBoolean()));
+        Assert.InRange(Field(discover, "cards").GetInt32(), 4, 119);
+        Assert.Equal(40, Field(Cards(logs, "themes"), "total").GetInt32());
 
-        var themes = Cards(logs, "themes");
-        Assert.Equal(40, Field(themes, "total").GetInt32());
         var done = Cards(logs, "themes-done");
         Assert.Equal((40, 40, true), (Field(done, "cards").GetInt32(), Field(done, "total").GetInt32(), Field(done, "complete").GetBoolean()));
         Assert.Equal(Ids.Where((_, i) => IsTheme(i)), Text(done, "ids").Split(','));
-        // Discover's slices stopped when the tab changed: its 120 cards were never all made.
-        Assert.DoesNotContain(logs, l => Message(l) == "marketplace cards complete" && Field(l, "cards").GetInt32() == 120);
-        Assert.Contains(logs, l => Message(l) == "marketplace cards complete" && Field(l, "cards").GetInt32() == 40);
+        // Discover's second set stopped when the tab changed: after it began, no set of 120 cards was completed.
+        var began = logs.FindIndex(l => Message(l) == "marketplace cards" && Text(l, "label") == "discover");
+        Assert.DoesNotContain(logs.Skip(began), l => Message(l) == "marketplace cards complete" && Field(l, "cards").GetInt32() == 120);
+        Assert.Contains(logs.Skip(began), l => Message(l) == "marketplace cards complete" && Field(l, "cards").GetInt32() == 40);
     }
 
     // A window on a scratch configuration whose marketplace.index is a local index of the 120 items; returns its log lines.

@@ -1973,8 +1973,8 @@ with no drag and no reorder, so every change goes through a command.
   2026-10-01, the speed review's proposal E). Its listing stays open in
   shared memory and the core keeps watching its folder, so a switch back
   shows its rows again, with its cursor and marks, without a new
-  `list_directory`. For 100,000 files the first frame comes about 15 ms
-  after the switch instead of about 65 ms. A pane keeps one such listing,
+  `list_directory`. For 100,000 files the first frame comes about 17 ms
+  after the switch instead of 60 to 90 ms. A pane keeps one such listing,
   about 10 MB for 100,000 entries: the next tab that goes behind takes its
   place, and the listing kept before is closed. The core closes a kept
   listing ("listing closed" in its log) when its 30 s are up, when its
@@ -3131,9 +3131,17 @@ the core's events.
   the same order) keeps the grid where it was scrolled, and the cards down
   to there are made at once. A card made before is kept while its item
   stays the same object, so a tab or a search that brings an item back
-  reuses its card. 50 cards in one go held the first view's frame for 74
-  to 95 ms; the first screenful (15 cards in a 1400 × 900 window) takes
-  about 8 ms of the window's work.
+  reuses its card. When the index comes before the view's own first
+  layout (the marketplace was shown a moment ago), the cards wait for the
+  frame after it: the view's layout and the cards then do not share one
+  frame, and the view's size says how many cards fill it. Measured on
+  2026-10-01 with `speed-review.ps1` (scenario `market`, 50 items, 7
+  paired runs): 50 cards in one go made a frame of 98 to 128 ms; now the
+  first screenful (15 cards in a 1400 × 900 window) is made in 12 to 16 ms
+  and no frame of the cards is longer than about 40 ms. The longest frame
+  of a first opening is now the view's own first layout, 54 to 81 ms,
+  before any card exists; a second opening has no frame over 33 ms
+  ([the report](log/2026-10-01/speed-items-ce-report.md)).
 - **The detail column** (340 px, slides in over 180 ms) of the selected
   card: the 52 px tile, the name, "author · v{version}", the primary
   button, Source, Uninstall for what the marketplace installed, a line
@@ -3218,7 +3226,8 @@ the core's events.
   since the opening), "marketplace cards complete" at the first frame
   after the last slice of a set was laid out (`cards`, `slices`, and `ms`
   since the opening, or since the set started when it was not an
-  opening's), "marketplace index read" with the source and the number of items,
+  opening's); both have `make_ms`, the time spent making the cards (the
+  first slice's, all slices'), "marketplace index read" with the source and the number of items,
   "marketplace index not read" with the reason, "plugin installed and
   granted" with its version, "source page opened".
 

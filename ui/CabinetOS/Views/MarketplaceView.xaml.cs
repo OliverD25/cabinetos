@@ -41,6 +41,13 @@ public sealed partial class MarketplaceView : UserControl
     // When the set of cards being made began: the opening, or the render that brought new items.
     private long _setStarted;
 
+    // The time spent making the set's cards, all slices together.
+    private double _makeMs;
+
+    // The view was shown a moment ago and its cards wait for its first layout; or that wait is over.
+    private bool _waitingForLayout;
+    private bool _layoutWaited;
+
     /// <summary>Creates the view, hidden.</summary>
     public MarketplaceView()
     {
@@ -264,6 +271,11 @@ public sealed partial class MarketplaceView : UserControl
         var items = model.Items;
         if (!_slices.Holds(items))
         {
+            if (CardArea.ActualWidth <= 0 && items.Count > 0 && !_layoutWaited)
+            {
+                WaitForLayout();
+                return;
+            }
             StartCards(model, items);
             return;
         }
@@ -274,29 +286,58 @@ public sealed partial class MarketplaceView : UserControl
         }
     }
 
+    // The index came before the view's first layout: the cards wait for the frame after it, so the view's own layout
+    // and the cards do not share one frame, and the view's size says how many cards fill it.
+    private void WaitForLayout()
+    {
+        if (_waitingForLayout)
+        {
+            return;
+        }
+        _waitingForLayout = true;
+        var since = Stopwatch.GetTimestamp();
+        void OnFrame(object? sender, object e)
+        {
+            if (IsOpen && CardArea.ActualWidth <= 0 && Stopwatch.GetElapsedTime(since) < TimeSpan.FromSeconds(1))
+            {
+                return;
+            }
+            CompositionTarget.Rendering -= OnFrame;
+            _waitingForLayout = false;
+            _layoutWaited = true;
+            Render();
+            _layoutWaited = false;
+        }
+        CompositionTarget.Rendering += OnFrame;
+    }
+
     private void StartCards(MarketplaceModel model, IReadOnlyList<MarketItem> items)
     {
+        // The index read again (Refresh) leaves the grid where it was scrolled, and the cards down to there are made at
+        // once, so the grid is as tall; other items (a tab, a search) start at the top. Counted while the old cards are
+        // still laid out, so one of them gives a card's height.
+        var scrolled = _slices.HasSameIds(items) ? CardScroller.VerticalOffset : 0;
+        var (first, perSlice) = (CardsPerScreen(scrolled), CardsPerScreen(0));
+        if (scrolled == 0)
+        {
+            CardScroller.ChangeView(null, 0, null, disableAnimation: true);
+        }
         // The cards of the set before wait as spares: an item that comes back (a tab, a search cleared) keeps its card.
         foreach (var (id, card) in _cards)
         {
             _spare[id] = card;
         }
-        // The index read again (Refresh) leaves the grid where it was scrolled, and the cards down to there are made at
-        // once, so the grid is as tall; other items (a tab, a search) start at the top.
-        var scrolled = _slices.HasSameIds(items) ? CardScroller.VerticalOffset : 0;
-        if (scrolled == 0)
-        {
-            CardScroller.ChangeView(null, 0, null, disableAnimation: true);
-        }
         _cards = new Dictionary<string, Card>(StringComparer.Ordinal);
         Cards.Children.Clear();
         // An opening's cards are timed from the opening, as "marketplace cards shown" is; a later set from now.
         _setStarted = _openedTicks != 0 ? _openedTicks : Stopwatch.GetTimestamp();
-        AddCards(model, _slices.Start(items, CardsPerScreen(scrolled), CardsPerScreen(0)));
+        _makeMs = 0;
+        AddCards(model, _slices.Start(items, first, perSlice));
         if (_openedTicks != 0 && _slices.Made > 0)
         {
-            var first = Cards.Children[^1];
-            LogAtFrame("marketplace cards shown", _openedTicks, first, new LogField("cards", _slices.Made), new LogField("total", items.Count));
+            // At the first frame that has a card laid out: this set's, or the one that took its place before that frame.
+            LogAtFrame("marketplace cards shown", _openedTicks, () => Cards.Children.Count > 0 && Cards.Children[0].ActualSize.Y > 0, () => false,
+                new LogField("cards", _slices.Made), new LogField("total", items.Count), new LogField("make_ms", Math.Round(_makeMs, 1)));
             _openedTicks = 0;
         }
         NextSlice(_slices.Generation);
@@ -328,6 +369,7 @@ public sealed partial class MarketplaceView : UserControl
 
     private void AddCards(MarketplaceModel model, IReadOnlyList<MarketItem> slice)
     {
+        var started = Stopwatch.GetTimestamp();
         foreach (var item in slice)
         {
             var card = _spare.Remove(item.Id, out var spare) && ReferenceEquals(spare.Item, item)
@@ -339,6 +381,7 @@ public sealed partial class MarketplaceView : UserControl
             Cards.Children.Add(card.Root);
             card.Update(model.SelectedId == item.Id, StateLine(model, item));
         }
+        _makeMs += Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
 
     private void CompleteCards()
@@ -346,8 +389,10 @@ public sealed partial class MarketplaceView : UserControl
         _spare.Clear();
         if (_slices.Made > 0)
         {
-            LogAtFrame("marketplace cards complete", _setStarted, Cards.Children[^1], new LogField("cards", _slices.Made),
-                new LogField("slices", _slices.Slices));
+            // Not for a set that a newer one replaced before its last card was laid out.
+            var (last, generation) = (Cards.Children[^1], _slices.Generation);
+            LogAtFrame("marketplace cards complete", _setStarted, () => last.ActualSize.Y > 0, () => generation != _slices.Generation,
+                new LogField("cards", _slices.Made), new LogField("slices", _slices.Slices), new LogField("make_ms", Math.Round(_makeMs, 1)));
         }
     }
 
@@ -357,9 +402,8 @@ public sealed partial class MarketplaceView : UserControl
     private int CardsPerScreen(double scrolled)
     {
         var padding = CardScroller.Padding;
-        var area = (Grid)CardScroller.Parent;
-        var width = area.ActualWidth - padding.Left - padding.Right;
-        var height = area.RowDefinitions[1].ActualHeight - padding.Top - padding.Bottom;
+        var width = CardArea.ActualWidth - padding.Left - padding.Right;
+        var height = CardArea.RowDefinitions[1].ActualHeight - padding.Top - padding.Bottom;
         if (!(width > 0 && height > 0) && XamlRoot?.Size is { Width: > 0 } window)
         {
             width = window.Width - 180 - padding.Left - padding.Right;
@@ -382,18 +426,18 @@ public sealed partial class MarketplaceView : UserControl
         return 113 + (2 * WindowMetrics.Current.MarketplaceCardPaddingY);
     }
 
-    // A line at the first frame after <paramref name="card"/> was laid out, with the ms since <paramref name="since"/>,
-    // as "listing shown" is timed.
-    private void LogAtFrame(string message, long since, UIElement card, params LogField[] fields)
+    // A line at the first frame for which <paramref name="laidOut"/> holds, with the ms since <paramref name="since"/>,
+    // as "listing shown" is timed; none once <paramref name="replaced"/> holds.
+    private void LogAtFrame(string message, long since, Func<bool> laidOut, Func<bool> replaced, params LogField[] fields)
     {
         void OnFrame(object? sender, object e)
         {
-            if (IsOpen && card.ActualSize.Y <= 0 && Stopwatch.GetElapsedTime(since) < TimeSpan.FromSeconds(5))
+            if (IsOpen && !replaced() && !laidOut() && Stopwatch.GetElapsedTime(since) < TimeSpan.FromSeconds(5))
             {
                 return;
             }
             CompositionTarget.Rendering -= OnFrame;
-            if (IsOpen)
+            if (IsOpen && !replaced())
             {
                 Diag.Info("cabinetos_ui::market", message, [.. fields, new LogField("ms", Math.Round(Stopwatch.GetElapsedTime(since).TotalMilliseconds, 1))]);
             }
