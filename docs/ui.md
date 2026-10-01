@@ -787,18 +787,18 @@ search hit. From the context menu it gets the menu's rows
 
 | Command | In this version |
 |---|---|
-| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, Quick Open, the prompt, the theme picker, the plugin review, the plugin list, the marketplace (its detail column first), the context menu, Windows' menu and the top row's dropdowns, a rename, a quick search, a breadcrumb row's text box, the rail layout's or the Search view's focus, the find widget, the search results, and last folds the transfer flyout into the pill. Opening an overlay closes the others, so at most one of the palette, Quick Open, the prompt, the theme picker and the plugin list is open (the order matters for the review over the list and for the rest; [keybindings.md](keybindings.md), "One overlay at a time") |
+| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, Quick Open, the prompt, the theme picker, the plugin review, the plugin list, the marketplace (its detail column first), the context menu, Windows' menu and the top row's dropdowns, a rename, a quick search, a path row's text box, the rail layout's or the Search view's focus, the find widget, the search results, and last folds the transfer flyout into the pill. Opening an overlay closes the others, so at most one of the palette, Quick Open, the prompt, the theme picker and the plugin list is open (the order matters for the review over the list and for the rest; [keybindings.md](keybindings.md), "One overlay at a time") |
 | `search.focus` | Opens the active pane's find widget ("Find in pane") |
 | `quickOpen.show`, `menu.show`, `settings.open` | Quick Open, the top row's menu, and `cabinetos.json` in the editor ("The shell") |
 | `keys.open` | Opens the palette: it lists every command with its keys and edits them |
 | `view.toggleDualPane`, `view.toggleSidebar`, `view.focusOtherPane` | As named; the first two are saved in `cabinetos.json` |
-| `go.toPath` | With `{"path": …}` goes there; without, turns the active pane's breadcrumb row into a text box (`{"pane": 0 or 1}` names the pane) |
+| `go.toPath` | With `{"path": …}` goes there; without, turns the active pane's path row into a text box (`{"pane": 0 or 1}` names the pane) |
 | `help.about` | The window's command (target `ui`): its handler shows About CabinetOS ("About", below). An older core that ran it itself answered `command_result`; the window shows the same view for that |
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
 | `view.toggleTerminal` | Shows the terminal, gives the keyboard back to the pane, or hides it ("The terminal") |
 | `marketplace.browse`, `preferences.selectColorTheme` | Open the marketplace and the theme picker ("The marketplace", "Themes") |
 | `go.root` to `terminal.insertSelectedPaths` | Total Commander's small commands, 31 of them, run in the window ("Total Commander's keys") |
-| `workspace.switch` | The workspace pill's dropdown ("The shell"); its "Open folder as workspace…" says that workspaces arrive in a later version |
+| `workspace.switch` | The sidebar's workspace dropdown ("The sidebar header"); its "Open folder as workspace…" says that workspaces arrive in a later version |
 | `terminal.runTask` | "arrives in a later version" in the status bar |
 
 ### Dialogs
@@ -1321,9 +1321,9 @@ What the drawer is:
   use, without their saves. The right pane is hidden, not closed: its tool
   tabs stay open for the way back (turning Dual Pane off closes them). The
   rail, the top row's buttons for the second pane and the terminal, and the
-  workspace pill are hidden too: they would do nothing, or they would run
-  under the buttons on the right. The command center hides under 640 px as
-  always.
+  Quick Open chip are hidden too: they would do nothing, or they would run
+  under the buttons on the right (Ctrl+P still opens Quick Open). The
+  title gives way to the buttons as always.
 - **Its size is `ui.compactOverlay`.** `width` and `height` are the window's
   outer size in device-independent pixels (DIPs), each from 240 to 4000
   ([config.md](config.md)). `null`, the default, gives 480 by 640. The size
@@ -1439,27 +1439,33 @@ palette shown, and closed at once after the palette closed.
 
 ## The shell
 
-Phase 16 gave the window the shell of the creator's redesign
-(`SHELL_REDESIGN.md`, received 2026-09-30): one top row instead of the
-title bar and the command bar, and in each pane a tab strip and a
-breadcrumb row instead of the pane's header. The global address bar and
-the global search field are gone: each pane has its own path, finding a
-name in the folder on screen is the pane's find widget (Ctrl+F), and
-finding a file anywhere in the workspace is Quick Open (Ctrl+P).
-Constitution Articles 3, 4, 5 and 7. What the shell decides without a
-window is in `CabinetOS.Core/Shell` and tested there (`ShellTests`); the
-window's part is `MainWindow.Shell.cs`, `MainWindow.Find.cs` and
-`MainWindow.QuickOpen.cs`.
+The shell is the creator's redesign, `SHELL_REDESIGN.md`: Phase 16 built
+it on 2026-09-30, and Phase 20 built its v2 of 2026-10-01
+([design/SHELL_REDESIGN.md](design/SHELL_REDESIGN.md); its reference
+build is `design/CabinetOS Compact.dc.html`). One quiet top row instead of the title bar and
+the command bar; the workspace switcher as the sidebar's first row; and in
+each pane, top to bottom, a tab strip, a toolbar row, a path row, the
+column headers and the list. The global address bar and the global search
+field are gone: each pane has its own path, finding a name in the folder
+on screen is the pane's find widget (Ctrl+F), and finding a file anywhere
+in the workspace is Quick Open (Ctrl+P). Constitution Articles 3, 4, 5 and
+7. What the shell decides without a window is in `CabinetOS.Core/Shell`
+(`TopRowLayout`, `Breadcrumbs`, `PaneRows`, `NavState`, `ShellMenu`) and
+`CabinetOS.Core/Tabs` (`TabLook`), tested there (`ShellTests`,
+`TabTests`); the window's part is `MainWindow.Shell.cs`,
+`MainWindow.Find.cs`, `MainWindow.QuickOpen.cs`, `Views/PaneTabs` and
+`Views/PaneCrumbs`.
 
 ### The top row
 
 One row, `topRowHeight` high (40 px; 32 in Commander Compact, never lower
 than the 32 px Windows draws its caption buttons at). It is filled with the
-bar colour and has a 1 px line under it. The whole row is the window's
-drag area, except over its controls: those rectangles are handed to
-Windows as pass-through regions (`InputNonClientPointerSource`), so a
-click on them reaches the control and a drag anywhere else moves the
-window. Left to right:
+bar colour and has a 1 px line under it. Nothing in it belongs to one pane
+or one path: the row stays quiet, so the pane tabs under it read as the
+way to move around. The whole row is the window's drag area, except over
+its controls: those rectangles are handed to Windows as pass-through
+regions (`InputNonClientPointerSource`), so a click on them reaches the
+control and a drag anywhere else moves the window. Left to right:
 
 - **The menu** (the hamburger, `topRowButtonSize`, 36 px): `menu.show`.
   Its dropdown lists New Tab, New Folder, Find in Pane, Go to Path…,
@@ -1469,21 +1475,21 @@ window. Left to right:
   a restart, the button carries an accent dot, and Check for Updates
   becomes "Restart to Update (0.2.0)" with the same dot ("Updates").
 - **The app icon**, 16 px.
-- **The workspace pill** (`workspacePillHeight` 24 px, `workspacePillRadius`
-  4 px, the accent at 18 %): a dot, the workspace's name ("Default" until
-  workspaces exist) and, in the mono font at 10 px, the branch of the git
-  repository that holds the active pane's folder (below). A click, or
-  Ctrl+K Ctrl+W (`workspace.switch`), opens its dropdown: the workspace
-  with its branch, a line, and "Open folder as workspace…", which says that
-  workspaces arrive in a later version.
-- **The command center**, centred in the window: clamp(200 px, 34 %,
-  380 px) wide, `commandCenterHeight` 24 px, with a search glyph, the
-  workspace's name and "Ctrl+P". A click opens Quick Open. It never lies
-  over the clusters beside it: where the centred place would, it moves and
-  narrows into the room between them, down to 120 px, and hides below that
-  and whenever the window is narrower than 640 px (`TopRowLayout`). Ctrl+P
-  works when it is hidden. The window's least width is 600 px, so the
-  640 px rule can show.
+- **The title**, "CabinetOS · folder": the app's name at weight 600, a
+  dot at 35 %, and at 60 % white the name of the active pane's tab in
+  front (a folder's name; a tool tab's file). It follows the active pane
+  and its tab. It takes the room up to the Quick Open chip and no more
+  (`TopRowLayout.TitleRoom`): a long name ends with an ellipsis, and
+  nothing lies over the chip. The taskbar's title stays "CabinetOS": the
+  end-to-end tests and the compact drawer find the main window by it.
+- **The empty middle**, which is the drag area.
+- **The Quick Open chip** (`quickOpenChipHeight`, 24 px; 22 in Commander
+  Compact): a 1 px border at white 8 %, a search glyph and the key of
+  Quick Open in the mono font ("Ctrl+P"; a rebinding shows). A click opens
+  Quick Open. The chip never hides: the window's least width is 600 px
+  (`TopRowLayout.MinWindowWidth`), where the title has given up its room.
+  Only the compact drawer hides it at its narrower widths, as it hid the
+  pill (Ctrl+P works there).
 - **The view buttons**: Dual/Single, Terminal, Marketplace, the command
   palette and Settings. The first four are in the accent colour while
   what they show is on. Settings runs `settings.open` (Ctrl+,): the core
@@ -1492,35 +1498,39 @@ window. Left to right:
   else Notepad). Then a 1 px divider and the space Windows' caption
   buttons take (`AppWindow.TitleBar.RightInset`).
 
-The dropdowns use the acrylic surface the context menu had until Phase 18
-under their trigger,
-with `dropdownRowHeight` rows (26 px); a click outside or Esc closes them.
-Opened from a key, the keyboard is on their first row.
+The dropdowns use the acrylic surface the context menu had until Phase 18,
+the menu's under its button and the workspace dropdown under the
+sidebar's first row, with `dropdownRowHeight` rows (26 px); a click outside
+or Esc closes them. Opened from a key, the keyboard is on their first row.
 
-**The chrome never takes the keyboard.** The buttons of the top row, the
-status bar's pills and keycap, the crumb row (Back, Forward, Up and the
-segments), the tab strips (the "+" and "Open with…"), the Tool Dock's header
-and tabs, and the editor pane's header refuse it: `AllowFocusOnInteraction`
-is off and they are no tab stop. So a click acts on the active pane and
-leaves the keyboard in it, and Tab always switches panes
-(`view.focusOtherPane`, bound in the context `filesView`, which holds only
-while a pane has the keyboard). Until 2026-09-30 a click on a top-row
-button left the keyboard on the button, Tab fell through to WinUI and
-walked the buttons as in a dialog (Article 7: the mouse is optional, and a
-key must mean the same thing whatever was clicked before). Two exceptions
-keep a tab stop and refuse only the click: the rail's buttons, because Up,
-Down and Shift+Up/Down work on a button the keyboard was walked to, and the
-classic sidebar's rows, because Ctrl+Shift+E without the rail puts the
-keyboard on the first one. The overlays and the full-column views (the
-palette, Quick Open, the prompt, the theme picker, the plugin list, the
-review dialog, the marketplace, the context menu and its edit mode, the
-transfer flyout, the update dialog) are not chrome: Tab walks there. A new
-chrome button follows the rule: `ChromeKeyboardTests` reads the XAML and the
-code that builds buttons and fails on one that takes the keyboard;
-`ChromeKeyboardEndToEndTests` presses the dual toggle, the hamburger and the
-workspace pill on a real window and checks the keyboard focus line; the live
-check does it with the real mouse ("compact: a real click on the top row's
-Toggle dual pane…" and the hamburger step).
+**The chrome never takes the keyboard.** The buttons of the top row (the
+Quick Open chip among them), the sidebar's workspace row, the status bar's
+pills and keycap, a pane's toolbar row (Back, Forward, Up, the drive chip,
+Find, Open with…) and path row (the segments and the filter label), the
+tab strips (the "+"), the Tool Dock's header and tabs, and the editor
+pane's header refuse it: `AllowFocusOnInteraction` is off and they are no
+tab stop. So a click acts on the active pane and leaves the keyboard in it,
+and Tab always switches panes (`view.focusOtherPane`, bound in the context
+`filesView`, which holds only while a pane has the keyboard). Until
+2026-09-30 a click on a top-row button left the keyboard on the button,
+Tab fell through to WinUI and walked the buttons as in a dialog (Article
+7: the mouse is optional, and a key must mean the same thing whatever was
+clicked before). Two exceptions keep a tab stop and refuse only the click:
+the rail's buttons, because Up, Down and Shift+Up/Down work on a button the
+keyboard was walked to, and the classic sidebar's rows, because
+Ctrl+Shift+E without the rail puts the keyboard on the first one. The
+overlays and the full-column views (the palette, Quick Open, the prompt,
+the theme picker, the plugin list, the review dialog, the marketplace, the
+context menu and its edit mode, the transfer flyout, the update dialog) are
+not chrome: Tab walks there. A new chrome button follows the rule:
+`ChromeKeyboardTests` reads the XAML and the code that builds buttons and
+fails on one that takes the keyboard, and names the shell's controls so
+the check cannot pass on nothing; `ChromeKeyboardEndToEndTests` presses
+the dual toggle, the hamburger and the sidebar's workspace row on a real
+window and checks the keyboard focus line; the live check does it with the
+real mouse ("compact: a real click on the top row's Toggle dual pane…",
+the hamburger step, and section 16's clicks on the toolbar, the drive
+chip, the workspace row and the Quick Open chip).
 
 **The branch.** Until workspaces exist, the workspace is the git
 repository that holds the active pane's folder: the nearest folder at or
@@ -1531,82 +1541,157 @@ front, so a branch switched in a terminal shows. The branch is the name in
 the repository's `HEAD`; a detached `HEAD` shows the commit's first 7
 characters, and a worktree's `.git` file is followed to its own `HEAD`.
 Outside a repository, or with a core that does not know the request, the
-pill shows the name alone, and Quick Open searches the active folder.
+workspace row shows the name alone, and Quick Open searches the active
+folder.
 
-### The breadcrumb row
+### The sidebar header
 
-Every pane has, top to bottom: its tab strip (`tabRow`, 32 px), its
-breadcrumb row (`breadcrumbRowHeight`, 28 px), the column headers and the
-list (or a tool). The pane's old header, with the folder's name and path,
-is gone.
+The sidebar's first row is the workspace switcher
+(`workspaceHeaderHeight`, 28 px; 26 in Commander Compact): a dot in the
+accent, the workspace's name at weight 600 ("Default" until workspaces
+exist), its branch in the mono font at 10 px, and a chevron, on the accent
+at 18 % with a 1 px line under it. Its top corners follow `radiusSurface`,
+as the panes' do (square in Commander Compact). It sits above whatever the
+sidebar shows: the Explorer, the Search view or a tool's page, in the rail
+layout too.
 
-- **Back, Forward and Up** first, as `navButtonSize` (20 px) buttons.
-  They run `go.back`, `go.forward` and `go.up` with the pane's index
-  (`{"pane": 0 or 1}`), so a click acts on that pane and makes it the
-  active one; a key or the palette acts on the active pane. A button with
-  nowhere to go is drawn at 30 % and does nothing (`NavState`).
+- **A click**, Ctrl+K Ctrl+W (`workspace.switch`) or the palette opens the
+  dropdown right under the row, at the row's full width and never
+  narrower than the design's 220 px: the workspace with its dot and
+  branch, a line, and "Open folder as workspace…", which says that
+  workspaces arrive in a later version. Picking the workspace goes to its
+  root in the left pane's tab in front (`go.toPath` with `{"pane": 0}`).
+- **With the sidebar hidden** (Ctrl+B), Ctrl+K Ctrl+W and the palette
+  open the dropdown under the top row at the panes' left edge, at the
+  menu's own width.
+- **It refuses the keyboard** like the rest of the chrome, so in the
+  classic layout Ctrl+Shift+E still puts the keyboard on the sidebar's
+  first folder, and Tab still switches panes.
+- **Its accessible name** is "Workspace Default", with ", branch <name>"
+  while the workspace is on a branch; its tooltip names the root and the
+  key.
+- **The log** (target `cabinetos_ui::shell`): "workspace menu shown" with
+  the branch, the root, where the dropdown opened and its width; and
+  "workspace shows a branch" when the branch or the root changes.
+
+### The pane's rows
+
+Every pane has, top to bottom: its tab strip (`tabRow`, 36 px; 28 in
+Commander Compact), its toolbar row (`toolbarRowHeight`, 28; 24), its path
+row (`pathRowHeight`, 24; 20, its two lines included), the column headers
+and the list (or a tool). Both rows are `PaneCrumbs`. The pane's old
+header, with the folder's name and path, went in Phase 16; Phase 16's
+breadcrumb row went in v2, split into these two.
+
+**The toolbar row** has the fill of the pane's tab in front, white 9 % in
+the active pane (or the only one) and 5 % in the other, and no line
+between it and the strip, so the tab and the toolbar read as one surface.
+Its buttons are 22 x 20 px (`navButtonSize` high and 2 px wider), with
+2 px corners and white 10 % under the pointer. Left to right:
+
+- **Back, Forward and Up.** They run `go.back`, `go.forward` and `go.up`
+  with the pane's index (`{"pane": 0 or 1}`), so a click acts on that pane
+  and makes it the active one; a key or the palette acts on the active
+  pane. A button with nowhere to go is drawn at 30 % and does nothing
+  (`NavState`).
+- A 1 px divider at white 12 %.
+- **The drive chip**: the drive's glyph, its letter ("C:", or `\\` on a
+  share) and a chevron, in the mono font at 11 px. A click runs
+  `go.chooseDriveLeft` or `go.chooseDriveRight` (Alt+F1, Alt+F2) for its
+  pane, and the drive list opens under the chip.
+- The flexible space.
+- **The free space** of the pane's drive, "118 GB free", in the mono font
+  at 11 px and 50 % white (`PaneRows.FreeSpace`). It comes from the core's
+  last `list_volumes`, as the sidebar's drives do: the window reads
+  nothing from the disk. It follows the pane's folder and changes when the
+  sidebar's volumes do (a drive comes or goes). A share has none.
+- A 1 px divider.
+- **Find** toggles the pane's find widget ("Find in pane"), in the accent
+  while it is open. It runs the window's own command `search.toggle` with
+  the pane's index; the palette's Find in Pane is `search.focus`.
+- **Open with…** keeps its place after Find but stays hidden, by the
+  creator's call of 2026-09-30 (with Markdown Preview as the only editor
+  its list was thin). When a second editor exists it shows again and opens
+  the palette on the Editor commands. There are no plugin buttons yet:
+  the registry has no mark for a toolbar button.
+
+**The path row** has a white 3 % fill, a 1 px line above it (white 6 %)
+and one below (the theme's hairline), and 8 px at its sides.
+
 - **The crumbs**, in the mono font at 11 px, `›` between them at 35 %
-  white; the last one white, the others at 70 %. A click goes there.
-  Segments never shrink one by one: a path of more than 3 parts in dual
-  mode (5 in single) collapses to `Drive › … › parent › current`
-  (`Breadcrumbs`); the `…` goes to the folder it stands for, the deepest
-  one it hides, and its tooltip is that path. A row still too narrow
-  scrolls to its end.
-- **Ctrl+L** (`go.toPath`) turns the active pane's row into a text box
-  with the path selected; Enter goes there, Esc puts the crumbs back.
+  white; the last one white, the others at 70 %, white 10 % under the
+  pointer. A click goes there. Segments never shrink one by one: a path of
+  more than 5 parts in dual mode (8 in single) collapses to `Drive › … ›
+  parent › current` (`Breadcrumbs`); the `…` goes to the folder it stands
+  for, the deepest one it hides, and its tooltip is that path. The
+  handout's `C:\Users\dev\Projects\fileforge` (5 parts) shows whole in a
+  440 px pane. A row still too narrow scrolls to its end.
+- **The filter label** at the right end, at 35 % white: `*.*`, or
+  `*text*` while the pane's find holds a text (`PaneRows.FilterLabel`). A
+  click runs `search.focus` for that pane: the find opens, or takes the
+  keyboard. The pattern box (Num + and Num −) marks rows and hides none,
+  so it leaves the label as it is.
+- **Ctrl+L** (`go.toPath`) turns the active pane's path row into a text
+  box with the path selected; Enter goes there, Esc puts the crumbs back.
   The box is the pane's: the pane's keys that type nothing (F5, Ctrl+T,
   Ctrl+Tab) act on the pane from it, and the box keeps its typing and
-  editing keys (keybindings.md, "Contexts").
-- The active pane's row has an accent-tinted fill (6 %); the other pane's
-  has none. The drive list (Alt+F1, Alt+F2) and the prompts open under the
-  row.
+  editing keys (keybindings.md, "Contexts"). A click beside the crumbs
+  opens the box too.
+
+The active pane shows by its border and its toolbar's fill; the accent
+tint of Phase 16's breadcrumb row is gone. The drive list (Alt+F1, Alt+F2,
+the chip) opens under the chip; the other prompts open in the palette's
+frame.
 
 ### Tabs in the shell
 
-Since Phase 16 the strip shows from the first tab (the handout's rule: a
-theme may not remove it). Since 2026-09-30 it is the window's own row of
-tabs, drawn as the creator's design page draws it (option 1a and the
-handout's "Tab strip"), and not WinUI's `TabView`: the `TabView` gave a
-grey rounded block, a bar floating over its corners, an icon on every tab
-and a boxed close button.
+The strip shows from the first tab (the handout's rule: a theme may not
+remove it). It is the window's own row of tabs (`PaneTabs`), not WinUI's
+`TabView`, drawn as v2 of the redesign and its reference build draw it.
 
-- **The strip** is `tabRow` high. It has a white 3 % fill and a 1 px
-  hairline under it. Every tab fills its full height.
-- **A tab** has 10 px of space at each side and is at most 160 px wide.
-  Its name is cut with an ellipsis, and its tooltip is the full path.
-  There is no icon on a folder tab. A locked tab shows a 12 px lock before
-  its name, and a tab that shows a tool shows the tool's glyph.
-- **The tab in front of the active pane** has a white 8 % fill, a 2 px bar
-  on top in the accent, white text in weight 600, and its ×. The × is a
-  plain glyph with no box, at 55 % white. It turns white under the
-  pointer, and its target is at least 16 x 16 px.
-- **The tab in front of the other pane** has a white 6 % fill, the bar at
-  white 30 %, weight 600 and text at 90 % white. Its × shows only while
-  the pointer is over the tab.
-- **The other tabs** have no fill, text at 65 % white and a 1 px hairline
-  at the right. Under the pointer they get a white 6 % fill and white
-  text. They close with a middle click or their menu.
-- **Corners are square**, as the design draws them: `tabRadius` is 0 in
-  the default look. A theme that wants round tabs sets it. It rounds the
-  two top corners of a tab, and the 2 px bar follows the curve, because
-  the bar is the tab's own top border. Commander Compact has 3 px.
-- **The colours are the window's tokens** (`CbTabActiveFillBrush`,
-  `CbHoverFillBrush`, `CbTabFrontBarInactiveBrush`,
-  `CbTabInactiveTextBrush`, `CbTextPrimaryBrush` and `CbRowTextBrush` for
-  the text, `CbTextTertiaryBrush` for the ×), so a theme's colours reach
-  the strip.
+- **The strip** is a recessed band, `tabRow` high: black 18 % (a lighter
+  shade in light mode), a 1 px line at its bottom (the theme's hairline)
+  and 4 px at its sides. The tabs stand on its bottom edge. The band is
+  drawn in pieces around the tab in front (above it and beside it), never
+  under it: a band under the card would darken it against the toolbar row
+  and show the seam the handout forbids.
+- **The tab in front** is a card 32 px tall (26 in Commander Compact: the
+  strip less a quarter of what it has over 20 px, `TabLook.Heights`), its
+  two top corners at `tabRadius` (8 px; 6), filled white 9 % in the active
+  pane and 5 % in the other, with a 1 px highlight along its top (white
+  12 %; 8 % in the other pane). Its text is white at weight 600.
+- **The other tabs** are 26 px tall (22), 3 px above the band's edge, with
+  no fill: text and glyph at 60 %, and white 5 % with white text under
+  the pointer. A 1 px divider (white 10 %, 6 px in from top and bottom)
+  stands at the right of each, but not next to the tab in front and not
+  after the last one (`TabLook.Divider`).
+- **A glyph before every name**: the design's folder at 14 px on a folder
+  tab, the lock on a locked tab, the tool's glyph on a tool tab
+  (`TabLook.Glyph`). Until v2 a folder tab had none, by the creator's call
+  of 2026-09-30 on the "Pane Tabs Options" page; v2 is the newer word.
+- **The ×** (an 8 px glyph in a 16 px target, 55 % white, white on a
+  white 10 % fill under the pointer) shows on the tab in front only while
+  the pane has more than one tab (`TabLook.ShowsClose`). Its place is kept
+  on every tab, so a tab's width does not change when it comes to the
+  front. Any tab closes with a middle click or its menu.
+- **A tab is at most `tabMaxWidth`** wide (160 px; 170 in Commander
+  Compact). Its name is cut with an ellipsis, and its tooltip is the full
+  path.
+- **No accent line** on any tab: the accent is for the selected row and
+  the active pane's border. Phase 16's 2 px bar is gone.
+- **The colours are the window's tokens** (`CbTabBandFillBrush`,
+  `CbFrontTabFillBrush`, `CbFrontTabInactiveFillBrush`,
+  `CbTabHighlightBrush`, `CbTabHoverFillBrush`, `CbTabDividerBrush`,
+  `CbTabInactiveTextBrush`), so a theme's colours reach the strip.
 - **Tabs do not wrap.** When they do not fit, the row scrolls sideways,
   and the tab in front scrolls into view when it changes.
-- **The "+"** is 24 px wide and runs `tab.new` for that pane. It is right
-  after the last tab while the tabs fit. When they do not fit, it stays
-  at the end of the strip and does not scroll away.
+- **The "+"** is 24 x 22 px with 4 px corners, 3 px above the band's edge,
+  and runs `tab.new` for that pane. It is right after the last tab while
+  the tabs fit. When they do not fit, it stays at the end of the strip and
+  does not scroll away.
 - **The keyboard never rests on the strip.** Nothing in it takes focus, so
   a click leaves the keys with the pane.
 
-The handout's "Open with…" button at the strip's right end, which opens the
-palette on the Editor commands, is hidden since 2026-09-30 (the creator's
-call: with Markdown Preview as the only editor its list was thin) and
-returns when a second editor exists; the commands stay in the palette.
 Ctrl+1 to Ctrl+9 run `tab.select` for the tab at that place ("Tabs"). A
 tab keeps, besides its folder, history, order, cursor and marks, its
 list's scroll position and its find text.
@@ -1641,7 +1726,7 @@ Since Phase 19f a pane's folder tab has a mode: `files`, the list, or
   column, with the cursor on the folder it came from; the other columns
   stay.
 - **The path.** The deepest column's folder is the tab's path: the
-  breadcrumb row, the tab's title and the saved tab show it. Going to a
+  path row, the tab's title and the saved tab show it. Going to a
   folder another way (a crumb, Back, the sidebar, Ctrl+L, another tab)
   starts the view over, with that folder as the one column. Ctrl+R and a
   new order list the keyboard's column again and keep the columns.
@@ -1706,10 +1791,14 @@ Since Phase 19f a pane's folder tab has a mode: `files`, the list, or
 
 ### Find in pane
 
-Ctrl+F (and Alt+F7, Total Commander's key; `search.focus`) opens the find
-widget of the active pane's tab: an acrylic box that drops from the right
-end of the breadcrumb row, with a search glyph, a 150 px box ("Find in
-{folder}"), the count "n of m" and a close button.
+Ctrl+F (and Alt+F7, Total Commander's key; `search.focus`), the toolbar's
+Find button and a click on the path row's filter label open the find
+widget of that pane's tab: an acrylic box that drops from the right end of
+the toolbar row and lies over the path row (since v2; before, it hung from
+the breadcrumb row's end), with a search glyph, a 150 px box ("Find in
+{folder}"), the count "n of m" and a close button. While it is open the
+toolbar's Find is in the accent, and while it holds a text the path row's
+filter label reads `*text*`; Esc brings back `*.*`.
 
 - **Typing filters the pane's list** to the names that hold the text, case
   ignored. The core matches (`match_entries` with `*text*`), as for the
@@ -1717,7 +1806,7 @@ end of the breadcrumb row, with a search glyph, a 150 px box ("Find in
   answers that came too late. The other pane is not touched.
 - **Enter** puts the cursor on the first match and keeps the widget and
   the keyboard; Down gives the keyboard to the list. **Esc** closes the
-  widget: every row shows again.
+  widget: every row shows again. The toolbar's Find closes it too.
 - **The pane's keys work from the box.** The box is the pane's: a key that
   types nothing runs the pane's binding, so F5 copies the cursor row to
   the other pane, Ctrl+F3 sorts, Ctrl+T opens a tab and Ctrl+W closes it.
@@ -1737,9 +1826,9 @@ end of the breadcrumb row, with a search glyph, a 150 px box ("Find in
 
 ### Quick Open
 
-Ctrl+P (`quickOpen.show`) or a click on the command center lists the
-workspace's files and folders on the command palette's surface. The core
-finds and ranks them (`search` under the workspace, 50 names, from its
+Ctrl+P (`quickOpen.show`) or a click on the top row's Quick Open chip lists
+the workspace's files and folders on the command palette's surface. The
+core finds and ranks them (`search` under the workspace, 50 names, from its
 index or a walk); `QuickOpenModel` asks after 80 ms without a key, drops
 late answers and keeps the highlight. A row shows the name and, in the
 mono font, its folder from the workspace's own name down.
@@ -1774,47 +1863,75 @@ mono font, its folder from the workspace's own name down.
 ### The shell's snapshot steps and checks
 
 The snapshot aid's steps for the shell: `shell:<label>` writes "shell
-state" into the log (the window's size, the top row's height, the command
-center's place or `hidden`, the clusters' edges, the workspace and its
-root and branch, whether Quick Open and the palette are open and Quick
-Open's rows, an open menu's rows, the context menu's list and icon row
+state" into the log: the window's size; the top row's height; the title
+(`title`, and `title_trimmed`), where it ends (`title_right`), the Quick
+Open chip's edges, height, key and whether it shows (`chip_left`,
+`chip_right`, `chip_height`, `chip_keys`, `chip_visible`), and where the
+view buttons and the caption buttons start and end; the workspace, its
+root and branch, and the sidebar's workspace row (`workspace_header`, its
+height, width, left and bottom edges and branch, and `sidebar_shown`);
+whether Quick Open, the palette and a prompt are open and Quick Open's
+rows; an open menu's rows, the context menu's list and icon row
 (`context_menu`, `context_quick`) and Windows' menu (`windows_menu`, a
-submenu as `Send to›`), the active pane, and for each pane its
-path, crumbs, the nav buttons' state, whether its row is a text box, its
-shown and listed rows, marks, cursor, scroll position, find text and count,
-tabs, and the tab strip's and breadcrumb row's heights); `find:<text>`
-opens the active pane's find and types; `find-key:enter|down|esc`;
-`quick-open:<text>` opens Quick Open and types; `quick-open-key:enter|
-ctrl+enter|down|esc`.
+submenu as `Send to›`); the active pane; and for each pane its path, crumbs
+and whether they fit (`crumbs_fit`), the nav buttons' state, whether its
+path row is a text box, its shown and listed rows, marks, cursor, scroll
+position, find text and count, the toolbar's items shown whole
+(`toolbar_items`: "back forward up drive free find"), the filter label,
+whether Find shows the find open, the drive chip's text and the free space,
+the toolbar's fill and the tab in front's fill as the brushes' names and
+colours (`toolbar_fill`, `tab_fill`), how the strip draws each tab
+(`tab_look`: "folder,divider | *folder,close,32"), where the find widget
+hangs (`find_top` against `toolbar_bottom`, and `find_right_gap`), its
+tabs, the strip's, toolbar row's and path row's heights, and its width.
+`find:<text>` opens the active pane's find and types;
+`find-key:enter|down|esc`; `quick-open:<text>` opens Quick Open and types;
+`quick-open-key:enter|ctrl+enter|down|esc`. `tabs:<label>` ("tabs shown")
+has each strip's look as `left_look` and `right_look`, and `layout:<label>`
+has the chip, the workspace row and each pane's three rows.
 
-- `ShellTests` (Core): the breadcrumb collapse (the handout's path at 380 px
-  in dual and single mode, one part, a drive's root, a trailing
-  backslash), the 640 px rule and the command center between the
-  clusters, the nav buttons' state, the find filter (one pane only, marks
-  kept aside and back, no match, Esc), the tab state, Quick Open (`>`,
-  Backspace, the request, late answers), the hamburger's content from the
-  registry, and the new default keys. The branch is the core's
-  (`workspace_info`): its tests read a branch ref, a detached `HEAD`, a
-  worktree's and a submodule's `gitdir:` file, and no `.git`.
+- `ShellTests` (Core): the path row's collapse (the handout's path whole
+  in dual mode, a 7-part path collapsed, 8 parts whole in single mode and
+  9 collapsed, a drive's root, a trailing backslash, a share), the filter
+  label, the drive chip's letter and the free space from the volumes, the
+  title's text and the room it gets before the chip, the nav buttons'
+  state, the find filter (one pane only, marks kept aside and back, no
+  match, Esc), the tab state, Quick Open (`>`, Backspace, the request,
+  late answers), the hamburger's content from the registry, and the new
+  default keys. `TabTests`: the tab heights, the dividers, the × rule and
+  the glyphs. The branch is the core's (`workspace_info`): its tests read a
+  branch ref, a detached `HEAD`, a worktree's and a submodule's `gitdir:`
+  file, and no `.git`.
 - `ShellEndToEndTests` (with `CABINETOS_UI_E2E=1`): the top row at 924 px
-  (all controls, the command center at least 200 px, no overlap) and at
-  620 px (hidden); Ctrl+F filtering one pane, Enter, a text with no match,
-  Esc; a second tab going elsewhere and the first one's folder, cursor and
-  scroll coming back; closing the last tab; Ctrl+9 with one tab; the
-  collapsed crumbs; Quick Open in a repository with Enter, Ctrl+Enter and
-  `>`; the pill's branch and its absence; the hamburger by its accessible
-  name and Esc; the pill's dropdown by a click and by Ctrl+K Ctrl+W; a
-  click on a crumb, Back, Ctrl+L and Esc; and Settings with an editor that
-  is not there.
+  and at 620 px (every control shown, the title ending before the chip,
+  the chip before the view buttons, these before the caption buttons);
+  both panes' toolbars at 924 px with nav, the drive chip, the free space
+  and Find shown whole; a five-part path whole in a 440 px pane and a
+  seven-part one collapsed; Ctrl+F filtering one pane, the filter label
+  `*alpha*` and back to `*.*`, Enter, a text with no match, Esc, the
+  widget under the toolbar row; a second tab going elsewhere, the tab in
+  front and the toolbar sharing one fill, and the first tab's folder,
+  cursor and scroll coming back; closing the last tab; Ctrl+9 with one
+  tab; Quick Open in a repository with Enter, Ctrl+Enter and `>`; the
+  workspace row's branch, its dropdown at the row's width, the workspace
+  picked into the left pane, and the dropdown under the top row with the
+  sidebar hidden; the hamburger by its accessible name and Esc; a click on
+  a crumb, Back, Up, the drive chip's list and Esc, Ctrl+L and Esc; the
+  toolbar's Find on and off and the filter label's click; and Settings
+  with an editor that is not there. `TabsEndToEndTests` checks the strip's
+  look after a restart (the glyphs, a divider, the ×).
 - The live check's section 16 presses the keys and clicks for real: Ctrl+L
   and Enter, Ctrl+F with a text, Enter and Esc, Ctrl+P with Esc and with
   Enter, Alt+Left, the hamburger found by its accessible name and closed by
-  a click outside and by Esc, and a click on a crumb. Its folder `shell16`
-  holds a fake repository (a `.git\HEAD` with `ref: refs/heads/live-16`), so
-  it is the workspace: Quick Open in `alpha` finds a file in `beta\deep`,
-  Enter shows that folder, Alt+Left comes back, and the log line of Quick
-  Open carries the branch `live-16`. The window's log writer works in its
-  own thread, so the section reads each log line only after it has come
+  a click outside and by Esc, a click on a crumb, the left toolbar's Up,
+  its drive chip (the drive list, closed by Esc), the sidebar's workspace
+  row (its dropdown, Default, Esc) and the Quick Open chip (Esc). Its
+  folder `shell16` holds a fake repository (a `.git\HEAD` with
+  `ref: refs/heads/live-16`), so it is the workspace: Quick Open in `alpha`
+  finds a file in `beta\deep`, Enter shows that folder, Alt+Left comes
+  back, the log line of Quick Open carries the branch `live-16`, and the
+  workspace row's name says it. The window's log writer works in its own
+  thread, so the section reads each log line only after it has come
   (`WaitShellLines`, up to 5 s) and never right after a fixed sleep.
 
 ### Where the shell differs from the handout
@@ -1824,16 +1941,27 @@ ctrl+enter|down|esc`.
   "Marketplace" and "Keyboard Shortcuts", so a rename in the registry shows
   in both places. Plugins cannot add rows yet: the registry has no mark
   for "in this menu", and the handout changes nothing in the plugin model.
-- **Workspaces do not exist yet.** The pill and the command center say
+- **Workspaces do not exist yet.** The workspace row and its dropdown say
   "Default", the workspace is the active folder's repository (above), and
   "Open folder as workspace…" says so.
 - **The top row is the drag area only where Windows gets the pointer.** A
   click on its empty part while a dropdown is open moves the window and
   leaves the dropdown open; a click anywhere else closes it.
-- **The command center moves off the centre** when the clusters leave less
-  room there than its width, as at 924 px with the sidebar shown: it keeps
-  at least 200 px between them instead of lying over the pill or the view
-  buttons.
+- **The pane's rows stand above the list's card**, as Phase 16's rows did:
+  the list's frame keeps the pane's border (the active pane's brighter),
+  and a tool or the preview over the list draws its own. In Commander
+  Compact, with no gap and square corners, the rows and the card meet;
+  in the default look the strip, toolbar and path row sit above the
+  rounded card.
+- **No soft shadow above the tab in front.** WinUI 3 has no box shadow for
+  a plain element, and a shadow per tab would need a composition visual
+  for each; the band, the card's fill and its top highlight already set it
+  apart.
+- **The free space changes with the volume list**, not with each copy: the
+  core's `list_volumes` is asked at the start and when a drive comes or
+  goes, as for the sidebar's drives.
+- **The path row is `pathRowHeight` high with its two lines**; the
+  reference build's CSS adds them to its 20 px.
 - **Ctrl+9** goes to the ninth tab and does nothing with fewer, as the
   handout's "tab n" says; browsers make it the last tab.
 
@@ -1933,8 +2061,8 @@ or the other way round.
 - **The pinned folders** (Ctrl+D) are the sidebar's; typing narrows them
   by name or path, Enter goes there in the active pane, and the last row
   pins the pane's folder when it is not pinned yet.
-- **The drive list** (Alt+F1, Alt+F2) has no box: it opens under that
-  pane's breadcrumb row with the sidebar's `list_volumes` data (name, free space),
+- **The drive list** (Alt+F1, Alt+F2, the toolbar's drive chip) has no box: it opens under that
+  pane's drive chip with the sidebar's `list_volumes` data (name, free space),
   the pane's own drive highlighted. A drive's letter picks it at once, as
   in Total Commander; the arrows and Enter, or a click, too. A drive goes
   to the folder this pane last showed on it in this session, else to its
@@ -3128,8 +3256,8 @@ the Commander Compact handout
 - **How.** `MetricsMapper` (in `CabinetOS.Core`, tested) is one table:
   every metric's name, unit and bounds, and the default look's value. A
   test holds the table equal to `sdk/themes/theme.schema.json`: the same
-  88 names, the same bounds, and the default that each name's description
-  gives. Another test checks every value of Commander Compact. The mapper
+  names, the same bounds, and the default that each name's description
+  gives (93 since v2 of the shell redesign). Another test checks every value of Commander Compact. The mapper
   gives one value for each name: the theme's, held to its bounds and
   rounded to whole pixels, or else the default look's. A name that is not
   a metric changes nothing, and the log names it. `ThemeMapper` adds the
@@ -3139,28 +3267,31 @@ the Commander Compact handout
   whether the sizes changed since it was made.
 - **The log.** Target `cabinetos_ui::theme`: "metrics applied" with the
   theme, whether it is a density preset (`preset`: it sets any metric),
-  the row height, the text size, the top row's, the breadcrumb row's and
-  the tab strip's heights, the three chrome switches, and the names it
-  ignored.
+  the row height, the text size, the top row's height, the tab strip's,
+  toolbar row's and path row's heights, the workspace row's and the Quick
+  Open chip's, the three chrome switches, and the names it ignored.
 
 ### Where each metric goes
 
 | Metrics | What they size in the window |
 |---|---|
-| `fontSize` | The base text: names in the file lists, the sidebar's rows, the breadcrumb row's text box, the Search view's field, the rows of the palette, the menus and the prompts, and the rename box. The default look draws the design's 13 px; before this, these texts were WinUI's own 14 px. |
+| `fontSize` | The base text: names in the file lists, the sidebar's rows, the Search view's field, the rows of the palette, the menus and the prompts, and the rename box. The default look draws the design's 13 px; before this, these texts were WinUI's own 14 px. |
 | `lineHeight` | Wrapped text: a pane's message ("This folder is empty.") and the search note. Single lines sit in rows of a fixed height, so it does not change them. |
 | `backdropOpacity` | Mica. At 0.86 and below, plain Mica (the default look). Above it, Mica's own base colour is laid over Mica, up to opaque at 1: Commander Compact's 0.94 is a tint opacity of 0.91 in dark mode. A theme with a `mica` tint of its own keeps it. |
 | `radiusControl` | Buttons, fields, the rows of the palette and the menus, the terminal's and the editor's buttons, and the marketplace's search field and buttons. WinUI's own controls made from then on take it too (`ControlCornerRadius`). |
 | `radiusSurface` | The panes, the editor, the terminal and the marketplace. Icon tiles and info boxes (the app tile, the marketplace's tiles and stat boxes) keep the design's radius in proportion to it, and never less than `radiusControl`. |
 | `gap`, `bodyPadding` | The space between the sidebar and the panes, between the two panes, and between the panes and the terminal, which is also the splitter; with no gap, the splitter keeps a 6 px handle laid over the edges it joins. The space at the window's sides and bottom. |
 | `topRowHeight`, `topRowButtonSize` | The top row, never lower than 32 px: Windows draws the minimize, maximize and close buttons that high; its menu and view buttons ("The shell"). |
-| `workspacePillHeight`, `workspacePillRadius`, `commandCenterHeight`, `commandCenterRadius` | The workspace pill and the command center. |
-| `hairlineOpacity` | The 1 px lines under the top row, the tab strips and the breadcrumb rows, and between tabs. |
-| `tabFontSize`, `tabRadius` | The tabs of a pane's strip. |
-| `tabRow` | The height of a pane's tab strip (32 px; 24 px in Commander Compact). It shows from the first tab ("Tabs"). |
-| `breadcrumbRowHeight`, `navButtonSize` | A pane's breadcrumb row and its Back, Forward and Up. |
+| `quickOpenChipHeight` | The top row's Quick Open chip; its corners are `radiusControl` ("The top row"). |
+| `workspaceHeaderHeight` | The sidebar's first row, the workspace switcher ("The sidebar header"). |
+| `hairlineOpacity` | The 1 px lines under the top row, the tab strips, the path rows and the sidebar's workspace row. |
+| `tabFontSize`, `tabRadius`, `tabMaxWidth` | The tabs of a pane's strip: their text, the card's top corners (8 px; 6 in Commander Compact), and the widest a tab gets (160 px; 170). |
+| `tabRow` | The height of a pane's tab strip (36 px; 28 px in Commander Compact); the tab in front and the others take their heights from it (`TabLook.Heights`). It shows from the first tab ("Tabs"). |
+| `toolbarRowHeight`, `navButtonSize` | A pane's toolbar row (28 px; 24) and its buttons: Back, Forward, Up and Find `navButtonSize` high and 2 px wider, the drive chip as high ("The pane's rows"). |
+| `pathRowHeight` | A pane's path row (24 px; 20), its two lines included: the crumbs, the filter label, Ctrl+L's text box, and the find widget's box over it. |
 | `dropdownRowHeight` | The rows of the top row's menu and the workspace dropdown. |
 | `titleBarHeight`, `tabHeight`, `tabPaddingX`, `tabMinWidth`, `commandBarHeight`, `iconButtonSize`, `fieldHeight`, `toggleHeight`, `paneHeaderHeight` | Nothing since Phase 16: the title bar, its workspace tab, the command bar and the pane's header are gone. A theme may still set them, so themes written before stay valid. |
+| `workspacePillHeight`, `workspacePillRadius`, `commandCenterHeight`, `commandCenterRadius`, `breadcrumbRowHeight` | Nothing since v2 of the shell redesign: the workspace pill, the command center and the breadcrumb row are gone. A theme may still set them. |
 | `captionButtonWidth` | Nothing: Windows draws the caption buttons 46 px wide, and a window cannot change that. |
 | `sidebarMinWidth`, `sidebarWidthPercent`, `sidebarMaxWidth` | The sidebar's width. |
 | `sidebarHeaderFontSize`, `sidebarHeaderPaddingTop`, `sidebarHeaderPaddingX`, `sidebarHeaderPaddingBottom` | The PINNED and DRIVES labels. The first label sits 8 px higher, as the design's first one does. |
@@ -3202,7 +3333,7 @@ the Commander Compact handout
 - **`rowStripes`**: every other row of a file list at .025 white, and a
   selected row at .12 over the stripes (.08 without them).
 - **`hairlines`**: 1 px lines between the surfaces instead of floating
-  cards. (The top row, the tab strips and the breadcrumb rows always have
+  cards. (The top row, the tab strips and the path rows always have
   their fill and their line, at `hairlineOpacity`, since Phase 16.) The
   sidebar has a line on its right (.08). With no gap, the two
   panes' borders overlap into one line. The column headers
@@ -3279,9 +3410,9 @@ name ("The live check").
 - Since Phase 16 the top row takes the place of the page's title bar and
   command bar: 32 px high in Commander Compact, not 30, and its caption
   buttons are 46 px wide, not 40: Windows draws them.
-- The workspace pill shows one workspace, "Default"; the page has three
-  workspace tabs and "+". The sidebar has no Workspaces and no Tags. Those
-  features do not exist yet.
+- The sidebar's workspace row shows one workspace, "Default"; the page
+  has three workspace tabs and "+". The sidebar has no Workspaces list and
+  no Tags. Those features do not exist yet.
 - Types are extensions ("MD", "LOCK", "EXE") where the page has words
   ("Markdown", "Lock file", "Application"): the window has only the
   shell's names, which do not fit. Old dates use the PC's short date
@@ -3924,9 +4055,10 @@ folder.
 
 - **The crumbs keep the drive, a "…", and the last folders** (checked
   2026-09-29 with the address bar's pixel fit, `CrumbFit`). Since Phase 16
-  each pane's breadcrumb row counts parts instead (`Breadcrumbs`: 3 whole
-  in dual mode, 5 in single), its "…" goes to the deepest folder it hides,
-  and a row still too narrow scrolls to its end ("The breadcrumb row").
+  each pane's crumbs count parts instead (`Breadcrumbs`: since v2 of the
+  shell redesign 5 whole in dual mode, 8 in single; 3 and 5 before), its
+  "…" goes to the deepest folder it hides, and a row still too narrow
+  scrolls to its end ("The pane's rows").
 - **The transfer flyout's line keeps the drive (and until Phase 16 the
   pane header's path kept it too) and the last names around "…"**
   (`DisplayFormat.ShortPath`), never
@@ -3934,7 +4066,7 @@ folder.
   the flyout cut the line's end, which lost the file and the destination.
   The whole text is in the tooltip. The crumbs and `ShortPath` read
   `\\?\C:\…` as the drive and `\\?\UNC\server\share\…` as the share.
-- A breadcrumb row's text box (Ctrl+L) shows the whole path, selected and
+- A path row's text box (Ctrl+L) shows the whole path, selected and
   scrolled to its end, as the address box did.
   Properties wraps the Location. The status bar names the selected row,
   not its path. The search's note wraps the searched folder, and the
