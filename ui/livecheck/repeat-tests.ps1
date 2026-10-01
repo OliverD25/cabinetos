@@ -46,6 +46,13 @@ function Start-Suites {
 }
 function Stop-Suites($running) {
   foreach ($suiteRun in $running) { & taskkill.exe /PID $suiteRun.Id /T /F 2>&1 | Out-Null }
+  if ($running.Count -gt 0) {
+    # The tree kill leaves windows the test host started (14 of them after one script on 2026-10-01, and they lock the
+    # next build): end every window and core that runs from this repository. No test of ours is running at this point.
+    foreach ($left in @(Get-Process CabinetOS, cabinetos-core -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$repo\*" })) {
+      & taskkill.exe /PID $left.Id /T /F 2>&1 | Out-Null
+    }
+  }
 }
 try {
   if ($Cover) {
