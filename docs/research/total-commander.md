@@ -263,7 +263,7 @@ content-field hook of feature 15.
 **Today.** Not built. The design shows archives only as a plugin: "Compress
 to .7z [7-Zip]" in the context menu, and "Compress Selection" (Ctrl+Alt+Z)
 from a "7-Zip Bridge" plugin (`COMMANDS` in
-[FileForge.dc.html](../design/FileForge.dc.html)). The design handout
+[CabinetOS.dc.html](../design/CabinetOS.dc.html)). The design handout
 still lists "Pane types beyond folder, Markdown and hex (image, archive
 contents, remote drives)" among its open questions. Two platform pieces are
 missing. A pane can list only real folders: `list_directory` reads the
