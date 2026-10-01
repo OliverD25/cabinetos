@@ -347,6 +347,18 @@ The screenshot the script takes at the end is made inside the VM, from
 its own desktop: VirtualBox's own screenshot of a headless VM with 3D
 acceleration is a stale frame.
 
+On this PC a window run (the end-to-end suite, the live check, the speed
+runner, a manual start) also needs the creator's consent, their rule of
+2026-10-02: the planning session asks in the chat, a yes or one minute of
+silence is consent, a deliberate no is not, and the answer is recorded with
+`wait-for-pc.ps1 -Set allowed` or `-Set held` (`-Until "yyyy-MM-dd HH:mm"`
+for a time the creator named) in `%LOCALAPPDATA%\CabinetOS-dev\window-runs.txt`,
+outside every checkout, so a worktree finds the same file. Every window run
+calls `wait-for-pc.ps1` first; it waits, 20 s between looks and 30 minutes at
+most (`-Minutes`), until the file says allowed and no `CabinetOS.exe` runs,
+and exits 1 otherwise; `-Status` prints the state. The laptop and the VM
+need no consent.
+
 `run-livecheck.ps1` first shows the countdown window of `countdown.ps1`
 (5 seconds, a sound, always on top: "The live check takes the keyboard and
 mouse in 5"; Esc or its button cancels the run, `-NoCountdown` skips it for

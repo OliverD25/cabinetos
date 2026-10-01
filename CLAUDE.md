@@ -67,16 +67,22 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
   creator's rule of 2026-10-01. A `DONE.md` in Notepad says when they are
   free again. Scripts that press no key (the speed runner, the snapshot
   steps) need no countdown.
-- While the creator works at this PC, nothing that opens CabinetOS windows
-  runs here: not the live check, not the end-to-end suite, not the speed
-  runner. Those runs go to the Omen laptop (`ui/livecheck/remote-livecheck.ps1`
-  for the live check; the test and speed runs follow once the laptop has
-  the .NET SDK), or wait for the night or for the creator's word. The
-  creator's rule of 2026-10-01: a morning of coders' test windows spawning
-  made this PC unusable. Coders' handouts carry this rule; the fast test
-  run (no end-to-end tests) opens no window and is always fine. While the
-  creator is away (they say so: `/sleep-mode`, "I will be away"), this PC
-  may run them again, long runs finished before the time they named.
+- **Nothing opens a CabinetOS window on this PC without the creator's
+  consent.** Their rule of 2026-10-02: twice, test windows popped up over
+  their work. Before the first window run of a stretch (the end-to-end
+  suite, the live check, the speed runner, a manual window start), the
+  session asks in the chat. A yes, or no answer for one minute, is consent,
+  and the PC stays free until the creator takes it back ("give me the PC",
+  "stop", "no"). A deliberate no means the PC is not used, with no second
+  ask until they offer it. The answer is recorded with
+  `ui/livecheck/wait-for-pc.ps1 -Set allowed` or `-Set held` (`-Until
+  "yyyy-MM-dd HH:mm"` for a time the creator named), and every window run
+  on this PC, the session's or a coder's, calls `wait-for-pc.ps1` first: it
+  waits until the file says allowed and no CabinetOS.exe runs. Coders'
+  handouts carry this; the fast test run (no end-to-end tests) opens no
+  window and is always fine. The Omen laptop (`ui/livecheck/remote-livecheck.ps1`,
+  `remote-tests.ps1`, `remote-script.ps1`) and the VM (`vm-livecheck.ps1`)
+  need no consent.
 - Unsafe Rust only in the crates that talk to Windows (`ipc`, `fs`, `jobs`,
   `index`), every `unsafe` block with a `// SAFETY:` comment.
 - Project skills live in `.claude/skills/`. `heavy-logging` says when and
