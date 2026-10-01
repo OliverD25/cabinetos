@@ -1271,7 +1271,9 @@ keybindings.md) and the CHANGELOG. Handed to a coder on Opus on
 
 **Status (2026-10-02, 01:05): built and checked, not merged.** On the
 branch `shell-v2`, 63eb9d2..9ccad5d and this plan's commit be9d1f2, rebased on
-main's 17e4c83, by a coder on Opus; merging into main is the planning
+main's 17e4c83, by a coder on Opus (its hand-back:
+[log/2026-10-01/shell-v2-report.md](log/2026-10-01/shell-v2-report.md),
+saved on main as 0877fa4); merging into main is the planning
 session's step. The checks: the five core checks green (813 passed,
 6 ignored); the window built with warnings as errors, 0 warnings; 1239
 window tests, 1195 passed and 44 end-to-end tests skipped in the fast
