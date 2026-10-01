@@ -19,7 +19,8 @@ param(
   [int]$BurnMinutes = 30,
   [switch]$Cover
 )
-$ErrorActionPreference = 'Continue'
+# A failure while the load starts must end the script: runs beside no load would pass and mean nothing.
+$ErrorActionPreference = 'Stop'
 $ui = Split-Path $PSScriptRoot -Parent
 $repo = Split-Path $ui -Parent
 $env:CABINETOS_UI_E2E = '1'
@@ -31,7 +32,8 @@ $failedRuns = 0
 try {
   if ($Cover) {
     $form = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.Form; $f.FormBorderStyle = "None"; $f.WindowState = "Maximized"; $f.TopMost = $true; $f.BackColor = "Black"; $f.ShowInTaskbar = $false; $t = New-Object System.Windows.Forms.Timer; $t.Interval = ' + ($BurnMinutes * 60000) + '; $t.Add_Tick({ $f.Close() }); $t.Start(); [void]$f.ShowDialog()'
-    $coverWindow = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($form))
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($form))
+    $coverWindow = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ErrorAction Stop -ArgumentList '-NoProfile', '-EncodedCommand', $encoded
     "cover: a full-screen window in front of the others"
     Start-Sleep -Seconds 3
   }
@@ -46,6 +48,7 @@ try {
   Push-Location $ui
   for ($run = 1; $run -le $Times; $run++) {
     $started = Get-Date
+    $ErrorActionPreference = 'Continue'
     $lines = @(& dotnet test --solution CabinetOS.sln --no-build --filter $Filter 2>&1 | ForEach-Object { "$_" })
     $code = $LASTEXITCODE
     $seconds = [int]((Get-Date) - $started).TotalSeconds
