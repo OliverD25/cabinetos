@@ -107,7 +107,10 @@ public sealed partial class Sidebar : UserControl
         button.FontSize = m.FontSize;
     }
 
-    /// <summary>Raised with a folder the user picked: the window runs <c>go.toPath</c>.</summary>
+    /// <summary>
+    /// Raised with a folder the user picked, in the pinned folders, the drives or the folder tree: the window runs
+    /// <c>go.toPath</c>. It is the only event the window listens to for a pick; the tree's own is re-raised here.
+    /// </summary>
     public event Action<string>? Navigate;
 
     /// <summary>Gives the keyboard to the first pinned folder (view.showExplorer in a layout without the rail).</summary>

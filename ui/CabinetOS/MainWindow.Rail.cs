@@ -51,7 +51,8 @@ public sealed partial class MainWindow
     {
         _tree = new FolderTreeModel(new CoreFolderSource(_session));
         SidebarView.Tree.Tree = _tree;
-        SidebarView.Tree.Navigate += path => _ = _router.ExecuteAsync("go.toPath", CommandArgs.With("path", path), "sidebar");
+        // The tree's pick is not subscribed here: the sidebar re-raises it as its own Navigate, which the window handles once
+        // (SidebarView.Navigate). A second subscription ran go.toPath twice for one Enter or click in the tree.
         SidebarView.Tree.LockToggled += () => _ = _router.ExecuteAsync("sidebar.lock", trigger: "button");
         SidebarView.Tree.LocateRequested += () => _ = _router.ExecuteAsync("sidebar.locate", trigger: "button");
         SidebarView.Tree.EscapePressed += FocusPaneOrEditor;
