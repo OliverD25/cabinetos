@@ -295,3 +295,229 @@ the extended runner).
   (the cards, the caption, each tab's count), and each call filters the
   whole index again; an install's 30 progress events a second do that
   each time. Cheap at 50 or 120 items, but it grows with the collection.
+
+## Follow-up: the marketplace view prepared while the window is idle
+
+The planning session chose the proposal under "What is not done" above
+(the creator's "do as you recommend"): lay the marketplace view out once,
+hidden, while the window is idle after start, so the first opening of the
+marketplace has no frame over 33 ms. The same coder built it in the same
+worktree.
+
+### Commits on main
+
+| Commit | What |
+|---|---|
+| cd3e597 | `MarketplaceView.PrepareLayout`: the nav, the toolbar, the notice, the cards' scroller and one sample card made and laid out in one dispatcher turn, the view hidden again before the next frame; "marketplace view prepared" with `ms`; run in the menu shapes' idle slot, one low-priority turn after the last shape, after a quiet second (`InputQuiet` in `CabinetOS.Core`, fed by the window's keys and pointer); an opening counts its cards only after its own first layout; `InputQuietTests`, a new test in `MarketplaceCardsEndToEndTests` |
+| 80bb907 | docs/ui.md ("The view prepared ahead", the log line, the tests) and a CHANGELOG line |
+| (this section) | This follow-up |
+
+Each push followed `git fetch` and `git rebase origin/main`; nothing was
+forced.
+
+### What changed
+
+- **When.** The context menu shapes are built 0.75 s after the first
+  folders are shown, one per low-priority dispatcher turn (a62fb98). The
+  chain now has a fifth turn: the marketplace view. So it never comes
+  before the first listing is on screen. In the 7 measured runs it came
+  20 to 21 ms after the last shape, and 3.5 s before the speed runner's
+  command.
+- **Only when the window is idle.** The window notes every key
+  (`PreviewKeyDown`), pointer press, pointer move and wheel over its root,
+  handled or not. The preparation runs only after one second without any
+  of them; input in that second puts it off until a quiet second follows,
+  and the check is made again in a low-priority turn. So it does not take
+  a frame from someone who scrolls, drags a scroll bar or types.
+- **What is prepared.** The view is made visible, rendered from its model
+  (no index yet: the nav, the counts at zero, the toolbar), the notice and
+  the cards' scroller are both made visible, one sample card is added, and
+  `UpdateLayout` lays it all out in the same turn. Then the sample card is
+  removed and the view is collapsed again. No frame comes in between, so
+  nothing of it reaches the screen. The sample card names no real
+  extension and has every part of a card (the verified check, the rating,
+  the installs), so the card's template and texts are made once.
+- **No index, no index card.** The core reads the index only at the first
+  look (trust rule 6). So when the view is prepared, the index has never
+  arrived, and only the view's frame is prepared: the brief's "the frame
+  only" case is the only case. The cards of the first opening come as
+  before: the first screenful at once, the rest in slices.
+- **Log.** "marketplace view prepared" (`cabinetos_ui::market`, info) with
+  `ms`, the time of the preparation's turn: 19.9 to 21.7 ms in the Release
+  build, about 43 to 64 ms in the Debug build. "marketplace cards shown"
+  and "marketplace cards complete" are unchanged.
+- **Sizes after the preparation.** The hidden view kept the sizes of its
+  layout. One trial opening counted its first screenful from those and made
+  42 cards instead of 15. An opening now counts its first cards only after
+  its own first layout (`LayoutUpdated` after `Open`), not when the card
+  area has any width.
+
+### Numbers
+
+`speed-review.ps1`, scenario `market` (`cmd:marketplace.browse` on the local
+index of 50 items in a 1400 × 900 window). "Before" is the Release build of
+main at 68c999f (the code of origin/main at 96390b6, whose only newer commit
+is a report), "after" is this worktree's Release build with the
+preparation. Both ran on the same release core (built from 1249ce0), the
+builds in turn run by run, 7 runs each, none shared with another CabinetOS
+window. Median and range:
+
+| 7 paired runs each | Before (68c999f) | After |
+|---|---|---|
+| **The opening's longest frame (frame gap)** | **51.6 ms (44.6 to 63.6)** | **42.4 ms (37.8 to 47.7)** |
+| WinUI's own work in the slowest frame | 54.5 ms (8.3 to 66.9) | 43.1 ms (5.6 to 47.1) |
+| Frames over 33 ms in the opening | 2 (2 to 3) | 2 (1 to 2) |
+| The command to "marketplace shown" | 12 ms (10 to 13) | 8 ms (7 to 10) |
+| The command to the first cards on screen | 88 ms (70 to 104) | 74 ms (59 to 81) |
+| Making the first 15 cards (`make_ms`) | 12 ms (10.5 to 15) | 8.1 ms (6.4 to 9.7) |
+| All 50 cards in, after the opening | 146.6 ms (121.6 to 188.5) | 128.3 ms (121.4 to 157.7) |
+| The preparation at idle | none | 20.4 ms (19.9 to 21.7), no slow frame |
+
+The opening's frames over 33 ms, each run, as gap / WinUI's work:
+
+- Before: 35.4/0, 44.6/8.3, 37.3/0 · 41.2/0, 51.6/49.9 · 50.8/0, 63.6/66.9,
+  44.2/3.3 · 44.4/0, 48.5/53.3 · 46/0, 58.4/61 · 40.9/0, 57.4/60.4, 43.7/3.2
+  · 42.1/0, 48.3/54.5.
+- After: 36/0, 39/40.2 · 39.3/0, 40.4/43.1 · 41.8/0, 46.3/47.1 · 47.7/0,
+  43.1/44.8 · 34.1/0, 42.7/43.7 · 36/0, 37.8/5.6 · 42.4/41.5.
+
+The "before" here is lower than the 66.4 ms in section C above. Main now
+also holds the other coder's items A, B, D, F and G, and the machine was
+quieter; the pairs are what compare.
+
+**The goal, no frame over 33 ms at the first opening, is not reached.**
+The longest frame is about 9 ms shorter, the first cards come about 14 ms
+sooner, and the opening's synchronous part is a third shorter. One or two
+frames of 34 to 48 ms stay in every run, in both builds:
+
+1. A frame gap of 34 to 48 ms for which WinUI reports no frame work: the
+   window's own turns of the opening (the command, what floats over the
+   panes closed, the panes hidden, the view shown, focused and laid out,
+   the index's reply read into the model).
+2. The next frame, with 38 to 47 ms of WinUI's own work: the first 15
+   cards made, laid out and drawn, and the view drawn for the first time.
+   "marketplace cards shown" is logged right after it.
+
+A second opening in one window has no frame over 33 ms (section C). What a
+second opening has and the prepared first one does not: the 15 cards are
+made and drawn already, and the view was drawn once.
+
+### What was tried and dropped
+
+Three unpaired runs each, after build, the opening's longest frame:
+
+| Variant | Runs |
+|---|---|
+| The view laid out ahead, no sample card | about 55 ms (and once 42 cards, the stale sizes above) |
+| Laid out ahead with the sample card (kept) | 36.1, 39.5, 41.8 ms |
+| Also drawn ahead: visible at opacity 0 for one frame, then collapsed | 42.6, 39.8, 39.2 ms |
+| Also drawn ahead: rendered into a `RenderTargetBitmap` that is thrown away | 35.2, 45, 42.7 ms |
+
+Drawing the view ahead gave no measurable gain over laying it out, and
+both ways keep the view in the tree for one frame or more. So the kept
+version lays out and draws nothing.
+
+### Checks
+
+- `dotnet.exe build CabinetOS.sln -warnaserror` after the rebase: 0
+  warnings, 0 errors. The fast run: 1177 tests, 1137 passed, 40 skipped,
+  0 failed.
+- `MarketplaceCardsEndToEndTests` with `CABINETOS_UI_E2E=1` and the release
+  core: 3 of 3 passed.
+- Full runs with `CABINETOS_UI_E2E=1` (1177 tests, about 2 min 7 s
+  each): 10 with the preparation and, as a control, 5 with its one call
+  commented out. Every run had failures, all in tests that wait a fixed
+  time on a machine that runs many windows at once:
+
+  | Test that failed | Preparation on (10 runs) | Off (5 runs) |
+  |---|---|---|
+  | `RailEndToEndTests`, the tree's rows at start | 10 | 5 |
+  | `ShellEndToEndTests`, Quick Open (no rows 500 ms after typing) | 3 | 1 |
+  | `ContextMenuEndToEndTests`, a menu asked for while it closes | 2 | 0 |
+  | `ContextMenuEndToEndTests+Alone`, the edit mode over 100,000 rows (a 33.4 ms garbage-collection pause) | 2 | 0 |
+  | `CompactOverlayEndToEndTests`, the dock comes back | 1 | 0 |
+  | The new prepared-view test (expected without the preparation) | 0 | 5 |
+
+  The rail test passed alone 5 of 5, twice. The Quick Open failure of
+  the control run had no preparation in its log. The menu test (the 19f
+  report records the same failure in a full run before this change) was
+  checked against the preparation, because both run in the same idle
+  chain: alone it passed 4 of 4, its class alone 6 of 6 twice, and its
+  steps in six windows at once kept every menu on screen. With a scratch
+  delay (not committed) the preparation was moved into the test's menu
+  steps at 14 moments, from the first menu's opening to just after the
+  reopen: every menu stayed on screen. The preparation's low-priority
+  turn never got between the close and the reopen; it came about 60 ms
+  after the second menu opened. The last 5 runs with the preparation had
+  no menu or Quick Open failure. The builds of those runs differed from
+  the commit only by the log copies in two tests and the inactive scratch
+  hook. So I found no failure that the preparation causes, but 10 and 5
+  runs cannot rule out that it shifts the timing of these tests on a
+  busy machine.
+- The core was not changed; its five checks were not run.
+
+### Decisions made alone
+
+Each as what — because — undo.
+
+1. One second without a key, pointer press, pointer move or wheel over the
+   window's root, handled events included — because the menu shapes have
+   no input check of their own to copy, and the brief asks that the
+   preparation not take a frame from someone scrolling or typing; a move
+   counts because dragging a scroll bar is moves; one second covers the
+   pause between typed keys — undo: drop the `_quiet` check in
+   `PrepareMarketplaceWhenQuiet`, or change `InputQuiet.DefaultQuietMs`.
+2. Input inside a tool's web view (WebView2) is not watched — because it
+   never reaches the window's XAML tree; the worst case is one 20 ms turn,
+   which fits in one frame — undo: feed `InputQuiet` from the tool host
+   too.
+3. The preparation is the fifth turn of the menu-shape chain, not a timer
+   of its own — because the brief says the same slot after the menu shapes,
+   and the chain starts only after the first folders are on screen — undo:
+   remove the `kinds.Count == 0` branch in `PrepareContextMenusSoonAsync`.
+4. "No cards" is read as no cards of the index; one made-up sample card is
+   laid out and removed in the same turn — because it took the opening's
+   longest frame from about 55 to about 40 ms in the trials, and it shows
+   nothing and installs nothing — undo: remove the sample card's four lines
+   in `PrepareLayout` and `SampleItem`.
+5. Laid out, not drawn — because the two ways of drawing ahead gave no
+   measurable gain (table above) — undo: none needed.
+6. An opening counts its first cards after its own first layout — because
+   the sizes kept from the hidden layout can be another window size's —
+   undo: go back to `CardArea.ActualWidth <= 0`, which is wrong once the
+   view was prepared.
+7. The line "marketplace view prepared" comes from the view, under
+   `cabinetos_ui::market` like the other marketplace lines, at info level —
+   because it is one line per run — undo: none needed.
+8. The end-to-end test waits 2.5 s before the command and asserts the
+   order — because in the normal run the preparation comes about 0.8 s
+   after the first folders; a real mouse moved over the test's window puts
+   it off by a second each time, so the test can fail while someone moves
+   the mouse over it — undo: a longer wait in the test.
+9. The "before" build is main's Release build at 68c999f, copied aside,
+   both builds on the same core copy — because the brief says to pair
+   against the current main build, and the newer origin/main commit
+   changes only a report — undo: none needed.
+10. Nothing beyond the preparation was changed to reach 33 ms — because the
+    frames left are the opening's own work and the first cards' first
+    drawing, and changing them means changing C's rule of a screenful at
+    once or the opening's order, which the brief did not ask — undo: none
+    needed.
+
+### What is left, as proposals
+
+- **A smaller first slice.** The second remaining frame is the first 15
+  cards' first layout and drawing. A first slice of one row (5 cards in a
+  1400 × 900 window), with the rest in the slices as now, would make that
+  frame smaller. It changes C's rule that the first screenful comes at
+  once: the rows below would come one or two frames later. Not measured.
+- **The opening in two turns.** The first remaining frame is the window's
+  own turn of the opening. Reading the index's reply into the model in a
+  turn of its own, after the view's first frame, could split it. Not
+  measured.
+
+### Results kept
+
+The paired runs' `results.json` stays in
+`%TEMP%\cabinetos-speed-ce-results\paired-prepared` (the logs, the build
+copies and the scratch folders were deleted).
