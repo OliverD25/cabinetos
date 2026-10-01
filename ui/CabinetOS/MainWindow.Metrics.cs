@@ -31,7 +31,8 @@ public sealed partial class MainWindow
         var m = look.Metrics;
         Diag.Info(Target, "metrics applied", new LogField("theme", look.Id), new LogField("preset", m.IsPreset),
             new LogField("row_height", m.RowHeight), new LogField("font_size", m.FontSize), new LogField("top_row_height", m.TopRowHeight),
-            new LogField("breadcrumb_row_height", m.BreadcrumbRowHeight), new LogField("tab_row", m.TabRow),
+            new LogField("tab_row", m.TabRow), new LogField("toolbar_row_height", m.ToolbarRowHeight), new LogField("path_row_height", m.PathRowHeight),
+            new LogField("workspace_header_height", m.WorkspaceHeaderHeight), new LogField("quick_open_chip_height", m.QuickOpenChipHeight),
             new LogField("fkey_bar", look.Chrome.FkeyBar), new LogField("row_stripes", look.Chrome.RowStripes), new LogField("hairlines", look.Chrome.Hairlines),
             new LogField("ignored", m.Ignored.Count == 0 ? null : string.Join(",", m.Ignored)));
         // The user's column widths stay; the theme's gap and Name's minimum, or its weights when there are none, apply.
@@ -255,6 +256,12 @@ public sealed partial class MainWindow
         var sizes = named.Where(n => n.Element.Visibility == Visibility.Visible)
             .Select(n => string.Create(CultureInfo.InvariantCulture, $"{n.Name}={n.Element.ActualWidth:0.#}x{n.Element.ActualHeight:0.#}"));
         fields.Add(new("sizes", string.Join(" ", sizes)));
+        // v2's rows of each pane, which "sizes" takes together as lefttabs and leftcrumbs: the strip, the toolbar, the path row.
+        for (var i = 0; i < _crumbViews.Length; i++)
+        {
+            var (toolbar, path) = _crumbViews[i].RowHeights;
+            fields.Add(new($"pane{i}_rows", string.Create(CultureInfo.InvariantCulture, $"tabs {_tabViews[i].RowHeight:0.#}, toolbar {toolbar:0.#}, path {path:0.#}")));
+        }
         fields.Add(new("pane_sizes", _paneViews[0].SizeSignature()));
         var (radius, over) = RadiiOverThree();
         fields.Add(new("max_radius", radius));
