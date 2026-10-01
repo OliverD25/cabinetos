@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using CabinetOS.Core.Ipc;
+using CabinetOS.Core.Platform;
 using CabinetOS.Tests.Support;
 
 namespace CabinetOS.Tests;
@@ -642,9 +643,9 @@ public class ContextMenuEndToEndTests
         /// surface's templates, as the menu's first opening does, so it is done once in the small
         /// folder first and its time logged. A slow frame can come from the machine: the same collection of the garbage
         /// collector took 21 to 33 ms in eight runs beside a full suite and 40 busy processes, and stretched one frame over
-        /// 33 ms in two of them. So the window gets up to <see cref="Attempts"/> fresh starts and the test fails only when
-        /// every one has a slow frame: work of the window's own on 100,000 rows is in every start, a pause of the machine's
-        /// is not.
+        /// 33 ms in two of them. So each start waits until the machine is calm (up to 30 s), and the window gets up to
+        /// <see cref="Attempts"/> fresh starts: the test fails only when every one has a slow frame. Work of the window's
+        /// own on 100,000 rows is in every start; a pause of the machine's is not.
         /// </summary>
         [Fact]
         public async Task Entering_the_edit_mode_over_100000_selected_rows_adds_no_slow_frame()
@@ -657,16 +658,36 @@ public class ContextMenuEndToEndTests
             var seen = new List<string>();
             for (var attempt = 1; attempt <= Attempts; attempt++)
             {
+                var calm = await WaitForCalmAsync();
+                var before = CpuLoad.Read(null);
                 if (await EditModeAttemptAsync(bench) is not { } slow)
                 {
                     return;
                 }
-                seen.Add($"start {attempt}: {slow}");
+                seen.Add($"start {attempt}: the machine was {calm:N0} % busy before the start and {CpuLoad.Between(before, CpuLoad.Read(null)).TotalPercent:N0} % during it\n{slow}");
             }
             Assert.Fail($"every one of {Attempts} fresh windows had a frame with over 33 ms of UI-thread work while the edit mode opened:\n{string.Join("\n\n", seen)}");
         }
 
         private const int Attempts = 3;
+
+        // Whether the machine is calm: under 35 % busy (Task Manager's CPU, all processors) over one second, a quiet machine
+        // is under 5 % and a full suite beside this one 40 to 55 %. Gives up after 30 s and returns the last reading: a machine
+        // that is never calm is measured anyway, and the failure says how busy it was.
+        private static async Task<double> WaitForCalmAsync()
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (true)
+            {
+                var before = CpuLoad.Read(null);
+                await Task.Delay(1000);
+                var busy = CpuLoad.Between(before, CpuLoad.Read(null)).TotalPercent;
+                if (busy < 35 || DateTime.UtcNow >= deadline)
+                {
+                    return busy;
+                }
+            }
+        }
 
         // One fresh window: null when no frame of the opening had over 33 ms of UI-thread work, else the frames and the log of the opening.
         private static async Task<string?> EditModeAttemptAsync(string bench)
