@@ -31,12 +31,12 @@ New-Item -ItemType Directory -Force $io | Out-Null
 $window = Join-Path $repo 'ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64'
 $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
 $remoteRepoFwd = $RemoteRepo -replace '\\', '/'
-$remoteIo = (Split-Path (Split-Path $RemoteRepo -Parent) -Parent) + '\_io\live-check'
+$remoteIo = (Split-Path $RemoteRepo -Parent) + '\_io\live-check'
 
 # The SSH config of the Windows user, named outright: Git's own ssh reads HOME, which a Git Bash sets elsewhere.
 $sshConfig = Join-Path $env:USERPROFILE '.ssh\config'
 function Remote([string]$command) {
-  $out = & ssh -F $sshConfig -o BatchMode=yes $Machine $command 2>&1 | ForEach-Object { "$_" }
+  $out = & ssh -F $sshConfig -o BatchMode=yes $Machine $command 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -ne '' }
   if ($LASTEXITCODE -ne 0) { throw "ssh $Machine failed ($LASTEXITCODE): $($out -join ' ')" }
   $out
 }
@@ -70,16 +70,18 @@ if (-not $SkipBuilds) {
   "builds copied: the window of $((Get-Item (Join-Path $window 'CabinetOS.exe')).LastWriteTime.ToString('HH:mm')), the core of $((Get-Item $core).LastWriteTime.ToString('HH:mm'))"
 }
 
-# 3. The run, in the machine's own session, and the wait for its DONE.md.
-$before = (Remote "if (Test-Path '$remoteIo\DONE.md') { (Get-Item '$remoteIo\DONE.md').LastWriteTimeUtc.Ticks } else { 0 }") | Select-Object -Last 1
-Remote "Start-ScheduledTask -TaskName $Task; (Get-ScheduledTask -TaskName $Task).State" | Select-Object -Last 1 | ForEach-Object { "task started: $_" }
+# 3. The run, in the machine's own session, and the wait for its DONE.md. The task stays "Running" while the
+# Notepad that run-livecheck.ps1 opens on DONE.md is open, so a run from before is ended first, and the wait
+# watches DONE.md, not the task's state.
+$doneTicks = "if (Test-Path '$remoteIo\DONE.md') { (Get-Item '$remoteIo\DONE.md').LastWriteTimeUtc.Ticks } else { 0 }"
+$before = (Remote $doneTicks) | Select-Object -Last 1
+Remote "if ((Get-ScheduledTask -TaskName $Task).State -eq 'Running') { Stop-ScheduledTask -TaskName $Task; Start-Sleep -Seconds 2 }; Start-ScheduledTask -TaskName $Task; (Get-ScheduledTask -TaskName $Task).State" | Select-Object -Last 1 | ForEach-Object { "task started: $_" }
 $deadline = (Get-Date).AddMinutes($WaitMinutes)
 do {
   Start-Sleep -Seconds 15
-  $now = (Remote "if (Test-Path '$remoteIo\DONE.md') { (Get-Item '$remoteIo\DONE.md').LastWriteTimeUtc.Ticks } else { 0 }") | Select-Object -Last 1
-  $state = (Remote "(Get-ScheduledTask -TaskName $Task).State") | Select-Object -Last 1
-} while ($now -eq $before -and $state -eq 'Running' -and (Get-Date) -lt $deadline)
-if ($now -eq $before) { throw "no new DONE.md on $Machine after $WaitMinutes minutes (task state $state)" }
+  $now = (Remote $doneTicks) | Select-Object -Last 1
+} while ($now -eq $before -and (Get-Date) -lt $deadline)
+if ($now -eq $before) { throw "no new DONE.md on $Machine after $WaitMinutes minutes" }
 
 # 4. The result, home.
 $latest = (Remote "(Get-ChildItem '$remoteIo\run-*.txt' | Sort-Object LastWriteTime | Select-Object -Last 1).Name") | Select-Object -Last 1
@@ -88,3 +90,5 @@ $local = Join-Path $io ($latest -replace '\.txt$', "-$($name.ToLower()).txt")
 & scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/DONE.md" (Join-Path $io "DONE-$($name.ToLower()).md")
 Get-Content (Join-Path $io "DONE-$($name.ToLower()).md")
 "full output: $local"
+# The run's Notepad on DONE.md keeps the task alive; end it, so the next run can start.
+Remote "Stop-ScheduledTask -TaskName $Task" | Out-Null

@@ -4,7 +4,9 @@
 # -Io names that folder when the repository is a git worktree somewhere else.
 # It first shows the countdown window (countdown.ps1) for 5 s, so whoever sits at the PC lets go of the
 # keyboard and mouse in time; -NoCountdown skips it for a run that starts while nobody is there.
-param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown)
+# -MinimizeOthers first minimizes every other window, for a machine that runs the check on its own (the
+# remote live check): a window left in front there, a terminal for example, would stop the check at once.
+param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown, [switch]$MinimizeOthers)
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
@@ -13,6 +15,9 @@ if (-not $NoCountdown) {
   . "$PSScriptRoot\countdown.ps1"
   if (-not (Show-InputCountdown -Seconds 5 -What 'The live check')) { 'cancelled at the countdown: nothing ran'; exit 2 }
 }
+# After the countdown, not before: when its window closes, Windows brings the window that was active back to the
+# front, and that one would cover the check's window.
+if ($MinimizeOthers) { (New-Object -ComObject Shell.Application).MinimizeAll(); Start-Sleep -Milliseconds 800 }
 $started = Get-Date
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\livecheck.ps1" -Strict 2>&1 | ForEach-Object { "$_" } | Out-File -LiteralPath $out -Encoding UTF8
 $code = $LASTEXITCODE
