@@ -206,7 +206,8 @@ frame numbers of such a run come from that machine's graphics card: on the
 Omen laptop the integrated AMD Radeon, which drives its 144 Hz screen, not
 the GTX 1660 Ti, and there the scroll goal does not hold (each page of new
 rows reaches the screen about 90 ms after the UI thread's 8 ms of work; the
-portability report has the numbers).
+portability report has the numbers), so the laptop's run judges the goal by
+the window's UI work (`-Panel`, below).
 `-Branch <name>` sends another branch than `main` (a coder's worktree sends
 its own; it must be a fast-forward of what the clone has), and `-Io <folder>`
 names where the output lands.
@@ -275,6 +276,25 @@ times, today the scroll goal line ("no frame over 33 ms, under 5 % over
 yes or no; `-Strict` does not judge them, and `DONE.md` counts them apart,
 neither True nor False. Every other check stays as strict as on a real
 machine.
+
+**A laptop panel** (the Omen laptop) runs the check with `-Panel`
+(`run-livecheck.ps1 -Panel` passes it on to `livecheck.ps1`; the laptop's
+wrapper, `C:\Dev\cabinetos\_io\run-livecheck-laptop.ps1`, which lives on the
+laptop and not in the repository, passes it). The panel's display path sleeps
+between pages and wakes in about 80 ms, so the gaps between frames there are
+the display's wait and not the window's drawing
+([log/2026-10-01/scroll-gaps-laptop.md](log/2026-10-01/scroll-gaps-laptop.md)).
+With `-Panel` the scroll goal line still prints the gap numbers, exactly as
+before, but answers "not judged on a panel" instead of yes or no. The line
+after it, "panel goal (no frame with UI work over 33 ms, under 5 % with UI work
+over 20 ms) met: yes|no", asks the same two limits of the frames' own UI-thread
+work: the window's `busy_over_20ms` and `busy_over_33ms` counts in its
+per-second `frame stats` lines, the same measure as the frame table's "UI work"
+column. `-Strict` judges that line, `DONE.md` shows it, and `DONE.md` counts the
+"not judged on a panel" line apart, neither True nor False. A window that logs
+no such counts cannot meet the panel goal, so a goal never passes for want of
+data. `-Virtual` wins when both switches are given. Every other check stays as
+strict as on a desktop.
 
 #### The live check in a virtual machine
 
@@ -384,9 +404,9 @@ powershell -ExecutionPolicy Bypass -File <repo>\ui\livecheck\livecheck.ps1 [-Str
 powershell -ExecutionPolicy Bypass -File <repo>\ui\livecheck\livecheck2.ps1
 ```
 
-With `-Strict`, `livecheck.ps1` exits 1 when the scroll goal was not met;
-it is off by default, because the number depends on the machine being
-quiet.
+With `-Strict`, `livecheck.ps1` exits 1 when the scroll goal was not met
+(with `-Panel`, when the panel goal was not met); it is off by default, because
+the number depends on the machine being quiet.
 
 The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/live-check.md).
 
@@ -3565,7 +3585,10 @@ seen in that run (the core's own tests cover it).
 Phase 5's goal: while PageDown is held in the 100,000-entry folder, no
 frame takes more than 33 ms, and fewer than 5 % take more than 20 ms, on
 a quiet machine. A held key repeats about 30 times a second, and each
-PageDown shows a new page of rows (30 at the default window size).
+PageDown shows a new page of rows (30 at the default window size). On a
+laptop panel whose display path sleeps between pages the goal is judged by the
+frames' UI work instead of their gaps (`-Panel`, see "The live check on another
+machine").
 
 ### How it is measured
 
