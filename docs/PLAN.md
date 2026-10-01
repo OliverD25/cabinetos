@@ -1068,6 +1068,56 @@ and 19c on Sonnet (concrete plans), 19d, 19e and 19f on Opus (faults that
 hide; a new component). One live check with real keys at the end covers
 all of it, and one after 19f.
 
+**Status (2026-10-01, night): done, the tags excepted.** 19a was closed
+on the card with Phase 16's Find in pane. 19b landed as d352be2..2c63758
+and 19c as 501493c..6addc78, both by a coder on Sonnet: `panes.folderSizes`
+with `view.toggleFolderSizes`, every folder of a listing measured through
+`measure_paths` and the walk cancelled on leaving; `view.toggleCompactOverlay`
+(Ctrl+Alt+Up) with the size in `ui.compactOverlay` and the layout restored
+on the way back. 19d, by a coder on Opus, in two rounds: f4eca09..7c32a1b
+fixed five faults with a test that failed first (keys in dialogs, a held
+chord key, Tab into a tool tab and inside the picker and the plugin list,
+the chord notice) and wrote the state-by-key table with seven proposals in
+[log/2026-10-01/keys-audit-report.md](log/2026-10-01/keys-audit-report.md);
+the planning session decided the first proposal the same night, and round
+two (02817cb..1973fe6) built it: in a text box a bound key that types
+nothing runs its command, and the pane's own boxes count as the pane (the
+cause of the creator's "they don't work all the time"); a held key runs
+its command once; Esc and Ctrl+Shift+P keep their tier's meaning during a
+chord's wait; the palette gives the keyboard back to the tool page it was
+opened from. P2 (a tool page hands back the tab keys) and P4 (overlays
+stack, and Esc closes the wrong one first) stay proposals. 19e, by a coder
+on Opus (f85db52..a15411c, the numbers in
+[log/2026-10-01/speed-review.md](log/2026-10-01/speed-review.md)): one
+crash fixed (the keyboard's menu on a row out of view ended the window),
+the start about 0.2 s shorter (the core starts while WinUI builds the
+window), the four common menu shapes built while the window is idle, Find
+in pane 2.5 times faster; seven proposals A to G for the creator
+(ReadyToRun at about 15 MB more download, the compact theme's relayout,
+marketplace cards in parts, Quick Open's cap of 20,000 entries, a tab
+switch that lists again, icons at start, a note of an unclean exit). 19f,
+by a coder on Opus (2a600a7..ac5b3c4, ADR 0016 accepted): the column view
+as a mode of a pane's tab, `view.toggleColumns` (Ctrl+Alt+C), one watched
+listing per column, released when the column goes, the mode saved in
+`ui.tabs`, the metric `columnViewWidth`; one departure from the ADR's
+wording stands: the commands act on the keyboard column's folder, because
+a command's rows and its folder must be one folder. 19g was planned, not
+built: [ADR 0017](decisions/0017-file-tags.md) is proposed for the
+creator's decision. The planning session's own fixes: 29d719f (a core
+restart forgets the folder sizes it was counting) and b2b4305 (the live
+check counted one log line as none in PowerShell 5.1, and held a key that
+an earlier step had rebound). Checked on the main checkout: the five core
+checks (805 tests), the window's build with warnings as errors, 1143 of
+1143 window tests with the end-to-end tests on, and the live check with
+real keys on the Release build of 03:14 (`run-2026-10-01-0314.txt`): 195
+True, 2 False, both faults of the check, fixed in b2b4305; the run after
+the fix (`run-2026-10-01-0330.txt`): 197 True, 0 False, no stop line, the scroll goal met with no frame over 20 ms, exit code 0. The coders' decisions
+with their undo are in the hand-backs listed in
+[log/2026-10-01/README.md](log/2026-10-01/README.md). Left for the
+creator: the seven speed proposals, P2 and P4, and ADR 0017. Noticed and
+left: many end-to-end tests read exactly one day's log file, so a run
+that crosses midnight UTC fails them.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
