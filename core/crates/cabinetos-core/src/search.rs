@@ -11,7 +11,8 @@
 //! (a network share that stopped answering) can hold the walk longer.
 //! `complete` is false in the reply when either limit ended the walk.
 
-use std::collections::VecDeque;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, VecDeque};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -235,6 +236,88 @@ pub(crate) struct WalkOutcome {
     pub(crate) visited: usize,
 }
 
+/// The best `limit` hits of a walk, kept while it walks. A hit that ranks
+/// below all of them is dropped at once, so a query that matches every name
+/// holds `limit` hits, not one per entry (the walk once kept up to 200,000
+/// and cut after sorting them). Hits are ordered as the index orders them:
+/// by rank, then by path. A walk meets each path once, so that order is total
+/// and the kept hits are the first `limit` of a full sort.
+struct BestHits {
+    limit: usize,
+    /// The worst kept hit is on top: the one a better hit replaces.
+    kept: BinaryHeap<Kept>,
+}
+
+struct Kept {
+    rank: Rank,
+    hit: FileHit,
+}
+
+impl Kept {
+    fn order(&self) -> (Rank, &str) {
+        (self.rank, &self.hit.path)
+    }
+}
+
+impl PartialEq for Kept {
+    fn eq(&self, other: &Self) -> bool {
+        self.order() == other.order()
+    }
+}
+
+impl Eq for Kept {}
+
+impl PartialOrd for Kept {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Kept {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.order().cmp(&other.order())
+    }
+}
+
+impl BestHits {
+    fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            kept: BinaryHeap::new(),
+        }
+    }
+
+    /// Keeps the hit `make_hit` builds when it is among the best so far.
+    /// `path` is the hit's path, so a hit that is not kept costs no copy.
+    fn offer(&mut self, rank: Rank, path: &str, make_hit: impl FnOnce() -> FileHit) {
+        if self.limit == 0 {
+            return;
+        }
+        if self.kept.len() < self.limit {
+            self.kept.push(Kept {
+                rank,
+                hit: make_hit(),
+            });
+        } else if let Some(mut worst) = self.kept.peek_mut()
+            && (rank, path) < worst.order()
+        {
+            *worst = Kept {
+                rank,
+                hit: make_hit(),
+            };
+        }
+    }
+
+    /// The kept hits, best first.
+    fn into_hits(self) -> Vec<FileHit> {
+        self.kept
+            .into_sorted_vec()
+            .into_iter()
+            .map(|kept| kept.hit)
+            .collect()
+    }
+}
+
 /// Walks the tree under `root` breadth first (links are not followed) and
 /// keeps the names that contain the query. Blocking.
 pub(crate) fn walk(
@@ -255,7 +338,7 @@ pub(crate) fn walk(
         ..ListOptions::default()
     };
     let mut folders = VecDeque::from([root.trim_end_matches(['\\', '/']).to_owned()]);
-    let mut found: Vec<(Rank, FileHit)> = Vec::new();
+    let mut best = BestHits::new(limit);
     let mut visited = 0usize;
     let mut complete = true;
     let mut first = true;
@@ -287,29 +370,24 @@ pub(crate) fn walk(
             let child = format!("{folder}\\{name}");
             let directory = entry.meta.attributes & 0x10 != 0;
             if let Some(rank) = matcher.rank(&name) {
-                found.push((
-                    rank,
-                    FileHit {
-                        path: child.clone(),
-                        kind: if directory {
-                            HitKind::Directory
-                        } else {
-                            HitKind::File
-                        },
-                        frn: (entry.flags & ListingEntry::FLAG_ID_IS_NAME_HASH == 0)
-                            .then_some(entry.id),
+                best.offer(rank, &child, || FileHit {
+                    path: child.clone(),
+                    kind: if directory {
+                        HitKind::Directory
+                    } else {
+                        HitKind::File
                     },
-                ));
+                    frn: (entry.flags & ListingEntry::FLAG_ID_IS_NAME_HASH == 0)
+                        .then_some(entry.id),
+                });
             }
             if entry.kind == EntryKind::Directory {
                 folders.push_back(child);
             }
         }
     }
-    found.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.path.cmp(&b.1.path)));
-    found.truncate(limit);
     Ok(WalkOutcome {
-        hits: found.into_iter().map(|(_, hit)| hit).collect(),
+        hits: best.into_hits(),
         complete,
         visited,
     })
@@ -557,6 +635,160 @@ mod tests {
         .unwrap();
         assert!(!outcome.complete);
         assert_eq!(outcome.visited, 0);
+    }
+
+    /// The 3,000 names of the bounded-collection tests: three lengths of
+    /// number, names that start with `f` and names that only contain it, in
+    /// ten folders, so rank ties are broken by path across folders.
+    fn names_for_ranking() -> Vec<String> {
+        (0..3000_u32)
+            .map(|n| {
+                let name = match n % 3 {
+                    0 => format!("f{n}.dat"),
+                    1 => format!("fx{n}.dat"),
+                    _ => format!("of{n}.dat"),
+                };
+                format!(r"d{}\{name}", n % 10)
+            })
+            .collect()
+    }
+
+    /// What a walk must answer, worked out the plain way: rank every path,
+    /// sort them all, cut to `limit`.
+    fn sorted_in_full(
+        root: &str,
+        relative: &[String],
+        matcher: &Matcher,
+        limit: usize,
+    ) -> Vec<String> {
+        let mut all: Vec<(Rank, String)> = relative
+            .iter()
+            .filter_map(|relative| {
+                let name = relative.rsplit('\\').next().unwrap();
+                matcher
+                    .rank(name)
+                    .map(|rank| (rank, format!(r"{root}\{relative}")))
+            })
+            .collect();
+        all.sort();
+        all.truncate(limit);
+        all.into_iter().map(|(_, path)| path).collect()
+    }
+
+    #[test]
+    fn a_walk_keeps_the_same_best_hits_as_sorting_every_match() {
+        let root = std::env::temp_dir().join("cabinetos-index-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("walk-best")
+            .tempdir_in(root)
+            .unwrap();
+        let relative = names_for_ranking();
+        for folder in 0..10 {
+            std::fs::create_dir(dir.path().join(format!("d{folder}"))).unwrap();
+        }
+        for path in &relative {
+            std::fs::File::create(dir.path().join(path)).unwrap();
+        }
+        let root = dir.path().display().to_string();
+        let paths = |outcome: &WalkOutcome| -> Vec<String> {
+            outcome.hits.iter().map(|hit| hit.path.clone()).collect()
+        };
+        // "f" is in every name: starting with it ranks better than only
+        // containing it, shorter names rank better, and the path decides
+        // between equal ranks.
+        let matcher = Matcher::new("f").unwrap();
+        let everything = relative.len();
+        assert_eq!(everything, 3000);
+
+        // No bound that matters: the limit is above the match count.
+        let unbounded = walk(&root, &matcher, everything, WALK_LIMITS).unwrap();
+        assert!(unbounded.complete);
+        assert_eq!(unbounded.hits.len(), everything);
+        assert_eq!(
+            paths(&unbounded),
+            sorted_in_full(&root, &relative, &matcher, everything)
+        );
+
+        // The bound: 50, as Quick Open asks. The same first 50, in order.
+        let bounded = walk(&root, &matcher, 50, WALK_LIMITS).unwrap();
+        assert!(bounded.complete);
+        assert_eq!(bounded.visited, unbounded.visited);
+        assert_eq!(bounded.hits.len(), 50);
+        assert_eq!(paths(&bounded), paths(&unbounded)[..50]);
+        assert_eq!(
+            paths(&bounded),
+            sorted_in_full(&root, &relative, &matcher, 50)
+        );
+        assert!(
+            bounded.hits.iter().all(|hit| hit.kind == HitKind::File),
+            "the hits keep their kind"
+        );
+
+        for limit in [0, 1, 7] {
+            let outcome = walk(&root, &matcher, limit, WALK_LIMITS).unwrap();
+            assert_eq!(paths(&outcome), paths(&unbounded)[..limit], "limit {limit}");
+        }
+    }
+
+    #[test]
+    fn the_best_hits_never_hold_more_than_the_limit() {
+        // Hits in every order a walk could meet them: best first, worst
+        // first, and shuffled; ranks tie often, so paths decide.
+        let mut candidates: Vec<(Rank, String)> = (0..3000_usize)
+            .map(|n| {
+                let rank = Rank::new(n % 7 == 0, 1 + n % 11);
+                (rank, format!(r"C:\root\d{}\f{}", n % 13, n))
+            })
+            .collect();
+        let mut shuffled = candidates.clone();
+        let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+        for i in (1..shuffled.len()).rev() {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            shuffled.swap(i, usize::try_from(state >> 33).unwrap() % (i + 1));
+        }
+        candidates.sort();
+        let mut worst_first = candidates.clone();
+        worst_first.reverse();
+
+        for limit in [0, 1, 50, 2999, 3000, 5000] {
+            let wanted: Vec<&str> = candidates
+                .iter()
+                .take(limit)
+                .map(|(_, path)| path.as_str())
+                .collect();
+            for (index, order) in [&candidates, &worst_first, &shuffled]
+                .into_iter()
+                .enumerate()
+            {
+                let mut best = BestHits::new(limit);
+                let mut made = 0;
+                for (rank, path) in order {
+                    best.offer(*rank, path, || {
+                        made += 1;
+                        FileHit {
+                            path: path.clone(),
+                            kind: HitKind::File,
+                            frn: None,
+                        }
+                    });
+                    assert!(best.kept.len() <= limit, "limit {limit}");
+                }
+                if index == 0 {
+                    // Best first: after the first `limit`, nothing ranks
+                    // better, so no later hit is even built.
+                    assert_eq!(made, limit.min(candidates.len()), "limit {limit}");
+                }
+                let hits = best.into_hits();
+                assert_eq!(
+                    hits.iter().map(|hit| hit.path.as_str()).collect::<Vec<_>>(),
+                    wanted,
+                    "limit {limit}"
+                );
+            }
+        }
     }
 
     #[test]
