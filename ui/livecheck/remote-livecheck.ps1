@@ -7,9 +7,10 @@
 #
 # What it does, in order: sends the commits the machine does not have yet as a git bundle and fast-forwards its
 # clone; copies this PC's Release window and release core into the clone's build paths (the machine builds
-# nothing); starts the task; waits for the run's DONE.md; copies the run's output into _io\live-check here with
-# the machine's name in the file name; prints DONE.md. Needs the Release window and the release core built on
-# this PC (docs/ui.md, "The live check"). Runs in Windows PowerShell 5.1 and PowerShell 7.
+# nothing); makes the 100,000-entry folder of the core's bench there (bench-folders.ps1: the machine has no Rust);
+# starts the task; waits for the run's DONE.md; copies the run's output into _io\live-check here with the machine's
+# name in the file name; prints DONE.md. Needs the Release window and the release core built on this PC (docs/ui.md,
+# "The live check"). Runs in Windows PowerShell 5.1 and PowerShell 7.
 #
 # -Branch names the branch to send (main when left out): a git worktree sends its own branch, which must be a
 # fast-forward of what the machine's clone has. -Io names the folder for the output, for a worktree elsewhere.
@@ -75,7 +76,11 @@ if (-not $SkipBuilds) {
   "builds copied: the window of $((Get-Item (Join-Path $window 'CabinetOS.exe')).LastWriteTime.ToString('HH:mm')), the core of $((Get-Item $core).LastWriteTime.ToString('HH:mm'))"
 }
 
-# 3. The run, in the machine's own session, and the wait for its DONE.md. The task stays "Running" while the
+# 3. What the machine cannot build, since it has no Rust: the core bench's 100,000-entry folder, which the live check
+# scrolls; the first time this takes a minute or two.
+Remote "powershell -NoProfile -ExecutionPolicy Bypass -File '$RemoteRepo\ui\livecheck\bench-folders.ps1'" | ForEach-Object { "bench folders: $_" }
+
+# 4. The run, in the machine's own session, and the wait for its DONE.md. The task stays "Running" while the
 # Notepad that run-livecheck.ps1 opens on DONE.md is open, so a run from before is ended first, and the wait
 # watches DONE.md, not the task's state.
 $doneTicks = "if (Test-Path '$remoteIo\DONE.md') { (Get-Item '$remoteIo\DONE.md').LastWriteTimeUtc.Ticks } else { 0 }"
@@ -88,7 +93,7 @@ do {
 } while ($now -eq $before -and (Get-Date) -lt $deadline)
 if ($now -eq $before) { throw "no new DONE.md on $Machine after $WaitMinutes minutes" }
 
-# 4. The result, home.
+# 5. The result, home.
 $latest = (Remote "(Get-ChildItem '$remoteIo\run-*.txt' | Sort-Object LastWriteTime | Select-Object -Last 1).Name") | Select-Object -Last 1
 $local = Join-Path $io ($latest -replace '\.txt$', "-$($name.ToLower()).txt")
 & scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/$latest" $local

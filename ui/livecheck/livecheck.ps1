@@ -25,6 +25,10 @@ $ErrorActionPreference = 'Stop'
 $Exe = [System.IO.Path]::GetFullPath($Exe)
 $Core = [System.IO.Path]::GetFullPath($Core)
 foreach ($needed in $Exe, $Core) { if (-not (Test-Path -LiteralPath $needed)) { "STOP: $needed is missing: build it first (docs/ui.md, 'The live check')"; exit 1 } }
+# Without the bench's 100,000-entry folder the PageDown hold and the scroll bar's throw run in whatever folder the keys
+# reach, and the scroll goal's numbers mean nothing (the Omen laptop's first runs, 2026-10-01, held PageDown in a folder
+# of one entry).
+if (-not (Test-Path -LiteralPath "$env:TEMP\cabinetos-bench\100000.complete")) { "STOP: $env:TEMP\cabinetos-bench\100000 is missing: run 'cargo bench -p cabinetos-fs --bench list_directory' once, or ui\livecheck\bench-folders.ps1 on a machine without Rust (docs/ui.md, 'The live check')"; exit 1 }
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 Add-Type @"
@@ -384,7 +388,11 @@ GoPath "$env:TEMP\cabinetos-bench" 1200
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 200
 Step "enter 100000"
-[Live]::Press($VK.Enter); Start-Sleep -Seconds 2
+$listings = UiCount '"listing shown"'
+$at = Get-Date
+[Live]::Press($VK.Enter)
+$bench = WaitUi '"listing shown"' $listings $at 2000 8000
+"the PageDown hold runs in the 100,000-entry folder ($($bench.fields.path), $($bench.fields.entries) entries): $($bench.fields.path -like '*\cabinetos-bench\100000' -and $bench.fields.entries -eq 100000)"
 Step "pagedown held for 5 s"
 $others = @{}
 foreach ($proc in Get-Process) { try { $others[$proc.Id] = @($proc.ProcessName, $proc.TotalProcessorTime.Ticks) } catch { } }
