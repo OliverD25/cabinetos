@@ -3,8 +3,8 @@
 # already trusts, so no trust question comes first), a terminal tab with the claude profile opened through
 # the core's pipe (terminal.new with {"profile":"claude","cwd":…}, as the dock's profile list would), then
 # keys into Claude Code as a user types them: a long answer cut short with Esc, a prompt that makes it write
-# a file (its own permission question gets Enter), a folder change in the pane (the sync must leave the
-# tab alone: decision SkipProfile), Ctrl+Alt+P (the pane's path lands in its input), and /exit. Two short
+# a file (its own permission question gets Enter), a folder change in the pane (nothing may reach the tab:
+# the terminal never follows a pane by itself), Ctrl+Alt+P (the pane's path lands in its input), and /exit. Two short
 # prompts go to the Claude subscription of whoever is logged in to Claude Code on this PC.
 #
 # It takes the keyboard and the mouse for about two minutes: run it on an unlocked, awake screen that
@@ -133,7 +133,7 @@ $env:CABINETOS_CONFIG = "$root\config\cabinetos.json"
 $config = @{ version = 1; logging = @{ level = 'debug' }; terminal = @{ defaultProfile = 'claude' }; ui = @{ tabs = @{ left = @{ items = @(@{ path = $Folder; locked = $false }) }; right = @{ items = @(@{ path = $Folder; locked = $false }) } }; dockSize = @{ bottom = 420 } } } | ConvertTo-Json -Depth 6
 [System.IO.File]::WriteAllText($env:CABINETOS_CONFIG, $config, (New-Object System.Text.UTF8Encoding $false))
 $env:CABINETOS_LOG_DIR = "$root\logs"
-# The window's "cwd sync" line (the decision for each folder change) is written at debug level.
+# Debug level: a failed check can then be read from every line the window and the core wrote.
 $env:CABINETOS_LOG = 'debug'
 $env:CABINETOS_CORE_EXE = $Core
 $env:CABINETOS_THEMES_DIR = "$root\themes"
@@ -190,16 +190,18 @@ $wrote = (Test-Path -LiteralPath $target) -and ((Get-Content -LiteralPath $targe
 Check "Claude Code wrote the file it was asked for (keys reached it, the model answered, its tool ran)" $wrote
 Shot $h "$ShotDir\claude-3-file-written.png"
 
-Step "the pane goes up one folder; the sync must leave the claude tab alone"
-$syncs = (UiLines '"cwd sync"').Count
+# Since terminal unit 1 (2026-10-01) the terminal never follows a pane by itself (docs/ui.md, "The terminal"): a folder
+# change in the pane shows no other tab and sends nothing to a shell. The claude profile cannot even be linked to a pane.
+Step "the pane goes up one folder; nothing reaches the claude tab"
+$shown = (UiLines '"terminal tab shown"').Count
+$requests = (UiLines '"request sent".*"request":"terminal_(open|close|type_paths|set_mode)"').Count
+$listings = (UiLines '"listing shown"').Count
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600   # the keyboard back to the pane; the dock stays
 [Live]::Press($VK.Back); Start-Sleep -Milliseconds 1500                  # up one folder
-$seen = WaitLog { UiLines '"cwd sync"' } $syncs 5
-$last = UiLines '"cwd sync"' | Select-Object -Last 1
-$decision = if ($last) { ($last | ConvertFrom-Json).fields.decision } else { '(no cwd sync line)' }
-"the sync's decision for the claude tab: $decision"
-Check "the folder sync skipped the claude tab (decision SkipProfile)" ($seen -and $decision -eq 'SkipProfile')
-Check "no sync ever decided to type into the claude tab (no cwd sync line with decision Sync)" ((UiLines '"cwd sync".*"decision":"Sync"').Count -eq 0)
+Check "the pane went up one folder" (WaitLog { UiLines '"listing shown"' } $listings 5)
+Check "no other tab came to the front and no terminal request was sent" ((UiLines '"terminal tab shown"').Count -eq $shown -and (UiLines '"request sent".*"request":"terminal_(open|close|type_paths|set_mode)"').Count -eq $requests)
+$claudeTab = UiLines '"terminal session opened".*"profile":"claude"' | Select-Object -Last 1
+Check "the claude session is locked and cannot be linked to its pane" ($claudeTab -and ($claudeTab | ConvertFrom-Json).fields.linkable -eq $false -and ($claudeTab | ConvertFrom-Json).fields.mode -eq 'locked')
 
 # Ctrl+Alt+P is a pane key (terminal.insertPath; Ctrl+P until Phase 16, which gave Ctrl+P to Quick Open): pressed in
 # the pane it shows the terminal, types the pane's folder at the prompt and hands the keyboard to the page.

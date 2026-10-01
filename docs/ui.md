@@ -33,7 +33,7 @@ at a drawn frame can be up to 30 ms shorter on an unlocked screen:
 
 | Project | What it is |
 |---|---|
-| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol and folder-sync rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper (with the light colours of a `system` theme) and the theme picker's model, the marketplace view's model and card texts, the in-app clipboard, the settings the window reads and writes, display formatting, diagnostics, and the parts of Total Commander's keys that need no window (the marking styles, the marks kept by name, a pane's sort, measured folder sizes, quick search, the prompts' lists and pattern history, the drive memory). |
+| `ui/CabinetOS.Core` | Everything that runs without a window, so it is unit-tested: the pipe client, the protocol types, the core launcher, `ListingView` (the shared-memory reader), the type-name and icon caches, the selection, keys and the chord state machine, the `CommandRouter`, the job client (`TransferCenter`, `ConflictQueue`), the terminal's byte pump, page protocol, header texts and summoning rule, the dock's size rules, the search model, the plugin list and review models, the Tool Extension manifest, catalog and messages, the theme mapper (with the light colours of a `system` theme) and the theme picker's model, the marketplace view's model and card texts, the in-app clipboard, the settings the window reads and writes, display formatting, diagnostics, and the parts of Total Commander's keys that need no window (the marking styles, the marks kept by name, a pane's sort, measured folder sizes, quick search, the prompts' lists and pattern history, the drive memory). |
 | `ui/CabinetOS` | The WinUI 3 app, `CabinetOS.exe`: the window, the panes, the sidebar, the palette, the context menu, the transfer flyout, the Tool Dock with the terminal, the editor tabs of Tool Extensions, the plugin list and review, the theme applier (brushes, WinUI's accent, the tinted Mica backdrop) and the theme picker, the marketplace view, and `Assets/xterm` (the terminal page and xterm.js). |
 | `ui/CabinetOS.Tests` | xunit v3 tests of `CabinetOS.Core`, including end-to-end runs against the real core. |
 
@@ -167,7 +167,18 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   system's default), Ctrl+T and Ctrl+W go as physical keys (scan codes,
   so the layout decides the virtual key) and must run `tab.new` and
   `tab.close`, and the layout goes back; a PC without the Ukrainian layout
-  says "not installed" and skips it.
+  says "not installed" and skips it. Then section 21, the terminal's panes
+  ("The terminal"): Ctrl+` in the left pane (its session, with the
+  keyboard), Ctrl+` back, Tab and Ctrl+` in the right pane (a session of
+  its own; the dock must not hide), the header's badges and mode read
+  through UI Automation, a real click and a folder change in the left pane
+  (no other tab shown, no terminal request sent), Ctrl+` there (the left
+  session comes back), Alt+] and Alt+[, Ctrl+Shift+T and Ctrl+Shift+W,
+  Ctrl+Shift+V pasting a command that writes a file (the file must
+  exist), a drag over the shell's text and Ctrl+Shift+C (the clipboard
+  must hold it), the Locked toggle clicked twice (Linked, then Locked
+  again), Alt+] as a physical key on the Ukrainian layout, and last the
+  two Ctrl+` that give the keyboard back and hide the dock.
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
@@ -177,15 +188,18 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   repository folder with `terminal.defaultProfile: claude`; Ctrl+` starts
   Claude Code in the pane's folder; a long answer cut short with Esc; a
   prompt that makes it write a file, its permission question answered
-  with Enter; Backspace in the pane, whose folder change the sync must
-  skip (decision `SkipProfile`); Ctrl+Alt+P from the pane, which types the
+  with Enter; Backspace in the pane, whose folder change must show no
+  other tab and send no terminal request (the claude session is locked
+  and cannot be linked); Ctrl+Alt+P from the pane, which types the
   path into its input; `/exit`. Two short prompts go to the Claude login
   of whoever runs it. It waits until nobody has touched the PC for 12 s
   before it takes the keyboard, stops when another window comes in front,
   clears every `CLAUDE*` variable first (Claude Code refuses to start
   inside another Claude Code session), and opens `DONE.md` at the end.
   Every check True on 2026-09-30
-  ([log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md)).
+  ([log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md));
+  the folder-change step was rewritten for terminal unit 1 on 2026-10-01
+  and has not run since.
 
 **How the check reads the window's log.** `livecheck.ps1` judges its steps by
 the window's log (`logs\ui.*.jsonl`; the core's `logs\core.*.jsonl` for two
@@ -480,7 +494,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_UI_PARKED_LISTING_MS` | For the tests: how long a pane keeps the listing of the tab that went behind last, in milliseconds, instead of 30 s ("Tabs") |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part, with the garbage collector's pauses and collections in the second ("Scrolling"). A `slow frame` line for each frame of 33 ms or more, with the collector's pause in it. The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active, once XAML has raised that pane's GotFocus and drawn two frames more (it does so on its next frames, a few hundred milliseconds late on a busy machine, and a late event of the pane before made that pane the active one again); `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row), as the keyboard opens it, under the row; `menu-at:<name>|<x>,<y>` opens it as a right-click at that point does, in the window's content DIPs (`menu-at:alpha.txt|300,200`); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits 1.5 s for the core, and `shellmenu-at:<name>|<x>,<y>` does it at a point; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`), and `menu-edit-drag:<title>|<title>` drops the first row on the second through the drag's own steps (not the pointer's events); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>` types into the active pane's find and waits, 300 ms at least and 20 s at most, until the filter is applied (the pane's find holds the text and the core's answer is in; XAML raises the box's text change on its next frame, which a busy machine draws 0.5 s late); `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `pick:<index>` puts the open theme picker's highlight on that row, as the pointer or a key moves it (its preview follows); `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it when the button takes the keyboard (the window's chrome buttons refuse it, as under a real click), then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label, the element's type, accessible name and `x:Name`, and the overlays that are open as `overlays`: their names, comma-separated, empty for none; "One overlay at a time" in [keybindings.md](keybindings.md)); `key:<keys>` presses keys the way a real press arrives: key messages to the window's input window, which WinUI routes as it routes a real key (the window's `PreviewKeyDown`, the focused control, Tab's move between controls, a dialog's buttons), with the modifiers down in the UI thread's key state while they are handled, so the window need not be in front and no key reaches another program (`key:tab`, `key:shift+delete`, `key:ctrl+k ctrl+t` for a chord's two halves); while a web page (a tool's, the terminal) has the keyboard, the key goes into the page itself, through DevTools' `Input.dispatchKeyEvent`, because the window's input window drops a key as the page's, and the page's script passes it back as it does a real one (a key that closes the page, Ctrl+W on a tool's tab, does not hold the step up); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `market:<label>` writes the marketplace's cards into the log ("marketplace cards": how many are made, the set's `total`, whether it is `complete`, its `slices`, and the items' `ids` in the grid's order, which the keyboard follows; "The marketplace"); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree, `rail-state:<label>` logs what the rail, the sidebar and the tree show, and `tree-state:<label>|<folder>` logs what the tree shows of one folder (whether it has a row, whether the row is a hidden folder's and how opaque its drawn name is, the names of the rows right under it, and the folder the tree marked) ("The activity rail and the sidebar"); `columns:<label>` logs each pane's four column widths as laid out, the width they share, the first row's widths and how far the grips are from the dividers ("columns shown"), `column-drag:<divider>|<pixels>` drags a grip of the active pane (1 Name|Modified, 2 Modified|Type, 3 Type|Size) by that many pixels through the grip's own drag steps and lets go, and `column-fit:<column>` fits as a double-click on that heading does (`name`, `modified`, `type` or `size`); the last two do not wait, so an `until:config` right after them sees the save ("Column widths"); `column-view:<label>` logs what the active pane shows ("column view shown": the mode, the columns' folders and cursors, the keyboard's column, its rows, the rows each column has on screen and the listings), `column-open:<name>` opens that row of the keyboard's column as Enter does, `column-key:<key>` presses `left`, `right`, `up`, `down`, `home`, `end` or `backspace` in the active pane, and `column-click:<depth>|<name>` clicks that row of that column, 1 being the first ("The column view"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:tree`, `until:menu`, `until:menu-closed`, `until:keyboard`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the folder tree to mark the active pane's folder, the right-click menu to be on screen (a newer one no longer waiting for the one before it to close) or to be gone, every check of a hand-over of the keyboard to a web page to have run ("The terminal"), the next reading of the configuration (after an edit of the file) or the core's next report of an error in the file; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active, once XAML has raised that pane's GotFocus and drawn two frames more (it does so on its next frames, a few hundred milliseconds late on a busy machine, and a late event of the pane before made that pane the active one again); `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row), as the keyboard opens it, under the row; `menu-at:<name>|<x>,<y>` opens it as a right-click at that point does, in the window's content DIPs (`menu-at:alpha.txt|300,200`); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits 1.5 s for the core, and `shellmenu-at:<name>|<x>,<y>` does it at a point; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`), and `menu-edit-drag:<title>|<title>` drops the first row on the second through the drag's own steps (not the pointer's events); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown; `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>` types into the active pane's find and waits, 300 ms at least and 20 s at most, until the filter is applied (the pane's find holds the text and the core's answer is in; XAML raises the box's text change on its next frame, which a busy machine draws 0.5 s late); `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `terminal-state:<label>` writes "terminal state" into the log (the tabs as the header shows them, the shown session, whether the dock is shown, whether the terminal has the keyboard, the active pane and the caption; "The terminal"); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels; `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `pick:<index>` puts the open theme picker's highlight on that row, as the pointer or a key moves it (its preview follows); `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, the way assistive technology may press it: the keyboard moves to it when the button takes the keyboard (the window's chrome buttons refuse it, as under a real click), then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label, the element's type, accessible name and `x:Name`, and the overlays that are open as `overlays`: their names, comma-separated, empty for none; "One overlay at a time" in [keybindings.md](keybindings.md)); `key:<keys>` presses keys the way a real press arrives: key messages to the window's input window, which WinUI routes as it routes a real key (the window's `PreviewKeyDown`, the focused control, Tab's move between controls, a dialog's buttons), with the modifiers down in the UI thread's key state while they are handled, so the window need not be in front and no key reaches another program (`key:tab`, `key:shift+delete`, `key:ctrl+k ctrl+t` for a chord's two halves); while a web page (a tool's, the terminal) has the keyboard, the key goes into the page itself, through DevTools' `Input.dispatchKeyEvent`, because the window's input window drops a key as the page's, and the page's script passes it back as it does a real one (a key that closes the page, Ctrl+W on a tool's tab, does not hold the step up); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `market:<label>` writes the marketplace's cards into the log ("marketplace cards": how many are made, the set's `total`, whether it is `complete`, its `slices`, and the items' `ids` in the grid's order, which the keyboard follows; "The marketplace"); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree, `rail-state:<label>` logs what the rail, the sidebar and the tree show, and `tree-state:<label>|<folder>` logs what the tree shows of one folder (whether it has a row, whether the row is a hidden folder's and how opaque its drawn name is, the names of the rows right under it, and the folder the tree marked) ("The activity rail and the sidebar"); `columns:<label>` logs each pane's four column widths as laid out, the width they share, the first row's widths and how far the grips are from the dividers ("columns shown"), `column-drag:<divider>|<pixels>` drags a grip of the active pane (1 Name|Modified, 2 Modified|Type, 3 Type|Size) by that many pixels through the grip's own drag steps and lets go, and `column-fit:<column>` fits as a double-click on that heading does (`name`, `modified`, `type` or `size`); the last two do not wait, so an `until:config` right after them sees the save ("Column widths"); `column-view:<label>` logs what the active pane shows ("column view shown": the mode, the columns' folders and cursors, the keyboard's column, its rows, the rows each column has on screen and the listings), `column-open:<name>` opens that row of the keyboard's column as Enter does, `column-key:<key>` presses `left`, `right`, `up`, `down`, `home`, `end` or `backspace` in the active pane, and `column-click:<depth>|<name>` clicks that row of that column, 1 being the first ("The column view"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:tree`, `until:menu`, `until:menu-closed`, `until:keyboard`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the folder tree to mark the active pane's folder, the right-click menu to be on screen (a newer one no longer waiting for the one before it to close) or to be gone, every check of a hand-over of the keyboard to a web page to have run ("The terminal"), the next reading of the configuration (after an edit of the file) or the core's next report of an error in the file; `until:terminals:<n>` waits for n terminal tabs, each with its byte pipe connected; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -786,8 +800,10 @@ rebound: the transfer flyout's `transfer.pause`, `transfer.resume`,
 `transfer.cancel`, `transfer.close`, `transfer.minimize`,
 `transfer.restore`, `transfer.next` and `conflict.resolve`;
 `sidebar.pin` and `sidebar.unpin`; the terminal's `terminal.new`
-(`{"profile": …, "cwd": …}`), `terminal.show`, `terminal.close`
-(`{"session": …}`) and `terminal.reload`; the search's `search.scope`
+(`{"profile": …, "cwd": …, "pane": 0 or 1}`), `terminal.show`,
+`terminal.close` (`{"session": …}`), `terminal.reload`,
+`terminal.previousTab`, `terminal.nextTab` and `terminal.setMode`
+(`{"session": …, "mode": "locked" or "linked"}`); the search's `search.scope`
 (`{"wholeVolume": true}`); `plugins.list`; and the editors'
 `editor.openMarkdownPreview` (Ctrl+K V in a pane), `editor.close` and
 `editor.reload` (`{"pane": 0 or 1}`). The window keeps only their handlers.
@@ -798,7 +814,10 @@ in front:
 - `conflict.resolve` opens the flyout at the waiting conflict, or says that
   none waits;
 - `sidebar.pin` and `sidebar.unpin` take the active pane's folder;
-- `terminal.show` shows the dock, and `terminal.close` ends the shown shell;
+- `terminal.new` binds the new shell to the active pane, `terminal.show`
+  shows the active pane's session, `terminal.close` ends the shown shell,
+  and `terminal.setMode` switches the shown shell between locked and
+  linked;
 - `search.scope` switches "Whole volume" on or off;
 - `editor.close` and `editor.reload` take the editor that has the keyboard,
   else the one that is open.
@@ -829,7 +848,7 @@ search hit. From the context menu it gets the menu's rows
 | `go.toPath` | With `{"path": …}` goes there; without, turns the active pane's breadcrumb row into a text box (`{"pane": 0 or 1}` names the pane) |
 | `help.about` | The window's command (target `ui`): its handler shows About CabinetOS ("About", below). An older core that ran it itself answered `command_result`; the window shows the same view for that |
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
-| `view.toggleTerminal` | Shows the terminal, gives the keyboard back to the pane, or hides it ("The terminal") |
+| `view.toggleTerminal` | Shows the pane's session with the keyboard, gives the keyboard back to the pane, or hides the dock ("The terminal") |
 | `marketplace.browse`, `preferences.selectColorTheme` | Open the marketplace and the theme picker ("The marketplace", "Themes") |
 | `go.root` to `terminal.insertSelectedPaths` | Total Commander's small commands, 31 of them, run in the window ("Total Commander's keys") |
 | `workspace.switch` | The workspace pill's dropdown ("The shell"); its "Open folder as workspace…" says that workspaces arrive in a later version |
@@ -1095,8 +1114,9 @@ menus of Phase 5:
 
 - a row: the icons Cut, Copy, Paste, Rename and Delete; the list Open
   (Enter), Open in other pane (Ctrl+Enter, folders only), Copy to other
-  pane (F5) and Open in Terminal (a new shell in the row's folder; no keys
-  shown, because Ctrl+` toggles the terminal instead);
+  pane (F5) and Open in Terminal (a new shell in the row's folder, bound
+  to the row's pane; no keys shown, because Ctrl+` shows the pane's
+  session that runs already);
 - the empty space: no icons; the list Paste, New folder and "Pin this
   folder to the sidebar" (hidden when the folder is pinned already).
 
@@ -1903,7 +1923,7 @@ window is in `CabinetOS.Core` and tested there.
 | Shift+F4 | `file.newTextFile` | A name box over a new row ("New text file") |
 | (none) | `file.windowsProperties` | Windows' own property sheet for the targets, or the folder (`show_properties`); also the "Windows Properties" button of the Properties dialog |
 | (none), Shift+Alt+Enter | `file.calculateFolderSize`, `file.calculateAllFolderSizes` | The marked folders, or the cursor folder; or every folder of the listing: measured ("Folder sizes") |
-| Ctrl+Alt+P, Ctrl+Shift+Enter | `terminal.insertPath`, `terminal.insertSelectedPaths` | The terminal shows, its default shell started when none runs, with the pane's folder, or the targets' paths, typed at the prompt, quoted for that shell and without Enter (`terminal_type_paths`); the terminal gets the keyboard |
+| Ctrl+Alt+P, Ctrl+Shift+Enter | `terminal.insertPath`, `terminal.insertSelectedPaths` | The active pane's session shows (a new one of the default profile when the pane has none), with the pane's folder, or the targets' paths, typed at the prompt, quoted for that shell and without Enter (`terminal_type_paths`); the terminal gets the keyboard |
 
 Snapshots of 2026-09-29 in [log/2026-09-28/](log/2026-09-28/):
 `11a-drive-list.png`, `11a-pattern-box.png`, `11a-pinned-folders.png`,
@@ -2164,8 +2184,9 @@ syntax reads them.
   unmark), `MarkMemoryTests`, `PaneSortTests`, `FolderSizesTests`,
   `QuickSearchTests`, `PromptTests` (the pattern history, the pick list,
   ranges, the same extension), `DriveMemoryTests`, `KeyTests` (the keypad
-  names), `DisplayFormatTests` (the root), `TerminalTests` (paths typed
-  hold the line) and `ProtocolTests` (the version 12 messages against the
+  names), `DisplayFormatTests` (the root), `TerminalTests` (until
+  2026-10-01 also: paths typed hold the line, a rule of the folder sync,
+  which is gone) and `ProtocolTests` (the version 12 messages against the
   core's schemas).
 - End-to-end against the real core (`CommanderEndToEndTests`): the sort by
   extension; `create_file` and `edit_path` with an editor found nowhere,
@@ -2537,50 +2558,84 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   `"bottom": 330`, and after a restart the dock opened at about 330 px
   (measured in the snapshot) instead of the design's 240 px.
 - **The header, 34 px.** One tab per shell: a green dot while it runs,
-  the profile's name, and × to end it. "+" starts the default profile
-  (`terminal.defaultProfile`); the arrow next to it lists every profile of
-  `terminal.profiles` (by default pwsh, cmd, wsl and claude). The caption says whether the shell follows the
-  active pane: "cwd synced to active pane · {folder}", "cwd not synced: a
-  command is being typed", "cwd not synced: a full-screen program runs",
-  "cwd not synced: the profile does not follow the pane", or "pwsh
-  exited with code 0" (shorter on the right: "not synced: typing", "not
-  synced: a program runs", "not synced: profile"). The × at the end
-  hides the dock; the shells go on running.
-- **Ctrl+`.** In a pane, it shows the terminal and gives it the keyboard;
-  the first time, it starts the default profile in the active pane's
-  folder. In the terminal, it gives the keyboard back to the pane. In a
-  pane while the terminal is shown, it hides the terminal.
-- **Open in Terminal** starts another shell in the row's folder (a file's
-  own folder for a file).
-- **Following the active pane.** When the active pane's folder changes,
-  by navigation or by switching panes, the shown shell gets
-  `terminal_sync_cwd` once 300 ms pass without another change. The core
-  types the shell's own `cd` command and Enter, so the rule is about what
-  that typing would break. The sync is skipped when a line is half typed
-  (keys went in since the last Enter or Ctrl+C: the command would be
-  added to that line), when a full-screen program runs (xterm.js shows the
-  alternate screen: vim, less, a TUI would get the line), when the
-  session's profile has `followsPane: false` (a program that is not a
-  shell, such as the `claude` profile: the line would be its input, and
-  Claude Code does not use the alternate screen, so the rule before would
-  not catch it; the caption says "cwd not synced: the profile does not
-  follow the pane"), when the shell is in that folder already, or when it
-  ended. A new tab of such a profile starts with that caption, not with
-  "synced", since it will never sync. Ctrl+Alt+P and Ctrl+Shift+Enter still
-  type paths at such a prompt: that is the user's own request. A skipped sync is not tried
-  again when the line is finished, because that line may be the user's own
-  `cd`; the next change of the pane's folder tries again. Only the shown
-  tab follows, and only while the dock is shown; when it is shown again,
-  it catches up.
+  the profile's name, a badge `[Left]` or `[Right]` for the pane the
+  session belongs to (in the theme's accent colour; both panes share the
+  one accent), its mode, and × to end it. The mode is a small text button,
+  "Locked" or "Linked", that runs `terminal.setMode` with the other mode;
+  its tooltip says what the mode means. A profile that cannot be linked
+  (`linkable: false`; cmd and claude by default, [terminal.md](terminal.md),
+  "Profiles") shows "Locked" as plain text, and its tooltip says why:
+  "Locked: cmd cannot follow a pane, because no prompt hook can be added to
+  it." "+" starts the default profile (`terminal.defaultProfile`) for the
+  active pane; the arrow next to it lists every profile of
+  `terminal.profiles` (by default pwsh, cmd, wsl and claude). The caption
+  right of the tabs names the folder the shown session started in
+  ("started in docs") or how it ended ("pwsh exited with code 0"). The
+  core does not see a shell change folder, so the caption does not follow
+  a `cd`. The × at the end hides the dock; the shells go on running.
+- **Panes and modes.** Every session belongs to the pane it was opened for
+  ([terminal.md](terminal.md), "Panes and modes"): Ctrl+`, "+" and
+  `terminal.new` bind it to the active pane, and "Open in Terminal" to the
+  row's pane (a right-click makes that pane active first). The pane never
+  changes. A session is locked (the default) or linked. In this version
+  linked shows only in the header: the shell behaves exactly as when
+  locked, until the prompt hook of terminal unit 2 makes a linked shell
+  follow its pane. `terminal.setMode` asks the core
+  (`terminal_set_mode`), and the header changes when
+  `terminal_mode_changed` comes back, so every window shows the same mode.
+  Linking a profile that cannot be linked says so in the status bar and
+  asks the core nothing.
+- **Ctrl+` (Active Summoning).** It acts for the pane it is pressed in
+  (`TerminalSummoning`, tested):
+  - in a pane while the dock is hidden, or while the dock shows the other
+    pane's session: the dock shows this pane's most recent session (its
+    running session shown last) and gives it the keyboard, or starts the
+    default profile in the pane's folder when the pane has none. Moving to
+    the other pane and pressing Ctrl+` never hides the dock;
+  - in the terminal: the keyboard goes back to the active pane;
+  - in a pane whose session is shown without the keyboard: the session
+    gets the keyboard; but right after Ctrl+` gave the keyboard back to
+    this pane, it hides the dock (the "second" Ctrl+`). A click into the
+    terminal, another pane becoming active, or the dock hiding makes the
+    next Ctrl+` a first one again.
+
+  The top row's terminal button and the rail's only toggle: when the dock
+  is shown they hide it, else they act as Ctrl+` in the active pane.
+  `terminal.show`, Ctrl+Alt+P and `view.toggleTerminal` with
+  `{"visible": true}` only show, never hide or hand the keyboard back.
+- **Zero-Hijack.** Nothing a pane does reaches the terminal by itself. A
+  click, a key, a switch of pane and a folder change never change the
+  shown tab and never type into a shell, and the window never moves the
+  keyboard away from a terminal that has it. A click into a pane does
+  move the keyboard there, as any click does. Only the user's own request
+  types into a shell: Ctrl+Alt+P and Ctrl+Shift+Enter ("Total Commander's
+  keys"), which show the active pane's session first. Until 2026-10-01 the
+  shown shell followed the active pane's folder: the window asked the core
+  for `terminal_sync_cwd`, which typed the shell's own `cd` and Enter. That
+  could land in a half-typed command or in a running program, so it is
+  gone, with its captions ("cwd synced to active pane", "cwd not synced:
+  …") and the profile key `followsPane`.
 - **When a shell ends** (`terminal_exited`), its last output stays and a
   dim line "[exited with code N]" follows, the dot turns grey, and the
-  caption names the code. After 3 s the tab closes (`terminal_close`);
+  caption names the code. After 3 s the tab closes (`terminal_close`), and
+  the pane's most recent session comes to the front (else the last tab);
   when the last tab closes, the dock hides.
 - **Keys in the terminal** go to the shell, with these exceptions: a
   single combination bound with `when: terminalFocus`, and the keys of
   `palette.show` and `view.toggleTerminal` (the ways out), go to the
-  window; Ctrl+C with text selected copies it (as in Windows Terminal),
-  and Ctrl+V pastes (bracketed when the shell asked for it). Esc, Tab and
+  window. The default `terminalFocus` bindings are the tab keys: Ctrl+Shift+T
+  (`terminal.new`, a session for the active pane), Ctrl+Shift+W
+  (`terminal.close`, the shown session; the tab that comes to the front
+  keeps the keyboard), and Alt+[ and Alt+] (`terminal.previousTab` and
+  `terminal.nextTab`: the tab before or after the shown one, round the
+  ends, with the keyboard; the active pane does not change). Alt+[ and
+  Alt+] are bound by key position (the virtual keys of `[` and `]`), so
+  they also work on the Ukrainian layout, where those keys type х and ї.
+  In a pane the same keys keep their pane meaning (Ctrl+Shift+C is
+  `edit.copyFullPath` there). The page itself handles four keys: Ctrl+C
+  with text selected copies it (as in Windows Terminal); Ctrl+Shift+C
+  copies the selection and never reaches the shell; Ctrl+V and
+  Ctrl+Shift+V paste (bracketed when the shell asked for it). Esc, Tab and
   chords such as Ctrl+K … stay in the shell, which needs them. Ctrl+Tab and Ctrl+Shift+Tab (`tab.next`,
   `tab.previous`) go to the window too, since no shell uses them, and the
   keyboard goes to the pane's tab that comes to the front; Ctrl+W and Ctrl+T
@@ -2689,9 +2744,15 @@ How it is built:
   (`CoreWebView2.BrowserProcessId`, with the snapshot step
   `crash:terminal`): the dock said so, the other pane went on navigating,
   Reload brought back the screen of the same pwsh, and it took new input.
-- **Logs.** Target `cabinetos_ui::terminal`: "terminal session opened",
-  "terminal shell exited", "cwd sync" with its decision (debug level),
-  "terminal tab closed". Target `cabinetos_ui::webview`: "WebView2
+- **Logs.** Target `cabinetos_ui::terminal`: "terminal session opened"
+  (with the pane, the mode and `linkable`), "terminal summoned" (the pane,
+  what Ctrl+` or the button did: `ShowSession`, `OpenNew`, `FocusShown`,
+  `HandBackToPane` or `Hide`, and the session), "terminal tab shown" (the
+  session, its pane, and every tab as one line, the shown one marked:
+  `3 pwsh [Left] Locked | *4 cmd [Right] Locked`), "terminal mode asked"
+  and "terminal mode changed", "terminal shell exited", "terminal tab
+  closed", and "terminal state" at the snapshot aid's `terminal-state:`
+  step. Target `cabinetos_ui::webview`: "WebView2
   started" with its browser process ID, every blocked request, and "a
   WebView2 process failed" with the kind and reason. Target
   `cabinetos_ui::shell`: "a page has the keyboard" with the page and the

@@ -208,7 +208,7 @@ cargo run -p cabinetos-cli -- --pipe demo search budget --root D:\work --limit 1
 cargo run -p cabinetos-cli -- --pipe demo index status
 cargo run -p cabinetos-cli -- --pipe demo term --profile cmd
 cargo run -p cabinetos-cli -- --pipe demo term list
-cargo run -p cabinetos-cli -- --pipe demo term cd 1 D:\work
+cargo run -p cabinetos-cli -- --pipe demo term mode 1 linked
 cargo run -p cabinetos-cli -- --pipe demo term close 1
 cargo run -p cabinetos-cli -- --pipe demo themes list
 cargo run -p cabinetos-cli -- --pipe demo themes show nord
@@ -273,14 +273,15 @@ cargo run --release -p cabinetos-indexer -- --console --volumes C
   folder), then how many, `source: index` or `source: walk`, the time, and
   whether the search was complete; `index status` prints whether an indexer
   answers and each volume's state.
-- `term [--profile NAME] [--cwd PATH]` runs a shell in the core, attached
-  to this console: keys go to the shell as typed, the size follows the
+- `term [--profile NAME] [--cwd PATH] [--pane left|right]` runs a shell
+  in the core, bound to that file pane (default `left`) and attached to
+  this console: keys go to the shell as typed, the size follows the
   window, `Ctrl+]` detaches (the shell keeps running), and when the shell
   exits the CLI prints its exit code. With input from a pipe
   (`printf 'dir\r\nexit\r\n' | … term`) it forwards the bytes and waits
-  for the shell to exit. `term list` prints every session, `term cd <id>
-  <path>` types the shell's own change-directory command, and `term close
-  <id>` ends a session.
+  for the shell to exit. `term list` prints every session with its pane
+  and mode, `term mode <id> locked|linked` locks a session or links it to
+  its pane, and `term close <id>` ends a session.
 - `themes list` prints every valid theme, `*` marking the one in effect;
   `themes show [<id>]` prints a whole theme as JSON (without an ID, the
   one in effect). `config set ui.theme <id>` changes the theme, and

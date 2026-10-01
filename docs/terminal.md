@@ -6,7 +6,8 @@ that gives a program a console whose screen goes to a pipe instead of a
 window). The pane shows what the shell prints and sends what the user types.
 Nothing runs until a client asks: the terminal is hidden by default
 (Constitution Article 4; [ADR 0005](decisions/0005-terminal-in-core-hidden.md)).
-It follows the active pane's folder when the client asks (Article 9).
+Each session belongs to one file pane and is locked or linked to it
+(Article 9; "Panes and modes" below).
 
 The code is in `core/crates/cabinetos-terminal`. The core wires it to the
 pipe; the messages are in [ipc.md](ipc.md), "Terminal sessions". The
@@ -34,38 +35,41 @@ The defaults:
 "terminal": {
   "defaultProfile": "pwsh",
   "profiles": [
-    { "name": "pwsh", "command": "pwsh.exe", "args": ["-NoLogo"] },
-    { "name": "cmd", "command": "cmd.exe", "args": [] },
-    { "name": "wsl", "command": "wsl.exe", "args": [] },
+    { "name": "pwsh", "command": "pwsh.exe", "args": ["-NoLogo"], "linkable": true },
+    { "name": "cmd", "command": "cmd.exe", "args": [], "linkable": false },
+    { "name": "wsl", "command": "wsl.exe", "args": [], "linkable": true },
     {
       "name": "claude",
       "command": "claude.exe",
       "args": ["--append-system-prompt", "…"],
-      "followsPane": false
+      "linkable": false
     }
   ]
 }
 ```
 
-(The core writes `followsPane` for every profile, `true` for the first
-three. The `claude` profile's note is quoted below.)
+(The core writes `linkable` for every default profile. The `claude`
+profile's note is quoted below.)
 
 - The core reads the profiles at each `terminal_open`, so an edited profile
   applies to the next shell at once. A running shell keeps what it started
   with.
-- `followsPane` (default `true`) says whether the window types a
-  change-directory line into the session when the active pane changes
-  folder ("Following the active pane" below). Set it to `false` for a
-  program that is not a shell: the window never types that line into it,
-  because the program would take the line as its input. The client's own
-  `terminal_sync_cwd` (`cabinetos-cli term cd`) still works on such a
-  session, and so does typing paths at the prompt (Ctrl+Alt+P): that is the
-  user's own request. The key is read by the window only; the core starts
-  every profile the same way.
+- `linkable` says whether a session of this profile may be linked to its
+  pane ("Panes and modes" below). Left out, it is `true` for PowerShell
+  (`pwsh`, `powershell`) and WSL, and `false` for any other program. It is
+  `false` for cmd and Claude Code: a linked shell will follow its pane
+  through a prompt hook (a few lines the shell runs each time it shows
+  its prompt; unit 2 of the terminal sprint adds it), and no such hook can
+  be added to them. Linking such a session fails with `not_linkable`.
+  Typing paths at its prompt (Ctrl+Alt+P) still works: that is the user's
+  own request.
+- `followsPane`, the key of the old folder sync, is ignored since
+  2026-10-01: a file that has it still loads, and the core no longer
+  writes it.
 - The `claude` profile starts Claude Code (`claude.exe`, the
   subscription-based command-line program; it needs no API key). It is
-  not a shell, so it does not follow the pane: it starts in the folder
-  the terminal was opened in and stays there. `--append-system-prompt`
+  not a shell, so it cannot be linked: it starts in the folder the
+  terminal was opened in and stays there. `--append-system-prompt`
   adds one line to Claude Code's system prompt, so it knows where it runs
   and how to reach `cabinetos-cli`:
   > You run inside the CabinetOS file manager's integrated terminal. Its
@@ -80,7 +84,7 @@ three. The `claude` profile's note is quoted below.)
   (the full note is in the default file of a new install, and in
   `sdk/config/cabinetos.schema.json`):
   ```json
-  { "name": "claude", "command": "claude.exe", "followsPane": false,
+  { "name": "claude", "command": "claude.exe", "linkable": false,
     "args": ["--append-system-prompt", "You run inside the CabinetOS file manager's integrated terminal. Its command line is on the PATH as cabinetos-cli (also as cab). `cabinetos-cli state --json` prints both panes: their tabs, cursor and marked files. `cabinetos-cli --help` lists the rest. For the marked files, prefer its copy, move and delete: they run as jobs, and `cabinetos-cli undo --last` reverses the last one."] }
   ```
 - `command` is a full path, or a name looked up in the folders of `PATH`
@@ -142,24 +146,61 @@ pseudo-console. After the exit, output that does not fit the buffer is
 dropped instead of waiting, so a session whose client never reads can
 still end.
 
-## Following the active pane
+## Panes and modes
 
-`terminal_sync_cwd` types the shell's own change-directory command,
-followed by Enter, as if the user typed it. The command depends on the
-program's file name:
+Every session belongs to one file pane, `left` or `right`, which
+`terminal_open` names. The pane never changes: a session opened for the
+left pane stays the left pane's. Each session also has a mode:
 
-| Program | Line typed for `D:\it's here` |
+- **`locked`** (the default): the shell stays where the user takes it.
+  Nothing the panes do reaches it.
+- **`linked`**: the session is meant to follow its pane. Since unit 1 of
+  the terminal sprint (2026-10-01) the core records and reports the mode,
+  but the shell behaves exactly as when locked. Unit 2 adds the prompt
+  hook ("Profiles" above) that makes a linked shell follow its pane.
+
+`terminal_open` takes the mode too (`locked` when left out).
+`terminal_set_mode` changes it later. Every connection that said `hello`
+then gets `terminal_mode_changed` with the session and its new mode, so
+two windows, or a window and the CLI, show the same mode. The same mode
+again changes nothing and sends no event. An exited session takes the
+change too, since it stays listed until it is closed. `linked` for a
+session whose profile is not linkable fails with `not_linkable`;
+`terminal_open` with `linked` fails the same way and starts no shell.
+`terminal_opened` reports the new session's mode and whether it is
+linkable, and `terminal_list` reports the pane, the mode and `linkable`
+of every session.
+
+Until 2026-10-01 the core had `terminal_sync_cwd`: it typed the shell's
+own `cd` command and Enter whenever the window's active pane changed
+folder. It is gone, with the window's following of the active pane. A
+line typed into a shell the user did not touch can land in a half-typed
+command or in a running program, so only the user's own request types
+into a shell now ([ui.md](ui.md), "The terminal").
+
+## Typing paths
+
+`terminal_type_paths` types paths at the prompt for the user to go on
+typing around them (the window's Ctrl+Alt+P, the active pane's folder, and
+Ctrl+Shift+Enter, the selected paths). Total Commander's command line has
+Ctrl+P and Ctrl+Shift+Enter; the window's Ctrl+P went to Quick Open in
+Phase 16. Each path is quoted so the shell reads it literally (the
+program's file name says which shell it is); the paths are separated by
+one space, and no Enter follows. For `D:\it's here` and `D:\100%x`:
+
+| Program | Text typed |
 |---|---|
-| `pwsh`, `powershell` | `Set-Location -LiteralPath 'D:\it''s here'` |
-| `cmd` | `cd /d "D:\it's here"` |
-| `wsl` | `cd "$(wslpath -a 'D:\it'\''s here')"` |
-| anything else | `cd "D:\it's here"` |
+| `pwsh`, `powershell` | `'D:\it''s here' 'D:\100%x'` |
+| `cmd` | `"D:\it's here" "D:\100"%^x""` |
+| `wsl` | `"$(wslpath -a 'D:\it'\''s here')" "$(wslpath -a 'D:\100%x')"` |
+| anything else | `"D:\it's here" "D:\100%x"` |
 
 Each shell must read the path literally:
 
 - **PowerShell:** inside single quotes, each single-quote character is
   doubled, including the typographic quotes ‘ ’ ‚ ‛, which PowerShell also
-  counts as quotes. `-LiteralPath` keeps `[` and `]` from being wildcards.
+  counts as quotes. A command that takes wildcards still reads `[` and
+  `]` as wildcards; `Set-Location -LiteralPath` does not.
 - **cmd:** a name cannot contain `"`, but it can contain `%`, and cmd
   expands `%name%` even inside quotes when `name` is a variable. So each `%`
   is moved out of the quotes with a caret after it: `100%x` becomes
@@ -171,48 +212,29 @@ Each shell must read the path literally:
   (`/mnt/d/it's here`); a `'` is written `'\''` inside single quotes. This
   assumes a POSIX shell such as bash or zsh in the Linux distribution.
 
-Every other character goes into the line as it is: the line reaches the
+Every other character goes in as it is: the text reaches the
 pseudo-console as UTF-8, which it turns into the shell's own input, so
 Cyrillic, Chinese, an emoji or a decomposed accent needs no quoting of its
 own and the console's code page plays no part. For
-`E:\Звіт 'проєкт' $HOME 100%PATH%` the lines are:
+`E:\Звіт 'проєкт' $HOME 100%PATH%` the text is:
 
-| Program | Line typed |
+| Program | Text typed |
 |---|---|
-| `pwsh`, `powershell` | `Set-Location -LiteralPath 'E:\Звіт ''проєкт'' $HOME 100%PATH%'` |
-| `cmd` | `cd /d "E:\Звіт 'проєкт' $HOME 100"%^P"ATH"%^""` |
-| `wsl` | `cd "$(wslpath -a 'E:\Звіт '\''проєкт'\'' $HOME 100%PATH%')"` |
+| `pwsh`, `powershell` | `'E:\Звіт ''проєкт'' $HOME 100%PATH%'` |
+| `cmd` | `"E:\Звіт 'проєкт' $HOME 100"%^P"ATH"%^""` |
+| `wsl` | `"$(wslpath -a 'E:\Звіт '\''проєкт'\'' $HOME 100%PATH%')"` |
 
 `$HOME` stays literal in PowerShell and bash because single quotes do not
 expand it, and in cmd because cmd has no `$` variables. The tests type a
 folder named `Звіт 'проєкт' $HOME ’q’ 100%PATH% Ґанок` into real cmd,
-PowerShell 7, Windows PowerShell 5.1 and WSL, and read the folder back from
-each shell (`cd`, `(Get-Location).Path`, `pwd`); WSL's `wslpath` turns it
-into `/mnt/c/…/Звіт 'проєкт' $HOME ’q’ 100%PATH% Ґанок`.
-
-The path must be an absolute path to a folder (`invalid_path`, `not_found`
-otherwise). Limits of typing a command: text already on the prompt line
-stays in front of it, and a program that runs in the shell (an editor, a
-long build) receives the line instead of the shell. The client decides
-when to sync; the core does not guess. The window does not ask for a sync
-in a session whose profile has `followsPane: false` ("Profiles" above).
-
-## Typing paths
-
-`terminal_type_paths` types paths at the prompt for the user to go on
-typing around them (the window's Ctrl+Alt+P, the active pane's folder, and
-Ctrl+Shift+Enter, the selected paths). Total Commander's command line has
-Ctrl+P and Ctrl+Shift+Enter; the window's Ctrl+P went to Quick Open in
-Phase 16. Each path is quoted as the shell reads it literally, by
-the rules of "Following the active pane" above; the paths are separated
-by one space, and no Enter follows. For `D:\it's here` and `D:\100%x`:
-
-| Program | Text typed |
-|---|---|
-| `pwsh`, `powershell` | `'D:\it''s here' 'D:\100%x'` |
-| `cmd` | `"D:\it's here" "D:\100"%^x""` |
-| `wsl` | `"$(wslpath -a 'D:\it'\''s here')" "$(wslpath -a 'D:\100%x')"` |
-| anything else | `"D:\it's here" "D:\100%x"` |
+PowerShell 7, Windows PowerShell 5.1 and WSL at an empty prompt, put the
+shell's own `cd` in front of it (`cd /d`, `Set-Location -LiteralPath`,
+`cd`), press Enter and read the folder back from each shell (`cd`,
+`(Get-Location).Path`, `pwd`); WSL's `wslpath` turns it into
+`/mnt/c/…/Звіт 'проєкт' $HOME ’q’ 100%PATH% Ґанок`. Typed behind the
+command instead, the folder lost its typographic quotes in Windows
+PowerShell 5.1 on 2026-10-01, while a suggestion from its history was on
+the line; typed at an empty prompt, it arrived whole.
 
 The text goes in as one chunk, so a key the user presses meanwhile cannot
 land inside it; text already on the line stays in front of it. The paths
@@ -268,7 +290,7 @@ same 2 s.
 attaches to it:
 
 ```text
-cabinetos-cli --pipe demo term --profile pwsh --cwd E:\
+cabinetos-cli --pipe demo term --profile pwsh --cwd E:\ --pane right
 ```
 
 - The console switches to raw mode: keys go to the shell one by one, as VT
@@ -282,16 +304,16 @@ cabinetos-cli --pipe demo term --profile pwsh --cwd E:\
   unchanged and waits for the shell to exit, so the input should end with
   `exit`: `printf 'Get-Location\r\nexit\r\n' | cabinetos-cli term`.
 - Without `--profile`, the default profile; without `--cwd`, the CLI's own
-  folder.
+  folder; without `--pane`, the left pane. The session starts locked.
 
 The other commands act on any session, from any CLI:
 
 ```text
 cabinetos-cli term list
-3 pwsh pid 4242 120x30 running attached E:\
-4 cmd pid 5120 80x25 exited(0) detached C:\Users\me
-cabinetos-cli term cd 3 D:\docs
-session 3: cd D:\docs
+3 pwsh right locked pid 4242 120x30 running attached E:\
+4 cmd left locked pid 5120 80x25 exited(0) detached C:\Users\me
+cabinetos-cli term mode 3 linked
+session 3: linked
 cabinetos-cli term type 3 "D:\docs\a b.txt" D:\docs\c.md
 session 3: typed 2 paths
 cabinetos-cli term close 3
@@ -305,8 +327,9 @@ pseudo-console's output into the buffer, `term-<id>-in` writes keys into
 it, and `term-<id>-exit` waits for the shell and reports its exit. One
 async task serves the byte pipe. Every log line about a session names it
 in `session_id` (under `fields`, [diagnostics.md](diagnostics.md)):
-`terminal session opened` (with the profile, program, process ID, folder
-and size), `terminal shell exited` (with the exit code), `terminal session
+`terminal session opened` (with the profile, program, process ID, folder,
+size, pane, mode and `linkable`), `terminal mode changed` (with the new
+mode), `terminal shell exited` (with the exit code), `terminal session
 closed`, and the warning `terminal output backpressure`.
 
 ## Tests
@@ -321,8 +344,8 @@ session of its own and types into that pseudo-console, `Ctrl+]` included.
 
 The shells run only `echo`, `cd`, `mode con`, `Get-Location`, `pwd` and
 `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which the tests
-remove. Paths typed with `terminal_type_paths` are never run: no Enter
-follows them.
+remove. Paths typed with `terminal_type_paths` run only behind the tests'
+own `cd` ("Typing paths" above).
 
 The `claude` profile was checked with the real program on 2026-09-30, two
 ways: headless, through `cabinetos-cli term --profile claude` driven by a

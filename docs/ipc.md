@@ -75,7 +75,7 @@ because it duplicates shared-memory handles into that process. A
 configuration events (`config_changed`, `config_error`, `keymap_changed`),
 the job events (`job_progress`, `job_conflict`, `job_state_changed`),
 the plugin events (`plugin_state_changed`, `plugin_crashed`,
-`plugin_event`), `terminal_exited`, `volumes_changed`,
+`plugin_event`), `terminal_exited`, `terminal_mode_changed`, `volumes_changed`,
 `theme_changed`, and the marketplace events (`install_progress`,
 `install_finished`, `tools_changed`), and right after
 `welcome` a `job_conflict` for every conflict that already waits for a
@@ -149,7 +149,14 @@ Windows' own menu: `shell_menu` with its reply `shell_menu`,
 `no_such_menu` and `shell_menu_off` ("Windows' context menu"); and the
 user's programs: the command source kind `program`, and the error codes
 `unknown_program`, `program_refused` and `command_line_too_long`
-("Configuration, commands and keybindings").
+("Configuration, commands and keybindings"). Version 16 (unit 1 of the
+terminal sprint, 2026-10-01) bound each terminal session to a file pane:
+`terminal_open` takes the required `pane` and the optional `mode`,
+`terminal_opened` and `terminal_list` report the mode and `linkable`
+(`terminal_list` the pane too), and it added `terminal_set_mode`, the
+event `terminal_mode_changed` and the error code `not_linkable`
+("Terminal sessions"). `terminal_sync_cwd` is gone: a client of version
+15 that sends it gets `unknown_request`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -199,11 +206,11 @@ as absent from an older core.
 | `grant_capabilities` | `plugin_id`, `capabilities` | `ok` |
 | `search` | `query`; `limit` (default 100, at most 1,000); `root` | `file_search_results` |
 | `index_status` | — | `index_status` (`available`, `volumes`) |
-| `terminal_open` | `cols`, `rows`; `profile` (default `terminal.defaultProfile`); `cwd` (default the user's profile folder) | `terminal_opened` (`session_id`, `pipe`, `pid`) |
+| `terminal_open` | `cols`, `rows`, `pane` (`left` or `right`); `profile` (default `terminal.defaultProfile`); `cwd` (default the user's profile folder); `mode` (`locked` or `linked`, default `locked`) | `terminal_opened` (`session_id`, `pipe`, `pid`, `mode`, `linkable`) |
 | `terminal_resize` | `session_id`, `cols`, `rows` | `ok` |
 | `terminal_close` | `session_id` | `ok`, once the shell has ended |
-| `terminal_sync_cwd` | `session_id`, `path` | `ok` |
 | `terminal_type_paths` | `session_id`, `paths` | `ok` |
+| `terminal_set_mode` | `session_id`, `mode` | `ok` |
 | `terminal_list` | — | `terminal_sessions` (`sessions`) |
 | `list_themes` | — | `themes` (`themes`) |
 | `get_theme` | `theme_id` (without it: the theme in effect) | `theme` (`theme`) |
@@ -253,7 +260,8 @@ Any request can instead get `error` with a `code` and a `message`:
 | `invalid_resolution` | The resolution does not fit the conflict, such as `delete_permanently` for a file that exists. |
 | `no_such_plugin` | No plugin with that ID is installed, or the plugin host is not running. |
 | `plugin_error` | A plugin's command failed: the plugin answered with an error or with text that is not JSON, crashed, or is not running. Also a grant the core refuses: an unknown capability, or one it never grants. |
-| `no_such_session` | No terminal session has that `session_id`; or, for `terminal_resize`, `terminal_sync_cwd` and `terminal_type_paths`, its shell has exited. |
+| `no_such_session` | No terminal session has that `session_id`; or, for `terminal_resize` and `terminal_type_paths`, its shell has exited. |
+| `not_linkable` | `terminal_set_mode` or `terminal_open` with `linked` for a session whose profile is not linkable (`"linkable": false`: no prompt hook can be added to its program). |
 | `unknown_profile` | No profile in `terminal.profiles` has that name. The message lists the names. |
 | `spawn_failed` | A program could not start. A terminal's shell: its program is not on the `PATH`, the folder is not an absolute path to a folder, 32 sessions exist already, or Windows refused. The editor of `files.editor` (`edit_path`): its program is neither a file nor a program on the `PATH`. |
 | `no_such_theme` | No theme with that ID is in the themes folder, or the ID cannot name a theme file. |
@@ -281,7 +289,7 @@ Requests on one connection are independent: `list_directory`,
 `set_value`, `set_keybinding`, `reset_keybinding`, `start_job`,
 `reload_plugin`, `set_plugin_enabled`, `grant_capabilities`,
 `execute_command` for a plugin's command, `search`, `index_status`,
-`terminal_open`, `terminal_close`, `terminal_sync_cwd`, `list_themes`,
+`terminal_open`, `terminal_close`, `list_themes`,
 `get_theme` of a named theme, `list_tools`, the marketplace requests,
 `preview_listing`, `open_preview`, `preview_apply`, the secret requests,
 the update steps, `execute_command` for a program, `shell_menu` and
@@ -1255,21 +1263,29 @@ with read-only requests only; that protocol is in [indexer.md](indexer.md).
 ## Terminal sessions
 
 Shells that the core runs in pseudo-consoles, for the terminal pane
-([terminal.md](terminal.md) has the profiles, the byte pipe in detail and
-the folder sync). A session belongs to the core, not to the connection
-that opened it: a client that leaves, or restarts, finds its sessions in
-`terminal_list` and attaches again.
+([terminal.md](terminal.md) has the profiles, the byte pipe in detail,
+the panes and modes, and the quoting of typed paths). A session belongs to
+the core, not to the connection that opened it: a client that leaves, or
+restarts, finds its sessions in `terminal_list` and attaches again.
 
 ```json
-{"id":"01M…","type":"terminal_open","profile":"pwsh","cwd":"E:\\work","cols":120,"rows":30}
+{"id":"01M…","type":"terminal_open","profile":"pwsh","cwd":"E:\\work","cols":120,"rows":30,"pane":"left"}
 {"id":"01M…","type":"terminal_opened","session_id":3,
- "pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","pid":4242}
+ "pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","pid":4242,"mode":"locked","linkable":true}
 ```
 
 - `profile` names one of `terminal.profiles`; without it,
   `terminal.defaultProfile`. `cwd` must be an absolute path to a folder;
   without it, the user's profile folder. `cols` and `rows` are the size in
   character cells, from 1 to 32,767.
+- `pane` is the file pane the session belongs to, `left` or `right`; it
+  never changes. `mode` is `locked` (the default) or `linked`; `linked`
+  for a profile that is not linkable fails with `not_linkable` and starts
+  no shell. In this version the mode changes nothing in how the shell
+  runs: a linked session will follow its pane through the prompt hook of
+  a later version. `linkable` in the reply says whether the session may be
+  linked (the profile's `linkable`, [terminal.md](terminal.md),
+  "Profiles").
 - The shell's bytes travel on `pipe`, not on this channel: raw bytes, no
   framing, both ways. The client reads the shell's output (UTF-8 text with
   VT sequences) and writes keys (text, `\r` for Enter, VT sequences for the
@@ -1292,29 +1308,37 @@ that opened it: a client that leaves, or restarts, finds its sessions in
 {"id":"01M…","type":"terminal_list"}
 {"id":"01M…","type":"terminal_sessions","sessions":[{"session_id":3,"profile":"pwsh",
  "cwd":"E:\\work","cols":120,"rows":30,"pid":4242,"state":{"type":"running"},
- "pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","attached":true}]}
+ "pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","attached":true,
+ "pane":"left","mode":"locked","linkable":true}]}
 ```
 
 `sessions` come oldest first. `state` is `{"type":"running"}` or
-`{"type":"exited","code":3}`. `cwd` is the folder the session started in
-or was last synced to; the shell may have moved since. `attached` says
-whether a client holds the pipe.
+`{"type":"exited","code":3}`. `cwd` is the folder the session started in;
+the shell may have moved since. `attached` says whether a client holds the
+pipe. `pane`, `mode` and `linkable` are as in `terminal_open`.
 
 ```json
 {"id":"01M…","type":"terminal_resize","session_id":3,"cols":100,"rows":30}
-{"id":"01M…","type":"terminal_sync_cwd","session_id":3,"path":"D:\\docs"}
 {"id":"01M…","type":"terminal_type_paths","session_id":3,"paths":["D:\\docs\\a b.txt"]}
+{"id":"01M…","type":"terminal_set_mode","session_id":3,"mode":"linked"}
 {"id":"01M…","type":"terminal_close","session_id":3}
 ```
 
-Each answers `ok`. `terminal_sync_cwd` types the shell's own
-change-directory command, followed by Enter, so the terminal follows the
-active pane; the path must be an absolute path to a folder (`invalid_path`
-or `not_found` otherwise). `terminal_type_paths` types paths at the
-prompt without Enter, each quoted as `terminal_sync_cwd` quotes its
-folder, separated by spaces (the window's Ctrl+Alt+P and Ctrl+Shift+Enter;
+Each answers `ok`. `terminal_type_paths` types paths at the prompt
+without Enter, each quoted so the session's shell reads it literally,
+separated by spaces (the window's Ctrl+Alt+P and Ctrl+Shift+Enter;
 [terminal.md](terminal.md), "Typing paths"); a path with a control
-character is `invalid_path`. `terminal_close` closes the pseudo-console,
+character is `invalid_path`. `terminal_set_mode` locks a session or links
+it to its pane (`not_linkable` for `linked` when its profile is not
+linkable). When the mode changes, every connection that said `hello` gets:
+
+```json
+{"id":"01M…","type":"terminal_mode_changed","session_id":3,"mode":"linked"}
+```
+
+The same mode again changes nothing and sends no event. An exited session
+takes the change too. A client that fell behind on events gets one for
+every session. `terminal_close` closes the pseudo-console,
 which the shell sees as a hang-up, and forgets the session; the reply
 comes once the shell has ended (a shell still running 2 s later is ended
 by force). When the core stops, it closes every session.

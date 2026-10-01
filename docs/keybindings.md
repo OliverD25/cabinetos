@@ -82,10 +82,13 @@ The core's commands, in palette order:
 | `workspace.switch` | Workspace: Switch Workspace… | `ctrl+k ctrl+w` | | UI |
 | `preferences.selectColorTheme` | Preferences: Color Theme | `ctrl+k ctrl+t` | | UI |
 | `terminal.runTask` | Terminal: Run Task… | `ctrl+shift+b` | | UI |
-| `terminal.new` | Terminal: New Terminal | | | UI |
+| `terminal.new` | Terminal: New Terminal | `ctrl+shift+t` | `terminalFocus` | UI |
 | `terminal.show` | Terminal: Show Terminal | | | UI |
-| `terminal.close` | Terminal: Close Terminal | | | UI |
+| `terminal.close` | Terminal: Close Terminal | `ctrl+shift+w` | `terminalFocus` | UI |
 | `terminal.reload` | Terminal: Reload Terminal | | | UI |
+| `terminal.previousTab` | Terminal: Previous Terminal Tab | `alt+bracketleft` | `terminalFocus` | UI |
+| `terminal.nextTab` | Terminal: Next Terminal Tab | `alt+bracketright` | `terminalFocus` | UI |
+| `terminal.setMode` | Terminal: Lock or Link Terminal to Its Pane | | | UI |
 | `go.root` | Go: Up to Root | `ctrl+backslash` | | UI |
 | `go.chooseDriveLeft` | Go: Choose Drive for Left Pane… | `alt+f1` | | UI |
 | `go.chooseDriveRight` | Go: Choose Drive for Right Pane… | `alt+f2` | | UI |
@@ -431,7 +434,7 @@ no tab key came out of a page):
 |---|---|
 | a tool in a pane's tab (Markdown Preview) | the ways out (`palette.show`, `view.toggleTerminal`) and the tab keys: `tab.next`, `tab.previous`, `tab.close`, `tab.new`, `tab.select` (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W, Ctrl+T, Ctrl+1 to 9) |
 | a tool in the sidebar (the agent's chat) | the same, and `view.showExplorer`, `view.showSearch`, `view.toggleSidebar` |
-| the terminal | the ways out, the keys bound with `when: terminalFocus`, and `tab.next` and `tab.previous` (Ctrl+Tab, Ctrl+Shift+Tab) |
+| the terminal | the ways out, the keys bound with `when: terminalFocus` (by default the terminal's tab keys: Ctrl+Shift+T, Ctrl+Shift+W, Alt+[ and Alt+]), and `tab.next` and `tab.previous` (Ctrl+Tab, Ctrl+Shift+Tab) |
 
 - **Why the tab keys come out.** They are `filesView` bindings, and a page in
   a pane's tab has the keyboard as that pane's list has it. With the page
@@ -456,7 +459,17 @@ no tab key came out of a page):
   Ctrl+3 to Ctrl+8 (xterm.js sends them to the shell as control codes, ESC to
   DEL, so `tab.select` stays whole) are shell keys, so `tab.close`, `tab.new`
   and `tab.select` stay with the shell. Ctrl+C with
-  a selection and Ctrl+V are the terminal's own, as before.
+  a selection and Ctrl+V are the terminal's own, as before, and so are
+  Ctrl+Shift+C (copy the selection) and Ctrl+Shift+V (paste): the page
+  handles them itself, so the window's keymap never sees them there, and
+  in a pane Ctrl+Shift+C stays `edit.copyFullPath`.
+- **The terminal's own tabs.** Ctrl+Shift+T, Ctrl+Shift+W, Alt+[ and Alt+]
+  are `terminalFocus` bindings of `terminal.new`, `terminal.close`,
+  `terminal.previousTab` and `terminal.nextTab` (since 2026-10-01). A
+  shortcut is matched by the key's position (its virtual key), not by the
+  character it types, so Alt+[ and Alt+] also work on the Ukrainian
+  layout, where those two keys type х and ї ([ui.md](ui.md), "The
+  terminal").
 - A key held down is passed once (the rule above), so Ctrl+Tab held in a page
   does not repeat; it repeats in a pane's list.
 

@@ -161,7 +161,8 @@ public static class Live {
 $VK = @{ Ctrl = 0x11; Shift = 0x10; Alt = 0x12; P = 0x50; D = 0x44; B = 0x42; L = 0x4C; Esc = 0x1B; Tab = 0x09; Enter = 0x0D; Back = 0x08; Down = 0x28; PgDn = 0x22; F2 = 0x71;
   F5 = 0x74; F7 = 0x76; F10 = 0x79; Delete = 0x2E; Home = 0x24; Backquote = 0xC0; F = 0x46; K = 0x4B; V = 0x56;
   F1 = 0x70; F3 = 0x72; F4 = 0x73; F8 = 0x77; Space = 0x20; U = 0x55; Backslash = 0xDC; NumAdd = 0x6B; NumSubtract = 0x6D; NumMultiply = 0x6A;
-  T = 0x54; Up = 0x26; End = 0x23; W = 0x57; X = 0x58; A = 0x41; E = 0x45; Left = 0x25; Right = 0x27; C = 0x43 }
+  T = 0x54; Up = 0x26; End = 0x23; W = 0x57; X = 0x58; A = 0x41; E = 0x45; Left = 0x25; Right = 0x27; C = 0x43;
+  BracketLeft = 0xDB; BracketRight = 0xDD }
 function Step($text) {
   # Keys must never reach another program: stop the run if the window lost the front.
   # A flyout (the drive list) is a window of its own, so the test is the process, not the window.
@@ -2286,6 +2287,165 @@ if (-not $ukrainian) {
     "keys: the window's layout is back ({0:X8}): {1}" -f ([Live]::LayoutOf($script:h)).ToInt64(), ([Live]::LayoutOf($script:h) -eq $layoutBefore)
   }
 }
+
+# ----- 21: the terminal's panes (docs/ui.md, "The terminal"; terminal unit 1 of 2026-10-01) -----
+# Each terminal session belongs to a pane. Ctrl+Backquote in a pane reaches that pane's session (Active Summoning), and
+# nothing a pane does changes the shown tab or types into a shell (Zero-Hijack). With real keys and the real mouse: the
+# left pane's session, then the right pane's (the dock stays: switching panes never hides it), a click and a folder
+# change in the left pane (the shown tab stays), Ctrl+Backquote there (the left session comes back), the tab keys
+# Alt+] and Alt+[ and Ctrl+Shift+T and Ctrl+Shift+W, the Locked/Linked toggle clicked, Ctrl+Shift+V pasting a command
+# that writes a file and Ctrl+Shift+C copying a selection, and Alt+] as a physical key on the Ukrainian layout.
+function TermLines([string]$message) { @(ShellLines $message | Where-Object { $_.target -eq 'cabinetos_ui::terminal' }) }
+function Summoned { TermLines 'terminal summoned' | Select-Object -Last 1 }
+function TermRequests { @(ShellLines 'request sent' | Where-Object { $_.fields.request -like 'terminal_*' -and $_.fields.request -ne 'terminal_resize' }).Count }
+function PageHasKeys([int]$before) { [bool](WaitShellLines 'a page has the keyboard' $before 5 { param($line) $line.fields.page -eq 'terminal' }) }
+$t21 = "$files\term21"
+New-Item -ItemType Directory -Force "$t21\inner" | Out-Null
+
+Step "21: Ctrl+Backquote in the left pane: the left pane's session, with the keyboard"
+GoLeftPane $t21
+$handed = @(ShellLines 'a page has the keyboard').Count
+$summons = @(TermLines 'terminal summoned').Count
+[Live]::Press($VK.Ctrl, $VK.Backquote)
+$left = WaitShellLines 'terminal summoned' $summons 5
+$leftHasKeys = PageHasKeys $handed
+Start-Sleep -Milliseconds 800
+$leftSession = if ($left.fields.session_id) { $left.fields.session_id } else { (TermLines 'terminal session opened' | Where-Object { $_.fields.pane -eq 'left' } | Select-Object -Last 1).fields.session_id }
+"21: Ctrl+Backquote from the left pane chose $($left.fields.action) for the left pane (session $leftSession), and the terminal has the keyboard: $($left.fields.pane -eq 'left' -and $left.fields.action -in 'ShowSession', 'OpenNew' -and $leftHasKeys)"
+
+Step "21: Ctrl+Backquote in the terminal, Tab to the right pane, Ctrl+Backquote: a new session for the right pane"
+[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 600
+$opened = @(TermLines 'terminal session opened').Count
+$handed = @(ShellLines 'a page has the keyboard').Count
+$hides = @(TermLines 'terminal summoned' | Where-Object { $_.fields.action -eq 'Hide' }).Count
+[Live]::Press($VK.Ctrl, $VK.Backquote)
+$right = WaitShellLines 'terminal session opened' $opened 8
+$rightHasKeys = PageHasKeys $handed
+Start-Sleep -Milliseconds 1500
+$rightSession = $right.fields.session_id
+"21: the right pane got a session of its own ($($right.fields.profile), session $rightSession, $($right.fields.mode)), the terminal has the keyboard, and the dock did not hide: $($right.fields.pane -eq 'right' -and $rightHasKeys -and @(TermLines 'terminal summoned' | Where-Object { $_.fields.action -eq 'Hide' }).Count -eq $hides)"
+[Live]::Type("echo right-21"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 800
+$leftTab = ShellElement "pwsh [Left], session $leftSession"
+$rightTab = ShellElement "pwsh [Right], session $rightSession"
+$rightMode = ShellElement "Locked, pwsh on the right pane"
+"21: the header shows both tabs with their badges and the right tab's mode ('pwsh [Left]', 'pwsh [Right]', 'Locked'): $([bool]$leftTab -and [bool]$rightTab -and [bool]$rightMode)"
+Shot $h "$ShotDir\21-two-panes-live.png"
+
+Step "21: a click in the left pane and a folder opened there: the shown tab stays, nothing is typed into a shell"
+$shown = @(TermLines 'terminal tab shown').Count
+$requests = TermRequests
+ClickLeftPane
+# Rows: inner.
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 200
+PressToFolder { [Live]::Press($VK.Enter) } "$t21\inner" 800
+PressToFolder { [Live]::Press($VK.Back) } $t21 800
+"21: the click and the folder change showed no other tab and sent no terminal request: $(@(TermLines 'terminal tab shown').Count -eq $shown -and (TermRequests) -eq $requests)"
+
+Step "21: Ctrl+Backquote in the left pane: the left session comes to the front with the keyboard; the dock stays"
+$summons = @(TermLines 'terminal summoned').Count
+$handed = @(ShellLines 'a page has the keyboard').Count
+[Live]::Press($VK.Ctrl, $VK.Backquote)
+$back = WaitShellLines 'terminal summoned' $summons 5
+$backHasKeys = PageHasKeys $handed
+Start-Sleep -Milliseconds 500
+"21: Ctrl+Backquote from the left pane chose $($back.fields.action) with session $($back.fields.session_id), and the terminal has the keyboard: $($back.fields.action -eq 'ShowSession' -and $back.fields.session_id -eq $leftSession -and $backHasKeys)"
+
+Step "21: Alt+] and Alt+[ in the terminal: the next tab, then the one before"
+$shown = @(TermLines 'terminal tab shown').Count
+[Live]::Press($VK.Alt, $VK.BracketRight)
+$next = WaitShellLines 'terminal tab shown' $shown 3
+Start-Sleep -Milliseconds 300
+$shown = @(TermLines 'terminal tab shown').Count
+[Live]::Press($VK.Alt, $VK.BracketLeft)
+$previous = WaitShellLines 'terminal tab shown' $shown 3
+Start-Sleep -Milliseconds 300
+"21: Alt+] showed session $($next.fields.session_id) and Alt+[ showed session $($previous.fields.session_id) again: $([bool]$next -and $next.fields.session_id -ne $leftSession -and $previous.fields.session_id -eq $leftSession)"
+
+Step "21: Ctrl+Shift+T in the terminal: a new session for the active pane; Ctrl+Shift+W closes it"
+$opened = @(TermLines 'terminal session opened').Count
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.T)
+$extra = WaitShellLines 'terminal session opened' $opened 8
+Start-Sleep -Milliseconds 1500
+$closed = @(TermLines 'terminal tab closed').Count
+$shown = @(TermLines 'terminal tab shown').Count
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.W)
+$gone = WaitShellLines 'terminal tab closed' $closed 5
+$after = WaitShellLines 'terminal tab shown' $shown 3
+Start-Sleep -Milliseconds 300
+"21: Ctrl+Shift+T opened session $($extra.fields.session_id) for the $($extra.fields.pane) pane, and Ctrl+Shift+W closed it and showed session $($after.fields.session_id): $($extra.fields.pane -eq 'left' -and $gone.fields.session_id -eq $extra.fields.session_id -and $after.fields.session_id -eq $leftSession)"
+
+Step "21: Ctrl+Shift+V in the terminal pastes a command; Enter runs it, and it writes a file"
+# Ctrl+Shift+W gave the keyboard to the tab that came to the front.
+$pasted = "$t21\pasted-21.txt"
+[System.Windows.Forms.Clipboard]::SetText("Set-Content -LiteralPath '$pasted' -Value 21")
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.V); Start-Sleep -Milliseconds 600
+[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+"21: Ctrl+Shift+V pasted the command and Enter wrote the file: $(Test-Path -LiteralPath $pasted)"
+
+Step "21: Clear-Host and an echo, a drag over the text, then Ctrl+Shift+C: the selection is on the clipboard"
+[Live]::Type("Clear-Host; echo copy-21"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
+[System.Windows.Forms.Clipboard]::SetText("cabinetos live check 21")
+$tab = ShellElement "pwsh [Left], session $leftSession"
+if ($tab) {
+  # The shell's first lines sit just under the tab: the prompt with the echo, then copy-21.
+  $r = $tab.Current.BoundingRectangle
+  [Live]::Drag([int]($r.Left + 20 * $scale), [int]($r.Bottom + 10 * $scale), [int]($r.Left + 320 * $scale), [int]($r.Bottom + 70 * $scale))
+  Start-Sleep -Milliseconds 300
+  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.C); Start-Sleep -Milliseconds 600
+}
+$copied = [System.Windows.Forms.Clipboard]::GetText()
+"21: Ctrl+Shift+C copied the shell's text ('$(($copied -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1))'): $([bool]$tab -and $copied -match 'copy-21')"
+
+Step "21: the left tab's Locked toggle, clicked: Linked; clicked again: Locked"
+$toggle = ShellElement "Locked, pwsh on the left pane"
+$changes = @(TermLines 'terminal mode changed').Count
+if ($toggle) { ClickElement $toggle }
+$linked = WaitShellLines 'terminal mode changed' $changes 5
+Start-Sleep -Milliseconds 400
+$linkedName = ShellElement "Linked, pwsh on the left pane"
+Shot $h "$ShotDir\21-linked-live.png"
+"21: the click linked session $($linked.fields.session_id) ($($linked.fields.mode)), and the toggle says Linked: $([bool]$toggle -and $linked.fields.session_id -eq $leftSession -and $linked.fields.mode -eq 'linked' -and [bool]$linkedName)"
+$changes = @(TermLines 'terminal mode changed').Count
+if ($linkedName) { ClickElement $linkedName }
+$locked = WaitShellLines 'terminal mode changed' $changes 5
+Start-Sleep -Milliseconds 400
+"21: the second click locked it again: $($locked.fields.mode -eq 'locked')"
+
+# The toggle takes no keyboard; a click into the shell's text gives the page the keys for the next step.
+if ($tab) {
+  $r = $tab.Current.BoundingRectangle
+  [Live]::Click([int]($r.Left + 200 * $scale), [int]($r.Bottom + 90 * $scale)); Start-Sleep -Milliseconds 500
+}
+
+$ukrainian = @([Live]::Layouts() | Where-Object { ($_.ToInt64() -band 0xFFFF) -eq 0x0422 }) | Select-Object -First 1
+if (-not $ukrainian) {
+  "21: the Ukrainian layout: not installed on this PC; Alt+] on it is skipped"
+} else {
+  Step "21: the window's own layout goes to Ukrainian; Alt+] as a physical key in the terminal"
+  $layoutBefore = [Live]::LayoutOf($script:h)
+  [Live]::SwitchLayout($script:h, $ukrainian)
+  $layoutNow = [Live]::LayoutOf($script:h)
+  try {
+    $nexts = CommandCount 'terminal.nextTab'
+    [Live]::PressPhysical($VK.Alt, $VK.BracketRight); Start-Sleep -Milliseconds 700
+    "21: on the Ukrainian layout ({0:X8}) Alt+] ran terminal.nextTab: {1}" -f $layoutNow.ToInt64(), ($layoutNow -eq $ukrainian -and (CommandCount 'terminal.nextTab') -gt $nexts)
+  } finally {
+    [Live]::SwitchLayout($script:h, $layoutBefore)
+    "21: the window's layout is back ({0:X8}): {1}" -f ([Live]::LayoutOf($script:h)).ToInt64(), ([Live]::LayoutOf($script:h) -eq $layoutBefore)
+  }
+}
+
+Step "21: a click on the left tab; Ctrl+Backquote gives the keyboard back to the pane; again: the dock hides"
+# Alt+] above may have brought the right pane's tab to the front: the second Ctrl+Backquote hides only the pane's own.
+$tab = ShellElement "pwsh [Left], session $leftSession"
+if ($tab) { ClickElement $tab; Start-Sleep -Milliseconds 800 }
+[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 600
+$summons = @(TermLines 'terminal summoned').Count
+[Live]::Press($VK.Ctrl, $VK.Backquote)
+$hidden = WaitShellLines 'terminal summoned' $summons 3
+Start-Sleep -Milliseconds 500
+"21: the second Ctrl+Backquote from the pane hid the dock: $($hidden.fields.action -eq 'Hide')"
 
 Step "close"
 $script:h = $null

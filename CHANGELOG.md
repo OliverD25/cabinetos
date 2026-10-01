@@ -18,8 +18,13 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Folder sizes for every folder of a listing: turn on `panes.folderSizes` in `cabinetos.json`, or run "Toggle Folder Sizes" from the palette, and each folder's Size is counted when a listing opens, with no key. It is off by default, because counting costs disk time. A pane that leaves a folder stops its count.
 - The column view: Ctrl+Alt+C ("Toggle Column View") shows a pane's tab as columns of names, as Finder does. Enter, Right or a click on a folder opens it in a column to the right, Left goes back up, the whole path stays on screen, and the tab keeps the mode across a restart.
+- Each terminal belongs to a file pane. Its tab shows `[Left]` or `[Right]` and a Locked/Linked switch ("Lock or Link Terminal to Its Pane" in the palette). Linked changes nothing yet: following the pane comes in a later version. Command Prompt and Claude Code stay locked, and the tooltip says why.
+- Keys for the terminal's tabs while it has the keyboard: Ctrl+Shift+T opens a terminal for the active pane, Ctrl+Shift+W closes the one in front, and Alt+[ and Alt+] show the tab before or after it. They also work on the Ukrainian keyboard layout. Ctrl+Shift+C copies the selected text and Ctrl+Shift+V pastes.
 
 ### Changed
+
+- Ctrl+\` works for the pane you press it in: it shows that pane's terminal with the keyboard, or starts one in the pane's folder. Pressed in the other pane, it shows that pane's terminal and never hides the dock. In the terminal it gives the keyboard back to the pane, and pressed again right after that, it hides the dock.
+- The terminal no longer follows the active pane. Clicking a pane, switching panes or opening a folder never changes the terminal in front and never types into a shell; the shell stays where you take it. The caption shows the folder the terminal started in. `followsPane` in `cabinetos.json` is ignored, and `cabinetos-cli term cd` is gone (`term mode` locks or links a terminal).
 
 - The right-click menu is WinUI's command bar menu, as Windows 11's Explorer shows it: the icons in a row at the top, the keys on the right of each row.
 - The "Open with…" button at the right end of each pane's tab strip is hidden until a second editor exists; its Editor commands stay in the command palette.

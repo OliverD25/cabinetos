@@ -61,10 +61,10 @@ file itself shows everything that can be set:
   "terminal": {
     "defaultProfile": "pwsh",
     "profiles": [
-      { "name": "pwsh", "command": "pwsh.exe", "args": ["-NoLogo"], "followsPane": true },
-      { "name": "cmd", "command": "cmd.exe", "args": [], "followsPane": true },
-      { "name": "wsl", "command": "wsl.exe", "args": [], "followsPane": true },
-      { "name": "claude", "command": "claude.exe", "args": ["--append-system-prompt", "…"], "followsPane": false }
+      { "name": "pwsh", "command": "pwsh.exe", "args": ["-NoLogo"], "linkable": true },
+      { "name": "cmd", "command": "cmd.exe", "args": [], "linkable": false },
+      { "name": "wsl", "command": "wsl.exe", "args": [], "linkable": true },
+      { "name": "claude", "command": "claude.exe", "args": ["--append-system-prompt", "…"], "linkable": false }
     ]
   },
   "keybindings": [],
@@ -142,7 +142,7 @@ while you type.
 | `contextMenu.<target>.quickActions` | list of command IDs | the menus of Phase 5 | The icon row at the top of the menu, left to right. `<target>` is `background`, `file`, `folder` or `multiSelect` |
 | `contextMenu.<target>.items` | list of `{ "command", "extensions" }` or `{ "separator": true }` | the menus of Phase 5 | The menu's rows, top to bottom |
 | `terminal.defaultProfile` | a profile `name` | `pwsh` | The shell a new terminal starts with when the client names none; must name one of the profiles |
-| `terminal.profiles` | list of `{ "name", "command", "args", "followsPane" }` | pwsh, cmd, wsl, claude | The programs a terminal can run. Names must be unique; `args` and `followsPane` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). `followsPane` (default `true`): whether the window types a change-directory line into the session when the active pane changes folder; `false` for a program that is not a shell, such as `claude`. |
+| `terminal.profiles` | list of `{ "name", "command", "args", "linkable" }` | pwsh, cmd, wsl, claude | The programs a terminal can run. Names must be unique; `args` and `linkable` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). `linkable`: whether a session of the profile may be linked to its pane ([terminal.md](terminal.md), "Panes and modes"); left out, `true` for PowerShell and WSL and `false` for any other program; `false` for cmd and `claude`, where no prompt hook can be added. `followsPane`, the key of the folder sync before 2026-10-01, is ignored: a file that has it still loads, and the core no longer writes it. |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
 | `logging.heavy` | `true`, `false` | `false` | Heavy logging: every operation is also written, at every level, into `heavy-<process>.<date>.jsonl` files next to the logs, at most 2 GB in all, even when that slows an operation down. On until turned off ([diagnostics.md](diagnostics.md), "Heavy mode") |
