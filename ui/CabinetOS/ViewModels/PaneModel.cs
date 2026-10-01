@@ -9,8 +9,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace CabinetOS.ViewModels;
 
-/// <summary>How long one navigation took, for the "listing shown" log line.</summary>
-public sealed record NavigationTiming(string RequestId, string Path, int Entries, ulong CoreUs, long StartedTicks, long RepliedTicks);
+/// <summary>
+/// How long one navigation took, for the "listing shown" log line; <paramref name="Kept"/> when a tab
+/// came back with the listing it kept (<see cref="ParkedListing"/>) and the core was not asked.
+/// </summary>
+public sealed record NavigationTiming(string RequestId, string Path, int Entries, ulong CoreUs, long StartedTicks, long RepliedTicks, bool Kept = false);
 
 /// <summary>One entry of a pane, as a command needs it.</summary>
 public sealed record PaneEntry(int Index, string Name, string Path, bool IsFolder, ulong Size);
@@ -55,6 +58,11 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     private readonly PaneFind _find;
     // The filter the rows were made with, so a change of it makes new rows.
     private IReadOnlyList<int>? _rowsVisible;
+    // The listing of the tab that went behind last, kept for a while so a switch back does not list again.
+    private readonly ParkedListing _kept;
+    private CancellationTokenSource? _keptTimer;
+    // The listing of the tab going behind while the next one is listed: kept once the pane lets go of it.
+    private ParkedListing.Entry? _keepOnLeave;
 
     /// <summary>
     /// Creates pane <paramref name="index"/>, asking <paramref name="core"/> for
@@ -76,6 +84,8 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         SearchSelection.Changed += () => OnPropertyChanged(nameof(Selection));
         _find = new PaneFind(core, Selection);
         _find.Changed += OnFindChanged;
+        _kept = new ParkedListing(core, () => Environment.TickCount64,
+            ParkedListing.LifetimeFrom(Environment.GetEnvironmentVariable(ParkedListing.LifetimeEnv)));
     }
 
     /// <summary>
@@ -651,11 +661,9 @@ public sealed class PaneModel : ObservableObject, IRowDetails
             }
         }
         RaiseHistoryChanged();
-        oldView?.Dispose();
-        if (oldListing != 0)
-        {
-            CloseListing(oldListing);
-        }
+        var keep = _keepOnLeave;
+        _keepOnLeave = null;
+        LetGo(oldView, oldListing, keep);
         Navigated?.Invoke(this, kind, samePlace);
         Listed?.Invoke(this, requestId);
         return true;
@@ -877,8 +885,12 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// name. A folder that is gone falls back to its parents, then to
     /// <paramref name="fallbacks"/>; only the first failure is reported.
     /// </summary>
-    public async Task<bool> RestoreAsync(PaneTab tab, IEnumerable<string> fallbacks, string? requestId = null)
+    public async Task<bool> RestoreAsync(PaneTab tab, IEnumerable<string> fallbacks, string? requestId = null, PaneTab? leaving = null)
     {
+        // The listing of the tab going behind, as the pane has it now (before the find closes and the order changes).
+        var outgoing = leaving is not null && _view is { } current && _listingId != 0
+            ? new ParkedListing.Entry(leaving, Path, EffectiveSort, _listingId, current, Selection.Focus, Selection.Anchor, [.. Selection.AllSelected])
+            : null;
         // The find of the tab that was in front is its own; this tab's comes back once its folder is listed.
         if (_find.IsOpen)
         {
@@ -903,26 +915,117 @@ public sealed class PaneModel : ObservableObject, IRowDetails
             candidates.Add(parent);
         }
         candidates.AddRange(fallbacks);
-        for (var i = 0; i < candidates.Count; i++)
+        // A tab in the column view keeps no listing (ADR 0016), so only a list tab can find its own here.
+        if (tab.Mode == TabMode.Files && _kept.TakeBack(tab, EffectiveSort) is { } kept)
         {
-            if (!await NavigateAsync(candidates[i], i == 0 ? requestId : null, NavigationKind.Reload, i == 0 ? tab.CursorName : null, notify: i == 0))
+            ShowKept(kept, outgoing, requestId);
+            if (tab.FindQuery is { } keptQuery)
             {
-                continue;
-            }
-            if (i == 0 && tab.MarkedNames.Count > 0 && _view is { } view)
-            {
-                Selection.Restore(view.Count, view.IndexesOfNames(tab.MarkedNames), Selection.Focus, Selection.Anchor);
-            }
-            if (i == 0 && tab.FindQuery is { } query)
-            {
-                _find.Open(query);
+                _find.Open(keptQuery);
                 await RefindAsync();
             }
             return true;
         }
+        _keepOnLeave = outgoing;
+        try
+        {
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                if (!await NavigateAsync(candidates[i], i == 0 ? requestId : null, NavigationKind.Reload, i == 0 ? tab.CursorName : null, notify: i == 0))
+                {
+                    continue;
+                }
+                if (i == 0 && tab.MarkedNames.Count > 0 && _view is { } view)
+                {
+                    Selection.Restore(view.Count, view.IndexesOfNames(tab.MarkedNames), Selection.Focus, Selection.Anchor);
+                }
+                if (i == 0 && tab.FindQuery is { } query)
+                {
+                    _find.Open(query);
+                    await RefindAsync();
+                }
+                return true;
+            }
+        }
+        finally
+        {
+            _keepOnLeave = null;
+        }
         RaiseHistoryChanged();
         return false;
     }
+
+    // A tab back in front with the listing it kept: the rows are bound to it again, with the cursor and the marks
+    // it had, and the core is not asked. The listing of the tab that went behind is kept in its place.
+    private void ShowKept(ParkedListing.Entry kept, ParkedListing.Entry? outgoing, string? requestId)
+    {
+        // A navigation that answers later is no longer wanted, as after a new listing.
+        ++_navigation;
+        var started = Stopwatch.GetTimestamp();
+        var oldView = _view;
+        var oldListing = _listingId;
+        var samePlace = string.Equals(Path, kept.Path, StringComparison.OrdinalIgnoreCase);
+        if (!Sizes.IsEmpty && !samePlace)
+        {
+            ForgetSizes();
+        }
+        _view = kept.View;
+        _listingId = kept.ListingId;
+        _details.Reset(kept.ListingId, kept.View.Generation);
+        PendingTiming = new NavigationTiming(requestId ?? Ulid.NewId(), kept.Path, kept.View.Count, 0, started, started, Kept: true);
+        Path = kept.Path;
+        Drives.Remember(kept.Path);
+        Message = kept.View.Count == 0 ? "This folder is empty." : null;
+        _rowsVisible = null;
+        Rows = new ListingRows(kept.View, this);
+        Selection.Restore(kept.View.Count, kept.Selected, kept.Focus, kept.Anchor);
+        RaiseHistoryChanged();
+        LetGo(oldView, oldListing, outgoing);
+        Navigated?.Invoke(this, NavigationKind.Reload, samePlace);
+        Listed?.Invoke(this, requestId);
+    }
+
+    // The listing the pane showed before: kept for the tab that went behind while it still is that tab's, else closed.
+    private void LetGo(ListingView? view, ulong listingId, ParkedListing.Entry? keep)
+    {
+        if (keep is not null && view is not null && ReferenceEquals(keep.View, view) && keep.ListingId == listingId)
+        {
+            _kept.Park(keep);
+            _keptTimer?.Cancel();
+            _keptTimer?.Dispose();
+            _keptTimer = new CancellationTokenSource();
+            _ = ExpireKeptAsync(_keptTimer.Token);
+            return;
+        }
+        view?.Dispose();
+        if (listingId != 0)
+        {
+            CloseListing(listingId);
+        }
+    }
+
+    // Lets the kept listing go when its time is up; a newer one cancels this wait and starts its own.
+    private async Task ExpireKeptAsync(CancellationToken cancellationToken)
+    {
+        while (_kept.DueInMs is { } due)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(1, due)), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            _kept.ReleaseIfExpired();
+        }
+    }
+
+    /// <summary>
+    /// Lets the listing kept for a tab behind go when that tab is not among
+    /// <paramref name="tabs"/> any more (closed, or moved to the other pane).
+    /// </summary>
+    public void ReleaseKeptUnlessAmong(IEnumerable<PaneTab> tabs) => _kept.ReleaseUnlessAmong(tabs);
 
     /// <summary>Goes to the parent folder and selects the folder it came from.</summary>
     public Task GoUpAsync(string requestId) =>
@@ -946,6 +1049,12 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// </summary>
     public bool ApplyRefresh(ListingRefreshedEvent refreshed)
     {
+        // A kept listing whose folder changed goes; its tab lists the folder again when it comes back.
+        if (_kept.Release(refreshed.ListingId, "its folder changed"))
+        {
+            refreshed.TakeSection()?.Dispose();
+            return true;
+        }
         if (refreshed.ListingId != _listingId || _view is not { } old || refreshed.Generation <= old.Generation)
         {
             return false;
@@ -1018,7 +1127,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// </summary>
     public async Task ApplyLostAsync(ListingLostEvent lost)
     {
-        if (lost.ListingId != _listingId)
+        if (_kept.Release(lost.ListingId, "its folder is gone") || lost.ListingId != _listingId)
         {
             return;
         }
@@ -1041,6 +1150,7 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// </summary>
     public void ForgetListing()
     {
+        _kept.Forget("the core started again");
         _listingId = 0;
         _detailsUnavailable = false;
         // The dead core's counts never finish: without this the rows say "counting" for good, and the
@@ -1051,6 +1161,8 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// <summary>Releases the listing, at shutdown.</summary>
     public void Release()
     {
+        _kept.Forget("the window closes");
+        _keptTimer?.Cancel();
         _view?.Dispose();
         _view = null;
         _listingId = 0;

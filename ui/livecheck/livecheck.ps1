@@ -800,6 +800,8 @@ $metrics = LastMetrics
 function TabLog { Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"target":"cabinetos_ui::tabs"' } | ForEach-Object { $_ | ConvertFrom-Json } }
 function LastTabShown { TabLog | Where-Object { $_.message -eq 'tab shown' -and $_.fields.pane -eq 0 } | Select-Object -Last 1 }
 function NoticeCount([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"notice shown"' -and $_ -match $pattern }).Count }
+function ListRequests { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"request sent"' -and $_ -match '"request":"list_directory"' }).Count }
+function TakenBack { @(TabLog | Where-Object { $_.message -eq 'tab listing taken back' }).Count }
 $tb = "$files\tabs12"
 New-Item -ItemType Directory -Force "$tb\one\sub", "$tb\two" | Out-Null
 Set-Content -LiteralPath "$tb\one\note.txt" -Value "one" -NoNewline
@@ -825,6 +827,17 @@ Step "tabs: Ctrl+Tab goes on to the first tab"
 [Live]::Press($VK.Ctrl, $VK.Tab); Start-Sleep -Milliseconds 900
 $shown = LastTabShown
 "tabs: Ctrl+Tab from the last tab came to the first: $($shown.fields.index -eq 0)"
+
+# The pane keeps the listing of the tab that went behind last (docs/ui.md, "Tabs"): the third tab's now, then the first's.
+Step "tabs: Ctrl+Shift+Tab and Ctrl+Tab: both tabs take their kept listings back, no folder is listed again"
+$takenBefore = TakenBack
+$listsBefore = ListRequests
+[Live]::Press($VK.Ctrl, $VK.Shift, $VK.Tab); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Ctrl, $VK.Tab); Start-Sleep -Milliseconds 900
+$shown = LastTabShown
+"tabs: back on the first tab after Ctrl+Shift+Tab and Ctrl+Tab: $($shown.fields.index -eq 0)"
+"tabs: both switches took a kept listing back: $((TakenBack) -eq $takenBefore + 2)"
+"tabs: no folder was listed again for them: $((ListRequests) -eq $listsBefore)"
 
 Step "tabs: the palette, Toggle Tab Lock, Enter"
 [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500

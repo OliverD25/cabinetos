@@ -160,6 +160,8 @@ public sealed partial class MainWindow
     {
         var strip = _strips[pane];
         var tab = strip.Active;
+        // A listing kept for a tab that was closed or went to the other pane has no tab to come back to.
+        _panes[pane].ReleaseKeptUnlessAmong(strip.Tabs);
         if (_searchPane == pane)
         {
             EndSearch(focusPane: false);
@@ -186,15 +188,19 @@ public sealed partial class MainWindow
         {
             // The columns belong to the tab that goes behind: it keeps its deepest folder and its mode, not its columns.
             CloseColumnView(pane);
+            PaneTab? leaving = null;
             if (_held[pane] is { IsTool: false } old && strip.IndexOf(old) >= 0)
             {
                 _panes[pane].CaptureInto(old);
                 // The list's scroll position is the view's, not the model's: the tab keeps it too (Phase 16).
                 old.ScrollOffset = view.ScrollOffset;
+                // Its listing is kept for a while, so coming back does not list the folder again; a tab in the
+                // column view keeps none (ADR 0016).
+                leaving = old.Mode == TabMode.Files ? old : null;
             }
             _held[pane] = tab;
             var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (!await _panes[pane].RestoreAsync(tab, [profile, @"C:\"], requestId))
+            if (!await _panes[pane].RestoreAsync(tab, [profile, @"C:\"], requestId, leaving))
             {
                 Diag.Warn(TabsTarget, "a tab could not show its folder", new LogField("pane", pane), new LogField("path", tab.Path));
             }

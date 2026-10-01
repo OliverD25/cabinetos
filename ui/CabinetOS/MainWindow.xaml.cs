@@ -1062,7 +1062,8 @@ public sealed partial class MainWindow : Window
                 _ = _panes.Any(p => p.ApplyRefresh(refreshed)) || _columnViews.Any(c => c?.ApplyRefresh(refreshed) == true);
                 break;
             case ListingLostEvent lost:
-                foreach (var pane in _panes.Where(p => p.ListingId == lost.ListingId))
+                // A pane's own listing, or the one it keeps for a tab behind.
+                foreach (var pane in _panes)
                 {
                     _ = pane.ApplyLostAsync(lost);
                 }
