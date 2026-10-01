@@ -170,6 +170,8 @@ public sealed partial class MainWindow : Window
         Palette.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         Palette.ReturnFocus = ReturnFocusAfterPalette;
         PromptView.ReturnFocus = FocusActivePane;
+        // Every prompt (the drive list, the pattern box, the pinned folders, a plugin's question) closes the other overlays first.
+        PromptView.Opening += () => CloseOtherOverlays(Overlay.Prompt);
         _palette.KeymapUpdated += keymap => ApplyKeymap(Keymap.From(keymap));
 
         TransferView.Center = _transfers;
@@ -738,7 +740,8 @@ public sealed partial class MainWindow : Window
             : IsWithin(focused, RootGrid) ? "window"
             : "elsewhere";
         Diag.Info("cabinetos_ui::snapshot", "keyboard focus", new LogField("label", label), new LogField("element", focused?.GetType().Name ?? "none"),
-            new LogField("name", name), new LogField("x_name", (focused as FrameworkElement)?.Name ?? ""), new LogField("within", within));
+            new LogField("name", name), new LogField("x_name", (focused as FrameworkElement)?.Name ?? ""), new LogField("within", within),
+            new LogField("overlays", OpenOverlayNames()));
         LogKeyboard(label);
 
         static bool IsWithin(DependencyObject element, DependencyObject container)
@@ -1350,7 +1353,13 @@ public sealed partial class MainWindow : Window
         _router.RegisterUiHandler("overlay.close", _ => CloseOverlay());
         // The palette lists every command with its keys and edits them: it is
         // the shortcut editor of this version.
-        _router.RegisterUiHandler("keys.open", _ => _palette.Open());
+        _router.RegisterUiHandler("keys.open", _ =>
+        {
+            if (!_palette.IsOpen)
+            {
+                OpenPalette();
+            }
+        });
         _router.RegisterUiHandler("view.toggleDualPane", invocation =>
         {
             if (RefuseInCompact("dual pane"))
@@ -1592,21 +1601,22 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            EndAddressEdit();
-            FileMenu.Close();
-            PromptView.Cancel();
-            // One overlay at a time: Ctrl+Shift+P from Quick Open shows the commands instead.
-            CloseQuickOpen(returnFocus: false);
-            // Ctrl+Shift+P from a shell or a tool's page: the keyboard goes back there when the palette closes.
-            _paletteFromTerminal = Dock.HasTerminalFocus;
-            _paletteBackToPage = _paletteFromTerminal ? null : WayBackToToolPage();
-            _palette.Open();
-            // Once the palette has the keyboard: a review left open is a Cancel; the list and
-            // the picker come back from the palette.
-            ReviewView.Close();
-            PluginsView.Close();
-            HideThemePicker(restore: true);
+            OpenPalette();
         }
+    }
+
+    private void OpenPalette()
+    {
+        EndAddressEdit();
+        FileMenu.Close();
+        // One overlay at a time: Ctrl+Shift+P from Quick Open or a prompt shows the commands instead.
+        CloseOtherOverlays(Overlay.Palette);
+        // Ctrl+Shift+P from a shell or a tool's page: the keyboard goes back there when the palette closes.
+        _paletteFromTerminal = Dock.HasTerminalFocus;
+        _paletteBackToPage = _paletteFromTerminal ? null : WayBackToToolPage();
+        _palette.Open();
+        // Once the palette has the keyboard: a review left open is a Cancel (it is a dialog, not one of the overlays).
+        ReviewView.Close();
     }
 
     private void ReturnFocusAfterPalette()

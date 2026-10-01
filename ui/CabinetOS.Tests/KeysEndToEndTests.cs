@@ -365,6 +365,98 @@ public class KeysEndToEndTests
         }
     }
 
+    [Fact]
+    public async Task Opening_an_overlay_closes_the_others_and_Esc_closes_the_one_on_screen()
+    {
+        var (run, root, data) = Prepare("keys-one-overlay");
+        try
+        {
+            // Ctrl+K Ctrl+T works in every box and over every overlay: from the palette, Quick Open and the drive list the
+            // picker opens, and the overlay under it goes first, so the first Esc closes the picker and nothing is left open.
+            // The plugin list opened over the palette does the same; the palette opened over the list too.
+            var process = run.Start("one-overlay", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "cmd:palette.show",
+                "wait:500",
+                "focus:palette",
+                "key:ctrl+k ctrl+t",
+                "wait:800",
+                "focus:palette-picker",
+                "key:escape",
+                "wait:600",
+                "focus:palette-esc",
+                "cmd:quickOpen.show",
+                "wait:500",
+                "focus:quick",
+                "key:ctrl+k ctrl+t",
+                "wait:800",
+                "focus:quick-picker",
+                "key:escape",
+                "wait:600",
+                "focus:quick-esc",
+                "cmd-nowait:go.chooseDriveLeft",
+                "wait:700",
+                "focus:drives",
+                "key:ctrl+k ctrl+t",
+                "wait:800",
+                "focus:drives-picker",
+                "key:escape",
+                "wait:600",
+                "focus:drives-esc",
+                "cmd:palette.show",
+                "wait:500",
+                "cmd:plugins.list",
+                "wait:800",
+                "focus:palette-plugins",
+                "cmd:palette.show",
+                "wait:500",
+                "focus:plugins-palette",
+                "key:escape",
+                "wait:600",
+                "focus:plugins-esc",
+                "shot:done"));
+            var logs = await run.FinishAsync("one-overlay", process, "done");
+
+            var focus = Focus(logs);
+            string Open(string label) => Field(focus[label], "overlays").GetString()!;
+            string Context() => Evidence(logs);
+
+            Assert.Equal("Palette", Open("palette"));
+            Assert.True(Open("palette-picker") == "ThemePicker", "the picker opened over the palette and closed it" + Context());
+            Assert.Equal("", Open("palette-esc"));
+            Assert.Equal("FilePane", Field(focus["palette-esc"], "element").GetString());
+
+            Assert.Equal("QuickOpen", Open("quick"));
+            Assert.True(Open("quick-picker") == "ThemePicker", "the picker opened over Quick Open and closed it" + Context());
+            Assert.Equal("", Open("quick-esc"));
+
+            Assert.Equal("Prompt", Open("drives"));
+            Assert.True(Open("drives-picker") == "ThemePicker", "the picker opened over the drive list and closed it" + Context());
+            Assert.Equal("", Open("drives-esc"));
+
+            Assert.True(Open("palette-plugins") == "PluginList", "the plugin list opened over the palette and closed it" + Context());
+            Assert.True(Open("plugins-palette") == "Palette", "the palette opened over the plugin list and closed it" + Context());
+            Assert.Equal("", Open("plugins-esc"));
+            Assert.Equal("FilePane", Field(focus["plugins-esc"], "element").GetString());
+
+            var closed = logs.Where(l => Message(l) == "overlays closed for another")
+                .Select(l => (Field(l, "opening").GetString(), Field(l, "closed").GetString())).ToList();
+            Assert.Contains(("ThemePicker", "Palette"), closed);
+            Assert.Contains(("ThemePicker", "QuickOpen"), closed);
+            Assert.Contains(("ThemePicker", "Prompt"), closed);
+            Assert.Contains(("PluginList", "Palette"), closed);
+            Assert.Contains(("Palette", "PluginList"), closed);
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
     // The lines that say what the keys did, for the message of a failed assertion.
     private static string Evidence(List<string> logs) => "\n" + string.Join('\n', logs
         .Where(l => Message(l) is "key sent" or "key sent to a page" or "command executed" or "a key the page did not get" or "keyboard focus"

@@ -79,8 +79,7 @@ public sealed partial class MainWindow
     {
         // The marketplace takes the main column's place: what floats over the panes or edits them ends first.
         FileMenu.Close();
-        HideThemePicker(restore: true);
-        PluginsView.Close();
+        CloseOtherOverlays(opening: null);
         EndAddressEdit();
         foreach (var pane in _paneViews.Where(v => v.IsRenaming))
         {

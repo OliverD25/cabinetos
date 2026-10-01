@@ -47,13 +47,9 @@ public sealed partial class MainWindow
     /// <summary>Shows Quick Open on the workspace: the repository that holds the active folder, else that folder.</summary>
     private void OpenQuickOpen()
     {
-        if (_palette.IsOpen)
-        {
-            _palette.Close();
-        }
         EndAddressEdit();
         FileMenu.Close();
-        PromptView.Cancel();
+        CloseOtherOverlays(Overlay.QuickOpen);
         var root = WorkspaceRoot();
         _quickOpen.Open(root);
         QuickOpenView.Show();

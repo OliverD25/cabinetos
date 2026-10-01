@@ -1,6 +1,7 @@
 using CabinetOS.Core.Commands;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Plugins;
+using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Services;
 
@@ -39,6 +40,7 @@ public sealed partial class MainWindow
         {
             return;
         }
+        CloseOtherOverlays(Overlay.PluginList);
         PluginsView.Show(plugins.Select(p => new PluginRow(p)).ToList(), PluginsFolder());
     }
 

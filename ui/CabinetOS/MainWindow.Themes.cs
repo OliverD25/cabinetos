@@ -1,5 +1,6 @@
 using CabinetOS.Core.Commands;
 using CabinetOS.Core.Diagnostics;
+using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Themes;
 using CabinetOS.Services;
@@ -74,6 +75,7 @@ public sealed partial class MainWindow
     private async Task OpenThemePickerAsync()
     {
         FileMenu.Close();
+        CloseOtherOverlays(Overlay.ThemePicker);
         _picker.BeginPreviews();
         ThemesView.Open();
         await _picker.LoadAsync(_themes.Theme?.Id);

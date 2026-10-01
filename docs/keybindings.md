@@ -460,6 +460,26 @@ no tab key came out of a page):
 - A key held down is passed once (the rule above), so Ctrl+Tab held in a page
   does not repeat; it repeats in a pane's list.
 
+**One overlay at a time.** The palette, Quick Open, a prompt (the drive list,
+the pattern box, the pinned folders, a plugin's question), the theme picker and
+the plugin list are the overlays. Opening one closes every other one first, so
+at most one is open and Esc closes the one on screen. The marketplace, which
+covers the panes, closes them all as it opens. Each closes as Esc closes it:
+the keyboard goes to the pane, then the new overlay takes it. `OverlayRule`
+says what closes (tested), and `MainWindow.CloseOtherOverlays` is the one
+step every opening calls. Ctrl+K Ctrl+T works from any box ("Text boxes"), so
+from the palette, Quick Open or the drive list it closes that overlay and shows
+the picker, and the first Esc closes the picker and leaves nothing open.
+The permissions review is not one of them: it is a dialog of the window (the
+router refuses every command but its own while it shows), and it opens over the
+plugin list or the marketplace that asked for it, or by itself when a plugin
+newly waits for a review, which does not close what the user is doing. The
+rules of the audit's round two stay: a key that types nothing runs from a box,
+and Esc during a chord's wait only ends the wait. Until 2026-10-01 the picker
+opened over the palette, Quick Open, a prompt and the drive list, the plugin
+list opened over the palette and the prompts, and the first Esc closed the
+overlay under the picker.
+
 ## The Immutable System Tier
 
 Three commands keep their keys whatever the configuration says:

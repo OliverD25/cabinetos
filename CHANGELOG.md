@@ -54,6 +54,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The keyboard now works in dialogs: Tab and the arrows move between the buttons, and Enter and Space press one. Before, only Esc worked in "Delete permanently?", Properties, About, the update questions and the other dialogs.
 - Shift+F10 or the Menu key on a focused row that was scrolled out of view no longer closes CabinetOS without a word. The menu opens near the top of the pane instead, as it does for a row the list has not drawn.
 - Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W, Ctrl+T and Ctrl+1 to 9 work while the keyboard is in a tool's page, such as a Markdown Preview or the agent's chat. Before, the page kept them, and only Ctrl+Shift+P and Ctrl+\` came out. They change the tabs of the pane that holds the page, and the keyboard goes to the tab that comes to the front. The terminal passes back Ctrl+Tab and Ctrl+Shift+Tab only: Ctrl+W and Ctrl+T are shell keys (delete word, transpose), so they stay with the shell.
+- Only one overlay is open at a time. Opening the theme picker (Ctrl+K Ctrl+T), the command palette, Quick Open, a prompt (the drive list, Num +, Ctrl+D) or the plugin list closes the one that was open, and Esc closes the one on screen. Before, the picker opened over them, and the first Esc closed the one under it.
 
 ## [0.1.0] - 2026-09-30
 

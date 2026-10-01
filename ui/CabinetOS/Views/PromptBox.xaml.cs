@@ -60,6 +60,9 @@ public sealed partial class PromptBox : UserControl
     /// <summary>Gives the keyboard back (to the pane) when the prompt closes.</summary>
     public Action? ReturnFocus { get; set; }
 
+    /// <summary>A prompt is about to show: the window closes the other overlays first (one overlay at a time).</summary>
+    public event Action? Opening;
+
     /// <summary>
     /// Shows <paramref name="request"/> and waits for the answer: the result,
     /// or null when the user cancelled. A prompt already shown is cancelled.
@@ -68,6 +71,7 @@ public sealed partial class PromptBox : UserControl
     /// </summary>
     public Task<PromptResult?> ShowAsync(PromptRequest request, FrameworkElement? anchor = null)
     {
+        Opening?.Invoke();
         Cancel();
         var pending = new TaskCompletionSource<PromptResult?>();
         _pending = pending;
