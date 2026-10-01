@@ -478,8 +478,27 @@ public class ShellEndToEndTests
     {
         var line = Assert.Single(logs, l => Message(l) == "shell state" && Field(l, "label").GetString() == label);
         using var parsed = JsonDocument.Parse(line);
-        check(parsed.RootElement.GetProperty("fields"));
+        try
+        {
+            check(parsed.RootElement.GetProperty("fields"));
+        }
+        catch (Xunit.Sdk.XunitException error)
+        {
+            // A state that came before the filter did shows in the times: the find's lines against the state's.
+            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe find and state lines of the window's log:\n{FindTimeline(logs)}");
+        }
     }
+
+    private static string FindTimeline(List<string> logs) =>
+        string.Join('\n', logs.Where(l => Message(l) is "find opened" or "find filtered" or "find closed" or "shell state").Select(l =>
+        {
+            using var parsed = JsonDocument.Parse(l);
+            var fields = parsed.RootElement.GetProperty("fields");
+            var detail = Message(l) == "shell state"
+                ? $"{fields.GetProperty("label")} pane0_find={fields.GetProperty("pane0_find")} pane0_shown={fields.GetProperty("pane0_shown")} pane0_find_count={fields.GetProperty("pane0_find_count")}"
+                : fields.ToString();
+            return $"  {parsed.RootElement.GetProperty("ts").GetString()} {Message(l)} {detail}";
+        }));
 
     private static string? Message(string line)
     {

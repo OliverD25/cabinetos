@@ -1,0 +1,56 @@
+# Runs some of the window's end-to-end tests again and again, beside a CPU load, on the machine it runs on, and says for
+# each run whether it passed. It is for a test that fails only on a busy machine: one run proves nothing, five runs
+# beside a load do. It builds nothing: the build under ui\CabinetOS.Tests\bin must be of the commit under test
+# (remote-tests.ps1 builds it; run that first with the same filter). The load is -Burn busy processes. Each loops at
+# normal priority until -BurnMinutes pass or this script ends. One to 1.5 busy processes for each logical processor
+# make a loaded machine (the creator's Omen laptop has 16). The exit code is the number of runs that did not pass.
+#
+# On the Omen laptop, through remote-script.ps1 (the windows need its desktop):
+#   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-script.ps1 -Script ui\livecheck\repeat-tests.ps1 -Args '-Filter "FullyQualifiedName~The_top_row_fits" -Times 5 -Burn 24' -Branch <branch>
+param(
+  [Parameter(Mandatory = $true)][string]$Filter,
+  [int]$Times = 5,
+  [int]$Burn = 0,
+  [int]$BurnMinutes = 30
+)
+$ErrorActionPreference = 'Continue'
+$ui = Split-Path $PSScriptRoot -Parent
+$repo = Split-Path $ui -Parent
+$env:CABINETOS_UI_E2E = '1'
+$core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
+if (Test-Path -LiteralPath $core) { $env:CABINETOS_CORE_EXE = $core }
+$burners = @()
+$failedRuns = 0
+try {
+  $busy = "`$end = (Get-Date).AddMinutes($BurnMinutes); while ((Get-Date) -lt `$end) { }"
+  for ($i = 0; $i -lt $Burn; $i++) {
+    $burners += Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-Command', $busy
+  }
+  if ($burners.Count -gt 0) { "load: $($burners.Count) busy processes on $env:NUMBER_OF_PROCESSORS logical processors"; Start-Sleep -Seconds 5 }
+  "filter: $Filter, $Times runs, at $(git -C $repo rev-parse --short HEAD)"
+  Push-Location $ui
+  for ($run = 1; $run -le $Times; $run++) {
+    $started = Get-Date
+    $lines = @(& dotnet test --solution CabinetOS.sln --no-build --filter $Filter 2>&1 | ForEach-Object { "$_" })
+    $code = $LASTEXITCODE
+    $seconds = [int]((Get-Date) - $started).TotalSeconds
+    $counts = @($lines | Where-Object { $_ -match '^\s*(total|failed|succeeded|skipped):' } | ForEach-Object { $_.Trim() }) -join ' '
+    # A run that matched no test, or skipped them all (the opt-in off), proves nothing: it counts as not passed.
+    $ran = ($counts -match 'succeeded: [1-9]') -or ($counts -match 'failed: [1-9]')
+    if ($code -eq 0 -and $ran) {
+      "run $run of ${Times}: passed in $seconds s ($counts)"
+    } else {
+      $failedRuns++
+      "run $run of ${Times}: NOT PASSED in $seconds s, exit code $code ($counts)"
+      $from = -1
+      for ($n = 0; $n -lt $lines.Count; $n++) { if ($lines[$n] -match '^\s*failed ') { $from = $n; break } }
+      if ($from -ge 0) { $shown = $lines[$from..([Math]::Min($lines.Count - 1, $from + 60))] } else { $shown = $lines | Select-Object -Last 30 }
+      foreach ($line in $shown) { '    ' + $(if ($line.Length -gt 600) { $line.Substring(0, 600) + '...' } else { $line }) }
+    }
+  }
+  Pop-Location
+  "summary: $($Times - $failedRuns) of $Times runs passed"
+} finally {
+  foreach ($burner in $burners) { try { $burner.Kill() } catch { } }
+}
+exit $failedRuns
