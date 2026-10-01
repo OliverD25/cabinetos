@@ -802,6 +802,8 @@ public sealed partial class MainWindow : Window
                 // The right-click menu is on screen (a newer one no longer waits for the one before it), or it is gone.
                 "menu" => _contextMenu.IsSettled,
                 "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,
+                // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
+                "keyboard" => _pageChecksPending == 0,
                 _ => true,
             };
             if (met)

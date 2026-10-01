@@ -45,7 +45,8 @@ internal sealed record SnapshotStep(string Kind, string Argument);
 /// (the keyboard moves to it, then its automation peer invokes it), <c>focus:&lt;label&gt;</c> logs where the keyboard is,
 /// <c>scroll:&lt;pages&gt;</c> presses PageDown in the active pane 30 times a second (<c>scroll:&lt;pages&gt;/&lt;n&gt;</c>: once every n frames)
 /// and logs the frame table of the run when <c>CABINETOS_UI_FRAMESTATS=1</c>,
-/// <c>until:running|conflict|terminal|search|tool</c> waits for a job, a shell, an answer or a tool page, <c>wait:&lt;ms&gt;</c> waits, and
+/// <c>until:running|conflict|terminal|search|tool|keyboard</c> waits for a job, a shell, an answer, a tool page or the end of a
+/// hand-over of the keyboard to a web page, <c>wait:&lt;ms&gt;</c> waits, and
 /// <c>shot:&lt;name&gt;</c> renders the window's content to <c>&lt;name&gt;.png</c>.
 /// The window draws its own content, so this works when the screen is locked
 /// or off; the Mica backdrop is not part of it (a stand-in colour is).

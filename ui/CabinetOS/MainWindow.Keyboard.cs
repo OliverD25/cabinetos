@@ -24,6 +24,9 @@ public sealed partial class MainWindow
     // Each hand-over to a page gets a number; a check that finds a newer one leaves the keyboard alone.
     private int _pageHandOver;
 
+    // Checks of a hand-over that have not run yet: the snapshot aid's until:keyboard waits until there is none.
+    private int _pageChecksPending;
+
     /// <summary>
     /// Gives <paramref name="view"/> (the page named <paramref name="page"/>)
     /// the keyboard, then checks that Windows sends the keys there, and hands
@@ -47,8 +50,10 @@ public sealed partial class MainWindow
         var timer = DispatcherQueue.CreateTimer();
         timer.IsRepeating = false;
         timer.Interval = PageKeyboard.CheckAfter;
+        _pageChecksPending++;
         timer.Tick += (_, _) =>
         {
+            _pageChecksPending--;
             if (handOver != _pageHandOver)
             {
                 return;
