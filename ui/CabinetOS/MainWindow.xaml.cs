@@ -343,6 +343,7 @@ public sealed partial class MainWindow : Window
             pane.Release();
         }
         _closed = true;
+        RowFactory.WindowClosing();
         Close();
     }
 

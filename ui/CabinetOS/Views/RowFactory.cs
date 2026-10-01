@@ -23,6 +23,14 @@ internal sealed class RowFactory(DataTemplate template, DispatcherQueue queue) :
     private int _wanted;
     private bool _making;
 
+    // Set when the window closes: a step still waiting in the dispatcher then runs while XAML is taken down, and
+    // DataTemplate.LoadContent fails with an access violation (0xC0000005) that ends the process with a crash report.
+    // On a busy machine the idle steps have not finished when the window closes, so every run of a test beside a load saw it.
+    private static volatile bool _windowClosing;
+
+    /// <summary>The window is closing: no row is made ahead from now on.</summary>
+    public static void WindowClosing() => _windowClosing = true;
+
     /// <summary>Rows made so far, by the repeater's need and ahead of it.</summary>
     public int Made { get; private set; }
 
@@ -33,7 +41,7 @@ internal sealed class RowFactory(DataTemplate template, DispatcherQueue queue) :
     public void MakeAhead(int rows)
     {
         _wanted = Math.Max(_wanted, rows);
-        if (_ahead < _wanted && !_making)
+        if (_ahead < _wanted && !_making && !_windowClosing)
         {
             _making = queue.TryEnqueue(DispatcherQueuePriority.Low, Step);
         }
@@ -41,6 +49,11 @@ internal sealed class RowFactory(DataTemplate template, DispatcherQueue queue) :
 
     private void Step()
     {
+        if (_windowClosing)
+        {
+            _making = false;
+            return;
+        }
         var started = Stopwatch.GetTimestamp();
         while (_ahead < _wanted && Stopwatch.GetElapsedTime(started).TotalMilliseconds < SliceMs)
         {
