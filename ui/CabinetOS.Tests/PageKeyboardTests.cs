@@ -60,6 +60,17 @@ public class PageKeyboardTests
         Assert.InRange(PageKeyboard.Attempts, 1, 5);
     }
 
+    [Fact]
+    public void The_check_waits_for_frames_too_and_not_for_ever()
+    {
+        // A frame is what makes a page's browser visible to WinUI: at least one must come between a hand-over and the look.
+        Assert.InRange(PageKeyboard.FramesBeforeCheck, 1, 4);
+        // The wait for them ends: with nothing drawn the window still looks, and the longest chain stays a matter of seconds.
+        Assert.InRange(PageKeyboard.FramesWait.TotalSeconds, 1, 5);
+        var longest = (PageKeyboard.CheckAfter + PageKeyboard.FramesWait) * (PageKeyboard.Attempts + 1);
+        Assert.InRange(longest.TotalSeconds, 1, 20);
+    }
+
     private const string Window = "InputSiteWindowClass";
     private const string Chromium = "Chrome_WidgetWin_0";
 

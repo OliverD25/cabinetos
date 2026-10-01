@@ -629,11 +629,11 @@ public sealed partial class MainWindow : Window
         SetActive(pane);
     }
 
-    // The snapshot aid's wait for the framework: XAML raises GotFocus, TextChanged and the like on its next frames, so a step
-    // that changed something waits for some, and the events it caused have come before the next step reads the state. A
-    // frame is every 16 ms on a quiet machine and every few hundred ms on a busy one. At most 5 s: a window that draws
-    // nothing (minimised) has no frames.
-    private static async Task SettleFramesAsync(int frames = 2)
+    // A wait for the framework: XAML raises GotFocus, TextChanged and the like on its next frames, and makes a page's
+    // browser visible at one, so the snapshot aid's steps and the hand-over of the keyboard to a page (PageKeyboard) wait
+    // for some before they look at what they caused. A frame is every 16 ms on a quiet machine and every few hundred ms on
+    // a busy one. At most 5 s (or the limit given): a window that draws nothing (minimised) has no frames.
+    private static async Task SettleFramesAsync(int frames = 2, TimeSpan? limit = null)
     {
         var left = frames;
         var done = new TaskCompletionSource();
@@ -647,7 +647,7 @@ public sealed partial class MainWindow : Window
         CompositionTarget.Rendering += OnFrame;
         try
         {
-            await Task.WhenAny(done.Task, Task.Delay(5_000));
+            await Task.WhenAny(done.Task, Task.Delay(limit ?? TimeSpan.FromSeconds(5)));
         }
         finally
         {

@@ -55,6 +55,7 @@ public sealed partial class MainWindow
     {
         _pageChecksPending++;
         await Task.Delay(PageKeyboard.CheckAfter);
+        await SettleFramesAsync(PageKeyboard.FramesBeforeCheck, PageKeyboard.FramesWait);
         _pageChecksPending--;
         if (handOver != _pageHandOver)
         {

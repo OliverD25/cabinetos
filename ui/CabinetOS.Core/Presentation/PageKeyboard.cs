@@ -38,6 +38,21 @@ public static class PageKeyboard
     /// <summary>How long after a hand-over the window looks whether the keys arrived: a frame, and Chromium's own move.</summary>
     public static readonly TimeSpan CheckAfter = TimeSpan.FromMilliseconds(150);
 
+    /// <summary>
+    /// How many frames XAML must have drawn after a hand-over before the window looks, however long that takes (the
+    /// window waits for them at most <see cref="FramesWait"/>). A page's browser takes the keys only while its controller
+    /// is visible, and WinUI makes it visible at a frame it draws after the page was shown. A quiet machine draws one in
+    /// 16 ms, so <see cref="CheckAfter"/> decides. A busy one draws a frame every few hundred milliseconds (0.5 s and more
+    /// on the laptop with two test runs beside), and a window that looked after 150 ms, handed the keys over again
+    /// and gave up after 600 ms had made every hand-over before the page could take the keys: the terminal had no
+    /// keyboard in 1 to 8 of 20 rounds of the window test, and a window whose log says "did not get the keyboard"
+    /// has no way to get it until a key reaches the window.
+    /// </summary>
+    public const int FramesBeforeCheck = 2;
+
+    /// <summary>The longest the window waits for <see cref="FramesBeforeCheck"/> frames: with nothing drawn (the window is minimised) none come.</summary>
+    public static readonly TimeSpan FramesWait = TimeSpan.FromSeconds(3);
+
     /// <summary>Whether the window of class <paramref name="windowClass"/> is a page's input window.</summary>
     public static bool IsPageWindow(string? windowClass) =>
         windowClass is not null && windowClass.StartsWith("Chrome_", StringComparison.Ordinal);
