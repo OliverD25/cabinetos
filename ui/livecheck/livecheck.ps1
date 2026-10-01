@@ -331,6 +331,26 @@ if (Get-Process LogonUI -ErrorAction SilentlyContinue) { "STOP: the screen is lo
 Step "start"
 $p = Start-Process -FilePath $Exe -PassThru
 "app pid: $($p.Id)"
+# A command that throws ends the run here, and the run's own window and the cores it started are closed first: left
+# open, they hold files in the run's folder, which the next run deletes before it starts (the Omen laptop's run of
+# 2026-10-01 13:21 died at the edge fixture and left both). The STOP line goes into DONE.md.
+trap {
+  "{0:HH:mm:ss.fff} STOP: {1} (at {2}:{3})" -f (Get-Date), $_.Exception.Message, (Split-Path -Leaf "$($_.InvocationInfo.ScriptName)"), $_.InvocationInfo.ScriptLineNumber
+  try {
+    if ($script:p -and -not $script:p.HasExited) {
+      $script:h = $null
+      [void]$script:p.CloseMainWindow()
+      if (-not $script:p.WaitForExit(8000)) { $script:p.Kill(); [void]$script:p.WaitForExit(3000) }
+      "the run's window closed: $($script:p.HasExited)"
+      Start-Sleep -Milliseconds 1000
+      foreach ($c in @(Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"core started"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields.pid })) {
+        $core = Get-Process -Id $c -ErrorAction SilentlyContinue
+        if ($core -and $core.ProcessName -eq 'cabinetos-core') { $core.Kill(); "the core $c was still running after the window; ended" }
+      }
+    }
+  } catch { "closing the run's window failed: $($_.Exception.Message)" }
+  exit 1
+}
 Start-Sleep -Seconds 6
 $h = $p.MainWindowHandle
 [Live]::Front($h); Start-Sleep -Milliseconds 800
