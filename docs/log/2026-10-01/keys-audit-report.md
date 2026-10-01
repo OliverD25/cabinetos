@@ -377,3 +377,150 @@ panes are the fixture's (0c0a8af); the second run was clean.
   P4's one helper that closes the other overlays would cover it.
 - No test opens the permissions review (P5): that needs a plugin that
   asks for a capability.
+
+## Round three
+
+The planning session's decision, under the creator's "move on as far as you
+can": build P2 and P4, the two proposals round two left open. A coder (Sonnet
+5.5) built them on 2026-10-01 in the afternoon, in its own worktree, with the
+end-to-end suite run on this PC while the creator was away.
+
+### What changed
+
+| # | Now | Commit |
+|---|---|---|
+| P2 | A tool's page hands back the tab keys: `tab.next`, `tab.previous`, `tab.close`, `tab.new`, `tab.select` (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W, Ctrl+T, Ctrl+1 to 9), under the user's own keys. A key from a page in a pane's tab changes that pane's tabs, and the keyboard goes to the tab that comes to the front. The terminal hands back Ctrl+Tab and Ctrl+Shift+Tab only | 109435f |
+| P4 | Opening an overlay closes the other overlays first, through one step (`CloseOtherOverlays`), so at most one is open and Esc closes the one on screen | bb6fa2a |
+
+The rules are written in [keybindings.md](../../keybindings.md) ("Tool pages
+and the terminal", "One overlay at a time"), in [ui.md](../../ui.md) (the
+palette, the prompts, the terminal's keys, the Tool Extensions' keys, the
+snapshot steps `key:` and `focus:`) and in
+[tool-extensions.md](../../tool-extensions.md) ("The window's keys").
+
+### Decisions the plan did not cover
+
+Each is "what, because, undo".
+
+- **The terminal hands back only Ctrl+Tab and Ctrl+Shift+Tab.** The handout
+  said Ctrl+W and Ctrl+T are not shell keys, so passing them would be safe.
+  They are shell keys: Ctrl+W is readline's delete word and vim's window
+  prefix, Ctrl+T is readline's transpose and the file picker of fzf, and
+  xterm.js turns Ctrl+3 to Ctrl+8 into control codes. A shell user who deletes
+  a word would close a tab. The handout's own rule, "the terminal must keep the
+  keys a shell needs", decided it. Undo: add `tab.close`, `tab.new` and
+  `tab.select` to `TerminalKeys.TerminalTabWays`. **The planning session
+  should confirm this**, because it differs from the handout's words.
+- **Tab (`view.focusOtherPane`) is not handed back, and no way to the other
+  pane is.** The handout named "the way to the other pane" among the tab
+  keys. It can mean two things: Tab (`view.focusOtherPane`), or
+  `tab.moveToOtherPane` (a chord, and chords never pass back, because their
+  first key may be the page's). The audit's own text says Tab and Esc stay the
+  page's, because a page uses them for its links and fields (the agent's chat
+  has a text box), and a Tab that left the page would break both. So neither
+  was built. From a page the way to the pane is Ctrl+Tab, Ctrl+Shift+Tab,
+  Ctrl+1 to 9, or Ctrl+W on the tool's tab. Undo, if Tab should leave a
+  page: add `view.focusOtherPane` to `TerminalKeys.TabWays`.
+- **Sidebar pages get the tab keys too.** The handout listed "a sidebar tool"
+  among the pages. A tab key there changes the active pane's tabs, as in VS
+  Code, where Ctrl+Tab works from a side bar. Undo: pass no `paneWays` for
+  `_sidebarPageKeys` in `ApplyToolKeys`.
+- **A key from a page in a pane's tab names that pane.** A Markdown Preview
+  opens in the other pane, and Tab to it does not make that pane the active
+  one (only a pane's list does). Without the pane, Ctrl+W in the preview would
+  close a tab of the pane the user is not in. `PageKeyArguments` adds the pane
+  (and Go to Tab's digit); `tab.next` and `tab.previous` take the `pane`
+  argument like the other tab commands. Undo: leave the pane out in
+  `PageKeyArguments`.
+- **From the terminal, Ctrl+Tab moves the keyboard to the pane.** The terminal
+  is not one of the pane's tabs, and a tab command gives the keyboard to the
+  tab that comes to the front, as it does from a list. Undo: none needed.
+- **A held key from a page runs once**, as in round two: the pages do not know
+  the list of commands that repeat. So Ctrl+Tab held in a preview moves one
+  tab; in a list it repeats. Undo: the same as in round two.
+- **The snapshot step `key:` sends a key into a page that has the keyboard,
+  through DevTools (`Input.dispatchKeyEvent`).** Before, the key went to the
+  window's input window, which drops it as the page's, so a test could never
+  reach the page's script (the first run showed it: no command ran). The page's
+  script now runs as for a real key, and a key that closes the page (Ctrl+W)
+  does not hold the step up. Undo: take out the branch in
+  `PressKeysForSnapshotAsync`. The tests' `FinishAsync` also prints the
+  window's last log lines when a step never ends.
+- **The overlays are the palette, Quick Open, a prompt, the theme picker and
+  the plugin list.** The drive list is a prompt (`PromptBox` without a box),
+  so it is covered with the pattern box, the pinned folders and a plugin's
+  question. Undo: remove the calls of `CloseOtherOverlays`.
+- **A prompt closes the others through an event** (`PromptBox.Opening`), not
+  at its five callers, so a sixth caller cannot forget it.
+- **The permissions review stays as it is.** It is a dialog of the window (the
+  router refuses every command but its own while it shows). It opens over the
+  plugin list or the marketplace that asked for it, and by itself when a
+  plugin newly waits for a review. That last one does not close what the user
+  is doing, because a background event must not throw away a typed prompt.
+  The palette still closes it.
+- **The marketplace closes all the overlays when it opens.** It covers the
+  panes, and it already closed the picker and the plugin list; a palette,
+  Quick Open or a drive list under it would hold the keyboard without being
+  seen. Undo: `CloseOtherOverlays(opening: null)` in `OpenMarket`.
+- **Each overlay closes the way Esc closes it** (the keyboard goes to the pane
+  first, then the new overlay takes it in the same turn). So the palette now
+  closes Quick Open with the keyboard handed back (it did not before), and the
+  picker and the plugin list close before the palette opens, not after.
+  Nothing showed a difference; the new overlay takes the keyboard in the same
+  turn. `keys.open` (Ctrl+K Ctrl+S) goes through the palette's opening step
+  now. Undo: the old order is in the history of `TogglePalette`.
+- **New log evidence.** A line "overlays closed for another" (the opening one
+  and the closed ones), and the field `overlays` on the snapshot step's
+  "keyboard focus" line. Both are cheap and only the tests read them.
+- **`docs/PLAN.md` was not touched.** Its line about the keys audit still says
+  P2 and P4 stay proposals. The desk's mirror card follows the file, so the
+  planning session should change both together.
+
+### Evidence
+
+- `dotnet build CabinetOS.sln -warnaserror`: 0 warnings, 0 errors. The fast
+  tests: 1135 passed, 58 end-to-end skipped, of 1193.
+- The whole suite with the end-to-end tests, on this PC, with the release
+  core, twice (before and after the rebase onto the live check commits): 1192
+  of 1193 each time. The one failure is
+  `ContextMenuEndToEndTests+Alone.Entering_the_edit_mode_over_100000_selected_rows_adds_no_slow_frame`:
+  a generation 2 collection of 32 ms in the frame that opens the menu's edit
+  mode. It drives no key. The same suite on main without these commits fails
+  the same test (1176 of 1177), and it passes when run alone (3 of 3 on main,
+  1 of 2 on this branch). It is flaky and was flaky in round one; it needs its
+  own look.
+- New tests. `OverlayRuleTests` (5): what an opening overlay closes, that
+  it never closes itself, the order, and the marketplace's case. `TerminalTests`
+  (5): the page's list with the tab keys, a rebound key, a way out that wins on
+  the same keys whatever the order, the terminal's two keys, and the old list
+  without the tab ways. End to end in `KeysEndToEndTests` (2):
+  `A_tool_page_hands_back_the_tab_keys_and_the_keyboard_follows_the_front_tab`
+  presses Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1, Ctrl+2, Ctrl+T, Ctrl+2 and Ctrl+W
+  with the keyboard in a Markdown Preview in the other pane (the inactive
+  one), and reads the other pane's row and the keyboard's place after each
+  one; `Opening_an_overlay_closes_the_others_and_Esc_closes_the_one_on_screen`
+  opens the theme picker over the palette, Quick Open and the drive list with
+  Ctrl+K Ctrl+T, and the plugin list and the palette over each other, and
+  checks that the first Esc leaves no overlay open and the keyboard in the pane.
+- Each end-to-end test failed with its fix switched off. P4: the palette and
+  the picker were open together (`Palette,ThemePicker`), and after the first
+  Esc `ThemePicker` was still open, in all three places. P2: Ctrl+Tab sent into
+  the page ran no command, and the keyboard stayed in the page.
+- All of it ran on this PC. The Omen laptop was not used: the creator's rule
+  changed during the run (they went away), and the coordinator asked for this
+  PC. No real key or mouse event was sent on either machine: the `key:` step
+  posts key messages to the window or, for a page, sends DevTools key events.
+- Not tested: the terminal's Ctrl+Tab (the lists are unit tested; the
+  end-to-end tests have no shell), a tab key from a page in the sidebar, and
+  the path where Windows sends the keys to the window instead of the page
+  (`HandleKeyForPage`; it uses the same arguments).
+
+### Still open
+
+- The two points to confirm: the terminal's Ctrl+W and Ctrl+T (above), and
+  whether Tab should leave a tool's page.
+- P2 changes the table "Where the keyboard can be" for the two rows of the
+  pages (the tool page and the terminal), and P4 for the drive list and the
+  picker. The table above is the audit's state of the morning and is not
+  rewritten.
+- The permissions review still has no test (P5).
