@@ -202,7 +202,11 @@ Release window and release core into the clone's build paths, starts the
 task, waits for the run's `DONE.md`, and copies the run's output into
 `_io\live-check` here as `run-<time>-<machine>.txt`. The machine must be
 logged in and unlocked; its own countdown window shows there first. The
-frame numbers of such a run come from that machine's graphics card.
+frame numbers of such a run come from that machine's graphics card: on the
+Omen laptop the integrated AMD Radeon, which drives its 144 Hz screen, not
+the GTX 1660 Ti, and there the scroll goal does not hold (each page of new
+rows reaches the screen about 90 ms after the UI thread's 8 ms of work; the
+portability report has the numbers).
 `-Branch <name>` sends another branch than `main` (a coder's worktree sends
 its own; it must be a fast-forward of what the clone has), and `-Io <folder>`
 names where the output lands.

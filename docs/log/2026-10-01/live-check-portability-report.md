@@ -2,28 +2,28 @@
 
 Context: the live check with real keys (`ui/livecheck/livecheck.ps1` and
 its helpers) must pass on a second machine, the creator's Omen laptop
-(`omen`, Windows 11 Pro 24H2, 1920 x 1080 at 125 %, a 144 Hz screen, a GTX
-1660 Ti), so the creator's PC stays free. The laptop's run of 2026-10-01
-13:21 (`_io/live-check/run-2026-10-01-1321-rd-omen-laptop.txt`, its
-screenshots in `_io/live-check/laptop-shots-1321/`) had 97 True and 9
-False and died before its end. This report covers the six faults of that
-run, what caused each, and what changed.
+(`omen`: Windows 11 Pro 24H2, a Ryzen 7 4800H, a 1920 x 1080 screen at
+125 % and 144 Hz), so the creator's PC stays free. The laptop's run of
+2026-10-01 13:21 (`_io/live-check/run-2026-10-01-1321-rd-omen-laptop.txt`,
+its screenshots in `_io/live-check/laptop-shots-1321/`) had 97 True and
+9 False and died before its end. This report covers the six faults of
+that run, what caused each, what changed, and the runs after the changes.
 
-## Status
+## The runs
 
-Every change is committed and pushed (7bd88ff to e6f6eb3, then the docs
-commit). **No laptop run has verified them yet.** The window and the core
-of the 13:21 run are still open on the laptop (`CabinetOS.exe` pid 16648
-and `cabinetos-core.exe` pid 16764, both started 13:21:29): that run died
-at the fixture, before its own close step. A new run deletes its folder,
-`%TEMP%\cabinetos-ui-test\live`, before it starts its window, and those
-two processes hold files in it (their logs, the WebView2 data, the
-terminal's shell, whose current folder is inside it). My request to stop
-them was refused by the session's permission check, so I did not touch
-them and did not start a run. Once they are closed, one
-`remote-livecheck.ps1 -SkipBuilds` run checks all of this.
+| Run (in `_io/live-check/`) | Code on the laptop | Builds | True | False | Scroll goal | Exit |
+|---|---|---|---|---|---|---|
+| `run-2026-10-01-1321-rd-omen-laptop.txt` (before) | 4ade5a7 | window 12:35, core 11:27 | 97 | 9 | not measured: the hold ran in a folder of one entry; the run died at the edge fixture | died |
+| `run-2026-10-01-1424-rd-omen-laptop.txt` (first after) | 4bf1f1f | window 14:23, core 13:57 | 209 | 0 | not met: 341 frames in 5 s, 38 over 20 ms (11.1 %), 27 over 33 ms, worst 103.6 ms | 1 (`-Strict`, the goal) |
+| `run-2026-10-01-1434-rd-omen-laptop.txt` (last) | 72f6b3d (with the trap and `-Virtual`) | window 14:23, core 13:57 | 209 | 0 | not met: 291 frames in 5 s, 47 over 20 ms (16.2 %), 31 over 33 ms, worst 109.5 ms | 1 (`-Strict`, the goal) |
 
-Laptop run files made in this pass: none yet (see above).
+Every section ran to its end in both runs after the changes, the scroll
+goal line printed, and no check answered False. The exit code 1 is
+`-Strict` judging the scroll goal, which does not hold on this machine
+(fault 6). The shot of the scroll bar's throw in Commander Compact
+(`compact-scrollbar-drag-live.png`, run of 14:24) was looked at: the list
+is at its last rows, and every row has its name and size, with no empty
+band.
 
 ## The faults, their causes and the fixes
 
@@ -37,12 +37,10 @@ find a part of the path" and the run ended at `livecheck.ps1` line 1278.
 
 **Fix** (e35176b). The fixture's `Put` writes through the `\\?\` form
 when the path has 248 characters or more; that form works whatever the
-setting says. The long path under `long\` already used it. Checked over
-SSH on the laptop: the fixed script built the whole fixture into a scratch
-folder (the 255-unit name, 347-character long path, case-sensitive folder,
-symbolic links), which was then removed. No script reads the long-named
-file back; the app under test still lists it in `names\`, and the edge
-section counts it among the rows it walks.
+setting says. The long path under `long\` already used it. No script
+reads the long-named file back; the app under test lists it in `names\`,
+and the edge section walks past it to the Ukrainian report. Since then
+the fixture builds on the laptop, and every edge check is True.
 
 ### 2. Section 13: six checks of the tree
 
@@ -71,7 +69,8 @@ again at its end, so the sections after it see the configuration they
 saw before. The checks are the same; the section's reads of "the tree
 shows a folder", "the tree drew rows" and "listing shown" now wait for the
 line they need (bounded, never shorter than the old sleep) instead of
-reading whatever came last after a fixed sleep.
+reading whatever came last after a fixed sleep. All 41 checks of the
+section are True on the laptop.
 
 **The waits the handout asked for** (same commit). The window logs no
 "address box shown" or "palette shown". It logs "command executed" for
@@ -90,27 +89,30 @@ terminal, up to 15 s), the Search and Explorer views (their
 places, its `list_themes` reply), the Markdown Preview (two, "tool
 ready"), the search's results in section 13, and Ctrl+Right in the keys
 section. Sleeps that are rhythm (between the two keys of a chord, after a
-plain arrow key) stay.
+plain arrow key) stay. No wait ran out in the runs after the change: no
+"did not report itself" or "logged no listing" line.
 
 ### 3. Commander Compact: "no scrollable list found"
 
 **Cause.** Not UI Automation and not the 125 % scale: the folder was not
 there. The step types `%TEMP%\cabinetos-bench\100000`, and the window said
 "Cannot open …\cabinetos-bench\100000: it does not exist" (10:24:08.485).
-The laptop has no `%TEMP%\cabinetos-bench` at all: `cargo bench` makes it,
-and the laptop has no Rust.
+The laptop had no `%TEMP%\cabinetos-bench` at all: `cargo bench` makes
+it, and the laptop has no Rust.
 
-**Fix** (474ee28), shared with fault 6 below. `ui/livecheck/bench-folders.ps1`
+**Fix** (474ee28), shared with fault 6. `ui/livecheck/bench-folders.ps1`
 makes the bench's three folders (1,000, 10,000 and 100,000 empty files)
 with the bench's own names and `.complete` markers; a folder with its
 marker is left alone, and nothing is removed. Its names were compared with
-this PC's folder made by `cargo bench`: 100,000 of 100,000 equal.
-`remote-livecheck.ps1` runs it on the machine before each run.
-`livecheck.ps1` now stops before the window starts when
-`cabinetos-bench\100000.complete` is missing, and a new check line says
-whether the PageDown hold runs in the 100,000-entry folder. Whether the
-list lookup then holds at 125 % is for the first laptop run to show; the
-lookup itself was not changed.
+this PC's folder made by `cargo bench`: 100,000 of 100,000 equal. On the
+laptop it took 49 s for the 100,000 files. `remote-livecheck.ps1` runs it
+before each run. `livecheck.ps1` stops before the window starts when
+`cabinetos-bench\100000.complete` is missing, and a new check says whether
+the PageDown hold runs in that folder (True on the laptop: 100,000
+entries). With the folder there, the list lookup held at 125 % unchanged.
+The thumb itself is not in the automation tree on either machine (this
+PC's run of 12:40 said the same at 150 %), so the throw starts at the
+estimated point; it took the list from 0 % to 100 %.
 
 ### 4. Section 14: the row drag did not start
 
@@ -124,14 +126,16 @@ scale and the drag's timing were not the problem.
 **Fix** (e6f6eb3). The row is found by UI Automation, by its name a.txt,
 the leftmost element of that name on the screen; the press is at its
 middle (at most 40 px in). The old fractions stay as the fallback, and the
-output says which one was used. The drop point (72 % across, half way
+output says which one was used. On the laptop UI Automation found it (a
+Text element; the press at 603,284), the drag started, and the drop
+reached the page with one path. The drop point (72 % across, half way
 down) lies in the right pane's page on both windows and stayed. Ctrl+K V
 before it now waits for the preview's "tool ready" line.
 
 ### 5. Section 14 "ask": WAITING
 
 **Cause.** The laptop builds nothing, so `sdk\extensions\agent\plugin\plugin.wasm`
-is not there.
+was not there.
 
 **Fix** (74cec53). `remote-livecheck.ps1` copies
 `sdk\fixtures\plugins\agent\plugin.wasm` into that place when it is empty
@@ -141,22 +145,63 @@ or the fixture is newer. The fixture satisfies the section:
 and the fake provider the section uses exists since the plugin's first
 commit (21d414a). The committed fixture is a newer build than this PC's
 own `plugin.wasm` of 2026-09-30 (it includes the watch-folders commit,
-aaa1fce).
+aaa1fce). On the laptop all eight "ask" checks are True: the card, the
+install, the prompt, the preview with three rows, the renames on disk.
 
 ### 6. The scroll goal on the laptop
 
-**Cause.** The 13:21 numbers ("709 frames in 5 s, 2 over 20 ms, 1 over
-33 ms, worst 89.3 ms") were not measured in the 100,000-entry folder. The
-step typed `%TEMP%\cabinetos-bench`, the window said it does not exist
-(10:21:49.518), and Down, Down, Enter then opened `C:\Users\Omen\.cache`,
-a folder of one entry (10:21:51.144). PageDown was held there. The one
-frame over 33 ms (10:21:55.987, a gap of 89.3 ms) had no work on the UI
-thread (`work_ms` 0, `busy_ms` 0, no garbage collection): a pause in
-presenting frames, not the window's work, in a folder where nothing
-scrolled. It says nothing about the scroll goal.
+**The 13:21 numbers were void.** "709 frames in 5 s, 2 over 20 ms, 1 over
+33 ms, worst 89.3 ms" came from the wrong folder: the step typed
+`%TEMP%\cabinetos-bench`, the window said it does not exist
+(10:21:49.518), and Down, Down, Enter opened `C:\Users\Omen\.cache`, a
+folder of one entry (10:21:51.144). The one slow frame there had no work
+on the UI thread.
 
-**Fix**: fault 3's. The goal was not changed. The real number comes with
-the first laptop run that has the bench folder.
+**The real numbers, in the 100,000-entry folder** (run of 14:24): 341
+frames in 5 s, 38 over 20 ms (11.1 %), 27 over 33 ms, worst 103.6 ms;
+the machine's CPU 5.4 %, the window's 2.7 %. **The goal does not hold on
+this machine, and it is not a one-off or the first frame of the hold.**
+The window's log has 27 "slow frame" lines in those seconds, and all 27
+look the same: a gap of 77 to 104 ms (median 91 ms) between two frames,
+of which the UI thread worked 7 to 10 ms (median 8.4 ms), with no garbage
+collection. They come about every 150 ms from the first second to the
+last: each page of new rows reaches the screen about 90 ms after the UI
+thread finished it. The UI thread's work per second is the same as on
+this PC (217 to 252 ms against 234 to 276 ms in this PC's run of 12:40,
+where every frame came within 17.4 ms at 60 Hz). So the time goes after
+the UI thread: in drawing and presenting the frame. The run of 14:34 shows
+the same: 31 frames over 33 ms, gaps of median 90.9 ms, the UI thread's
+work median 8 ms, one with a garbage collection.
+
+On this laptop that is the integrated graphics. The 144 Hz screen is
+driven by the Ryzen's AMD Radeon graphics; the GTX 1660 Ti has no display
+of its own, and CabinetOS has no GPU preference in Windows' graphics
+settings, so it runs on the integrated GPU. The frame numbers of a laptop
+run are those of the Radeon, not of the GTX 1660 Ti. The goal was not
+changed. What the creator may want to decide: whether the scroll goal
+must hold on an integrated GPU (then this is a performance fault of the
+window's drawing, Article 1, worth its own investigation), and whether to
+try the run once with CabinetOS set to "High performance" in Windows'
+graphics settings on the laptop (a setting of the creator's machine, so
+not changed here).
+
+## The trap and -Virtual (the coordinator's additions)
+
+- **d0279e3**: a `trap` in `livecheck.ps1`. When a command throws, the run
+  writes a STOP line (DONE.md shows it), closes its own window as the end
+  of the run does, ends it after 8 s if it is still there, ends a core of
+  that window still running a second later, and exits 1. With the
+  script's `ErrorActionPreference` of Stop the same errors end the run as
+  before; only the cleanup is new. Tested with a throwing function in both
+  PowerShells (the STOP line, exit code 1); a real throw did not happen in
+  the laptop runs.
+- **72f6b3d**: `-Virtual`, for the VirtualBox VM. `run-livecheck.ps1
+  -Virtual` passes it on. The scroll goal line, the only check that judges
+  frame times, then prints its numbers and answers "not measured in a VM";
+  `-Strict` does not judge it, and DONE.md counts such lines apart,
+  neither True nor False. Every other check stays as strict.
+  Documented in docs/ui.md next to the other-machine section. Not run in a
+  VM here.
 
 ## Decisions
 
@@ -188,19 +233,26 @@ the first laptop run that has the bench folder.
 - **The drag finds its row by UI Automation, the old fractions as fallback**
   — because fractions of the window depend on its size — undo: revert
   e6f6eb3.
+- **The scroll goal stays as it is; the laptop's run exits 1 under
+  `-Strict`** — because the handout forbids changing the goal and the
+  evidence points at the machine's graphics, which is the creator's
+  question — undo: none.
 - **Each laptop run follows a push to main** — because the laptop's clone
   must only fast-forward; a commit sent before a rebase would leave the
   clone off main — undo: none needed.
-- **The window and core left by the 13:21 run were not stopped** — because
-  the session's permission check refused it — undo: none; they are still
-  open on the laptop.
+- **The window and core left by the 13:21 run were not stopped by me** —
+  because the session's permission check refused it; the coordinator
+  closed them — undo: none.
 
 ## What does not hold on the laptop by nature
 
-Nothing found so far: every fault of the 13:21 run came from the check or
-its fixtures, not from the machine. This list is to be completed by the
-first verified run (the scroll goal at 144 Hz on the GTX 1660 Ti, and the
-Commander Compact throw at 125 %).
+- **The scroll goal** (fault 6): the frames of a page change take about
+  90 ms to reach the screen on the integrated Radeon at 144 Hz, while the
+  UI thread's share is about 8 ms.
+- **Symbolic links in the edge fixture**: the task's session may not make
+  them ("Administrator privilege required"; Windows' Developer Mode is
+  off there), so the fixture makes the junctions only, and says so. No
+  check needs a symbolic link; this PC's run of 12:40 said the same.
 
 ## What the check now tolerates between the two machines
 
@@ -210,8 +262,9 @@ Commander Compact throw at 125 %).
 | AppData | not hidden | hidden (the default) | section 13 shows hidden entries while it runs |
 | The bench folder | made by `cargo bench` | no Rust | `bench-folders.ps1`, run by `remote-livecheck.ps1`; a STOP when it is missing |
 | The Agent plugin | built by `build-extensions.ps1` | nothing built | the committed fixture copied into place |
-| The window's size | larger | 1520 x 828 at 125 % | the dragged row is found by UI Automation |
-| Speed of the window's answers | fast | not slower in this run, but untested | the keys wait for the window's log lines |
+| The window's size and scale | larger, 150 % | 1520 x 828 at 125 % | the dragged row is found by UI Automation |
+| Speed of the window's answers | fast | as fast in these runs | the keys wait for the window's log lines, never shorter than the old sleeps |
+| Graphics and refresh rate | 60 Hz | integrated Radeon, 144 Hz | nothing: the scroll goal judges it, and it fails there |
 
 ## Seen on the way, not changed
 
@@ -225,9 +278,5 @@ Commander Compact throw at 125 %).
   can show (`C:\Users\Omen`) without saying so. On a stock Windows that is
   everything under `%TEMP%` and `%APPDATA%`. Whether the tree should open
   a hidden folder on the way to the active one is a product question.
-- **A live check that dies on an error leaves its window and core open**
-  (`livecheck.ps1` closes the window at its STOP lines and at its end, not
-  when a command throws). That is what blocks the next laptop run now. A
-  `trap` that closes the run's own window would prevent it.
 - The handout's line for commits named Claude Fable 5.1; the commits name
   the model that wrote them, Claude Opus 5.5.
