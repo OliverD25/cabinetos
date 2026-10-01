@@ -42,7 +42,11 @@ if (Test-Path -LiteralPath $Root) {
 [void][System.IO.Directory]::CreateDirectory($Root)
 $utf8 = New-Object System.Text.UTF8Encoding $false
 function Put([string]$Folder, [string]$Name, [string]$Text = 'x') {
-  [System.IO.File]::WriteAllText([System.IO.Path]::Combine($Folder, $Name), $Text, $utf8)
+  $path = [System.IO.Path]::Combine($Folder, $Name)
+  # The 255-unit name passes 260 characters under %TEMP%. Windows PowerShell's .NET takes such a path only in the
+  # \\?\ form when Windows has long paths off (LongPathsEnabled 0, the default; the Omen laptop has it so).
+  if ($path.Length -ge 248) { $path = "\\?\$path" }
+  [System.IO.File]::WriteAllText($path, $Text, $utf8)
 }
 function Astral([int[]]$CodePoints) { -join ($CodePoints | ForEach-Object { [char]::ConvertFromUtf32($_) }) }
 Put $Root $marker 'made by sdk\fixtures\edge-fixture.ps1; the script may remove this folder'
