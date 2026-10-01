@@ -3,7 +3,7 @@
 Phase 19e of the plan. The creator's words before sleeping: "double check
 the speed of the app, and where it could be improved if it could." A coder
 on Opus measured the release build of the window and the core from 00:45 to
-03:40 on the development PC, with the window's own log and frame statistics.
+02:50 on the development PC, with the window's own log and frame statistics.
 
 **The result.** Most of what a user does is fast. A folder of 100,000
 files is on screen 80 ms after the request, and scrolling it keeps its
@@ -20,14 +20,14 @@ start and makes the download about 15 MB bigger.
 
 | # | Finding | Numbers (median, [lowest to highest]) | Status |
 |---|---|---|---|
-| 1 | Shift+F10 or the Menu key on a focused row that is scrolled out of view ended CabinetOS, with no crash trace | every run of the menu scenario on both builds; `0xc000027b` in CoreMessagingXP.dll | fixed, 7befbf2 |
-| 2 | The start: the process start to both folders on screen | medians 1.34 s (small folders) and 1.32 s (3,000 entries) before; 1.16 and 1.08 s after; 1.03 and 0.86 s with ReadyToRun | fixed in part, 2c356fb; ReadyToRun proposed (A) |
+| 1 | Shift+F10 or the Menu key on a focused row that is scrolled out of view ended CabinetOS, with no crash trace | every run of the menu scenario on both builds; `0xc000027b` in CoreMessagingXP.dll | fixed, 0375e61 |
+| 2 | The start: the process start to both folders on screen | medians 1.34 s (small folders) and 1.32 s (3,000 entries) before; 1.16 and 1.08 s after; 1.03 and 0.86 s with ReadyToRun | fixed in part, 1564a12; ReadyToRun proposed (A) |
 | 3 | A theme change into or out of Commander Compact freezes one frame | 85 to 173 ms (the theme picker's preview of it: 112 to 135 ms); colour-only themes 20 to 54 ms | proposed (B) |
-| 4 | The first right-click menu of a session | a 96 ms gap and two slow frames before; 75 ms after | fixed in part, d95e583; the rest is WinUI's |
+| 4 | The first right-click menu of a session | a 96 ms gap and two slow frames before; 75 ms after | fixed in part, a62fb98; the rest is WinUI's |
 | 5 | The marketplace's first view | cards on screen 93 to 126 ms after the command, one frame of 74 to 95 ms of UI-thread work | proposed (C) |
 | 6 | Quick Open without the indexer, in a folder of 100,000 files | it looks at the first 20,000 names only and says "0 results" for names after them | proposed (D) |
 | 7 | A tab switch to a large folder lists it again | 44 to 148 ms to the tab (100,000 files), 9 to 56 ms (10,000 folders) | proposed (E) |
-| 8 | Find in pane on 100,000 names, each key | 43 to 54 ms to the filtered rows before; 18 to 24 ms after | fixed, 907bc71 |
+| 8 | Find in pane on 100,000 names, each key | 43 to 54 ms to the filtered rows before; 18 to 24 ms after | fixed, ec763c2 |
 | 9 | Icons at the start of a session come after the rows | each new icon 25 ms in the core (p95 47 ms, max 171 ms), one at a time | proposed (F) |
 
 Not felt, and left as they are: listing (100,000 files in 80 ms, 10,000
@@ -243,7 +243,7 @@ marketplace) without frame statistics.
 ## The findings, with their causes
 
 **1. The keyboard's menu for a row out of view ended the window (fixed,
-7befbf2).** In the menu scenario the window stopped at the second menu of
+0375e61).** In the menu scenario the window stopped at the second menu of
 every run, in both builds. The list makes rows ahead of what it shows (two
 screens and some rows more), and `FilePane.RowEdges` took such a row's
 place as the menu's point: y 1,638 in a 900 px window. `MenuPlacement`
@@ -259,7 +259,7 @@ the edge it is past. Tests: the placement test failed before the fix; an
 end-to-end test opens the keyboard's menu on row 40 of 120 and reads that it
 is on screen and inside the window.
 
-**2. The start (fixed in part, 2c356fb; ReadyToRun proposed).** Where the
+**2. The start (fixed in part, 1564a12; ReadyToRun proposed).** Where the
 1.3 s went before: 60 to 90 ms until the window's first log line, about
 800 to 850 ms while WinUI and the window build the window, then the core
 was started (it opens its pipe about 60 ms later), `hello` took 130 ms
@@ -283,7 +283,7 @@ default cache length) plus the rows made ahead since the scroll work, so a
 switch measures several hundred rows again. The picker's live preview does the same
 when the highlight passes Commander Compact.
 
-**4. The first right-click menu (fixed in part, d95e583).** The first menu
+**4. The first right-click menu (fixed in part, a62fb98).** The first menu
 spent 36 ms before it returned (`build_ms`, which includes WinUI's
 `ShowAt`); 12 to 14 ms of it was building the `CommandBarFlyout` and its
 buttons. The window now builds the common shapes while it is idle
@@ -309,7 +309,7 @@ restores a tab with `PaneModel.RestoreAsync`, which lists its folder again
 type names and a new section, and the other tab's listing is closed. For
 100,000 files that is the 60 ms of a listing, each time.
 
-**8. Find in pane (fixed, 907bc71).** `cabinetos_fs::match_entries` decoded
+**8. Find in pane (fixed, ec763c2).** `cabinetos_fs::match_entries` decoded
 each whole entry (a `Vec<u16>` and a `String`) and folded its case into a
 new `Vec<char>`: three buffers per name, 400 ns a name. It now reads the
 name's bytes and the attributes only, and folds into one buffer: 16.5 ms
@@ -338,7 +338,7 @@ from an elevated prompt), which this review did not have.
 
 | Proposal | Gain | Cost and risk | Estimate |
 |---|---|---|---|
-| A. Publish the window with ReadyToRun (`-p:PublishReadyToRun=true` in `build/release.ps1`) | start 0.14 s (small folders) to 0.24 s (3,000 entries) shorter, on top of 2c356fb | the window's folder grows from 42 to 57 MB before zipping; a decision on the download size | small |
+| A. Publish the window with ReadyToRun (`-p:PublishReadyToRun=true` in `build/release.ps1`) | start 0.14 s (small folders) to 0.24 s (3,000 entries) shorter, on top of 1564a12 | the window's folder grows from 42 to 57 MB before zipping; a decision on the download size | small |
 | B. Commander Compact: fewer rows made ahead (`Repeater.VerticalCacheLength` 0.5 instead of 2, as scroll-gaps.md proposed for Compact's scrolling) | fewer rows to measure again at a density change, and 8 % less work while scrolling (measured 2026-09-30) | a fast drag of the scroll bar may show empty rows for a frame; needs a check with real mouse input | small, plus a live check |
 | C. Make the marketplace's cards in parts: the first screenful at once, the rest in slices at low priority (or an `ItemsRepeater` with a uniform grid) | the first view's frozen frame from 74 to 95 ms to about 20 ms | the card's keyboard order and selection must stay | half a day |
 | D. Quick Open's walk: raise the entry limit (the 2 s limit stays), and say "searched the first N entries" when the reply is not complete | finds names past the first 20,000 in a large folder | a walk of a huge tree takes longer, up to the 2 s limit | small |
@@ -348,19 +348,27 @@ from an elevated prompt), which this review did not have.
 
 ## What was fixed tonight, and how it was checked
 
-- 2c356fb: the core started and the codec's tables built at process start.
+- 1564a12: the core started and the codec's tables built at process start.
   Unit test: warming the codec beside a first decode changes nothing it
   decodes. End-to-end test: "core started" comes before the window's
   "Starting the core…", and `hello` answers in under 60 ms.
-- 7befbf2: the keyboard's menu for a row out of view. The placement test
+- 0375e61: the keyboard's menu for a row out of view. The placement test
   failed first; the end-to-end test opens the menu on a row the list made
   but does not show.
-- d95e583: the common menu shapes built at idle. End-to-end test: the first
+- a62fb98: the common menu shapes built at idle. End-to-end test: the first
   menu on a file, a folder and the pane's space has `built: false`.
-- 907bc71: the name matching without buffers per name. Core unit test: the
+- ec763c2: the name matching without buffers per name. Core unit test: the
   pass matches exactly what the decoded names match, beyond ASCII.
-- b79627a: "marketplace cards shown" in the log, to measure section 9.
-- a6b6b94, e83341f: the fixture and runner scripts.
+- e0b4013: "marketplace cards shown" in the log, to measure section 9.
+- f85db52, a15411c: the fixture and runner scripts.
+
+The checks on the final tree, after the rebase onto 66b6c8d, all passed.
+The window builds with warnings as errors. The window's 1,143 tests pass
+with the end-to-end ones; without them 1,108 pass and 35 are skipped. The
+core's five checks pass, with 805 tests (6 ignored). One earlier end-to-end
+run lost 13 tests because it crossed midnight UTC. The windows then wrote a
+second day's log file, and those tests read exactly one. The next run
+passed all 1,143.
 
 ## Decisions made alone
 
@@ -375,21 +383,21 @@ Each as what — because — undo.
 - The context menu's crash was fixed although it is not a speed item — it
   ends the window without a trace, which Article 1 ("never freeze") and
   Article 12 rule out, and the fix changes only where a menu that crashed
-  appears — revert 7befbf2.
+  appears — revert 0375e61.
 - The menu shapes are prepared 0.75 s after the first folders, one per
   dispatcher turn at low priority, four shapes (file, folder, space, several
   rows) — the first right-click comes later than that in practice, and a
   build costs 12 to 14 ms, under a frame — `PrepareMenusAfter` and the list
-  in `PrepareContextMenusSoonAsync`, or revert d95e583.
+  in `PrepareContextMenusSoonAsync`, or revert a62fb98.
 - A prepared shape never pushes a shape the user opened out of the six kept
   — the user's own shapes are the ones that come back — `Prepare` in
   `ContextMenuFlyout`.
 - The core is started before WinUI starts, from `Program.Main` — its start
   needs nothing of the window, and the core's parent-process watch ends it
-  if the window fails to start — revert 2c356fb.
+  if the window fails to start — revert 1564a12.
 - The find speed-up was made in the core although the plan's example was a
   window fix — it changes no result and no protocol, and it was measured
-  before and after with the core as the only difference — revert 907bc71.
+  before and after with the core as the only difference — revert ec763c2.
 - ReadyToRun was measured but not switched on — it grows the download by
   about 15 MB, which is the creator's decision — proposal A.
 - A ReadyToRun publish restored the crossgen compiler package from NuGet —
@@ -407,7 +415,7 @@ Each as what — because — undo.
   network call for a measurement was not needed — rerun with
   `marketplace.index` left at its default.
 - The fixtures and the copies of the builds were removed at the end; the
-  runs' logs (10 MB) stay in `%TEMP%\cabinetos-speed-reviewesults` —
+  runs' logs (10 MB) stay in `%TEMP%\cabinetos-speed-review\results` —
   the fixtures are 110,000 files of scratch data, the logs are the evidence
   behind the tables — `speed-fixtures.ps1` makes the folders again in about
   40 s; delete the results folder when it is not wanted.
