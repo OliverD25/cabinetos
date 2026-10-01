@@ -2766,8 +2766,11 @@ under each the folders the user opened.
   (`FolderTreeView.ScrollTo`). Asked earlier, at the start of the window, the
   list drew its rows around the folder, far from the window, and FOLDERS
   showed none until Ctrl+Shift+E (found with real keys, 2026-09-30). The log's
-  line "the tree drew rows" says, 600 ms after the scroll, how many rows are
-  in the model, drawn, and inside the window (`visible`); the end-to-end test
+  line "the tree drew rows" says how many rows are in the model, drawn, and
+  inside the window (`visible`). The look is made 600 ms after the scroll;
+  one that finds no row inside the window is made again every 200 ms for
+  10 s, and only the last is logged (`looked_after_ms` says when), since a
+  machine under load lays the list out late. The end-to-end test
   `The_tree_has_rows_on_the_screen_when_the_window_starts_in_the_rail_layout_before_any_key`
   starts the window as a user does, without the snapshot aid (which waits
   until the window is ready and would not show this) and reads it.

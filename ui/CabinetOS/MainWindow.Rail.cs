@@ -404,15 +404,36 @@ public sealed partial class MainWindow
     }
 
     // Once the layout after the reveal has settled: how many rows the list has drawn. The tests read it, since a tree with all
-    // its rows in the model and none on the screen looks full in every other line of the log.
+    // its rows in the model and none on the screen looks full in every other line of the log. The look is made 600 ms after the
+    // scroll; one that finds no row inside the window is made again every 200 ms for 10 s, and only the last is logged. A machine
+    // under load lays the list out late (1.8 s in a test run beside a full suite), and a look at a fixed time called a tree that
+    // was only slow an empty one.
     private void LogTreeDrawnSoon()
     {
+        // A newer reveal replaces the look of an older one.
+        _treeDrawnTimer?.Stop();
         // Held in a field: a timer nothing refers to may be collected before it ticks.
         var timer = _treeDrawnTimer = DispatcherQueue.CreateTimer();
-        timer.IsRepeating = false;
-        timer.Interval = TimeSpan.FromMilliseconds(600);
-        timer.Tick += (_, _) => Diag.Info(RailTarget, "the tree drew rows", new LogField("rows", _tree.Rows.Count),
-            new LogField("drawn", SidebarView.Tree.RealizedRowCount), new LogField("visible", SidebarView.Tree.VisibleRowCount()));
+        var scrolled = System.Diagnostics.Stopwatch.GetTimestamp();
+        timer.IsRepeating = true;
+        timer.Interval = TimeSpan.FromMilliseconds(200);
+        timer.Tick += (_, _) =>
+        {
+            var waited = System.Diagnostics.Stopwatch.GetElapsedTime(scrolled);
+            if (waited < TimeSpan.FromMilliseconds(500))
+            {
+                return;
+            }
+            var visible = SidebarView.Tree.VisibleRowCount();
+            if (visible == 0 && waited < TimeSpan.FromSeconds(10))
+            {
+                return;
+            }
+            timer.Stop();
+            Diag.Info(RailTarget, "the tree drew rows", new LogField("rows", _tree.Rows.Count),
+                new LogField("drawn", SidebarView.Tree.RealizedRowCount), new LogField("visible", visible),
+                new LogField("looked_after_ms", Math.Round(waited.TotalMilliseconds)));
+        };
         timer.Start();
     }
 

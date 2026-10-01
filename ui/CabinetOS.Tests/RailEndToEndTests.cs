@@ -177,6 +177,8 @@ public class RailEndToEndTests
 
             var process = run.Start("plain", "", snapshot: false);
             List<string> log() => LogFiles.Ui(Path.Combine(root, "logs-plain"));
+            // The window logs its look at the tree once a row is inside the sidebar's window, or after 10 s without one: a loaded
+            // machine lays the list out late, and a look at a fixed time called a slow tree an empty one.
             var deadline = DateTime.UtcNow.AddSeconds(60);
             while (!log().Any(l => Message(l) == "the tree drew rows"))
             {
@@ -192,7 +194,8 @@ public class RailEndToEndTests
             var drew = Assert.Single(logs, l => Message(l) == "the tree drew rows");
             // All the rows are in the model, and some of them are inside the sidebar's window, with no key pressed.
             Assert.True(Field(drew, "rows").GetInt32() > 80);
-            Assert.True(Field(drew, "visible").GetInt32() > 0, "the tree has its rows in the model and none on the screen");
+            Assert.True(Field(drew, "visible").GetInt32() > 0,
+                $"the tree has its rows in the model and none on the screen, {Field(drew, "looked_after_ms").GetDouble():N0} ms after the scroll");
         }
         finally
         {
