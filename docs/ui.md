@@ -3139,9 +3139,36 @@ the core's events.
   paired runs): 50 cards in one go made a frame of 98 to 128 ms; now the
   first screenful (15 cards in a 1400 × 900 window) is made in 12 to 16 ms
   and no frame of the cards is longer than about 40 ms. The longest frame
-  of a first opening is now the view's own first layout, 54 to 81 ms,
+  of a first opening was then the view's own first layout, 54 to 81 ms,
   before any card exists; a second opening has no frame over 33 ms
-  ([the report](log/2026-10-01/speed-items-ce-report.md)).
+  ([the report](log/2026-10-01/speed-items-ce-report.md)). That layout is
+  now done ahead (the next point).
+- **The view prepared ahead** (since 2026-10-01, the follow-up to
+  proposal C). The window makes and lays out the marketplace view once,
+  hidden, while it is idle after start: in the idle slot of the context
+  menu shapes (the context menu's **Speed**), one low-priority dispatcher
+  turn after the last shape, so never before the first folders are on
+  screen. It runs only after a second with no key, click, pointer move or
+  wheel over the window (`InputQuiet` in `CabinetOS.Core`); input in that
+  second puts it off until a quiet second follows, so it does not take a
+  frame from someone who scrolls or types. Input inside a tool's web view
+  (WebView2) does not reach the window and does not count. It makes the
+  nav, the toolbar, the notice, the cards' scroller and one sample card (an
+  item that names no real extension), lays them out in that one turn, and
+  hides the view again before the next frame: nothing is drawn, the index
+  is not read (the core reads it at the first look only), and no card of
+  the index is made. It takes about 20 ms in a Release build and fits in
+  one frame. "marketplace view prepared" in the log, with `ms`. The sizes
+  the hidden view kept may be another window size's, so an opening counts
+  its first cards only after its own first layout. Measured on 2026-10-01
+  with `speed-review.ps1` (scenario `market`, 7 paired runs against the
+  build before it): the opening's longest frame went from 51.6 ms (44.6 to
+  63.6) to 42.4 ms (37.8 to 47.7), and the first 15 cards are made in 8 ms
+  instead of 12. One or two frames of 34 to 48 ms stay: the opening's own
+  turn (the command, the panes hidden, the view shown, the index's reply)
+  and the frame that lays out and draws the first 15 real cards for the
+  first time ([the report](log/2026-10-01/speed-items-ce-report.md),
+  "Follow-up").
 - **The detail column** (340 px, slides in over 180 ms) of the selected
   card: the 52 px tile, the name, "author · v{version}", the primary
   button, Source, Uninstall for what the marketplace installed, a line
@@ -3227,7 +3254,9 @@ the core's events.
   after the last slice of a set was laid out (`cards`, `slices`, and `ms`
   since the opening, or since the set started when it was not an
   opening's); both have `make_ms`, the time spent making the cards (the
-  first slice's, all slices'), "marketplace index read" with the source and the number of items,
+  first slice's, all slices'), "marketplace view prepared" once a run,
+  while the window is idle after start (`ms`, the time the preparation
+  took), "marketplace index read" with the source and the number of items,
   "marketplace index not read" with the reason, "plugin installed and
   granted" with its version, "source page opened".
 
@@ -3262,7 +3291,11 @@ rows) and `MarketplaceCardsEndToEndTests` (with `CABINETOS_UI_E2E=1`: a
 real window on a local index of 120 items logs its first screenful, then
 all 120 in the index's order, and Tab goes from a card to the next item's;
 the Themes tab clicked while Discover's slices are still to come leaves the
-40 themes only).
+40 themes only; the view is prepared after start, after the first folders
+and the menu shapes, before the marketplace's command and without asking
+the core for the index, and the first opening afterwards still logs its
+first screenful and then all 120 in order). `InputQuietTests`: the quiet
+second before the preparation, put off again by each key or pointer event.
 
 ## Updates
 
