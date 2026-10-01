@@ -272,7 +272,7 @@ is recorded, not chased.
   as processes with no thread, which Windows kept (their parents are gone) and
   which locked `CabinetOS.Core.dll` of that clone's `bin`, so the next build
   there failed ("Could not copy"). I did not find the holder of the
-  handles. A restart cleared them. To keep going I made clones beside the
+  handles. A restart cleared them. At the end of this run 8 are there again (1 in clone `-e`, 7 in `-f`; no live window, no busy process, both tasks `Ready`). To keep going I made clones beside the
   first: `C:\Dev\cabinetos\cabinetos-b` to `-f` (a `git clone` of the first
   clone and a copy of its release core), each built once. I built in
   the first clone, `C:\Dev\cabinetos\cabinetos`, only until about 23:10.
