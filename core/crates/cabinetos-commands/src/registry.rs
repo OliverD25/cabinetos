@@ -68,6 +68,7 @@ const fn seed(
 const UI: CommandTarget = CommandTarget::Ui;
 const FILES: Option<&str> = Some("filesView");
 const PALETTE: Option<&str> = Some("paletteOpen");
+const TERMINAL: Option<&str> = Some("terminalFocus");
 
 /// The core's commands, in palette order: the design's command list
 /// (`docs/design/FileForge.dc.html`, `COMMANDS`) without its plugin commands,
@@ -81,7 +82,7 @@ const PALETTE: Option<&str> = Some("paletteOpen");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 112] = [
+const SEED: [Seed; 115] = [
     seed(
         "palette.show",
         "View",
@@ -352,20 +353,55 @@ const SEED: [Seed; 112] = [
         UI,
         None,
     ),
-    seed("terminal.new", "Terminal", "New Terminal", &[], UI, None),
+    // The terminal's tab keys hold only while a terminal has the keyboard
+    // (terminal unit 1): Ctrl+Shift+T and Ctrl+Shift+W are no pane's keys,
+    // and Alt+[ and Alt+] go by the key's place, so a Ukrainian layout
+    // (where those keys are letters) has them too.
+    seed(
+        "terminal.new",
+        "Terminal",
+        "New Terminal",
+        &["ctrl+shift+t"],
+        UI,
+        TERMINAL,
+    ),
     seed("terminal.show", "Terminal", "Show Terminal", &[], UI, None),
     seed(
         "terminal.close",
         "Terminal",
         "Close Terminal",
-        &[],
+        &["ctrl+shift+w"],
         UI,
-        None,
+        TERMINAL,
     ),
     seed(
         "terminal.reload",
         "Terminal",
         "Reload Terminal",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "terminal.previousTab",
+        "Terminal",
+        "Previous Terminal Tab",
+        &["alt+bracketleft"],
+        UI,
+        TERMINAL,
+    ),
+    seed(
+        "terminal.nextTab",
+        "Terminal",
+        "Next Terminal Tab",
+        &["alt+bracketright"],
+        UI,
+        TERMINAL,
+    ),
+    seed(
+        "terminal.setMode",
+        "Terminal",
+        "Lock or Link Terminal to Its Pane",
         &[],
         UI,
         None,
@@ -1022,9 +1058,54 @@ mod tests {
     }
 
     #[test]
+    fn the_terminal_tab_keys_hold_only_in_the_terminal_and_the_pane_keeps_its_own() {
+        let registry = CommandRegistry::core();
+        for (id, title, keys) in [
+            ("terminal.new", "New Terminal", "ctrl+shift+t"),
+            ("terminal.close", "Close Terminal", "ctrl+shift+w"),
+            (
+                "terminal.previousTab",
+                "Previous Terminal Tab",
+                "alt+bracketleft",
+            ),
+            ("terminal.nextTab", "Next Terminal Tab", "alt+bracketright"),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(command.title, title, "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.when.as_deref(), Some("terminalFocus"), "{id}");
+            assert_eq!(texts(&command.default_keys), [keys], "{id}");
+        }
+        let set_mode = registry.get("terminal.setMode").unwrap();
+        assert!(set_mode.default_keys.is_empty());
+        assert_eq!(set_mode.when, None);
+        // Ctrl+Shift+C stays the pane's Copy Full Path: the terminal's copy
+        // is the page's own key, not a command.
+        let copy = registry.get("edit.copyFullPath").unwrap();
+        assert_eq!(texts(&copy.default_keys), ["ctrl+shift+c"]);
+        assert_eq!(copy.when.as_deref(), Some("filesView"));
+        // No other command has the four keys, in any context.
+        for keys in [
+            "ctrl+shift+t",
+            "ctrl+shift+w",
+            "alt+bracketleft",
+            "alt+bracketright",
+        ] {
+            let owners: Vec<&str> = registry
+                .commands()
+                .iter()
+                .filter(|command| texts(&command.default_keys).contains(&keys.to_owned()))
+                .map(|command| command.id.as_str())
+                .collect();
+            assert_eq!(owners.len(), 1, "{keys}: {owners:?}");
+        }
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
+    #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 112);
+        assert_eq!(registry.commands().len(), 115);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1348,10 +1429,9 @@ mod tests {
         // can bind them; only the Markdown preview has keys of its own.
         for id in [
             "plugins.list",
-            "terminal.new",
             "terminal.show",
-            "terminal.close",
             "terminal.reload",
+            "terminal.setMode",
             "search.scope",
             "editor.close",
             "editor.reload",

@@ -162,19 +162,34 @@ mod tests {
         // Every terminal command leads, the ones whose category is the word
         // first; toggling the panel comes right after them.
         let terminal = ids("terminal");
+        let mut leading = terminal[..10].to_vec();
+        leading.sort();
         assert_eq!(
-            terminal[..8],
+            leading,
+            [
+                "terminal.close",
+                "terminal.insertPath",
+                "terminal.insertSelectedPaths",
+                "terminal.new",
+                "terminal.nextTab",
+                "terminal.previousTab",
+                "terminal.reload",
+                "terminal.runTask",
+                "terminal.setMode",
+                "terminal.show",
+            ]
+        );
+        assert_eq!(
+            terminal[..5],
             [
                 "terminal.runTask",
                 "terminal.new",
                 "terminal.show",
                 "terminal.close",
-                "terminal.reload",
-                "terminal.insertPath",
-                "terminal.insertSelectedPaths",
-                "view.toggleTerminal"
+                "terminal.reload"
             ]
         );
+        assert_eq!(terminal[10], "view.toggleTerminal");
         assert_eq!(ids("toggle term")[0], "view.toggleTerminal");
         assert_eq!(ids("about")[0], "help.about");
         assert_eq!(ids("plugins")[0], "plugins.list");
