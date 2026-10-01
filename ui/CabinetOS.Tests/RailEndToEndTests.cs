@@ -55,7 +55,7 @@ public class RailEndToEndTests
             await WaitForAsync(() => File.Exists(Shot(name, lastShot)), $"the {name} window's last snapshot", TimeSpan.FromSeconds(90));
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
-            var logs = Lines(Directory.GetFiles(Path.Combine(root, "logs-" + name), "ui.*.jsonl").Single());
+            var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
             return logs;
@@ -176,11 +176,7 @@ public class RailEndToEndTests
                 JsonSerializer.Serialize(new { ui = new { layout = "rail", sidebar = true, lastPaths = new[] { folder, folder } } }));
 
             var process = run.Start("plain", "", snapshot: false);
-            List<string> log()
-            {
-                var folderOfLogs = Path.Combine(root, "logs-plain");
-                return Directory.Exists(folderOfLogs) && Directory.GetFiles(folderOfLogs, "ui.*.jsonl") is [var file] ? Lines(file) : [];
-            }
+            List<string> log() => LogFiles.Ui(Path.Combine(root, "logs-plain"));
             var deadline = DateTime.UtcNow.AddSeconds(60);
             while (!log().Any(l => Message(l) == "the tree drew rows"))
             {
@@ -333,18 +329,6 @@ public class RailEndToEndTests
         {
             CopyFolder(folder, Path.Combine(to, Path.GetFileName(folder)));
         }
-    }
-
-    private static List<string> Lines(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
     }
 
     private static string? Message(string line)

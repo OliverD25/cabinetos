@@ -68,7 +68,7 @@ public class ThemePickerEndToEndTests
                 Assert.True(process.WaitForExit(20_000), $"the {run} window did not close");
                 var folder = Path.Combine(root, "logs-" + run);
                 Assert.Empty(Directory.GetFiles(folder, "crash-*.json"));
-                var logs = Lines(Directory.GetFiles(folder, "ui.*.jsonl").Single());
+                var logs = LogFiles.Ui(folder);
                 Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
                 var themes = logs.Where(l => Target(l) == "cabinetos_ui::theme").ToList();
                 foreach (var line in themes)
@@ -131,18 +131,6 @@ public class ThemePickerEndToEndTests
 
     private static int Index(List<string> lines, string message, string theme, int from = 0) =>
         lines.FindIndex(from, l => Message(l) == message && Theme(l) == theme);
-
-    private static List<string> Lines(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
-    }
 
     private static string? Message(string line)
     {

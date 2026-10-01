@@ -85,8 +85,8 @@ public class TwoWindowsTests
             var a = Start("a", "cmd:view.toggleTerminal;until:terminal;wait:1000;shot:a-terminal;cmd:view.toggleDualPane;wait:4000;shot:a-done");
             await WaitForAsync(() => File.Exists(Shot("a", "a-done")), "A's last snapshot", TimeSpan.FromSeconds(60));
 
-            var logPath = Directory.GetFiles(Path.Combine(root, "logs"), "ui.*.jsonl").Single();
-            var cores = Lines(logPath).Where(l => Message(l) == "core started").Select(l => Field(l, "pid").GetInt32()).ToList();
+            var logFolder = Path.Combine(root, "logs");
+            var cores = LogFiles.Ui(logFolder).Where(l => Message(l) == "core started").Select(l => Field(l, "pid").GetInt32()).ToList();
             Assert.Equal(2, cores.Distinct().Count());
             var (coreOfB, coreOfA) = (cores[0], cores[1]);
             Assert.True(IsRunning(coreOfA) && IsRunning(coreOfB));
@@ -102,8 +102,8 @@ public class TwoWindowsTests
             b.CloseMainWindow();
             Assert.True(b.WaitForExit(15_000), "B did not close");
 
-            // One log file for both windows, every line whole.
-            var lines = Lines(logPath);
+            // One log for both windows, every line whole.
+            var lines = LogFiles.Ui(logFolder);
             Assert.All(lines, line => JsonDocument.Parse(line).Dispose());
             // A wrote the setting; B followed it and wrote nothing back.
             var followed = lines.Where(l => Message(l) == "dual pane follows the configuration").ToList();
@@ -129,19 +129,6 @@ public class TwoWindowsTests
             }
             Repo.RemoveTempFolder(root);
         }
-    }
-
-    private static List<string> Lines(string path)
-    {
-        // The windows may still hold the file: read it as they share it.
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
     }
 
     private static string? Message(string line)

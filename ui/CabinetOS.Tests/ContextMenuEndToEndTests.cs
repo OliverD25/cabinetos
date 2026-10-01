@@ -457,7 +457,7 @@ public class ContextMenuEndToEndTests
             var menu = config.RootElement.GetProperty("contextMenu");
             Assert.Equal("""[{"command":"pane.openSelected"},{"command":"file.openInOtherPane"}]""", JsonSerializer.Serialize(menu.GetProperty("file").GetProperty("items")));
             Assert.Equal(4, menu.GetProperty("folder").GetProperty("items").GetArrayLength());
-            var core = Lines(Directory.GetFiles(Path.Combine(root, "logs-edit"), "core.*.jsonl").Single());
+            var core = LogFiles.Core(Path.Combine(root, "logs-edit"));
             Assert.Equal(2, core.Count(l => Message(l) == "configuration changed" && Field(l, "changed").GetString()!.Contains("contextMenu.file.items", StringComparison.Ordinal)));
         }
         finally
@@ -746,8 +746,7 @@ public class ContextMenuEndToEndTests
         public async Task WaitForStateAsync(string name, string label)
         {
             var folder = Path.Combine(root, "logs-" + name);
-            await WaitForAsync(() => Directory.Exists(folder) && Directory.GetFiles(folder, "ui.*.jsonl")
-                .Any(file => Lines(file).Any(l => Message(l) == "shell state" && Field(l, "label").GetString() == label)),
+            await WaitForAsync(() => LogFiles.Ui(folder).Any(l => Message(l) == "shell state" && Field(l, "label").GetString() == label),
                 $"the {name} window's state {label}", TimeSpan.FromSeconds(60));
         }
 
@@ -758,7 +757,7 @@ public class ContextMenuEndToEndTests
             await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", TimeSpan.FromSeconds(120));
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
-            var logs = Lines(Directory.GetFiles(Path.Combine(root, "logs-" + name), "ui.*.jsonl").Single());
+            var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
             return logs;
@@ -802,18 +801,6 @@ public class ContextMenuEndToEndTests
         var line = Assert.Single(logs, l => Message(l) == "shell state" && Field(l, "label").GetString() == label);
         using var parsed = JsonDocument.Parse(line);
         check(parsed.RootElement.GetProperty("fields"));
-    }
-
-    private static List<string> Lines(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
     }
 
     private static string? Message(string line)

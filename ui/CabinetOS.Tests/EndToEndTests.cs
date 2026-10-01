@@ -98,8 +98,7 @@ public class EndToEndTests
             Assert.Equal(0, core.Process.ExitCode);
 
             // Article 12: the request ID the UI created is in the core's own log.
-            var coreLog = Directory.GetFiles(Path.Combine(root, "logs"), "core.*.jsonl").Single();
-            Assert.Contains(list.Id, File.ReadAllText(coreLog));
+            Assert.Contains(LogFiles.Core(Path.Combine(root, "logs")), l => l.Contains(list.Id, StringComparison.Ordinal));
         }
         finally
         {
@@ -454,8 +453,7 @@ public class EndToEndTests
                 await core.ShutdownAsync(TimeSpan.FromSeconds(5));
             }
             // The core was never asked to run it.
-            var coreLog = Directory.GetFiles(Path.Combine(root, "logs"), "core.*.jsonl").Single();
-            Assert.DoesNotContain(requestId, File.ReadAllText(coreLog));
+            Assert.DoesNotContain(LogFiles.Core(Path.Combine(root, "logs")), l => l.Contains(requestId, StringComparison.Ordinal));
         }
         finally
         {

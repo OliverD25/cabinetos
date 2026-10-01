@@ -252,8 +252,7 @@ public class ColumnsEndToEndTests
         public async Task WaitForColumnsAsync(string name, string label)
         {
             var folder = Path.Combine(root, "logs-" + name);
-            await WaitForAsync(() => Directory.Exists(folder) && Directory.GetFiles(folder, "ui.*.jsonl")
-                .Any(file => Lines(file).Any(l => Message(l) == "columns shown" && Field(l, "label").GetString() == label)),
+            await WaitForAsync(() => LogFiles.Ui(folder).Any(l => Message(l) == "columns shown" && Field(l, "label").GetString() == label),
                 $"the {name} window's columns {label}", TimeSpan.FromSeconds(90));
         }
 
@@ -264,7 +263,7 @@ public class ColumnsEndToEndTests
             await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", TimeSpan.FromSeconds(120));
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
-            var logs = Lines(Directory.GetFiles(Path.Combine(root, "logs-" + name), "ui.*.jsonl").Single());
+            var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
             return logs;
@@ -301,18 +300,6 @@ public class ColumnsEndToEndTests
         Directory.CreateDirectory(Path.Combine(root, "config"));
         File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), """{ "version": 1, "ui": { "dualPane": true } }""");
         return (new Run(root, exe, core), root, data);
-    }
-
-    private static List<string> Lines(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
     }
 
     private static string? Message(string line)

@@ -109,7 +109,7 @@ public class ColumnViewEndToEndTests
             first.CloseMainWindow();
             Assert.True(first.WaitForExit(15_000), "the first window did not close");
 
-            var logs = Lines(Directory.GetFiles(Path.Combine(root, "logs-first"), "ui.*.jsonl").Single());
+            var logs = LogFiles.Ui(Path.Combine(root, "logs-first"));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-first"), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
             string Shown(string label, string field) => Text(Assert.Single(logs, l => Message(l) == "column view shown" && Text(l, "label") == label), field);
@@ -173,7 +173,7 @@ public class ColumnViewEndToEndTests
             Assert.Contains(logs, l => Message(l) == "tabs saved" && Field(l, "columns").GetInt32() == 1);
 
             // The core stopped watching every folder whose column went: each released listing is closed there.
-            var core = Lines(Directory.GetFiles(Path.Combine(root, "logs-first"), "core.*.jsonl").Single());
+            var core = LogFiles.Core(Path.Combine(root, "logs-first"));
             var closed = core.Where(l => Message(l) == "listing closed").Select(l => Field(l, "listing_id").GetUInt64()).ToHashSet();
             var releasedIds = logs.Where(l => Message(l) == "column released").Select(l => Field(l, "listing_id").GetUInt64()).ToList();
             Assert.NotEmpty(releasedIds);
@@ -191,7 +191,7 @@ public class ColumnViewEndToEndTests
             await WaitForAsync(() => File.Exists(Shot("second", "start")), "the second window's snapshot", TimeSpan.FromSeconds(60));
             second.CloseMainWindow();
             Assert.True(second.WaitForExit(15_000), "the second window did not close");
-            var again = Lines(Directory.GetFiles(Path.Combine(root, "logs-second"), "ui.*.jsonl").Single());
+            var again = LogFiles.Ui(Path.Combine(root, "logs-second"));
             Assert.Contains(again, l => Message(l) == "column view entered" && Text(l, "path") == b);
             var start = Assert.Single(again, l => Message(l) == "column view shown" && Text(l, "label") == "start");
             Assert.Equal(("columns", "1", b, "c>|b.txt"), (Text(start, "mode"), Text(start, "depth"), Text(start, "folders"), Text(start, "rows")));
@@ -206,18 +206,6 @@ public class ColumnViewEndToEndTests
             }
             Repo.RemoveTempFolder(root);
         }
-    }
-
-    private static List<string> Lines(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
     }
 
     private static string? Message(string line)

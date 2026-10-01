@@ -435,7 +435,7 @@ public class ShellEndToEndTests
             await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", TimeSpan.FromSeconds(90));
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
-            var logs = Lines(Directory.GetFiles(Path.Combine(root, "logs-" + name), "ui.*.jsonl").Single());
+            var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
             return logs;
@@ -479,18 +479,6 @@ public class ShellEndToEndTests
         var line = Assert.Single(logs, l => Message(l) == "shell state" && Field(l, "label").GetString() == label);
         using var parsed = JsonDocument.Parse(line);
         check(parsed.RootElement.GetProperty("fields"));
-    }
-
-    private static List<string> Lines(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
     }
 
     private static string? Message(string line)

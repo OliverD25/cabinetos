@@ -64,7 +64,7 @@ public class StartEndToEndTests
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), "the window did not close");
 
-            var logs = ReadLines(Directory.GetFiles(Path.Combine(root, "logs"), "ui.*.jsonl").Single())
+            var logs = LogFiles.Ui(Path.Combine(root, "logs"))
                 .Select(line => JsonSerializer.Deserialize<JsonElement>(line)).ToList();
             JsonElement First(string message, Func<JsonElement, bool>? also = null) =>
                 logs.First(l => l.GetProperty("message").GetString() == message && (also?.Invoke(l) ?? true));
@@ -92,17 +92,5 @@ public class StartEndToEndTests
             }
             Repo.RemoveTempFolder(root);
         }
-    }
-
-    private static List<string> ReadLines(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
     }
 }

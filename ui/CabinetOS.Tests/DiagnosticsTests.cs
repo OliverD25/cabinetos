@@ -216,6 +216,26 @@ public class DiagnosticsTests
     }
 
     [Fact]
+    public void A_run_across_midnight_UTC_is_read_as_one_log_oldest_file_first()
+    {
+        var dir = Repo.NewTempFolder("diag");
+        try
+        {
+            // The newer day's file is written first: the order comes from the date in the name, not from the disk.
+            File.WriteAllLines(Path.Combine(dir, "ui.2026-10-02.jsonl"), ["""{"message":"third"}""", """{"message":"fourth"}"""]);
+            File.WriteAllLines(Path.Combine(dir, "ui.2026-10-01.jsonl"), ["""{"message":"first"}""", """{"message":"second"}"""]);
+            File.WriteAllLines(Path.Combine(dir, "core.2026-10-01.jsonl"), ["""{"message":"core"}"""]);
+            Assert.Equal(["""{"message":"first"}""", """{"message":"second"}""", """{"message":"third"}""", """{"message":"fourth"}"""], LogFiles.Ui(dir));
+            Assert.Equal(["""{"message":"core"}"""], LogFiles.Core(dir));
+            Assert.Empty(LogFiles.Ui(Path.Combine(dir, "not-yet")));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(dir);
+        }
+    }
+
+    [Fact]
     public void The_directory_comes_from_the_environment_first()
     {
         Assert.Equal(@"D:\logs", Diag.DefaultDirectory(name => name == Diag.LogDirEnv ? @"D:\logs" : null));

@@ -96,7 +96,7 @@ public class TabsEndToEndTests
             second.CloseMainWindow();
             Assert.True(second.WaitForExit(15_000), "the second window did not close");
 
-            var logs = Lines(Directory.GetFiles(Path.Combine(root, "logs-second"), "ui.*.jsonl").Single());
+            var logs = LogFiles.Ui(Path.Combine(root, "logs-second"));
             var shown = Assert.Single(logs, l => Message(l) == "tabs shown" && Field(l, "label").GetString() == "restored");
             // The row as the window shows it: the tab in front marked with *, the lock in brackets.
             Assert.Equal("one | two | *three (locked)", Field(shown, "left").GetString());
@@ -112,18 +112,6 @@ public class TabsEndToEndTests
             }
             Repo.RemoveTempFolder(root);
         }
-    }
-
-    private static List<string> Lines(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream);
-        var lines = new List<string>();
-        while (reader.ReadLine() is { } line)
-        {
-            lines.Add(line);
-        }
-        return lines;
     }
 
     private static string? Message(string line)
