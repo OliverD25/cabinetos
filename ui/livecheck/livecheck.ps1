@@ -881,7 +881,11 @@ $toggles = ToggleCount
 [Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 800
 $owner = UiLines '"keyboard owner"' | Where-Object { $_ -match 'terminal hidden' } | Select-Object -Last 1
 $ownerFields = if ($owner) { ($owner | ConvertFrom-Json).fields } else { $null }
-"Ctrl+Backquote hid the terminal: $((ToggleCount) -gt $toggles)"
+# The window's own word: Ctrl+Backquote in the pane the terminal gave the keyboard back to hides the dock (docs/ui.md,
+# "The terminal"); a count of the command alone also counts a Ctrl+Backquote that gave the terminal the keyboard.
+$summoned = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"terminal summoned"' } | Select-Object -Last 1
+$summonedAction = if ($summoned) { ($summoned | ConvertFrom-Json).fields.action } else { '(not logged)' }
+"Ctrl+Backquote hid the terminal (the window chose $summonedAction): $((ToggleCount) -gt $toggles -and $summonedAction -eq 'Hide')"
 "then the keys go to $(if ($ownerFields) { "$($ownerFields.element), $($ownerFields.keys_to)" } else { '(not logged)' }), the pane: $([bool]($ownerFields -and $ownerFields.element -eq 'FilePane' -and $ownerFields.keys_to -eq 'window'))"
 $ran = UiObjects '"command executed"' | ForEach-Object { $_.fields.command }
 foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPattern", "edit.invertSelection", "edit.unselectAll", "edit.toggleSelectionInPlace",
@@ -2384,13 +2388,16 @@ $pasted = "$t21\pasted-21.txt"
 "21: Ctrl+Shift+V pasted the command and Enter wrote the file: $(Test-Path -LiteralPath $pasted)"
 
 Step "21: Clear-Host and an echo, a drag over the text, then Ctrl+Shift+C: the selection is on the clipboard"
-[Live]::Type("Clear-Host; echo copy-21"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
+# xx- in front: a selection that starts a column late still holds copy-21.
+[Live]::Type("Clear-Host; echo xx-copy-21"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
 [System.Windows.Forms.Clipboard]::SetText("cabinetos live check 21")
 $tab = ShellElement "pwsh [Left], session $leftSession"
 if ($tab) {
-  # The shell's first lines sit just under the tab: the prompt with the echo, then copy-21.
+  # After Clear-Host the echo is the first line: the 34 DIP header (the tab sits in its middle), 8 px above
+  # the text, 15 px lines. The drag starts in that line's middle, over the text, and ends two lines lower.
   $r = $tab.Current.BoundingRectangle
-  [Live]::Drag([int]($r.Left + 20 * $scale), [int]($r.Bottom + 10 * $scale), [int]($r.Left + 320 * $scale), [int]($r.Bottom + 70 * $scale))
+  $textTop = $r.Top + $r.Height / 2 + 17 * $scale + 8 * $scale
+  [Live]::Drag([int]($r.Left + 20 * $scale), [int]($textTop + 7 * $scale), [int]($r.Left + 320 * $scale), [int]($textTop + 37 * $scale))
   Start-Sleep -Milliseconds 300
   [Live]::Press($VK.Ctrl, $VK.Shift, $VK.C); Start-Sleep -Milliseconds 600
 }
@@ -2412,8 +2419,10 @@ $locked = WaitShellLines 'terminal mode changed' $changes 5
 Start-Sleep -Milliseconds 400
 "21: the second click locked it again: $($locked.fields.mode -eq 'locked')"
 
-# The toggle takes no keyboard; a click into the shell's text gives the page the keys for the next step.
-if ($tab) {
+# The toggle takes no keyboard; a click into the shell's text gives the page the keys for the next step. The tab is
+# looked up again: the header was drawn anew when the mode changed, and the old element has no place on screen.
+$tab = ShellElement "pwsh [Left], session $leftSession"
+if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
   $r = $tab.Current.BoundingRectangle
   [Live]::Click([int]($r.Left + 200 * $scale), [int]($r.Bottom + 90 * $scale)); Start-Sleep -Milliseconds 500
 }
