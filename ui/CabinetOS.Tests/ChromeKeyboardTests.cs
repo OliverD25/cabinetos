@@ -5,7 +5,7 @@ using CabinetOS.Tests.Support;
 namespace CabinetOS.Tests;
 
 /// <summary>
-/// The window's chrome never takes the keyboard (docs/ui.md, "The top row"). A click on a top-row button, a pill, a crumb, a tab
+/// The window's chrome never takes the keyboard (docs/ui.md, "The top row"). A click on a top-row button, the sidebar's workspace row, a pill, a crumb, a tab
 /// strip button, the dock's header or a rail button leaves the keyboard in the pane, so Tab (<c>view.focusOtherPane</c>, context
 /// <c>filesView</c>) still switches panes. These tests read the XAML and the code that builds buttons; the end-to-end test in
 /// <c>ChromeKeyboardEndToEndTests</c> and the live check prove it on a running window.
@@ -55,6 +55,20 @@ public class ChromeKeyboardTests
             }
             Assert.True(IsOff(button, "IsTabStop"), $"{where} has no IsTabStop=\"False\"");
             Assert.True(IsOff(button, "AllowFocusOnInteraction"), $"{where} has no AllowFocusOnInteraction=\"False\"");
+        }
+    }
+
+    [Theory]
+    [InlineData("MainWindow.xaml", "MenuButton QuickOpenChip DualButton TerminalButton MarketplaceButton PaletteButton SettingsButton WorkspaceHeader")]
+    public void The_shells_controls_are_there_and_are_chrome(string relative, string names)
+    {
+        // v2 of the shell redesign: the top row's chip and the sidebar's workspace row are chrome too, so the theory above
+        // checks them; this one fails when one of them is renamed or gone, so that check cannot pass on nothing.
+        var buttons = ButtonsOf(relative).ToDictionary(b => b.Name, b => b.Button);
+        foreach (var name in names.Split(' '))
+        {
+            Assert.True(buttons.TryGetValue(name, out var button), $"{relative} has no button {name}");
+            Assert.True(IsOff(button, "IsTabStop") && IsOff(button, "AllowFocusOnInteraction"), $"{relative} {name} takes the keyboard");
         }
     }
 

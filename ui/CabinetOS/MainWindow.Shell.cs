@@ -43,12 +43,17 @@ public sealed partial class MainWindow
             _crumbViews[i].RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         }
         MenuButton.Click += (_, _) => _ = _router.ExecuteAsync("menu.show", trigger: "button");
+        WorkspaceHeader.Click += (_, _) => ShowWorkspaceMenu(fromKeyboard: false);
         QuickOpenChip.Click += (_, _) => _ = _router.ExecuteAsync("quickOpen.show", trigger: "button");
         SettingsButton.Click += (_, _) => _ = _router.ExecuteAsync("settings.open", trigger: "button");
         _palette.Opened += UpdatePaletteButton;
         _palette.Closed += UpdatePaletteButton;
-        // The chip says the key Quick Open has now, so a rebinding shows there too.
-        _router.CommandsChanged += () => DispatcherQueue.TryEnqueue(ShowQuickOpenKeys);
+        // The chip and the workspace row say the keys their commands have now, so a rebinding shows there too.
+        _router.CommandsChanged += () => DispatcherQueue.TryEnqueue(() =>
+        {
+            ShowQuickOpenKeys();
+            ShowBranch();
+        });
         // The top row's layout: the title up to the chip, and the drag area around its controls.
         TopRowGrid.SizeChanged += (_, _) => LayOutTopRow();
         TopRight.SizeChanged += (_, _) => LayOutTopRow();
@@ -224,12 +229,19 @@ public sealed partial class MainWindow
             new LogField("left", Math.Round(at.X, 1)), new LogField("top", Math.Round(at.Y, 1)), new LogField("width", width is { } w ? Math.Round(w, 1) : null));
     }
 
-    // Where the workspace dropdown opens: under the top row at the sidebar's left edge, or at the panes' left edge while the
-    // sidebar is hidden (Ctrl+B), at the menu's own width.
+    // The least width of the workspace dropdown: the design's min-width, for a narrow sidebar.
+    private const double WorkspaceMenuMinWidth = 220;
+
+    // Where the workspace dropdown opens: under the sidebar's workspace row at its full width (at least 220 px); while the
+    // sidebar is hidden (Ctrl+B), under the top row at the panes' left edge, at the menu's own width.
     private (Point At, double? Width) WorkspaceMenuPlace()
     {
-        var edge = SidebarHost.Visibility == Visibility.Visible && SidebarHost.ActualWidth > 0 ? (FrameworkElement)SidebarHost : MainColumn;
-        var left = edge.TransformToVisual(null).TransformPoint(new Point(0, 0)).X;
+        if (SidebarHost.Visibility == Visibility.Visible && WorkspaceHeaderFrame.ActualWidth > 0)
+        {
+            var below = WorkspaceHeaderFrame.TransformToVisual(null).TransformPoint(new Point(0, WorkspaceHeaderFrame.ActualHeight));
+            return (below, Math.Max(WorkspaceMenuMinWidth, WorkspaceHeaderFrame.ActualWidth));
+        }
+        var left = MainColumn.TransformToVisual(null).TransformPoint(new Point(0, 0)).X;
         return (new Point(left, TopBar.ActualHeight), null);
     }
 
@@ -317,9 +329,20 @@ public sealed partial class MainWindow
         }
     }
 
-    // The workspace's branch, where the shell shows the workspace.
+    // The sidebar's workspace row: the workspace's name, and the branch in the mono font when the active folder is in a
+    // repository on one.
     private void ShowBranch()
     {
+        var branch = _workspace?.Branch;
+        WorkspaceName.Text = WorkspaceTitle;
+        WorkspaceBranch.Text = branch ?? "";
+        WorkspaceBranch.Visibility = branch is null ? Visibility.Collapsed : Visibility.Visible;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(WorkspaceHeader,
+            branch is null ? $"Workspace {WorkspaceTitle}" : $"Workspace {WorkspaceTitle}, branch {branch}");
+        var keys = KeysOf("workspace.switch") is { } key ? $" ({key})" : "";
+        ToolTipService.SetToolTip(WorkspaceHeader, _workspace is { Branch: not null } workspace
+            ? $"{WorkspaceTitle} · {workspace.Root}{Environment.NewLine}Switch workspace{keys}"
+            : $"Switch workspace{keys}");
     }
 
     // ----- The breadcrumb rows -----
@@ -403,6 +426,13 @@ public sealed partial class MainWindow
             new("right_cluster_end", Math.Round(LeftOf(SettingsButton) + SettingsButton.ActualWidth, 1)),
             new("caption_start", Math.Round(LeftOf(CaptionSpace), 1)),
             new("workspace", WorkspaceTitle),
+            new("workspace_header", WorkspaceHeaderFrame.Visibility == Visibility.Visible && WorkspaceHeaderFrame.ActualWidth > 0 && SidebarHost.Visibility == Visibility.Visible),
+            new("workspace_header_height", Math.Round(WorkspaceHeaderFrame.ActualHeight, 1)),
+            new("workspace_header_width", Math.Round(WorkspaceHeaderFrame.ActualWidth, 1)),
+            new("workspace_header_left", Math.Round(LeftOf(WorkspaceHeaderFrame), 1)),
+            new("workspace_header_bottom", Math.Round(BottomOf(WorkspaceHeaderFrame), 1)),
+            new("workspace_header_branch", WorkspaceBranch.Visibility == Visibility.Visible ? WorkspaceBranch.Text : ""),
+            new("sidebar_shown", SidebarHost.Visibility == Visibility.Visible),
             new("workspace_root", WorkspaceRoot()),
             new("quick_open", _quickOpen.IsOpen),
             new("quick_open_rows", string.Join("|", _quickOpen.Rows.Take(10).Select(r => r.Folder.Length > 0 ? $"{r.Name} ({r.Folder})" : r.Name))),
@@ -449,4 +479,8 @@ public sealed partial class MainWindow
     // An element's left edge in the window, for the snapshot aid's log.
     private static double LeftOf(FrameworkElement element) =>
         element.ActualWidth > 0 ? element.TransformToVisual(null).TransformPoint(new Point(0, 0)).X : 0;
+
+    // An element's bottom edge in the window, for the snapshot aid's log.
+    private static double BottomOf(FrameworkElement element) =>
+        element.ActualHeight > 0 ? element.TransformToVisual(null).TransformPoint(new Point(0, element.ActualHeight)).Y : 0;
 }

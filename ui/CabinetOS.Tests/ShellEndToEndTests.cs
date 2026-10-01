@@ -168,6 +168,22 @@ public class ShellEndToEndTests
                 $"path:{Path.Combine(project, "src")}",
                 "wait:500",
                 "shell:pill",
+                // §7: the sidebar header opens the workspace dropdown at its full width; picking the workspace goes to its
+                // root in the left pane's tab in front. With the sidebar hidden, Ctrl+K Ctrl+W opens it under the top row.
+                "click:Workspace Default, branch phase-16",
+                "wait:300",
+                "shell:ws-menu",
+                "click:Default",
+                "wait:800",
+                "shell:ws-picked",
+                "cmd:view.toggleSidebar",
+                "wait:300",
+                "cmd:workspace.switch",
+                "wait:300",
+                "shell:ws-collapsed",
+                "cmd:overlay.close",
+                "cmd:view.toggleSidebar",
+                "wait:300",
                 "quick-open:notes",
                 "shell:typed",
                 "quick-open-key:enter",
@@ -190,7 +206,38 @@ public class ShellEndToEndTests
             {
                 Assert.Equal("phase-16", state.GetProperty("branch").GetString());
                 Assert.Equal(project, state.GetProperty("workspace_root").GetString(), ignoreCase: true);
+                // The sidebar's first row shows the workspace and its branch, at the default look's 28 px.
+                Assert.True(state.GetProperty("workspace_header").GetBoolean());
+                Assert.Equal(28, state.GetProperty("workspace_header_height").GetDouble());
+                Assert.Equal("phase-16", state.GetProperty("workspace_header_branch").GetString());
             });
+            double headerLeft = 0, headerWidth = 0, headerBottom = 0;
+            State(logs, "ws-menu", state =>
+            {
+                Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString());
+                headerLeft = state.GetProperty("workspace_header_left").GetDouble();
+                headerWidth = state.GetProperty("workspace_header_width").GetDouble();
+                headerBottom = state.GetProperty("workspace_header_bottom").GetDouble();
+            });
+            var menus = logs.Where(l => Message(l) == "workspace menu shown").ToList();
+            Assert.Equal(2, menus.Count);
+            // Anchored to the row's full width (at least the design's 220 px), right under it.
+            Assert.Equal(headerLeft, Field(menus[0], "left").GetDouble(), 0.6);
+            Assert.Equal(Math.Max(220, headerWidth), Field(menus[0], "width").GetDouble(), 0.6);
+            Assert.Equal(headerBottom, Field(menus[0], "top").GetDouble(), 0.6);
+            State(logs, "ws-picked", state =>
+            {
+                Assert.Equal(project, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
+                Assert.Equal("", state.GetProperty("menu").GetString());
+            });
+            State(logs, "ws-collapsed", state =>
+            {
+                Assert.False(state.GetProperty("sidebar_shown").GetBoolean());
+                Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString());
+            });
+            // With the sidebar hidden: under the top row, at the menu's own width.
+            Assert.Equal(40, Field(menus[1], "top").GetDouble(), 0.6);
+            Assert.Equal(JsonValueKind.Null, Field(menus[1], "width").ValueKind);
             State(logs, "typed", state =>
             {
                 Assert.True(state.GetProperty("quick_open").GetBoolean());

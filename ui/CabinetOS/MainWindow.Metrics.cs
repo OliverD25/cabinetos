@@ -61,6 +61,10 @@ public sealed partial class MainWindow
         QuickOpenChip.CornerRadius = WindowMetrics.Corners(Math.Max(0, m.RadiusControl - 1));
         // Inside the frame's 1 px border: the subtle button style's own 32 px would push the text down and be cut.
         QuickOpenChip.Height = Math.Max(0, m.QuickOpenChipHeight - 2);
+        // The sidebar's workspace row: its height with the line under it, its top corners as the surfaces' (square in
+        // Commander Compact).
+        WorkspaceHeaderFrame.Height = m.WorkspaceHeaderHeight;
+        WorkspaceHeaderFrame.CornerRadius = WorkspaceHeader.CornerRadius = WindowMetrics.TopCorners(m.RadiusSurface);
         foreach (var crumbs in _crumbViews)
         {
             crumbs.ApplyMetrics();
@@ -241,7 +245,7 @@ public sealed partial class MainWindow
         // The sizes the metrics set, element by element: two looks compare by this line.
         var named = new (string Name, FrameworkElement Element)[]
         {
-            ("top", TopBar), ("menu", MenuButton), ("tile", AppTile), ("chip", QuickOpenChipFrame),
+            ("top", TopBar), ("menu", MenuButton), ("tile", AppTile), ("chip", QuickOpenChipFrame), ("wsheader", WorkspaceHeaderFrame),
             ("dual", DualButton), ("settings", SettingsButton), ("body", Body), ("sidebar", SidebarView), ("lefttabs", LeftTabs),
             ("leftcrumbs", LeftCrumbs), ("left", LeftPane), ("righttabs", RightTabs), ("rightcrumbs", RightCrumbs), ("right", RightPane),
             ("fkeys", FkeyBar), ("status", StatusGrid), ("dock", Dock),
