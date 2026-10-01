@@ -29,6 +29,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The first right-click menu of a session opens a little sooner: the menus are built while the window is idle after start.
 - The marketplace shows its first cards without a pause: it makes the cards that fill the view at once and the rest a screenful at a time. The first view's frame took 74 to 95 ms of work for 50 cards; it now takes under 10 ms, and a larger collection costs no more.
 - Going back to the tab a pane showed just before does not list its folder again: the pane keeps that tab's listing for 30 seconds, with its cursor and marks. A tab on 100,000 files is back on screen in about 15 ms instead of about 65 ms.
+- The release build compiles the window ahead of time (ReadyToRun), so CabinetOS starts 0.14 to 0.24 s sooner. The download is about 5 MB bigger (the unpacked folder about 16 MB).
 
 - Shortcuts work while a text box has the keyboard, when they type nothing there: Ctrl+B, Ctrl+Tab, Alt+Left, Ctrl+K Ctrl+T and the function keys run their command. The box keeps the keys that type or edit, such as letters, Enter, Tab, the arrows, Ctrl+A, Ctrl+C and Ctrl+V. In a pane's find box and address box the pane's keys work too: F5 copies the cursor row to the other pane, Ctrl+T opens a tab. Before, only Ctrl+Shift+P, Esc and Ctrl+K Ctrl+S worked in a box.
 

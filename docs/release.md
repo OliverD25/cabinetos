@@ -12,7 +12,7 @@ the zip's root:
 
 | Part | What it is |
 |---|---|
-| `CabinetOS.exe` and the libraries next to it | The window: .NET 10, WinUI 3, published framework-dependent |
+| `CabinetOS.exe` and the libraries next to it | The window: .NET 10, WinUI 3, published framework-dependent and compiled ahead of time (ReadyToRun) |
 | `CabinetOS.pri` | The window's compiled XAML; without it the window cannot start |
 | `cabinetos-core.exe`, `cabinetos-indexer.exe`, `cabinetos-cli.exe` | The Rust programs. The window's launcher finds the core next to `CabinetOS.exe` ([ui.md](ui.md)) |
 | `cab.exe` | `cabinetos-cli.exe` once more, under a short name to type: `cab jobs`, `cab undo --last`. The same program, byte for byte; everything else keeps the name `cabinetos-cli` (the docs, the help text, the tests) |
@@ -33,6 +33,14 @@ Measured on 2026-09-28 for 0.1.0: 83 files, 246 MB unpacked, a 77 MB zip.
 The Rust `.pdb` files are 38 MB of the zip, and the Windows App SDK's AI and
 machine-learning libraries (`onnxruntime.dll`, `DirectML.dll` and their
 projections), which CabinetOS does not use, another 17 MB.
+
+ReadyToRun (since 2026-10-01) makes the window's folder bigger and its start
+shorter. The window's own files grow from 41 to 57 MB unpacked (45 files
+either way; `Microsoft.WinUI.dll` from 7 to 16 MB, `CabinetOS.Core.dll` from
+1.6 to 3.8 MB), and zipped that part grows from 11.8 to 17.0 MB. So the
+release zip is about 5 MB bigger than the 77 MB above, and the unpacked
+folder about 16 MB bigger. The start is 0.14 to 0.24 s shorter
+([speed review](log/2026-10-01/speed-review.md), proposal A).
 
 ## Build
 
@@ -58,9 +66,11 @@ What it runs, in order:
    in `core\`. `core\.cargo\config.toml` links the C runtime into the
    programs (`+crt-static`), so they do not need the Visual C++
    Redistributable, which a clean Windows 11 lacks.
-2. `dotnet publish CabinetOS\CabinetOS.csproj -c Release -r win-x64 --self-contained false -o <release folder>`
+2. `dotnet publish CabinetOS\CabinetOS.csproj -c Release -r win-x64 --self-contained false -p:PublishReadyToRun=true -o <release folder>`
    in `ui\`. Framework-dependent: .NET 10 and the Windows App Runtime come
-   from the machine. The project keeps the Windows App SDK's MSIX tooling on,
+   from the machine. ReadyToRun compiles the window's IL to native code ahead
+   of time, so the start spends less time in the JIT; the first publish
+   restores the compiler's NuGet package once. The project keeps the Windows App SDK's MSIX tooling on,
    which writes `CabinetOS.pri`, the compiled XAML, into the publish; without
    it the window stops at start. The app stays unpackaged. The script stops
    if the `.pri` file is missing.
