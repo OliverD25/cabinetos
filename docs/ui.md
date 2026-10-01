@@ -185,7 +185,11 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   Every check True on 2026-09-30
   ([log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md)).
 
-`run-livecheck.ps1` runs `livecheck.ps1 -Strict`, keeps the output in
+`run-livecheck.ps1` first shows the countdown window of `countdown.ps1`
+(5 seconds, a sound, always on top: "The live check takes the keyboard and
+mouse in 5"; Esc or its button cancels the run, `-NoCountdown` skips it for
+a run that starts while nobody is there), the creator's rule of 2026-10-01
+so nobody is caught typing; then runs `livecheck.ps1 -Strict`, keeps the output in
 `_io\live-check\run-<time>.txt` next to the repository (`-Io <folder>`
 names another folder, for a git worktree elsewhere), and at the end writes
 `DONE.md` there and opens it in Notepad: the sign, on a PC where someone is

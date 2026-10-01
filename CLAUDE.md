@@ -58,6 +58,13 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
 
 - Commit after each finished unit of work; the message says why. Push after
   each commit.
+- Before any script takes the real keyboard and mouse (the live check, the
+  Claude Code probe, a coder's real-key driver), it shows the countdown
+  window of `ui/livecheck/countdown.ps1` for 5 seconds, with a sound, so
+  the creator knows when to let go of both; Esc cancels the run. The
+  creator's rule of 2026-10-01. A `DONE.md` in Notepad says when they are
+  free again. Scripts that press no key (the speed runner, the snapshot
+  steps) need no countdown.
 - Unsafe Rust only in the crates that talk to Windows (`ipc`, `fs`, `jobs`,
   `index`), every `unsafe` block with a `// SAFETY:` comment.
 - Project skills live in `.claude/skills/`. `heavy-logging` says when and

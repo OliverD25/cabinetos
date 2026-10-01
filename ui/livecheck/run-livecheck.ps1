@@ -2,11 +2,17 @@
 # waits at the PC sees on screen that the keyboard and mouse are free again (docs/ui.md, "The live
 # check"). The output goes to _io\live-check next to the repository, never into the repository.
 # -Io names that folder when the repository is a git worktree somewhere else.
-param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '')
+# It first shows the countdown window (countdown.ps1) for 5 s, so whoever sits at the PC lets go of the
+# keyboard and mouse in time; -NoCountdown skips it for a run that starts while nobody is there.
+param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown)
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $out = "$io\run-$Tag.txt"
+if (-not $NoCountdown) {
+  . "$PSScriptRoot\countdown.ps1"
+  if (-not (Show-InputCountdown -Seconds 5 -What 'The live check')) { 'cancelled at the countdown: nothing ran'; exit 2 }
+}
 $started = Get-Date
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\livecheck.ps1" -Strict 2>&1 | ForEach-Object { "$_" } | Out-File -LiteralPath $out -Encoding UTF8
 $code = $LASTEXITCODE

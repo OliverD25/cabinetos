@@ -73,6 +73,8 @@ public static class Live {
   public static uint IdleMilliseconds() { var info = new LASTINPUTINFO { cbSize = 8 }; GetLastInputInfo(ref info); return (uint)Environment.TickCount - info.dwTime; }
 }
 "@
+. "$PSScriptRoot\countdown.ps1"
+if (-not (Show-InputCountdown -Seconds 5 -What 'The Claude Code probe')) { 'cancelled at the countdown: nothing ran'; exit 2 }
 # The probe takes the keyboard only once nobody has touched the PC for 12 s (it waits up to 10 min), so a
 # person reading the chat next to it is not interrupted mid-click.
 $waited = 0
