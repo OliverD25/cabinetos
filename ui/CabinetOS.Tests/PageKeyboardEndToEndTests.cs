@@ -111,7 +111,21 @@ public class PageKeyboardEndToEndTests
         public async Task<List<string>> FinishAsync(string name, Process process, string lastShot, TimeSpan timeout)
         {
             var shot = Path.Combine(root, "shots-" + name, lastShot + ".png");
-            await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", timeout);
+            try
+            {
+                await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", timeout);
+            }
+            catch (Xunit.Sdk.XunitException error)
+            {
+                // The steps ran as far as the log shows: the window's last lines say which one holds the run up.
+                var tail = LogFiles.Ui(Path.Combine(root, "logs-" + name)).TakeLast(40).Select(l =>
+                {
+                    using var parsed = JsonDocument.Parse(l);
+                    var fields = parsed.RootElement.TryGetProperty("fields", out var found) ? found.ToString() : "";
+                    return $"  {parsed.RootElement.GetProperty("ts").GetString()} {Message(l)} {(fields.Length > 240 ? fields[..240] : fields)}";
+                });
+                throw new Xunit.Sdk.XunitException($"{error.Message}; the window has exited: {process.HasExited}\nthe window's last log lines:\n{string.Join('\n', tail)}");
+            }
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
