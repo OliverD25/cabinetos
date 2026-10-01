@@ -60,6 +60,7 @@ public class ChromeKeyboardTests
 
     [Theory]
     [InlineData("MainWindow.xaml", "MenuButton QuickOpenChip DualButton TerminalButton MarketplaceButton PaletteButton SettingsButton WorkspaceHeader")]
+    [InlineData("Views/PaneCrumbs.xaml", "BackButton ForwardButton UpButton DriveChip FindButton OpenWithButton FilterLabel")]
     public void The_shells_controls_are_there_and_are_chrome(string relative, string names)
     {
         // v2 of the shell redesign: the top row's chip and the sidebar's workspace row are chrome too, so the theory above

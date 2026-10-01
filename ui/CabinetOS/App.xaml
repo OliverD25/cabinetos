@@ -91,13 +91,19 @@
             <SolidColorBrush x:Key="CbWorkspacePillFillBrush" Color="#2E60CDFF" />
             <SolidColorBrush x:Key="CbTabFrontBarInactiveBrush" Color="#4DFFFFFF" />
             <SolidColorBrush x:Key="CbTabInactiveTextBrush" Color="#A6FFFFFF" />
-            <SolidColorBrush x:Key="CbCrumbRowActiveFillBrush" Color="#0F60CDFF" />
             <SolidColorBrush x:Key="CbCrumbSeparatorBrush" Color="#59FFFFFF" />
             <SolidColorBrush x:Key="CbCrumbTextBrush" Color="#B3FFFFFF" />
             <SolidColorBrush x:Key="CbCrumbSegmentHoverBrush" Color="#1AFFFFFF" />
             <SolidColorBrush x:Key="CbFindStrokeBrush" Color="#24FFFFFF" />
-            <!-- v2 of the shell redesign: the folder in the top row's title (60 %). -->
+            <!--
+              v2 of the shell redesign: the folder in the top row's title (60 %); the tab in front and the toolbar row under it,
+              in the active pane (9 %) and the other (5 %); the toolbar's dividers (12 %) and the drive's free space (50 %).
+            -->
             <SolidColorBrush x:Key="CbTitleFolderBrush" Color="#99FFFFFF" />
+            <SolidColorBrush x:Key="CbFrontTabFillBrush" Color="#17FFFFFF" />
+            <SolidColorBrush x:Key="CbFrontTabInactiveFillBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="CbToolbarDividerBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="CbFreeSpaceTextBrush" Color="#80FFFFFF" />
 
             <!-- A 1 px lighter bottom edge, as on a Fluent text field. -->
             <LinearGradientBrush x:Key="CbFieldStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">

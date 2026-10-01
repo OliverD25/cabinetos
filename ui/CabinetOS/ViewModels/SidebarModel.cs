@@ -69,6 +69,9 @@ public sealed class SidebarModel : ObservableObject
     /// <summary>The drives, once the core can list them.</summary>
     public ObservableCollection<DriveItem> Drives { get; } = [];
 
+    /// <summary>The volumes of the core's last <c>list_volumes</c>, in its order; null while it has listed none.</summary>
+    public IReadOnlyList<VolumeDetails>? Volumes => _volumes;
+
     /// <summary>Whether the Drives section is shown: the core must answer <c>list_volumes</c>.</summary>
     public bool ShowDrives
     {

@@ -132,13 +132,18 @@ public static class ThemeMapper
             ["CbWorkspacePillFillBrush"] = accent.WithAlpha(0x2E),
             ["CbTabFrontBarInactiveBrush"] = Text(0x4D),
             ["CbTabInactiveTextBrush"] = Text(0xA6),
-            ["CbCrumbRowActiveFillBrush"] = accent.WithAlpha(0x0F),
             ["CbCrumbSeparatorBrush"] = Text(0x59),
             ["CbCrumbTextBrush"] = Text(0xB3),
             ["CbCrumbSegmentHoverBrush"] = Text(0x1A),
             ["CbFindStrokeBrush"] = Text(0x24),
-            // v2 of the shell redesign (2026-10-01): the folder in the top row's title at 60 %.
+            // v2 of the shell redesign (2026-10-01): the folder in the top row's title at 60 %; the tab in front and the
+            // toolbar row under it, one surface, at 9 % in the active pane and 5 % in the other; the toolbar's dividers
+            // (12 %) and the drive's free space (50 %).
             ["CbTitleFolderBrush"] = Text(0x99),
+            ["CbFrontTabFillBrush"] = Text(0x17),
+            ["CbFrontTabInactiveFillBrush"] = Text(0x0D),
+            ["CbToolbarDividerBrush"] = Text(0x1F),
+            ["CbFreeSpaceTextBrush"] = Text(0x80),
         };
 
         // The palette's Acrylic alpha is how much luminosity it lays over the blur (0xB8, the design's .72);

@@ -15,42 +15,51 @@ namespace CabinetOS.Tests;
 /// </summary>
 public class ShellTests
 {
-    // ----- The breadcrumb row -----
+    // ----- The path row -----
 
     [Fact]
-    public void The_handout_path_in_a_dual_pane_collapses_to_drive_ellipsis_parent_and_current()
+    public void The_handout_path_shows_whole_in_a_dual_pane_and_a_seven_part_path_collapses_to_drive_ellipsis_parent_and_current()
     {
-        // SHELL_REDESIGN.md §7: C:\Users\dev\Projects\fileforge in a 380 px pane. The rule counts
+        // SHELL_REDESIGN.md v2 §7: C:\Users\dev\Projects\fileforge in a 440 px pane renders in full. The rule counts
         // parts, not pixels, so the width does not change it, and no segment is cut short on its own.
-        var segments = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge", dual: true);
+        var whole = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge", dual: true);
+        Assert.Equal("C: \u203A Users \u203A dev \u203A Projects \u203A fileforge", Breadcrumbs.Text(whole));
+        Assert.DoesNotContain(whole, s => s.IsEllipsis);
 
-        Assert.Equal("C: \u203A \u2026 \u203A Projects \u203A fileforge", Breadcrumbs.Text(segments));
-        Assert.Equal([@"C:\", @"C:\Users\dev", @"C:\Users\dev\Projects", @"C:\Users\dev\Projects\fileforge"], segments.Select(s => s.Path));
+        // A 7-part path in dual mode: C: › … › parent › current.
+        var segments = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge\src\app", dual: true);
+        Assert.Equal("C: \u203A \u2026 \u203A src \u203A app", Breadcrumbs.Text(segments));
+        Assert.Equal([@"C:\", @"C:\Users\dev\Projects\fileforge", @"C:\Users\dev\Projects\fileforge\src", @"C:\Users\dev\Projects\fileforge\src\app"], segments.Select(s => s.Path));
         Assert.Equal([false, true, false, false], segments.Select(s => s.IsEllipsis));
         Assert.DoesNotContain(segments, s => s.Label.EndsWith('\u2026') && !s.IsEllipsis);
     }
 
     [Fact]
-    public void One_pane_shows_five_parts_whole_and_collapses_from_six()
+    public void One_pane_shows_eight_parts_whole_and_collapses_from_nine()
     {
-        var five = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge", dual: false);
-        Assert.Equal("C: \u203A Users \u203A dev \u203A Projects \u203A fileforge", Breadcrumbs.Text(five));
-        Assert.DoesNotContain(five, s => s.IsEllipsis);
+        var eight = Breadcrumbs.Segments(@"C:\a\b\c\d\e\f\g", dual: false);
+        Assert.Equal("C: \u203A a \u203A b \u203A c \u203A d \u203A e \u203A f \u203A g", Breadcrumbs.Text(eight));
+        Assert.DoesNotContain(eight, s => s.IsEllipsis);
 
-        var six = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge\src", dual: false);
-        Assert.Equal("C: \u203A \u2026 \u203A fileforge \u203A src", Breadcrumbs.Text(six));
+        var nine = Breadcrumbs.Segments(@"C:\a\b\c\d\e\f\g\h", dual: false);
+        Assert.Equal("C: \u203A \u2026 \u203A g \u203A h", Breadcrumbs.Text(nine));
         // The "…" goes to the last folder it hides.
-        Assert.Equal(@"C:\Users\dev\Projects", six[1].Path);
+        Assert.Equal(@"C:\a\b\c\d\e\f", nine[1].Path);
+        Assert.Equal((5, 8), (Breadcrumbs.DualLimit, Breadcrumbs.SingleLimit));
     }
 
     [Theory]
     [InlineData(@"C:\a\b", true, "C: \u203A a \u203A b")]
-    [InlineData(@"C:\a\b\c", true, "C: \u203A \u2026 \u203A b \u203A c")]
+    [InlineData(@"C:\a\b\c\d", true, "C: \u203A a \u203A b \u203A c \u203A d")]
+    [InlineData(@"C:\a\b\c\d\e", true, "C: \u203A \u2026 \u203A d \u203A e")]
     [InlineData(@"C:\", true, "C:")]
     [InlineData(@"D:\", false, "D:")]
     [InlineData(@"C:\Users\", true, "C: \u203A Users")]
-    [InlineData(@"C:\Users\dev\Projects\fileforge\", true, "C: \u203A \u2026 \u203A Projects \u203A fileforge")]
-    [InlineData(@"\\server\share\a\b", true, "\\\\server \u203A \u2026 \u203A a \u203A b")]
+    [InlineData(@"C:\Users\dev\Projects\fileforge\", true, "C: \u203A Users \u203A dev \u203A Projects \u203A fileforge")]
+    [InlineData(@"C:\Users\dev\Projects\fileforge\src\", true, "C: \u203A \u2026 \u203A fileforge \u203A src")]
+    [InlineData(@"C:\Users\dev\Projects\fileforge\src\", false, "C: \u203A Users \u203A dev \u203A Projects \u203A fileforge \u203A src")]
+    [InlineData(@"\\server\share\a\b", true, "\\\\server \u203A share \u203A a \u203A b")]
+    [InlineData(@"\\server\share\a\b\c\d", true, "\\\\server \u203A \u2026 \u203A c \u203A d")]
     public void Paths_of_every_length_keep_their_rule(string path, bool dual, string expected) =>
         Assert.Equal(expected, Breadcrumbs.Text(Breadcrumbs.Segments(path, dual)));
 
@@ -60,6 +69,39 @@ public class ShellTests
         var root = Assert.Single(Breadcrumbs.Segments(@"C:\", dual: true));
         Assert.Equal(("C:", @"C:\", false), (root.Label, root.Path, root.IsEllipsis));
         Assert.Empty(Breadcrumbs.Segments("", dual: true));
+    }
+
+    [Theory]
+    [InlineData(null, "*.*")]
+    [InlineData("", "*.*")]
+    [InlineData("   ", "*.*")]
+    [InlineData("rep", "*rep*")]
+    [InlineData("a b", "*a b*")]
+    public void The_filter_label_reads_star_dot_star_and_the_find_text_while_a_find_holds_one(string? query, string label) =>
+        Assert.Equal(label, PaneRows.FilterLabel(query));
+
+    [Fact]
+    public void The_toolbar_shows_the_drive_s_letter_and_its_free_space_from_the_core_s_volumes()
+    {
+        var volumes = new List<VolumeDetails>
+        {
+            new("C", @"\\?\Volume{1}\", "NTFS", "", 512UL << 30, 118UL << 30, null),
+            new("D", @"\\?\Volume{2}\", "NTFS", "Data", 2UL << 40, (14UL << 40) / 10, null),
+            new(null, @"\\?\Volume{3}\", "NTFS", "Recovery", 1UL << 30, 1UL << 29, null),
+        };
+
+        Assert.Equal("C:", PaneRows.DriveLabel(@"C:\Users\dev"));
+        Assert.Equal("D:", PaneRows.DriveLabel(@"d:\"));
+        Assert.Equal("C:", PaneRows.DriveLabel(@"\\?\C:\very\long"));
+        Assert.Equal(@"\\", PaneRows.DriveLabel(@"\\server\share\a"));
+        Assert.Equal("", PaneRows.DriveLabel(""));
+
+        Assert.Equal($"{Core.Presentation.DisplayFormat.Bytes(118UL << 30)} free", PaneRows.FreeSpace(volumes, @"C:\Users"));
+        Assert.Equal($"{Core.Presentation.DisplayFormat.Bytes((14UL << 40) / 10)} free", PaneRows.FreeSpace(volumes, @"d:\work"));
+        // A share, a drive the core did not list, and no list at all: the toolbar shows nothing there.
+        Assert.Equal("", PaneRows.FreeSpace(volumes, @"\\server\share"));
+        Assert.Equal("", PaneRows.FreeSpace(volumes, @"E:\"));
+        Assert.Equal("", PaneRows.FreeSpace(null, @"C:\"));
     }
 
     [Fact]

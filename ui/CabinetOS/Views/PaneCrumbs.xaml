@@ -5,96 +5,239 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     IsTabStop="False">
     <!--
-      A pane's breadcrumb row (Phase 16; docs/ui.md, "The breadcrumb row"): Back, Forward and Up as 20 px buttons, then one
-      segment per part of the path in the mono font, collapsed to "Drive › … › parent › current" by Breadcrumbs. Ctrl+L turns
-      the segments into a text box. The height is the theme's breadcrumbRowHeight; the active pane's row is tinted.
+      A pane's two rows under its tab strip (v2 of the shell redesign; docs/ui.md, "The pane's rows"). The toolbar row, in the
+      fill of the tab in front so the two read as one surface: Back, Forward and Up, a divider, the drive chip, the drive's
+      free space, a divider, Find and the (hidden) Open with…. The path row: one segment per part of the path in the mono font,
+      collapsed to "Drive › … › parent › current" by Breadcrumbs, and the filter label at its right end; Ctrl+L turns the
+      segments into a text box. The heights are the theme's toolbarRowHeight and pathRowHeight. Nothing here takes the keyboard.
     -->
-    <Border
-        x:Name="Root"
-        Height="28"
-        BorderBrush="{ThemeResource CbShellHairlineBrush}"
-        BorderThickness="0,0,0,1">
+    <StackPanel x:Name="Root">
         <Grid
-            x:Name="RowGrid"
-            Padding="4,0,8,0"
-            ColumnSpacing="6">
+            x:Name="Toolbar"
+            Height="28"
+            Padding="4,0,4,0"
+            ColumnSpacing="1">
+            <Grid.Resources>
+                <!-- A button's hover fill: the handout's white at 10 %, the same brush object, changed in place by a theme. -->
+                <StaticResource x:Key="CbHoverFillBrush" ResourceKey="CbCrumbSegmentHoverBrush" />
+            </Grid.Resources>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel
-                x:Name="Nav"
+            <Button
+                x:Name="BackButton"
+                Width="22"
+                Height="20"
+                MinWidth="0"
+                Padding="0"
                 VerticalAlignment="Center"
-                Orientation="Horizontal"
-                Spacing="2">
-                <Button
-                    x:Name="BackButton"
-                    Width="20"
-                    Height="20"
-                    MinWidth="0"
-                    AllowFocusOnInteraction="False"
-                    AutomationProperties.Name="Back"
-                    IsTabStop="False"
-                    Style="{StaticResource CbSubtleButtonStyle}"
-                    ToolTipService.ToolTip="Back (Alt+Left)">
-                    <FontIcon FontSize="10" Glyph="&#xE72B;" />
-                </Button>
-                <Button
-                    x:Name="ForwardButton"
-                    Width="20"
-                    Height="20"
-                    MinWidth="0"
-                    AllowFocusOnInteraction="False"
-                    AutomationProperties.Name="Forward"
-                    IsTabStop="False"
-                    Style="{StaticResource CbSubtleButtonStyle}"
-                    ToolTipService.ToolTip="Forward (Alt+Right)">
-                    <FontIcon FontSize="10" Glyph="&#xE72A;" />
-                </Button>
-                <Button
-                    x:Name="UpButton"
-                    Width="20"
-                    Height="20"
-                    MinWidth="0"
-                    AllowFocusOnInteraction="False"
-                    AutomationProperties.Name="Up"
-                    IsTabStop="False"
-                    Style="{StaticResource CbSubtleButtonStyle}"
-                    ToolTipService.ToolTip="Up (Backspace)">
-                    <FontIcon FontSize="10" Glyph="&#xE74A;" />
-                </Button>
-            </StackPanel>
-
-            <Grid x:Name="PathArea" Grid.Column="1">
-                <ScrollViewer
-                    x:Name="CrumbScroller"
-                    Background="Transparent"
-                    HorizontalScrollBarVisibility="Hidden"
-                    HorizontalScrollMode="Enabled"
-                    IsTabStop="False"
-                    VerticalScrollBarVisibility="Disabled"
-                    VerticalScrollMode="Disabled">
-                    <StackPanel
-                        x:Name="Crumbs"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Back"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Back (Alt+Left)">
+                <FontIcon FontSize="10" Glyph="&#xE72B;" />
+            </Button>
+            <Button
+                x:Name="ForwardButton"
+                Grid.Column="1"
+                Width="22"
+                Height="20"
+                MinWidth="0"
+                Padding="0"
+                VerticalAlignment="Center"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Forward"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Forward (Alt+Right)">
+                <FontIcon FontSize="10" Glyph="&#xE72A;" />
+            </Button>
+            <Button
+                x:Name="UpButton"
+                Grid.Column="2"
+                Width="22"
+                Height="20"
+                MinWidth="0"
+                Padding="0"
+                VerticalAlignment="Center"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Up"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Up (Backspace)">
+                <FontIcon FontSize="10" Glyph="&#xE74A;" />
+            </Button>
+            <Rectangle
+                Grid.Column="3"
+                Width="1"
+                Height="14"
+                Margin="4,0"
+                VerticalAlignment="Center"
+                Fill="{ThemeResource CbToolbarDividerBrush}" />
+            <!-- The drive chip: the drive's glyph, its letter and a chevron; a click opens the pane's drive list (Alt+F1, Alt+F2). -->
+            <Button
+                x:Name="DriveChip"
+                Grid.Column="4"
+                Height="20"
+                MinWidth="0"
+                Padding="6,0"
+                VerticalAlignment="Center"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Drive"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <FontIcon
                         VerticalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="1">
-                        <StackPanel.Resources>
-                            <!-- A segment's hover fill: the handout's white at 10 %, the same brush object, changed in place by a theme. -->
-                            <StaticResource x:Key="CbHoverFillBrush" ResourceKey="CbCrumbSegmentHoverBrush" />
-                        </StackPanel.Resources>
-                    </StackPanel>
-                </ScrollViewer>
-                <TextBox
-                    x:Name="AddressEdit"
-                    MinHeight="0"
-                    Padding="6,0,6,0"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="Address"
-                    FontFamily="{StaticResource CbMonoFont}"
-                    FontSize="11"
-                    Visibility="Collapsed" />
-            </Grid>
+                        FontSize="12"
+                        Glyph="&#xEDA2;" />
+                    <TextBlock
+                        x:Name="DriveText"
+                        VerticalAlignment="Center"
+                        FontFamily="{StaticResource CbMonoFont}"
+                        FontSize="11" />
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="8"
+                        Glyph="&#xE70D;" />
+                </StackPanel>
+            </Button>
+            <!-- The free space of the pane's drive, from the core's list_volumes as the sidebar's drives have it. -->
+            <TextBlock
+                x:Name="FreeText"
+                Grid.Column="6"
+                VerticalAlignment="Center"
+                FontFamily="{StaticResource CbMonoFont}"
+                FontSize="11"
+                Foreground="{ThemeResource CbFreeSpaceTextBrush}"
+                IsHitTestVisible="False"
+                TextWrapping="NoWrap" />
+            <Rectangle
+                x:Name="FindDivider"
+                Grid.Column="7"
+                Width="1"
+                Height="14"
+                Margin="4,0"
+                VerticalAlignment="Center"
+                Fill="{ThemeResource CbToolbarDividerBrush}" />
+            <Button
+                x:Name="FindButton"
+                Grid.Column="8"
+                Width="22"
+                Height="20"
+                MinWidth="0"
+                Padding="0"
+                VerticalAlignment="Center"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Find in pane"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Find in pane (Ctrl+F)">
+                <FontIcon
+                    x:Name="FindIcon"
+                    FontSize="12"
+                    Glyph="&#xE721;" />
+            </Button>
+            <!--
+              The editors a file may open in: the palette, filtered to them. Hidden since 2026-09-30 by the creator: with Markdown
+              Preview as the only editor the list it opens is thin. Its place stays here, after Find; it shows again when a second
+              editor exists, and the Editor commands stay in the palette meanwhile.
+            -->
+            <Button
+                x:Name="OpenWithButton"
+                Grid.Column="9"
+                Width="22"
+                Height="20"
+                MinWidth="0"
+                Padding="0"
+                VerticalAlignment="Center"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Open with…"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Open with… (the editors, in the command palette)"
+                Visibility="Collapsed">
+                <FontIcon FontSize="12" Glyph="&#xE7AC;" />
+            </Button>
         </Grid>
-    </Border>
+
+        <!-- The path row: white 3 %, a 1 px line above (6 %) and one below (the theme's hairline). -->
+        <Border
+            x:Name="PathRow"
+            Height="24"
+            Background="{ThemeResource CbBarFillBrush}"
+            BorderBrush="{ThemeResource CbDividerBrush}"
+            BorderThickness="0,1,0,0">
+            <Border BorderBrush="{ThemeResource CbShellHairlineBrush}" BorderThickness="0,0,0,1">
+                <Grid
+                    x:Name="PathGrid"
+                    Padding="8,0,8,0"
+                    ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid x:Name="PathArea">
+                        <ScrollViewer
+                            x:Name="CrumbScroller"
+                            Background="Transparent"
+                            HorizontalScrollBarVisibility="Hidden"
+                            HorizontalScrollMode="Enabled"
+                            IsTabStop="False"
+                            VerticalScrollBarVisibility="Disabled"
+                            VerticalScrollMode="Disabled">
+                            <StackPanel
+                                x:Name="Crumbs"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="1">
+                                <StackPanel.Resources>
+                                    <!-- A segment's hover fill: the handout's white at 10 %, the same brush object, changed in place by a theme. -->
+                                    <StaticResource x:Key="CbHoverFillBrush" ResourceKey="CbCrumbSegmentHoverBrush" />
+                                </StackPanel.Resources>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <TextBox
+                            x:Name="AddressEdit"
+                            MinHeight="0"
+                            Padding="6,0,6,0"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Address"
+                            FontFamily="{StaticResource CbMonoFont}"
+                            FontSize="11"
+                            Visibility="Collapsed" />
+                    </Grid>
+                    <!-- The filter: *.* normally, *query* while the pane's find holds a text; a click gives the find the keyboard. -->
+                    <Button
+                        x:Name="FilterLabel"
+                        Grid.Column="1"
+                        MinWidth="0"
+                        Padding="4,0"
+                        VerticalAlignment="Center"
+                        AllowFocusOnInteraction="False"
+                        AutomationProperties.Name="Filter"
+                        IsTabStop="False"
+                        Style="{StaticResource CbSubtleButtonStyle}"
+                        ToolTipService.ToolTip="Find in pane (Ctrl+F)">
+                        <TextBlock
+                            x:Name="FilterText"
+                            FontFamily="{StaticResource CbMonoFont}"
+                            FontSize="11"
+                            Foreground="{ThemeResource CbCrumbSeparatorBrush}"
+                            Text="*.*" />
+                    </Button>
+                </Grid>
+            </Border>
+        </Border>
+    </StackPanel>
 </UserControl>

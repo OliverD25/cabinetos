@@ -30,6 +30,14 @@ public class ShellEndToEndTests
             {
                 File.WriteAllText(Path.Combine(many, $"file-{i:000}.txt"), "x");
             }
+            // §7's paths: a folder of five parts like the handout's C:\Users\dev\Projects\fileforge, which every user has
+            // (C:\Users\<name>\AppData\Local), and one of seven parts above the test's own folder.
+            var fiveParts = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var sevenParts = root;
+            while (sevenParts.Split('\\', StringSplitOptions.RemoveEmptyEntries).Length > 7)
+            {
+                sevenParts = Path.GetDirectoryName(sevenParts)!;
+            }
             var process = run.Start("find", string.Join(';',
                 "size:924x700",
                 "pane:1",
@@ -46,6 +54,15 @@ public class ShellEndToEndTests
                 "shell:none",
                 "find-key:esc",
                 "shell:closed",
+                // §7: in a 440 px pane the five-part path renders whole; a seven-part one collapses to C: › … › parent › current.
+                "size:1136x700",
+                "wait:500",
+                $"path:{fiveParts}",
+                "shell:five-parts",
+                $"path:{sevenParts}",
+                "shell:seven-parts",
+                "size:924x700",
+                "wait:500",
                 // §7: the first tab's folder, cursor and scroll come back after a second tab went elsewhere.
                 $"path:{many}",
                 "scroll:4",
@@ -75,12 +92,28 @@ public class ShellEndToEndTests
                 Assert.Equal($"CabinetOS · {Path.GetFileName(data)}", state.GetProperty("title").GetString());
                 TopRowFits(state);
                 Assert.Equal(5, state.GetProperty("pane0_count").GetInt32());
+                // §7: each pane's toolbar shows nav, the drive chip, the free space and Find, none of them cut off.
+                foreach (var pane in new[] { "pane0", "pane1" })
+                {
+                    Assert.Equal((pane, "back forward up drive free find"), (pane, state.GetProperty($"{pane}_toolbar_items").GetString()));
+                    Assert.Equal((pane, 28.0, 24.0), (pane, state.GetProperty($"{pane}_toolbar_row").GetDouble(), state.GetProperty($"{pane}_path_row").GetDouble()));
+                    Assert.Equal((pane, "C:"), (pane, state.GetProperty($"{pane}_drive").GetString()));
+                    Assert.EndsWith(" free", state.GetProperty($"{pane}_free").GetString());
+                    Assert.Equal((pane, "*.*"), (pane, state.GetProperty($"{pane}_filter").GetString()));
+                }
+                // The active pane's toolbar has the 9 % fill, the other's 5 %.
+                Assert.StartsWith("CbFrontTabFillBrush ", state.GetProperty("pane0_toolbar_fill").GetString());
+                Assert.StartsWith("CbFrontTabInactiveFillBrush ", state.GetProperty("pane1_toolbar_fill").GetString());
             });
             State(logs, "found", state =>
             {
                 Assert.Equal("alpha", state.GetProperty("pane0_find").GetString());
                 Assert.True(state.GetProperty("pane0_find_open").GetBoolean());
                 Assert.Equal(2, state.GetProperty("pane0_shown").GetInt32());
+                // §7: the path row's filter label reads *query*, and the toolbar's Find shows the find open.
+                Assert.Equal("*alpha*", state.GetProperty("pane0_filter").GetString());
+                Assert.True(state.GetProperty("pane0_find_button_open").GetBoolean());
+                Assert.Equal("*.*", state.GetProperty("pane1_filter").GetString());
                 // The other pane shows every row: the find is the active pane's only.
                 Assert.Equal(state.GetProperty("pane1_count").GetInt32(), state.GetProperty("pane1_shown").GetInt32());
                 Assert.False(state.GetProperty("pane1_find_open").GetBoolean());
@@ -101,8 +134,26 @@ public class ShellEndToEndTests
                 Assert.False(state.GetProperty("pane0_find_open").GetBoolean());
                 Assert.Equal("", state.GetProperty("pane0_find").GetString());
                 Assert.Equal(5, state.GetProperty("pane0_shown").GetInt32());
+                // §7: Esc restores the full list and *.*.
+                Assert.Equal("*.*", state.GetProperty("pane0_filter").GetString());
+                Assert.False(state.GetProperty("pane0_find_button_open").GetBoolean());
                 // The selection survives the filter: the cursor stays on the match Enter chose.
                 Assert.StartsWith("alpha", state.GetProperty("pane0_cursor").GetString(), StringComparison.OrdinalIgnoreCase);
+            });
+            State(logs, "five-parts", state =>
+            {
+                Assert.InRange(state.GetProperty("pane0_width").GetDouble(), 438, 442);
+                var parts = fiveParts.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+                Assert.Equal(5, parts.Length);
+                Assert.Equal(string.Join(" › ", parts), state.GetProperty("pane0_crumbs").GetString());
+                Assert.True(state.GetProperty("pane0_crumbs_fit").GetBoolean(), "the five-part path does not fit its 440 px pane");
+            });
+            State(logs, "seven-parts", state =>
+            {
+                var parts = sevenParts.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+                Assert.Equal(7, parts.Length);
+                Assert.Equal($"{parts[0]} › … › {parts[^2]} › {parts[^1]}", state.GetProperty("pane0_crumbs").GetString());
+                Assert.True(state.GetProperty("pane0_crumbs_fit").GetBoolean());
             });
             var scrolled = 0.0;
             string? cursor = null;
@@ -308,13 +359,23 @@ public class ShellEndToEndTests
                 "cmd:workspace.switch",
                 "shell:workspace-key",
                 "cmd:overlay.close",
-                // A click on a crumb goes there; Back comes back; Ctrl+L makes the row a text box, Esc ends it.
+                // A click on a crumb goes there; Back comes back; Up goes to the parent; Ctrl+L makes the row a text box, Esc
+                // ends it. The toolbar's drive chip opens the pane's drive list, which Esc closes.
                 $"click:{projects}",
                 "wait:400",
                 "shell:crumb",
                 "click:Back",
                 "wait:400",
                 "shell:back",
+                "click:Up",
+                "wait:400",
+                "shell:up",
+                "click:Drive C:",
+                "wait:400",
+                "shell:drives",
+                "cmd:overlay.close",
+                "wait:300",
+                "shell:drives-closed",
                 "cmd:go.toPath",
                 "shell:editing",
                 "cmd:overlay.close",
@@ -341,6 +402,11 @@ public class ShellEndToEndTests
                 Assert.Equal(deep, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
                 Assert.Equal("back forward up", state.GetProperty("pane0_nav").GetString());
             });
+            State(logs, "up", state => Assert.Equal(projects, state.GetProperty("pane0_path").GetString(), ignoreCase: true));
+            State(logs, "drives", state => Assert.True(state.GetProperty("prompt_open").GetBoolean(), "the drive chip opened no drive list"));
+            State(logs, "drives-closed", state => Assert.False(state.GetProperty("prompt_open").GetBoolean()));
+            Assert.Contains(logs, l => Message(l) == "prompt shown" && Field(l, "label").GetString() == "Drives");
+            Assert.Contains(logs, l => Message(l) == "command executed" && Field(l, "command").GetString() == "go.chooseDriveLeft");
             State(logs, "editing", state => Assert.True(state.GetProperty("pane0_editing").GetBoolean()));
             State(logs, "edited", state => Assert.False(state.GetProperty("pane0_editing").GetBoolean()));
             Assert.Contains(logs, l => Message(l) == "notice shown" && Field(l, "text").GetString()!.StartsWith("Cannot edit cabinetos.json", StringComparison.Ordinal));

@@ -3,26 +3,26 @@ using CabinetOS.Core.Presentation;
 namespace CabinetOS.Core.Shell;
 
 /// <summary>
-/// One segment of a pane's breadcrumb row: a folder's name and where a click
+/// One segment of a pane's path row: a folder's name and where a click
 /// goes. <see cref="IsEllipsis"/> marks the "…" of a collapsed path, which
 /// stands for the folders it hides and goes to the last of them.
 /// </summary>
 public sealed record CrumbSegment(string Label, string Path, bool IsEllipsis = false);
 
 /// <summary>
-/// The segments of a pane's breadcrumb row (docs/ui.md, "The breadcrumb
-/// row"; the creator's SHELL_REDESIGN.md §2): one per part of the path, or,
-/// when the path has more than 3 parts in dual mode (5 with one pane),
+/// The segments of a pane's path row (docs/ui.md, "The pane's rows"; the
+/// creator's SHELL_REDESIGN.md v2 §2): one per part of the path, or, when the
+/// path has more than 5 parts in dual mode (8 with one pane),
 /// <c>Drive › … › parent › current</c>. A segment is never cut short on its
 /// own: the rule counts parts, not pixels, and a row still too narrow scrolls.
 /// </summary>
 public static class Breadcrumbs
 {
     /// <summary>The most parts a path shows whole with two panes.</summary>
-    public const int DualLimit = 3;
+    public const int DualLimit = 5;
 
     /// <summary>The most parts a path shows whole with one pane.</summary>
-    public const int SingleLimit = 5;
+    public const int SingleLimit = 8;
 
     /// <summary>The label of the segment that stands for the hidden folders.</summary>
     public const string Ellipsis = "…";

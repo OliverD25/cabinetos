@@ -50,7 +50,6 @@ public sealed partial class PaneTabs : UserControl
     {
         InitializeComponent();
         AddButton.Click += (_, _) => _ = RunCommand?.Invoke("tab.new", CommandArgs.Object(("pane", PaneIndex)), "button");
-        OpenWithButton.Click += (_, _) => _ = RunCommand?.Invoke("palette.show", CommandArgs.With("query", "Editor"), "button");
         Scroller.SizeChanged += (_, _) => QueueSettle(scroll: true);
         TabList.SizeChanged += (_, _) => QueueSettle(scroll: false);
         Loaded += (_, _) =>
@@ -128,8 +127,6 @@ public sealed partial class PaneTabs : UserControl
         var m = WindowMetrics.Current;
         Root.Height = m.TabRow;
         AddButton.Height = m.TabRow;
-        OpenWithButton.Height = Math.Max(14, m.TabRow - 4);
-        OpenWithButton.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
         foreach (var cell in _cells)
         {
             Layout(cell);
@@ -344,10 +341,6 @@ public sealed partial class PaneTabs : UserControl
     private bool PlaceAddButton()
     {
         var room = Root.ActualWidth;
-        if (OpenWithButton.Visibility == Visibility.Visible)
-        {
-            room -= OpenWithButton.ActualWidth + OpenWithButton.Margin.Left + OpenWithButton.Margin.Right;
-        }
         if (room <= 0)
         {
             return false;

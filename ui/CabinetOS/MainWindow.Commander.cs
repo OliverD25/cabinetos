@@ -224,7 +224,7 @@ public sealed partial class MainWindow
         QuickText.Visibility = Visibility.Collapsed;
     }
 
-    // Alt+F1, Alt+F2: the drive list under that pane's header, the sidebar's list_volumes data;
+    // Alt+F1, Alt+F2 and the toolbar's drive chip: the drive list under that pane's chip, the sidebar's list_volumes data;
     // the pane becomes the active one, and the right one shows first when one pane was shown.
     // A letter picks its drive at once. A drive goes to the folder this pane last showed there,
     // else to its root.
@@ -249,8 +249,8 @@ public sealed partial class MainWindow
         var request = new PromptRequest("Drives", PromptKind.Pick, rows, ShowInput: false,
             Hint: "A letter or Enter goes to the drive: to the folder this pane last showed there.");
         view.UpdateLayout();
-        // Under the pane's breadcrumb row, where the pane's header was (Phase 16).
-        var answer = PromptView.ShowAsync(request, _crumbViews[paneIndex]);
+        // Under the pane's drive chip in its toolbar row (v2 of the shell redesign).
+        var answer = PromptView.ShowAsync(request, _crumbViews[paneIndex].DriveAnchor);
         // The drive the pane is on starts highlighted.
         var here = drives.FindIndex(d => d.Path.Length > 0 && char.ToUpperInvariant(d.Path[0]) == current);
         PromptView.Highlight(Math.Max(0, here));

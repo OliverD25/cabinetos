@@ -54,6 +54,8 @@ public sealed partial class MainWindow
             ShowQuickOpenKeys();
             ShowBranch();
         });
+        // Each toolbar's free space follows the volumes the sidebar's drives come from (list_volumes, and its changes).
+        _sidebar.DrivesChanged += UpdatePaneDrives;
         // The top row's layout: the title up to the chip, and the drag area around its controls.
         TopRowGrid.SizeChanged += (_, _) => LayOutTopRow();
         TopRight.SizeChanged += (_, _) => LayOutTopRow();
@@ -345,9 +347,12 @@ public sealed partial class MainWindow
             : $"Switch workspace{keys}");
     }
 
-    // ----- The breadcrumb rows -----
+    // ----- The pane's rows: the toolbar row and the path row -----
 
-    /// <summary>Each pane's breadcrumb row shows its folder; the active pane's row is tinted.</summary>
+    /// <summary>
+    /// Each pane's path row shows its folder, and its toolbar the drive of that
+    /// folder; the active pane's toolbar has the fill of its tab in front.
+    /// </summary>
     private void UpdateCrumbs()
     {
         if (_crumbViews is null)
@@ -358,6 +363,25 @@ public sealed partial class MainWindow
         {
             _crumbViews[i].Show(TabFolder(i), _dual);
             _crumbViews[i].IsActivePane = _dual ? i == _active : i == 0;
+        }
+        UpdatePaneDrives();
+    }
+
+    /// <summary>
+    /// Each toolbar's drive chip and free space: the letter of the pane's
+    /// folder, and that drive's free space as the core's last
+    /// <c>list_volumes</c> said it. The window reads nothing from the disk.
+    /// </summary>
+    private void UpdatePaneDrives()
+    {
+        if (_crumbViews is null)
+        {
+            return;
+        }
+        for (var i = 0; i < _crumbViews.Length; i++)
+        {
+            var folder = TabFolder(i);
+            _crumbViews[i].SetDrive(PaneRows.DriveLabel(folder), PaneRows.FreeSpace(_sidebar.Volumes, folder));
         }
     }
 
@@ -438,6 +462,7 @@ public sealed partial class MainWindow
             new("quick_open_rows", string.Join("|", _quickOpen.Rows.Take(10).Select(r => r.Folder.Length > 0 ? $"{r.Name} ({r.Folder})" : r.Name))),
             new("quick_open_highlight", _quickOpen.Highlight),
             new("palette_open", _palette.IsOpen),
+            new("prompt_open", PromptView.IsOpen),
             new("menu", FileMenu.Describe()),
             new("context_menu", _contextMenu.DescribeItems()),
             new("context_quick", _contextMenu.DescribeQuickActions()),
@@ -468,13 +493,27 @@ public sealed partial class MainWindow
             fields.Add(new($"pane{i}_find_count", _findViews[i].Count));
             fields.Add(new($"pane{i}_tabs", _tabViews[i].Describe()));
             fields.Add(new($"pane{i}_tab_row", Math.Round(_tabViews[i].RowHeight, 1)));
-            fields.Add(new($"pane{i}_crumb_row", Math.Round(_crumbViews[i].ActualHeight, 1)));
+            var (toolbarRow, pathRow) = _crumbViews[i].RowHeights;
+            fields.Add(new($"pane{i}_toolbar_row", Math.Round(toolbarRow, 1)));
+            fields.Add(new($"pane{i}_path_row", Math.Round(pathRow, 1)));
+            fields.Add(new($"pane{i}_width", Math.Round(_crumbViews[i].ActualWidth, 1)));
+            fields.Add(new($"pane{i}_toolbar_items", _crumbViews[i].ToolbarItems()));
+            fields.Add(new($"pane{i}_crumbs_fit", _crumbViews[i].CrumbsFit));
+            fields.Add(new($"pane{i}_filter", _crumbViews[i].FilterLabelText));
+            fields.Add(new($"pane{i}_find_button_open", _crumbViews[i].FindShownOpen));
+            fields.Add(new($"pane{i}_drive", _crumbViews[i].DriveShown.Drive));
+            fields.Add(new($"pane{i}_free", _crumbViews[i].DriveShown.Free));
+            fields.Add(new($"pane{i}_toolbar_fill", BrushText(_crumbViews[i].ToolbarFillKey)));
             // The listings the pane holds: one per column in the column view (ADR 0016), so a dropped column's is seen to go.
             fields.Add(new($"pane{i}_listings", ListingCount(i)));
             fields.Add(new($"pane{i}_columns", _columnViews[i]?.Count ?? 0));
         }
         Diag.Info("cabinetos_ui::snapshot", "shell state", [.. fields]);
     }
+
+    // A theme brush as the log names it: its key and its colour, "CbFrontTabFillBrush #17FFFFFF".
+    private static string BrushText(string key) =>
+        ThemeResources.Brush(key) is Microsoft.UI.Xaml.Media.SolidColorBrush solid ? $"{key} {solid.Color}" : key;
 
     // An element's left edge in the window, for the snapshot aid's log.
     private static double LeftOf(FrameworkElement element) =>
