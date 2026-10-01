@@ -187,6 +187,28 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   Every check True on 2026-09-30
   ([log/2026-09-30/claude-code-in-the-terminal.md](log/2026-09-30/claude-code-in-the-terminal.md)).
 
+**How the check reads the window's log.** `livecheck.ps1` judges its steps by
+the window's log (`logs\ui.*.jsonl`; the core's `logs\core.*.jsonl` for two
+checks). It reads the logs through a `LogReader`, a small C# class the script
+compiles at its start, and no longer with `Get-Content`. The reader keeps how
+far it has read each file, takes only the bytes written since its last call,
+and cuts them into lines. A line without its newline is left for the next
+call, because the log writer may be in the middle of it. When the glob matches
+more than one file (a run that crosses midnight UTC has two), the files are
+read in name order, as `Get-Content` gave them; if the files stop being a
+continuation of what was read, the reader starts again from the first byte.
+Every helper (`UiCount`, `WaitUi`, `UiLines`, `ShellLines`, `TabLog` and the
+others) first brings the reader up to date and then answers from its lines, so
+it sees what the file holds at the moment of its call, as before. A pattern is
+matched against each line once, with the rules of `-match` (case-insensitive),
+and a line's JSON is parsed the first time a helper asks for it, and kept. The
+text is read as UTF-8 everywhere. Before 2026-10-02 every helper call, and
+every 50 ms poll of `WaitUi`, read and decoded the whole file again; on a
+slow machine that cost minutes
+([log/2026-10-02/livecheck-log-reader-report.md](log/2026-10-02/livecheck-log-reader-report.md)).
+Every `Step` line starts with the time it was written, and the run's last
+line says how long the whole run took, so two runs can be compared.
+
 #### The live check on another machine
 
 `remote-livecheck.ps1` runs the live check on another Windows machine over
