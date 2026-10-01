@@ -812,7 +812,6 @@ public sealed partial class MainWindow
         UpdateNavigationButtons();
         UpdateCrumbs();
         _sidebar.SetActivePath(Active.Path);
-        _terminal.SetActiveFolder(Active.Path);
         ScheduleToolContext();
         _paneViews[_active].Focus(FocusState.Programmatic);
     }

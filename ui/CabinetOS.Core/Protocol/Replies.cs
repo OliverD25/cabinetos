@@ -183,8 +183,11 @@ public sealed record JobInfo(
 /// <summary>Reply to <c>list_jobs</c>: every job, oldest first (the core keeps the last 100 finished ones).</summary>
 public sealed record JobsReply(IReadOnlyList<JobInfo> Jobs) : CoreReply;
 
-/// <summary>Reply to <c>terminal_open</c>: the session and its byte pipe.</summary>
-public sealed record TerminalOpenedReply(ulong SessionId, string Pipe, uint Pid) : CoreReply;
+/// <summary>
+/// Reply to <c>terminal_open</c>: the session and its byte pipe, its mode, and whether
+/// it may be linked (from version 16; an older core sends neither: locked, not linkable).
+/// </summary>
+public sealed record TerminalOpenedReply(ulong SessionId, string Pipe, uint Pid, string Mode = "locked", bool Linkable = false) : CoreReply;
 
 /// <summary>Whether a session's shell runs: <c>running</c>, or <c>exited</c> with its code.</summary>
 public sealed record TerminalState(string Type, uint? Code = null)
@@ -203,7 +206,10 @@ public sealed record TerminalSessionInfo(
     uint Pid,
     TerminalState State,
     string Pipe,
-    bool Attached);
+    bool Attached,
+    string Pane = "left",
+    string Mode = "locked",
+    bool Linkable = false);
 
 /// <summary>Reply to <c>terminal_list</c>, oldest first.</summary>
 public sealed record TerminalSessionsReply(IReadOnlyList<TerminalSessionInfo> Sessions) : CoreReply;

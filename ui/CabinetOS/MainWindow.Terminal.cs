@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CabinetOS.Core.Commands;
+using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Settings;
 using CabinetOS.Core.Terminal;
@@ -11,9 +12,13 @@ using Windows.UI;
 
 namespace CabinetOS;
 
-// The terminal and the Tool Dock around it (docs/ui.md, "The terminal").
+// The terminal and the Tool Dock around it (docs/ui.md, "The terminal"). Each session belongs to a
+// pane; Ctrl+` reaches the session of the pane it is pressed in (Active Summoning), and nothing a
+// pane does changes the shown session or sends anything to a shell (the Zero-Hijack rule).
 public sealed partial class MainWindow
 {
+    private const string TerminalTarget = "cabinetos_ui::terminal";
+
     private TerminalController _terminal = null!;
     private DockPlacement _dockPlacement = DockPlacement.Bottom;
     private bool _dockVisible;
@@ -24,6 +29,9 @@ public sealed partial class MainWindow
     // write, or what the file said. A config_changed that brings the same value changes nothing.
     private readonly Dictionary<DockPlacement, uint?> _dockKnown = [];
     private bool _paletteFromTerminal;
+    // The pane Ctrl+` gave the keyboard back to from the terminal, until the terminal gets it again,
+    // another pane becomes active or the dock hides: Ctrl+` there is the "second" one, which hides the dock.
+    private int? _terminalHandedBackTo;
 
     private void SetUpTerminal()
     {
@@ -39,6 +47,7 @@ public sealed partial class MainWindow
             }
         };
         Dock.RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
+        Dock.TerminalFocused += () => _terminalHandedBackTo = null;
         Dock.TerminalPage.Failed += reason =>
         {
             var hadFocus = Dock.HasTerminalFocus;
@@ -64,10 +73,11 @@ public sealed partial class MainWindow
     private void RegisterTerminalCommands()
     {
         _router.RegisterUiHandler("view.toggleTerminal", ToggleTerminalAsync);
-        // The dock's own buttons and the menu's "Open in Terminal" pass a session or a folder;
-        // from the palette or a key they come without, and act on the shown shell.
+        // The dock's own buttons and the menu's "Open in Terminal" pass a session, a folder or a pane;
+        // from the palette or a key they come without, and act on the shown shell or the active pane.
         _router.RegisterUiHandler("terminal.new", invocation =>
-            NewTerminalAsync(CommandArgs.Text(invocation.Args, "profile"), CommandArgs.Text(invocation.Args, "cwd"), invocation.RequestId));
+            NewTerminalAsync(CommandArgs.Text(invocation.Args, "profile"), CommandArgs.Text(invocation.Args, "cwd"),
+                CommandArgs.Number(invocation.Args, "pane") is { } pane and <= 1 ? (int)pane : null, invocation.RequestId));
         _router.RegisterUiHandler("terminal.show", async invocation =>
         {
             if (CommandArgs.Number(invocation.Args, "session") is not { } session)
@@ -78,27 +88,29 @@ public sealed partial class MainWindow
             _terminal.Show(session);
             FocusTerminal();
         });
-        _router.RegisterUiHandler("terminal.close", invocation =>
-            (CommandArgs.Number(invocation.Args, "session") ?? _terminal.Shown?.SessionId) is { } session ? _terminal.CloseAsync(session) : Task.CompletedTask);
+        _router.RegisterUiHandler("terminal.close", CloseTerminalAsync);
         _router.RegisterUiHandler("terminal.reload", _ => ReloadTerminalAsync());
+        _router.RegisterUiHandler("terminal.previousTab", _ => CycleTerminalTabs(-1));
+        _router.RegisterUiHandler("terminal.nextTab", _ => CycleTerminalTabs(1));
+        _router.RegisterUiHandler("terminal.setMode", SetTerminalModeAsync);
     }
 
-    // Ctrl+`: hidden -> shown, with the keyboard; shown with the keyboard -> the keyboard goes
-    // back to the pane; shown, keyboard elsewhere -> hidden. {"visible": false} hides it.
+    // Ctrl+` and the top row's terminal button. A key (or the palette) summons the active pane's session
+    // (TerminalSummoning); the buttons, which no pane's keyboard is behind, toggle: shown -> hidden,
+    // hidden -> the active pane's session. {"visible": false} hides, {"visible": true} only shows.
     private async Task ToggleTerminalAsync(CommandInvocation invocation)
     {
         var wanted = VisibleArgument(invocation.Args);
-        if (wanted == false || (wanted is null && _dockVisible && !Dock.HasTerminalFocus))
+        if (wanted == false || (wanted is null && _dockVisible && invocation.Trigger is "button" or "rail"))
         {
             HideDock();
             return;
         }
-        if (wanted is null && _dockVisible)
-        {
-            FocusActivePane();
-            return;
-        }
-        await ShowDockAsync(invocation.RequestId);
+        var state = SummonStateNow();
+        var summon = wanted is null && invocation.Trigger is not ("button" or "rail")
+            ? TerminalSummoning.Decide(state)
+            : TerminalSummoning.DecideShow(state);
+        await SummonAsync(summon, invocation.RequestId);
     }
 
     private static bool? VisibleArgument(JsonElement? args) =>
@@ -107,46 +119,123 @@ public sealed partial class MainWindow
             ? visible.GetBoolean()
             : null;
 
-    private async Task ShowDockAsync(string requestId)
+    private SummonState SummonStateNow() => new(
+        _dockVisible,
+        _dockVisible && Dock.HasTerminalFocus,
+        _active,
+        _terminal.Shown?.Pane,
+        _terminal.MostRecentFor(_active)?.SessionId,
+        _terminalHandedBackTo == _active);
+
+    // The dock's "show" without a session, and Ctrl+Alt+P: the active pane's session, shown, with the keyboard.
+    private Task ShowDockAsync(string requestId) => SummonAsync(TerminalSummoning.DecideShow(SummonStateNow()), requestId);
+
+    private async Task SummonAsync(Summon summon, string requestId)
+    {
+        Diag.Info(TerminalTarget, "terminal summoned", new LogField("action", summon.Action.ToString()),
+            new LogField("pane", TerminalBinding.PaneName(_active)), new LogField("session_id", summon.Session));
+        switch (summon.Action)
+        {
+            case SummonAction.HandBackToPane:
+                FocusActivePane();
+                // After the focus moved: the page's GotFocus must not clear it.
+                _terminalHandedBackTo = _active;
+                LogKeyboardSoon("terminal handed the keyboard back, 300 ms later");
+                return;
+            case SummonAction.Hide:
+                HideDock();
+                return;
+        }
+        if (RefuseInCompact("terminal"))
+        {
+            return;
+        }
+        switch (summon.Action)
+        {
+            case SummonAction.FocusShown:
+                SetDockVisible(true);
+                FocusTerminal();
+                break;
+            case SummonAction.ShowSession when summon.Session is { } session:
+                SetDockVisible(true);
+                _terminal.Show(session);
+                FocusTerminal();
+                break;
+            default:
+                await OpenInDockAsync(null, PaneFolder(_active), _active, requestId);
+                break;
+        }
+    }
+
+    private async Task NewTerminalAsync(string? profile, string? folder, int? pane, string requestId)
     {
         if (RefuseInCompact("terminal"))
         {
             return;
         }
+        var bound = pane ?? _active;
+        await OpenInDockAsync(profile, folder ?? PaneFolder(bound), bound, requestId);
+    }
+
+    // A new session bound to the pane, shown with the keyboard; when none could start, an empty dock goes away.
+    private async Task OpenInDockAsync(string? profile, string? folder, int pane, string requestId)
+    {
         SetDockVisible(true);
         if (_terminal.Tabs.Count == 0)
         {
             Dock.ShowStarting();
-            if (await _terminal.OpenAsync(null, TerminalFolder(), requestId) is null && _terminal.Tabs.Count == 0)
+        }
+        if (await _terminal.OpenAsync(profile, folder, pane, requestId) is null)
+        {
+            if (_terminal.Tabs.Count == 0)
             {
                 // The status bar says why; an empty dock would only be in the way.
                 SetDockVisible(false);
-                return;
             }
+            return;
         }
         FocusTerminal();
     }
 
-    private async Task NewTerminalAsync(string? profile, string? folder, string requestId)
+    // Alt+[ and Alt+] in the terminal: the shown tab changes, the active pane does not, and a terminal
+    // that had the keyboard keeps it in the tab that comes to the front.
+    private Task CycleTerminalTabs(int step)
     {
-        if (RefuseInCompact("terminal"))
+        if (_terminal.ShowNext(step) && _dockVisible && Dock.HasTerminalFocus)
+        {
+            _terminal.FocusPage();
+        }
+        return Task.CompletedTask;
+    }
+
+    // terminal.close: {"session": n}, else the shown tab. Closed from the terminal (Ctrl+Shift+W), the tab that comes
+    // to the front gets the keyboard: the closed one's xterm had it inside the page.
+    private async Task CloseTerminalAsync(CommandInvocation invocation)
+    {
+        if ((CommandArgs.Number(invocation.Args, "session") ?? _terminal.Shown?.SessionId) is not { } session)
         {
             return;
         }
-        SetDockVisible(true);
-        if (_terminal.Tabs.Count == 0)
+        var hadKeyboard = _dockVisible && Dock.HasTerminalFocus;
+        await _terminal.CloseAsync(session);
+        if (hadKeyboard && _dockVisible && _terminal.Shown is not null)
         {
-            Dock.ShowStarting();
+            _terminal.FocusPage();
         }
-        if (await _terminal.OpenAsync(profile, folder ?? TerminalFolder(), requestId) is null)
+    }
+
+    // terminal.setMode: {"session": n, "mode": "locked"|"linked"}; without them, the shown tab's mode flips.
+    private Task SetTerminalModeAsync(CommandInvocation invocation)
+    {
+        var session = CommandArgs.Number(invocation.Args, "session") ?? _terminal.Shown?.SessionId;
+        if (session is not { } id || _terminal.Tabs.FirstOrDefault(t => t.SessionId == id) is not { } tab)
         {
-            if (_terminal.Tabs.Count == 0)
-            {
-                SetDockVisible(false);
-            }
-            return;
+            ShowNotice("No terminal is open.");
+            return Task.CompletedTask;
         }
-        FocusTerminal();
+        var mode = TerminalBinding.ParseMode(CommandArgs.Text(invocation.Args, "mode"))
+            ?? (tab.Mode == TerminalMode.Linked ? TerminalMode.Locked : TerminalMode.Linked);
+        return _terminal.SetModeAsync(id, mode, invocation.RequestId);
     }
 
     private async Task ReloadTerminalAsync()
@@ -160,7 +249,7 @@ public sealed partial class MainWindow
         FocusTerminal();
     }
 
-    private string? TerminalFolder() => Active.Path.Length > 0 ? Active.Path : null;
+    private string? PaneFolder(int pane) => _panes[pane].Path.Length > 0 ? _panes[pane].Path : null;
 
     private void FocusTerminal()
     {
@@ -177,6 +266,7 @@ public sealed partial class MainWindow
 
     private void HideDock()
     {
+        _terminalHandedBackTo = null;
         SetDockVisible(false);
         // The collapsed page cannot keep the keyboard; the pane takes it.
         FocusActivePane();
@@ -190,7 +280,6 @@ public sealed partial class MainWindow
         BottomSplitter.Visibility = visible && _dockPlacement == DockPlacement.Bottom ? Visibility.Visible : Visibility.Collapsed;
         RightSplitter.Visibility = visible && _dockPlacement == DockPlacement.Right ? Visibility.Visible : Visibility.Collapsed;
         ApplyDockSize();
-        _terminal.IsVisible = visible;
         TerminalIcon.Foreground = ThemeResources.Brush(visible ? "CbAccentBrush" : "CbTextSecondaryBrush");
         UpdateRail();
     }
@@ -284,8 +373,15 @@ public sealed partial class MainWindow
     private void UpdateDockHeader()
     {
         Dock.SetTabs(_terminal.Tabs, _terminal.Shown);
-        Dock.SetCaption(_terminal.Caption(_dockPlacement));
+        Dock.SetCaption(_terminal.Caption());
     }
+
+    // The snapshot aid's terminal-state:<label> step: the tabs as the header shows them, who has the keyboard.
+    private void LogTerminalState(string label) =>
+        Diag.Info(TerminalTarget, "terminal state", new LogField("label", label), new LogField("tabs", _terminal.Describe()),
+            new LogField("shown", _terminal.Shown?.SessionId), new LogField("dock", _dockVisible),
+            new LogField("terminal_keyboard", _dockVisible && Dock.HasTerminalFocus), new LogField("active_pane", TerminalBinding.PaneName(_active)),
+            new LogField("caption", _terminal.Caption()));
 
     // The theme's terminal colours (docs/themes.md, "terminal"); before the core sent a theme,
     // the design's text colour on a clear background with the accent's cursor.

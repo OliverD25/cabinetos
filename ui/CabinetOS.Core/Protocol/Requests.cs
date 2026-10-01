@@ -365,14 +365,23 @@ public sealed class TerminalTypePathsRequest(ulong sessionId, IReadOnlyList<stri
     public IReadOnlyList<string> Paths { get; } = paths;
 }
 
-/// <summary>Opens a shell in a pseudo-console (docs/terminal.md); the reply is <c>terminal_opened</c>.</summary>
-public sealed class TerminalOpenRequest(ushort cols, ushort rows) : CoreRequest("terminal_open")
+/// <summary>
+/// Opens a shell in a pseudo-console (docs/terminal.md), bound to a file pane;
+/// the reply is <c>terminal_opened</c>.
+/// </summary>
+public sealed class TerminalOpenRequest(ushort cols, ushort rows, string pane) : CoreRequest("terminal_open")
 {
     /// <summary>Width in character cells.</summary>
     public ushort Cols { get; } = cols;
 
     /// <summary>Height in character cells.</summary>
     public ushort Rows { get; } = rows;
+
+    /// <summary>The pane the session belongs to: <c>left</c> or <c>right</c>.</summary>
+    public string Pane { get; } = pane;
+
+    /// <summary><c>locked</c> or <c>linked</c>; absent: <c>locked</c>.</summary>
+    public string? Mode { get; init; }
 
     /// <summary>A profile of <c>terminal.profiles</c>; absent: <c>terminal.defaultProfile</c>.</summary>
     public string? Profile { get; init; }
@@ -401,14 +410,17 @@ public sealed class TerminalCloseRequest(ulong sessionId) : CoreRequest("termina
     public ulong SessionId { get; } = sessionId;
 }
 
-/// <summary>Types the shell's own change-directory command, then Enter; the reply is <c>ok</c>.</summary>
-public sealed class TerminalSyncCwdRequest(ulong sessionId, string path) : CoreRequest("terminal_sync_cwd")
+/// <summary>
+/// Locks a session or links it to its pane (version 16); the reply is <c>ok</c>, or
+/// <c>not_linkable</c> for <c>linked</c> on a profile that is not linkable.
+/// </summary>
+public sealed class TerminalSetModeRequest(ulong sessionId, string mode) : CoreRequest("terminal_set_mode")
 {
     /// <summary>The session.</summary>
     public ulong SessionId { get; } = sessionId;
 
-    /// <summary>An absolute path to a folder.</summary>
-    public string Path { get; } = path;
+    /// <summary><c>locked</c> or <c>linked</c>.</summary>
+    public string Mode { get; } = mode;
 }
 
 /// <summary>Asks for every session; the reply is <c>terminal_sessions</c>.</summary>

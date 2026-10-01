@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CabinetOS.Core.Terminal;
+using CabinetOS.Core.Themes;
 using CabinetOS.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -12,9 +13,9 @@ namespace CabinetOS.Views;
 /// <summary>
 /// The Tool Dock: the panel under or beside the panes. Its first occupant is
 /// the terminal (design view A, "Integrated terminal"): one tab per shell
-/// session, "+" for the default shell and a menu of the others, the folder
-/// sync caption, and the xterm.js page in one WebView2. Every button runs a
-/// command through the window's router.
+/// session with its pane's badge and its mode, "+" for the default shell and
+/// a menu of the others, the caption, and the xterm.js page in one WebView2.
+/// Every button runs a command through the window's router.
 /// </summary>
 public sealed partial class ToolDock : UserControl
 {
@@ -30,7 +31,12 @@ public sealed partial class ToolDock : UserControl
         NewButton.Click += (_, _) => Run("terminal.new");
         CloseButton.Click += (_, _) => Run("view.toggleTerminal", CommandArgs.Object(("visible", false)));
         ReloadButton.Click += (_, _) => Run("terminal.reload");
+        // GotFocus bubbles: the page's WebView2 inside the frame got XAML's focus (a click, a hand-over).
+        TerminalFrame.GotFocus += (_, _) => TerminalFocused?.Invoke();
     }
+
+    /// <summary>The terminal's page got XAML's focus, however it came.</summary>
+    public event Action? TerminalFocused;
 
     /// <summary>Runs a command by ID through the window's router: (command, arguments, trigger).</summary>
     public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
@@ -86,7 +92,7 @@ public sealed partial class ToolDock : UserControl
         return ((ushort)Math.Clamp((int)(width / CellWidth), 20, 1000), (ushort)Math.Clamp((int)(height / CellHeight), 5, 500));
     }
 
-    /// <summary>Draws the tabs: a green dot for a running shell, its profile, and ×.</summary>
+    /// <summary>Draws the tabs: a green dot for a running shell, its profile, its pane's badge, its mode, and ×.</summary>
     internal void SetTabs(IReadOnlyList<TerminalTab> tabs, TerminalTab? shown)
     {
         TabStrip.Children.Clear();
@@ -134,6 +140,7 @@ public sealed partial class ToolDock : UserControl
 
     private FrameworkElement TabFor(TerminalTab tab, bool active)
     {
+        var look = TerminalHeader.Tab(tab.Profile, tab.Pane, tab.Mode, tab.Linkable);
         var textBrush = ThemeResources.Brush(active ? "CbTextPrimaryBrush" : "CbStatusTextBrush");
         var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         title.Children.Add(new Ellipse
@@ -143,7 +150,15 @@ public sealed partial class ToolDock : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             Fill = ThemeResources.Brush(tab.Running ? "CbRunningBrush" : "CbTextDisabledBrush"),
         });
-        title.Children.Add(new TextBlock { Text = tab.Profile, VerticalAlignment = VerticalAlignment.Center, Foreground = textBrush });
+        title.Children.Add(new TextBlock { Text = look.Title, VerticalAlignment = VerticalAlignment.Center, Foreground = textBrush });
+        // The pane's badge, in the accent the active pane's tab row has; both panes share the theme's one accent.
+        title.Children.Add(new TextBlock
+        {
+            Text = look.Badge,
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = ThemeResources.Brush("CbAccentBrush"),
+        });
 
         var m = WindowMetrics.Current;
         var select = new Button
@@ -157,8 +172,9 @@ public sealed partial class ToolDock : UserControl
             AllowFocusOnInteraction = false,
             IsTabStop = false,
         };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(select, $"{tab.Profile}, session {tab.SessionId}");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(select, $"{tab.Profile} {look.Badge}, session {tab.SessionId}");
         select.Click += (_, _) => Run("terminal.show", CommandArgs.Object(("session", tab.SessionId)));
+        var mode = ModeFor(tab, look, m);
 
         var close = new Button
         {
@@ -181,6 +197,7 @@ public sealed partial class ToolDock : UserControl
         close.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(select);
+        row.Children.Add(mode);
         row.Children.Add(close);
         return new Border
         {
@@ -189,6 +206,46 @@ public sealed partial class ToolDock : UserControl
             Background = active ? ThemeResources.Brush("CbTabActiveFillBrush") : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             Child = row,
         };
+    }
+
+    // The mode: a small text button that switches it (terminal.setMode), or the same text without a
+    // button when the profile cannot be linked; the tooltip says what the mode means, or why not.
+    private FrameworkElement ModeFor(TerminalTab tab, TerminalTabLook look, ThemeMetrics m)
+    {
+        FrameworkElement mode;
+        if (look.ModeToggles)
+        {
+            var toggle = new Button
+            {
+                Content = new TextBlock { Text = look.ModeText, FontSize = 11 },
+                Style = (Style)ThemeResources.Get("CbDockTabButtonStyle")!,
+                Height = Math.Min(20, m.TerminalTabHeight - 2),
+                Padding = new Thickness(6, 0, 6, 0),
+                Margin = new Thickness(0, 0, 2, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                CornerRadius = WindowMetrics.Corners(m.RadiusControl),
+                Foreground = ThemeResources.Brush("CbStatusTextBrush"),
+                AllowFocusOnInteraction = false,
+                IsTabStop = false,
+            };
+            var next = TerminalBinding.ModeName(look.NextMode);
+            toggle.Click += (_, _) => Run("terminal.setMode", CommandArgs.Object(("session", tab.SessionId), ("mode", next)));
+            mode = toggle;
+        }
+        else
+        {
+            mode = new TextBlock
+            {
+                Text = look.ModeText,
+                FontSize = 11,
+                Margin = new Thickness(6, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = ThemeResources.Brush("CbTextDisabledBrush"),
+            };
+        }
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(mode, look.ModeName);
+        ToolTipService.SetToolTip(mode, look.ModeTip);
+        return mode;
     }
 
     private void Run(string command, JsonElement? args = null) => _ = RunCommand?.Invoke(command, args, "button");

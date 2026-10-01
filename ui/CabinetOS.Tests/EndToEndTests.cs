@@ -61,8 +61,8 @@ public class EndToEndTests
             var client = core.Client;
 
             var welcome = await client.HelloAsync();
-            // Version 15: Windows' context menu (Phase 18), after 14's updates.
-            Assert.Equal(15u, welcome.ProtocolVersion);
+            // Version 16: terminal sessions bound to a pane (terminal unit 1), after 15's context menu.
+            Assert.Equal(16u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);
@@ -268,7 +268,7 @@ public class EndToEndTests
             var client = core.Client;
             await client.HelloAsync();
 
-            var opened = await client.RequestAsync<TerminalOpenedReply>(new TerminalOpenRequest(100, 30) { Profile = "cmd", Cwd = root });
+            var opened = await client.RequestAsync<TerminalOpenedReply>(new TerminalOpenRequest(100, 30, "left") { Profile = "cmd", Cwd = root });
             Assert.StartsWith(@"\\.\pipe\cabinetos-term-", opened.Pipe);
             var output = new OutputCoalescer(() => Environment.TickCount64);
             var seen = new StringBuilder();

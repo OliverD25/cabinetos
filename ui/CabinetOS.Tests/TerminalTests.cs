@@ -9,7 +9,7 @@ using CabinetOS.Core.Terminal;
 
 namespace CabinetOS.Tests;
 
-/// <summary>The terminal pane's parts that run without a window: the byte pump, the page protocol, the folder sync rule.</summary>
+/// <summary>The terminal pane's parts that run without a window: the byte pump, the page protocol, summoning, the tabs and the header.</summary>
 public class TerminalTests
 {
     [Fact]
@@ -87,74 +87,150 @@ public class TerminalTests
         Assert.False(pipe.IsOpen);
     }
 
+    private static SummonState State(bool dock = true, bool keyboard = false, int pane = 0, int? shown = 0, ulong? paneSession = 3, bool cameBack = false) =>
+        new(dock, keyboard, pane, shown, paneSession, cameBack);
+
     [Fact]
-    public void A_half_typed_line_or_a_full_screen_program_stops_the_folder_sync()
+    public void Ctrl_backquote_in_a_pane_with_the_dock_hidden_shows_the_pane_s_session_or_a_new_one()
     {
-        var typing = new TypingTracker();
-        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing));
-
-        typing.OnInput("git sta");
-        Assert.Equal(CwdSyncDecision.SkipTyping, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", true, typing));
-        typing.OnInput("tus\r");
-        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", true, typing));
-        typing.OnInput("oops");
-        typing.OnInput("\u0003");
-        Assert.False(typing.LinePending);
-
-        // Focus reports come from the terminal, not from the user's keys.
-        typing.OnInput("\u001b[I");
-        Assert.False(typing.LinePending);
-        // The up arrow brings back a command: that is a line on the prompt.
-        typing.OnInput("\u001b[A");
-        Assert.True(typing.LinePending);
-        typing.OnSynced();
-
-        typing.FullScreen = true;
-        Assert.Equal(CwdSyncDecision.SkipFullScreen, CwdSyncRule.Decide(@"D:\docs", null, true, typing));
-        Assert.Equal(CwdSyncDecision.SkipSameFolder, CwdSyncRule.Decide(@"D:\docs\", @"d:\DOCS", true, typing));
-        Assert.Equal(CwdSyncDecision.SkipNotRunning, CwdSyncRule.Decide(@"D:\docs", null, false, typing));
+        // The dock hidden: the pane's most recent session comes back with the keyboard.
+        Assert.Equal(new Summon(SummonAction.ShowSession, 3), TerminalSummoning.Decide(State(dock: false, shown: 1, paneSession: 3)));
+        // A pane with no session gets a new one of the default profile, in its own folder.
+        Assert.Equal(new Summon(SummonAction.OpenNew), TerminalSummoning.Decide(State(dock: false, shown: null, paneSession: null)));
+        Assert.Equal(new Summon(SummonAction.OpenNew), TerminalSummoning.Decide(State(dock: false, pane: 1, shown: 0, paneSession: null)));
     }
 
     [Fact]
-    public void A_profile_that_does_not_follow_the_pane_gets_no_cd_line()
+    public void Ctrl_backquote_in_the_terminal_hands_the_keyboard_back_to_the_pane()
     {
-        var typing = new TypingTracker();
-        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing, followsPane: false));
-        // The default is a shell that follows.
-        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing));
-        // Not running and same folder are told first: the session is over, or nothing would be typed anyway.
-        Assert.Equal(CwdSyncDecision.SkipNotRunning, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", false, typing, followsPane: false));
-        Assert.Equal(CwdSyncDecision.SkipSameFolder, CwdSyncRule.Decide(@"D:\docs\", @"d:\DOCS", true, typing, followsPane: false));
-        // The profile is told before the screen and the half-typed line.
-        typing.FullScreen = true;
-        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", true, typing, followsPane: false));
-        Assert.Equal(CwdSyncDecision.SkipFullScreen, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", true, typing));
-        typing.FullScreen = false;
-        typing.OnInput("hello");
-        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", true, typing, followsPane: false));
+        Assert.Equal(new Summon(SummonAction.HandBackToPane), TerminalSummoning.Decide(State(keyboard: true)));
+        // Whose tab is shown does not matter: the keyboard was in the terminal.
+        Assert.Equal(new Summon(SummonAction.HandBackToPane), TerminalSummoning.Decide(State(keyboard: true, pane: 1, shown: 0, paneSession: null)));
     }
 
     [Fact]
-    public void A_new_tab_starts_with_the_decision_its_profile_will_always_make()
+    public void Ctrl_backquote_in_a_pane_whose_session_is_shown_gives_it_the_keyboard_and_the_second_one_hides()
     {
-        // The caption of a tab of a profile that does not follow the pane must not
-        // say "synced" before the first pane change.
-        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Initial(followsPane: false));
-        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Initial(followsPane: true));
-        Assert.Equal(CwdSyncDecision.SkipProfile, CwdSyncRule.Initial(TerminalProfiles.Defaults.FollowsPane("claude")));
-        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Initial(TerminalProfiles.Defaults.FollowsPane("pwsh")));
+        // The terminal lost the keyboard some other way (a click in the pane): Ctrl+` gives it back to the terminal.
+        Assert.Equal(new Summon(SummonAction.FocusShown), TerminalSummoning.Decide(State(shown: 0, cameBack: false)));
+        // Ctrl+` just brought the keyboard from the terminal to this pane: the next one hides the dock, as before.
+        Assert.Equal(new Summon(SummonAction.Hide), TerminalSummoning.Decide(State(shown: 0, cameBack: true)));
     }
 
     [Fact]
-    public void Paths_typed_by_ctrl_p_hold_the_line_until_the_user_presses_enter()
+    public void Ctrl_backquote_in_the_other_pane_switches_the_shown_session_and_never_hides()
     {
-        var typing = new TypingTracker();
-        typing.OnPathsTyped();
-        // The folder sync would type a cd behind the paths: it waits, as for a half-typed line.
-        Assert.Equal(CwdSyncDecision.SkipTyping, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing));
-        typing.OnInput(" && dir\r");
-        Assert.Equal(CwdSyncDecision.Sync, CwdSyncRule.Decide(@"D:\docs", @"C:\Users\me", running: true, typing));
+        // The left pane's session is shown; Ctrl+` in the right pane shows the right pane's own.
+        Assert.Equal(new Summon(SummonAction.ShowSession, 7), TerminalSummoning.Decide(State(pane: 1, shown: 0, paneSession: 7)));
+        Assert.Equal(new Summon(SummonAction.OpenNew), TerminalSummoning.Decide(State(pane: 1, shown: 0, paneSession: null)));
+        // Even right after a hand-back to that pane: the shown tab is not its own, so nothing hides.
+        Assert.Equal(new Summon(SummonAction.ShowSession, 7), TerminalSummoning.Decide(State(pane: 1, shown: 0, paneSession: 7, cameBack: true)));
     }
+
+    [Fact]
+    public void The_show_commands_never_hide_and_never_hand_the_keyboard_back()
+    {
+        Assert.Equal(new Summon(SummonAction.FocusShown), TerminalSummoning.DecideShow(State(keyboard: true)));
+        Assert.Equal(new Summon(SummonAction.FocusShown), TerminalSummoning.DecideShow(State(cameBack: true)));
+        Assert.Equal(new Summon(SummonAction.ShowSession, 3), TerminalSummoning.DecideShow(State(dock: false)));
+        Assert.Equal(new Summon(SummonAction.ShowSession, 9), TerminalSummoning.DecideShow(State(pane: 1, shown: 0, paneSession: 9)));
+    }
+
+    [Fact]
+    public void A_pane_s_session_is_its_running_tab_shown_last()
+    {
+        TabFacts[] tabs =
+        [
+            new(1, 0, true, 5),
+            new(2, 1, true, 6),
+            new(3, 0, true, 2),
+            new(4, 0, false, 9),
+            new(5, 1, true, 0),
+        ];
+        Assert.Equal(1UL, TerminalTabs.MostRecent(tabs, 0));
+        Assert.Equal(2UL, TerminalTabs.MostRecent(tabs, 1));
+        // An ended shell does not count, and a pane without tabs has none.
+        Assert.Null(TerminalTabs.MostRecent([new TabFacts(4, 0, false, 9)], 0));
+        Assert.Null(TerminalTabs.MostRecent(tabs, 1 + 1));
+        // Never shown: the newest wins.
+        Assert.Equal(6UL, TerminalTabs.MostRecent([new TabFacts(5, 1, true, 0), new TabFacts(6, 1, true, 0)], 1));
+    }
+
+    [Fact]
+    public void Alt_brackets_cycle_the_tabs_round_the_ends()
+    {
+        ulong[] sessions = [3, 5, 8];
+        Assert.Equal(8UL, TerminalTabs.Cycle(sessions, 5, 1));
+        Assert.Equal(3UL, TerminalTabs.Cycle(sessions, 8, 1));
+        Assert.Equal(8UL, TerminalTabs.Cycle(sessions, 3, -1));
+        Assert.Equal(3UL, TerminalTabs.Cycle(sessions, 5, -1));
+        // No shown tab: the first for next, the last for previous.
+        Assert.Equal(3UL, TerminalTabs.Cycle(sessions, null, 1));
+        Assert.Equal(8UL, TerminalTabs.Cycle(sessions, null, -1));
+        Assert.Equal(5UL, TerminalTabs.Cycle([5], 5, 1));
+        Assert.Null(TerminalTabs.Cycle([], null, 1));
+    }
+
+    [Fact]
+    public void A_tab_shows_its_pane_and_its_mode_as_a_toggle()
+    {
+        var left = TerminalHeader.Tab("pwsh", 0, TerminalMode.Locked, linkable: true);
+        Assert.Equal(("pwsh", "[Left]", "Locked", true, TerminalMode.Linked), (left.Title, left.Badge, left.ModeText, left.ModeToggles, left.NextMode));
+        Assert.Equal("Locked, pwsh on the left pane", left.ModeName);
+        Assert.Contains("link it to the left pane", left.ModeTip, StringComparison.Ordinal);
+
+        var right = TerminalHeader.Tab("wsl", 1, TerminalMode.Linked, linkable: true);
+        Assert.Equal(("[Right]", "Linked", true, TerminalMode.Locked), (right.Badge, right.ModeText, right.ModeToggles, right.NextMode));
+        Assert.Equal("Linked to the right pane. Click to lock it.", right.ModeTip);
+        Assert.Equal("Linked, wsl on the right pane", right.ModeName);
+    }
+
+    [Fact]
+    public void A_profile_that_cannot_be_linked_shows_locked_without_a_toggle_and_says_why()
+    {
+        var claude = TerminalHeader.Tab("claude", 1, TerminalMode.Locked, linkable: false);
+        Assert.Equal(("Locked", false, "[Right]"), (claude.ModeText, claude.ModeToggles, claude.Badge));
+        Assert.Equal("Locked: claude cannot follow a pane, because no prompt hook can be added to it.", claude.ModeTip);
+    }
+
+    [Fact]
+    public void The_caption_says_where_the_shell_started_or_how_it_ended()
+    {
+        Assert.Equal("started in work", TerminalHeader.Caption("pwsh", running: true, null, @"E:\work\"));
+        Assert.Equal("pwsh exited with code 3", TerminalHeader.Caption("pwsh", running: false, 3, @"E:\work"));
+        Assert.Equal("", TerminalHeader.Caption(null, running: false, null, null));
+        Assert.Equal("", TerminalHeader.Caption("pwsh", running: true, null, null));
+        // The old folder sync's texts are gone.
+        Assert.DoesNotContain("synced", TerminalHeader.Caption("pwsh", true, null, @"C:\x"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_tabs_read_as_one_line_for_the_logs()
+    {
+        Assert.Equal("3 pwsh [Left] Locked | *4 cmd [Right] Linked",
+            TerminalHeader.Describe([(3UL, "pwsh", 0, TerminalMode.Locked, false), (4UL, "cmd", 1, TerminalMode.Linked, true)]));
+        Assert.Equal("", TerminalHeader.Describe([]));
+    }
+
+    [Theory]
+    [InlineData(0, "left")]
+    [InlineData(1, "right")]
+    public void Panes_have_their_wire_names(int pane, string name)
+    {
+        Assert.Equal(name, TerminalBinding.PaneName(pane));
+        Assert.Equal(pane, TerminalBinding.PaneIndex(name));
+    }
+
+    [Fact]
+    public void Modes_have_their_wire_names_and_anything_else_is_no_mode()
+    {
+        Assert.Equal("locked", TerminalBinding.ModeName(TerminalMode.Locked));
+        Assert.Equal("linked", TerminalBinding.ModeName(TerminalMode.Linked));
+        Assert.Equal(TerminalMode.Linked, TerminalBinding.ParseMode("linked"));
+        Assert.Null(TerminalBinding.ParseMode("Linked"));
+        Assert.Null(TerminalBinding.ParseMode(null));
+    }
+
 
     [Fact]
     public void The_debouncer_hands_out_the_last_value_once_the_user_stopped()
@@ -240,34 +316,23 @@ public class TerminalTests
         Assert.Equal(["pwsh", "cmd"], profiles.Names);
         using var empty = JsonDocument.Parse("{}");
         Assert.Same(TerminalProfiles.Defaults, TerminalProfiles.FromConfig(empty.RootElement));
-        // The defaults mirror the core's: the fourth profile is Claude Code, which is not a shell.
+        // The defaults mirror the core's: the fourth profile is Claude Code.
         Assert.Equal(["pwsh", "cmd", "wsl", "claude"], TerminalProfiles.Defaults.Names);
-        Assert.True(TerminalProfiles.Defaults.FollowsPane("wsl"));
-        Assert.False(TerminalProfiles.Defaults.FollowsPane("claude"));
     }
 
     [Fact]
-    public void A_profile_follows_the_pane_unless_the_config_says_false()
+    public void A_config_written_before_unit_1_still_gives_the_profile_names()
     {
+        // followsPane and linkable are the core's business; the window reads only the names.
         using var config = JsonDocument.Parse("""
             {"terminal":{"defaultProfile":"pwsh","profiles":[
               {"name":"pwsh","followsPane":true},
-              {"name":"claude","followsPane":false},
-              {"name":"missing"},
-              {"name":"wrong","followsPane":"no"},
-              {"name":"number","followsPane":0},
-              {"name":"empty","followsPane":null}
+              {"name":"claude","followsPane":false,"linkable":false}
             ]}}
             """);
         var profiles = TerminalProfiles.FromConfig(config.RootElement);
-        Assert.Equal(["pwsh", "claude", "missing", "wrong", "number", "empty"], profiles.Names);
-        Assert.False(profiles.FollowsPane("claude"));
-        // A missing key or a key of the wrong type is the default: the profile follows.
-        Assert.All(new[] { "pwsh", "missing", "wrong", "number", "empty" }, name => Assert.True(profiles.FollowsPane(name), name));
-        // A name the config does not list follows too.
-        Assert.True(profiles.FollowsPane("nu"));
-        // Names are compared exactly, as the core does.
-        Assert.True(profiles.FollowsPane("Claude"));
+        Assert.Equal(["pwsh", "claude"], profiles.Names);
+        Assert.Equal("pwsh", profiles.DefaultProfile);
     }
 
     [Fact]

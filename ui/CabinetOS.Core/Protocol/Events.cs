@@ -122,6 +122,9 @@ public sealed record VolumesChangedEvent(IReadOnlyList<VolumeDetails> Volumes) :
 /// <summary>A terminal session's shell exited; the session stays listed until closed.</summary>
 public sealed record TerminalExitedEvent(ulong SessionId, uint ExitCode) : CoreEvent;
 
+/// <summary>A terminal session's mode changed (<c>terminal_set_mode</c> from any client): <c>locked</c> or <c>linked</c>.</summary>
+public sealed record TerminalModeChangedEvent(ulong SessionId, string Mode) : CoreEvent;
+
 /// <summary>The theme in effect changed (<c>ui.theme</c>, or its file was saved); it comes whole.</summary>
 public sealed record ThemeChangedEvent(ColorTheme Theme) : CoreEvent;
 

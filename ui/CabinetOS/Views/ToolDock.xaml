@@ -19,7 +19,7 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- Header, 34 px: a tab per session, "+", the other profiles, the sync caption, close. -->
+            <!-- Header, 34 px: a tab per session (its pane's badge, its mode), "+", the other profiles, the caption, close. -->
             <Border BorderBrush="{ThemeResource CbDividerBrush}" BorderThickness="0,0,0,1">
                 <Grid
                     x:Name="HeaderGrid"

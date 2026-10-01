@@ -507,6 +507,9 @@ public sealed partial class MainWindow : Window
                     // Typed into the shown shell as keys; {enter} is Enter.
                     await _terminal.TypeAsync(step.Argument.Replace("{enter}", "\r", StringComparison.Ordinal));
                     break;
+                case "terminal-state":
+                    LogTerminalState(step.Argument);
+                    break;
                 case "search":
                     // Typed into the Search view's field (the command bar's search field is gone since Phase 16).
                     SetSearchText(step.Argument);
@@ -840,6 +843,9 @@ public sealed partial class MainWindow : Window
                 "conflict" => _transfers.Conflicts.Current is not null,
                 "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
                 "terminal" => _terminal.Shown is { Pipe: not null },
+                // terminals:<n>: that many tabs, each with its pipe connected.
+                _ when condition.StartsWith("terminals:", StringComparison.Ordinal) && int.TryParse(condition["terminals:".Length..], out var tabs) =>
+                    _terminal.Tabs.Count >= tabs && _terminal.Tabs.All(t => t.Pipe is not null),
                 "search" => _search.Phase is SearchPhase.Done or SearchPhase.Failed,
                 "tool" => AllToolHosts().Any(h => h.IsReady),
                 // The folder tree has caught up with the active pane: the row it marks is the pane's folder.
@@ -1160,6 +1166,9 @@ public sealed partial class MainWindow : Window
                 return;
             case TerminalExitedEvent exited:
                 _ = _terminal.OnExitedAsync(exited);
+                return;
+            case TerminalModeChangedEvent modeChanged:
+                _terminal.OnModeChanged(modeChanged);
                 return;
             case PluginStateChangedEvent or PluginCrashedEvent:
                 _market.OnEvent(coreEvent);
@@ -2405,7 +2414,8 @@ public sealed partial class MainWindow : Window
         UpdateNavigationButtons();
         UpdateCrumbs();
         _sidebar.SetActivePath(Active.Path);
-        _terminal.SetActiveFolder(Active.Path);
+        // The terminal stays as it is (the Zero-Hijack rule); only a "second" Ctrl+` belongs to one pane.
+        _terminalHandedBackTo = null;
         ScheduleToolContext();
         UpdateTabRows();
         ScheduleWindowState();
@@ -2448,7 +2458,6 @@ public sealed partial class MainWindow : Window
             case nameof(PaneModel.Path):
                 EndQuickSearch();
                 _sidebar.SetActivePath(Active.Path);
-                _terminal.SetActiveFolder(Active.Path);
                 ScheduleToolContext();
                 _ = UpdateWorkspaceAsync();
                 break;

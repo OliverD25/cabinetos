@@ -1,7 +1,6 @@
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Keys;
-using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Terminal;
 using Microsoft.UI.Dispatching;
@@ -10,7 +9,7 @@ using Microsoft.Web.WebView2.Core;
 namespace CabinetOS.Services;
 
 /// <summary>One shell session as the window sees it: a tab of the terminal pane.</summary>
-internal sealed class TerminalTab(ulong sessionId, string profile, string? folder, ushort cols, ushort rows)
+internal sealed class TerminalTab(ulong sessionId, string profile, int pane, string? folder, ushort cols, ushort rows)
 {
     /// <summary>The core's session ID.</summary>
     public ulong SessionId { get; } = sessionId;
@@ -18,23 +17,29 @@ internal sealed class TerminalTab(ulong sessionId, string profile, string? folde
     /// <summary>The profile's name, the tab's title.</summary>
     public string Profile { get; } = profile;
 
+    /// <summary>The file pane the session belongs to: 0 left, 1 right.</summary>
+    public int Pane { get; } = pane;
+
+    /// <summary>Locked or linked; the core tells changes (<c>terminal_mode_changed</c>).</summary>
+    public TerminalMode Mode { get; set; } = TerminalMode.Locked;
+
+    /// <summary>Whether the session may be linked (its profile's <c>linkable</c>, as the core says).</summary>
+    public bool Linkable { get; set; }
+
+    /// <summary>The folder the session started in.</summary>
+    public string? Folder { get; } = folder;
+
+    /// <summary>When the tab was last shown, as a growing count; the pane's most recent session is the one shown last.</summary>
+    public long LastShown { get; set; }
+
     /// <summary>Whether the shell still runs.</summary>
     public bool Running { get; set; } = true;
 
     /// <summary>The shell's exit code, once it ended.</summary>
     public uint? ExitCode { get; set; }
 
-    /// <summary>The folder the session started in or was last synced to.</summary>
-    public string? LastSynced { get; set; } = folder;
-
-    /// <summary>What the last folder sync decided.</summary>
-    public CwdSyncDecision LastDecision { get; set; } = CwdSyncDecision.Sync;
-
     /// <summary>The size the core knows.</summary>
     public (ushort Cols, ushort Rows) Size { get; set; } = (cols, rows);
-
-    /// <summary>Whether a line is being typed, or a full-screen program runs.</summary>
-    public TypingTracker Typing { get; } = new();
 
     /// <summary>The output waiting for the page.</summary>
     public OutputCoalescer Output { get; } = new(() => Environment.TickCount64);
@@ -53,15 +58,19 @@ internal sealed class TerminalTab(ulong sessionId, string profile, string? folde
 
     /// <summary>The timer that closes the tab 3 s after the shell ended.</summary>
     public DispatcherQueueTimer? CloseTimer { get; set; }
+
+    /// <summary>What the order of the tabs needs of it.</summary>
+    public TabFacts Facts => new(SessionId, Pane, Running, LastShown);
 }
 
 /// <summary>
 /// The terminal pane's sessions (docs/ui.md, "The terminal"). The core runs
-/// the shells; this class opens and closes sessions, pumps each byte pipe
-/// into the xterm.js page at most 60 times a second, sends keys and sizes
-/// back, and types the active pane's folder into the shown shell when the
-/// rule allows (<see cref="CwdSyncRule"/>). Everything runs on the UI thread;
-/// the pipes' reader threads only schedule flushes.
+/// the shells; this class opens and closes sessions, each bound to a file
+/// pane, pumps each byte pipe into the xterm.js page at most 60 times a
+/// second, and sends keys and sizes back. Nothing the panes do reaches a
+/// session (the Zero-Hijack rule): a shell gets only the user's keys and the
+/// paths the user asked to type. Everything runs on the UI thread; the
+/// pipes' reader threads only schedule flushes.
 /// </summary>
 internal sealed class TerminalController
 {
@@ -74,15 +83,12 @@ internal sealed class TerminalController
     private readonly DispatcherQueue _dispatcher;
     private readonly WebViewHost _page;
     private readonly List<TerminalTab> _tabs = [];
-    private readonly Debouncer<string> _sync = new(() => Environment.TickCount64, 300);
-    private readonly DispatcherQueueTimer _syncTimer;
     private IReadOnlyDictionary<string, string> _passKeys = new Dictionary<string, string>();
     private string? _theme;
     private TaskCompletionSource<bool>? _ready;
     private bool _pageReady;
     private bool _starting;
-    private string _activeFolder = "";
-    private bool _visible;
+    private long _shownCount;
 
     /// <summary>A controller whose page lives in <paramref name="page"/>.</summary>
     public TerminalController(ICoreChannel core, DispatcherQueue dispatcher, WebViewHost page)
@@ -98,12 +104,9 @@ internal sealed class TerminalController
             _ready?.TrySetResult(false);
             _ready = null;
         };
-        _syncTimer = dispatcher.CreateTimer();
-        _syncTimer.IsRepeating = false;
-        _syncTimer.Tick += (_, _) => _ = SyncDueAsync();
     }
 
-    /// <summary>Tabs, the shown tab or the caption changed.</summary>
+    /// <summary>Tabs, the shown tab, a mode or the caption changed.</summary>
     public event Action? Changed;
 
     /// <summary>Something for the status bar: (text, is an error).</summary>
@@ -127,37 +130,17 @@ internal sealed class TerminalController
     /// <summary>How many cells fit the pane now: the size a new session starts with.</summary>
     public Func<(ushort Cols, ushort Rows)> EstimateSize { get; set; } = () => (100, 24);
 
-    /// <summary>
-    /// Whether the pane is on screen. A hidden terminal does not follow the
-    /// active pane; when it shows again, it catches up after the usual wait.
-    /// </summary>
-    public bool IsVisible
-    {
-        get => _visible;
-        set
-        {
-            _visible = value;
-            if (value)
-            {
-                QueueSync();
-            }
-        }
-    }
+    /// <summary>The header's caption: how the shown shell ended, or the folder it started in.</summary>
+    public string Caption() =>
+        TerminalHeader.Caption(Shown?.Profile, Shown?.Running ?? false, Shown?.ExitCode, Shown?.Folder);
 
-    /// <summary>The header's caption: the folder sync, or how the shell ended.</summary>
-    public string Caption(DockPlacement placement)
-    {
-        var folder = DisplayFormat.FolderName(_activeFolder);
-        return Shown switch
-        {
-            null => "",
-            { Running: false } tab => $"{tab.Profile} exited with code {tab.ExitCode}",
-            { LastDecision: CwdSyncDecision.SkipTyping } => placement == DockPlacement.Bottom ? "cwd not synced: a command is being typed" : "not synced: typing",
-            { LastDecision: CwdSyncDecision.SkipFullScreen } => placement == DockPlacement.Bottom ? "cwd not synced: a full-screen program runs" : "not synced: a program runs",
-            { LastDecision: CwdSyncDecision.SkipProfile } => placement == DockPlacement.Bottom ? "cwd not synced: the profile does not follow the pane" : "not synced: profile",
-            _ => placement == DockPlacement.Bottom ? $"cwd synced to active pane · {folder}" : $"synced to {folder}",
-        };
-    }
+    /// <summary>The tabs in one line, the shown one marked (<see cref="TerminalHeader.Describe"/>).</summary>
+    public string Describe() =>
+        TerminalHeader.Describe(_tabs.Select(t => (t.SessionId, t.Profile, t.Pane, t.Mode, t == Shown)));
+
+    /// <summary>The pane's most recent running session, or null (<see cref="TerminalTabs.MostRecent"/>).</summary>
+    public TerminalTab? MostRecentFor(int pane) =>
+        TerminalTabs.MostRecent(_tabs.Select(t => t.Facts), pane) is { } session ? Find(session) : null;
 
     /// <summary>The keymap changed: the page passes on the new ways out.</summary>
     public void SetKeymap(Keymap keymap)
@@ -182,26 +165,14 @@ internal sealed class TerminalController
         }
     }
 
-    /// <summary>The active pane's folder, which the shown shell follows.</summary>
-    public void SetActiveFolder(string folder)
-    {
-        if (string.Equals(folder, _activeFolder, StringComparison.Ordinal))
-        {
-            return;
-        }
-        _activeFolder = folder;
-        QueueSync();
-        Changed?.Invoke();
-    }
-
     /// <summary>Gives the shown terminal the keyboard (the view focused the WebView2 first).</summary>
     public void FocusPage() => _page.Post(TerminalPageMessages.Focus());
 
     /// <summary>
-    /// Starts a shell: <paramref name="profile"/> (null for the default) in
-    /// <paramref name="folder"/> (null for the profile folder), shown at once.
+    /// Starts a shell bound to <paramref name="pane"/> (0 left, 1 right): <paramref name="profile"/>
+    /// (null for the default) in <paramref name="folder"/> (null for the profile folder), shown at once.
     /// </summary>
-    public async Task<TerminalTab?> OpenAsync(string? profile, string? folder, string? requestId = null)
+    public async Task<TerminalTab?> OpenAsync(string? profile, string? folder, int pane, string? requestId = null)
     {
         if (!await EnsurePageAsync())
         {
@@ -213,7 +184,12 @@ internal sealed class TerminalController
         CoreReply reply;
         try
         {
-            reply = await _core.RequestAsync(new TerminalOpenRequest(cols, rows) { Profile = profile, Cwd = folder, Id = requestId ?? "" });
+            reply = await _core.RequestAsync(new TerminalOpenRequest(cols, rows, TerminalBinding.PaneName(pane))
+            {
+                Profile = profile,
+                Cwd = folder,
+                Id = requestId ?? "",
+            });
         }
         catch (IOException error)
         {
@@ -223,7 +199,7 @@ internal sealed class TerminalController
         switch (reply)
         {
             case TerminalOpenedReply opened:
-                return await AttachAsync(opened, name, folder, cols, rows);
+                return await AttachAsync(opened, name, pane, folder, cols, rows);
             case ErrorReply { Code: ErrorCodes.UnknownRequest }:
                 Notice?.Invoke("This core has no terminal yet (terminal_open).", true);
                 return null;
@@ -244,6 +220,74 @@ internal sealed class TerminalController
         }
     }
 
+    /// <summary>
+    /// Shows the tab <paramref name="step"/> places from the shown one (1 the next, -1 the
+    /// previous), round the ends; false when there is no other tab to show.
+    /// </summary>
+    public bool ShowNext(int step)
+    {
+        var next = TerminalTabs.Cycle([.. _tabs.Select(t => t.SessionId)], Shown?.SessionId, step);
+        if (next is not { } session || session == Shown?.SessionId)
+        {
+            return false;
+        }
+        Show(session);
+        return true;
+    }
+
+    /// <summary>
+    /// Locks a session or links it to its pane (<c>terminal_set_mode</c>). The tab changes when the
+    /// core's <c>terminal_mode_changed</c> arrives, so every window shows the same. A profile that
+    /// cannot be linked gets a notice and stays locked.
+    /// </summary>
+    public async Task SetModeAsync(ulong sessionId, TerminalMode mode, string? requestId = null)
+    {
+        if (Find(sessionId) is not { } tab)
+        {
+            return;
+        }
+        if (mode == TerminalMode.Linked && !tab.Linkable)
+        {
+            Notice?.Invoke($"{tab.Profile} cannot be linked to a pane: no prompt hook can be added to it.", false);
+            return;
+        }
+        CoreReply reply;
+        try
+        {
+            reply = await _core.RequestAsync(new TerminalSetModeRequest(sessionId, TerminalBinding.ModeName(mode)) { Id = requestId ?? "" });
+        }
+        catch (IOException error)
+        {
+            Notice?.Invoke($"The mode could not change: {error.Message}", true);
+            return;
+        }
+        switch (reply)
+        {
+            case OkReply:
+                Diag.Info(Target, "terminal mode asked", new LogField("session_id", sessionId), new LogField("mode", TerminalBinding.ModeName(mode)));
+                break;
+            case ErrorReply { Code: ErrorCodes.UnknownRequest }:
+                Notice?.Invoke("This core cannot lock or link a terminal yet (terminal_set_mode).", true);
+                break;
+            case ErrorReply error:
+                Notice?.Invoke($"The mode could not change: {error.Message}", true);
+                break;
+        }
+    }
+
+    /// <summary>A session's mode changed (<c>terminal_mode_changed</c>, from this window or another client).</summary>
+    public void OnModeChanged(TerminalModeChangedEvent changed)
+    {
+        if (Find(changed.SessionId) is not { } tab || TerminalBinding.ParseMode(changed.Mode) is not { } mode || tab.Mode == mode)
+        {
+            return;
+        }
+        tab.Mode = mode;
+        Diag.Info(Target, "terminal mode changed", new LogField("session_id", tab.SessionId), new LogField("mode", changed.Mode),
+            new LogField("pane", TerminalBinding.PaneName(tab.Pane)));
+        Changed?.Invoke();
+    }
+
     /// <summary>Closes a tab: the shell ends (<c>terminal_close</c>) if it still runs.</summary>
     public async Task CloseAsync(ulong sessionId)
     {
@@ -257,9 +301,10 @@ internal sealed class TerminalController
         if (Shown == tab)
         {
             Shown = null;
-            if (_tabs.Count > 0)
+            // The pane's other session comes to the front before another pane's.
+            if ((MostRecentFor(tab.Pane) ?? _tabs.LastOrDefault()) is { } next)
             {
-                ShowTab(_tabs[^1]);
+                ShowTab(next);
             }
         }
         Changed?.Invoke();
@@ -342,8 +387,6 @@ internal sealed class TerminalController
         {
             return null;
         }
-        // Before the request: a folder sync that falls due meanwhile must not type a cd into the line.
-        tab.Typing.OnPathsTyped();
         var reply = await _core.RequestAsync(new TerminalTypePathsRequest(tab.SessionId, paths) { Id = requestId ?? "" });
         Diag.Info(Target, "paths typed at the prompt", new LogField("session_id", tab.SessionId), new LogField("paths", paths.Count),
             new LogField("reply", reply.GetType().Name));
@@ -352,13 +395,7 @@ internal sealed class TerminalController
 
     /// <summary>Types <paramref name="text"/> into the shown shell as if typed (the snapshot aid).</summary>
     public Task TypeAsync(string text) =>
-        Shown is { Running: true, Pipe: { } pipe } tab ? TypeInto(tab, pipe, text) : Task.CompletedTask;
-
-    private static Task TypeInto(TerminalTab tab, TerminalPipe pipe, string text)
-    {
-        tab.Typing.OnInput(text);
-        return pipe.WriteAsync(System.Text.Encoding.UTF8.GetBytes(text));
-    }
+        Shown is { Running: true, Pipe: { } pipe } ? pipe.WriteAsync(System.Text.Encoding.UTF8.GetBytes(text)) : Task.CompletedTask;
 
     private async Task<bool> EnsurePageAsync()
     {
@@ -408,17 +445,19 @@ internal sealed class TerminalController
     private static Uri PageUri() =>
         new($"https://{PageHost}/terminal.html?build={Environment.OSVersion.Version.Build}");
 
-    private async Task<TerminalTab?> AttachAsync(TerminalOpenedReply opened, string profile, string? folder, ushort cols, ushort rows)
+    private async Task<TerminalTab?> AttachAsync(TerminalOpenedReply opened, string profile, int pane, string? folder, ushort cols, ushort rows)
     {
-        var tab = new TerminalTab(opened.SessionId, profile, folder, cols, rows)
+        var tab = new TerminalTab(opened.SessionId, profile, pane, folder, cols, rows)
         {
-            LastDecision = CwdSyncRule.Initial(Profiles.FollowsPane(profile)),
+            Mode = TerminalBinding.ParseMode(opened.Mode) ?? TerminalMode.Locked,
+            Linkable = opened.Linkable,
         };
         _tabs.Add(tab);
         _page.Post(TerminalPageMessages.Create(tab.SessionId));
-        ShowTab(tab);
         Diag.Info(Target, "terminal session opened", new LogField("session_id", tab.SessionId), new LogField("profile", profile),
+            new LogField("pane", TerminalBinding.PaneName(pane)), new LogField("mode", opened.Mode), new LogField("linkable", opened.Linkable),
             new LogField("cwd", folder), new LogField("pid", opened.Pid));
+        ShowTab(tab);
         try
         {
             tab.Pipe = await TerminalPipe.ConnectAsync(opened.Pipe, tab.Output, TimeSpan.FromSeconds(5));
@@ -446,9 +485,14 @@ internal sealed class TerminalController
 
     private void ShowTab(TerminalTab tab)
     {
-        Shown = tab;
-        _page.Post(TerminalPageMessages.Show(tab.SessionId));
-        QueueSync();
+        tab.LastShown = ++_shownCount;
+        if (Shown != tab)
+        {
+            Shown = tab;
+            _page.Post(TerminalPageMessages.Show(tab.SessionId));
+            Diag.Info(Target, "terminal tab shown", new LogField("session_id", tab.SessionId), new LogField("profile", tab.Profile),
+                new LogField("pane", TerminalBinding.PaneName(tab.Pane)), new LogField("tabs", Describe()));
+        }
         Changed?.Invoke();
     }
 
@@ -507,12 +551,8 @@ internal sealed class TerminalController
                 OnPageReady();
                 break;
             case "input" or "binary":
-                if (Find(message.Session) is { Running: true, Pipe: { } pipe } typed)
+                if (Find(message.Session) is { Running: true, Pipe: { } pipe })
                 {
-                    if (message.Type == "input")
-                    {
-                        typed.Typing.OnInput(message.Data ?? "");
-                    }
                     _ = pipe.WriteAsync(TerminalPageMessages.Bytes(message));
                 }
                 break;
@@ -524,12 +564,6 @@ internal sealed class TerminalController
                     {
                         _ = ResizeAsync(sized);
                     }
-                }
-                break;
-            case "buffer":
-                if (Find(message.Session) is { } buffered)
-                {
-                    buffered.Typing.FullScreen = message.Alternate;
                 }
                 break;
             case "key":
@@ -591,64 +625,5 @@ internal sealed class TerminalController
         {
             Diag.Debug(Target, "cannot resize a session", new LogField("session_id", tab.SessionId), new LogField("error", error.Message));
         }
-    }
-
-    private void QueueSync()
-    {
-        if (!_visible || Shown is not { Running: true } || _activeFolder.Length == 0)
-        {
-            return;
-        }
-        _sync.Set(_activeFolder);
-        _syncTimer.Stop();
-        _syncTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, _sync.MillisecondsUntilDue()));
-        _syncTimer.Start();
-    }
-
-    private async Task SyncDueAsync()
-    {
-        if (!_sync.TryTake(out var folder))
-        {
-            var wait = _sync.MillisecondsUntilDue();
-            if (wait >= 0)
-            {
-                _syncTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, wait));
-                _syncTimer.Start();
-            }
-            return;
-        }
-        if (!_visible || Shown is not { } tab)
-        {
-            return;
-        }
-        var decision = CwdSyncRule.Decide(folder, tab.LastSynced, tab.Running, tab.Typing, Profiles.FollowsPane(tab.Profile));
-        Diag.Debug(Target, "cwd sync", new LogField("session_id", tab.SessionId), new LogField("path", folder),
-            new LogField("decision", decision.ToString()));
-        if (decision != CwdSyncDecision.SkipSameFolder)
-        {
-            tab.LastDecision = decision;
-        }
-        if (decision == CwdSyncDecision.Sync)
-        {
-            try
-            {
-                switch (await _core.RequestAsync(new TerminalSyncCwdRequest(tab.SessionId, folder)))
-                {
-                    case OkReply:
-                        tab.LastSynced = folder;
-                        tab.Typing.OnSynced();
-                        break;
-                    case ErrorReply error:
-                        Diag.Info(Target, "cwd sync refused", new LogField("session_id", tab.SessionId), new LogField("code", error.Code),
-                            new LogField("error", error.Message));
-                        break;
-                }
-            }
-            catch (IOException error)
-            {
-                Diag.Debug(Target, "cannot sync the cwd", new LogField("error", error.Message));
-            }
-        }
-        Changed?.Invoke();
     }
 }
