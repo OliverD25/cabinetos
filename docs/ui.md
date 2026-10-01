@@ -413,6 +413,11 @@ most (`-Minutes`), until the file says allowed and no `CabinetOS.exe` runs,
 and exits 1 otherwise; `-Status` prints the state. The laptop and the VM
 need no consent.
 
+`livecheck.ps1` puts Windows PowerShell's own module folder first in
+`PSModulePath` when it runs in 5.1: a 5.1 started from PowerShell 7 inherits
+7's path and then lacks `Get-FileHash`, so the marketplace index build fails
+and the Agent steps with it (two coders lost a run that way on 2026-10-02).
+
 `run-livecheck.ps1` first shows the countdown window of `countdown.ps1`
 (5 seconds, a sound, always on top: "The live check takes the keyboard and
 mouse in 5"; Esc or its button cancels the run, `-NoCountdown` skips it for

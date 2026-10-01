@@ -30,6 +30,9 @@ param(
   [switch]$Panel
 )
 $ErrorActionPreference = 'Stop'
+# A 5.1 started from PowerShell 7 inherits 7's PSModulePath and then lacks Get-FileHash (the marketplace index build
+# failed that way for two coders on 2026-10-02); the engine's own module folder goes first.
+if ($PSVersionTable.PSVersion.Major -lt 6) { $env:PSModulePath = "$PSHOME\Modules;$env:PSModulePath" }
 $runStart = Get-Date
 $Exe = [System.IO.Path]::GetFullPath($Exe)
 $Core = [System.IO.Path]::GetFullPath($Core)
