@@ -5,9 +5,11 @@ terminal session now belongs to a file pane and is locked or linked to it;
 Ctrl+` summons the session of the pane it is pressed in; nothing a pane
 does reaches the terminal by itself (Zero-Hijack); the terminal got its own
 tab keys. Written by the Opus coder agent in the worktree branch
-`worktree-agent-ad1b2899b9f06a2e5`, on the main PC. The window runs (the
-end-to-end tests and the live check) ran on this PC after 23:00 and after
-00:15, as the coordinator allowed; the laptop was not used.
+`worktree-agent-ad1b2899b9f06a2e5`, on the main PC (the night of
+2026-10-01/02). The window runs ran on this PC: the end-to-end tests after
+23:00, the live checks from 01:03 behind the creator's consent file
+(`wait-for-pc.ps1`), after a first attempt at 00:15 that met the creator
+still at the PC. The laptop was not used.
 
 ## Summary
 
@@ -17,7 +19,7 @@ end-to-end tests and the live check) ran on this PC after 23:00 and after
 | 2. The header | Done. Each tab: the profile, `[Left]` or `[Right]` in the accent colour, and a Locked/Linked toggle that runs the new command `terminal.setMode` (no default key). A profile that cannot be linked shows plain "Locked" with a tooltip that says why. The "cwd synced" captions are gone; the caption names the folder the session started in, or the exit code |
 | 3. Zero-Hijack | Done. The follow code and `terminal_sync_cwd` are removed, with their captions and tests. `terminal_type_paths` stays |
 | 4. Active Summoning | Done. The rule is a pure class, `TerminalSummoning`, with unit tests |
-| 5. Tab keys | Done. Ctrl+Shift+T, Ctrl+Shift+W, Alt+[ and Alt+] (`when: terminalFocus`); Ctrl+Shift+C and Ctrl+Shift+V in the terminal page |
+| 5. Tab keys | Done. Ctrl+Shift+T, Ctrl+Shift+W, Alt+[ and Alt+] (`when: terminalFocus`); Ctrl+Shift+C copies in the terminal page; Ctrl+Shift+V pastes through the window (the page asks, the window reads the clipboard) |
 | 6. Docs | Done: terminal.md, ui.md, ipc.md, config.md, keybindings.md, core/README.md, CHANGELOG.md |
 
 Commits on the branch, oldest first:
@@ -29,6 +31,10 @@ Commits on the branch, oldest first:
 | 3620054 | window: terminal tabs show their pane and mode, Ctrl+` summons, nothing hijacks |
 | abd373f | terminal page: Ctrl+Shift+C copies and Ctrl+Shift+V pastes |
 | cd266a9 | docs, live check: terminal sessions belong to a pane, and nothing follows by itself |
+| 46c60fc | docs: report of terminal unit 1 and a row in the build log (this report's first version) |
+| d5b7204 | fix: the second Ctrl+` hides after a pane switch; Ctrl+Shift+V pastes through the window |
+| 8c47185 | live check: 11a reads the window's own decision; section 21 drags over the text |
+| 4bd93e4 | window, live check: each step of a terminal paste is logged; section 21 pastes on an empty line |
 
 The handout asked for four pieces (core; window header and summoning;
 keys; docs and live check). The keys piece is split in two: the command
@@ -62,12 +68,13 @@ Window (C#):
 - `ui/CabinetOS.Core/Terminal/CwdSync.cs` became `Debouncer.cs`: only the debouncer stays (the search uses it); the sync rule is gone.
 - New `ui/CabinetOS.Core/Terminal/TerminalBinding.cs` (pane and mode names on the wire), `TerminalSummoning.cs` (the Ctrl+` rule), `TerminalHeader.cs` (the tab texts, the caption, the one-line description for the logs, the most recent session of a pane, the tab cycle).
 - `ui/CabinetOS.Core/Terminal/TerminalProfiles.cs`: only the default profile and the names (no `followsPane`).
-- `ui/CabinetOS/Services/TerminalController.cs`: rewritten around tabs that have a pane, a mode and `linkable`; no sync, no typing state; `SetModeAsync`, `ShowNext`, `MostRecentFor`; the log lines "terminal tab shown", "terminal mode asked", "terminal mode changed".
-- `ui/CabinetOS/MainWindow.Terminal.cs`: rewritten: summoning, the buttons' plain toggle, new terminal for a pane, tab cycling, close that keeps the keyboard, `terminal.setMode`; the log lines "terminal summoned" and "terminal state".
-- `ui/CabinetOS/MainWindow.xaml.cs`, `MainWindow.Commander.cs`: the mode event; no folder hand-over to the terminal on a pane switch or a swap; the snapshot steps `terminal-state:<label>` and `until:terminals:<n>`.
+- `ui/CabinetOS/Services/TerminalController.cs`: rewritten around tabs that have a pane, a mode and `linkable`; no sync, no typing state; `SetModeAsync`, `ShowNext`, `MostRecentFor`, `Paste`; the log lines "terminal tab shown", "terminal mode asked", "terminal mode changed", "terminal paste asked", "terminal pasted".
+- `ui/CabinetOS.Core/Terminal/TerminalPageMessages.cs`: `paste` both ways (the page's request; the window's text for xterm.js).
+- `ui/CabinetOS/MainWindow.Terminal.cs`: rewritten: summoning, the buttons' plain toggle, new terminal for a pane, tab cycling, close that keeps the keyboard, `terminal.setMode`, the clipboard read for Ctrl+Shift+V; the log lines "terminal summoned", "terminal state" and "terminal paste: the clipboard holds no text".
+- `ui/CabinetOS/MainWindow.xaml.cs`, `MainWindow.Commander.cs`: the mode event; no folder hand-over to the terminal on a pane switch or a swap; a pane switch no longer forgets that Ctrl+` gave the keyboard back (d5b7204); the snapshot steps `terminal-state:<label>` and `until:terminals:<n>`.
 - `ui/CabinetOS/Views/ToolDock.xaml`, `ToolDock.xaml.cs`: the badge, the mode toggle or text with its tooltip, the `TerminalFocused` event.
-- `ui/CabinetOS/Assets/xterm/terminal.js`: Ctrl+Shift+C copies the selection and never reaches the shell; Ctrl+Shift+V pastes like Ctrl+V.
-- `ui/CabinetOS.Tests/TerminalTests.cs`: the sync tests replaced by tests of summoning, the most recent session, the tab cycle, the header, the caption, the log line, the wire names and an old config.
+- `ui/CabinetOS/Assets/xterm/terminal.js`: Ctrl+Shift+C copies the selection and never reaches the shell; Ctrl+Shift+V asks the window for the clipboard (`paste`) and pastes the text that comes back.
+- `ui/CabinetOS.Tests/TerminalTests.cs`: the sync tests replaced by tests of summoning, the most recent session, the tab cycle, the header, the caption, the log line, the wire names, an old config and the paste messages.
 - `ui/CabinetOS.Tests/ProtocolTests.cs`, `EndToEndTests.cs`: the new messages; version 16.
 - New `ui/CabinetOS.Tests/TerminalEndToEndTests.cs`: four end-to-end tests (below).
 
@@ -77,7 +84,7 @@ Docs and scripts:
 - `docs/ui.md`: the header, panes and modes, Active Summoning, Zero-Hijack, the keys, the logs, the snapshot steps, the live check's section 21.
 - `docs/ipc.md`: version 16, the new request, event and error code, the examples.
 - `docs/config.md`, `docs/keybindings.md`, `core/README.md`, `CHANGELOG.md`: follow the change.
-- `ui/livecheck/livecheck.ps1`: the new section 21 (below).
+- `ui/livecheck/livecheck.ps1`: the new section 21 (below); 11a's "Ctrl+Backquote hid the terminal" now needs the window's own "terminal summoned" line to say Hide (it only counted the command before, and said True while the dock stayed open).
 - `ui/livecheck/claude-terminal.ps1`: the folder-change step checks that no tab comes to the front and no terminal request goes out, and that the claude session is locked and not linkable (it checked the old sync decision `SkipProfile`). Not run: it sends prompts to the creator's Claude login.
 
 ## Tests and runs
@@ -87,15 +94,20 @@ Docs and scripts:
 | Core, `cargo test --workspace` | 813 passed, 6 ignored | 821 passed, 0 failed, 6 ignored |
 | Core, clippy `-D warnings`, fmt, deny | clean | clean |
 | Window build, `-warnaserror` (Debug and Release) | 0 warnings | 0 warnings |
-| Window, fast run (no end-to-end) | 1219 total, 1175 passed, 44 skipped | 1234 total, 1186 passed, 0 failed, 48 skipped |
-| Window, the 4 new terminal end-to-end tests | (new) | 4 of 4 passed |
-| Window, full run with the end-to-end tests | | 1234 total, 1233 passed, 1 failed: the known flaky shell test (below) |
+| Window, fast run (no end-to-end) | 1219 total, 1175 passed, 44 skipped | 1237 total, 1189 passed, 0 failed, 48 skipped |
+| Window, the 4 new terminal end-to-end tests and the compact overlay's dock test (final code) | (new) | 5 of 5 passed |
+| Window, full run with the end-to-end tests (before the fixes of d5b7204) | | 1234 total, 1233 passed, 1 failed: the known flaky shell test (below) |
+| The live check with real keys (final code, run "e") | 209 True, 0 False on the other coder's branch at 01:02, same PC | 209 True, 0 False, exit code 0, the scroll goal met |
 
 The four new end-to-end tests (`TerminalEndToEndTests`), each with a real
 core and window:
 
 - Ctrl+` in the left pane, then in the right pane: two sessions, `[Left]`
-  and `[Right]`, the dock never hides, the terminal has the keys.
+  and `[Right]`, the dock never hides, the terminal has the keys. Then
+  Ctrl+` back to the pane, a switch to the other pane and back, and the
+  second Ctrl+` hides the dock. With the old line that forgot the
+  hand-back on a pane switch put back, this test fails at "the second
+  Ctrl+` from the pane hid the dock" (checked once, 01:23).
 - With the left session holding the keys: a click in the right pane and
   navigation in both panes; the shown session and the tabs stay the same,
   no tab is shown anew, nothing is typed. The click moves the keyboard to
@@ -125,35 +137,21 @@ you"), so they prove nothing either way.
 
 ### The live check
 
-**Not finished: it stopped in section 11a, before the new section 21.**
-One run, started at 00:15:02 on 2026-10-02 (the Release window and the
-release core of this worktree, built 00:07 and 23:39), output in
-`_io/live-check/run-terminal-unit1.txt`:
+Five runs on this PC, output in `_io/live-check/`:
 
-- Up to section 5c every printed check was True (8 True, 0 False): the
-  scroll goal met (300 frames in 5 s, worst 17.7 ms), F7, F2, Delete, F5
-  with Skip, the dialog that holds Ctrl+`.
-- Section 5c ran with the new code: Ctrl+` opened the terminal with the
-  keyboard, the typed echoes reached the shell, the palette came and went,
-  then Ctrl+` gave the keyboard back to the pane and the second Ctrl+` hid
-  the dock. 5c prints no True or False of its own; its screenshots show the
-  header "pwsh [Left] Locked", the caption "started in src", and the hidden
-  dock (copied to `_io/live-check/terminal-unit1-shots/`).
-- At 00:16:33, in step "11a: the check folder", the window got no keys:
-  the address box and the folder's listing never came. At the next step
-  (00:16:48) the script found the Claude desktop window "Prom Reviews
-  Parser - ORIONDB" in front, stopped, and closed CabinetOS. Between those
-  two moments the step typed a path
-  (`C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live\files\tc`)
-  and pressed Enter. Those keys most likely went into that Claude window,
-  so the path may have been sent as a message in that session. The script
-  checks the front window only between steps, not inside one.
-- Right after, the PC got keyboard or mouse input at about 00:17:36 and
-  00:18:42 while nothing of mine sent any: someone was using the PC. So I
-  did not start the live check again here. Section 21 has not run with real
-  keys yet; it parses in Windows PowerShell 5.1 and PowerShell 7
-  (`build\check-scripts.ps1`), and the same behaviour is covered by the
-  four end-to-end tests above.
+| Run | Build | Result |
+|---|---|---|
+| `run-terminal-unit1.txt`, 00:15 | cd266a9 | Stopped in 11a: the creator was still at the PC, and the Claude desktop window came to the front. 8 True, 0 False before. See "Needs you" |
+| `run-terminal-unit1-b.txt`, 01:03 | cd266a9 | 182 True, 21 False. The dock stayed open after 11a (the fault fixed in d5b7204), and with the terminal's page on screen, UI Automation found no element after it by name: the F5 button of Commander Compact's bar, the top row's menu, the menu's edit mode, Windows' menu. Section 21: Ctrl+Shift+V and Ctrl+Shift+C False, then the script stopped at a stale element |
+| `run-terminal-unit1-c.txt`, 01:25 | d5b7204 | 208 True, 1 False: Ctrl+Shift+V. The dock hid in 11a, every older section passed again, and Ctrl+Shift+C copied |
+| `run-terminal-unit1-d.txt`, 01:47 | + the paste log lines | 208 True, 1 False: Ctrl+Shift+V. The new lines showed the window had pasted all 120 characters: 11a's typed path was still on that shell's prompt, so the pasted command behind it was a parse error. A fault of the check, not of the paste |
+| `run-terminal-unit1-e.txt`, 02:04 | 4bd93e4 | **209 True, 0 False, exit code 0**, the scroll goal met (303 frames in 5 s, worst 20.9 ms) |
+
+Between runs, two short real-key probes (a scratch script, behind the
+consent file and the countdown window) proved Ctrl+Shift+V and Ctrl+V
+with real keys: the page asked, the window pasted 17 to 21 ms later, and
+the pasted command wrote its file, also right after Ctrl+Shift+T and
+Ctrl+Shift+W.
 
 Section 21 is new: the terminal's panes with real keys and the real mouse.
 It checks: Ctrl+` in the left pane (its session, with the keyboard); back
@@ -161,12 +159,13 @@ to the pane, Tab, Ctrl+` in the right pane (a session of its own, the dock
 does not hide); the badges and the right tab's mode through UI Automation;
 a real click and a folder change in the left pane (no tab shown anew, no
 terminal request sent); Ctrl+` there (the left session comes back); Alt+]
-and Alt+[; Ctrl+Shift+T and Ctrl+Shift+W; Ctrl+Shift+V pasting a command
-that writes a file; Clear-Host, an echo, a drag over the text and
-Ctrl+Shift+C (the clipboard must hold the echo); the Locked toggle clicked
-twice; Alt+] as a physical key on the Ukrainian layout; and the two Ctrl+`
-that give the keyboard back and hide the dock. Sections 5c and 11a did not
-change: their Ctrl+` sequences (open, back to the pane, hide) fit the new
+and Alt+[; Ctrl+Shift+T and Ctrl+Shift+W; Ctrl+C to drop a half-typed
+line, then Ctrl+Shift+V pasting a command that writes a file; Clear-Host,
+an echo, a drag over the text and Ctrl+Shift+C (the clipboard must hold the
+echo); the Locked toggle clicked twice; Alt+] as a physical key on the
+Ukrainian layout; and the two Ctrl+` that give the keyboard back and hide
+the dock. When the paste check fails it prints the window's paste lines.
+Sections 5c and 11a kept their keys; their Ctrl+` sequences fit the
 "second Ctrl+`" rule.
 
 ## Decided without you
@@ -183,11 +182,13 @@ Each line: what, because, how to undo.
   handler, give the keys back to the terminal when it had them; the
   end-to-end test `A_pane_click_and_navigation_leave_the_shown_session_and_the_shell_alone`
   asserts the current reading.
-- **The second Ctrl+`.** Ctrl+` in a pane hides the dock only right after
-  Ctrl+` gave the keyboard back to this pane; otherwise, with this pane's
-  session shown, it gives the session the keyboard. Because "the shown tab
-  belongs to that pane" alone would hide a terminal the user just clicked
-  away from. Undo: `TerminalSummoning.Decide`, return `Hide` whenever the
+- **The second Ctrl+`.** Ctrl+` in a pane hides the dock when Ctrl+` gave
+  the keyboard back to this pane and the terminal has not had it since;
+  otherwise, with this pane's session shown, it gives the session the
+  keyboard. Because "the shown tab belongs to that pane" alone would hide
+  a terminal the user just clicked away from. A pane switch in between
+  keeps it (d5b7204; at first it did not, and the live check's dock stayed
+  open). Undo: `TerminalSummoning.Decide`, return `Hide` whenever the
   shown pane is this pane.
 - **The buttons toggle.** The top row's terminal button and the rail's hide
   the dock when it is shown, else act as Ctrl+` in the active pane. No pane
@@ -219,10 +220,17 @@ Each line: what, because, how to undo.
   else the last tab.
 - **`terminal_set_mode` on an ended session** is allowed (it stays listed
   until closed); the same mode again sends no event.
-- **Ctrl+Shift+C and Ctrl+Shift+V** live in the terminal page, not in the
-  keymap: they never leave the page, so the pane's Ctrl+Shift+C
-  (`edit.copyFullPath`) is not touched. Ctrl+Shift+C never reaches the
-  shell, even with no selection.
+- **Ctrl+Shift+C and Ctrl+Shift+V** are caught in the terminal page, not
+  in the keymap, so the pane's Ctrl+Shift+C (`edit.copyFullPath`) is not
+  touched. Ctrl+Shift+C copies in the page (`navigator.clipboard`) and
+  never reaches the shell, even with no selection. Ctrl+Shift+V goes
+  through the window: the browser treats it as its own key, which
+  `WebViewHost` turns off, and the page may not read the clipboard. The
+  window reads it as Ctrl+V in a pane does and sends the text back; over
+  1 MiB gives a notice. Undo: `terminal.js` and `PasteIntoTerminalAsync`.
+  They could also become palette commands (`terminal.copy`,
+  `terminal.paste`) with `terminalFocus` keys, as Article 7 likes; not
+  done, since the handout asked only for the keys.
 - **`terminal.setMode` without arguments** flips the shown tab's mode (the
   palette's way).
 - **`terminal_opened` got `mode` and `linkable`**, so the window draws the
@@ -240,37 +248,47 @@ Each line: what, because, how to undo.
 
 - **The Zero-Hijack reading** above: is a click into a pane allowed to take
   the keyboard from the terminal?
+- **A message may have gone to your Claude session "Prom Reviews Parser -
+  ORIONDB"** at about 00:16:33. The first live check started at 00:15
+  while you were still at the PC; its step "11a: the check folder" typed
+  the path `C:\Users\Admin\AppData\Local\Temp\cabinetos-ui-test\live\files\tc`
+  and pressed Enter while that Claude window was in front. Please look
+  there and delete it if it arrived.
 - **My mistake with the shared PC.** Two reruns of the flaky shell test ran
   while another coder's window run was going (16 CabinetOS.exe). My check
   printed the processes but did not stop the command. From then on every
-  window run waited for zero CabinetOS.exe. The other coder's run may have
-  seen my windows.
+  window run waited for zero CabinetOS.exe, and later for the consent file.
 - **`claude-terminal.ps1` was changed but not run**: it uses your Claude
   login.
 - **The flaky shell test** `The_top_row_fits_924_px...` failed once in the
-  full run here; it is known, outside this unit.
-- **The live check of this unit is still to run**, on a free machine:
-  `ui\livecheck\run-livecheck.ps1` from this worktree (or main after the
-  merge), after the Release builds of the window and the core. Section 21
-  is the new part.
-- **A message may have gone to your Claude session "Prom Reviews Parser -
-  ORIONDB"** at about 00:16:33: the live check's typed path and Enter
-  (see "The live check"). Please look there and delete it if it arrived.
+  full end-to-end run here; it is known, outside this unit.
 
 ## Seen on the way, not changed
 
-- The run's first lines show `Get-FileHash` "not recognized" in
-  `sdk/marketplace/build-index.ps1`. I started the run from a PowerShell 7
-  process, and Windows PowerShell 5.1 then inherits PowerShell 7's module
-  path (`PSModulePath`), so it cannot load its own `Get-FileHash`. Started
-  from a Git Bash or WSL terminal, as the coordinator's command was meant,
-  this should not happen. Section 14 (the marketplace fixtures) would have
-  felt it; the run stopped before.
-- The live check guards the front window only at each step's start. A
-  step that types (`GoPath`: Ctrl+L, a path, Enter) can still type into
-  another program when that program comes to the front inside the step.
-  Checking the front window before each `[Live]::Type` and each Enter would
-  close that gap.
+- **UI Automation and the open terminal.** In run "b" the dock stayed open
+  by a fault, and while the terminal's page was on screen, every lookup by
+  name of an element after it failed: the function-key bar's buttons, the
+  top row's menu rows, the context menu's edit mode, Windows' menu. Those
+  lookups pass with the dock hidden. So a screen reader may also lose
+  those elements while the terminal shows; worth a check with Narrator.
+- **11a's Esc leaves the typed path on the prompt.** After Ctrl+Alt+P the
+  check presses Esc to clear the line, but the path stayed on the pwsh
+  prompt in every run (seen in run "b"'s screenshots of sections 16 and
+  18). PSReadLine's Esc may only close its suggestion there. Section 21 now
+  presses Ctrl+C first; 11a itself is unchanged.
+- **The live check's window log is shared.** Every live check writes to
+  `%TEMP%\cabinetos-ui-test\live`, and the next run deletes it first, so a
+  failed run's log is gone when another coder's run follows. My launcher
+  copied it right after the run; a `-Run` name per run would keep them.
+- **The front-window guard works between steps only.** A step that types
+  (`GoPath`: Ctrl+L, a path, Enter) can type into another program that
+  comes to the front inside the step, as at 00:16. Checking the front
+  window before each `[Live]::Type` and Enter would close that gap.
+- **`Get-FileHash` "not recognized"** at the start of my runs, in
+  `sdk/marketplace/build-index.ps1`. The other coder's run on this PC had
+  no such line, so it comes from how my launcher started Windows
+  PowerShell (from a PowerShell 7 process); clearing `PSModulePath` did not
+  cure it. No check turned False from it.
 
 ## Notes for unit 2 (the prompt hook)
 
