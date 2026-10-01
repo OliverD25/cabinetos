@@ -12,9 +12,9 @@ using Windows.Graphics;
 
 namespace CabinetOS;
 
-// The shell of Phase 16 (the creator's SHELL_REDESIGN.md; docs/ui.md, "The top row", "The breadcrumb row"): one top
-// row that is also the window's drag area, and in each pane a breadcrumb row with Back, Forward and Up. What they
-// decide without a window is in CabinetOS.Core.Shell, with tests.
+// The shell (the creator's SHELL_REDESIGN.md, v2 of 2026-10-01; docs/ui.md, "The top row", "The pane's rows"): one quiet
+// top row that is also the window's drag area, and in each pane a toolbar row and a path row. What they decide without a
+// window is in CabinetOS.Core.Shell, with tests.
 public sealed partial class MainWindow
 {
     private const string ShellTarget = "cabinetos_ui::shell";
@@ -22,12 +22,14 @@ public sealed partial class MainWindow
     // Windows draws the caption buttons this high (TitleBarHeightOption.Standard): the top row is never lower.
     private const double CaptionButtonsHeight = 32;
 
+    // The workspace's name until workspaces exist (docs/ui.md, "The sidebar header").
+    private const string WorkspaceTitle = "Default";
+
     private PaneCrumbs[] _crumbViews = null!;
-    private CommandCenterPlace _centerPlace = new(false, 0, 0);
     private string _dragRegions = "";
 
-    // The workspace until workspaces exist (docs/ui.md, "The top row"): the repository that holds the active folder, for
-    // the pill's branch and Quick Open's folder. The core finds it (workspace_info) whenever the active folder changes.
+    // The workspace until workspaces exist (docs/ui.md, "The sidebar header"): the repository that holds the active folder,
+    // for its branch and Quick Open's folder. The core finds it (workspace_info) whenever the active folder changes.
     private WorkspaceInfoReply? _workspace;
     private string _workspaceFor = "";
     private int _workspaceAsked;
@@ -41,41 +43,54 @@ public sealed partial class MainWindow
             _crumbViews[i].RunCommand = (id, args, trigger) => _router.ExecuteAsync(id, args, trigger);
         }
         MenuButton.Click += (_, _) => _ = _router.ExecuteAsync("menu.show", trigger: "button");
-        WorkspacePill.Click += (_, _) => ShowWorkspaceMenu(fromKeyboard: false);
-        CommandCenter.Click += (_, _) => _ = _router.ExecuteAsync("quickOpen.show", trigger: "button");
+        QuickOpenChip.Click += (_, _) => _ = _router.ExecuteAsync("quickOpen.show", trigger: "button");
         SettingsButton.Click += (_, _) => _ = _router.ExecuteAsync("settings.open", trigger: "button");
         _palette.Opened += UpdatePaletteButton;
         _palette.Closed += UpdatePaletteButton;
-        // The top row's layout: the command center between its clusters, and the drag area around its controls.
+        // The chip says the key Quick Open has now, so a rebinding shows there too.
+        _router.CommandsChanged += () => DispatcherQueue.TryEnqueue(ShowQuickOpenKeys);
+        // The top row's layout: the title up to the chip, and the drag area around its controls.
         TopRowGrid.SizeChanged += (_, _) => LayOutTopRow();
-        TopLeft.SizeChanged += (_, _) => LayOutTopRow();
         TopRight.SizeChanged += (_, _) => LayOutTopRow();
-        CommandCenterFrame.SizeChanged += (_, _) => UpdateDragRegions();
         ShowBranch();
+        UpdateTitle();
     }
 
     // ----- The top row -----
 
     /// <summary>
-    /// Places the command center (<see cref="TopRowLayout"/>): centred in the
-    /// window, clamp(200px, 34%, 380px) wide, never over the clusters beside
-    /// it, hidden below 640 px of window width. Then the drag area follows.
+    /// The title takes the room up to the Quick Open chip and no more
+    /// (<see cref="TopRowLayout.TitleRoom"/>): a long folder name ends with an
+    /// ellipsis, and the chip never hides. Then the drag area follows.
     /// </summary>
     private void LayOutTopRow()
     {
-        var width = RootGrid.ActualWidth;
-        var leftEnd = TopLeft.ActualWidth + TopLeft.Margin.Left;
-        var rightStart = TopRowGrid.ActualWidth - TopRight.ActualWidth;
-        var place = TopRowLayout.Place(width, leftEnd, rightStart);
-        if (place != _centerPlace)
-        {
-            _centerPlace = place;
-            CommandCenterFrame.Visibility = place.Visible ? Visibility.Visible : Visibility.Collapsed;
-            Canvas.SetLeft(CommandCenterFrame, place.Left);
-            CommandCenterFrame.Width = Math.Max(0, place.Width);
-        }
-        Canvas.SetTop(CommandCenterFrame, Math.Max(0, (TopRowGrid.ActualHeight - CommandCenterFrame.Height) / 2));
+        var titleLeft = TopLeft.Padding.Left + MenuButton.ActualWidth + AppTile.ActualWidth + (2 * TopLeft.Spacing);
+        var chipLeft = TopRowGrid.ActualWidth - TopRight.ActualWidth;
+        TitleText.MaxWidth = TopRowLayout.TitleRoom(titleLeft, chipLeft);
         UpdateDragRegions();
+    }
+
+    /// <summary>"CabinetOS · folder": the title follows the active pane's front tab (a folder's name, a tool tab's file).</summary>
+    private void UpdateTitle()
+    {
+        if (_strips is null)
+        {
+            return;
+        }
+        var strip = _strips[_dual ? _active : 0];
+        var name = strip.Count > 0 ? strip.Active.Title : "";
+        var title = TopRowLayout.Title(name);
+        TitleSeparator.Text = title.Length > TopRowLayout.AppName.Length ? TopRowLayout.Separator : "";
+        TitleFolder.Text = title.Length > TopRowLayout.AppName.Length ? name : "";
+    }
+
+    // The chip's key: Quick Open's first binding as the registry has it now, Ctrl+P until the registry is read.
+    private void ShowQuickOpenKeys()
+    {
+        var keys = KeysOf("quickOpen.show") ?? "Ctrl+P";
+        QuickOpenKeys.Text = keys;
+        ToolTipService.SetToolTip(QuickOpenChip, $"Quick Open ({keys}) · type > for commands");
     }
 
     // Windows' caption buttons take the right end of the row: RightInset in physical pixels, once the window shows.
@@ -89,7 +104,7 @@ public sealed partial class MainWindow
     /// <summary>
     /// The top row is the window's drag area (SetTitleBar), except over its
     /// controls: those rectangles pass the pointer through, so a click on the
-    /// menu, the pill, the command center or a view button reaches it.
+    /// menu, the Quick Open chip or a view button reaches it.
     /// </summary>
     private void UpdateDragRegions()
     {
@@ -99,7 +114,7 @@ public sealed partial class MainWindow
         }
         var scale = root.RasterizationScale;
         var rects = new List<RectInt32>();
-        foreach (var element in new FrameworkElement[] { MenuButton, WorkspacePillFrame, CommandCenterFrame, DualButton, TerminalButton, MarketplaceButton, PaletteButton, SettingsButton })
+        foreach (var element in new FrameworkElement[] { MenuButton, QuickOpenChipFrame, DualButton, TerminalButton, MarketplaceButton, PaletteButton, SettingsButton })
         {
             if (element.Visibility != Visibility.Visible || element.ActualWidth <= 0)
             {
@@ -137,7 +152,7 @@ public sealed partial class MainWindow
     {
         _router.RegisterUiHandler("menu.show", invocation => ShowShellMenu(fromKeyboard: invocation.Trigger is not ("button" or "mouse")));
         _router.RegisterUiHandler("settings.open", invocation => OpenSettingsAsync(invocation.RequestId));
-        // Ctrl+K W keeps its binding and now opens the pill's dropdown, so the keyboard reaches it (Article 7).
+        // Ctrl+K W keeps its binding and opens the workspace dropdown, so the keyboard reaches it (Article 7).
         _router.RegisterUiHandler("workspace.switch", invocation => ShowWorkspaceMenu(fromKeyboard: invocation.Trigger is not ("button" or "mouse")));
         _router.RegisterLocal("workspace.openFolder", _ =>
             ShowNotice("Workspaces arrive in a later version. Until then the workspace is the repository that holds the active folder."));
@@ -181,10 +196,11 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// The workspace pill's dropdown, also on Ctrl+K W (workspace.switch):
+    /// The workspace dropdown, on Ctrl+K W (workspace.switch) and the palette:
     /// the workspaces (only "Default" until workspaces exist, with its
-    /// branch), a divider, and "Open folder as workspace…", which says that
-    /// workspaces arrive in a later version.
+    /// branch; picking it goes to its root in the left pane's tab in front),
+    /// a divider, and "Open folder as workspace…", which says that workspaces
+    /// arrive in a later version.
     /// </summary>
     private void ShowWorkspaceMenu(bool fromKeyboard)
     {
@@ -193,15 +209,28 @@ public sealed partial class MainWindow
             FileMenu.Close();
             return;
         }
+        var root = WorkspaceRoot();
         var items = new List<MenuEntry>
         {
-            new(MenuEntryKind.Item, WorkspaceName.Text, "\uE73E", Keys: _workspace?.Branch,
-                Tooltip: _workspace is { Branch: not null } workspace ? workspace.Root : "The only workspace until workspaces arrive"),
+            new(MenuEntryKind.Item, WorkspaceTitle, "\uE73E", root.Length > 0 ? "go.toPath" : null,
+                root.Length > 0 ? CommandArgs.Object(("path", root), ("pane", 0)) : null, Keys: _workspace?.Branch,
+                Tooltip: root.Length > 0 ? root : "The only workspace until workspaces arrive"),
             MenuEntry.Separator,
             new(MenuEntryKind.Item, "Open folder as workspace…", "\uE8DA", "workspace.openFolder"),
         };
-        FileMenu.Show(Below(WorkspacePillFrame), [], items, fromKeyboard, WindowMetrics.Current.DropdownRowHeight);
-        Diag.Info(ShellTarget, "workspace menu shown", new LogField("branch", _workspace?.Branch ?? ""));
+        var (at, width) = WorkspaceMenuPlace();
+        FileMenu.Show(at, [], items, fromKeyboard, WindowMetrics.Current.DropdownRowHeight, width);
+        Diag.Info(ShellTarget, "workspace menu shown", new LogField("branch", _workspace?.Branch ?? ""), new LogField("root", root),
+            new LogField("left", Math.Round(at.X, 1)), new LogField("top", Math.Round(at.Y, 1)), new LogField("width", width is { } w ? Math.Round(w, 1) : null));
+    }
+
+    // Where the workspace dropdown opens: under the top row at the sidebar's left edge, or at the panes' left edge while the
+    // sidebar is hidden (Ctrl+B), at the menu's own width.
+    private (Point At, double? Width) WorkspaceMenuPlace()
+    {
+        var edge = SidebarHost.Visibility == Visibility.Visible && SidebarHost.ActualWidth > 0 ? (FrameworkElement)SidebarHost : MainColumn;
+        var left = edge.TransformToVisual(null).TransformPoint(new Point(0, 0)).X;
+        return (new Point(left, TopBar.ActualHeight), null);
     }
 
     // The point under a top-row control's left edge, in the window's coordinates: where its dropdown opens.
@@ -283,20 +312,14 @@ public sealed partial class MainWindow
         if (changed)
         {
             ShowBranch();
-            Diag.Info(ShellTarget, "workspace pill shows a branch", new LogField("root", workspace?.Root ?? folder),
+            Diag.Info(ShellTarget, "workspace shows a branch", new LogField("root", workspace?.Root ?? folder),
                 new LogField("branch", workspace?.Branch ?? ""));
         }
     }
 
-    // The pill: the workspace's name, and the branch in the mono font when the active folder is in a repository on one.
+    // The workspace's branch, where the shell shows the workspace.
     private void ShowBranch()
     {
-        var branch = _workspace?.Branch;
-        WorkspaceBranch.Text = branch ?? "";
-        WorkspaceBranch.Visibility = branch is null ? Visibility.Collapsed : Visibility.Visible;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(WorkspacePill,
-            branch is null ? $"Workspace {WorkspaceName.Text}" : $"Workspace {WorkspaceName.Text}, branch {branch}");
-        ToolTipService.SetToolTip(WorkspacePill, _workspace is { Branch: not null } workspace ? $"{WorkspaceName.Text} · {workspace.Root}" : WorkspaceName.Text);
     }
 
     // ----- The breadcrumb rows -----
@@ -368,10 +391,18 @@ public sealed partial class MainWindow
             new("label", label),
             new("window", string.Create(CultureInfo.InvariantCulture, $"{RootGrid.ActualWidth:0}x{RootGrid.ActualHeight:0}")),
             new("top_row", Math.Round(TopBar.ActualHeight, 1)),
-            new("command_center", _centerPlace.Visible ? string.Create(CultureInfo.InvariantCulture, $"{_centerPlace.Left:0}+{_centerPlace.Width:0}") : "hidden"),
-            new("left_cluster_end", Math.Round(TopLeft.ActualWidth, 1)),
+            new("title", TitleText.Inlines.OfType<Microsoft.UI.Xaml.Documents.Run>().Aggregate("", (text, run) => text + run.Text)),
+            new("title_trimmed", TitleText.IsTextTrimmed),
+            new("title_right", Math.Round(LeftOf(TitleText) + TitleText.ActualWidth, 1)),
+            new("chip_left", Math.Round(LeftOf(QuickOpenChipFrame), 1)),
+            new("chip_right", Math.Round(LeftOf(QuickOpenChipFrame) + QuickOpenChipFrame.ActualWidth, 1)),
+            new("chip_height", Math.Round(QuickOpenChipFrame.ActualHeight, 1)),
+            new("chip_visible", QuickOpenChipFrame.Visibility == Visibility.Visible && QuickOpenChipFrame.ActualWidth > 0),
+            new("chip_keys", QuickOpenKeys.Text),
             new("right_cluster_start", Math.Round(TopRowGrid.ActualWidth - TopRight.ActualWidth, 1)),
-            new("workspace", WorkspaceName.Text),
+            new("right_cluster_end", Math.Round(LeftOf(SettingsButton) + SettingsButton.ActualWidth, 1)),
+            new("caption_start", Math.Round(LeftOf(CaptionSpace), 1)),
+            new("workspace", WorkspaceTitle),
             new("workspace_root", WorkspaceRoot()),
             new("quick_open", _quickOpen.IsOpen),
             new("quick_open_rows", string.Join("|", _quickOpen.Rows.Take(10).Select(r => r.Folder.Length > 0 ? $"{r.Name} ({r.Folder})" : r.Name))),
@@ -384,7 +415,7 @@ public sealed partial class MainWindow
             new("menu_edit", MenuEditorView.Describe()),
             new("menu_edit_target", MenuEditorView.Model?.TargetName ?? ""),
             new("windows_menu", _windowsMenu.Describe()),
-            new("branch", WorkspaceBranch.Visibility == Visibility.Visible ? WorkspaceBranch.Text : ""),
+            new("branch", _workspace?.Branch ?? ""),
             new("active_pane", _active),
             new("update_pill", UpdatePill.Visibility == Visibility.Visible ? UpdatePillText.Text : ""),
             new("update_dot", MenuUpdateDot.Visibility == Visibility.Visible),
@@ -414,4 +445,8 @@ public sealed partial class MainWindow
         }
         Diag.Info("cabinetos_ui::snapshot", "shell state", [.. fields]);
     }
+
+    // An element's left edge in the window, for the snapshot aid's log.
+    private static double LeftOf(FrameworkElement element) =>
+        element.ActualWidth > 0 ? element.TransformToVisual(null).TransformPoint(new Point(0, 0)).X : 0;
 }

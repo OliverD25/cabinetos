@@ -137,6 +137,8 @@ public static class ThemeMapper
             ["CbCrumbTextBrush"] = Text(0xB3),
             ["CbCrumbSegmentHoverBrush"] = Text(0x1A),
             ["CbFindStrokeBrush"] = Text(0x24),
+            // v2 of the shell redesign (2026-10-01): the folder in the top row's title at 60 %.
+            ["CbTitleFolderBrush"] = Text(0x99),
         };
 
         // The palette's Acrylic alpha is how much luminosity it lays over the blur (0xB8, the design's .72);

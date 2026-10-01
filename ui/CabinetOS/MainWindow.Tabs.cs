@@ -422,7 +422,8 @@ public sealed partial class MainWindow
         ScheduleWindowState();
     }
 
-    // The accent line belongs to the row of the active pane; a tab may move only while the other pane shows.
+    // The accent line belongs to the row of the active pane; a tab may move only while the other pane shows. The top row's
+    // title follows the active pane's tab in front.
     private void UpdateTabRows()
     {
         for (var i = 0; i < _tabViews.Length; i++)
@@ -430,6 +431,7 @@ public sealed partial class MainWindow
             _tabViews[i].ShowsAccent = _dual && i == _active || !_dual && i == 0;
             _tabViews[i].CanMoveToOtherPane = _dual;
         }
+        UpdateTitle();
     }
 
     // The tab in front follows its pane's folder, whatever moved the pane (a click, Back, a lost folder); in the column view

@@ -47,8 +47,8 @@ public sealed partial class MainWindow
         // WinUI's own controls made from now on (dialogs, menus' text boxes) take the theme's control radius too.
         Application.Current.Resources["ControlCornerRadius"] = control;
 
-        // The top row (Phase 16): its height (never lower than Windows' caption buttons), its buttons, the pill, the
-        // command center and the app icon.
+        // The top row: its height (never lower than Windows' caption buttons), its buttons, the Quick Open chip and the app
+        // icon. The pill's and the command center's metrics of Phase 16 size nothing since v2 of the redesign.
         TopRow.Height = new GridLength(Math.Max(m.TopRowHeight, CaptionButtonsHeight));
         AppTile.CornerRadius = WindowMetrics.Inner(4);
         foreach (var button in new[] { MenuButton, DualButton, TerminalButton, MarketplaceButton, PaletteButton, SettingsButton })
@@ -56,13 +56,11 @@ public sealed partial class MainWindow
             button.Width = button.Height = m.TopRowButtonSize;
             button.CornerRadius = control;
         }
-        WorkspacePill.Height = m.WorkspacePillHeight;
-        WorkspacePill.CornerRadius = WorkspacePillFrame.CornerRadius = WindowMetrics.Corners(m.WorkspacePillRadius);
-        CommandCenterFrame.Height = m.CommandCenterHeight;
-        CommandCenterFrame.CornerRadius = WindowMetrics.Corners(m.CommandCenterRadius);
-        CommandCenter.CornerRadius = WindowMetrics.Corners(Math.Max(0, m.CommandCenterRadius - 1));
+        QuickOpenChipFrame.Height = m.QuickOpenChipHeight;
+        QuickOpenChipFrame.CornerRadius = control;
+        QuickOpenChip.CornerRadius = WindowMetrics.Corners(Math.Max(0, m.RadiusControl - 1));
         // Inside the frame's 1 px border: the subtle button style's own 32 px would push the text down and be cut.
-        CommandCenter.Height = Math.Max(0, m.CommandCenterHeight - 2);
+        QuickOpenChip.Height = Math.Max(0, m.QuickOpenChipHeight - 2);
         foreach (var crumbs in _crumbViews)
         {
             crumbs.ApplyMetrics();
@@ -243,7 +241,7 @@ public sealed partial class MainWindow
         // The sizes the metrics set, element by element: two looks compare by this line.
         var named = new (string Name, FrameworkElement Element)[]
         {
-            ("top", TopBar), ("menu", MenuButton), ("tile", AppTile), ("pill", WorkspacePillFrame), ("center", CommandCenterFrame),
+            ("top", TopBar), ("menu", MenuButton), ("tile", AppTile), ("chip", QuickOpenChipFrame),
             ("dual", DualButton), ("settings", SettingsButton), ("body", Body), ("sidebar", SidebarView), ("lefttabs", LeftTabs),
             ("leftcrumbs", LeftCrumbs), ("left", LeftPane), ("righttabs", RightTabs), ("rightcrumbs", RightCrumbs), ("right", RightPane),
             ("fkeys", FkeyBar), ("status", StatusGrid), ("dock", Dock),

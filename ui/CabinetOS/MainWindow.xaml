@@ -16,9 +16,9 @@
             </Grid.RowDefinitions>
 
             <!--
-              The top row (Phase 16; docs/ui.md, "The top row"): the menu, the app icon and the workspace pill on the left,
-              the command center in the middle, the view buttons and Windows' caption buttons on the right. The whole row
-              is the window's drag area except over its controls (MainWindow.Shell.cs, UpdateDragRegions).
+              The top row (v2 of the shell redesign; docs/ui.md, "The top row"): the menu, the app icon and the title
+              "CabinetOS · folder" on the left, the Quick Open chip, the view buttons and Windows' caption buttons on the
+              right. The whole row is the window's drag area except over its controls (MainWindow.Shell.cs, UpdateDragRegions).
             -->
             <Border
                 x:Name="TopBar"
@@ -64,110 +64,70 @@
                             AutomationProperties.AccessibilityView="Raw"
                             Background="{StaticResource CbAppTileBrush}"
                             CornerRadius="4" />
-                        <!-- The accent at 18 % under the button, so its hover fill lies over the accent. -->
-                        <Border
-                            x:Name="WorkspacePillFrame"
+                        <!--
+                          "CabinetOS · folder", the folder of the active pane's front tab at 60 %. Its widest is the room up to
+                          the Quick Open chip (TopRowLayout.TitleRoom): it ends with an ellipsis rather than reach the chip.
+                        -->
+                        <TextBlock
+                            x:Name="TitleText"
                             VerticalAlignment="Center"
-                            Background="{ThemeResource CbWorkspacePillFillBrush}"
-                            CornerRadius="4">
-                            <Button
-                                x:Name="WorkspacePill"
-                                Height="24"
-                                Padding="8,0"
-                                AllowFocusOnInteraction="False"
-                                AutomationProperties.Name="Workspace"
-                                CornerRadius="4"
-                                IsTabStop="False"
-                                Style="{StaticResource CbSubtleButtonStyle}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Ellipse
-                                        Width="8"
-                                        Height="8"
-                                        VerticalAlignment="Center"
-                                        Fill="{ThemeResource CbAccentBrush}" />
-                                    <TextBlock
-                                        x:Name="WorkspaceName"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        FontWeight="SemiBold"
-                                        Foreground="{ThemeResource CbTextPrimaryBrush}"
-                                        Text="Default" />
-                                    <TextBlock
-                                        x:Name="WorkspaceBranch"
-                                        VerticalAlignment="Center"
-                                        FontFamily="{StaticResource CbMonoFont}"
-                                        FontSize="10"
-                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
-                                        Visibility="Collapsed" />
-                                    <FontIcon
-                                        VerticalAlignment="Center"
-                                        FontSize="8"
-                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
-                                        Glyph="&#xE70D;" />
-                                </StackPanel>
-                            </Button>
-                        </Border>
+                            FontSize="12"
+                            IsHitTestVisible="False"
+                            MaxLines="1"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap">
+                            <Run
+                                x:Name="TitleApp"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource CbRowTextBrush}"
+                                Text="CabinetOS" />
+                            <Run x:Name="TitleSeparator" Foreground="{ThemeResource CbCrumbSeparatorBrush}" />
+                            <Run x:Name="TitleFolder" Foreground="{ThemeResource CbTitleFolderBrush}" />
+                        </TextBlock>
                     </StackPanel>
-
-                    <!-- The command center, placed by TopRowLayout: centred, clamp(200px, 34%, 380px), hidden below 640 px. -->
-                    <Canvas x:Name="CenterLayer">
-                        <Border
-                            x:Name="CommandCenterFrame"
-                            Height="24"
-                            Background="{ThemeResource CbControlFillBrush}"
-                            BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
-                            BorderThickness="1"
-                            CornerRadius="4">
-                            <Button
-                                x:Name="CommandCenter"
-                                Padding="8,0"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                HorizontalContentAlignment="Stretch"
-                                AllowFocusOnInteraction="False"
-                                AutomationProperties.Name="Quick Open"
-                                CornerRadius="3"
-                                IsTabStop="False"
-                                Style="{StaticResource CbSubtleButtonStyle}"
-                                ToolTipService.ToolTip="Quick Open (Ctrl+P)">
-                                <Grid ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <FontIcon
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
-                                        Glyph="&#xE721;" />
-                                    <TextBlock
-                                        x:Name="CommandCenterText"
-                                        Grid.Column="1"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
-                                        Text="Default"
-                                        TextTrimming="CharacterEllipsis" />
-                                    <TextBlock
-                                        x:Name="CommandCenterKeys"
-                                        Grid.Column="2"
-                                        VerticalAlignment="Center"
-                                        FontFamily="{StaticResource CbMonoFont}"
-                                        FontSize="11"
-                                        Foreground="{ThemeResource CbHintTextBrush}"
-                                        Text="Ctrl+P" />
-                                </Grid>
-                            </Button>
-                        </Border>
-                    </Canvas>
 
                     <StackPanel
                         x:Name="TopRight"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Orientation="Horizontal">
+                        <!-- The Quick Open chip: a search glyph and its key; it never hides (the title gives way to it). -->
+                        <Border
+                            x:Name="QuickOpenChipFrame"
+                            Height="24"
+                            Margin="0,0,6,0"
+                            VerticalAlignment="Center"
+                            BorderBrush="{ThemeResource CbHairlineBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                            <Button
+                                x:Name="QuickOpenChip"
+                                Height="22"
+                                MinWidth="0"
+                                Padding="8,0"
+                                VerticalAlignment="Stretch"
+                                AllowFocusOnInteraction="False"
+                                AutomationProperties.Name="Quick Open"
+                                CornerRadius="3"
+                                IsTabStop="False"
+                                Style="{StaticResource CbSubtleButtonStyle}"
+                                ToolTipService.ToolTip="Quick Open (Ctrl+P) · type &gt; for commands">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                        Glyph="&#xE721;" />
+                                    <TextBlock
+                                        x:Name="QuickOpenKeys"
+                                        VerticalAlignment="Center"
+                                        FontFamily="{StaticResource CbMonoFont}"
+                                        FontSize="10"
+                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                        Text="Ctrl+P" />
+                                </StackPanel>
+                            </Button>
+                        </Border>
                         <Button
                             x:Name="DualButton"
                             Width="36"

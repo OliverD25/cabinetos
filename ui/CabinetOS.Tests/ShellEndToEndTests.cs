@@ -61,7 +61,7 @@ public class ShellEndToEndTests
                 "tab:close",
                 "cmd:tab.select {\"tab\":8}",
                 "shell:one-tab",
-                // §7: below 640 px the command center hides and the rest stays.
+                // Near the window's least width the Quick Open chip still shows and the title gives way to it.
                 "size:620x700",
                 "wait:500",
                 "shell:narrow",
@@ -70,11 +70,10 @@ public class ShellEndToEndTests
 
             State(logs, "start", state =>
             {
+                // §7: at 924 px in dual mode the top row shows every control and nothing lies over anything else.
                 Assert.Equal(40, state.GetProperty("top_row").GetDouble());
-                var (left, width) = Center(state);
-                Assert.True(width >= 200, $"the command center is {width} px at 924 px");
-                Assert.True(state.GetProperty("left_cluster_end").GetDouble() <= left, "the command center lies over the left cluster");
-                Assert.True(left + width <= state.GetProperty("right_cluster_start").GetDouble(), "the command center lies over the right cluster");
+                Assert.Equal($"CabinetOS · {Path.GetFileName(data)}", state.GetProperty("title").GetString());
+                TopRowFits(state);
                 Assert.Equal(5, state.GetProperty("pane0_count").GetInt32());
             });
             State(logs, "found", state =>
@@ -134,7 +133,7 @@ public class ShellEndToEndTests
             });
             State(logs, "narrow", state =>
             {
-                Assert.Equal("hidden", state.GetProperty("command_center").GetString());
+                TopRowFits(state);
                 Assert.Equal(40, state.GetProperty("top_row").GetDouble());
             });
             Assert.Contains(logs, l => Message(l) == "find opened");
@@ -392,13 +391,17 @@ public class ShellEndToEndTests
         }
     }
 
-    // "left+width" of the command center, as the shell state logs it.
-    private static (double Left, double Width) Center(JsonElement state)
+    // The top row as the shell state logs it: the chip shows at its height, the title ends before it, and the chip ends
+    // before the view buttons, which end before Windows' caption buttons.
+    private static void TopRowFits(JsonElement state)
     {
-        var text = state.GetProperty("command_center").GetString()!;
-        var parts = text.Split('+');
-        Assert.Equal(2, parts.Length);
-        return (double.Parse(parts[0], CultureInfo.InvariantCulture), double.Parse(parts[1], CultureInfo.InvariantCulture));
+        Assert.True(state.GetProperty("chip_visible").GetBoolean(), "the Quick Open chip is not shown");
+        Assert.Equal(24, state.GetProperty("chip_height").GetDouble());
+        Assert.Equal("Ctrl+P", state.GetProperty("chip_keys").GetString());
+        var chipLeft = state.GetProperty("chip_left").GetDouble();
+        Assert.True(state.GetProperty("title_right").GetDouble() <= chipLeft, $"the title lies over the chip at {chipLeft}");
+        Assert.True(state.GetProperty("chip_right").GetDouble() <= state.GetProperty("right_cluster_end").GetDouble(), "the chip lies over the view buttons");
+        Assert.True(state.GetProperty("right_cluster_end").GetDouble() <= state.GetProperty("caption_start").GetDouble() + 0.5, "the view buttons lie over the caption buttons");
     }
 
     private sealed class Run(string root, string exe, string core)

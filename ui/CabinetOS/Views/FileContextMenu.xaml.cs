@@ -65,6 +65,9 @@ public sealed partial class FileContextMenu : UserControl
         Color.FromArgb(0xFF, 0xE0, 0x70, 0x5E),
     ];
 
+    // The menu's width in the markup: the context menu's and the hamburger's.
+    private const double DefaultWidth = 260;
+
     private readonly Storyboard _entrance;
     private double? _rowHeight;
     private string _described = "";
@@ -99,19 +102,24 @@ public sealed partial class FileContextMenu : UserControl
     /// <summary>
     /// Shows the menu at <paramref name="at"/> (window coordinates), kept inside
     /// the window. From the keyboard, the first row shows the focus rectangle.
-    /// The top row's dropdowns pass their own <paramref name="rowHeight"/>
+    /// The shell's dropdowns pass their own <paramref name="rowHeight"/>
     /// (the theme's dropdownRowHeight); the context menu's is menuRowHeight.
+    /// A dropdown anchored to a row's full width passes <paramref name="width"/>
+    /// and opens exactly at <paramref name="at"/>; the others are 260 px wide.
     /// </summary>
-    public void Show(Point at, IReadOnlyList<MenuEntry> strip, IReadOnlyList<MenuEntry> items, bool fromKeyboard = false, double? rowHeight = null)
+    public void Show(Point at, IReadOnlyList<MenuEntry> strip, IReadOnlyList<MenuEntry> items, bool fromKeyboard = false, double? rowHeight = null, double? width = null)
     {
         _rowHeight = rowHeight;
         _described = string.Join("|", items.Where(i => i.Kind == MenuEntryKind.Item).Select(i => i.Title));
+        Panel.Width = width ?? DefaultWidth;
         Build(strip, items);
         Visibility = Visibility.Visible;
         Panel.Measure(new Size(Panel.Width, double.PositiveInfinity));
         var window = XamlRoot?.Size ?? new Size(ActualWidth, ActualHeight);
         // The design clamps x to the window width − 270; y so the whole menu stays visible.
-        var x = Math.Max(4, Math.Min(at.X, window.Width - 270));
+        var x = width is { } wide
+            ? Math.Max(0, Math.Min(at.X, window.Width - wide))
+            : Math.Max(4, Math.Min(at.X, window.Width - 270));
         var y = Math.Max(4, Math.Min(at.Y, window.Height - Panel.DesiredSize.Height - 8));
         Canvas.SetLeft(Panel, x);
         Canvas.SetTop(Panel, y);

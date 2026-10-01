@@ -208,9 +208,9 @@ public sealed partial class MainWindow
             }
         }
         // What the drawer has no use for: the rail (a sidebar's buttons), the top row's buttons for the second pane and the dock,
-        // and the workspace pill, which would run under the buttons on the right at the drawer's narrower widths.
+        // and the Quick Open chip, which would run under the buttons on the right at the drawer's narrower widths (Ctrl+P stays).
         Rail.Visibility = !on && _railLayout ? Visibility.Visible : Visibility.Collapsed;
-        DualButton.Visibility = TerminalButton.Visibility = WorkspacePillFrame.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        DualButton.Visibility = TerminalButton.Visibility = QuickOpenChipFrame.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         // A status bar 345 to 465 px wide keeps what the mode says: the encoding and the palette's keycap give way, the gaps
         // narrow and a long selection text is cut short (its full name is in the list).
         EncodingText.Visibility = PaletteKeycap.Visibility = on ? Visibility.Collapsed : Visibility.Visible;

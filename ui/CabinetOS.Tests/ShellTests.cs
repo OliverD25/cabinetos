@@ -78,44 +78,32 @@ public class ShellTests
 
     // ----- The top row -----
 
-    // The default look's clusters: menu 36 + icon + pill on the left; five 36 px buttons, a divider and
-    // Windows' three 46 px caption buttons on the right.
-    private const double DefaultLeftEnd = 8 + 36 + 8 + 16 + 8 + 150;
-    private const double DefaultRight = (5 * 36) + 13 + (3 * 46);
+    [Theory]
+    [InlineData("fileforge", "CabinetOS · fileforge")]
+    [InlineData("C:", "CabinetOS · C:")]
+    [InlineData("README.md", "CabinetOS · README.md")]
+    [InlineData("", "CabinetOS")]
+    [InlineData("   ", "CabinetOS")]
+    [InlineData(null, "CabinetOS")]
+    public void The_title_is_the_app_and_the_folder_of_the_active_pane_s_front_tab(string? folder, string expected) =>
+        Assert.Equal(expected, TopRowLayout.Title(folder));
 
     [Fact]
-    public void At_924_px_the_command_center_is_at_least_200_px_and_covers_neither_cluster()
+    public void The_title_gives_way_to_the_chip_and_the_chip_never_hides()
     {
-        var place = TopRowLayout.Place(924, DefaultLeftEnd, 924 - DefaultRight);
+        // The default look at 924 px: menu 36 and icon 16 with 8 px between, from 4 px; the chip starts where the right
+        // cluster does (five 36 px buttons, a 13 px divider, Windows' three 46 px caption buttons, the chip about 76 px).
+        const double titleLeft = 4 + 36 + 8 + 16 + 8;
+        const double chipLeft = 924 - ((5 * 36) + 13 + (3 * 46) + 76 + 6);
+        Assert.Equal(chipLeft - TopRowLayout.Gap - titleLeft, TopRowLayout.TitleRoom(titleLeft, chipLeft));
+        Assert.True(TopRowLayout.TitleRoom(titleLeft, chipLeft) > 150, "924 px leave the title room for a folder's name");
 
-        Assert.True(place.Visible);
-        Assert.True(place.Width >= 200, $"{place.Width}");
-        Assert.True(place.Left >= DefaultLeftEnd + TopRowLayout.Gap, $"{place.Left}");
-        Assert.True(place.Left + place.Width <= 924 - DefaultRight - TopRowLayout.Gap, $"{place.Left + place.Width}");
-    }
-
-    [Fact]
-    public void Below_640_px_the_command_center_hides()
-    {
-        Assert.False(TopRowLayout.Place(639, 60, 600).Visible);
-        Assert.False(TopRowLayout.Place(400, 10, 390).Visible);
-        // At 640 px it shows when the clusters leave room for it.
-        Assert.True(TopRowLayout.Place(640, 60, 600).Visible);
-    }
-
-    [Fact]
-    public void A_wide_window_centres_a_box_of_at_most_380_px_and_a_crowded_one_hides_it()
-    {
-        var wide = TopRowLayout.Place(1600, DefaultLeftEnd, 1600 - DefaultRight);
-        Assert.Equal((380.0, 610.0), (wide.Width, wide.Left));
-        Assert.Equal(0.34 * 1000, TopRowLayout.PreferredWidth(1000), 6);
-        Assert.Equal((200.0, 380.0), (TopRowLayout.PreferredWidth(300), TopRowLayout.PreferredWidth(3000)));
-        // 700 px leaves a narrower box between the clusters; 660 px less than the least width: hidden, nothing overlaps.
-        var narrow = TopRowLayout.Place(700, DefaultLeftEnd, 700 - DefaultRight);
-        Assert.True(narrow.Visible);
-        Assert.True(narrow.Width is >= TopRowLayout.LeastWidth and < 200, $"{narrow.Width}");
-        Assert.True(narrow.Left >= DefaultLeftEnd + TopRowLayout.Gap && narrow.Left + narrow.Width <= 700 - DefaultRight - TopRowLayout.Gap);
-        Assert.False(TopRowLayout.Place(660, DefaultLeftEnd, 660 - DefaultRight).Visible);
+        // A window too narrow for any title: the title gets no room, nothing lies over the chip.
+        Assert.Equal(0, TopRowLayout.TitleRoom(titleLeft, titleLeft + 4));
+        Assert.Equal(0, TopRowLayout.TitleRoom(titleLeft, 10));
+        // The window's least width keeps the chip and the buttons: 600 px hold both clusters.
+        Assert.Equal(600, TopRowLayout.MinWindowWidth);
+        Assert.True(TopRowLayout.TitleRoom(titleLeft, TopRowLayout.MinWindowWidth - ((5 * 36) + 13 + (3 * 46) + 76 + 6)) >= 0);
     }
 
     [Fact]

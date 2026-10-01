@@ -251,8 +251,8 @@ public sealed partial class MainWindow : Window
         UpdateCaptionColors();
         if (AppWindow.Presenter is OverlappedPresenter presenter && RootGrid.XamlRoot is { } root)
         {
-            // 600 px, so the window can be narrower than the 640 px under which the command center hides (Phase 16).
-            presenter.PreferredMinimumWidth = (int)(600 * root.RasterizationScale);
+            // The top row and both panes' toolbars fit 600 px (TopRowLayout); the window never gets narrower.
+            presenter.PreferredMinimumWidth = (int)(Core.Shell.TopRowLayout.MinWindowWidth * root.RasterizationScale);
             presenter.PreferredMinimumHeight = (int)(480 * root.RasterizationScale);
         }
         FitCaptionSpace();

@@ -96,6 +96,8 @@
             <SolidColorBrush x:Key="CbCrumbTextBrush" Color="#B3FFFFFF" />
             <SolidColorBrush x:Key="CbCrumbSegmentHoverBrush" Color="#1AFFFFFF" />
             <SolidColorBrush x:Key="CbFindStrokeBrush" Color="#24FFFFFF" />
+            <!-- v2 of the shell redesign: the folder in the top row's title (60 %). -->
+            <SolidColorBrush x:Key="CbTitleFolderBrush" Color="#99FFFFFF" />
 
             <!-- A 1 px lighter bottom edge, as on a Fluent text field. -->
             <LinearGradientBrush x:Key="CbFieldStrokeBrush" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,2">
