@@ -203,6 +203,39 @@ task, waits for the run's `DONE.md`, and copies the run's output into
 `_io\live-check` here as `run-<time>-<machine>.txt`. The machine must be
 logged in and unlocked; its own countdown window shows there first. The
 frame numbers of such a run come from that machine's graphics card.
+`-Branch <name>` sends another branch than `main` (a coder's worktree sends
+its own; it must be a fast-forward of what the clone has), and `-Io <folder>`
+names where the output lands.
+
+What else the machine needs, and what the script and the check do about it
+(the portability pass of 2026-10-01,
+[log/2026-10-01/live-check-portability-report.md](log/2026-10-01/live-check-portability-report.md)):
+
+- **PowerShell 7** (`pwsh`): the terminal's default profile, which the
+  terminal steps type into. The check itself runs in Windows PowerShell 5.1.
+- **No long-path setting.** Windows' `LongPathsEnabled` may stay 0, the
+  default: the edge fixture writes its 255-unit name through the `\\?\`
+  form, which Windows PowerShell's .NET needs for a path of 260 characters
+  or more when the setting is off.
+- **The bench's 100,000-entry folder**, `%TEMP%\cabinetos-bench`, which
+  `cargo bench` makes where Rust is: the script runs `bench-folders.ps1`
+  there first, which makes the same folders with the same names (a minute
+  or two the first time; a folder with its `.complete` marker is left
+  alone). `livecheck.ps1` stops when the folder is missing, and checks that
+  the PageDown hold runs in it.
+- **The Agent plugin**, `sdk\extensions\agent\plugin\plugin.wasm`, which
+  `build-extensions.ps1` builds where Rust is: the script copies the
+  committed `sdk\fixtures\plugins\agent\plugin.wasm` there when the place
+  is empty or the fixture is newer. It is the same plugin, with the same
+  `plugin.json`.
+- **AppData hidden or not.** A stock Windows hides AppData, so every folder
+  of a run (they are under `%TEMP%`) is under a hidden folder, and the tree
+  lists hidden folders only with `panes.showHidden`. Section 13 turns that
+  setting on while it runs and takes it out at its end.
+- **No window of an earlier run.** A run deletes its own folder,
+  `%TEMP%\cabinetos-ui-test\live`, before it starts the window. A window
+  that a stopped run left open holds files in that folder (its logs, its
+  WebView2 data, its terminal's shell), so it must be closed first.
 
 `run-livecheck.ps1` first shows the countdown window of `countdown.ps1`
 (5 seconds, a sound, always on top: "The live check takes the keyboard and
@@ -213,7 +246,14 @@ so nobody is caught typing; then runs `livecheck.ps1 -Strict`, keeps the output 
 names another folder, for a git worktree elsewhere), and at the end writes
 `DONE.md` there and opens it in Notepad: the sign, on a PC where someone is
 waiting, that the keyboard and mouse are free again. The script types into a
-name box only after the window's "rename box shown" line, reads the
+name box only after the window's "rename box shown" line; into the address
+box and the palette only after their command's "command executed" line,
+into the find box after "find opened", Quick Open after "quick open shown",
+and the terminal after "a page has the keyboard"; and it presses the next
+key after a change of folder only once the pane's "listing shown" line is
+there. Each such wait is bounded and never shorter than the fixed sleep the
+step had before, so a fast machine keeps its rhythm and a slower one waits.
+It reads the
 selection from its "selection shown" line, stops when a window of another
 process comes to the front (a flyout of the window's own process is fine),
 and, where a global hotkey of another program takes Alt+F1 (as the Claude
@@ -228,7 +268,9 @@ themes under `%TEMP%\cabinetos-ui-test\<run>` and writes its screenshots to
 defaults point at `ui\CabinetOS\bin\x64\Release\…` and `core\target\release`),
 and `livecheck.ps1` needs the 100,000-entry folder that
 `cargo bench -p cabinetos-fs --bench list_directory` makes in
-`%TEMP%\cabinetos-bench`. `livecheck.ps1` leaves one file in the Recycle
+`%TEMP%\cabinetos-bench` (`ui\livecheck\bench-folders.ps1` makes the same
+folders where there is no Rust); it stops when the folder is missing.
+`livecheck.ps1` leaves one file in the Recycle
 Bin, `cabinetos-live-check-delete-me.txt` (the Delete check), and one of
 its own files on Windows' clipboard (section 18).
 
