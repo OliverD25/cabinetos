@@ -257,6 +257,8 @@ function Analyze($run) {
           to = if ($shown) { Split-Path -Leaf $shown.fields.path } else { $null }
           tab_shown_ms = if ($shown) { Ms $command.at $shown.at } else { $null }
           listing_first_frame_ms = if ($listing) { $listing.fields.first_frame_ms } else { $null }
+          # The pane kept the tab's listing (docs/ui.md, "Tabs"): the rows were bound again, the core was not asked.
+          kept = if ($listing) { $listing.fields.kept } else { $null }
           list_requests = $lists
           frames = Frames $ui $command.at $command.at.AddMilliseconds(1000)
         }
@@ -345,12 +347,20 @@ function Analyze($run) {
       $shownView = $ui | Where-Object { $_.message -eq 'marketplace shown' } | Select-Object -First 1
       $refresh = $ui | Where-Object { $_.message -eq 'request sent' -and $_.fields.request -eq 'marketplace_refresh' } | Select-Object -First 1
       $cards = $ui | Where-Object { $_.message -eq 'marketplace cards shown' } | Select-Object -First 1
+      # Since the cards come in parts (docs/ui.md, "The marketplace"): the last slice; a build before that has no such line.
+      $complete = $ui | Where-Object { $_.message -eq 'marketplace cards complete' } | Select-Object -First 1
       $r.view_shown_ms = if ($command -and $shownView) { Ms $command.at $shownView.at } else { $null }
       $r.refresh_round_trip_ms = if ($refresh) { Pair $ui $refresh.request_id } else { $null }
       $r.refresh_core_ms = if ($refresh) { Handled $core $refresh.request_id } else { $null }
       $r.cards_shown_ms = if ($command -and $cards) { Ms $command.at $cards.at } else { $null }
       $r.cards = if ($cards) { $cards.fields.cards } else { $null }
-      if ($command) { $r.frames = Frames $ui $command.at $(if ($cards) { $cards.at } else { $command.at.AddMilliseconds(1500) }) }
+      $r.first_make_ms = if ($cards) { $cards.fields.make_ms } else { $null }
+      $r.cards_complete_ms = if ($command -and $complete) { Ms $command.at $complete.at } else { $null }
+      $r.cards_complete = if ($complete) { $complete.fields.cards } else { $null }
+      $r.slices = if ($complete) { $complete.fields.slices } else { $null }
+      $r.make_ms = if ($complete) { $complete.fields.make_ms } else { $null }
+      $last = if ($complete) { $complete } else { $cards }
+      if ($command) { $r.frames = Frames $ui $command.at $(if ($last) { $last.at } else { $command.at.AddMilliseconds(1500) }) }
     }
     'idle-start' { $r.idle = $run.Idle }
     'session' { $r.idle = $run.Idle }
