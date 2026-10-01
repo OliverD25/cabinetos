@@ -6,7 +6,9 @@
 # keyboard and mouse in time; -NoCountdown skips it for a run that starts while nobody is there.
 # -MinimizeOthers first minimizes every other window, for a machine that runs the check on its own (the
 # remote live check): a window left in front there, a terminal for example, would stop the check at once.
-param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown, [switch]$MinimizeOthers)
+# -Virtual passes on to livecheck.ps1, for a virtual machine: the checks that judge frame times answer "not measured in
+# a VM", and DONE.md counts them apart, neither True nor False.
+param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown, [switch]$MinimizeOthers, [switch]$Virtual)
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
@@ -19,13 +21,16 @@ if (-not $NoCountdown) {
 # front, and that one would cover the check's window.
 if ($MinimizeOthers) { (New-Object -ComObject Shell.Application).MinimizeAll(); Start-Sleep -Milliseconds 800 }
 $started = Get-Date
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\livecheck.ps1" -Strict 2>&1 | ForEach-Object { "$_" } | Out-File -LiteralPath $out -Encoding UTF8
+$checkArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$PSScriptRoot\livecheck.ps1", '-Strict')
+if ($Virtual) { $checkArgs += '-Virtual' }
+& powershell.exe @checkArgs 2>&1 | ForEach-Object { "$_" } | Out-File -LiteralPath $out -Encoding UTF8
 $code = $LASTEXITCODE
 $ended = Get-Date
 $lines = Get-Content $out
 $goal = ($lines | Where-Object { $_ -like 'scroll goal*' } | Select-Object -Last 1)
 $stop = ($lines | Where-Object { $_ -match 'STOP:|STRICT:' } | Select-Object -Last 1)
 $falses = @($lines | Where-Object { $_ -match ': False$' })
+$unmeasured = @($lines | Where-Object { $_ -match 'not measured in a VM' })
 $done = @(
   "# Live check finished: you can use the keyboard and mouse again",
   "",
@@ -35,6 +40,8 @@ $done = @(
   "- $(if ($stop) { "Last stop line: $stop" } else { 'No stop line: the script ran to its end.' })",
   "- Checks that answered False: $(if ($falses.Count) { $falses.Count } else { 'none' })"
 ) + @($falses | ForEach-Object { "  - $_" }) + @(
+  $(if ($Virtual) { "- Checks not measured in a VM (they judge frame times; neither True nor False): $($unmeasured.Count)" })
+) + @(
   "",
   "Full output: $out"
 )

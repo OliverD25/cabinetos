@@ -12,14 +12,17 @@
 # It prints the frame table of the 5 s PageDown in that folder and the line "scroll goal (no frame
 # over 33 ms, under 5 % over 20 ms) met: yes|no", with the machine's CPU load during those seconds.
 # With -Strict it exits 1 when the goal was not met (off by default: the numbers depend on the
-# machine being quiet). docs/ui.md, "Scrolling".
+# machine being quiet). docs/ui.md, "Scrolling". With -Virtual (a virtual machine, whose frames come from a virtual
+# graphics card) the checks that judge frame times print their numbers and answer "not measured in a VM" instead of
+# yes or no, and -Strict does not judge them; every other check stays as strict.
 param(
   [string]$Exe = "$PSScriptRoot\..\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64\CabinetOS.exe",
   [string]$Core = "$PSScriptRoot\..\..\core\target\release\cabinetos-core.exe",
   [string]$ShotDir = "$env:TEMP\cabinetos-ui-test\live-shots",
   [string]$Run = "live",
   [string]$Tools = "$PSScriptRoot\..\..\sdk\tools",
-  [switch]$Strict
+  [switch]$Strict,
+  [switch]$Virtual
 )
 $ErrorActionPreference = 'Stop'
 $Exe = [System.IO.Path]::GetFullPath($Exe)
@@ -445,7 +448,7 @@ $script:scrollGoal = $frames -gt 0 -and $over33 -eq 0 -and $share -lt 5
 $mine = ($loads | Where-Object { $_.Id -eq $p.Id } | ForEach-Object { $_.Percent } | Measure-Object -Sum).Sum
 $busiest = $loads | Where-Object { $_.Id -ne $p.Id -and $_.Name -ne 'Idle' } | Sort-Object Percent -Descending | Select-Object -First 3
 "scroll goal (no frame over 33 ms, under 5 % over 20 ms) met: {0}; {1} frames in {2} s, {3} over 20 ms ({4:N1} %), {5} over 33 ms, worst {6} ms; CPU during the hold: machine {7:N1} %, this window {8:N1} %, busiest others: {9}" -f `
-  $(if ($script:scrollGoal) { 'yes' } else { 'no' }), $frames, $seconds.Count, $over20, $share, $over33, $worst, (100 * ($cpuAfter[0] - $cpuBefore[0]) / $allTicks), $mine, (($busiest | ForEach-Object { '{0} {1:N1} %' -f $_.Name, $_.Percent }) -join ', ')
+  $(if ($Virtual) { 'not measured in a VM' } elseif ($script:scrollGoal) { 'yes' } else { 'no' }), $frames, $seconds.Count, $over20, $share, $over33, $worst, (100 * ($cpuAfter[0] - $cpuBefore[0]) / $allTicks), $mine, (($busiest | ForEach-Object { '{0} {1:N1} %' -f $_.Name, $_.Percent }) -join ', ')
 
 # ----- Phase 5b: the file keys, with real key presses, checked on disk -----
 $files = "$root\files"; $src = "$files\src"; $dst = "$files\dst"
@@ -2167,4 +2170,4 @@ if ($job) {
   "and in the core log:"; Get-Content "$root\logs\core.*.jsonl" | Where-Object { $_ -match $id }
 }
 Step "done"
-if ($Strict -and -not $script:scrollGoal) { "STRICT: the scroll goal was not met"; exit 1 }
+if ($Strict -and -not $Virtual -and -not $script:scrollGoal) { "STRICT: the scroll goal was not met"; exit 1 }

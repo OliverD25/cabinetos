@@ -235,7 +235,18 @@ What else the machine needs, and what the script and the check do about it
 - **No window of an earlier run.** A run deletes its own folder,
   `%TEMP%\cabinetos-ui-test\live`, before it starts the window. A window
   that a stopped run left open holds files in that folder (its logs, its
-  WebView2 data, its terminal's shell), so it must be closed first.
+  WebView2 data, its terminal's shell), so it must be closed first. A run
+  that dies on an error closes its own window and core (a `trap` in
+  `livecheck.ps1`), with a STOP line that `DONE.md` shows.
+
+**A virtual machine** (the VirtualBox VM, for example) runs the check with
+`-Virtual` (`run-livecheck.ps1 -Virtual` passes it on to `livecheck.ps1`).
+Its frames come from a virtual graphics card, so the checks that judge frame
+times, today the scroll goal line ("no frame over 33 ms, under 5 % over
+20 ms"), print their numbers and answer "not measured in a VM" instead of
+yes or no; `-Strict` does not judge them, and `DONE.md` counts them apart,
+neither True nor False. Every other check stays as strict as on a real
+machine.
 
 `run-livecheck.ps1` first shows the countdown window of `countdown.ps1`
 (5 seconds, a sound, always on top: "The live check takes the keyboard and
