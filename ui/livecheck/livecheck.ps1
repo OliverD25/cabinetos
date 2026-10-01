@@ -215,6 +215,64 @@ function SelectionText {
   return $text
 }
 
+# The window's log says when the window is ready for the next key: the address box and the palette have the keyboard
+# once their command's "command executed" line is there (the handler opens them right after it, on the same call), the
+# find box once "find opened" is, Quick Open once "quick open shown" is, the terminal once "a page has the keyboard"
+# names it, and a folder is in the pane once its "listing shown" line is. UiCount counts the lines that hold $pattern.
+# WaitUi polls the log every 50 ms until more than $before lines hold it (and one of the new ones passes $until, when
+# given), for at most $maxMs from $since, and gives the newest such line, or $null. It never returns before $minMs have
+# passed since $since: where the line comes at once the run keeps the rhythm of the fixed sleep it had, and where it
+# comes late the run waits for it.
+function UiCount([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match $pattern }).Count }
+function WaitUi([string]$pattern, [int]$before, [datetime]$since, [int]$minMs = 0, [int]$maxMs = 5000, [scriptblock]$until = $null) {
+  $found = $null
+  while ($true) {
+    $lines = @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match $pattern })
+    if ($lines.Count -gt $before) {
+      $new = @($lines | Select-Object -Skip $before | ForEach-Object { $_ | ConvertFrom-Json })
+      $hits = @(if ($until) { $new | Where-Object { & $until $_ } } else { $new })
+      if ($hits.Count -gt 0) { $found = $hits[$hits.Count - 1]; break }
+    }
+    if (((Get-Date) - $since).TotalMilliseconds -ge $maxMs) { break }
+    Start-Sleep -Milliseconds 50
+  }
+  $rest = $minMs - ((Get-Date) - $since).TotalMilliseconds
+  if ($rest -gt 0) { Start-Sleep -Milliseconds ([int]$rest) }
+  $found
+}
+# Ctrl+L, the path once the address box has the keyboard, Enter, and back once the pane shows the folder (or says it
+# cannot list it), never sooner than $settleMs after Enter.
+function GoPath([string]$path, [int]$settleMs = 1000) {
+  $box = '"command executed".*"command":"go\.toPath".*"trigger":"key"'
+  $before = UiCount $box
+  $at = Get-Date
+  [Live]::Press($VK.Ctrl, $VK.L)
+  if (-not (WaitUi $box $before $at 400)) { "the address box did not report itself within 5 s" }
+  [Live]::Type($path)
+  $shown = '"(listing shown|cannot list a folder)"'
+  $before = UiCount $shown
+  $at = Get-Date
+  [Live]::Press($VK.Enter)
+  $want = $path.TrimEnd('\')
+  if (-not (WaitUi $shown $before $at $settleMs 8000 { param($line) $line.fields.path -eq $want })) { "the window logged no listing of $path within 8 s" }
+}
+# A key that opens something the next keys type into, back once the window's line for it is there, never sooner than
+# $minMs (the sleep the step had).
+function PressUntil([scriptblock]$press, [string]$pattern, [int]$minMs, [int]$maxMs = 5000, [string]$what = 'it') {
+  $before = UiCount $pattern
+  $at = Get-Date
+  & $press
+  if (-not (WaitUi $pattern $before $at $minMs $maxMs)) { "$what did not report itself within $([int]($maxMs / 1000)) s" }
+}
+function OpenPalette([int]$minMs = 500) { PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P) } '"command executed".*"command":"palette\.show"' $minMs -what 'the palette' }
+# A key that takes a pane to a folder: back once its "listing shown" line is there, never sooner than $minMs.
+function PressToFolder([scriptblock]$press, [string]$path, [int]$minMs) {
+  $listings = UiCount '"listing shown"'
+  $at = Get-Date
+  & $press
+  [void](WaitUi '"listing shown"' $listings $at $minMs 5000 { param($line) $line.fields.path -eq $path })
+}
+
 $root = "$env:TEMP\cabinetos-ui-test\$Run"
 # A fresh configuration every run: saved last folders must not change where Enter lands.
 if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
@@ -278,7 +336,7 @@ $scale = [Live]::GetDpiForWindow($h) / 96.0
 Shot $h "$ShotDir\phase-5-window.png"
 
 Step "palette, type dual"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+OpenPalette 500
 [Live]::Type("dual"); Start-Sleep -Milliseconds 900
 Shot $h "$ShotDir\phase-5-palette.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 400
@@ -297,7 +355,7 @@ Step "enter the selected folder, then backspace"
 [Live]::Press($VK.Back); Start-Sleep -Milliseconds 900
 
 Step "rebind View: Toggle Sidebar through the pencil"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+OpenPalette 500
 [Live]::Type("toggle sidebar"); Start-Sleep -Milliseconds 900
 $uiaRoot = [System.Windows.Automation.AutomationElement]::FromHandle($h)
 $byName = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Change keybinding")
@@ -322,8 +380,7 @@ Shot $h "$ShotDir\rebound.png"
 Shot $h "$ShotDir\palette-closed-under-the-mouse.png"
 
 Step "go to the bench folder"
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$env:TEMP\cabinetos-bench"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
+GoPath "$env:TEMP\cabinetos-bench" 1200
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 200
 Step "enter 100000"
@@ -372,11 +429,9 @@ Set-Content -LiteralPath "$src\notes.md" -Value "# notes" -NoNewline
 Set-Content -LiteralPath "$src\cabinetos-live-check-delete-me.txt" -Value "bye" -NoNewline
 
 Step "left pane: the source folder; right pane: the destination"
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($src); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath $src 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($dst); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath $dst 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 
 Step "F7: a new folder, named in place"
@@ -426,13 +481,13 @@ $log = Get-Content "$root\logs\ui.*.jsonl"
 
 # ----- Phase 5c: keys inside WebView2 pages need real key presses -----
 Step "Ctrl+Backquote: the terminal opens and takes the keyboard"
-[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Seconds 3
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Backquote) } '"a page has the keyboard".*"page":"terminal"' 3000 15000 -what 'the terminal'
 # Typed as Unicode key events (the touch keyboard's way): the shell must echo live-5c.
 [Live]::Type("echo live-5c"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\phase-5c-terminal-live.png"
 
 Step "Ctrl+Shift+P from the terminal: the page passes it to the window"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 700
+OpenPalette 700
 Shot $h "$ShotDir\phase-5c-palette-from-terminal.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
 Step "Esc closed the palette; the keyboard is back in the terminal"
@@ -448,24 +503,23 @@ Shot $h "$ShotDir\phase-5c-terminal-hidden.png"
 # Since Phase 16 Ctrl+F finds in the pane (section 16); the search through subfolders is the Search view, which the
 # classic layout shows in the sidebar's place while it is asked for (Ctrl+Shift+F).
 Step "Ctrl+Shift+F: the Search view; search 'report', Down to the hit, Enter to go there"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.F); Start-Sleep -Milliseconds 600
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.F) } '"command executed".*"command":"view\.showSearch"' 600 -what 'the Search view'
 [Live]::Type("report"); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\phase-5c-search-live.png"
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 500
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
 Shot $h "$ShotDir\phase-5c-search-opened.png"
 Step "Ctrl+Shift+F, type, Esc: back to the folder, the sidebar shows its folders again"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.F); Start-Sleep -Milliseconds 600
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.F) } '"command executed".*"command":"view\.showSearch"' 600 -what 'the Search view'
 [Live]::Type("readme"); Start-Sleep -Milliseconds 900
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
 Shot $h "$ShotDir\phase-5c-search-left.png"
 
 Step "Enter on readme.md: Markdown Preview in the other pane (tools from sdk\tools)"
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($src); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath $src 1000
 # Rows: Reports 2026, readme.md, report.txt.
 [Live]::Press($VK.Home); [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
-[Live]::Press($VK.Enter); Start-Sleep -Seconds 3
+PressUntil { [Live]::Press($VK.Enter) } '"tool ready"' 3000 15000 -what 'the preview'
 Shot $h "$ShotDir\phase-5c-markdown-live.png"
 Step "Ctrl+K V on readme.md: the same file, in the open preview"
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
@@ -491,8 +545,7 @@ Set-Content -LiteralPath "$tc\run.cmd" -Value "echo this must never run" -NoNewl
 
 Step "11a: the check folder"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($tc); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath $tc 1000
 
 Step "11a: Num *: every file marked, the folders not"
 [Live]::Press($VK.Home); [Live]::Press($VK.NumMultiply); Start-Sleep -Milliseconds 500
@@ -533,7 +586,7 @@ function WaitFolderSizeLine([string]$message, [int]$before, [int]$seconds = 10) 
   }
 }
 function ToggleFolderSizesFromPalette {
-  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  OpenPalette 500
   [Live]::Type("toggle folder sizes"); Start-Sleep -Milliseconds 900
   [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 }
@@ -554,8 +607,7 @@ Step "19b: Ctrl+L to a folder with two folders: both are counted with no key"
 $asked19 = @(FolderSizeLines 'folder sizes asked').Count
 $counted19 = @(FolderSizeLines 'folder sizes counted').Count
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($fs19); [Live]::Press($VK.Enter)
+GoPath $fs19 0
 $ask19 = WaitFolderSizeLine 'folder sizes asked' $asked19
 $done19 = WaitFolderSizeLine 'folder sizes counted' $counted19
 Start-Sleep -Milliseconds 500
@@ -568,8 +620,7 @@ $asksWhileOn = @(FolderSizeLines 'folder sizes asked').Count
 ToggleFolderSizesFromPalette
 "19b: panes.folderSizes is false in the file again: $((FolderSizesInFile) -eq $false)"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($tc); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath $tc 1000
 "19b: with the setting off, opening the folder of 11a asked for nothing: $(@(FolderSizeLines 'folder sizes asked').Count -eq $asksWhileOn)"
 
 Step "11a: F3 on run.cmd: the status bar says no tool shows it; nothing runs it"
@@ -628,7 +679,7 @@ $toggles = ToggleCount
 
 Step "11a: close the preview, so the later sections find two file panes"
 $closed = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+OpenPalette 500
 [Live]::Type("Close Editor"); Start-Sleep -Milliseconds 700
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 800
 "the preview closed: $(@(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"tool closed"' }).Count -gt $closed)"
@@ -645,7 +696,7 @@ if ([Live]::ForegroundPid() -ne [uint32]$p.Id) {
   "Alt+F1 is taken by another program on this PC ($($taker.ProcessName), '$($taker.MainWindowTitle)'): it never reached the window; the drive list is opened from the palette instead"
   [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
   [void][Live]::SetForegroundWindow($h); Start-Sleep -Milliseconds 400
-  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  OpenPalette 500
   [Live]::Type("Choose Drive for Left"); Start-Sleep -Milliseconds 700
   [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 700
 }
@@ -684,11 +735,9 @@ Set-Content -LiteralPath "$cc\src\cabinetos-live-check-f5.txt" -Value "copied by
 
 Step "compact: the source folder in the active pane, the destination in the other"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$cc\src"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath "$cc\src" 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$cc\dst"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath "$cc\dst" 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 
 # The picker previews its highlight live (docs/ui.md, "Themes"): "theme previewed" when the window paints
@@ -698,7 +747,7 @@ Step "theme preview: Ctrl+K Ctrl+T, Down previews the next theme, Esc paints the
 $themeBefore = (ThemeLog | Where-Object { $_.message -eq 'theme applied' -or $_.message -eq 'theme restored' } | Select-Object -Last 1).fields.theme
 [void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
-[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 1500
+PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 1500 -what 'the theme picker'
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 500
 Shot $h "$ShotDir\theme-preview-live.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 800
@@ -714,7 +763,7 @@ Step "compact: Ctrl+K Ctrl+T, the theme picker; Home, Down to Commander Compact,
 # The mouse goes to the corner first: a pointer left over the list would pull the highlight to its row.
 [void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
-[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 2000
+PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 2000 -what 'the theme picker'
 Shot $h "$ShotDir\compact-picker-live.png"
 # The picker lists the themes by id (catppuccin-mocha, commander-compact, default, nord, rose-pine-moon)
 # and highlights the current one; Home makes the walk independent of where it started. In the first
@@ -798,8 +847,7 @@ Shot $h "$ShotDir\compact-f5-live.png"
 # every row of the list must have its name and size, with no empty band.
 Step "compact: Commander Compact over the 100,000-file folder, the scroll bar's thumb thrown from the top to the bottom"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$env:TEMP\cabinetos-bench\100000"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2500
+GoPath "$env:TEMP\cabinetos-bench\100000" 2500
 $metrics = LastMetrics
 "compact: the theme in effect is $($metrics.theme), rows $($metrics.row_height) px (commander-compact and 20 expected): $($metrics.theme -eq 'commander-compact' -and $metrics.row_height -eq 20)"
 $scrollables = [System.Windows.Automation.AutomationElement]::FromHandle($h).FindAll([System.Windows.Automation.TreeScope]::Descendants,
@@ -832,7 +880,7 @@ if ($bigList) {
 Step "compact: Ctrl+K Ctrl+T, Home, Down, Down to Default, Enter"
 [void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
-[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 2000
+PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 2000 -what 'the theme picker'
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
@@ -859,8 +907,7 @@ Set-Content -LiteralPath "$tb\two\other.txt" -Value "two" -NoNewline
 
 Step "tabs: the left pane in tabs12\one, one tab, and its strip shows"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$tb\one"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath "$tb\one" 1000
 $rowShown = @(TabLog | Where-Object { $_.message -eq 'tab row shown' -and $_.fields.pane -eq 0 }).Count
 "tabs: the strip is shown with one tab: $($rowShown -eq 1)"
 
@@ -889,7 +936,7 @@ $shown = LastTabShown
 "tabs: no folder was listed again for them: $((ListRequests) -eq $listsBefore)"
 
 Step "tabs: the palette, Toggle Tab Lock, Enter"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+OpenPalette 500
 [Live]::Type("toggle tab lock"); Start-Sleep -Milliseconds 900
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 900
 "tabs: the tab is locked, the status bar said so: $((NoticeCount 'is locked') -eq 1)"
@@ -926,7 +973,7 @@ $saved = (Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json).ui.
 "tabs: ui.tabs holds one tab in the left pane: $(@($saved.left.items).Count -eq 1)"
 if (@($saved.left.items)[0].locked) {
   Step "tabs: the tab that is left is the locked one; the palette unlocks it"
-  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  OpenPalette 500
   [Live]::Type("toggle tab lock"); Start-Sleep -Milliseconds 900
   [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 900
   "tabs: unlocked again: $((NoticeCount 'is unlocked') -eq 1)"
@@ -944,12 +991,11 @@ Set-Content -LiteralPath "$drag\readme.md" -Value "# The tool's page" -NoNewline
 
 Step "14: drag: tabs12's pane goes to the drag folder; the cursor on readme.md; Ctrl+K V opens it in the preview"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($drag); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath $drag 1000
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 200
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
-[Live]::Press($VK.V); Start-Sleep -Milliseconds 2500
+PressUntil { [Live]::Press($VK.V) } '"tool ready".*readme\.md' 2500 10000 -what 'the preview'
 "14: the preview page is ready in the other pane: $([bool](PluginLog '"tool ready"' | Where-Object { $_ -match 'readme.md' }))"
 Shot $h "$ShotDir\drag14-page-live.png"
 
@@ -969,7 +1015,7 @@ Shot $h "$ShotDir\drag14-dropped-live.png"
 
 # Ctrl+W would close a tab of the left pane (the keyboard is there); the page's tab closes through the palette.
 Step "14: drag: the palette's Close Editor closes the page's tab, the keyboard is in the left pane again"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+OpenPalette 500
 [Live]::Type("close editor"); Start-Sleep -Milliseconds 900
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
 ClickLeftPane
@@ -1025,8 +1071,7 @@ if (-not $hasExtensions) {
 
   Step "14: ask: three files in the left pane, Ctrl+K Ctrl+A, 'rename these to vacation_*', Enter"
   ClickLeftPane
-  [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-  [Live]::Type($ask); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+  GoPath $ask 1000
   [Live]::Press($VK.Ctrl, $VK.A); Start-Sleep -Milliseconds 300
   [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
   [Live]::Press($VK.Ctrl, $VK.A); Start-Sleep -Milliseconds 900
@@ -1063,6 +1108,17 @@ function SetUiConfig([hashtable]$values) {
   foreach ($key in $values.Keys) { $cfg.ui | Add-Member -NotePropertyName $key -NotePropertyValue $values[$key] -Force }
   [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
 }
+# The same for the panes' settings; a $null value takes the setting out of the file.
+function SetPanesConfig([hashtable]$values) {
+  $cfgPath = "$root\config\cabinetos.json"
+  $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  if (-not $cfg.panes) { $cfg | Add-Member -NotePropertyName panes -NotePropertyValue ([pscustomobject]@{}) -Force }
+  foreach ($key in $values.Keys) {
+    if ($null -eq $values[$key]) { $cfg.panes.PSObject.Properties.Remove($key) }
+    else { $cfg.panes | Add-Member -NotePropertyName $key -NotePropertyValue $values[$key] -Force }
+  }
+  [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
+}
 # A rail button, by its accessible name. The rail is the leftmost column: a folder or a hit of the same name lies to its right.
 function RailButtonElement([string]$name) {
   $all = [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants,
@@ -1075,7 +1131,7 @@ function ClickRail([string]$name) {
   [Live]::Click([int]($r.Left + $r.Width / 2), [int]($r.Top + $r.Height / 2))
 }
 function LockTreeFromPalette {
-  [Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+  OpenPalette 500
   [Live]::Type("lock folder tree"); Start-Sleep -Milliseconds 900
   [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 900
 }
@@ -1087,18 +1143,33 @@ Set-Content -LiteralPath "$rl\note.txt" -Value "note" -NoNewline
 Set-Content -LiteralPath "$rl\beta\sub\s.txt" -Value "s" -NoNewline
 $origUi = ConfigUi
 $origSidebar = if ($null -ne $origUi.sidebar) { [bool]$origUi.sidebar } else { $true }
+$origHidden = (Get-Content "$root\config\cabinetos.json" -Raw -Encoding UTF8 | ConvertFrom-Json).panes.showHidden
 $warnBefore = @(UiLines '"level":"(WARN|WARNING|ERROR)"').Count
+
+# Every folder of this run lies under %TEMP%, so under AppData, which a stock Windows hides; the tree lists a hidden folder
+# only while panes.showHidden is on. Without it the tree cannot open AppData and marks the user's folder instead of
+# rail13, and Enter in the tree then goes there (the Omen laptop's run of 2026-10-01 13:21; the creator's PC has AppData
+# shown, so it never met this). The section shows hidden entries while it runs and takes the setting out again at its end.
+Step "13: panes.showHidden on for this section: the run's folders are under AppData, which Windows hides"
+$changed = UiCount '"configuration changed".*panes\.showHidden'
+$at = Get-Date
+SetPanesConfig @{ showHidden = $true }
+if (-not (WaitUi '"configuration changed".*panes\.showHidden' $changed $at 500)) { "the window did not report the change of panes.showHidden within 5 s" }
 
 Step "13: the configuration says ui.layout: rail; the rail and the folder tree appear"
 $before = @(UiLines '"the rail layout is on"').Count
 SetUiConfig @{ layout = 'rail'; sidebar = $true }
 Start-Sleep -Milliseconds 2500
 "13: the window switched to the rail layout: $(@(UiLines '"the rail layout is on"').Count -gt $before)"
+$reveals = UiCount '"the tree shows a folder"'
+$drawn = UiCount '"the tree drew rows"'
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($rl); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1800
-$f = LastFields '"the tree shows a folder"'
+GoPath $rl 1800
+# The tree opens the folders down to rail13 a listing at a time, and says what it drew 600 ms after it scrolled there.
+$hit = WaitUi '"the tree shows a folder"' $reveals (Get-Date) 0 5000 { param($line) $line.fields.path -eq $rl }
+$f = if ($hit) { $hit.fields } else { LastFields '"the tree shows a folder"' }
 "13: the tree followed the left pane to rail13: $($f.path -eq $rl)"
+[void](WaitUi '"the tree drew rows"' $drawn (Get-Date) 0 3000)
 $f = LastFields '"the tree drew rows"'
 "13: the tree has rows inside the sidebar's window, before Ctrl+Shift+E: $([int]$f.visible -gt 0)"
 $f = LastFields '"the sidebar shows a view"'
@@ -1119,31 +1190,36 @@ if ($buttons['Explorer'] -and $buttons['Search']) {
 }
 
 Step "13: Ctrl+Shift+F: the Search view; 'zzreport13'; Down to the hit; Enter"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.F); Start-Sleep -Milliseconds 700
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.F) } '"command executed".*"command":"view\.showSearch"' 700 -what 'the Search view'
 $f = LastFields '"the sidebar shows a view"'
 "13: the sidebar shows the Search view: $($f.view -eq 'search')"
-[Live]::Type("zzreport13"); Start-Sleep -Milliseconds 2000
+$results = UiCount '"reply received".*"reply":"file_search_results"'
+$at = Get-Date
+[Live]::Type("zzreport13")
+[void](WaitUi '"reply received".*"reply":"file_search_results"' $results $at 2000)
 Shot $h "$ShotDir\rail13-search-live.png"
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 400
-[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1800
+PressToFolder { [Live]::Press($VK.Enter) } "$rl\alpha" 1800
 $f = LastFields '"listing shown"'
 "13: Enter on the hit took the left pane to alpha: $($f.path -eq "$rl\alpha")"
 
 Step "13: Ctrl+Shift+E: the tree opens alpha, where the pane is, and has the keyboard; Down, Enter: the pane goes to beta"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 800
+$reveals = UiCount '"the tree shows a folder"'
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.E) } '"command executed".*"command":"view\.showExplorer"' 800 -what 'the Explorer view'
 $f = LastFields '"the sidebar shows a view"'
 "13: the sidebar shows the Explorer: $($f.view -eq 'explorer')"
-$f = LastFields '"the tree shows a folder"'
+$hit = WaitUi '"the tree shows a folder"' $reveals (Get-Date) 0 5000 { param($line) $line.fields.path -eq "$rl\alpha" }
+$f = if ($hit) { $hit.fields } else { LastFields '"the tree shows a folder"' }
 "13: the tree, shown again, followed the pane to alpha (it follows only while it shows): $($f.path -eq "$rl\alpha")"
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
-[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+PressToFolder { [Live]::Press($VK.Enter) } "$rl\beta" 1500
 $f = LastFields '"listing shown"'
 "13: Enter in the tree took the left pane to beta: $($f.path -eq "$rl\beta")"
 
 Step "13: Right opens beta, Right again goes to sub, Enter takes the pane there"
 [Live]::Press($VK.Right); Start-Sleep -Milliseconds 900
 [Live]::Press($VK.Right); Start-Sleep -Milliseconds 300
-[Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
+PressToFolder { [Live]::Press($VK.Enter) } "$rl\beta\sub" 1500
 $f = LastFields '"listing shown"'
 "13: the pane shows beta\sub: $($f.path -eq "$rl\beta\sub")"
 Shot $h "$ShotDir\rail13-tree-keys-live.png"
@@ -1151,11 +1227,11 @@ Shot $h "$ShotDir\rail13-tree-keys-live.png"
 # Enter in the tree has taken the keyboard to the pane (go.toPath, as the address box's Enter does). Ctrl+Shift+E puts it in the
 # tree again; Esc must give it back: the window's own key handler takes Esc first, and says so when it moved the keyboard.
 Step "13: Ctrl+Shift+E puts the keyboard in the tree; Esc gives it back to the pane; Backspace goes up"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 800
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.E) } '"command executed".*"command":"view\.showExplorer"' 800 -what 'the Explorer view'
 $gave = @(UiLines 'Esc gave the keyboard from the rail layout').Count
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
 "13: Esc in the tree gave the keyboard back to the pane: $(@(UiLines 'Esc gave the keyboard from the rail layout').Count -eq $gave + 1)"
-[Live]::Press($VK.Back); Start-Sleep -Milliseconds 1500
+PressToFolder { [Live]::Press($VK.Back) } "$rl\beta" 1500
 $f = LastFields '"listing shown"'
 "13: Backspace went up to beta: $($f.path -eq "$rl\beta")"
 
@@ -1164,10 +1240,12 @@ $locked = NoticeCount 'folder tree is locked'
 LockTreeFromPalette
 "13: the tree is locked, the status bar said so: $((NoticeCount 'folder tree is locked') -eq $locked + 1)"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$rl\gamma"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1800
+GoPath "$rl\gamma" 1800
 "13: the locked tree did not follow to gamma: $(@(UiLines '"the tree shows a folder"' | Where-Object { $_ -match 'gamma' }).Count -eq 0)"
-[Live]::Press($VK.Alt, $VK.Shift, $VK.L); Start-Sleep -Milliseconds 1500
+$reveals = UiCount '"the tree shows a folder"'
+$at = Get-Date
+[Live]::Press($VK.Alt, $VK.Shift, $VK.L)
+[void](WaitUi '"the tree shows a folder"' $reveals $at 1500 5000 { param($line) $line.fields.path -eq "$rl\gamma" })
 "13: Alt+Shift+L showed gamma in the tree: $(@(UiLines '"the tree shows a folder"' | Where-Object { $_ -match 'gamma' }).Count -eq 1)"
 Shot $h "$ShotDir\rail13-locate-live.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
@@ -1187,11 +1265,11 @@ $f = LastFields '"a rail button was pressed"'
 Shot $h "$ShotDir\rail13-tool-page-live.png"
 
 Step "13: Ctrl+Shift+F from inside the page: the page passes the key to the window"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.F); Start-Sleep -Milliseconds 900
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.F) } '"command executed".*"command":"view\.showSearch"' 900 -what 'the Search view'
 $f = LastFields '"the sidebar shows a view"'
 "13: the Search view shows again: $($f.view -eq 'search')"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 900
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.E) } '"command executed".*"command":"view\.showExplorer"' 900 -what 'the Explorer view'
 $f = LastFields '"the sidebar shows a view"'
 "13: Esc left the search field, and Ctrl+Shift+E shows the Explorer (a text box keeps every key but the immutable tier's): $($f.view -eq 'explorer')"
 
@@ -1204,7 +1282,7 @@ $f = LastFields '"the sidebar shows a view"'
 $f = LastFields '"listing shown"'
 "13: the pane had the keyboard: Backspace went up to rail13: $($f.path -eq $rl)"
 [Live]::Press($VK.Ctrl, $VK.Alt, $VK.B); Start-Sleep -Milliseconds 900
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 900
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.E) } '"command executed".*"command":"view\.showExplorer"' 900 -what 'the Explorer view'
 $f = LastFields '"the sidebar shows a view"'
 "13: the sidebar is open on the Explorer again: $($f.view -eq 'explorer' -and $f.open -eq $true)"
 
@@ -1218,7 +1296,7 @@ ClickRail 'Marketplace'; Start-Sleep -Milliseconds 1500
 "13: the second click closed it: $(@(UiLines '"marketplace closed"').Count -eq $closed + 1)"
 
 Step "13: the mouse on the active Explorer button closes the sidebar; Ctrl+Alt+B opens it"
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.E); Start-Sleep -Milliseconds 900
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.E) } '"command executed".*"command":"view\.showExplorer"' 900 -what 'the Explorer view'
 ClickRail 'Explorer'; Start-Sleep -Milliseconds 900
 $f = LastFields '"a rail button was pressed"'
 "13: the click on the active view was CloseSidebar: $($f.button -eq 'explorer' -and $f.action -eq 'CloseSidebar')"
@@ -1268,6 +1346,10 @@ SetUiConfig @{ layout = 'classic'; sidebar = $origSidebar; sidebarWidth = $null;
 Start-Sleep -Milliseconds 2500
 "13: the window is back in the classic layout: $(@(UiLines '"the rail layout is off"').Count -gt $off)"
 Shot $h "$ShotDir\rail13-classic-back-live.png"
+$changed = UiCount '"configuration changed".*panes\.showHidden'
+$at = Get-Date
+SetPanesConfig @{ showHidden = $origHidden }
+if (-not (WaitUi '"configuration changed".*panes\.showHidden' $changed $at 500)) { "the window did not report the change of panes.showHidden within 5 s" }
 ClickLeftPane
 "13: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warnBefore)"
 
@@ -1284,11 +1366,9 @@ $zvitLower = -join ([char[]](0x0437, 0x0432, 0x0456, 0x0442))
 
 Step "edge: the fixture's names on the left, its long path on the right"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$edge\names"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath "$edge\names" 1000
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type($deep); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
+GoPath $deep 1200
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 400
 Shot $h "$ShotDir\edge-both-panes-live.png"
 
@@ -1307,14 +1387,13 @@ Shot $h "$ShotDir\edge-renamed-live.png"
 "F2 renamed the Cyrillic file: $((Test-Path -LiteralPath "$edge\names\$zvit 2027.txt") -and -not (Test-Path -LiteralPath "$edge\names\$zvit 2026.txt"))"
 
 Step "edge: Ctrl+F, a Cyrillic query in the find widget: the pane keeps the names that hold it"
-[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 400
+PressUntil { [Live]::Press($VK.Ctrl, $VK.F) } '"find opened"' 400 -what 'the find box'
 [Live]::Type($zvitLower); Start-Sleep -Milliseconds 1500
 Shot $h "$ShotDir\edge-search-live.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 600
 
 Step "edge: Enter into the long path"
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type((Split-Path $deep -Parent)); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath (Split-Path $deep -Parent) 1000
 [Live]::Press($VK.Home); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\edge-long-live.png"
 # Not Enter on deep file.txt: Windows may open it with its program (Notepad did, 2026-09-29).
@@ -1327,8 +1406,7 @@ $notice = Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_
 "the status bar said why: $([bool]$notice)"
 
 Step "edge: Shift+Delete on the junction, Delete permanently through UI Automation"
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$edge\links"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath "$edge\links" 1000
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Shift, $VK.Delete); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\edge-delete-link-question-live.png"
@@ -1408,14 +1486,13 @@ Set-Content -LiteralPath "$sh\beta\deep\target-16.md" -Value "x" -NoNewline
 
 Step "16: Ctrl+L, a path, Enter: the left pane in shell16\alpha"
 ClickLeftPane
-[Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-[Live]::Type("$sh\alpha"); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+GoPath "$sh\alpha" 1000
 "16: Ctrl+L and Enter went there: $((SelectionText) -match 'notes-16|other-16')"
 
 Step "16: Ctrl+F, 'other', Enter, Esc: one row while the text is there, the cursor on it, every row after Esc"
 $opened = @(ShellLines 'find opened').Count
 $filters = @(ShellLines 'find filtered').Count
-[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
+PressUntil { [Live]::Press($VK.Ctrl, $VK.F) } '"find opened"' 500 -what 'the find box'
 [Live]::Type("other"); Start-Sleep -Milliseconds 800
 # "rows" is the rows shown after the filter (the folder has two); "matches" is how many names hold the text.
 $filtered = WaitShellLines 'find filtered' $filters -until { param($line) $line.fields.query_length -eq 5 }
@@ -1432,7 +1509,7 @@ $closed = WaitShellLines 'find closed' $closes
 
 Step "16: Ctrl+P, type, Esc: Quick Open shows and goes, the pane stays"
 $shown = @(ShellLines 'quick open shown').Count
-[Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Milliseconds 500
+PressUntil { [Live]::Press($VK.Ctrl, $VK.P) } '"quick open shown"' 500 -what 'Quick Open'
 [Live]::Type("target-16"); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\shell16-quick-open-live.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
@@ -1442,7 +1519,7 @@ $quickOpen = WaitShellLines 'quick open shown' $shown
 "16: Esc left the pane where it was: $((SelectionText) -match 'other-16')"
 
 Step "16: Ctrl+P, type, Enter: the file's folder in the pane, the file under the cursor"
-[Live]::Press($VK.Ctrl, $VK.P); Start-Sleep -Milliseconds 500
+PressUntil { [Live]::Press($VK.Ctrl, $VK.P) } '"quick open shown"' 500 -what 'Quick Open'
 [Live]::Type("target-16"); Start-Sleep -Milliseconds 1200
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
 "16: Enter opened the row in the pane: $((SelectionText) -match 'target-16')"
@@ -1514,8 +1591,7 @@ function MenuItemElement([string]$name, [double]$seconds = 2) {
 }
 function GoLeftPane([string]$path) {
   ClickLeftPane
-  [Live]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 400
-  [Live]::Type($path); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1000
+  GoPath $path 1000
 }
 # The core's "configuration changed" lines for the file menu's list, and a wait for the next one (the core logs through a
 # writer thread of its own, as the window does).
@@ -1787,7 +1863,7 @@ if ($modifiedHeading -and $typeHeading) {
 Step "19: the palette's Reset Column Widths gives the theme's widths back"
 $changes = @(ShellLines 'columns changed').Count
 $saves = @(ShellLines 'columns saved').Count
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+OpenPalette 500
 [Live]::Type("reset column widths"); Start-Sleep -Milliseconds 700
 [Live]::Press($VK.Enter)
 $reset = ColumnsChanged 'reset' $changes
@@ -1923,7 +1999,7 @@ $page = WaitShellLines 'a page has the keyboard' $handed 5 { param($line) $line.
 "keys: Tab ran view.focusOtherPane and the preview's page has the keyboard ($($page.fields.page)): $((CommandCount 'view.focusOtherPane') -gt $tabs -and $page.fields.page -like 'tool:*')"
 Step "keys: the palette's Close Editor, from inside the page, closes the preview"
 $toolsClosed = @(ShellLines 'tool closed').Count
-[Live]::Press($VK.Ctrl, $VK.Shift, $VK.P); Start-Sleep -Milliseconds 500
+OpenPalette 500
 [Live]::Type("Close Editor"); Start-Sleep -Milliseconds 700
 [Live]::Press($VK.Enter)
 "keys: the preview closed: $([bool](WaitShellLines 'tool closed' $toolsClosed))"
@@ -1934,7 +2010,7 @@ Step "keys: Ctrl+K Ctrl+T, Tab, Enter: Tab stays in the theme picker, and Enter 
 $applied = CommandCount 'theme.apply'
 $opens = CommandCount 'pane.openSelected'
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
-[Live]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 700
+PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 700 -what 'the theme picker'
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 1200
 "keys: Enter after Tab applied the theme in the picker, and opened nothing in the pane: $((CommandCount 'theme.apply') -gt $applied -and (CommandCount 'pane.openSelected') -eq $opens)"
@@ -1965,10 +2041,13 @@ Step "keys: the find box: a letter filters, Enter finds, F5 copies the cursor ro
 GoLeftPane $k20
 # Rows: sub, a.txt, notes.md; "a" is only in a.txt.
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
-[Live]::Press($VK.Ctrl, $VK.Right); Start-Sleep -Milliseconds 1000
+$listings = UiCount '"listing shown"'
+$at = Get-Date
+[Live]::Press($VK.Ctrl, $VK.Right)
+[void](WaitUi '"listing shown"' $listings $at 1000 5000 { param($line) $line.fields.path -eq "$k20\sub" })
 $other = ShellLines 'listing shown' | Select-Object -Last 1
 $copies = CommandCount 'file.copyToOtherPane'
-[Live]::Press($VK.Ctrl, $VK.F); Start-Sleep -Milliseconds 500
+PressUntil { [Live]::Press($VK.Ctrl, $VK.F) } '"find opened"' 500 -what 'the find box'
 $find = ShellLines 'find opened' | Select-Object -Last 1
 [Live]::Type("a"); Start-Sleep -Milliseconds 600
 $typed = ShellLines 'find filtered' | Select-Object -Last 1
