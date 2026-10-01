@@ -7,7 +7,9 @@
 # suite does; AboveNormal ones starve it the way a suite of windows does (32 of them on 16 logical processors starved
 # everything, this script too: one run took 28 minutes). -Cover puts a black full-screen window in front of everything
 # for the whole script: the test windows are then hidden behind it, as when someone works at the machine, and Windows
-# stops drawing a window nobody sees. The exit code is the number of runs that did not pass.
+# stops drawing a window nobody sees. -Suite starts a full test run of its own beside the runs (again whenever it ends):
+# the load that failed the shell test most often on the development PC, with many windows, cores and web pages at once.
+# The exit code is the number of runs that did not pass.
 #
 # On the Omen laptop, through remote-script.ps1 (the windows need its desktop):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-script.ps1 -Script ui\livecheck\repeat-tests.ps1 -Args '-Filter "FullyQualifiedName~The_top_row_fits" -Times 5 -Burn 24 -BurnPriority AboveNormal' -Branch <branch>
@@ -17,7 +19,8 @@ param(
   [int]$Burn = 0,
   [ValidateSet('Normal', 'AboveNormal', 'High')][string]$BurnPriority = 'Normal',
   [int]$BurnMinutes = 30,
-  [switch]$Cover
+  [switch]$Cover,
+  [switch]$Suite
 )
 # A failure while the load starts must end the script: runs beside no load would pass and mean nothing.
 $ErrorActionPreference = 'Stop'
@@ -28,8 +31,16 @@ $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
 if (Test-Path -LiteralPath $core) { $env:CABINETOS_CORE_EXE = $core }
 $burners = @()
 $coverWindow = $null
+$suiteRun = $null
 $failedRuns = 0
 try {
+  if ($Suite) {
+    $loop = "Set-Location '$ui'; while (`$true) { & dotnet test --solution CabinetOS.sln --no-build *> `$null }"
+    $encodedLoop = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($loop))
+    $suiteRun = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ErrorAction Stop -ArgumentList '-NoProfile', '-EncodedCommand', $encodedLoop
+    "load: a full test run beside the runs (process $($suiteRun.Id))"
+    Start-Sleep -Seconds 20
+  }
   if ($Cover) {
     $form = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.Form; $f.FormBorderStyle = "None"; $f.WindowState = "Maximized"; $f.TopMost = $true; $f.BackColor = "Black"; $f.ShowInTaskbar = $false; $t = New-Object System.Windows.Forms.Timer; $t.Interval = ' + ($BurnMinutes * 60000) + '; $t.Add_Tick({ $f.Close() }); $t.Start(); [void]$f.ShowDialog()'
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($form))
@@ -71,5 +82,7 @@ try {
 } finally {
   foreach ($burner in $burners) { try { $burner.Kill() } catch { } }
   if ($coverWindow) { try { $coverWindow.Kill() } catch { } }
+  # The whole tree: the test host, its windows and their cores and web pages go with the loop.
+  if ($suiteRun) { & taskkill.exe /PID $suiteRun.Id /T /F 2>&1 | Out-Null }
 }
 exit $failedRuns
