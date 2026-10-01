@@ -16,6 +16,9 @@ public sealed partial class MainWindow
 
     private FindWidget[] _findViews = null!;
 
+    // Questions to the core about a find's text that have not been answered, by pane: the snapshot aid's find: step waits for none.
+    private readonly int[] _findAsking = new int[2];
+
     private void SetUpFind()
     {
         _findViews = [LeftFind, RightFind];
@@ -75,12 +78,20 @@ public sealed partial class MainWindow
     private async Task FindAsync(int pane, string text)
     {
         var model = _panes[pane];
-        if (!await model.SetFindTextAsync(text))
+        _findAsking[pane]++;
+        try
         {
-            return;
+            if (!await model.SetFindTextAsync(text))
+            {
+                return;
+            }
+            Diag.Info(FindTarget, "find filtered", new LogField("pane", pane), new LogField("query_length", text.Length),
+                new LogField("matches", model.Find.Matches), new LogField("rows", model.Count));
         }
-        Diag.Info(FindTarget, "find filtered", new LogField("pane", pane), new LogField("query_length", text.Length),
-            new LogField("matches", model.Find.Matches), new LogField("rows", model.Count));
+        finally
+        {
+            _findAsking[pane]--;
+        }
     }
 
     // Enter: the cursor goes to the first match, the widget stays and keeps the keyboard.
@@ -160,6 +171,33 @@ public sealed partial class MainWindow
 
     // ----- The snapshot aid -----
 
+    // XAML raises the box's text change on its next frame, and the core answers a moment after that. On a busy machine a
+    // frame comes every few hundred milliseconds (0.5 s and more on the laptop with two test runs beside), so the fixed wait of
+    // the find: step ended before the filter ran. The filter is applied when the pane's find holds the text and no answer
+    // is on its way; until then the pane still shows the rows of the text before. A box that lost the typed text (the
+    // find's own update puts the pane's text back when another step opens the find before the change was raised) ends the
+    // wait at once, with the reason in the log: it would wait for a text that never comes.
+    private async Task WaitForFindAsync(int pane, string text)
+    {
+        var reason = "20 s passed";
+        for (var waited = 0; waited < 20_000; waited += 20)
+        {
+            if (_panes[pane].Find.Query == text && _findAsking[pane] == 0)
+            {
+                return;
+            }
+            if (_findViews[pane].Query != text)
+            {
+                reason = "the box no longer holds the text";
+                break;
+            }
+            await Task.Delay(20);
+        }
+        Diag.Warn(FindTarget, "the find step ended before the filter was applied", new LogField("pane", pane), new LogField("text", text),
+            new LogField("query", _panes[pane].Find.Query ?? ""), new LogField("box", _findViews[pane].Query),
+            new LogField("asking", _findAsking[pane]), new LogField("reason", reason));
+    }
+
     // find:<text> types into the active pane's find (opening it); find-key:enter|down|esc presses the key there.
     private async Task RunFindStepAsync(string kind, string argument)
     {
@@ -168,8 +206,9 @@ public sealed partial class MainWindow
         {
             OpenFind(pane);
             _findViews[pane].Type(argument);
-            // The core answers in a few milliseconds: the checks read the rows after it did.
+            // The core answers in a few milliseconds on a quiet machine: the checks read the rows after it did.
             await Task.Delay(300);
+            await WaitForFindAsync(pane, argument);
             return;
         }
         switch (argument)

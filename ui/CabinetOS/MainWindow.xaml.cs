@@ -421,10 +421,7 @@ public sealed partial class MainWindow : Window
                     await _router.ExecuteAsync("go.toPath", CommandArgs.With("path", step.Argument), "snapshot");
                     break;
                 case "pane" when int.TryParse(step.Argument, out var pane) && pane is 0 or 1:
-                    // GotFocus comes after the fact: let earlier focus changes land first.
-                    _paneViews[pane].Focus(FocusState.Programmatic);
-                    await Task.Delay(150);
-                    SetActive(pane);
+                    await FocusPaneForSnapshotAsync(pane);
                     break;
                 case "select":
                     var index = Active.View?.IndexOfName(step.Argument) ?? -1;
@@ -607,6 +604,53 @@ public sealed partial class MainWindow : Window
                         popups.Where(c => c is ContentDialog or MenuFlyoutPresenter or FlyoutPresenter).ToList());
                     break;
             }
+        }
+    }
+
+    // The snapshot aid's pane:<n> step: the pane takes the keyboard and becomes the active one. GotFocus comes after the
+    // fact, on XAML's next frame, and the window makes a pane active on it (OnPaneActivated). A busy machine draws a frame
+    // every few hundred milliseconds, so the event of the pane the step before had came after this step: the pane before
+    // was the active one again, and the find: that followed opened its find there. The step waits for the pane's own event
+    // (events come in the order the focus moved, so every earlier one has come by then), unless the pane had the
+    // keyboard already and no event is due, then for the frames that bring one that is still on its way.
+    private async Task FocusPaneForSnapshotAsync(int pane)
+    {
+        var view = _paneViews[pane];
+        var had = IsFocusWithin(view);
+        var activations = _paneActivations;
+        view.Focus(FocusState.Programmatic);
+        await Task.Delay(150);
+        for (var waited = 0; !had && !(_paneActivations > activations && _lastActivatedPane == pane) && waited < 20_000; waited += 20)
+        {
+            await Task.Delay(20);
+        }
+        await SettleFramesAsync();
+        SetActive(pane);
+    }
+
+    // The snapshot aid's wait for the framework: XAML raises GotFocus, TextChanged and the like on its next frames, so a step
+    // that changed something waits for some, and the events it caused have come before the next step reads the state. A
+    // frame is every 16 ms on a quiet machine and every few hundred ms on a busy one. At most 5 s: a window that draws
+    // nothing (minimised) has no frames.
+    private static async Task SettleFramesAsync(int frames = 2)
+    {
+        var left = frames;
+        var done = new TaskCompletionSource();
+        void OnFrame(object? sender, object e)
+        {
+            if (--left <= 0)
+            {
+                done.TrySetResult();
+            }
+        }
+        CompositionTarget.Rendering += OnFrame;
+        try
+        {
+            await Task.WhenAny(done.Task, Task.Delay(5_000));
+        }
+        finally
+        {
+            CompositionTarget.Rendering -= OnFrame;
         }
     }
 
@@ -2334,7 +2378,16 @@ public sealed partial class MainWindow : Window
         _paneViews[1 - _active].Focus(FocusState.Keyboard);
     }
 
-    private void OnPaneActivated(FilePane view) => SetActive(Array.IndexOf(_paneViews, view));
+    // How many panes took the keyboard and which was the last: the snapshot aid's pane: step waits for its pane's event.
+    private int _paneActivations;
+    private int _lastActivatedPane = -1;
+
+    private void OnPaneActivated(FilePane view)
+    {
+        _paneActivations++;
+        _lastActivatedPane = Array.IndexOf(_paneViews, view);
+        SetActive(_lastActivatedPane);
+    }
 
     private void SetActive(int index)
     {

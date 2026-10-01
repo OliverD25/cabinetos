@@ -495,7 +495,7 @@ public class ShellEndToEndTests
             using var parsed = JsonDocument.Parse(l);
             var fields = parsed.RootElement.GetProperty("fields");
             var detail = Message(l) == "shell state"
-                ? $"{fields.GetProperty("label")} pane0_find={fields.GetProperty("pane0_find")} pane0_shown={fields.GetProperty("pane0_shown")} pane0_find_count={fields.GetProperty("pane0_find_count")}"
+                ? $"{fields.GetProperty("label")} active_pane={fields.GetProperty("active_pane")} pane0_find={fields.GetProperty("pane0_find")} pane0_shown={fields.GetProperty("pane0_shown")} pane0_find_count={fields.GetProperty("pane0_find_count")}"
                 : fields.ToString();
             return $"  {parsed.RootElement.GetProperty("ts").GetString()} {Message(l)} {detail}";
         }));
