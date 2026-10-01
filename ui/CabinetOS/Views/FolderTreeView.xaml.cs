@@ -188,6 +188,15 @@ public sealed partial class FolderTreeView : UserControl
         return null;
     }
 
+    /// <summary>How opaque the name of a drawn row is (1; less for a hidden folder); null when the row is not drawn.</summary>
+    public double? NameOpacity(FolderNode node)
+    {
+        var index = _tree?.Rows.IndexOf(node) ?? -1;
+        return index >= 0 && TreeList.TryGetElement(index) is Grid { Children: [_, _, _, Grid { Children: [_, Button { Content: UIElement name }] }] }
+            ? name.Opacity
+            : null;
+    }
+
     /// <summary>Gives the tree the keyboard; the cursor goes to the current folder's row, or the first one.</summary>
     public bool FocusTree() => Focus(FocusState.Keyboard);
 

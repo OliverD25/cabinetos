@@ -407,6 +407,94 @@ public class RailEndToEndTests
     private static bool SamePath(string a, string b) =>
         string.Equals(a.TrimEnd('\\'), b.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
+    // Found by the live check on the Omen laptop on 2026-10-01: with panes.showHidden off the tree could not follow the pane into a
+    // folder under a hidden one, and marked the nearest folder it could show without saying so. On a stock Windows that is every
+    // folder of a test run (they lie under %TEMP%, under the hidden AppData), so this test makes a hidden folder of its own, so that
+    // the creator's PC, where AppData is not hidden, meets the fault too. The tree shows the folders on the pane's path, hidden or
+    // not (the hidden ones dim), and no other hidden folder; when the pane leaves the path the hidden folder goes.
+    [Fact]
+    public async Task The_tree_follows_the_pane_into_a_folder_under_a_hidden_one_and_shows_no_other_hidden_folder()
+    {
+        var (run, root, data) = Prepare("rail-hidden", "{}");
+        try
+        {
+            var hiddenParent = Path.Combine(root, "hidden-parent");
+            var inner = Path.Combine(hiddenParent, "inner");
+            var deep = Path.Combine(inner, "deep");
+            var hiddenSibling = Path.Combine(root, "hidden-sibling");
+            Directory.CreateDirectory(deep);
+            Directory.CreateDirectory(hiddenSibling);
+            foreach (var folder in new[] { hiddenParent, hiddenSibling })
+            {
+                File.SetAttributes(folder, File.GetAttributes(folder) | FileAttributes.Hidden);
+            }
+            File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"),
+                JsonSerializer.Serialize(new { ui = new { layout = "rail" }, panes = new { showHidden = false } }));
+
+            // The pane goes into deep, under the hidden folder; the tree follows. Then the pane leaves for data, and the tree follows again.
+            var process = run.Start("run", string.Join(';',
+                "size:1400x800",
+                $"path:{deep}",
+                "until:tree",
+                $"tree-state:inside|{root}",
+                $"tree-state:parent|{hiddenParent}",
+                $"tree-state:deep|{deep}",
+                $"path:{data}",
+                "until:tree",
+                $"tree-state:outside|{root}",
+                $"tree-state:gone|{hiddenParent}",
+                "shot:done"));
+            var logs = await run.FinishAsync("run", process, "done");
+
+            TreeState(logs, "inside", state =>
+            {
+                Assert.True(state.GetProperty("found").GetBoolean());
+                var below = state.GetProperty("children").GetString()!.Split('|');
+                Assert.Contains("data", below);
+                Assert.Contains("hidden-parent", below);
+                Assert.DoesNotContain("hidden-sibling", below);
+                // The tree marks the folder the pane is in, not the nearest folder it could show.
+                Assert.Equal(deep, state.GetProperty("current").GetString(), ignoreCase: true);
+            });
+            TreeState(logs, "parent", state =>
+            {
+                Assert.True(state.GetProperty("found").GetBoolean());
+                Assert.True(state.GetProperty("hidden").GetBoolean());
+                Assert.True(state.GetProperty("name_opacity").GetDouble() < 1, "the hidden folder's row is drawn dim");
+            });
+            TreeState(logs, "deep", state =>
+            {
+                Assert.True(state.GetProperty("found").GetBoolean());
+                Assert.False(state.GetProperty("hidden").GetBoolean());
+                Assert.Equal(1, state.GetProperty("name_opacity").GetDouble());
+            });
+            TreeState(logs, "outside", state =>
+            {
+                var below = state.GetProperty("children").GetString()!.Split('|');
+                Assert.Contains("data", below);
+                Assert.DoesNotContain("hidden-parent", below);
+                Assert.DoesNotContain("hidden-sibling", below);
+                Assert.Equal(data, state.GetProperty("current").GetString(), ignoreCase: true);
+            });
+            TreeState(logs, "gone", state => Assert.False(state.GetProperty("found").GetBoolean()));
+        }
+        finally
+        {
+            foreach (var process in run.Started.Where(p => !p.HasExited))
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    private static void TreeState(List<string> logs, string label, Action<JsonElement> check)
+    {
+        var line = Assert.Single(logs, l => Message(l) == "tree state" && Field(l, "label").GetString() == label);
+        using var parsed = JsonDocument.Parse(line);
+        check(parsed.RootElement.GetProperty("fields"));
+    }
+
     private static void State(List<string> logs, string label, Action<JsonElement> check)
     {
         var line = Assert.Single(logs, l => Message(l) == "rail state" && Field(l, "label").GetString() == label);

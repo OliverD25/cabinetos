@@ -31,6 +31,7 @@ public sealed class FolderNode : INotifyPropertyChanged
     private bool _isCurrent;
     private bool _isCursor;
     private bool _hasChildren = true;
+    private bool _isHidden;
     private string? _error;
 
     internal FolderNode(string path, string name, int depth, FolderNode? parent)
@@ -102,6 +103,16 @@ public sealed class FolderNode : INotifyPropertyChanged
     {
         get => _hasChildren;
         internal set => Set(ref _hasChildren, value);
+    }
+
+    /// <summary>
+    /// Whether the folder is hidden and the tree shows it only because the active pane is in it or below it
+    /// (<c>panes.showHidden</c> is off): the row is drawn dim.
+    /// </summary>
+    public bool IsHidden
+    {
+        get => _isHidden;
+        internal set => Set(ref _isHidden, value);
     }
 
     /// <summary>Why the folder could not be read, or null.</summary>

@@ -575,7 +575,7 @@ public sealed partial class MainWindow : Window
                 case "preview" or "preview-key" or "plugin-event" or "drop" or "fake-command":
                     await RunPreviewStepAsync(step.Kind, step.Argument);
                     break;
-                case "rail" or "rail-move" or "rail-state" or "divider" or "tree":
+                case "rail" or "rail-move" or "rail-state" or "divider" or "tree" or "tree-state":
                     await RunRailStepAsync(step.Kind, step.Argument);
                     break;
                 case "columns" or "column-drag" or "column-fit":
@@ -797,6 +797,8 @@ public sealed partial class MainWindow : Window
                 "terminal" => _terminal.Shown is { Pipe: not null },
                 "search" => _search.Phase is SearchPhase.Done or SearchPhase.Failed,
                 "tool" => AllToolHosts().Any(h => h.IsReady),
+                // The folder tree has caught up with the active pane: the row it marks is the pane's folder.
+                "tree" => TreeFollowsActiveFolder(),
                 // The right-click menu is on screen (a newer one no longer waits for the one before it), or it is gone.
                 "menu" => _contextMenu.IsSettled,
                 "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,

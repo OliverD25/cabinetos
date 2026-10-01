@@ -589,9 +589,41 @@ public sealed partial class MainWindow
         new LogField("tree_current", _tree.Current?.Path ?? ""),
         new LogField("tree_locked", _treeLocked));
 
+    // The row the tree marks is the folder the active pane shows (until:tree).
+    private bool TreeFollowsActiveFolder() =>
+        _tree.Current is { } current
+        && string.Equals(FolderTreeModel.Normalize(current.Path), FolderTreeModel.Normalize(_sidebar.ActivePath), StringComparison.OrdinalIgnoreCase);
+
+    // tree-state:<label>|<folder> writes what the tree shows of a folder: whether it has a row, whether it is a hidden folder
+    // and how opaque its drawn name is, and the names of the rows right under it. "current" is the folder the tree marked.
+    private void LogTreeState(string label, string folder)
+    {
+        var node = _tree.Find(folder);
+        var below = new List<string>();
+        if (node is not null)
+        {
+            for (var i = _tree.Rows.IndexOf(node) + 1; i > 0 && i < _tree.Rows.Count && _tree.Rows[i].Depth > node.Depth; i++)
+            {
+                if (_tree.Rows[i].Depth == node.Depth + 1)
+                {
+                    below.Add(_tree.Rows[i].Name);
+                }
+            }
+        }
+        Diag.Info(RailTarget, "tree state",
+            new LogField("label", label),
+            new LogField("folder", folder),
+            new LogField("found", node is not null),
+            new LogField("hidden", node?.IsHidden ?? false),
+            new LogField("name_opacity", node is null ? null : SidebarView.Tree.NameOpacity(node)),
+            new LogField("children", string.Join("|", below)),
+            new LogField("current", _tree.Current?.Path ?? ""));
+    }
+
     // rail:<id> presses that button; rail-move:<id>|<1 or -1> moves it (Shift+Down, Shift+Up);
     // divider:<pixels> drags the divider to that width and lets go; tree:<path> opens the folder in the tree
-    // (and the ones on the way); rail-state:<label> writes what the rail, the sidebar and the tree show into the log.
+    // (and the ones on the way); rail-state:<label> writes what the rail, the sidebar and the tree show into the log;
+    // tree-state:<label>|<folder> writes what the tree shows of one folder.
     private async Task RunRailStepAsync(string kind, string argument)
     {
         switch (kind)
@@ -604,6 +636,9 @@ public sealed partial class MainWindow
                 break;
             case "rail-state":
                 LogRailState(argument);
+                break;
+            case "tree-state" when argument.Split('|') is [var stateLabel, var stateFolder]:
+                LogTreeState(stateLabel, stateFolder);
                 break;
             case "divider" when double.TryParse(argument, System.Globalization.CultureInfo.InvariantCulture, out var width):
                 _sidebarDragging = true;
