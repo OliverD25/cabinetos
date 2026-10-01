@@ -227,6 +227,118 @@ function SelectionText {
   return $text
 }
 
+# Every helper below that reads the window's or the core's log goes through a LogReader: it keeps how far each file is read,
+# takes only the bytes written since its last call and cuts them into lines, so no line is read twice. A line without its
+# newline yet is left for the next call, because the log writer may be in the middle of it. The files are those the glob
+# matches, in name order, as Get-Content gave them (a run that crosses midnight has two). A pattern's matching lines are found
+# once per line, with the rules of -match (case-insensitive); a line's JSON is parsed on the first ask only. Reading the
+# whole log again for every helper call and every 50 ms poll took minutes on a slow machine.
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+public class LogReader {
+  class Found { public Regex Rx; public List<int> At = new List<int>(); public int Scanned; }
+  readonly string dir, glob;
+  readonly List<string> names = new List<string>();
+  readonly List<long> taken = new List<long>();
+  readonly List<int> counts = new List<int>();
+  readonly List<string> lines = new List<string>();
+  readonly List<object> parsed = new List<object>();
+  readonly Dictionary<string, Found> searched = new Dictionary<string, Found>();
+  public LogReader(string dir, string glob) { this.dir = dir; this.glob = glob; }
+  public void Refresh() { if (!Take()) { Reset(); Take(); } }
+  void Reset() { names.Clear(); taken.Clear(); counts.Clear(); lines.Clear(); parsed.Clear(); searched.Clear(); }
+  // False when the files are no longer a continuation of what was read (one went away, shrank, or a new one sorts before a
+  // read one): the caller then reads everything again, which gives the order Get-Content would.
+  bool Take() {
+    string[] files;
+    try { files = Directory.Exists(dir) ? Directory.GetFiles(dir, glob) : new string[0]; } catch (IOException) { return true; }
+    Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+    if (files.Length < names.Count) return false;
+    for (int i = 0; i < names.Count; i++) { if (!string.Equals(files[i], names[i], StringComparison.OrdinalIgnoreCase)) return false; }
+    for (int i = 0; i < files.Length; i++) {
+      if (i == names.Count) { names.Add(files[i]); taken.Add(0); counts.Add(0); }
+      long length;
+      try { length = new FileInfo(files[i]).Length; } catch (IOException) { continue; }
+      if (length < taken[i]) return false;
+      if (length > taken[i] && !TakeFrom(i, length)) return false;
+    }
+    return true;
+  }
+  bool TakeFrom(int i, long length) {
+    byte[] buffer = new byte[length - taken[i]];
+    int got = 0;
+    try {
+      using (FileStream stream = new FileStream(names[i], FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) {
+        stream.Seek(taken[i], SeekOrigin.Begin);
+        int n;
+        while (got < buffer.Length && (n = stream.Read(buffer, got, buffer.Length - got)) > 0) got += n;
+      }
+    } catch (IOException) { return true; }
+    int end = got - 1;
+    while (end >= 0 && buffer[end] != 10) end--;
+    if (end < 0) return true;
+    for (int j = i + 1; j < names.Count; j++) { if (counts[j] > 0) return false; }
+    int start = (taken[i] == 0 && end >= 2 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF) ? 3 : 0;
+    string[] pieces = Encoding.UTF8.GetString(buffer, start, end + 1 - start).Split('\n');
+    for (int k = 0; k < pieces.Length - 1; k++) {
+      string line = pieces[k];
+      if (line.Length > 0 && line[line.Length - 1] == '\r') line = line.Substring(0, line.Length - 1);
+      lines.Add(line); parsed.Add(null); counts[i]++;
+    }
+    taken[i] += end + 1;
+    return true;
+  }
+  Found Search(string pattern) {
+    Found found;
+    if (!searched.TryGetValue(pattern, out found)) {
+      found = new Found();
+      found.Rx = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+      searched[pattern] = found;
+    }
+    for (; found.Scanned < lines.Count; found.Scanned++) { if (found.Rx.IsMatch(lines[found.Scanned])) found.At.Add(found.Scanned); }
+    return found;
+  }
+  public int Count(string pattern) { return Search(pattern).At.Count; }
+  public int[] Indexes(string pattern) { return Search(pattern).At.ToArray(); }
+  public string[] Lines(string pattern) {
+    Found found = Search(pattern);
+    string[] result = new string[found.At.Count];
+    for (int k = 0; k < result.Length; k++) result[k] = lines[found.At[k]];
+    return result;
+  }
+  public string Last(string pattern) { Found found = Search(pattern); return found.At.Count == 0 ? null : lines[found.At[found.At.Count - 1]]; }
+  public string[] All() { return lines.ToArray(); }
+  public string Line(int index) { return lines[index]; }
+  public object GetParsed(int index) { return parsed[index]; }
+  public void SetParsed(int index, object value) { parsed[index] = value; }
+}
+'@
+$script:logReaders = @{}
+# The reader of the "ui" or the "core" log of this run, brought up to date: a helper sees what the file holds at its call.
+function LogOf([string]$kind) {
+  $reader = $script:logReaders[$kind]
+  if (-not $reader) { $reader = New-Object LogReader "$root\logs", "$kind.*.jsonl"; $script:logReaders[$kind] = $reader }
+  $reader.Refresh()
+  $reader
+}
+function UiCount([string]$pattern) { (LogOf 'ui').Count($pattern) }
+function UiLines([string]$pattern) { (LogOf 'ui').Lines($pattern) }
+function UiLast([string]$pattern) { (LogOf 'ui').Last($pattern) }
+function UiAll { (LogOf 'ui').All() }
+# The lines of $pattern as objects (ConvertFrom-Json), from the $skip-th on, each parsed once however often it is asked for.
+function LogObjects($reader, [string]$pattern, [int]$skip = 0) {
+  $at = $reader.Indexes($pattern)
+  for ($k = $skip; $k -lt $at.Count; $k++) {
+    $object = $reader.GetParsed($at[$k])
+    if ($null -eq $object) { $object = $reader.Line($at[$k]) | ConvertFrom-Json; $reader.SetParsed($at[$k], $object) }
+    $object
+  }
+}
+function UiObjects([string]$pattern, [int]$skip = 0) { LogObjects (LogOf 'ui') $pattern $skip }
 # The window's log says when the window is ready for the next key: the address box and the palette have the keyboard
 # once their command's "command executed" line is there (the handler opens them right after it, on the same call), the
 # find box once "find opened" is, Quick Open once "quick open shown" is, the terminal once "a page has the keyboard"
@@ -235,13 +347,12 @@ function SelectionText {
 # given), for at most $maxMs from $since, and gives the newest such line, or $null. It never returns before $minMs have
 # passed since $since: where the line comes at once the run keeps the rhythm of the fixed sleep it had, and where it
 # comes late the run waits for it.
-function UiCount([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match $pattern }).Count }
 function WaitUi([string]$pattern, [int]$before, [datetime]$since, [int]$minMs = 0, [int]$maxMs = 5000, [scriptblock]$until = $null) {
   $found = $null
   while ($true) {
-    $lines = @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match $pattern })
-    if ($lines.Count -gt $before) {
-      $new = @($lines | Select-Object -Skip $before | ForEach-Object { $_ | ConvertFrom-Json })
+    $log = LogOf 'ui'
+    if ($log.Count($pattern) -gt $before) {
+      $new = @(LogObjects $log $pattern $before)
       $hits = @(if ($until) { $new | Where-Object { & $until $_ } } else { $new })
       if ($hits.Count -gt 0) { $found = $hits[$hits.Count - 1]; break }
     }
