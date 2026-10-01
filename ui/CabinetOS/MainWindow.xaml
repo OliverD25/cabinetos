@@ -66,7 +66,8 @@
                             CornerRadius="4" />
                         <!--
                           "CabinetOS · folder", the folder of the active pane's front tab at 60 %. Its widest is the room up to
-                          the Quick Open chip (TopRowLayout.TitleRoom): it ends with an ellipsis rather than reach the chip.
+                          the Quick Open chip (TopRowLayout.TitleRoom): it ends with an ellipsis rather than reach the chip. Its
+                          three runs are made in code (MainWindow.Shell.cs): the markup's line breaks between runs would be spaces.
                         -->
                         <TextBlock
                             x:Name="TitleText"
@@ -75,15 +76,7 @@
                             IsHitTestVisible="False"
                             MaxLines="1"
                             TextTrimming="CharacterEllipsis"
-                            TextWrapping="NoWrap">
-                            <Run
-                                x:Name="TitleApp"
-                                FontWeight="SemiBold"
-                                Foreground="{ThemeResource CbRowTextBrush}"
-                                Text="CabinetOS" />
-                            <Run x:Name="TitleSeparator" Foreground="{ThemeResource CbCrumbSeparatorBrush}" />
-                            <Run x:Name="TitleFolder" Foreground="{ThemeResource CbTitleFolderBrush}" />
-                        </TextBlock>
+                            TextWrapping="NoWrap" />
                     </StackPanel>
 
                     <StackPanel

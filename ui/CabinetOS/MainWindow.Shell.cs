@@ -28,6 +28,11 @@ public sealed partial class MainWindow
     private PaneCrumbs[] _crumbViews = null!;
     private string _dragRegions = "";
 
+    // The title's parts: the app's name at weight 600, the dot at 35 %, the folder at 60 %.
+    private readonly Microsoft.UI.Xaml.Documents.Run _titleApp = new() { Text = TopRowLayout.AppName, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+    private readonly Microsoft.UI.Xaml.Documents.Run _titleSeparator = new();
+    private readonly Microsoft.UI.Xaml.Documents.Run _titleFolder = new();
+
     // The workspace until workspaces exist (docs/ui.md, "The sidebar header"): the repository that holds the active folder,
     // for its branch and Quick Open's folder. The core finds it (workspace_info) whenever the active folder changes.
     private WorkspaceInfoReply? _workspace;
@@ -48,6 +53,12 @@ public sealed partial class MainWindow
         SettingsButton.Click += (_, _) => _ = _router.ExecuteAsync("settings.open", trigger: "button");
         _palette.Opened += UpdatePaletteButton;
         _palette.Closed += UpdatePaletteButton;
+        _titleApp.Foreground = ThemeResources.Brush("CbRowTextBrush");
+        _titleSeparator.Foreground = ThemeResources.Brush("CbCrumbSeparatorBrush");
+        _titleFolder.Foreground = ThemeResources.Brush("CbTitleFolderBrush");
+        TitleText.Inlines.Add(_titleApp);
+        TitleText.Inlines.Add(_titleSeparator);
+        TitleText.Inlines.Add(_titleFolder);
         // The chip and the workspace row say the keys their commands have now, so a rebinding shows there too.
         _router.CommandsChanged += () => DispatcherQueue.TryEnqueue(() =>
         {
@@ -88,8 +99,8 @@ public sealed partial class MainWindow
         var strip = _strips[_dual ? _active : 0];
         var name = strip.Count > 0 ? strip.Active.Title : "";
         var title = TopRowLayout.Title(name);
-        TitleSeparator.Text = title.Length > TopRowLayout.AppName.Length ? TopRowLayout.Separator : "";
-        TitleFolder.Text = title.Length > TopRowLayout.AppName.Length ? name : "";
+        _titleSeparator.Text = title.Length > TopRowLayout.AppName.Length ? TopRowLayout.Separator : "";
+        _titleFolder.Text = title.Length > TopRowLayout.AppName.Length ? name : "";
     }
 
     // The chip's key: Quick Open's first binding as the registry has it now, Ctrl+P until the registry is read.
