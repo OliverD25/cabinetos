@@ -14,7 +14,11 @@
 # With -Strict it exits 1 when the goal was not met (off by default: the numbers depend on the
 # machine being quiet). docs/ui.md, "Scrolling". With -Virtual (a virtual machine, whose frames come from a virtual
 # graphics card) the checks that judge frame times print their numbers and answer "not measured in a VM" instead of
-# yes or no, and -Strict does not judge them; every other check stays as strict.
+# yes or no, and -Strict does not judge them; every other check stays as strict. With -Panel (a laptop whose display
+# path sleeps between pages and wakes in about 80 ms, so the gaps are the panel's, not the window's: the Omen laptop,
+# docs/log/2026-10-01/scroll-gaps-laptop.md) the scroll goal line still prints the gap numbers and answers "not judged
+# on a panel"; the line "panel goal ... met: yes|no" after it judges the frames' own UI-thread work instead, and -Strict
+# judges that. -Virtual wins over -Panel.
 param(
   [string]$Exe = "$PSScriptRoot\..\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64\CabinetOS.exe",
   [string]$Core = "$PSScriptRoot\..\..\core\target\release\cabinetos-core.exe",
@@ -22,7 +26,8 @@ param(
   [string]$Run = "live",
   [string]$Tools = "$PSScriptRoot\..\..\sdk\tools",
   [switch]$Strict,
-  [switch]$Virtual
+  [switch]$Virtual,
+  [switch]$Panel
 )
 $ErrorActionPreference = 'Stop'
 $Exe = [System.IO.Path]::GetFullPath($Exe)
@@ -445,10 +450,24 @@ $over33 = ($seconds | ForEach-Object { $_.fields.gaps_over_33ms } | Measure-Obje
 $worst = ($seconds | ForEach-Object { $_.fields.worst_ms } | Measure-Object -Maximum).Maximum
 $share = if ($frames -gt 0) { 100.0 * $over20 / $frames } else { 100 }
 $script:scrollGoal = $frames -gt 0 -and $over33 -eq 0 -and $share -lt 5
+# The panel goal asks the same of the frames' UI-thread work (the window's busy_over_* counts). A window that
+# logs no such counts (an older build) cannot meet it: a goal must not pass for want of data.
+$judgeByWork = $Panel -and -not $Virtual
+$haveWork = $seconds.Count -gt 0 -and @($seconds | Where-Object { $null -eq $_.fields.busy_over_20ms -or $null -eq $_.fields.busy_over_33ms }).Count -eq 0
+$work16 = ($seconds | ForEach-Object { $_.fields.busy_over_16ms } | Measure-Object -Sum).Sum
+$work20 = ($seconds | ForEach-Object { $_.fields.busy_over_20ms } | Measure-Object -Sum).Sum
+$work33 = ($seconds | ForEach-Object { $_.fields.busy_over_33ms } | Measure-Object -Sum).Sum
+$workShare = if ($frames -gt 0) { 100.0 * $work20 / $frames } else { 100 }
+$panelGoal = $haveWork -and $frames -gt 0 -and $work33 -eq 0 -and $workShare -lt 5
+if ($judgeByWork) { $script:scrollGoal = $panelGoal }
 $mine = ($loads | Where-Object { $_.Id -eq $p.Id } | ForEach-Object { $_.Percent } | Measure-Object -Sum).Sum
 $busiest = $loads | Where-Object { $_.Id -ne $p.Id -and $_.Name -ne 'Idle' } | Sort-Object Percent -Descending | Select-Object -First 3
 "scroll goal (no frame over 33 ms, under 5 % over 20 ms) met: {0}; {1} frames in {2} s, {3} over 20 ms ({4:N1} %), {5} over 33 ms, worst {6} ms; CPU during the hold: machine {7:N1} %, this window {8:N1} %, busiest others: {9}" -f `
-  $(if ($Virtual) { 'not measured in a VM' } elseif ($script:scrollGoal) { 'yes' } else { 'no' }), $frames, $seconds.Count, $over20, $share, $over33, $worst, (100 * ($cpuAfter[0] - $cpuBefore[0]) / $allTicks), $mine, (($busiest | ForEach-Object { '{0} {1:N1} %' -f $_.Name, $_.Percent }) -join ', ')
+  $(if ($Virtual) { 'not measured in a VM' } elseif ($Panel) { 'not judged on a panel' } elseif ($script:scrollGoal) { 'yes' } else { 'no' }), $frames, $seconds.Count, $over20, $share, $over33, $worst, (100 * ($cpuAfter[0] - $cpuBefore[0]) / $allTicks), $mine, (($busiest | ForEach-Object { '{0} {1:N1} %' -f $_.Name, $_.Percent }) -join ', ')
+if ($judgeByWork) {
+  "panel goal (no frame with UI work over 33 ms, under 5 % with UI work over 20 ms) met: {0}; {1} frames in {2} s, {3} with UI work over 20 ms ({4:N1} %), {5} over 33 ms, {6} over 16.7 ms{7}" -f `
+    $(if ($panelGoal) { 'yes' } else { 'no' }), $frames, $seconds.Count, $work20, $workShare, $work33, $work16, $(if ($haveWork) { '' } else { ' (the window logged no UI-work counts: an older build)' })
+}
 
 # ----- Phase 5b: the file keys, with real key presses, checked on disk -----
 $files = "$root\files"; $src = "$files\src"; $dst = "$files\dst"
@@ -2170,4 +2189,4 @@ if ($job) {
   "and in the core log:"; Get-Content "$root\logs\core.*.jsonl" | Where-Object { $_ -match $id }
 }
 Step "done"
-if ($Strict -and -not $Virtual -and -not $script:scrollGoal) { "STRICT: the scroll goal was not met"; exit 1 }
+if ($Strict -and -not $Virtual -and -not $script:scrollGoal) { "STRICT: the $(if ($Panel) { 'panel' } else { 'scroll' }) goal was not met"; exit 1 }

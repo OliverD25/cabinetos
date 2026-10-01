@@ -7,8 +7,10 @@
 # -MinimizeOthers first minimizes every other window, for a machine that runs the check on its own (the
 # remote live check): a window left in front there, a terminal for example, would stop the check at once.
 # -Virtual passes on to livecheck.ps1, for a virtual machine: the checks that judge frame times answer "not measured in
-# a VM", and DONE.md counts them apart, neither True nor False.
-param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown, [switch]$MinimizeOthers, [switch]$Virtual)
+# a VM", and DONE.md counts them apart, neither True nor False. -Panel passes on too, for a laptop whose display path
+# sleeps between pages: the scroll goal is judged by the frames' UI work (the "panel goal" line) and the gap goal answers
+# "not judged on a panel", which DONE.md counts apart too. -Virtual wins over -Panel.
+param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown, [switch]$MinimizeOthers, [switch]$Virtual, [switch]$Panel)
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
@@ -23,6 +25,7 @@ if ($MinimizeOthers) { (New-Object -ComObject Shell.Application).MinimizeAll(); 
 $started = Get-Date
 $checkArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$PSScriptRoot\livecheck.ps1", '-Strict')
 if ($Virtual) { $checkArgs += '-Virtual' }
+if ($Panel) { $checkArgs += '-Panel' }
 & powershell.exe @checkArgs 2>&1 | ForEach-Object { "$_" } | Out-File -LiteralPath $out -Encoding UTF8
 $code = $LASTEXITCODE
 $ended = Get-Date
@@ -31,6 +34,9 @@ $goal = ($lines | Where-Object { $_ -like 'scroll goal*' } | Select-Object -Last
 $stop = ($lines | Where-Object { $_ -match 'STOP:|STRICT:' } | Select-Object -Last 1)
 $falses = @($lines | Where-Object { $_ -match ': False$' })
 $unmeasured = @($lines | Where-Object { $_ -match 'not measured in a VM' })
+$judgedByWork = $Panel -and -not $Virtual
+$panelGoal = ($lines | Where-Object { $_ -like 'panel goal*' } | Select-Object -Last 1)
+$unjudged = @($lines | Where-Object { $_ -match 'not judged on a panel' })
 $done = @(
   "# Live check finished: you can use the keyboard and mouse again",
   "",
@@ -41,6 +47,10 @@ $done = @(
   "- Checks that answered False: $(if ($falses.Count) { $falses.Count } else { 'none' })"
 ) + @($falses | ForEach-Object { "  - $_" }) + @(
   $(if ($Virtual) { "- Checks not measured in a VM (they judge frame times; neither True nor False): $($unmeasured.Count)" })
+) + @(
+  $(if ($judgedByWork) { "- Judged by the frames' UI work on a panel (-Panel), not by the gaps: $(if ($panelGoal) { $panelGoal } else { 'the panel goal line was not printed (the run stopped before it).' })" })
+) + @(
+  $(if ($judgedByWork) { "- Checks not judged on a panel (they judge frame gaps; neither True nor False): $($unjudged.Count)" })
 ) + @(
   "",
   "Full output: $out"
