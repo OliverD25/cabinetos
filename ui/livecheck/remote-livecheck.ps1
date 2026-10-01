@@ -23,6 +23,8 @@ param(
   [string]$Io = ''
 )
 $ErrorActionPreference = 'Stop'
+# Git's own ssh reads HOME for ~/.ssh, and a Git Bash points HOME elsewhere; the Windows user's folder is the one.
+$env:HOME = $env:USERPROFILE
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
@@ -31,12 +33,19 @@ $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
 $remoteRepoFwd = $RemoteRepo -replace '\\', '/'
 $remoteIo = (Split-Path (Split-Path $RemoteRepo -Parent) -Parent) + '\_io\live-check'
 
-function Remote([string]$command) { & ssh -o BatchMode=yes $Machine $command 2>&1 | ForEach-Object { "$_" } }
-function Send([string]$local, [string]$remote) { & scp -q -r -o BatchMode=yes $local "${Machine}:$remote"; if ($LASTEXITCODE -ne 0) { throw "scp to $Machine failed for $local" } }
+# The SSH config of the Windows user, named outright: Git's own ssh reads HOME, which a Git Bash sets elsewhere.
+$sshConfig = Join-Path $env:USERPROFILE '.ssh\config'
+function Remote([string]$command) {
+  $out = & ssh -F $sshConfig -o BatchMode=yes $Machine $command 2>&1 | ForEach-Object { "$_" }
+  if ($LASTEXITCODE -ne 0) { throw "ssh $Machine failed ($LASTEXITCODE): $($out -join ' ')" }
+  $out
+}
+function Send([string]$local, [string]$remote) { & scp -q -r -F $sshConfig -o BatchMode=yes $local "${Machine}:$remote"; if ($LASTEXITCODE -ne 0) { throw "scp to $Machine failed for $local" } }
 
 "machine: $Machine, repo there: $RemoteRepo"
 $name = (Remote 'hostname') | Select-Object -Last 1
 if (-not $name) { throw "no answer from $Machine over ssh" }
+"answered by $name"
 
 # 1. The commits the machine lacks, as a bundle; its clone comes from a bundle too, so it has no GitHub login.
 $theirs = (Remote "git -C $RemoteRepo rev-parse HEAD") | Select-Object -Last 1
@@ -75,7 +84,7 @@ if ($now -eq $before) { throw "no new DONE.md on $Machine after $WaitMinutes min
 # 4. The result, home.
 $latest = (Remote "(Get-ChildItem '$remoteIo\run-*.txt' | Sort-Object LastWriteTime | Select-Object -Last 1).Name") | Select-Object -Last 1
 $local = Join-Path $io ($latest -replace '\.txt$', "-$($name.ToLower()).txt")
-& scp -q -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/$latest" $local
-& scp -q -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/DONE.md" (Join-Path $io "DONE-$($name.ToLower()).md")
+& scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/$latest" $local
+& scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/DONE.md" (Join-Path $io "DONE-$($name.ToLower()).md")
 Get-Content (Join-Path $io "DONE-$($name.ToLower()).md")
 "full output: $local"
