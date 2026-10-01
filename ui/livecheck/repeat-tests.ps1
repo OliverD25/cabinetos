@@ -2,15 +2,17 @@
 # each run whether it passed. It is for a test that fails only on a busy machine: one run proves nothing, five runs
 # beside a load do. It builds nothing: the build under ui\CabinetOS.Tests\bin must be of the commit under test
 # (remote-tests.ps1 builds it; run that first with the same filter). The load is -Burn busy processes. Each loops at
-# normal priority until -BurnMinutes pass or this script ends. One to 1.5 busy processes for each logical processor
-# make a loaded machine (the creator's Omen laptop has 16). The exit code is the number of runs that did not pass.
+# -BurnPriority (Normal, AboveNormal or High) until -BurnMinutes pass or this script ends. A thread that wakes after a
+# wait gets a boost over busy threads of its own priority, so Normal busy processes slow a window less than a full test
+# suite does; AboveNormal ones starve it the way a suite of windows does. The exit code is the number of runs that did not pass.
 #
 # On the Omen laptop, through remote-script.ps1 (the windows need its desktop):
-#   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-script.ps1 -Script ui\livecheck\repeat-tests.ps1 -Args '-Filter "FullyQualifiedName~The_top_row_fits" -Times 5 -Burn 24' -Branch <branch>
+#   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-script.ps1 -Script ui\livecheck\repeat-tests.ps1 -Args '-Filter "FullyQualifiedName~The_top_row_fits" -Times 5 -Burn 24 -BurnPriority AboveNormal' -Branch <branch>
 param(
   [Parameter(Mandatory = $true)][string]$Filter,
   [int]$Times = 5,
   [int]$Burn = 0,
+  [ValidateSet('Normal', 'AboveNormal', 'High')][string]$BurnPriority = 'Normal',
   [int]$BurnMinutes = 30
 )
 $ErrorActionPreference = 'Continue'
@@ -24,9 +26,11 @@ $failedRuns = 0
 try {
   $busy = "`$end = (Get-Date).AddMinutes($BurnMinutes); while ((Get-Date) -lt `$end) { }"
   for ($i = 0; $i -lt $Burn; $i++) {
-    $burners += Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-Command', $busy
+    $burner = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-Command', $busy
+    $burner.PriorityClass = $BurnPriority
+    $burners += $burner
   }
-  if ($burners.Count -gt 0) { "load: $($burners.Count) busy processes on $env:NUMBER_OF_PROCESSORS logical processors"; Start-Sleep -Seconds 5 }
+  if ($burners.Count -gt 0) { "load: $($burners.Count) busy processes at $BurnPriority priority on $env:NUMBER_OF_PROCESSORS logical processors"; Start-Sleep -Seconds 5 }
   "filter: $Filter, $Times runs, at $(git -C $repo rev-parse --short HEAD)"
   Push-Location $ui
   for ($run = 1; $run -le $Times; $run++) {
