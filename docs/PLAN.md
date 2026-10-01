@@ -1135,7 +1135,46 @@ Handed to two coders in parallel: A, B, D, F and G on Sonnet (small,
 concrete), C and E on Opus (a list made in slices and a listing's
 lifetime, where a mistake hides). Each coder measures before and after
 with `ui/livecheck/speed-review.ps1` and reports in `log/2026-10-01/`.
-Status follows when they land.
+The status follows.
+
+**Status (2026-10-01, midday): done; two goals partly met.** All seven
+landed, A, B, D, F and G as 38960c3..96390b6 by a coder on Sonnet, C and
+E as 1dca09d..68c999f and the C follow-up as cd3e597..8c0cafd by a coder
+on Opus; the numbers are paired runs of `speed-review.ps1` against the
+morning's build, medians. A: the start 200 to 280 ms shorter (868 ms to
+two small folders, 940 ms to a 3,000-entry folder); the window's folder
+41 to 57 MB, the zip about 5 MB larger, not 15. B: the Commander Compact
+change's frozen frame 106 to 79 ms, and 2.5 % of frames over 20 ms in a
+100,000-file scroll instead of 5.2 %. C: 15 cards made at once instead of
+50 and the rest in slices; the opening's longest frame 116 to 52 ms, then
+42 ms once the view is laid out hidden while the window is idle; the
+goal of no frame over 33 ms is not met, because the window's own opening
+work and the first cards' frame each stay near 40 ms (two ideas left in
+the report: a first slice of one row, or the index reply read a turn
+later). D: the walk visits 200,000 entries (was 20,000), a Ukrainian query
+on the 100,000-file fixture finds 50 rows instead of none, and Quick Open
+says when a search stopped early. E: a tab switch to 100,000 files shows
+the tab in 6 ms instead of 76, with no new listing; the kept listing is
+released on a refresh, a loss, a core restart, a close or after 30 s.
+F: an icon request answers in 0.2 ms instead of 26 (median of 85), and the
+first folder's last icon arrives 64 ms after its rows instead of 106.
+G: a killed window is reported once at the next start, proved by a test
+that kills one. Checked on the main checkout: the five core checks (811
+tests), the window's build with warnings as errors, 1175 of 1177 window
+tests with the end-to-end tests on, the two failures the known flaky
+context-menu tests that passed 8 of 8 alone, and the live check with real
+keys on the Release build of 12:35: 202 True, 0 False, the scroll goal met with no frame over 20 ms, the Commander Compact scroll bar's thumb thrown from the top to the bottom with the real mouse took the list to 100 % and left no empty row one second later (the screenshot `compact-scrollbar-drag-live.png` among the live shots), both tabs took their kept listings back, exit code 0 (`run-2026-10-01-1240.txt`). The coders' decisions
+with their undo are in
+[log/2026-10-01/speed-items-abdfg-report.md](log/2026-10-01/speed-items-abdfg-report.md)
+and
+[log/2026-10-01/speed-items-ce-report.md](log/2026-10-01/speed-items-ce-report.md);
+the ones to know: the Quick Open note points to the indexer, not to a
+longer text; a `listing_refreshed` for a kept listing releases it; the
+marketplace's preparation runs only after one second with no input.
+Noticed and left: Quick Open's walk collects every match before it cuts
+to 50 (a bounded heap would fix it); several end-to-end tests wait a fixed
+time and fail under load; the sidebar-tree test at a rail start failed in
+every full run on the loaded machine and passed on the quiet one.
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
