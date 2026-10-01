@@ -211,7 +211,7 @@ public class ShellEndToEndTests
         var (run, root, data) = Prepare("shell-quick-open");
         try
         {
-            // A repository on a branch: the pill shows it, and Quick Open searches the whole repository from a folder in it.
+            // A repository on a branch: the sidebar's workspace row shows it, and Quick Open searches the whole repository from a folder in it.
             var project = Directory.CreateDirectory(Path.Combine(data, "proj")).FullName;
             Directory.CreateDirectory(Path.Combine(project, ".git"));
             File.WriteAllText(Path.Combine(project, ".git", "HEAD"), "ref: refs/heads/phase-16\n");
@@ -226,7 +226,7 @@ public class ShellEndToEndTests
                 "pane:0",
                 $"path:{Path.Combine(project, "src")}",
                 "wait:500",
-                "shell:pill",
+                "shell:header",
                 // §7: the sidebar header opens the workspace dropdown at its full width; picking the workspace goes to its
                 // root in the left pane's tab in front. With the sidebar hidden, Ctrl+K Ctrl+W opens it under the top row.
                 "click:Workspace Default, branch phase-16",
@@ -261,7 +261,7 @@ public class ShellEndToEndTests
                 "shot:done"));
             var logs = await run.FinishAsync("quick", process, "done");
 
-            State(logs, "pill", state =>
+            State(logs, "header", state =>
             {
                 Assert.Equal("phase-16", state.GetProperty("branch").GetString());
                 Assert.Equal(project, state.GetProperty("workspace_root").GetString(), ignoreCase: true);

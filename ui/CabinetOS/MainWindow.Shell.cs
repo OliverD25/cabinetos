@@ -280,7 +280,7 @@ public sealed partial class MainWindow
         }
     }
 
-    // ----- The workspace pill -----
+    // ----- The workspace and its branch -----
 
     /// <summary>The folder Quick Open searches: the repository that holds the active folder, else the active folder.</summary>
     private string WorkspaceRoot()
@@ -294,10 +294,10 @@ public sealed partial class MainWindow
     /// <summary>
     /// Asks the core which repository holds the active folder
     /// (<c>workspace_info</c>: the core reads the repository's small files,
-    /// the window none, brief §1) and shows its branch in the pill. Runs when
-    /// the active folder changes and when the window comes to the front, so a
-    /// branch switched in a terminal shows. An older core, or a lost pipe,
-    /// leaves the pill without a branch.
+    /// the window none, brief §1) and shows its branch in the sidebar's workspace
+    /// row. Runs when the active folder changes and when the window comes to the
+    /// front, so a branch switched in a terminal shows. An older core, or a lost
+    /// pipe, leaves the row without a branch.
     /// </summary>
     private async Task UpdateWorkspaceAsync()
     {
@@ -315,7 +315,7 @@ public sealed partial class MainWindow
                         break;
                     case ErrorReply { Code: ErrorCodes.UnknownRequest }:
                         _unavailable.Add("workspace_info");
-                        Diag.Info(ShellTarget, "the core does not answer workspace_info; the pill shows no branch");
+                        Diag.Info(ShellTarget, "the core does not answer workspace_info; the workspace row shows no branch");
                         break;
                     case ErrorReply error:
                         Diag.Debug(ShellTarget, "workspace_info refused", new LogField("code", error.Code));

@@ -86,7 +86,7 @@
             <SolidColorBrush x:Key="CbFkeyFillBrush" Color="#0DFFFFFF" />
             <SolidColorBrush x:Key="CbFkeyHoverFillBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="CbFkeyLabelBrush" Color="#CCFFFFFF" />
-            <!-- The shell of Phase 16: hairlines at the theme's hairlineOpacity, the workspace pill, the tab strip, the breadcrumb row, the find widget. -->
+            <!-- The shell (Phase 16, v2 in Phase 20): hairlines at the theme's hairlineOpacity, the sidebar's workspace row (the pill's fill), the tab strip, the toolbar and path rows, the find widget. -->
             <SolidColorBrush x:Key="CbShellHairlineBrush" Color="#0FFFFFFF" />
             <SolidColorBrush x:Key="CbWorkspacePillFillBrush" Color="#2E60CDFF" />
             <SolidColorBrush x:Key="CbTabInactiveTextBrush" Color="#99FFFFFF" />
