@@ -199,12 +199,12 @@ function Shot([IntPtr]$h, [string]$path) {
 # Presses a key that opens the name box and types only once the window says the box is shown
 # ("rename box shown" in its log), or after 5 s: the box takes the keyboard a moment after the key.
 function PressForNameBox([scriptblock]$press) {
-  $count = @(Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"rename box shown"' }).Count
+  $count = UiCount '"rename box shown"'
   & $press
   $deadline = (Get-Date).AddSeconds(5)
   while ((Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 100
-    if (@(Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"rename box shown"' }).Count -gt $count) { Start-Sleep -Milliseconds 300; return }
+    if ((UiCount '"rename box shown"') -gt $count) { Start-Sleep -Milliseconds 300; return }
   }
   "the name box did not report itself within 5 s"
 }
@@ -220,7 +220,7 @@ function ClickLeftPane {
 }
 
 function SelectionText {
-  $line = Get-Content "$root\logs\ui.*.jsonl" -ErrorAction SilentlyContinue | Where-Object { $_ -match '"selection shown"' } | Select-Object -Last 1
+  $line = UiLast '"selection shown"'
   if (-not $line) { return "(the window has not reported a selection yet)" }
   $text = ($line | ConvertFrom-Json).fields.text
   if ($text -eq '') { return "(nothing selected)" }
@@ -736,7 +736,7 @@ $measures = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"r
 # has both counted with no key; the same command turns the setting off, so the run ends as it started. The window's log says what
 # it asked ("folder sizes asked") and what the count found ("folder sizes counted"). The helpers are here because the ones
 # further down the script are not defined yet.
-function FolderSizeLines([string]$message) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match "`"$message`"" } | ForEach-Object { $_ | ConvertFrom-Json }) }
+function FolderSizeLines([string]$message) { @(UiObjects "`"$message`"") }
 # The first line of the left pane (pane 0) after the $before lines taken earlier, polled every 200 ms; $null when none came.
 function WaitFolderSizeLine([string]$message, [int]$before, [int]$seconds = 10) {
   $deadline = (Get-Date).AddSeconds($seconds)
@@ -818,7 +818,7 @@ Start-Sleep -Milliseconds 2500
 "Shift+F8 removed it for good: $(-not (Test-Path -LiteralPath "$tc\cabinetos-live-check-shift-f8.txt"))"
 
 Step "11a: Ctrl+Alt+P: the terminal shows with the folder typed at the prompt (Ctrl+P is Quick Open since Phase 16)"
-function HandedToTerminal { @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a page has the keyboard"' -and $_ -match '"page":"terminal"' }) }
+function HandedToTerminal { @(UiLines '"a page has the keyboard"' | Where-Object { $_ -match '"page":"terminal"' }) }
 $handedBefore = (HandedToTerminal).Count
 # Never sooner than the 3 s the step slept before, and up to 12 s for the line: the window's hand-over checks the keyboard 150 ms
 # after each hand-over and up to four times, and its log writer works in its own thread.
@@ -832,7 +832,7 @@ $handed = HandedToTerminal | Select-Object -Skip $handedBefore | Select-Object -
 "the terminal's page has the keyboard after Ctrl+Alt+P (hand-overs: $(if ($handed) { ($handed | ConvertFrom-Json).fields.hand_overs } else { 'none' })), the preview open in the other pane: $([bool]$handed)"
 # Esc clears the typed line in pwsh; Ctrl+Backquote gives the keyboard back to the pane (the page
 # passes it to the window, which runs view.toggleTerminal).
-function ToggleCount { @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"command executed"' -and $_ -match 'view\.toggleTerminal' }).Count }
+function ToggleCount { @(UiLines '"command executed"' | Where-Object { $_ -match 'view\.toggleTerminal' }).Count }
 $lostBefore = @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a key the page did not get"' }).Count
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 300
 $toggles = ToggleCount
@@ -888,10 +888,10 @@ foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPatt
 # rose-pine-moon; its highlight starts on the theme in effect. The last "metrics applied" line of the
 # window's log says what the window laid itself out with.
 function LastChosenTheme {
-  $line = Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"theme chosen"' } | Select-Object -Last 1
+  $line = UiLast '"theme chosen"'
   if ($line) { ($line | ConvertFrom-Json).fields.theme } else { "(nothing chosen)" }
 }
-function LastMetrics { Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"metrics applied"' } | ForEach-Object { ($_ | ConvertFrom-Json).fields } | Select-Object -Last 1 }
+function LastMetrics { UiObjects '"metrics applied"' | ForEach-Object { $_.fields } | Select-Object -Last 1 }
 $cc = "$files\compact"
 New-Item -ItemType Directory -Force "$cc\src", "$cc\dst" | Out-Null
 Set-Content -LiteralPath "$cc\src\cabinetos-live-check-f5.txt" -Value "copied by the function-key bar" -NoNewline
@@ -905,7 +905,7 @@ GoPath "$cc\dst" 1000
 
 # The picker previews its highlight live (docs/ui.md, "Themes"): "theme previewed" when the window paints
 # the highlighted theme, "theme restored" when Esc paints the theme in effect back. Nothing is written.
-function ThemeLog { Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"target":"cabinetos_ui::theme"' } | ForEach-Object { $_ | ConvertFrom-Json } }
+function ThemeLog { UiObjects '"target":"cabinetos_ui::theme"' }
 Step "theme preview: Ctrl+K Ctrl+T, Down previews the next theme, Esc paints the theme in effect back"
 $themeBefore = (ThemeLog | Where-Object { $_.message -eq 'theme applied' -or $_.message -eq 'theme restored' } | Select-Object -Last 1).fields.theme
 [void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
@@ -954,7 +954,7 @@ foreach ($i in 1..2) {
 # Evidence: the window's log says Tab ran view.focusOtherPane (one more "command executed" line): had the click left the
 # keyboard on the button, Tab would have walked WinUI's tab stops and run nothing. UI Automation adds that the focus is no
 # Button; it cannot say which pane has it, because WinUI reports the focus at the window's input site (run of 2026-10-01).
-function FocusOtherCount { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match '"command executed"' -and $_ -match 'view\.focusOtherPane' }).Count }
+function FocusOtherCount { @(UiLines '"command executed"' | Where-Object { $_ -match 'view\.focusOtherPane' }).Count }
 # The leftmost element of a name: the top row's button, not a folder or a menu row of the same name.
 function TopRowButton([string]$name) {
   $all = [System.Windows.Automation.AutomationElement]::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants,
@@ -1057,10 +1057,10 @@ $metrics = LastMetrics
 # The window's log says what the tabs did: "tab shown" (the folder, the tab's place, how many tabs,
 # whether it is locked), "tab row shown" and "tab row hidden", and the notices of the status bar.
 # Since Phase 16 the strip shows from the first tab, so it is shown once at the start and never hidden.
-function TabLog { Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"target":"cabinetos_ui::tabs"' } | ForEach-Object { $_ | ConvertFrom-Json } }
+function TabLog { UiObjects '"target":"cabinetos_ui::tabs"' }
 function LastTabShown { TabLog | Where-Object { $_.message -eq 'tab shown' -and $_.fields.pane -eq 0 } | Select-Object -Last 1 }
-function NoticeCount([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"notice shown"' -and $_ -match $pattern }).Count }
-function ListRequests { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"request sent"' -and $_ -match '"request":"list_directory"' }).Count }
+function NoticeCount([string]$pattern) { @(UiLines '"notice shown"' | Where-Object { $_ -match $pattern }).Count }
+function ListRequests { @(UiLines '"request sent"' | Where-Object { $_ -match '"request":"list_directory"' }).Count }
 function TakenBack { @(TabLog | Where-Object { $_.message -eq 'tab listing taken back' }).Count }
 $tb = "$files\tabs12"
 New-Item -ItemType Directory -Force "$tb\one\sub", "$tb\two" | Out-Null
@@ -1146,7 +1146,7 @@ if (@($saved.left.items)[0].locked) {
 # Two parts. The drag of a pane's row onto a tool's page needs only the Markdown Preview. "ask" needs the
 # agent extension (Phase 14) with its fake provider, which did not exist when this was written (2026-09-30):
 # it is written against the protocol and waits until sdk\extensions\agent and build-index.ps1 -Extensions exist.
-function PluginLog([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match $pattern }) }
+function PluginLog([string]$pattern) { @(UiLines $pattern) }
 $drag = "$files\drag14"
 New-Item -ItemType Directory -Force $drag | Out-Null
 Set-Content -LiteralPath "$drag\a.txt" -Value "dragged" -NoNewline
@@ -1280,7 +1280,6 @@ if (-not $hasExtensions) {
 # happened: "the sidebar shows a view" (view, open, the width the divider sits at), "the tree shows a folder",
 # "a rail button was pressed" and "a sidebar page started". Toggle Sidebar is on Ctrl+Alt+B here: the first section
 # of this script rebound it.
-function UiLines([string]$pattern) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_ -match $pattern }) }
 function LastFields([string]$pattern) {
   $line = UiLines $pattern | Select-Object -Last 1
   if ($line) { ($line | ConvertFrom-Json).fields }
@@ -1607,7 +1606,7 @@ Shot $h "$ShotDir\edge-deleted-live.png"
 # "find filtered" (how many rows match), "find closed", "quick open shown", "menu shown", and "command executed"
 # with each command and what started it. The hamburger and a crumb are found by their accessible names, as a
 # screen reader finds them, and clicked with the real mouse.
-function ShellLines([string]$message) { @(Get-Content "$root\logs\ui.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match "`"$message`"" } | ForEach-Object { $_ | ConvertFrom-Json }) }
+function ShellLines([string]$message) { @(UiObjects "`"$message`"") }
 # The window's log writer works in its own thread: a line can reach the file some time after the window logged it, longer
 # than a fixed sleep. A check therefore reads a line only after it has come. This polls every 200 ms until there are more
 # lines of the message than $before (the count taken before the key or click) and gives the last one, or $null when none
@@ -1779,7 +1778,7 @@ function GoLeftPane([string]$path) {
 }
 # The core's "configuration changed" lines for the file menu's list, and a wait for the next one (the core logs through a
 # writer thread of its own, as the window does).
-function CoreMenuChanges { @(Get-Content "$root\logs\core.*.jsonl" -Encoding UTF8 | Where-Object { $_ -match '"configuration changed"' -and $_ -match 'contextMenu\.file\.items' }) }
+function CoreMenuChanges { @((LogOf 'core').Lines('"configuration changed"') | Where-Object { $_ -match 'contextMenu\.file\.items' }) }
 function WaitCoreMenuChange([int]$before, [int]$seconds = 5) {
   $deadline = (Get-Date).AddSeconds($seconds)
   while ($true) {
