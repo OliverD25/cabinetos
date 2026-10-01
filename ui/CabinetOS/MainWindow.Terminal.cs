@@ -29,8 +29,9 @@ public sealed partial class MainWindow
     // write, or what the file said. A config_changed that brings the same value changes nothing.
     private readonly Dictionary<DockPlacement, uint?> _dockKnown = [];
     private bool _paletteFromTerminal;
-    // The pane Ctrl+` gave the keyboard back to from the terminal, until the terminal gets it again,
-    // another pane becomes active or the dock hides: Ctrl+` there is the "second" one, which hides the dock.
+    // The pane Ctrl+` gave the keyboard back to from the terminal, until the terminal gets it again or the dock
+    // hides: Ctrl+` there is the "second" one, which hides the dock. A pane switch in between (closing a tool in
+    // the other pane, the drive list) keeps it, or the second Ctrl+` would give the keyboard back instead.
     private int? _terminalHandedBackTo;
 
     private void SetUpTerminal()
@@ -39,6 +40,7 @@ public sealed partial class MainWindow
         _terminal.Changed += UpdateDockHeader;
         _terminal.Notice += (text, isError) => ShowNotice(text, isError);
         _terminal.KeyCommand += command => _ = _router.ExecuteAsync(command, trigger: "key");
+        _terminal.PasteRequested += session => _ = PasteIntoTerminalAsync(session);
         _terminal.LastClosed += () =>
         {
             if (_dockVisible)
@@ -247,6 +249,23 @@ public sealed partial class MainWindow
             return;
         }
         FocusTerminal();
+    }
+
+    // Ctrl+Shift+V in the terminal: the window reads the clipboard, since the page may not.
+    private async Task PasteIntoTerminalAsync(ulong session)
+    {
+        switch (await ReadClipboardTextAsync())
+        {
+            case null:
+                ShowNotice("The clipboard could not be read.", isError: true);
+                break;
+            case { Length: > TerminalPageMessages.MaxIncomingLength }:
+                ShowNotice("The clipboard's text is too long to paste into the terminal (over 1 MiB).", isError: true);
+                break;
+            case { Length: > 0 } text:
+                _terminal.Paste(session, text);
+                break;
+        }
     }
 
     private string? PaneFolder(int pane) => _panes[pane].Path.Length > 0 ? _panes[pane].Path : null;

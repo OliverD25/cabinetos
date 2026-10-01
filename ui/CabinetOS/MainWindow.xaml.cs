@@ -2414,8 +2414,6 @@ public sealed partial class MainWindow : Window
         UpdateNavigationButtons();
         UpdateCrumbs();
         _sidebar.SetActivePath(Active.Path);
-        // The terminal stays as it is (the Zero-Hijack rule); only a "second" Ctrl+` belongs to one pane.
-        _terminalHandedBackTo = null;
         ScheduleToolContext();
         UpdateTabRows();
         ScheduleWindowState();

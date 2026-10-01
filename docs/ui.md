@@ -2594,10 +2594,13 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
     the other pane and pressing Ctrl+` never hides the dock;
   - in the terminal: the keyboard goes back to the active pane;
   - in a pane whose session is shown without the keyboard: the session
-    gets the keyboard; but right after Ctrl+` gave the keyboard back to
-    this pane, it hides the dock (the "second" Ctrl+`). A click into the
-    terminal, another pane becoming active, or the dock hiding makes the
-    next Ctrl+` a first one again.
+    gets the keyboard; but after Ctrl+` gave the keyboard back to this
+    pane, and before the terminal has it again, it hides the dock (the
+    "second" Ctrl+`). This holds when the active pane changed in between
+    (closing a tool in the other pane, the drive list): the live check of
+    2026-10-02 found that such a change made the second Ctrl+` give the
+    keyboard back instead. A click into the terminal or the dock hiding
+    makes the next Ctrl+` a first one again.
 
   The top row's terminal button and the rail's only toggle: when the dock
   is shown they hide it, else they act as Ctrl+` in the active pane.
@@ -2634,8 +2637,13 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   In a pane the same keys keep their pane meaning (Ctrl+Shift+C is
   `edit.copyFullPath` there). The page itself handles four keys: Ctrl+C
   with text selected copies it (as in Windows Terminal); Ctrl+Shift+C
-  copies the selection and never reaches the shell; Ctrl+V and
-  Ctrl+Shift+V paste (bracketed when the shell asked for it). Esc, Tab and
+  copies the selection and never reaches the shell; Ctrl+V pastes through
+  the browser's own paste; Ctrl+Shift+V asks the window (`paste`), which
+  reads the clipboard and sends the text back for xterm.js to paste. The
+  browser would treat Ctrl+Shift+V as its own key ("paste as plain
+  text"), which `WebViewHost` turns off, and the page may not read the
+  clipboard, since every permission request is refused. Both pastes are
+  bracketed when the shell asked for it. Esc, Tab and
   chords such as Ctrl+K … stay in the shell, which needs them. Ctrl+Tab and Ctrl+Shift+Tab (`tab.next`,
   `tab.previous`) go to the window too, since no shell uses them, and the
   keyboard goes to the pane's tab that comes to the front; Ctrl+W and Ctrl+T
@@ -2722,9 +2730,10 @@ How it is built:
   mouse reports), and go into the pipe in order. The fit addon measures
   the cells; a new size goes to the core as `terminal_resize`.
 - **Messages** (`TerminalPageMessages`, tested): window to page `create`,
-  `output`, `show`, `close`, `exited`, `focus`, `passKeys`, `theme`; page
-  to window `ready`, `input`, `binary`, `resize`, `buffer` (the alternate
-  screen came or went), `key`. Anything malformed, unknown or over 1 MiB
+  `output`, `show`, `close`, `exited`, `focus`, `passKeys`, `theme`,
+  `paste` (the clipboard's text); page to window `ready`, `input`,
+  `binary`, `resize`, `buffer` (the alternate screen came or went), `key`,
+  `paste` (Ctrl+Shift+V asks for the clipboard). Anything malformed, unknown or over 1 MiB
   is dropped.
 - **Safety.** The page loads only from its virtual host. Every other
   navigation, frame, new window, download, permission and request, http

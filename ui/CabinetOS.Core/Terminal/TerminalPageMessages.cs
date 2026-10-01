@@ -34,7 +34,8 @@ public sealed record TerminalSpacing(double LineHeight, double Top, double Right
 /// A message from the terminal page (xterm.js in WebView2) to the window:
 /// <c>ready</c>, <c>input</c> (keys as text), <c>binary</c> (keys as base64),
 /// <c>resize</c> (the fit addon's cells), <c>buffer</c> (the alternate screen
-/// came or went), or <c>key</c> (a shortcut of the window pressed in the terminal).
+/// came or went), <c>key</c> (a shortcut of the window pressed in the terminal),
+/// or <c>paste</c> (Ctrl+Shift+V: the page asks for the clipboard's text).
 /// </summary>
 public sealed record TerminalPageMessage(string Type, ulong Session, string? Data, int Cols, int Rows, bool Alternate, string? Keys);
 
@@ -76,6 +77,7 @@ public static class TerminalPageMessages
                     new TerminalPageMessage(type, session, null, 0, 0, alternate.GetBoolean(), null),
                 "key" when Text(root, "keys") is { Length: > 0 and < 64 } keys =>
                     new TerminalPageMessage(type, 0, null, 0, 0, false, keys),
+                "paste" when session > 0 => new TerminalPageMessage(type, session, null, 0, 0, false, null),
                 _ => null,
             };
         }
@@ -108,6 +110,13 @@ public static class TerminalPageMessages
 
     /// <summary>Gives the shown terminal the keyboard.</summary>
     public static string Focus() => Write(w => w.WriteString("type", "focus"));
+
+    /// <summary>
+    /// The clipboard's text for a session, which xterm.js pastes as typed text (bracketed when the shell asked for
+    /// it). The window reads the clipboard: the page may not, since every permission request of a page is refused.
+    /// </summary>
+    public static string Paste(ulong session, string text) =>
+        Write(w => { w.WriteString("type", "paste"); w.WriteNumber("session", session); w.WriteString("text", text); });
 
     /// <summary>The window's shortcuts the page passes on instead of sending to the shell.</summary>
     public static string PassKeys(IEnumerable<string> keys) => Write(w =>

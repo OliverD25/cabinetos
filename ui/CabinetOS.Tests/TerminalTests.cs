@@ -258,6 +258,7 @@ public class TerminalTests
     [InlineData("""{"type":"resize","session":3,"cols":120,"rows":30}""", "resize")]
     [InlineData("""{"type":"buffer","session":3,"alternate":true}""", "buffer")]
     [InlineData("""{"type":"key","keys":"ctrl+backquote"}""", "key")]
+    [InlineData("""{"type":"paste","session":3}""", "paste")]
     public void The_page_messages_the_window_takes(string json, string type) =>
         Assert.Equal(type, TerminalPageMessages.Parse(json)?.Type);
 
@@ -269,6 +270,7 @@ public class TerminalTests
     [InlineData("""{"type":"resize","session":3,"cols":0,"rows":30}""")]
     [InlineData("""{"type":"resize","session":3,"cols":40000,"rows":30}""")]
     [InlineData("""{"type":"launch","session":3}""")]
+    [InlineData("""{"type":"paste"}""")]
     public void Malformed_or_unknown_page_messages_are_dropped(string json) =>
         Assert.Null(TerminalPageMessages.Parse(json));
 
@@ -282,6 +284,15 @@ public class TerminalTests
         Assert.Equal(("output", 3UL, "aGk="), (output.RootElement.GetProperty("type").GetString(), output.RootElement.GetProperty("session").GetUInt64(), output.RootElement.GetProperty("data").GetString()));
         using var keys = JsonDocument.Parse(TerminalPageMessages.PassKeys(["ctrl+shift+p", "ctrl+backquote"]));
         Assert.Equal(2, keys.RootElement.GetProperty("keys").GetArrayLength());
+    }
+
+    [Fact]
+    public void Pasted_text_reaches_the_page_whole_for_one_session()
+    {
+        // The text goes as it is: quotes, a line break and a tab must arrive unchanged for xterm.js to paste.
+        const string text = "echo \"a b\"\r\n\tcd 'D:\\x y' — ґ";
+        using var paste = JsonDocument.Parse(TerminalPageMessages.Paste(3, text));
+        Assert.Equal(("paste", 3UL, text), (paste.RootElement.GetProperty("type").GetString(), paste.RootElement.GetProperty("session").GetUInt64(), paste.RootElement.GetProperty("text").GetString()));
     }
 
     [Fact]

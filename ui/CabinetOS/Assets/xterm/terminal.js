@@ -1,8 +1,8 @@
 // The terminal page: one xterm.js terminal per session, fed by the window.
 // The window owns the sessions and their byte pipes; this page only draws
 // output and turns keys into input. Messages (docs/ui.md, "The terminal"):
-//   window -> page: create, output (base64), show, close, exited, focus, passKeys, theme
-//   page -> window: ready, input (text), binary (base64), resize, buffer, key
+//   window -> page: create, output (base64), show, close, exited, focus, passKeys, theme, paste
+//   page -> window: ready, input (text), binary (base64), resize, buffer, key, paste
 'use strict';
 
 (() => {
@@ -114,9 +114,18 @@
       event.preventDefault();
       return false;
     }
-    // Ctrl+V and Ctrl+Shift+V: the browser's own paste event (Ctrl+Shift+V pastes as plain text)
-    // reaches xterm.js, which sends the text (bracketed when the shell asked for it) instead of a ^V.
-    if (keys === 'ctrl+v' || keys === 'ctrl+shift+v') {
+    // Ctrl+V: the browser's own paste event reaches xterm.js, which sends the text (bracketed when
+    // the shell asked for it) instead of a ^V.
+    if (keys === 'ctrl+v') {
+      return false;
+    }
+    // Ctrl+Shift+V is a browser key (paste as plain text), and WebView2's browser keys are off; the
+    // page may not read the clipboard either. So the window reads it and sends the text back (paste).
+    if (keys === 'ctrl+shift+v') {
+      event.preventDefault();
+      if (!event.repeat) {
+        post({ type: 'paste', session: shown });
+      }
       return false;
     }
     return true;
@@ -258,6 +267,11 @@
       }
       case 'passKeys':
         passKeys = new Set(message.keys || []);
+        break;
+      case 'paste':
+        if (session && typeof message.text === 'string') {
+          session.term.paste(message.text);
+        }
         break;
       case 'theme':
         applyLook(message);

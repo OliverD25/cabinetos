@@ -52,6 +52,12 @@ public class TerminalEndToEndTests
                 "key:ctrl+backquote",
                 "wait:800",
                 "terminal-state:back",
+                // The active pane changes and comes back in between, as closing a tool in the other pane does
+                // (the live check of 2026-10-02): the second Ctrl+` still hides.
+                "pane:0",
+                "wait:300",
+                "pane:1",
+                "wait:300",
                 "key:ctrl+backquote",
                 "wait:800",
                 "terminal-state:hidden",

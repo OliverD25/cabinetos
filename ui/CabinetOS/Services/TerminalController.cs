@@ -115,6 +115,9 @@ internal sealed class TerminalController
     /// <summary>A window command for a key pressed in the terminal (<see cref="TerminalKeys"/>).</summary>
     public event Action<string>? KeyCommand;
 
+    /// <summary>The page asked for the clipboard's text (Ctrl+Shift+V) for a running session.</summary>
+    public event Action<ulong>? PasteRequested;
+
     /// <summary>The last tab closed.</summary>
     public event Action? LastClosed;
 
@@ -572,7 +575,24 @@ internal sealed class TerminalController
                     KeyCommand?.Invoke(command);
                 }
                 break;
+            case "paste":
+                if (Find(message.Session) is { Running: true })
+                {
+                    PasteRequested?.Invoke(message.Session);
+                }
+                break;
         }
+    }
+
+    /// <summary>Pastes text into a session's terminal, as if the user had pasted it there.</summary>
+    public void Paste(ulong sessionId, string text)
+    {
+        if (Find(sessionId) is not { Running: true } tab)
+        {
+            return;
+        }
+        _page.Post(TerminalPageMessages.Paste(tab.SessionId, text));
+        Diag.Debug(Target, "terminal paste", new LogField("session_id", tab.SessionId), new LogField("chars", text.Length));
     }
 
     private void OnPageReady()
