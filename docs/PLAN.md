@@ -1118,6 +1118,25 @@ creator: the seven speed proposals, P2 and P4, and ADR 0017. Noticed and
 left: many end-to-end tests read exactly one day's log file, so a run
 that crosses midnight UTC fails them.
 
+**19h, the speed proposals (decided 2026-10-01, morning).** The creator
+answered the seven proposals of the speed review with "do as you
+recommend". The planning session recommended all seven, each a measured
+gain with a small or contained cost (Article 1): A ReadyToRun (a start
+0.14 to 0.24 s shorter for about 15 MB more download, on a 69 MB zip),
+B fewer rows made ahead (no frozen frame at a density change, 8 % less
+scroll work; the live check must show no empty rows on a fast drag),
+C the marketplace's cards in parts (the first view's frame from about
+80 ms to about 20 ms), D Quick Open's walk limit raised with a notice
+when a search stopped early, E the last tab's listing kept alive for
+30 s (a tab switch on 100,000 files from 60 to 20 ms, for 10 MB kept per
+pane), F the icons of the first listing drawn at the core's start, G a
+log line when the previous run ended without closing (Article 12).
+Handed to two coders in parallel: A, B, D, F and G on Sonnet (small,
+concrete), C and E on Opus (a list made in slices and a listing's
+lifetime, where a mistake hides). Each coder measures before and after
+with `ui/livecheck/speed-review.ps1` and reports in `log/2026-10-01/`.
+Status follows when they land.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
