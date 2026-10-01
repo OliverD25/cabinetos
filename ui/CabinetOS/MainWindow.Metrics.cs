@@ -72,6 +72,8 @@ public sealed partial class MainWindow
         foreach (var find in _findViews)
         {
             find.ApplyMetrics();
+            // It hangs from the toolbar row's bottom edge, over the path row (SHELL_REDESIGN.md v2 §3).
+            find.Margin = new Thickness(0, m.ToolbarRowHeight, 0, 0);
         }
 
         // Body: the space at its edges, between the sidebar and the panes, and between the panes; under the top

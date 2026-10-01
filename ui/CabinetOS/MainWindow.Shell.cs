@@ -505,6 +505,12 @@ public sealed partial class MainWindow
             fields.Add(new($"pane{i}_free", _crumbViews[i].DriveShown.Free));
             fields.Add(new($"pane{i}_toolbar_fill", BrushText(_crumbViews[i].ToolbarFillKey)));
             fields.Add(new($"pane{i}_tab_fill", BrushText(_tabViews[i].FrontFillKey)));
+            // Where the find widget hangs: from the toolbar row's bottom edge, at the pane's right end.
+            fields.Add(new($"pane{i}_toolbar_bottom", Math.Round(TopOf(_crumbViews[i]) + toolbarRow, 1)));
+            fields.Add(new($"pane{i}_find_top", _findViews[i].IsOpen ? Math.Round(TopOf(_findViews[i]), 1) : 0));
+            fields.Add(new($"pane{i}_find_right_gap", _findViews[i].IsOpen
+                ? Math.Round(LeftOf(_crumbViews[i]) + _crumbViews[i].ActualWidth - (LeftOf(_findViews[i]) + _findViews[i].ActualWidth), 1)
+                : 0));
             fields.Add(new($"pane{i}_tab_look", _tabViews[i].DescribeLook()));
             // The listings the pane holds: one per column in the column view (ADR 0016), so a dropped column's is seen to go.
             fields.Add(new($"pane{i}_listings", ListingCount(i)));
@@ -520,6 +526,10 @@ public sealed partial class MainWindow
     // An element's left edge in the window, for the snapshot aid's log.
     private static double LeftOf(FrameworkElement element) =>
         element.ActualWidth > 0 ? element.TransformToVisual(null).TransformPoint(new Point(0, 0)).X : 0;
+
+    // An element's top edge in the window, for the snapshot aid's log.
+    private static double TopOf(FrameworkElement element) =>
+        element.ActualHeight > 0 ? element.TransformToVisual(null).TransformPoint(new Point(0, 0)).Y : 0;
 
     // An element's bottom edge in the window, for the snapshot aid's log.
     private static double BottomOf(FrameworkElement element) =>

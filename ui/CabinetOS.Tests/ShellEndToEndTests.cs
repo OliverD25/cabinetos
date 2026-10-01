@@ -114,6 +114,9 @@ public class ShellEndToEndTests
                 Assert.Equal("*alpha*", state.GetProperty("pane0_filter").GetString());
                 Assert.True(state.GetProperty("pane0_find_button_open").GetBoolean());
                 Assert.Equal("*.*", state.GetProperty("pane1_filter").GetString());
+                // The widget drops from the toolbar row's right end and lies over the path row.
+                Assert.Equal(state.GetProperty("pane0_toolbar_bottom").GetDouble(), state.GetProperty("pane0_find_top").GetDouble(), 0.6);
+                Assert.InRange(state.GetProperty("pane0_find_right_gap").GetDouble(), 0, 8);
                 // The other pane shows every row: the find is the active pane's only.
                 Assert.Equal(state.GetProperty("pane1_count").GetInt32(), state.GetProperty("pane1_shown").GetInt32());
                 Assert.False(state.GetProperty("pane1_find_open").GetBoolean());
@@ -385,6 +388,17 @@ public class ShellEndToEndTests
                 "shell:editing",
                 "cmd:overlay.close",
                 "shell:edited",
+                // The toolbar's Find opens the pane's find and closes it again; a click on the filter label opens it too.
+                "click:Find in pane",
+                "wait:300",
+                "shell:find-button",
+                "click:Find in pane",
+                "wait:300",
+                "shell:find-button-off",
+                "click:Filter",
+                "wait:300",
+                "shell:filter-click",
+                "cmd:overlay.close",
                 "cmd:settings.open",
                 "wait:1000",
                 "shot:done"));
@@ -414,6 +428,9 @@ public class ShellEndToEndTests
             Assert.Contains(logs, l => Message(l) == "command executed" && Field(l, "command").GetString() == "go.chooseDriveLeft");
             State(logs, "editing", state => Assert.True(state.GetProperty("pane0_editing").GetBoolean()));
             State(logs, "edited", state => Assert.False(state.GetProperty("pane0_editing").GetBoolean()));
+            State(logs, "find-button", state => Assert.True(state.GetProperty("pane0_find_open").GetBoolean() && state.GetProperty("pane0_find_button_open").GetBoolean()));
+            State(logs, "find-button-off", state => Assert.False(state.GetProperty("pane0_find_open").GetBoolean() || state.GetProperty("pane0_find_button_open").GetBoolean()));
+            State(logs, "filter-click", state => Assert.True(state.GetProperty("pane0_find_open").GetBoolean()));
             Assert.Contains(logs, l => Message(l) == "notice shown" && Field(l, "text").GetString()!.StartsWith("Cannot edit cabinetos.json", StringComparison.Ordinal));
         }
         finally

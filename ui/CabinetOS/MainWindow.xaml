@@ -342,9 +342,10 @@
                             <ColumnDefinition x:Name="RightColumn" Width="*" />
                         </Grid.ColumnDefinitions>
                         <!--
-                          Each pane, top to bottom (Phase 16): its tab strip, its breadcrumb row with Back, Forward and
-                          Up, and its listing. A Tool Extension's editor (design view D) covers the listing while the
-                          pane's front tab shows one.
+                          Each pane, top to bottom (v2 of the shell redesign): its tab strip, its toolbar row and path row
+                          (PaneCrumbs), and its listing. A Tool Extension's editor (design view D) covers the listing while
+                          the pane's front tab shows one. The find widget drops from the toolbar row's right end and lies
+                          over the path row (its top margin is the toolbar row's height, MainWindow.Metrics.cs).
                         -->
                         <Grid x:Name="LeftSide" Margin="0,0,4,0">
                             <Grid.RowDefinitions>
@@ -358,9 +359,12 @@
                             <views:EditorPane x:Name="LeftEditor" Grid.Row="2" />
                             <views:FindWidget
                                 x:Name="LeftFind"
-                                Grid.Row="2"
+                                Grid.Row="1"
+                                Grid.RowSpan="2"
+                                Margin="0,28,0,0"
                                 HorizontalAlignment="Right"
-                                VerticalAlignment="Top" />
+                                VerticalAlignment="Top"
+                                Canvas.ZIndex="1" />
                             <views:PreviewPane x:Name="LeftPreview" Grid.Row="2" />
                         </Grid>
                         <Grid
@@ -378,9 +382,12 @@
                             <views:EditorPane x:Name="RightEditor" Grid.Row="2" />
                             <views:FindWidget
                                 x:Name="RightFind"
-                                Grid.Row="2"
+                                Grid.Row="1"
+                                Grid.RowSpan="2"
+                                Margin="0,28,0,0"
                                 HorizontalAlignment="Right"
-                                VerticalAlignment="Top" />
+                                VerticalAlignment="Top"
+                                Canvas.ZIndex="1" />
                             <views:PreviewPane x:Name="RightPreview" Grid.Row="2" />
                         </Grid>
                     </Grid>
