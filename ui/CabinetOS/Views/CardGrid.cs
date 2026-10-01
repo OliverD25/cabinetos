@@ -1,3 +1,4 @@
+using CabinetOS.Core.Market;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Foundation;
@@ -54,7 +55,7 @@ public sealed partial class CardGrid : Panel
     private (int Columns, double Width, double ItemWidth) Columns(double available)
     {
         var width = double.IsInfinity(available) ? MinItemWidth : available;
-        var columns = Math.Max(1, (int)Math.Floor((width + Spacing) / (MinItemWidth + Spacing)));
+        var columns = CardSlices.Columns(width, MinItemWidth, Spacing);
         return (columns, width, Math.Max(0, (width - (Spacing * (columns - 1))) / columns));
     }
 

@@ -29,13 +29,17 @@ public sealed partial class MarketplaceView : UserControl
     private readonly Storyboard _detailEntrance;
     private readonly Style _cardStyle;
     private readonly List<NavRowView> _navRows = [];
+    private readonly CardSlices _slices = new();
     private Dictionary<string, Card> _cards = new(StringComparer.Ordinal);
-    private List<string> _order = [];
+    private readonly Dictionary<string, Card> _spare = new(StringComparer.Ordinal);
     private MarketplaceModel? _model;
     private MarketItem? _detailItem;
 
     // An opening that showed no card yet: its first cards are logged at the frame that draws them (Article 12).
     private long _openedTicks;
+
+    // When the set of cards being made began: the opening, or the render that brought new items.
+    private long _setStarted;
 
     /// <summary>Creates the view, hidden.</summary>
     public MarketplaceView()
@@ -252,56 +256,160 @@ public sealed partial class MarketplaceView : UserControl
         return new NavRowView(id, button, count, pill);
     }
 
-    // Cards are made once per item and updated in place, so 30 progress events a second only change words.
+    // Cards are made once per item and updated in place, so 30 progress events a second only change words. A new set
+    // of items makes the cards that fill the view at once and the rest in slices (CardSlices): 50 cards in one go
+    // froze the first view for 74 to 95 ms (the speed review's finding 5).
     private void RenderCards(MarketplaceModel model)
     {
         var items = model.Items;
-        var order = items.Select(item => item.Id).ToList();
-        if (!order.SequenceEqual(_order) || items.Any(item => !_cards.TryGetValue(item.Id, out var card) || !ReferenceEquals(card.Item, item)))
+        if (!_slices.Holds(items))
         {
-            var cards = new Dictionary<string, Card>(StringComparer.Ordinal);
-            Cards.Children.Clear();
-            foreach (var item in items)
-            {
-                var card = _cards.TryGetValue(item.Id, out var existing) && ReferenceEquals(existing.Item, item)
-                    ? existing
-                    : new Card(item, _cardStyle, id => _model?.Select(id));
-                SizeCard(card.Root);
-                cards[item.Id] = card;
-                Cards.Children.Add(card.Root);
-            }
-            _cards = cards;
-            _order = order;
-            if (_openedTicks != 0 && Cards.Children.Count > 0)
-            {
-                LogFirstCards(_openedTicks, Cards.Children.Count);
-                _openedTicks = 0;
-            }
+            StartCards(model, items);
+            return;
         }
-        foreach (var item in items)
+        for (var i = 0; i < _slices.Made; i++)
         {
+            var item = _slices.Items[i];
             _cards[item.Id].Update(model.SelectedId == item.Id, StateLine(model, item));
         }
     }
 
-    // "marketplace cards shown": from the opening to the first frame after the cards were laid out, as "listing shown" is.
-    private void LogFirstCards(long opened, int count)
+    private void StartCards(MarketplaceModel model, IReadOnlyList<MarketItem> items)
+    {
+        // The cards of the set before wait as spares: an item that comes back (a tab, a search cleared) keeps its card.
+        foreach (var (id, card) in _cards)
+        {
+            _spare[id] = card;
+        }
+        // The index read again (Refresh) leaves the grid where it was scrolled, and the cards down to there are made at
+        // once, so the grid is as tall; other items (a tab, a search) start at the top.
+        var scrolled = _slices.HasSameIds(items) ? CardScroller.VerticalOffset : 0;
+        if (scrolled == 0)
+        {
+            CardScroller.ChangeView(null, 0, null, disableAnimation: true);
+        }
+        _cards = new Dictionary<string, Card>(StringComparer.Ordinal);
+        Cards.Children.Clear();
+        // An opening's cards are timed from the opening, as "marketplace cards shown" is; a later set from now.
+        _setStarted = _openedTicks != 0 ? _openedTicks : Stopwatch.GetTimestamp();
+        AddCards(model, _slices.Start(items, CardsPerScreen(scrolled), CardsPerScreen(0)));
+        if (_openedTicks != 0 && _slices.Made > 0)
+        {
+            var first = Cards.Children[^1];
+            LogAtFrame("marketplace cards shown", _openedTicks, first, new LogField("cards", _slices.Made), new LogField("total", items.Count));
+            _openedTicks = 0;
+        }
+        NextSlice(_slices.Generation);
+    }
+
+    // The next slice at low priority, one per dispatcher turn, so input and frames come between them.
+    private void NextSlice(int generation)
+    {
+        if (_slices.IsComplete)
+        {
+            CompleteCards();
+            return;
+        }
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (_model is not { } model)
+            {
+                return;
+            }
+            // Empty when a newer set of items replaced this one: its slices stop here.
+            var slice = _slices.Next(generation);
+            if (slice.Count > 0)
+            {
+                AddCards(model, slice);
+                NextSlice(generation);
+            }
+        });
+    }
+
+    private void AddCards(MarketplaceModel model, IReadOnlyList<MarketItem> slice)
+    {
+        foreach (var item in slice)
+        {
+            var card = _spare.Remove(item.Id, out var spare) && ReferenceEquals(spare.Item, item)
+                ? spare
+                : new Card(item, _cardStyle, id => _model?.Select(id));
+            SizeCard(card.Root);
+            card.Tile.CornerRadius = WindowMetrics.Inner(8);
+            _cards[item.Id] = card;
+            Cards.Children.Add(card.Root);
+            card.Update(model.SelectedId == item.Id, StateLine(model, item));
+        }
+    }
+
+    private void CompleteCards()
+    {
+        _spare.Clear();
+        if (_slices.Made > 0)
+        {
+            LogAtFrame("marketplace cards complete", _setStarted, Cards.Children[^1], new LogField("cards", _slices.Made),
+                new LogField("slices", _slices.Slices));
+        }
+    }
+
+    // How many cards fill the view scrolled down by <paramref name="scrolled"/> pixels: its columns as the grid lays
+    // them out, times the rows of cards down to the view's bottom. The grid's row of the layout is measured even while
+    // a notice stands in the cards' place; before the first layout the window's size stands in for it.
+    private int CardsPerScreen(double scrolled)
+    {
+        var padding = CardScroller.Padding;
+        var area = (Grid)CardScroller.Parent;
+        var width = area.ActualWidth - padding.Left - padding.Right;
+        var height = area.RowDefinitions[1].ActualHeight - padding.Top - padding.Bottom;
+        if (!(width > 0 && height > 0) && XamlRoot?.Size is { Width: > 0 } window)
+        {
+            width = window.Width - 180 - padding.Left - padding.Right;
+            height = window.Height;
+        }
+        return CardSlices.PerScreen(width, height + scrolled, Cards.MinItemWidth, Cards.Spacing, CardHeight());
+    }
+
+    // A card's height: a made card's as laid out, else the design's (the 40 px tile, two 10 px gaps, two lines of
+    // description at least 34 px, the footer's 17 px and the 1 px stroke twice) and the padding SizeCard gives.
+    private double CardHeight()
+    {
+        foreach (var card in _cards.Values)
+        {
+            if (card.Root.ActualHeight > 0)
+            {
+                return card.Root.ActualHeight;
+            }
+        }
+        return 113 + (2 * WindowMetrics.Current.MarketplaceCardPaddingY);
+    }
+
+    // A line at the first frame after <paramref name="card"/> was laid out, with the ms since <paramref name="since"/>,
+    // as "listing shown" is timed.
+    private void LogAtFrame(string message, long since, UIElement card, params LogField[] fields)
     {
         void OnFrame(object? sender, object e)
         {
-            if (IsOpen && Cards.ActualHeight <= 0 && Stopwatch.GetElapsedTime(opened) < TimeSpan.FromSeconds(5))
+            if (IsOpen && card.ActualSize.Y <= 0 && Stopwatch.GetElapsedTime(since) < TimeSpan.FromSeconds(5))
             {
                 return;
             }
             CompositionTarget.Rendering -= OnFrame;
             if (IsOpen)
             {
-                Diag.Info("cabinetos_ui::market", "marketplace cards shown", new LogField("cards", count),
-                    new LogField("ms", Math.Round(Stopwatch.GetElapsedTime(opened).TotalMilliseconds, 1)));
+                Diag.Info("cabinetos_ui::market", message, [.. fields, new LogField("ms", Math.Round(Stopwatch.GetElapsedTime(since).TotalMilliseconds, 1))]);
             }
         }
         CompositionTarget.Rendering += OnFrame;
     }
+
+    /// <summary>
+    /// The snapshot aid's <c>market:&lt;label&gt;</c> step: the cards in the
+    /// grid, in the order the keyboard reaches them, and the items they are
+    /// for, in the log ("marketplace cards").
+    /// </summary>
+    public void LogCardsForSnapshot(string label) =>
+        Diag.Info("cabinetos_ui::market", "marketplace cards", new LogField("label", label), new LogField("cards", Cards.Children.Count),
+            new LogField("total", _slices.Items.Count), new LogField("complete", _slices.IsComplete), new LogField("slices", _slices.Slices),
+            new LogField("ids", string.Join(",", Cards.Children.OfType<FrameworkElement>().Select(card => card.Tag as string))));
 
     // What a card says about itself in its footer: installing, an update, installed, applied.
     private static string StateLine(MarketplaceModel model, MarketItem item) => model.ActionFor(item) switch
@@ -563,7 +671,7 @@ public sealed partial class MarketplaceView : UserControl
             content.Children.Add(description);
             content.Children.Add(footer);
 
-            Root = new Button { Style = style, Content = content };
+            Root = new Button { Style = style, Content = content, Tag = item.Id };
             AutomationProperties.SetName(Root, $"{item.Name}, {MarketText.KindLabel(item)}, by {item.Author.Name}");
             Root.Click += (_, _) => select(item.Id);
             Tile = tileBox;

@@ -567,6 +567,9 @@ public sealed partial class MainWindow : Window
                 case "tabs":
                     LogTabsForSnapshot(step.Argument);
                     break;
+                case "market":
+                    MarketView.LogCardsForSnapshot(step.Argument);
+                    break;
                 case "preview" or "preview-key" or "plugin-event" or "drop" or "fake-command":
                     await RunPreviewStepAsync(step.Kind, step.Argument);
                     break;
