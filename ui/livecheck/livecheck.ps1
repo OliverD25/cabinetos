@@ -709,7 +709,9 @@ Start-Sleep -Milliseconds 2500
 Step "11a: Ctrl+Alt+P: the terminal shows with the folder typed at the prompt (Ctrl+P is Quick Open since Phase 16)"
 function HandedToTerminal { @(Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"a page has the keyboard"' -and $_ -match '"page":"terminal"' }) }
 $handedBefore = (HandedToTerminal).Count
-[Live]::Press($VK.Ctrl, $VK.Alt, $VK.P); Start-Sleep -Seconds 3
+# Never sooner than the 3 s the step slept before, and up to 12 s for the line: the window's hand-over checks the keyboard 150 ms
+# after each hand-over and up to four times, and its log writer works in its own thread.
+PressUntil { [Live]::Press($VK.Ctrl, $VK.Alt, $VK.P) } '"a page has the keyboard".*"page":"terminal"' 3000 12000 -what 'the terminal'
 Shot $h "$ShotDir\11a-terminal-path-live.png"
 "the path was typed: $([bool](Get-Content "$root\logs\ui.*.jsonl" | Where-Object { $_ -match '"paths typed at the prompt"' -and $_ -match 'OkReply' }))"
 # The preview is open in the right pane (phase 5c left it there). The window checks where Windows
