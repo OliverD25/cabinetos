@@ -28,7 +28,8 @@ public sealed partial class MainWindow
     private Task _toolsLoading = Task.CompletedTask;
     private IReadOnlyDictionary<string, string> _toolKeys = new Dictionary<string, string>();
 
-    // What a tool's page in the sidebar passes back: the ways out of every tool page, and the keys that change the sidebar's view.
+    // What a tool's page in the sidebar passes back: the ways out and the tab keys of every tool page, and the keys that change
+    // the sidebar's view.
     private IReadOnlyDictionary<string, string> _sidebarPageKeys = new Dictionary<string, string>();
 
     // Ctrl+Shift+P from a tool's page (a pane's tab, the sidebar): the way the keyboard goes back to it when the palette
@@ -67,8 +68,8 @@ public sealed partial class MainWindow
 
     private void ApplyToolKeys(Keymap keymap)
     {
-        _toolKeys = TerminalKeys.PassKeys(keymap, context: null);
-        _sidebarPageKeys = TerminalKeys.PassKeys(keymap, context: null, TerminalKeys.SidebarPageWays);
+        _toolKeys = TerminalKeys.PassKeys(keymap, context: null, paneWays: TerminalKeys.TabWays);
+        _sidebarPageKeys = TerminalKeys.PassKeys(keymap, context: null, TerminalKeys.SidebarPageWays, TerminalKeys.TabWays);
         foreach (var host in AllToolHosts())
         {
             host.SendPassKeys(ToolMessages.PassKeys(KeysOfHost(host).Keys));
@@ -233,7 +234,7 @@ public sealed partial class MainWindow
 
     private ToolHost CreateToolHost(InstalledTool tool, int pane)
     {
-        var host = NewToolHost(tool, _editorViews[pane].Frame, dataName: null);
+        var host = NewToolHost(tool, _editorViews[pane].Frame, dataName: null, pane);
         host.Failed += reason =>
         {
             Diag.Info(ToolsTarget, "tool stopped; the pane says so", new LogField("tool", tool.Manifest.Id), new LogField("pane", pane),
@@ -244,8 +245,9 @@ public sealed partial class MainWindow
     }
 
     // A host for a tool's page in any frame (a pane's editor, or the sidebar): the window's keys, the panes' context and
-    // the theme go to it, and what it asks for is checked in RunToolCommand.
-    private ToolHost NewToolHost(InstalledTool tool, Border frame, string? dataName)
+    // the theme go to it, and what it asks for is checked in RunToolCommand. A page in a pane's tab names its pane: the tab
+    // keys it passes back are about that pane's tabs, and the active pane need not be the one whose page has the keyboard.
+    private ToolHost NewToolHost(InstalledTool tool, Border frame, string? dataName, int? pane = null)
     {
         var sidebar = dataName is not null;
         var host = new ToolHost(tool, frame, ToolKeyScript.Build((sidebar ? _sidebarPageKeys : _toolKeys).Keys), dataName)
@@ -258,7 +260,7 @@ public sealed partial class MainWindow
         {
             if ((sidebar ? _sidebarPageKeys : _toolKeys).TryGetValue(keys, out var command))
             {
-                _ = _router.ExecuteAsync(command, trigger: "key");
+                _ = _router.ExecuteAsync(command, PageKeyArguments(command, keys, pane), trigger: "key");
             }
         };
         return host;

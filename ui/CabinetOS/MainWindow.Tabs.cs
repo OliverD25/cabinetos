@@ -68,8 +68,17 @@ public sealed partial class MainWindow
             var (pane, index) = TabTarget(invocation);
             return CloseTabAsync(pane, index, invocation.RequestId);
         });
-        _router.RegisterUiHandler("tab.next", _ => ActivateTabAsync(_active, _strips[_active].NextIndex()));
-        _router.RegisterUiHandler("tab.previous", _ => ActivateTabAsync(_active, _strips[_active].PreviousIndex()));
+        // A key a tool's page passes back names the pane of that page (PageKeyArguments); a key in a list means the active pane.
+        _router.RegisterUiHandler("tab.next", invocation =>
+        {
+            var pane = TabPaneOf(invocation);
+            return ActivateTabAsync(pane, _strips[pane].NextIndex(), invocation.RequestId);
+        });
+        _router.RegisterUiHandler("tab.previous", invocation =>
+        {
+            var pane = TabPaneOf(invocation);
+            return ActivateTabAsync(pane, _strips[pane].PreviousIndex(), invocation.RequestId);
+        });
         _router.RegisterUiHandler("tab.toggleLock", invocation =>
         {
             var (pane, index) = TabTarget(invocation);
@@ -106,10 +115,13 @@ public sealed partial class MainWindow
     // The pane and the tab a tab command concerns: the row's buttons name them, a key or the palette means the front tab of the active pane.
     private (int Pane, int Index) TabTarget(CommandInvocation invocation)
     {
-        var pane = CommandArgs.Number(invocation.Args, "pane") is { } named and <= 1 ? (int)named : _active;
+        var pane = TabPaneOf(invocation);
         var index = CommandArgs.Number(invocation.Args, "tab") is { } tab ? (int)tab : _strips[pane].ActiveIndex;
         return (pane, index);
     }
+
+    private int TabPaneOf(CommandInvocation invocation) =>
+        CommandArgs.Number(invocation.Args, "pane") is { } named and <= 1 ? (int)named : _active;
 
     // A chord's key names the side: Ctrl+K Ctrl+Right sends the tab to the right pane, Ctrl+K Ctrl+Left to the left one.
     // A digit names the tab of Go to Tab: Ctrl+1 is the first, Ctrl+9 the ninth (Phase 16).

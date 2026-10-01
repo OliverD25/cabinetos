@@ -8,7 +8,11 @@ namespace CabinetOS.Core.Terminal;
 /// Tab to complete), so the terminal is like a text box, only stricter: the
 /// page passes on a single combination only when it is bound with
 /// <c>when: terminalFocus</c>, or bound (in any context) to
-/// <c>palette.show</c> or <c>view.toggleTerminal</c>, the ways back out.
+/// <c>palette.show</c> or <c>view.toggleTerminal</c>, the ways back out, or when
+/// it is Ctrl+Tab or Ctrl+Shift+Tab (<see cref="TerminalTabWays"/>): no shell
+/// uses those. Ctrl+W (delete word in readline, window prefix in vim) and
+/// Ctrl+T (transpose in readline, the file picker of fzf) are shell keys, so the
+/// tab commands on them stay with the shell.
 /// Chords are never passed on: their first half is a shell key.
 /// </summary>
 public static class TerminalKeys
@@ -21,16 +25,32 @@ public static class TerminalKeys
     public static readonly IReadOnlyList<string> SidebarPageWays = ["view.showExplorer", "view.showSearch", "view.toggleSidebar"];
 
     /// <summary>
+    /// The tab commands a tool's page hands back to the window (docs/keybindings.md, "Tool pages"). They are bound in
+    /// <c>filesView</c>, which holds in a pane's list; a page in a pane's tab has the keyboard as the list has it, and
+    /// would otherwise keep Ctrl+Tab and Ctrl+W to itself, so only the mouse would leave it for another tab (Article 7).
+    /// </summary>
+    public static readonly IReadOnlyList<string> TabWays = ["tab.next", "tab.previous", "tab.close", "tab.new", "tab.select"];
+
+    /// <summary>
+    /// The tab commands the terminal hands back: the two whose keys no shell uses. The terminal is not one of the pane's
+    /// tabs, so they change the active pane's tab, and the keyboard goes to that pane.
+    /// </summary>
+    public static readonly IReadOnlyList<string> TerminalTabWays = ["tab.next", "tab.previous"];
+
+    /// <summary>
     /// The commands the window runs for keys pressed in a web page, by
     /// combination (<c>ctrl+shift+p</c>): in the terminal (<paramref name="context"/>
     /// <c>terminalFocus</c>, whose own bindings count too), or in a Tool
     /// Extension (null: the ways out only, and the commands of
-    /// <paramref name="moreWays"/> bound in any context).
+    /// <paramref name="moreWays"/> bound in any context). The commands of
+    /// <paramref name="paneWays"/> pass too, bound in any context or in
+    /// <c>filesView</c>; a way out on the same keys wins over them.
     /// </summary>
     public static IReadOnlyDictionary<string, string> PassKeys(Keymap keymap, string? context = KeyContexts.TerminalFocus,
-        IReadOnlyCollection<string>? moreWays = null)
+        IReadOnlyCollection<string>? moreWays = null, IReadOnlyCollection<string>? paneWays = null)
     {
         var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+        var paneKeys = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var binding in keymap.Bindings)
         {
             if (binding.Keys.IsChord)
@@ -47,6 +67,14 @@ public static class TerminalKeys
             {
                 keys.TryAdd(combo, binding.Command);
             }
+            else if (paneWays?.Contains(binding.Command) == true && binding.When is null or KeyContexts.FilesView)
+            {
+                paneKeys.TryAdd(combo, binding.Command);
+            }
+        }
+        foreach (var (combo, command) in paneKeys)
+        {
+            keys.TryAdd(combo, command);
         }
         return keys;
     }

@@ -269,6 +269,108 @@ public class KeysEndToEndTests
         }
     }
 
+    [Fact]
+    public async Task A_tool_page_hands_back_the_tab_keys_and_the_keyboard_follows_the_front_tab()
+    {
+        var (run, root, data) = Prepare("keys-page-tabs");
+        try
+        {
+            // The preview opens in the other pane, which stays the inactive one: the tab keys are about the pane whose page
+            // has the keyboard. Each key in the page goes to the window as a message and runs the command; the keyboard
+            // follows the tab that comes to the front: its list for a folder tab, its page for the preview.
+            var process = run.Start("page-tabs", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "open:readme.md",
+                "until:tool",
+                "wait:800",
+                "key:tab",
+                "wait:800",
+                "focus:page",
+                "tabs:page",
+                "key:ctrl+tab",
+                "wait:1200",
+                "focus:next",
+                "tabs:next",
+                "key:ctrl+shift+tab",
+                "wait:1200",
+                "focus:previous",
+                "tabs:previous",
+                "key:ctrl+1",
+                "wait:1200",
+                "focus:first",
+                "tabs:first",
+                "key:ctrl+2",
+                "wait:1200",
+                "focus:second",
+                "tabs:second",
+                "key:ctrl+t",
+                "wait:1200",
+                "focus:new",
+                "tabs:new",
+                "key:ctrl+2",
+                "wait:1200",
+                "focus:back",
+                "tabs:back",
+                "key:ctrl+w",
+                "wait:1200",
+                "focus:closed",
+                "tabs:closed",
+                "shot:done"));
+            var logs = await run.FinishAsync("page-tabs", process, "done");
+
+            var focus = Focus(logs);
+            var tabs = logs.Where(l => Message(l) == "tabs shown").ToDictionary(l => Field(l, "label").GetString()!);
+            // The right pane's row as the window shows it ("Documents | *readme.md (tool)"): how many tabs, which is in front, whether it is a tool.
+            (int Count, int Front, bool Tool) Row(string label)
+            {
+                var parts = Field(tabs[label], "right").GetString()!.Split(" | ");
+                var front = Array.FindIndex(parts, part => part.StartsWith('*'));
+                return (parts.Length, front, front >= 0 && parts[front].EndsWith("(tool)"));
+            }
+            string Element(string label) => Field(focus[label], "element").GetString()!;
+            string Context() => Evidence(logs);
+
+            Assert.Equal((2, 1, true), Row("page"));
+            Assert.Equal("WebView2", Element("page"));
+            // Ctrl+Tab in the page: the folder tab of that pane comes to the front, and its list has the keyboard.
+            Assert.True(Row("next") == (2, 0, false), "Ctrl+Tab in the page ran Next Tab" + Context());
+            Assert.Equal("FilePane", Element("next"));
+            // Ctrl+Shift+Tab from the list goes back; the preview is in front and its page has the keyboard.
+            Assert.Equal((2, 1, true), Row("previous"));
+            Assert.Equal("WebView2", Element("previous"));
+            // Ctrl+1 in the page goes to the first tab, Ctrl+2 from the list to the second, the preview.
+            Assert.True(Row("first") == (2, 0, false), "Ctrl+1 in the page ran Go to Tab" + Context());
+            Assert.Equal("FilePane", Element("first"));
+            Assert.Equal((2, 1, true), Row("second"));
+            Assert.Equal("WebView2", Element("second"));
+            // Ctrl+T in the page: a new folder tab beside the preview, in front, with the keyboard in its list.
+            Assert.True(Row("new") is (3, _, false), "Ctrl+T in the page ran New Tab" + Context());
+            Assert.Equal("FilePane", Element("new"));
+            Assert.Equal((3, 1, true), Row("back"));
+            Assert.Equal("WebView2", Element("back"));
+            // Ctrl+W in the page closes the preview's tab; the keyboard goes to the list of the tab that is left.
+            Assert.True(Row("closed") is (2, _, false), "Ctrl+W in the page ran Close Tab" + Context());
+            Assert.Equal("FilePane", Element("closed"));
+            var byKey = logs.Where(l => Message(l) == "command executed" && Field(l, "trigger").GetString() == "key")
+                .Select(l => Field(l, "command").GetString()!).Where(command => command.StartsWith("tab.")).ToList();
+            Assert.Equal(["tab.next", "tab.previous", "tab.select", "tab.select", "tab.new", "tab.select", "tab.close"], byKey);
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    // The lines that say what the keys did, for the message of a failed assertion.
+    private static string Evidence(List<string> logs) => "\n" + string.Join('\n', logs
+        .Where(l => Message(l) is "key sent" or "key sent to a page" or "command executed" or "a key the page did not get" or "keyboard focus"
+            or "tabs shown" or "overlays closed for another" or "command refused: a dialog is open")
+        .Select(l => l.Length > 360 ? l[..360] : l));
+
     private static Dictionary<string, string> Focus(List<string> logs) =>
         logs.Where(l => Message(l) == "keyboard focus").ToDictionary(l => Field(l, "label").GetString()!);
 
@@ -301,7 +403,16 @@ public class KeysEndToEndTests
         public async Task<List<string>> FinishAsync(string name, Process process, string lastShot)
         {
             var shot = Path.Combine(root, "shots-" + name, lastShot + ".png");
-            await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", TimeSpan.FromSeconds(120));
+            try
+            {
+                await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", TimeSpan.FromSeconds(120));
+            }
+            catch (Xunit.Sdk.XunitException error)
+            {
+                // A step that never ends: the last lines of the window's log say which.
+                var tail = LogFiles.Ui(Path.Combine(root, "logs-" + name)).TakeLast(20).Select(l => l.Length > 360 ? l[..360] : l);
+                throw new Xunit.Sdk.XunitException(error.Message + "\nthe window's last log lines:\n" + string.Join('\n', tail));
+            }
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));

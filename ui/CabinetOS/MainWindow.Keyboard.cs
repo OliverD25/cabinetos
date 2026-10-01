@@ -1,7 +1,11 @@
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text.Json;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Keys;
 using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
+using CabinetOS.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -108,6 +112,7 @@ public sealed partial class MainWindow
             return;
         }
         var inSidebar = _sidebarPages.Values.Any(p => p.Host.Page.View == view);
+        var editorPane = Array.FindIndex(_editorViews, v => v.PageView == view);
         var command = terminal ? _terminal.PassKeyCommand(combo) : (inSidebar ? _sidebarPageKeys : _toolKeys).GetValueOrDefault(combo);
         Diag.Info(Target, "a key the page did not get", new LogField("page", terminal ? "terminal" : "tool"), new LogField("key", combo),
             new LogField("command", command ?? ""));
@@ -116,7 +121,7 @@ public sealed partial class MainWindow
             e.Handled = true;
             if (!e.KeyStatus.WasKeyDown || ChordStateMachine.RepeatingCommands.Contains(command))
             {
-                _ = _router.ExecuteAsync(command, trigger: "key", traceId: TakeKeyTrace());
+                _ = _router.ExecuteAsync(command, PageKeyArguments(command, combo, editorPane >= 0 ? editorPane : null), "key", TakeKeyTrace());
             }
             return;
         }
@@ -124,14 +129,26 @@ public sealed partial class MainWindow
         {
             GiveKeysToPage(view, "terminal", () => _dockVisible, _terminal.FocusPage);
         }
-        else if (Array.FindIndex(_editorViews, v => v.PageView == view) is var pane and >= 0)
+        else if (editorPane >= 0)
         {
-            FocusEditorPage(pane);
+            FocusEditorPage(editorPane);
         }
         else if (_sidebarPages.FirstOrDefault(p => p.Value.Host.Page.View == view) is { Value: not null } sidebarPage)
         {
             FocusSidebarPage(sidebarPage.Key);
         }
+    }
+
+    // The arguments of a command a page passed back. Go to Tab's key names its tab by its digit (KeyArguments). A tab command
+    // from a page in a pane's tab is about that pane's tabs: the keyboard is in that pane's page even when the other pane is the active one.
+    private static JsonElement? PageKeyArguments(string command, string combo, int? pane)
+    {
+        var digit = KeySequence.TryParse(combo, out var keys) ? CommandArgs.Number(KeyArguments(command, keys), "tab") : null;
+        if (pane is null || !command.StartsWith("tab.", StringComparison.Ordinal))
+        {
+            return digit is { } place ? CommandArgs.Object(("tab", (int)place)) : null;
+        }
+        return digit is { } tab ? CommandArgs.Object(("pane", pane.Value), ("tab", (int)tab)) : CommandArgs.Object(("pane", pane.Value));
     }
 
     private void LogKeyboard(string moment)
@@ -210,6 +227,13 @@ public sealed partial class MainWindow
                 return;
             }
             var combo = parsed.Value;
+            if (RootGrid.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is WebView2 { CoreWebView2: { } page })
+            {
+                // A page has the keyboard: a real key goes to the page, whose script passes the window's keys back as messages
+                // (the window's input window would drop it as the page's). DevTools' key events run the page's own key path.
+                await PressKeyInPageAsync(page, combo, key);
+                continue;
+            }
             var modifiers = new List<int>(4);
             if ((combo.Modifiers & KeyModifiers.Ctrl) != 0) modifiers.Add(0x11);
             if ((combo.Modifiers & KeyModifiers.Shift) != 0) modifiers.Add(0x10);
@@ -245,6 +269,34 @@ public sealed partial class MainWindow
             WindowsPlatform.SetKeyState(saved);
             Diag.Info("cabinetos_ui::snapshot", "key sent", new LogField("keys", combo.ToString()));
         }
+    }
+
+    private static async Task PressKeyInPageAsync(Microsoft.Web.WebView2.Core.CoreWebView2 page, KeyCombo combo, int virtualKey)
+    {
+        // DevTools' modifier bits: Alt 1, Ctrl 2, Meta 4, Shift 8.
+        var bits = ((combo.Modifiers & KeyModifiers.Alt) != 0 ? 1 : 0) | ((combo.Modifiers & KeyModifiers.Ctrl) != 0 ? 2 : 0)
+            | ((combo.Modifiers & KeyModifiers.Win) != 0 ? 4 : 0) | ((combo.Modifiers & KeyModifiers.Shift) != 0 ? 8 : 0);
+        foreach (var type in new[] { "rawKeyDown", "keyUp" })
+        {
+            try
+            {
+                var sent = page.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent",
+                    $"{{\"type\":\"{type}\",\"modifiers\":{bits},\"windowsVirtualKeyCode\":{virtualKey},\"nativeVirtualKeyCode\":{virtualKey}}}").AsTask();
+                if (await Task.WhenAny(sent, Task.Delay(1000)) != sent)
+                {
+                    // The key closed the page (Ctrl+W on a tool's tab): the answer never comes.
+                    _ = sent.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                    break;
+                }
+                await sent;
+            }
+            catch (Exception error) when (error is COMException or InvalidOperationException or ObjectDisposedException)
+            {
+                break;
+            }
+        }
+        await Task.Delay(150);
+        Diag.Info("cabinetos_ui::snapshot", "key sent to a page", new LogField("keys", combo.ToString()));
     }
 
     // The same report a moment later, once WebView2 has moved the keys (it does so on its own time).

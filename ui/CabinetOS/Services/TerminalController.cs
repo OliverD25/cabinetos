@@ -162,7 +162,7 @@ internal sealed class TerminalController
     /// <summary>The keymap changed: the page passes on the new ways out.</summary>
     public void SetKeymap(Keymap keymap)
     {
-        _passKeys = TerminalKeys.PassKeys(keymap);
+        _passKeys = TerminalKeys.PassKeys(keymap, paneWays: TerminalKeys.TerminalTabWays);
         if (_pageReady)
         {
             _page.Post(TerminalPageMessages.PassKeys(_passKeys.Keys));

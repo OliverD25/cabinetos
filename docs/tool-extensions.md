@@ -95,8 +95,15 @@ never reaches the network).
 - **The window's keys.** A focused page gets every key. The window puts a
   small script into every document of a tool (before the page's own
   scripts) that hands it back the keys of `palette.show` and
-  `view.toggleTerminal`, so Ctrl+Shift+P and Ctrl+` work from a tool too.
-  Every other key stays with the page.
+  `view.toggleTerminal`, so Ctrl+Shift+P and Ctrl+` work from a tool too,
+  and, since 2026-10-01, the tab keys: Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W,
+  Ctrl+T and Ctrl+1 to 9 (`tab.next`, `tab.previous`, `tab.close`,
+  `tab.new`, `tab.select`, under the user's own keys). A tab key from a page
+  in a pane's tab changes that pane's tabs, and the keyboard goes to the
+  tab that comes to the front. Every other key stays with the page, Tab and
+  Esc included ([keybindings.md](keybindings.md), "Tool pages and the
+  terminal"). The page's own script needs nothing for this: it passes on the
+  combinations the window sends it (`passKeys`).
 
 ## Messages
 
@@ -230,9 +237,10 @@ sidebar page and works as before.
 - **Keys.** A page in the sidebar also hands back the keys that change what
   the sidebar shows: `view.showExplorer` (Ctrl+Shift+E), `view.showSearch`
   (Ctrl+Shift+F) and `view.toggleSidebar`, under whatever keys the user gave
-  them, beside the ways out (`palette.show`, `view.toggleTerminal`) of every
-  tool page. Without them the mouse would be the only way out of the page
-  (Constitution Article 7). When the sidebar closes while the page has the
+  them, beside the ways out (`palette.show`, `view.toggleTerminal`) and the
+  tab keys of every tool page. Without them the mouse would be the only way
+  out of the page (Constitution Article 7). A tab key from the sidebar's
+  page changes the active pane's tabs. When the sidebar closes while the page has the
   keyboard, the keyboard goes to the pane.
 - **A badge.** A plugin marks the button with the event `badge` and the
   payload `{ "view": "<tool id>", "kind": "dot" | "spinner" | null }`

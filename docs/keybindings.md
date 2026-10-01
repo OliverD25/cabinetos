@@ -419,6 +419,47 @@ System Tier worked in a box.
   belongs to the chord once the wait has started.
 - The Immutable System Tier works everywhere, as before.
 
+**Tool pages and the terminal.** A web page in the window (a tool's page, the
+terminal) gets every key. The window's script in the page passes a key back
+as a message only when its combination is in the list the window sends it
+(`passKeys`, from `TerminalKeys.PassKeys`), so every other key stays with the
+page. The list comes from the keymap, so a key the user rebound follows.
+This is the rule since 2026-10-01 (round three of the keys audit; before it
+no tab key came out of a page):
+
+| The page | The keys it passes back |
+|---|---|
+| a tool in a pane's tab (Markdown Preview) | the ways out (`palette.show`, `view.toggleTerminal`) and the tab keys: `tab.next`, `tab.previous`, `tab.close`, `tab.new`, `tab.select` (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W, Ctrl+T, Ctrl+1 to 9) |
+| a tool in the sidebar (the agent's chat) | the same, and `view.showExplorer`, `view.showSearch`, `view.toggleSidebar` |
+| the terminal | the ways out, the keys bound with `when: terminalFocus`, and `tab.next` and `tab.previous` (Ctrl+Tab, Ctrl+Shift+Tab) |
+
+- **Why the tab keys come out.** They are `filesView` bindings, and a page in
+  a pane's tab has the keyboard as that pane's list has it. With the page
+  keeping them, the mouse was the only way from a preview to another tab.
+- **Whose tabs.** A tab key from a tool in a pane's tab is about that pane's
+  tabs, also when the other pane is the active one (a preview opens in the
+  other pane): the page's key names its pane. From the sidebar's page or the
+  terminal it is about the active pane, as from a list.
+- **Where the keyboard goes.** It follows the tab that comes to the front, as
+  after a tab command from a list: a folder tab gets it in its list, another
+  tab of the tool in its page. Ctrl+W on the preview's tab closes it, and the
+  keyboard goes to the list of the tab that is left, as Close Editor does. A
+  page keeps the keyboard only while its tab is still the front one. From the
+  terminal, Ctrl+Tab moves the keyboard to the pane.
+- **What stays with the page.** Tab, Esc and every character key stay with a
+  tool's page: it uses them for its links and fields. Chords never pass back,
+  because their first key may be the page's. So the way from a page to the pane
+  is Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1 to 9, or closing the tab.
+- **What stays with the shell.** Ctrl+Tab and Ctrl+Shift+Tab are no shell's
+  keys, so the terminal passes them back. Ctrl+W (readline's delete word, vim's
+  window prefix), Ctrl+T (readline's transpose, fzf's file picker) and
+  Ctrl+3 to Ctrl+8 (xterm.js sends them to the shell as control codes, ESC to
+  DEL, so `tab.select` stays whole) are shell keys, so `tab.close`, `tab.new`
+  and `tab.select` stay with the shell. Ctrl+C with
+  a selection and Ctrl+V are the terminal's own, as before.
+- A key held down is passed once (the rule above), so Ctrl+Tab held in a page
+  does not repeat; it repeats in a pane's list.
+
 ## The Immutable System Tier
 
 Three commands keep their keys whatever the configuration says:

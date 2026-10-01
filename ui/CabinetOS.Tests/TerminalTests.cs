@@ -325,6 +325,91 @@ public class TerminalTests
         }, TerminalKeys.PassKeys(keymap, context: null, TerminalKeys.SidebarPageWays));
     }
 
+    private static Keymap TabKeymap(params KeymapBinding[] extra) => Keymap.From(new KeymapData(1000,
+    [
+        new KeymapBinding("ctrl+shift+p", "palette.show", null),
+        new KeymapBinding("ctrl+tab", "tab.next", KeyContexts.FilesView),
+        new KeymapBinding("ctrl+shift+tab", "tab.previous", KeyContexts.FilesView),
+        new KeymapBinding("ctrl+w", "tab.close", KeyContexts.FilesView),
+        new KeymapBinding("ctrl+t", "tab.new", KeyContexts.FilesView),
+        new KeymapBinding("ctrl+1", "tab.select", KeyContexts.FilesView),
+        new KeymapBinding("ctrl+2", "tab.select", KeyContexts.FilesView),
+        // Not tab keys of a page: Tab and Esc stay the page's, a chord starts with a key the page may use, and the rest are pane keys.
+        new KeymapBinding("tab", "view.focusOtherPane", KeyContexts.FilesView),
+        new KeymapBinding("ctrl+k ctrl+right", "tab.moveToOtherPane", KeyContexts.FilesView),
+        new KeymapBinding("ctrl+up", "tab.openFolderInNewTab", KeyContexts.FilesView),
+        new KeymapBinding("f5", "file.copyToOtherPane", KeyContexts.FilesView),
+        .. extra,
+    ],
+    ["palette.show"]));
+
+    [Fact]
+    public void A_tool_page_hands_back_the_tab_keys_that_are_bound_in_the_pane()
+    {
+        var keys = TerminalKeys.PassKeys(TabKeymap(), context: null, paneWays: TerminalKeys.TabWays);
+
+        Assert.Equal(new Dictionary<string, string>
+        {
+            ["ctrl+shift+p"] = "palette.show",
+            ["ctrl+tab"] = "tab.next",
+            ["ctrl+shift+tab"] = "tab.previous",
+            ["ctrl+w"] = "tab.close",
+            ["ctrl+t"] = "tab.new",
+            ["ctrl+1"] = "tab.select",
+            ["ctrl+2"] = "tab.select",
+        }, keys);
+    }
+
+    [Fact]
+    public void A_tab_key_the_user_rebound_is_the_one_the_page_hands_back()
+    {
+        // Rebinding replaces the default keys (docs/keybindings.md, "Changing bindings"); the keymap the core sends has only the new ones.
+        var keymap = Keymap.From(new KeymapData(1000,
+        [
+            new KeymapBinding("ctrl+shift+p", "palette.show", null),
+            new KeymapBinding("ctrl+alt+n", "tab.next", KeyContexts.FilesView),
+            new KeymapBinding("ctrl+alt+x", "tab.close", null),
+        ],
+        ["palette.show"]));
+
+        Assert.Equal(new Dictionary<string, string>
+        {
+            ["ctrl+shift+p"] = "palette.show",
+            ["ctrl+alt+n"] = "tab.next",
+            ["ctrl+alt+x"] = "tab.close",
+        }, TerminalKeys.PassKeys(keymap, context: null, paneWays: TerminalKeys.TabWays));
+    }
+
+    [Fact]
+    public void A_way_out_on_the_same_keys_wins_over_a_tab_key_whatever_their_order()
+    {
+        var wayOut = new KeymapBinding("ctrl+w", "view.toggleTerminal", null);
+        foreach (var keymap in new[] { TabKeymap(wayOut), Keymap.From(new KeymapData(1000, [wayOut, new KeymapBinding("ctrl+w", "tab.close", KeyContexts.FilesView)], ["palette.show"])) })
+        {
+            Assert.Equal("view.toggleTerminal", TerminalKeys.PassKeys(keymap, context: null, paneWays: TerminalKeys.TabWays)["ctrl+w"]);
+        }
+    }
+
+    [Fact]
+    public void The_terminal_hands_back_only_the_two_tab_keys_that_no_shell_uses()
+    {
+        var keys = TerminalKeys.PassKeys(TabKeymap(), paneWays: TerminalKeys.TerminalTabWays);
+
+        // Ctrl+W and Ctrl+T stay with the shell (delete word, transpose, fzf's file picker), and so does Ctrl+1.
+        Assert.Equal(new Dictionary<string, string>
+        {
+            ["ctrl+shift+p"] = "palette.show",
+            ["ctrl+tab"] = "tab.next",
+            ["ctrl+shift+tab"] = "tab.previous",
+        }, keys);
+    }
+
+    [Fact]
+    public void Without_the_tab_ways_a_page_hands_back_only_what_it_did_before()
+    {
+        Assert.Equal(new Dictionary<string, string> { ["ctrl+shift+p"] = "palette.show" }, TerminalKeys.PassKeys(TabKeymap(), context: null));
+    }
+
     [Theory]
     [InlineData(DockPlacement.Bottom, 300, 120)]
     [InlineData(DockPlacement.Bottom, 600, 180)]
