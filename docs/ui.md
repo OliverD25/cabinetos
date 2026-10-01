@@ -254,6 +254,19 @@ the per-user .NET SDK's variables, builds with warnings as errors and runs
 2026-10-01: `-Filter "FullyQualifiedName~KeysEndToEnd" -EndToEnd`, 8 of 8
 passed there, the build and the tests in three minutes.
 
+`remote-script.ps1` runs any script of the repository on the laptop the
+same way, in its logged-in session, through the task `CabinetOS-Script`
+and its wrapper `C:\Dev\cabinetos\_io\run-script-laptop.ps1`: a bundle of
+the commits, the request (the script's path and its arguments) in the
+laptop's inbox, the task, a wait for `DONE-script.md`, the output copied
+home as `_io\script-runs\script-<time>-<machine>.txt`. `-Env
+"NAME=VALUE;NAME=VALUE"` sets variables for the script and the window it
+starts; `-CopyBuilds` sends this PC's Release window and core first. The
+wrapper sets `CABINETOS_UI_FRAMESTATS=1`, so `scroll-keys.ps1` and
+`scroll-bench.ps1` measure there as they do here. First use 2026-10-01:
+the scroll gaps of the laptop
+([log/2026-10-01/scroll-gaps-laptop.md](log/2026-10-01/scroll-gaps-laptop.md)).
+
 **A virtual machine** (the VirtualBox VM, for example) runs the check with
 `-Virtual` (`run-livecheck.ps1 -Virtual` passes it on to `livecheck.ps1`).
 Its frames come from a virtual graphics card, so the checks that judge frame
