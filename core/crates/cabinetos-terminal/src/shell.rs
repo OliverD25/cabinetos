@@ -1,14 +1,14 @@
-//! What differs between shells: the line that changes their folder, how a
-//! path is typed at their prompt, and how a shell is started (its command
-//! line and its environment).
+//! What differs between shells: how a path is typed at their prompt so the
+//! shell reads it literally, and how a shell is started (its command line
+//! and its environment).
 
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
-/// The families of shells whose change-directory command is known, told
-/// apart by the program's file name.
+/// The families of shells whose quoting is known, told apart by the
+/// program's file name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShellKind {
     /// `pwsh` (PowerShell 7) and `powershell` (Windows PowerShell 5.1).
@@ -37,21 +37,9 @@ impl ShellKind {
         }
     }
 
-    /// The line to type so the shell changes to `path`, Enter (`\r`)
-    /// included. The path is quoted so the shell reads it literally.
-    pub(crate) fn cd_line(self, path: &str) -> String {
-        let command = match self {
-            Self::PowerShell => format!("Set-Location -LiteralPath '{}'", powershell_quoted(path)),
-            Self::Cmd => format!("cd /d \"{}\"", cmd_quoted(path)),
-            Self::Wsl => format!("cd \"$(wslpath -a '{}')\"", path.replace('\'', r"'\''")),
-            Self::Other => format!("cd \"{path}\""),
-        };
-        command + "\r"
-    }
-
-    /// `paths` as the shell reads each literally, quoted as `cd_line`
-    /// quotes its path, separated by spaces, without Enter: for the user
-    /// to go on typing the command around them.
+    /// `paths` as the shell reads each literally, separated by spaces,
+    /// without Enter: for the user to go on typing the command around
+    /// them.
     pub(crate) fn typed_paths(self, paths: &[String]) -> String {
         let quoted: Vec<String> = paths
             .iter()
@@ -249,60 +237,61 @@ mod tests {
         assert_eq!(ShellKind::of(""), ShellKind::Other);
     }
 
+    fn one(kind: ShellKind, path: &str) -> String {
+        kind.typed_paths(&[path.to_owned()])
+    }
+
     #[test]
     fn powershell_gets_a_literal_single_quoted_path() {
+        assert_eq!(one(ShellKind::PowerShell, r"E:\work"), "'E:\\work'");
         assert_eq!(
-            ShellKind::PowerShell.cd_line(r"E:\work"),
-            "Set-Location -LiteralPath 'E:\\work'\r"
-        );
-        assert_eq!(
-            ShellKind::PowerShell.cd_line(r"D:\it's [x] John’s $home"),
-            "Set-Location -LiteralPath 'D:\\it''s [x] John’’s $home'\r"
+            one(ShellKind::PowerShell, r"D:\it's [x] John’s $home"),
+            "'D:\\it''s [x] John’’s $home'"
         );
     }
 
     #[test]
     fn cmd_gets_a_quoted_path_with_percent_signs_taken_out_of_the_quotes() {
         assert_eq!(
-            ShellKind::Cmd.cd_line(r"C:\a b & c ^ (d)"),
-            "cd /d \"C:\\a b & c ^ (d)\"\r"
+            one(ShellKind::Cmd, r"C:\a b & c ^ (d)"),
+            "\"C:\\a b & c ^ (d)\""
         );
         assert_eq!(
-            ShellKind::Cmd.cd_line(r"C:\100%PATH%x"),
-            "cd /d \"C:\\100\"%^P\"ATH\"%^x\"\"\r"
+            one(ShellKind::Cmd, r"C:\100%PATH%x"),
+            "\"C:\\100\"%^P\"ATH\"%^x\"\""
         );
-        assert_eq!(ShellKind::Cmd.cd_line("C:\\%%"), "cd /d \"C:\\\"%^%\"\"\r");
-        assert_eq!(ShellKind::Cmd.cd_line("C:\\x%"), "cd /d \"C:\\x\"%^\"\"\r");
+        assert_eq!(one(ShellKind::Cmd, "C:\\%%"), "\"C:\\\"%^%\"\"");
+        assert_eq!(one(ShellKind::Cmd, "C:\\x%"), "\"C:\\x\"%^\"\"");
     }
 
     #[test]
     fn wsl_translates_the_path_inside_linux() {
         assert_eq!(
-            ShellKind::Wsl.cd_line(r"E:\it's"),
-            "cd \"$(wslpath -a 'E:\\it'\\''s')\"\r"
+            one(ShellKind::Wsl, r"E:\it's"),
+            "\"$(wslpath -a 'E:\\it'\\''s')\""
         );
-        assert_eq!(ShellKind::Other.cd_line(r"E:\x y"), "cd \"E:\\x y\"\r");
+        assert_eq!(one(ShellKind::Other, r"E:\x y"), "\"E:\\x y\"");
     }
 
     #[test]
     fn names_beyond_ascii_are_quoted_like_any_other_character() {
         let path = r"E:\Звіт 'проєкт' $HOME ’x’ 100%PATH% 日本語 📁 cafe".to_owned() + "\u{301}";
         assert_eq!(
-            ShellKind::PowerShell.cd_line(&path),
-            "Set-Location -LiteralPath 'E:\\Звіт ''проєкт'' $HOME ’’x’’ 100%PATH% 日本語 📁 cafe\u{301}'\r"
+            one(ShellKind::PowerShell, &path),
+            "'E:\\Звіт ''проєкт'' $HOME ’’x’’ 100%PATH% 日本語 📁 cafe\u{301}'"
         );
         assert_eq!(
-            ShellKind::Cmd.cd_line(&path),
-            "cd /d \"E:\\Звіт 'проєкт' $HOME ’x’ 100\"%^P\"ATH\"%^ \"日本語 📁 cafe\u{301}\"\r"
+            one(ShellKind::Cmd, &path),
+            "\"E:\\Звіт 'проєкт' $HOME ’x’ 100\"%^P\"ATH\"%^ \"日本語 📁 cafe\u{301}\""
         );
         assert_eq!(
-            ShellKind::Wsl.cd_line(&path),
-            "cd \"$(wslpath -a 'E:\\Звіт '\\''проєкт'\\'' $HOME ’x’ 100%PATH% 日本語 📁 cafe\u{301}')\"\r"
+            one(ShellKind::Wsl, &path),
+            "\"$(wslpath -a 'E:\\Звіт '\\''проєкт'\\'' $HOME ’x’ 100%PATH% 日本語 📁 cafe\u{301}')\""
         );
     }
 
     #[test]
-    fn typed_paths_are_quoted_as_cd_quotes_them_without_enter() {
+    fn typed_paths_are_quoted_and_joined_without_enter() {
         let paths = [r"E:\a b".to_owned(), r"C:\100%PATH% it's".to_owned()];
         assert_eq!(
             ShellKind::PowerShell.typed_paths(&paths),

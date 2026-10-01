@@ -1,5 +1,5 @@
 //! `cabinetos-cli term` against a real core: a shell fed from a pipe;
-//! `term list`, `term cd`, `term type` and `term close` from a second CLI
+//! `term list`, `term mode`, `term type` and `term close` from a second CLI
 //! while the first is attached; and `term` in a console window, which here
 //! is a pseudo-console of this test's own, so the test types the keys. The
 //! shells run only `echo`, `cd`, `mode con` (which prints the console's
@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use cabinetos_ipc::PipeName;
 use cabinetos_protocol::Event;
-use cabinetos_terminal::{EventSink, Opened, Profile, Terminals};
+use cabinetos_terminal::{Binding, EventSink, Opened, Profile, Terminals};
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
@@ -220,10 +220,8 @@ fn piped_input_runs_in_the_shell_and_the_exit_code_is_printed() {
 }
 
 #[test]
-fn list_cd_and_close_act_on_a_running_session() {
+fn list_mode_and_close_act_on_a_running_session() {
     let dir = scratch("cli");
-    let target = dir.path().join("later");
-    std::fs::create_dir(&target).unwrap();
     let core = start_core(dir.path());
     let cwd = shown(dir.path());
     let mut term = Attached::start(&core, &["term", "--profile", "cmd", "--cwd", &cwd]);
@@ -238,15 +236,23 @@ fn list_cd_and_close_act_on_a_running_session() {
             .ends_with(&format!(" running attached {cwd}")),
         "{line}"
     );
-    assert!(line.contains(" cmd pid "), "{line}");
+    // Without --pane the session belongs to the left pane, locked.
+    assert!(line.contains(" cmd left locked pid "), "{line}");
 
-    let moved = cli(&core, &["term", "cd", &id, &shown(&target)]);
-    assert!(moved.status.success(), "{}", text(&moved.stderr));
-    assert_eq!(
-        text(&moved.stdout).trim_end(),
-        format!("session {id}: cd {}", shown(&target))
+    // cmd is not linkable: no prompt hook can be added to it.
+    let refused = cli(&core, &["term", "mode", &id, "linked"]);
+    assert!(!refused.status.success());
+    assert!(
+        text(&refused.stderr).contains("not_linkable"),
+        "{}",
+        text(&refused.stderr)
     );
-    term.wait_for_output(&format!("{}>", shown(&target)));
+    let locked = cli(&core, &["term", "mode", &id, "locked"]);
+    assert!(locked.status.success(), "{}", text(&locked.stderr));
+    assert_eq!(
+        text(&locked.stdout).trim_end(),
+        format!("session {id}: locked")
+    );
 
     let closed = cli(&core, &["term", "close", &id]);
     assert!(closed.status.success(), "{}", text(&closed.stderr));
@@ -269,6 +275,38 @@ fn list_cd_and_close_act_on_a_running_session() {
         "{}",
         text(&refused.stderr)
     );
+}
+
+#[test]
+fn a_session_opened_for_the_right_pane_can_be_linked_when_its_profile_is_linkable() {
+    let dir = scratch("cli-mode");
+    std::fs::write(
+        dir.path().join("cabinetos.json"),
+        r#"{"terminal": {"defaultProfile": "hooked", "profiles": [
+            {"name": "hooked", "command": "cmd.exe", "linkable": true}
+        ]}}"#,
+    )
+    .unwrap();
+    let core = start_core(dir.path());
+    let cwd = shown(dir.path());
+    let mut term = Attached::start(&core, &["term", "--pane", "right", "--cwd", &cwd]);
+    term.wait_for_output(&format!("{cwd}>"));
+    let listed = cli(&core, &["term", "list"]);
+    let line = text(&listed.stdout);
+    let id = line.split(' ').next().unwrap().to_owned();
+    assert!(line.contains(" hooked right locked pid "), "{line}");
+
+    let linked = cli(&core, &["term", "mode", &id, "linked"]);
+    assert!(linked.status.success(), "{}", text(&linked.stderr));
+    assert_eq!(
+        text(&linked.stdout).trim_end(),
+        format!("session {id}: linked")
+    );
+    let line = text(&cli(&core, &["term", "list"]).stdout);
+    assert!(line.contains(" hooked right linked pid "), "{line}");
+    let closed = cli(&core, &["term", "close", &id]);
+    assert!(closed.status.success(), "{}", text(&closed.stderr));
+    term.finish();
 }
 
 #[test]
@@ -397,8 +435,11 @@ impl InConsole {
             .iter()
             .map(|arg| (*arg).to_owned())
             .collect(),
+            linkable: false,
         };
-        let opened = terminals.open(&cli, Some(cwd), 120, 30).unwrap();
+        let opened = terminals
+            .open(&cli, Some(cwd), 120, 30, Binding::default())
+            .unwrap();
         let pipe = runtime
             .block_on(async { ClientOptions::new().open(&opened.pipe) })
             .unwrap();
@@ -474,7 +515,7 @@ fn announced_session(console: &str) -> String {
 
 /// Waits until the core lists the session with this size.
 fn wait_for_size(core: &Core, id: &str, cols: u16, rows: u16) {
-    let wanted = format!("{id} cmd pid ");
+    let wanted = format!("{id} cmd left locked pid ");
     let size = format!(" {cols}x{rows} ");
     let deadline = Instant::now() + DEADLINE;
     loop {
@@ -521,7 +562,10 @@ fn in_a_console_keys_resizes_and_ctrl_bracket_reach_the_session() {
     console.read_until(|shown| shown.contains(&format!("detached; session {id} keeps running")));
     assert_eq!(console.exit_code(), 0);
     let listed = text(&cli(&core, &["term", "list"]).stdout);
-    assert!(listed.starts_with(&format!("{id} cmd pid ")), "{listed}");
+    assert!(
+        listed.starts_with(&format!("{id} cmd left locked pid ")),
+        "{listed}"
+    );
     assert!(listed.contains(" running detached "), "{listed}");
     assert!(cli(&core, &["term", "close", &id]).status.success());
 }

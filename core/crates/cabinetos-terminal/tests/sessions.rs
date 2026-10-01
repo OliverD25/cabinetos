@@ -2,7 +2,9 @@
 //! PowerShell and WSL when they are installed (skipped with a message
 //! otherwise). The shells run only `echo`, `cd`, `mode con` (which prints
 //! the console's size), `Get-Location`, `pwd` and `exit`, in folders under
-//! `%TEMP%\cabinetos-term-test\`, which the tests remove.
+//! `%TEMP%\cabinetos-term-test\`, which the tests remove. A `cd` the test
+//! types itself, with the folder typed by `type_paths`, shows that each
+//! shell reads a typed path literally.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -11,9 +13,10 @@ use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use cabinetos_ipc::{PipeName, PipeServer};
-use cabinetos_protocol::{ErrorCode, Event, TerminalSession, TerminalState};
+use cabinetos_protocol::{ErrorCode, Event, Pane, TerminalMode, TerminalSession, TerminalState};
 use cabinetos_terminal::{
-    EventSink, MAX_SESSIONS, OUTPUT_LIMIT, Opened, PIPE_PREFIX, Profile, Terminals,
+    Binding, EventSink, MAX_SESSIONS, OUTPUT_LIMIT, Opened, PIPE_PREFIX, Profile, Terminals,
+    linkable_by_default,
 };
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -54,6 +57,7 @@ fn profile(name: &str, command: &str, args: &[&str]) -> Profile {
         name: name.to_owned(),
         command: command.to_owned(),
         args: args.iter().map(|arg| (*arg).to_owned()).collect(),
+        linkable: linkable_by_default(command),
     }
 }
 
@@ -236,7 +240,7 @@ impl Harness {
 
     fn open(&self, profile: &Profile, cwd: &Path, cols: u16, rows: u16) -> Opened {
         self.terminals
-            .open(profile, Some(&shown(cwd)), cols, rows)
+            .open(profile, Some(&shown(cwd)), cols, rows, Binding::default())
             .unwrap_or_else(|error| panic!("cannot open {}: {error}", profile.name))
     }
 
@@ -256,10 +260,35 @@ impl Harness {
         self.runtime.block_on(client.read_to_end())
     }
 
-    fn sync_cwd(&self, opened: &Opened, path: &Path) {
+    /// Changes the shell's folder to `path` with a `cd` the test types
+    /// itself around the folder `type_paths` typed: the folder first, at
+    /// the empty prompt (as Ctrl+Alt+P types it), then Home, the shell's own
+    /// `cd` (`command`, with the space after it) and Enter. The keys wait
+    /// for the folder's echo: they and the typed paths take two ways into
+    /// the shell. (Typed after the command instead, the folder lost its
+    /// typographic quotes in Windows PowerShell 5.1 on 2026-10-01, while a
+    /// suggestion from its history was on the line.)
+    fn cd_typed(&self, client: &mut Client, opened: &Opened, command: &str, path: &Path) {
+        client.forget();
         self.terminals
-            .sync_cwd(opened.session_id, &shown(path))
+            .type_paths(opened.session_id, &[shown(path)])
             .unwrap();
+        let parent = path
+            .parent()
+            .and_then(Path::file_name)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        self.read_until(client, |output| output.contains(&parent));
+        self.send(client, &format!("\x1b[H{command}\r"));
+    }
+
+    /// The next `terminal_mode_changed`; fails on any other event.
+    fn mode_change(&self) -> (u64, TerminalMode) {
+        match self.events.recv_timeout(Duration::from_secs(5)) {
+            Ok(Event::TerminalModeChanged { session_id, mode }) => (session_id, mode),
+            other => panic!("expected terminal_mode_changed, got {other:?}"),
+        }
     }
 
     /// Waits for the session's `terminal_exited`; returns its exit code.
@@ -434,46 +463,28 @@ fn resizing_changes_the_width_the_shell_sees() {
 }
 
 #[test]
-fn a_folder_change_is_typed_as_the_shell_own_cd() {
-    let dir = scratch("sync");
+fn cmd_reads_a_typed_folder_literally() {
+    let dir = scratch("typed-cd");
     let harness = Harness::new();
     // cmd would expand %CABINETOS_SESSION% (the shell has that variable)
-    // if the command left it inside the quotes.
+    // if the typed path left it inside the quotes.
     let target = dir.path().join("to 100%CABINETOS_SESSION% & ^x (y)");
     std::fs::create_dir(&target).unwrap();
     let opened = harness.open(&cmd(), dir.path(), 300, 25);
     let mut client = harness.attach(&opened);
     harness.read_until(&mut client, at_prompt);
 
-    client.forget();
-    harness.sync_cwd(&opened, &target);
+    harness.cd_typed(&mut client, &opened, "cd /d ", &target);
     let prompt = format!("{}>", shown(&target));
     harness.read_until(&mut client, |output| output.contains(&prompt));
     client.forget();
     harness.send(&mut client, "cd\r");
     harness.read_until(&mut client, |output| has_line(output, &shown(&target)));
-    harness.wait_for(opened.session_id, |session| session.cwd == shown(&target));
-
-    let refused = |path: &str| {
-        harness
-            .terminals
-            .sync_cwd(opened.session_id, path)
-            .unwrap_err()
-            .code
-    };
-    assert_eq!(refused("relative"), ErrorCode::InvalidPath);
-    assert_eq!(
-        refused(&shown(&dir.path().join("missing"))),
-        ErrorCode::NotFound
-    );
-    assert_eq!(
-        harness
-            .terminals
-            .sync_cwd(opened.session_id + 1000, &shown(dir.path()))
-            .unwrap_err()
-            .code,
-        ErrorCode::NoSuchSession
-    );
+    // The core does not follow the shell: the list keeps the folder it
+    // started in.
+    harness.wait_for(opened.session_id, |session| {
+        session.cwd == shown(dir.path())
+    });
 }
 
 /// Paths reach cmd's prompt quoted as its `cd` is, and no Enter follows:
@@ -527,8 +538,8 @@ fn paths_are_typed_at_the_prompt_without_enter() {
 const BEYOND_ASCII: &str = "Звіт 'проєкт' $HOME ’q’ 100%PATH% Ґанок";
 
 #[test]
-fn cmd_follows_the_pane_into_a_folder_beyond_ascii() {
-    let dir = scratch("sync-names");
+fn cmd_reads_a_typed_folder_beyond_ascii_literally() {
+    let dir = scratch("typed-names");
     let harness = Harness::new();
     let target = long_name(dir.path()).join(BEYOND_ASCII);
     std::fs::create_dir(&target).unwrap();
@@ -536,21 +547,19 @@ fn cmd_follows_the_pane_into_a_folder_beyond_ascii() {
     let mut client = harness.attach(&opened);
     harness.read_until(&mut client, at_prompt);
 
-    client.forget();
-    harness.sync_cwd(&opened, &target);
+    harness.cd_typed(&mut client, &opened, "cd /d ", &target);
     let prompt = format!("{}>", shown(&target));
     harness.read_until(&mut client, |output| output.contains(&prompt));
     client.forget();
     harness.send(&mut client, "cd\r");
     harness.read_until(&mut client, |output| has_line(output, &shown(&target)));
-    harness.wait_for(opened.session_id, |session| session.cwd == shown(&target));
     harness.send(&mut client, "exit\r");
     harness.read_to_end(&mut client);
     assert_eq!(harness.exit_code(opened.session_id), 0);
 }
 
 #[test]
-fn powershell_follows_the_pane_into_a_folder_beyond_ascii_when_installed() {
+fn powershell_reads_a_typed_folder_beyond_ascii_literally_when_installed() {
     let mut tested = 0;
     for program in ["pwsh.exe", "powershell.exe"] {
         if !on_path(program) {
@@ -568,8 +577,7 @@ fn powershell_follows_the_pane_into_a_folder_beyond_ascii_when_installed() {
             output.contains("PS ") && at_prompt(output)
         });
 
-        client.forget();
-        harness.sync_cwd(&opened, &target);
+        harness.cd_typed(&mut client, &opened, "Set-Location -LiteralPath ", &target);
         let prompt = format!("PS {}>", shown(&target));
         harness.read_until(&mut client, |output| output.contains(&prompt));
         client.forget();
@@ -617,8 +625,6 @@ fn two_sessions_are_independent() {
 fn a_session_outlives_its_client_and_takes_one_client_at_a_time() {
     let dir = scratch("reattach");
     let harness = Harness::new();
-    let target = dir.path().join("later");
-    std::fs::create_dir(&target).unwrap();
     let opened = harness.open(&cmd(), dir.path(), 200, 25);
     let mut first = harness.attach(&opened);
     harness.read_until(&mut first, at_prompt);
@@ -635,11 +641,15 @@ fn a_session_outlives_its_client_and_takes_one_client_at_a_time() {
     drop(first);
     harness.wait_for(opened.session_id, |session| !session.attached);
 
-    // Output made while nobody is attached waits for the next client.
-    harness.sync_cwd(&opened, &target);
+    // Output made while nobody is attached waits for the next client: a
+    // resize makes the pseudo-console paint the screen, prompt and all.
+    harness
+        .terminals
+        .resize(opened.session_id, 150, 25)
+        .unwrap();
     std::thread::sleep(Duration::from_millis(300));
     let mut second = harness.attach(&opened);
-    let prompt = format!("{}>", shown(&target));
+    let prompt = format!("{}>", shown(dir.path()));
     harness.read_until(&mut second, |output| output.contains(&prompt));
     harness.send(&mut second, "echo fr^esh\r");
     harness.read_until(&mut second, |output| output.contains("\nfresh"));
@@ -717,7 +727,11 @@ fn refusals_name_the_problem() {
     let dir = scratch("refusals");
     let harness = Harness::with_limit(2);
     let cwd = shown(dir.path());
-    let open = |profile: &Profile, cwd: &str| harness.terminals.open(profile, Some(cwd), 80, 25);
+    let open = |profile: &Profile, cwd: &str| {
+        harness
+            .terminals
+            .open(profile, Some(cwd), 80, 25, Binding::default())
+    };
 
     let missing = open(&profile("nope", "cabinetos-no-such-shell.exe", &[]), &cwd).unwrap_err();
     assert_eq!(missing.code, ErrorCode::SpawnFailed);
@@ -755,7 +769,11 @@ fn refusals_name_the_problem() {
     for code in [
         harness.terminals.resize(unknown, 80, 25).unwrap_err().code,
         harness.terminals.close(unknown).unwrap_err().code,
-        harness.terminals.sync_cwd(unknown, &cwd).unwrap_err().code,
+        harness
+            .terminals
+            .set_mode(unknown, TerminalMode::Locked)
+            .unwrap_err()
+            .code,
     ] {
         assert_eq!(code, ErrorCode::NoSuchSession);
     }
@@ -767,7 +785,7 @@ fn refusals_name_the_problem() {
 }
 
 #[test]
-fn powershell_follows_the_pane_when_installed() {
+fn powershell_reads_a_typed_folder_with_quotes_and_brackets_when_installed() {
     let mut tested = 0;
     for program in ["pwsh.exe", "powershell.exe"] {
         if !on_path(program) {
@@ -787,8 +805,7 @@ fn powershell_follows_the_pane_when_installed() {
             output.contains("PS ") && at_prompt(output)
         });
 
-        client.forget();
-        harness.sync_cwd(&opened, &target);
+        harness.cd_typed(&mut client, &opened, "Set-Location -LiteralPath ", &target);
         let prompt = format!("PS {}>", shown(&target));
         harness.read_until(&mut client, |output| output.contains(&prompt));
         client.forget();
@@ -840,7 +857,7 @@ fn wsl_runs(folder: &Path) -> bool {
 }
 
 #[test]
-fn wsl_follows_the_pane_when_installed() {
+fn wsl_reads_a_typed_folder_when_installed() {
     let dir = scratch("wsl");
     if !wsl_runs(dir.path()) {
         return;
@@ -865,8 +882,8 @@ fn wsl_follows_the_pane_when_installed() {
     harness.send(&mut client, "pwd\r");
     harness.read_until(&mut client, |output| in_linux(output, &folder));
 
+    harness.cd_typed(&mut client, &opened, "cd ", &target);
     client.forget();
-    harness.sync_cwd(&opened, &target);
     harness.send(&mut client, "pwd\r");
     let tail = format!("{folder}/it's here");
     harness.read_until(&mut client, |output| in_linux(output, &tail));
@@ -900,12 +917,99 @@ fn wsl_translates_a_folder_beyond_ascii_when_installed() {
     harness.send(&mut client, "pwd\r");
     harness.read_until(&mut client, |output| in_linux(output, &folder));
 
+    harness.cd_typed(&mut client, &opened, "cd ", &target);
     client.forget();
-    harness.sync_cwd(&opened, &target);
     harness.send(&mut client, "pwd\r");
     let tail = format!("{folder}/{BEYOND_ASCII}");
     harness.read_until(&mut client, |output| in_linux(output, &tail));
     harness.send(&mut client, "exit\r");
     harness.read_to_end(&mut client);
     assert_eq!(harness.exit_code(opened.session_id), 0);
+}
+
+/// A session belongs to the pane it was opened for and keeps its mode until
+/// a client changes it; a profile that is not linkable stays locked.
+#[test]
+fn a_session_has_a_pane_and_a_mode_and_only_a_linkable_one_may_be_linked() {
+    let dir = scratch("modes");
+    let harness = Harness::new();
+    let cwd = shown(dir.path());
+    let locked_cmd = cmd();
+    assert!(!locked_cmd.linkable, "cmd is not linkable by default");
+    let linkable_cmd = Profile {
+        name: "cmd-hooked".to_owned(),
+        linkable: true,
+        ..cmd()
+    };
+
+    let open = |profile: &Profile, pane: Pane, mode: TerminalMode| {
+        harness
+            .terminals
+            .open(profile, Some(&cwd), 80, 25, Binding { pane, mode })
+    };
+
+    let refused = open(&locked_cmd, Pane::Left, TerminalMode::Linked).unwrap_err();
+    assert_eq!(refused.code, ErrorCode::NotLinkable);
+    assert!(refused.message.contains("`cmd`"), "{}", refused.message);
+    assert!(harness.terminals.list().is_empty(), "nothing started");
+
+    let right = open(&locked_cmd, Pane::Right, TerminalMode::Locked).unwrap();
+    let left = open(&linkable_cmd, Pane::Left, TerminalMode::Linked).unwrap();
+    let described = |session_id: u64| {
+        let listed = harness.terminals.list();
+        let session = listed
+            .iter()
+            .find(|session| session.session_id == session_id)
+            .unwrap();
+        (session.pane, session.mode, session.linkable)
+    };
+    assert_eq!(
+        described(right.session_id),
+        (Pane::Right, TerminalMode::Locked, false)
+    );
+    assert_eq!(
+        described(left.session_id),
+        (Pane::Left, TerminalMode::Linked, true)
+    );
+
+    let not_linkable = harness
+        .terminals
+        .set_mode(right.session_id, TerminalMode::Linked)
+        .unwrap_err();
+    assert_eq!(not_linkable.code, ErrorCode::NotLinkable);
+    // The same mode again is no change: nothing is sent.
+    harness
+        .terminals
+        .set_mode(right.session_id, TerminalMode::Locked)
+        .unwrap();
+    assert!(harness.events.try_recv().is_err(), "no event for no change");
+
+    harness
+        .terminals
+        .set_mode(left.session_id, TerminalMode::Locked)
+        .unwrap();
+    assert_eq!(
+        harness.mode_change(),
+        (left.session_id, TerminalMode::Locked)
+    );
+    assert_eq!(
+        described(left.session_id),
+        (Pane::Left, TerminalMode::Locked, true)
+    );
+    harness
+        .terminals
+        .set_mode(left.session_id, TerminalMode::Linked)
+        .unwrap();
+    assert_eq!(
+        harness.mode_change(),
+        (left.session_id, TerminalMode::Linked)
+    );
+    assert_eq!(
+        harness
+            .terminals
+            .set_mode(left.session_id + 1000, TerminalMode::Linked)
+            .unwrap_err()
+            .code,
+        ErrorCode::NoSuchSession
+    );
 }

@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::window::Pane;
+
 /// Whether a session's shell still runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -19,6 +21,21 @@ pub enum TerminalState {
     },
 }
 
+/// How a session is bound to its pane (`docs/terminal.md`, "Panes and
+/// modes").
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalMode {
+    /// The session stays where the user takes it: nothing the pane does
+    /// reaches it.
+    #[default]
+    Locked,
+    /// The session is meant to follow its pane through a prompt hook. The
+    /// hook is not built yet, so a linked session behaves as a locked one.
+    Linked,
+}
+
 /// One terminal session, as `terminal_list` reports it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -27,8 +44,7 @@ pub struct TerminalSession {
     pub session_id: u64,
     /// The profile it was opened with, such as `pwsh`.
     pub profile: String,
-    /// The folder it started in, or was last synced to. The shell may have
-    /// moved since.
+    /// The folder it started in. The shell may have moved since.
     pub cwd: String,
     /// Its width in character cells.
     pub cols: u16,
@@ -42,6 +58,13 @@ pub struct TerminalSession {
     pub pipe: String,
     /// Whether a client is attached to the byte pipe now.
     pub attached: bool,
+    /// The file pane the session belongs to.
+    pub pane: Pane,
+    /// How it is bound to that pane.
+    pub mode: TerminalMode,
+    /// Whether it may be `linked`: `false` for a profile that says
+    /// `"linkable": false` (no prompt hook can be added to its program).
+    pub linkable: bool,
 }
 
 #[cfg(test)]
@@ -62,18 +85,37 @@ mod tests {
             state: TerminalState::Exited { code: 3 },
             pipe: r"\\.\pipe\cabinetos-term-0123456789abcdef".to_owned(),
             attached: false,
+            pane: Pane::Right,
+            mode: TerminalMode::Linked,
+            linkable: true,
         };
         assert_eq!(
             serde_json::to_value(&session).unwrap(),
             json!({
                 "session_id": 3, "profile": "pwsh", "cwd": r"E:\work", "cols": 120, "rows": 30,
                 "pid": 4242, "state": {"type": "exited", "code": 3},
-                "pipe": r"\\.\pipe\cabinetos-term-0123456789abcdef", "attached": false
+                "pipe": r"\\.\pipe\cabinetos-term-0123456789abcdef", "attached": false,
+                "pane": "right", "mode": "linked", "linkable": true
             })
         );
         assert_eq!(
             serde_json::to_value(TerminalState::Running).unwrap(),
             json!({"type": "running"})
         );
+    }
+
+    #[test]
+    fn modes_are_two_words_and_locked_is_the_default() {
+        assert_eq!(TerminalMode::default(), TerminalMode::Locked);
+        assert_eq!(
+            serde_json::to_value(TerminalMode::Locked).unwrap(),
+            json!("locked")
+        );
+        assert_eq!(
+            serde_json::from_value::<TerminalMode>(json!("linked")).unwrap(),
+            TerminalMode::Linked
+        );
+        assert!(serde_json::from_value::<TerminalMode>(json!("following")).is_err());
+        assert!(serde_json::from_value::<TerminalMode>(json!("Locked")).is_err());
     }
 }

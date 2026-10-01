@@ -818,6 +818,21 @@
             "null"
           ]
         },
+        "mode": {
+          "description": "How it is bound to that pane; `locked` when absent. `linked`\nfor a profile that is not linkable is `not_linkable`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerminalMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pane": {
+          "description": "The file pane the session belongs to.",
+          "$ref": "#/$defs/Pane"
+        },
         "profile": {
           "description": "A profile from `terminal.profiles`; `terminal.defaultProfile`\nwhen absent.",
           "type": [
@@ -840,7 +855,8 @@
       "required": [
         "type",
         "cols",
-        "rows"
+        "rows",
+        "pane"
       ]
     },
     {
@@ -900,32 +916,7 @@
       ]
     },
     {
-      "description": "Types the shell's own change-directory command into the session, so\nthe terminal follows the active pane. The core answers `ok`.",
-      "type": "object",
-      "properties": {
-        "path": {
-          "description": "The folder to change to.",
-          "type": "string"
-        },
-        "session_id": {
-          "description": "The session.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "type": {
-          "type": "string",
-          "const": "terminal_sync_cwd"
-        }
-      },
-      "required": [
-        "type",
-        "session_id",
-        "path"
-      ]
-    },
-    {
-      "description": "Types paths at a session's prompt, each quoted as the shell reads it\nliterally (as `terminal_sync_cwd` quotes its folder), separated by\nspaces, without Enter. The core answers `ok`.",
+      "description": "Types paths at a session's prompt, each quoted as the shell reads it\nliterally, separated by spaces, without Enter. The core answers\n`ok`.",
       "type": "object",
       "properties": {
         "paths": {
@@ -950,6 +941,31 @@
         "type",
         "session_id",
         "paths"
+      ]
+    },
+    {
+      "description": "Changes how a session is bound to its pane. The core answers `ok`,\nand every connection that said `hello` gets `terminal_mode_changed`\nwhen the mode changed. `linked` for a session whose profile is not\nlinkable is `not_linkable`.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "The new mode.",
+          "$ref": "#/$defs/TerminalMode"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_set_mode"
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "mode"
       ]
     },
     {
@@ -2049,6 +2065,21 @@
           "default": "name"
         }
       }
+    },
+    "TerminalMode": {
+      "description": "How a session is bound to its pane (`docs/terminal.md`, \"Panes and\nmodes\").",
+      "oneOf": [
+        {
+          "description": "The session stays where the user takes it: nothing the pane does\nreaches it.",
+          "type": "string",
+          "const": "locked"
+        },
+        {
+          "description": "The session is meant to follow its pane through a prompt hook. The\nhook is not built yet, so a linked session behaves as a locked one.",
+          "type": "string",
+          "const": "linked"
+        }
+      ]
     },
     "WindowPanes": {
       "description": "The two panes of a window.",

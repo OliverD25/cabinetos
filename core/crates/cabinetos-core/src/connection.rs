@@ -14,7 +14,7 @@
 //!   `set_value`,
 //!   the keybinding and plugin settings writes, `start_job`, a plugin's command, a program's
 //!   command, `shell_menu`, `shell_menu_invoke`, `reload_plugin`, `search`,
-//!   `index_status`, `terminal_open`, `terminal_close`, `terminal_sync_cwd`,
+//!   `index_status`, `terminal_open`, `terminal_close`,
 //!   `list_themes`, `get_theme` of a named theme, `list_tools` and the
 //!   marketplace requests)
 //!   as tasks, so one slow directory, plugin, search, shell or download
@@ -396,8 +396,8 @@ impl Session {
                 request @ (Request::TerminalOpen { .. }
                 | Request::TerminalResize { .. }
                 | Request::TerminalClose { .. }
-                | Request::TerminalSyncCwd { .. }
                 | Request::TerminalTypePaths { .. }
+                | Request::TerminalSetMode { .. }
                 | Request::TerminalList) => self.terminal_request(&id, &span, kind, request),
                 request @ (Request::ListThemes
                 | Request::GetTheme { .. }
@@ -1265,10 +1265,10 @@ impl Session {
         }
     }
 
-    /// The terminal requests. `terminal_resize`, `terminal_type_paths` and
-    /// `terminal_list` answer at once; the others run on the blocking pool
-    /// (starting a shell takes tens of milliseconds, closing one up to
-    /// 2 s).
+    /// The terminal requests. `terminal_resize`, `terminal_type_paths`,
+    /// `terminal_set_mode` and `terminal_list` answer at once; the others
+    /// run on the blocking pool (starting a shell takes tens of
+    /// milliseconds, closing one up to 2 s).
     fn terminal_request(
         &mut self,
         id: &RequestId,
@@ -1287,6 +1287,8 @@ impl Session {
                 cwd,
                 cols,
                 rows,
+                pane,
+                mode,
             } => {
                 // Read at each open: an edited profile applies to the next
                 // shell at once.
@@ -1296,12 +1298,18 @@ impl Session {
                     Ok(profile) => profile,
                     Err(refusal) => return Some(failure_reply(refusal)),
                 };
+                let binding = cabinetos_terminal::Binding {
+                    pane,
+                    mode: mode.unwrap_or_default(),
+                };
                 self.spawn_reply(id, span, kind, move || {
-                    match terminals.open(&profile, cwd.as_deref(), cols, rows) {
+                    match terminals.open(&profile, cwd.as_deref(), cols, rows, binding) {
                         Ok(opened) => Response::TerminalOpened {
                             session_id: opened.session_id,
                             pipe: opened.pipe,
                             pid: opened.pid,
+                            mode: binding.mode,
+                            linkable: profile.linkable,
                         },
                         Err(error) => failure_reply((error.code, error.message)),
                     }
@@ -1317,14 +1325,11 @@ impl Session {
                 self.spawn_reply(id, span, kind, move || answer(terminals.close(session_id)));
                 None
             }
-            Request::TerminalSyncCwd { session_id, path } => {
-                self.spawn_reply(id, span, kind, move || {
-                    answer(terminals.sync_cwd(session_id, &path))
-                });
-                None
-            }
             Request::TerminalTypePaths { session_id, paths } => {
                 Some(answer(terminals.type_paths(session_id, &paths)))
+            }
+            Request::TerminalSetMode { session_id, mode } => {
+                Some(answer(terminals.set_mode(session_id, mode)))
             }
             Request::TerminalList => Some(Response::TerminalSessions {
                 sessions: terminals.list(),
@@ -1779,6 +1784,14 @@ impl Session {
                     ));
                 }
                 for session in self.services.terminals.list() {
+                    // A mode change it missed: the mode each session has now.
+                    self.out.send(&Envelope::new(
+                        RequestId::new(),
+                        Event::TerminalModeChanged {
+                            session_id: session.session_id,
+                            mode: session.mode,
+                        },
+                    ));
                     if let TerminalState::Exited { code } = session.state {
                         self.out.send(&Envelope::new(
                             RequestId::new(),

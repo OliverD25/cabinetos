@@ -1,15 +1,18 @@
 //! Terminal sessions end to end with the real `cabinetos-core.exe`: the
-//! requests, the byte pipe, `terminal_exited`, a session that outlives its
-//! connection, and the shells ending with the core. The shells run only
-//! `echo`, `cd` and `exit`, in folders under `%TEMP%\cabinetos-term-test\`,
-//! which the tests remove.
+//! requests, the byte pipe, `terminal_exited`, the panes and modes with
+//! `terminal_mode_changed`, a session that outlives its connection, and the
+//! shells ending with the core. The shells run only `echo`, `cd` and
+//! `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which the tests
+//! remove.
 
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use cabinetos_ipc::{PipeClient, PipeName};
-use cabinetos_protocol::{Envelope, ErrorCode, Event, Request, Response, TerminalState};
+use cabinetos_protocol::{
+    Envelope, ErrorCode, Event, Pane, Request, Response, TerminalMode, TerminalState,
+};
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
@@ -18,14 +21,15 @@ use tokio::sync::mpsc::UnboundedReceiver;
 const CORE_EXE: &str = env!("CARGO_BIN_EXE_cabinetos-core");
 const DEADLINE: Duration = Duration::from_secs(30);
 
-/// Two profiles: an interactive cmd (the default) and one that prints a
-/// line and exits with code 3.
+/// Three profiles: an interactive cmd (the default, not linkable), one that
+/// prints a line and exits with code 3, and a cmd that says it is linkable.
 const CONFIG: &str = r#"{
   "terminal": {
     "defaultProfile": "cmd",
     "profiles": [
       { "name": "cmd", "command": "cmd.exe" },
-      { "name": "once", "command": "cmd.exe", "args": ["/c", "echo", "hello-from-conpty", "&&", "exit", "3"] }
+      { "name": "once", "command": "cmd.exe", "args": ["/c", "echo", "hello-from-conpty", "&&", "exit", "3"] },
+      { "name": "hooked", "command": "cmd.exe", "linkable": true }
     ]
   }
 }"#;
@@ -112,6 +116,24 @@ fn open(profile: Option<&str>, cwd: &Path, cols: u16) -> Request {
         cwd: Some(shown(cwd)),
         cols,
         rows: 25,
+        pane: Pane::Left,
+        mode: None,
+    }
+}
+
+/// The next `terminal_mode_changed`, skipping other events.
+async fn mode_change(events: &mut UnboundedReceiver<Envelope<Event>>) -> (u64, TerminalMode) {
+    let deadline = tokio::time::Instant::now() + DEADLINE;
+    loop {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Envelope {
+                body: Event::TerminalModeChanged { session_id, mode },
+                ..
+            })) => return (session_id, mode),
+            Ok(Some(_)) => {}
+            Ok(None) => panic!("the events ended"),
+            Err(elapsed) => panic!("no terminal_mode_changed: {elapsed}"),
+        }
     }
 }
 
@@ -239,9 +261,9 @@ async fn terminal_requests_work_over_the_pipe() {
             rows: 25,
         },
         Request::TerminalClose { session_id: 999 },
-        Request::TerminalSyncCwd {
+        Request::TerminalSetMode {
             session_id: 999,
-            path: shown(dir.path()),
+            mode: TerminalMode::Locked,
         },
     ] {
         let reply = ask(&mut client, request).await;
@@ -253,10 +275,13 @@ async fn terminal_requests_work_over_the_pipe() {
         session_id,
         pipe,
         pid,
+        mode,
+        linkable,
     } = reply
     else {
         panic!("expected terminal_opened, got {reply:?}");
     };
+    assert_eq!((mode, linkable), (TerminalMode::Locked, false));
     assert!(pipe.starts_with(r"\\.\pipe\cabinetos-term-"), "{pipe}");
     assert!(pid > 0);
     let mut output = attach(&pipe).await;
@@ -273,6 +298,9 @@ async fn terminal_requests_work_over_the_pipe() {
     assert_eq!(sessions[0].profile, "once");
     assert_eq!(sessions[0].state, TerminalState::Exited { code: 3 });
     assert_eq!(sessions[0].pipe, pipe);
+    assert_eq!(sessions[0].pane, Pane::Left);
+    assert_eq!(sessions[0].mode, TerminalMode::Locked);
+    assert!(!sessions[0].linkable);
     assert_eq!(
         ask(&mut client, Request::TerminalClose { session_id }).await,
         Response::Ok
@@ -287,8 +315,6 @@ async fn terminal_requests_work_over_the_pipe() {
 #[tokio::test]
 async fn a_session_outlives_its_connection_and_ends_with_the_core() {
     let dir = scratch("core");
-    let target = dir.path().join("later");
-    std::fs::create_dir(&target).unwrap();
     let mut core = start_core(dir.path());
 
     // The first client opens the default profile, then goes away.
@@ -299,6 +325,7 @@ async fn a_session_outlives_its_connection_and_ends_with_the_core() {
             session_id,
             pipe,
             pid,
+            ..
         } = reply
         else {
             panic!("expected terminal_opened, got {reply:?}");
@@ -330,15 +357,8 @@ async fn a_session_outlives_its_connection_and_ends_with_the_core() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
-    let synced = ask(
-        &mut client,
-        Request::TerminalSyncCwd {
-            session_id,
-            path: shown(&target),
-        },
-    )
-    .await;
-    assert_eq!(synced, Response::Ok);
+    // The resize makes the pseudo-console paint its screen again while
+    // nobody is attached: that output waits for the next client.
     let resized = ask(
         &mut client,
         Request::TerminalResize {
@@ -353,7 +373,7 @@ async fn a_session_outlives_its_connection_and_ends_with_the_core() {
     // Reattached: what the shell printed meanwhile, then fresh output.
     let mut output = attach(&pipe).await;
     let mut seen = Vec::new();
-    read_until(&mut output, &mut seen, &format!("{}>", shown(&target))).await;
+    read_until(&mut output, &mut seen, &format!("{}>", shown(dir.path()))).await;
     output.write_all(b"echo fr^esh\r").await.unwrap();
     read_until(&mut output, &mut seen, "\nfresh").await;
     let Response::TerminalSessions { sessions } = ask(&mut client, Request::TerminalList).await
@@ -361,7 +381,7 @@ async fn a_session_outlives_its_connection_and_ends_with_the_core() {
         panic!("expected terminal_sessions");
     };
     assert_eq!((sessions[0].cols, sessions[0].rows), (180, 30));
-    assert_eq!(sessions[0].cwd, shown(&target));
+    assert_eq!(sessions[0].cwd, shown(dir.path()));
     assert!(sessions[0].attached);
 
     // The core closes its sessions when it stops.
@@ -380,5 +400,105 @@ async fn a_session_outlives_its_connection_and_ends_with_the_core() {
             "the shell {pid} outlived the core"
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// Each listed session's ID, pane, mode and whether it is linkable.
+async fn bindings(client: &mut PipeClient) -> Vec<(u64, Pane, TerminalMode, bool)> {
+    let Response::TerminalSessions { sessions } = ask(client, Request::TerminalList).await else {
+        panic!("expected terminal_sessions");
+    };
+    sessions
+        .iter()
+        .map(|session| {
+            (
+                session.session_id,
+                session.pane,
+                session.mode,
+                session.linkable,
+            )
+        })
+        .collect()
+}
+
+/// A session opened for a pane keeps that pane; its mode changes by
+/// `terminal_set_mode` from any connection, and every connection that said
+/// `hello` hears of it. A profile that is not linkable is refused `linked`,
+/// at the open and later.
+#[tokio::test]
+async fn sessions_have_a_pane_and_a_mode_and_every_client_hears_a_change() {
+    let dir = scratch("core-modes");
+    let core = start_core(dir.path());
+    let (mut first, mut first_events) = connect_with_events(&core.pipe).await;
+    let (mut second, mut second_events) = connect_with_events(&core.pipe).await;
+
+    let open_for = |profile: &str, pane: Pane, mode: Option<TerminalMode>| Request::TerminalOpen {
+        profile: Some(profile.to_owned()),
+        cwd: Some(shown(dir.path())),
+        cols: 80,
+        rows: 25,
+        pane,
+        mode,
+    };
+    let refused = ask(
+        &mut first,
+        open_for("cmd", Pane::Right, Some(TerminalMode::Linked)),
+    )
+    .await;
+    assert_eq!(error_code(&refused), ErrorCode::NotLinkable);
+
+    let reply = ask(
+        &mut first,
+        open_for("hooked", Pane::Right, Some(TerminalMode::Linked)),
+    )
+    .await;
+    let Response::TerminalOpened {
+        session_id: hooked,
+        mode,
+        linkable,
+        ..
+    } = reply
+    else {
+        panic!("expected terminal_opened, got {reply:?}");
+    };
+    assert_eq!((mode, linkable), (TerminalMode::Linked, true));
+    let reply = ask(&mut first, open_for("cmd", Pane::Left, None)).await;
+    let Response::TerminalOpened {
+        session_id: plain, ..
+    } = reply
+    else {
+        panic!("expected terminal_opened, got {reply:?}");
+    };
+
+    assert_eq!(
+        bindings(&mut second).await,
+        [
+            (hooked, Pane::Right, TerminalMode::Linked, true),
+            (plain, Pane::Left, TerminalMode::Locked, false),
+        ]
+    );
+
+    // The second connection locks the first one's session; both hear it.
+    let set_mode =
+        |session_id: u64, mode: TerminalMode| Request::TerminalSetMode { session_id, mode };
+    let locked = ask(&mut second, set_mode(hooked, TerminalMode::Locked)).await;
+    assert_eq!(locked, Response::Ok);
+    for events in [&mut first_events, &mut second_events] {
+        assert_eq!(mode_change(events).await, (hooked, TerminalMode::Locked));
+    }
+    let not_linkable = ask(&mut first, set_mode(plain, TerminalMode::Linked)).await;
+    assert_eq!(error_code(&not_linkable), ErrorCode::NotLinkable);
+    assert_eq!(
+        bindings(&mut first).await,
+        [
+            (hooked, Pane::Right, TerminalMode::Locked, true),
+            (plain, Pane::Left, TerminalMode::Locked, false),
+        ]
+    );
+    for session_id in [hooked, plain] {
+        assert_eq!(
+            ask(&mut first, Request::TerminalClose { session_id }).await,
+            Response::Ok
+        );
     }
 }

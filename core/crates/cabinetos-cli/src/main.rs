@@ -469,25 +469,27 @@ async fn props(client: &mut PipeClient, paths: &[String]) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// The terminal commands: `term`, `term list|close|cd|type`.
+/// The terminal commands: `term`, `term list|close|type|mode`.
 async fn term_command(client: &mut PipeClient, arguments: &TermArgs) -> anyhow::Result<()> {
     match &arguments.action {
         None => {
             let cwd = absolute(arguments.cwd.as_deref().unwrap_or("."))?;
-            term::run(client, arguments.profile.clone(), cwd).await
+            let pane = term::pane(arguments.pane);
+            term::run(client, arguments.profile.clone(), cwd, pane).await
         }
         Some(TermAction::List) => term::list(client).await,
         Some(TermAction::Close { id }) => {
             let request = Request::TerminalClose { session_id: *id };
             term::change(client, request, format_args!("session {id} closed")).await
         }
-        Some(TermAction::Cd { id, path }) => {
-            let path = absolute(path)?;
-            let request = Request::TerminalSyncCwd {
+        Some(TermAction::Mode { id, mode }) => {
+            let mode = term::mode(*mode);
+            let request = Request::TerminalSetMode {
                 session_id: *id,
-                path: path.clone(),
+                mode,
             };
-            term::change(client, request, format_args!("session {id}: cd {path}")).await
+            let word = term::mode_word(mode);
+            term::change(client, request, format_args!("session {id}: {word}")).await
         }
         Some(TermAction::Type { id, paths }) => {
             let paths: Vec<String> = paths

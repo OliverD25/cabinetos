@@ -6,8 +6,8 @@
 //!   buffer of at most [`OUTPUT_LIMIT`] bytes. When it is full the thread
 //!   stops reading, so the pseudo-console waits, until a client takes
 //!   bytes out (backpressure).
-//! - `term-<id>-in` writes what clients type (and the `cd` lines of
-//!   `sync_cwd`) into the pseudo-console.
+//! - `term-<id>-in` writes what clients type (and the paths of
+//!   `type_paths`) into the pseudo-console.
 //! - `term-<id>-exit` waits for the shell to exit, closes the
 //!   pseudo-console once its last output has arrived, and reports the exit.
 //! - The pipe task serves one client at a time on the byte pipe: output from
@@ -21,7 +21,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use cabinetos_ipc::PipeName;
-use cabinetos_protocol::{ErrorCode, Event, TerminalSession, TerminalState};
+use cabinetos_protocol::{ErrorCode, Event, Pane, TerminalMode, TerminalSession, TerminalState};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeServer};
 use tokio::runtime::Handle;
@@ -31,7 +31,7 @@ use tracing::Instrument;
 
 use crate::conpty::{self, Child, PseudoConsole};
 use crate::shell::{self, ShellKind};
-use crate::{EventSink, OUTPUT_LIMIT, PIPE_PREFIX, Profile, TerminalError};
+use crate::{Binding, EventSink, OUTPUT_LIMIT, PIPE_PREFIX, Profile, TerminalError};
 
 /// Bytes read from the pseudo-console at a time.
 const READ_CHUNK: usize = 16 * 1024;
@@ -269,6 +269,7 @@ struct Info {
     rows: u16,
     state: TerminalState,
     attached: bool,
+    mode: TerminalMode,
 }
 
 /// What a new session needs.
@@ -281,6 +282,7 @@ pub(crate) struct Start<'a> {
     pub(crate) cwd: &'a Path,
     pub(crate) cols: u16,
     pub(crate) rows: u16,
+    pub(crate) binding: Binding,
 }
 
 /// One running (or exited) shell.
@@ -288,6 +290,9 @@ pub(crate) struct Session {
     pub(crate) id: u64,
     profile: String,
     kind: ShellKind,
+    pane: Pane,
+    /// Whether the mode may be `linked`, from the profile it started with.
+    pub(crate) linkable: bool,
     pipe: PipeName,
     pub(crate) pid: u32,
     process: std::os::windows::io::OwnedHandle,
@@ -324,6 +329,7 @@ pub(crate) fn start(
         cwd,
         cols,
         rows,
+        binding,
     } = *start;
     let pipe = PipeName::from_full(format!("{PIPE_PREFIX}{:016x}", rand::random::<u64>()));
     let server = {
@@ -377,6 +383,8 @@ pub(crate) fn start(
         id,
         profile: profile.name.clone(),
         kind: ShellKind::of(&profile.command),
+        pane: binding.pane,
+        linkable: profile.linkable,
         pipe,
         pid,
         process,
@@ -389,6 +397,7 @@ pub(crate) fn start(
             rows,
             state: TerminalState::Running,
             attached: false,
+            mode: binding.mode,
         }),
         stop: CancellationToken::new(),
         span: span.clone(),
@@ -547,12 +556,17 @@ impl Session {
         Ok(())
     }
 
-    /// Types the shell's change-directory line, as one chunk of input so a
-    /// client's keys cannot land inside it.
-    pub(crate) fn sync_cwd(&self, path: &str) -> Result<(), TerminalError> {
-        self.type_text(self.kind.cd_line(path), "the folder change")?;
-        path.clone_into(&mut self.info().cwd);
-        Ok(())
+    /// The profile it was opened with.
+    pub(crate) fn profile(&self) -> &str {
+        &self.profile
+    }
+
+    /// Sets the mode; whether it changed.
+    pub(crate) fn set_mode(&self, mode: TerminalMode) -> bool {
+        let mut info = self.info();
+        let changed = info.mode != mode;
+        info.mode = mode;
+        changed
     }
 
     /// Types `paths` at the prompt, quoted for the shell, without Enter.
@@ -592,6 +606,9 @@ impl Session {
             state: info.state,
             pipe: self.pipe_name(),
             attached: info.attached,
+            pane: self.pane,
+            mode: info.mode,
+            linkable: self.linkable,
         }
     }
 

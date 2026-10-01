@@ -20,17 +20,22 @@
 //!   ends, and the event sink gets `terminal_exited`. The session stays
 //!   listed, as exited, until it is closed. Closing it closes the
 //!   pseudo-console, which the shell sees as a hang-up.
+//! - Each session belongs to a file pane and has a mode, `locked` or
+//!   `linked` ([`Terminals::set_mode`]); a change of mode goes to the event
+//!   sink as `terminal_mode_changed`. Nothing here types into a shell on
+//!   its own: a shell gets only what a client sends, and the paths of
+//!   [`Terminals::type_paths`].
 //!
 //! [`console`] is the other end, for a client in a console window: raw
 //! mode, the window size and keys as VT text.
 //!
 //! Serves Constitution Article 9 (Workspace & Terminal Integration: a shell
-//! scoped to the active pane), Article 4 (Progressive Disclosure: nothing
-//! runs until a client asks) and Article 1 (a slow or absent client never
-//! blocks the core: every session has its own threads, and its output is
-//! bounded). Unsafe code is limited to the modules that call Windows APIs
-//! (`conpty` and `console`); every unsafe block states its invariant in a
-//! `SAFETY:` comment.
+//! scoped to a pane), Article 4 (Progressive Disclosure: nothing runs until
+//! a client asks) and Article 1 (a slow or absent client never blocks the
+//! core: every session has its own threads, and its output is bounded).
+//! Unsafe code is limited to the modules that call Windows APIs (`conpty`
+//! and `console`); every unsafe block states its invariant in a `SAFETY:`
+//! comment.
 
 #[allow(unsafe_code)]
 mod conpty;
@@ -45,10 +50,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use cabinetos_protocol::{ErrorCode, Event, TerminalSession};
+use cabinetos_protocol::{ErrorCode, Event, Pane, TerminalMode, TerminalSession};
 use tokio::runtime::Handle;
 
 use crate::session::{Session, Start};
+use crate::shell::ShellKind;
 
 pub use conpty::find_program;
 
@@ -70,7 +76,8 @@ pub(crate) const CLOSE_GRACE: Duration = Duration::from_secs(2);
 /// 16-bit signed numbers).
 const MAX_CELLS: u16 = 32_767;
 
-/// Receives the events of every session: `terminal_exited`.
+/// Receives the events of every session: `terminal_exited` and
+/// `terminal_mode_changed`.
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
 
 /// One shell a session can run: a profile from `terminal.profiles`.
@@ -83,6 +90,28 @@ pub struct Profile {
     pub command: String,
     /// Its arguments.
     pub args: Vec<String>,
+    /// Whether its sessions may be `linked`.
+    pub linkable: bool,
+}
+
+/// Whether a profile that does not say `linkable` may be linked: the
+/// programs a prompt hook can be added to, PowerShell and WSL's shell. cmd
+/// and any other program cannot follow a pane.
+#[must_use]
+pub fn linkable_by_default(command: &str) -> bool {
+    matches!(
+        ShellKind::of(command),
+        ShellKind::PowerShell | ShellKind::Wsl
+    )
+}
+
+/// Where a new session belongs: its pane, and how it is bound to it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Binding {
+    /// The file pane.
+    pub pane: Pane,
+    /// Locked or linked.
+    pub mode: TerminalMode,
 }
 
 /// A session that just started.
@@ -116,6 +145,16 @@ impl TerminalError {
 
     fn spawn_failed(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::SpawnFailed, message)
+    }
+
+    fn not_linkable(profile: &str) -> Self {
+        Self::new(
+            ErrorCode::NotLinkable,
+            format!(
+                "profile `{profile}` cannot be linked to a pane: no prompt hook can be added to its \
+                 program (`\"linkable\": false`)"
+            ),
+        )
     }
 }
 
@@ -183,18 +222,24 @@ impl Terminals {
 
     /// Starts `profile`'s program in a pseudo-console of `cols` × `rows`
     /// cells (each at least 1 and at most 32,767), in `cwd` (an absolute
-    /// path to a folder; the user's profile folder when `None`).
+    /// path to a folder; the user's profile folder when `None`), bound to
+    /// `binding`'s pane in its mode.
     ///
-    /// Fails with `spawn_failed` when the program is not on the `PATH`, the
-    /// folder does not exist, [`MAX_SESSIONS`] sessions exist, or Windows
-    /// refuses.
+    /// Fails with `not_linkable` when the mode is `linked` and the profile
+    /// is not linkable; with `spawn_failed` when the program is not on the
+    /// `PATH`, the folder does not exist, [`MAX_SESSIONS`] sessions exist,
+    /// or Windows refuses.
     pub fn open(
         &self,
         profile: &Profile,
         cwd: Option<&str>,
         cols: u16,
         rows: u16,
+        binding: Binding,
     ) -> Result<Opened, TerminalError> {
+        if binding.mode == TerminalMode::Linked && !profile.linkable {
+            return Err(TerminalError::not_linkable(&profile.name));
+        }
         let program = conpty::find_program(&profile.command).ok_or_else(|| {
             TerminalError::spawn_failed(format!(
                 "`{}` of profile `{}` is not on the PATH",
@@ -230,6 +275,7 @@ impl Terminals {
                 cwd: &cwd,
                 cols,
                 rows,
+                binding,
             },
             &self.runtime,
             Arc::clone(&self.sink),
@@ -253,6 +299,9 @@ impl Terminals {
             cwd = %cwd.display(),
             cols,
             rows,
+            pane = ?binding.pane,
+            mode = ?binding.mode,
+            linkable = profile.linkable,
             "terminal session opened"
         );
         Ok(Opened {
@@ -260,6 +309,25 @@ impl Terminals {
             pipe: session.pipe_name(),
             pid: session.pid,
         })
+    }
+
+    /// Changes how a session is bound to its pane. When the mode changes,
+    /// the event sink gets `terminal_mode_changed`; the same mode again
+    /// changes nothing and sends nothing. An exited session takes the
+    /// change too: it stays listed until it is closed.
+    ///
+    /// Fails with `no_such_session` for an unknown session, and with
+    /// `not_linkable` for `linked` when its profile is not linkable.
+    pub fn set_mode(&self, session_id: u64, mode: TerminalMode) -> Result<(), TerminalError> {
+        let session = self.session(session_id)?;
+        if mode == TerminalMode::Linked && !session.linkable {
+            return Err(TerminalError::not_linkable(session.profile()));
+        }
+        if session.set_mode(mode) {
+            tracing::info!(session_id, mode = ?mode, "terminal mode changed");
+            (self.sink)(Event::TerminalModeChanged { session_id, mode });
+        }
+        Ok(())
     }
 
     /// Changes a running session's size.
@@ -287,21 +355,10 @@ impl Terminals {
         Ok(())
     }
 
-    /// Types the shell's own change-directory command for `path` (an
-    /// absolute path to a folder) into a running session, followed by
-    /// Enter, so the shell follows the active pane.
-    pub fn sync_cwd(&self, session_id: u64, path: &str) -> Result<(), TerminalError> {
-        let session = self.session(session_id)?;
-        folder(path).map_err(|(code, message)| TerminalError::new(code, message))?;
-        session.sync_cwd(path)?;
-        tracing::debug!(session_id, path, "terminal folder synced");
-        Ok(())
-    }
-
     /// Types `paths` at the prompt of a running session, each quoted as
-    /// the shell reads it literally (as [`sync_cwd`](Self::sync_cwd) quotes
-    /// its folder), separated by spaces, without Enter. A path with a
-    /// control character is refused: typed, it would act as a key.
+    /// the shell reads it literally, separated by spaces, without Enter. A
+    /// path with a control character is refused: typed, it would act as a
+    /// key.
     pub fn type_paths(&self, session_id: u64, paths: &[String]) -> Result<(), TerminalError> {
         let session = self.session(session_id)?;
         if let Some(path) = paths.iter().find(|path| path.chars().any(char::is_control)) {
@@ -415,6 +472,21 @@ mod tests {
             ErrorCode::InvalidPath
         );
         assert!(home_folder().is_dir());
+    }
+
+    #[test]
+    fn only_powershell_and_wsl_are_linkable_unless_the_profile_says_so() {
+        for command in [
+            "pwsh.exe",
+            r"C:\Program Files\PowerShell\7\pwsh.exe",
+            "powershell",
+            "wsl.exe",
+        ] {
+            assert!(linkable_by_default(command), "{command}");
+        }
+        for command in ["cmd.exe", "claude.exe", "nu.exe", ""] {
+            assert!(!linkable_by_default(command), "{command}");
+        }
     }
 
     #[test]

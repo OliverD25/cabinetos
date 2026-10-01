@@ -591,6 +591,14 @@
       "description": "Reply to `terminal_open`: the shell runs.",
       "type": "object",
       "properties": {
+        "linkable": {
+          "description": "Whether the session may be `linked` (its profile's `linkable`).",
+          "type": "boolean"
+        },
+        "mode": {
+          "description": "How the session is bound to its pane: the one asked for, or\n`locked`.",
+          "$ref": "#/$defs/TerminalMode"
+        },
         "pid": {
           "description": "The shell's process ID.",
           "type": "integer",
@@ -616,7 +624,9 @@
         "type",
         "session_id",
         "pipe",
-        "pid"
+        "pid",
+        "mode",
+        "linkable"
       ]
     },
     {
@@ -1561,6 +1571,11 @@
           "description": "`contextMenu.shellMenu` is off: the window shows its own menu.",
           "type": "string",
           "const": "shell_menu_off"
+        },
+        {
+          "description": "A terminal session cannot be `linked`: its profile says\n`\"linkable\": false` (no prompt hook can be added to its program).",
+          "type": "string",
+          "const": "not_linkable"
         }
       ]
     },
@@ -3435,6 +3450,21 @@
         "ansi"
       ]
     },
+    "TerminalMode": {
+      "description": "How a session is bound to its pane (`docs/terminal.md`, \"Panes and\nmodes\").",
+      "oneOf": [
+        {
+          "description": "The session stays where the user takes it: nothing the pane does\nreaches it.",
+          "type": "string",
+          "const": "locked"
+        },
+        {
+          "description": "The session is meant to follow its pane through a prompt hook. The\nhook is not built yet, so a linked session behaves as a locked one.",
+          "type": "string",
+          "const": "linked"
+        }
+      ]
+    },
     "TerminalSession": {
       "description": "One terminal session, as `terminal_list` reports it.",
       "type": "object",
@@ -3451,8 +3481,20 @@
           "minimum": 0
         },
         "cwd": {
-          "description": "The folder it started in, or was last synced to. The shell may have\nmoved since.",
+          "description": "The folder it started in. The shell may have moved since.",
           "type": "string"
+        },
+        "linkable": {
+          "description": "Whether it may be `linked`: `false` for a profile that says\n`\"linkable\": false` (no prompt hook can be added to its program).",
+          "type": "boolean"
+        },
+        "mode": {
+          "description": "How it is bound to that pane.",
+          "$ref": "#/$defs/TerminalMode"
+        },
+        "pane": {
+          "description": "The file pane the session belongs to.",
+          "$ref": "#/$defs/Pane"
         },
         "pid": {
           "description": "The shell's process ID.",
@@ -3495,7 +3537,10 @@
         "pid",
         "state",
         "pipe",
-        "attached"
+        "attached",
+        "pane",
+        "mode",
+        "linkable"
       ]
     },
     "TerminalState": {

@@ -55,7 +55,7 @@ pub use message::{
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 pub use preview::{ChangeKind, OpenedListing, PreviewRow};
 pub use secret::SecretText;
-pub use terminal::{TerminalSession, TerminalState};
+pub use terminal::{TerminalMode, TerminalSession, TerminalState};
 pub use theme::{
     Chrome, Color, Decimal, FileTypeColors, METRICS, MetricSpec, MetricUnit, Metrics, MicaTint,
     Opacity, Palette, Rgb, THEME_FORMAT, TerminalColors, Theme, ThemeInfo, ThemeKind,
@@ -117,5 +117,10 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// `program_refused` and `command_line_too_long` of the `program.<name>`
 /// commands, and Windows' own menu (`shell_menu` with the reply
 /// `shell_menu`, `shell_menu_invoke`, the error codes `shell_menu_error`,
-/// `no_such_menu` and `shell_menu_off`).
-pub const PROTOCOL_VERSION: u32 = 15;
+/// `no_such_menu` and `shell_menu_off`); version 16 sessions bound to a
+/// pane (unit 1 of the terminal sprint): `terminal_open` takes the required
+/// `pane` and the optional `mode`, `terminal_opened` and `terminal_list`
+/// report the mode and whether the session is `linkable`,
+/// `terminal_set_mode`, the event `terminal_mode_changed`, the error code
+/// `not_linkable`; and `terminal_sync_cwd` is gone.
+pub const PROTOCOL_VERSION: u32 = 16;

@@ -172,19 +172,19 @@
               "-NoLogo"
             ],
             "command": "pwsh.exe",
-            "followsPane": true,
+            "linkable": true,
             "name": "pwsh"
           },
           {
             "args": [],
             "command": "cmd.exe",
-            "followsPane": true,
+            "linkable": false,
             "name": "cmd"
           },
           {
             "args": [],
             "command": "wsl.exe",
-            "followsPane": true,
+            "linkable": true,
             "name": "wsl"
           },
           {
@@ -193,7 +193,7 @@
               "You run inside the CabinetOS file manager's integrated terminal. Its command line is on the PATH as cabinetos-cli (also as cab). `cabinetos-cli state --json` prints both panes: their tabs, cursor and marked files. `cabinetos-cli --help` lists the rest. For the marked files, prefer its copy, move and delete: they run as jobs, and `cabinetos-cli undo --last` reverses the last one."
             ],
             "command": "claude.exe",
-            "followsPane": false,
+            "linkable": false,
             "name": "claude"
           }
         ]
@@ -1041,19 +1041,19 @@
                 "-NoLogo"
               ],
               "command": "pwsh.exe",
-              "followsPane": true,
+              "linkable": true,
               "name": "pwsh"
             },
             {
               "args": [],
               "command": "cmd.exe",
-              "followsPane": true,
+              "linkable": false,
               "name": "cmd"
             },
             {
               "args": [],
               "command": "wsl.exe",
-              "followsPane": true,
+              "linkable": true,
               "name": "wsl"
             },
             {
@@ -1062,7 +1062,7 @@
                 "You run inside the CabinetOS file manager's integrated terminal. Its command line is on the PATH as cabinetos-cli (also as cab). `cabinetos-cli state --json` prints both panes: their tabs, cursor and marked files. `cabinetos-cli --help` lists the rest. For the marked files, prefer its copy, move and delete: they run as jobs, and `cabinetos-cli undo --last` reverses the last one."
               ],
               "command": "claude.exe",
-              "followsPane": false,
+              "linkable": false,
               "name": "claude"
             }
           ],
@@ -1090,9 +1090,19 @@
           "type": "string"
         },
         "followsPane": {
-          "description": "Whether the window types a change-directory line into it when the\nactive pane changes folder. `false` for a program that is not a\nshell: the line would be its input.",
-          "type": "boolean",
-          "default": true
+          "description": "Ignored. Until terminal unit 1 (2026-10-01) it said whether the\nwindow typed a change-directory line into the session; the window\ntypes none now. Kept so a file that has it still loads; the core\ndoes not write it.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "writeOnly": true
+        },
+        "linkable": {
+          "description": "Whether a session of this profile may be `linked` to its pane, so it\nfollows the pane through a prompt hook. `false` for a program no\nhook can be added to (cmd, Claude Code). Left out: `true` for\nPowerShell and WSL, `false` for any other program.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "name": {
           "description": "A unique name, for example `pwsh`.",

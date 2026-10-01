@@ -10,10 +10,10 @@ use crate::market::{ExtensionKind, MarketItem, ToolInfo};
 use crate::plugin::{PluginInfo, PluginState};
 use crate::preview::{OpenedListing, PreviewRow};
 use crate::secret::SecretText;
-use crate::terminal::TerminalSession;
+use crate::terminal::{TerminalMode, TerminalSession};
 use crate::theme::{Theme, ThemeInfo};
 use crate::update::UpdateStatus;
-use crate::window::WindowState;
+use crate::window::{Pane, WindowState};
 
 /// One message on the control channel: a request ID, the trace of the user
 /// action it belongs to, and the message body.
@@ -358,6 +358,12 @@ pub enum Request {
         cols: u16,
         /// Height in character cells.
         rows: u16,
+        /// The file pane the session belongs to.
+        pane: Pane,
+        /// How it is bound to that pane; `locked` when absent. `linked`
+        /// for a profile that is not linkable is `not_linkable`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<TerminalMode>,
     },
     /// Changes a session's size. The core answers `ok`.
     TerminalResize {
@@ -374,22 +380,24 @@ pub enum Request {
         /// The session.
         session_id: u64,
     },
-    /// Types the shell's own change-directory command into the session, so
-    /// the terminal follows the active pane. The core answers `ok`.
-    TerminalSyncCwd {
-        /// The session.
-        session_id: u64,
-        /// The folder to change to.
-        path: String,
-    },
     /// Types paths at a session's prompt, each quoted as the shell reads it
-    /// literally (as `terminal_sync_cwd` quotes its folder), separated by
-    /// spaces, without Enter. The core answers `ok`.
+    /// literally, separated by spaces, without Enter. The core answers
+    /// `ok`.
     TerminalTypePaths {
         /// The session.
         session_id: u64,
         /// The paths, in the order to type them.
         paths: Vec<String>,
+    },
+    /// Changes how a session is bound to its pane. The core answers `ok`,
+    /// and every connection that said `hello` gets `terminal_mode_changed`
+    /// when the mode changed. `linked` for a session whose profile is not
+    /// linkable is `not_linkable`.
+    TerminalSetMode {
+        /// The session.
+        session_id: u64,
+        /// The new mode.
+        mode: TerminalMode,
     },
     /// Asks for every session. The core answers `terminal_sessions`.
     TerminalList,
@@ -634,8 +642,8 @@ impl Request {
         "terminal_open",
         "terminal_resize",
         "terminal_close",
-        "terminal_sync_cwd",
         "terminal_type_paths",
+        "terminal_set_mode",
         "terminal_list",
         "list_themes",
         "get_theme",
@@ -711,8 +719,8 @@ impl Request {
             Self::TerminalOpen { .. } => "terminal_open",
             Self::TerminalResize { .. } => "terminal_resize",
             Self::TerminalClose { .. } => "terminal_close",
-            Self::TerminalSyncCwd { .. } => "terminal_sync_cwd",
             Self::TerminalTypePaths { .. } => "terminal_type_paths",
+            Self::TerminalSetMode { .. } => "terminal_set_mode",
             Self::TerminalList => "terminal_list",
             Self::ListThemes => "list_themes",
             Self::GetTheme { .. } => "get_theme",
@@ -950,6 +958,11 @@ pub enum Response {
         pipe: String,
         /// The shell's process ID.
         pid: u32,
+        /// How the session is bound to its pane: the one asked for, or
+        /// `locked`.
+        mode: TerminalMode,
+        /// Whether the session may be `linked` (its profile's `linkable`).
+        linkable: bool,
     },
     /// Reply to `terminal_list`: every session, oldest first.
     TerminalSessions {
@@ -1460,6 +1473,15 @@ pub enum Event {
         /// The shell's exit code.
         exit_code: u32,
     },
+    /// A terminal session's mode changed (`terminal_set_mode`, from any
+    /// client). Sent to every connection that said `hello`, so a second
+    /// window or the command line sees it.
+    TerminalModeChanged {
+        /// The session.
+        session_id: u64,
+        /// Its new mode.
+        mode: TerminalMode,
+    },
     /// How far a measure has come: the totals so far of the path it counts
     /// now. At most 30 per second per measure, and none for a measure that
     /// ends sooner. Sent on the connection that asked.
@@ -1580,6 +1602,7 @@ impl Event {
         "plugin_crashed",
         "plugin_event",
         "terminal_exited",
+        "terminal_mode_changed",
         "measure_progress",
         "measure_finished",
         "volumes_changed",
@@ -1609,6 +1632,7 @@ impl Event {
             Self::PluginCrashed { .. } => "plugin_crashed",
             Self::PluginEvent { .. } => "plugin_event",
             Self::TerminalExited { .. } => "terminal_exited",
+            Self::TerminalModeChanged { .. } => "terminal_mode_changed",
             Self::MeasureProgress { .. } => "measure_progress",
             Self::MeasureFinished { .. } => "measure_finished",
             Self::VolumesChanged { .. } => "volumes_changed",
@@ -1770,6 +1794,9 @@ pub enum ErrorCode {
     NoSuchMenu,
     /// `contextMenu.shellMenu` is off: the window shows its own menu.
     ShellMenuOff,
+    /// A terminal session cannot be `linked`: its profile says
+    /// `"linkable": false` (no prompt hook can be added to its program).
+    NotLinkable,
 }
 
 #[cfg(test)]
@@ -2032,6 +2059,8 @@ mod tests {
                 cwd: Some(r"E:\work".to_owned()),
                 cols: 120,
                 rows: 30,
+                pane: Pane::Right,
+                mode: Some(TerminalMode::Linked),
             },
             Request::TerminalResize {
                 session_id: 3,
@@ -2039,13 +2068,13 @@ mod tests {
                 rows: 24,
             },
             Request::TerminalClose { session_id: 3 },
-            Request::TerminalSyncCwd {
-                session_id: 3,
-                path: r"D:\docs".to_owned(),
-            },
             Request::TerminalTypePaths {
                 session_id: 3,
                 paths: vec![r"D:\docs\a b.txt".to_owned(), r"D:\docs\c.md".to_owned()],
+            },
+            Request::TerminalSetMode {
+                session_id: 3,
+                mode: TerminalMode::Linked,
             },
             Request::TerminalList,
             Request::ListThemes,
@@ -2386,6 +2415,8 @@ mod tests {
                 session_id: 3,
                 pipe: r"\\.\pipe\cabinetos-term-0123456789abcdef".to_owned(),
                 pid: 4242,
+                mode: TerminalMode::Locked,
+                linkable: true,
             },
             Response::TerminalSessions {
                 sessions: vec![TerminalSession {
@@ -2398,6 +2429,9 @@ mod tests {
                     state: crate::TerminalState::Running,
                     pipe: r"\\.\pipe\cabinetos-term-0123456789abcdef".to_owned(),
                     attached: true,
+                    pane: Pane::Left,
+                    mode: TerminalMode::Locked,
+                    linkable: false,
                 }],
             },
             Response::Themes {
@@ -2566,6 +2600,10 @@ mod tests {
                 session_id: 3,
                 exit_code: 0,
             },
+            Event::TerminalModeChanged {
+                session_id: 3,
+                mode: TerminalMode::Linked,
+            },
             Event::MeasureProgress {
                 measure_id: 4,
                 path: r"C:\Users\me\photos".to_owned(),
@@ -2663,6 +2701,65 @@ mod tests {
             progress,
             json!({"type": "update_progress", "version": "0.2.0", "bytes": 1, "total": 2, "bytes_per_second": 3})
         );
+    }
+
+    #[test]
+    fn terminal_sessions_have_a_pane_and_a_mode_on_the_wire() {
+        let open =
+            json!({"id": ID, "type": "terminal_open", "cols": 80, "rows": 25, "pane": "right"});
+        let envelope: Envelope<Request> = serde_json::from_value(open).unwrap();
+        assert_eq!(
+            envelope.body,
+            Request::TerminalOpen {
+                profile: None,
+                cwd: None,
+                cols: 80,
+                rows: 25,
+                pane: Pane::Right,
+                mode: None,
+            }
+        );
+        // The pane is required: a session always belongs to one.
+        let paneless = json!({"id": ID, "type": "terminal_open", "cols": 80, "rows": 25});
+        assert!(serde_json::from_value::<Envelope<Request>>(paneless).is_err());
+        let wrong =
+            json!({"id": ID, "type": "terminal_open", "cols": 80, "rows": 25, "pane": "middle"});
+        assert!(serde_json::from_value::<Envelope<Request>>(wrong).is_err());
+
+        let set = serde_json::to_value(Request::TerminalSetMode {
+            session_id: 3,
+            mode: TerminalMode::Linked,
+        })
+        .unwrap();
+        assert_eq!(
+            set,
+            json!({"type": "terminal_set_mode", "session_id": 3, "mode": "linked"})
+        );
+        let changed = serde_json::to_value(Event::TerminalModeChanged {
+            session_id: 3,
+            mode: TerminalMode::Locked,
+        })
+        .unwrap();
+        assert_eq!(
+            changed,
+            json!({"type": "terminal_mode_changed", "session_id": 3, "mode": "locked"})
+        );
+        let opened = serde_json::to_value(Response::TerminalOpened {
+            session_id: 3,
+            pipe: "p".to_owned(),
+            pid: 7,
+            mode: TerminalMode::Locked,
+            linkable: false,
+        })
+        .unwrap();
+        assert_eq!(
+            opened,
+            json!({"type": "terminal_opened", "session_id": 3, "pipe": "p", "pid": 7, "mode": "locked", "linkable": false})
+        );
+        // The folder sync of protocol 15 is gone.
+        let sync = json!({"id": ID, "type": "terminal_sync_cwd", "session_id": 3, "path": "C:\\"});
+        assert!(serde_json::from_value::<Envelope<Request>>(sync).is_err());
+        assert!(!Request::TYPES.contains(&"terminal_sync_cwd"));
     }
 
     #[test]
@@ -2996,6 +3093,7 @@ mod tests {
             (ErrorCode::SecretError, "secret_error"),
             (ErrorCode::NotUndoable, "not_undoable"),
             (ErrorCode::UpdateError, "update_error"),
+            (ErrorCode::NotLinkable, "not_linkable"),
         ];
         for (code, text) in codes {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(text));

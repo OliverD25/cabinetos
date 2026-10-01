@@ -407,18 +407,18 @@ and `cabinetos-cli undo --last` reverses the last one.";
 
 impl Default for TerminalConfig {
     fn default() -> Self {
-        let profile =
-            |name: &str, command: &str, args: &[&str], follows_pane: bool| TerminalProfile {
-                name: name.to_owned(),
-                command: command.to_owned(),
-                args: args.iter().map(|arg| (*arg).to_owned()).collect(),
-                follows_pane,
-            };
+        let profile = |name: &str, command: &str, args: &[&str], linkable: bool| TerminalProfile {
+            name: name.to_owned(),
+            command: command.to_owned(),
+            args: args.iter().map(|arg| (*arg).to_owned()).collect(),
+            linkable: Some(linkable),
+            follows_pane: None,
+        };
         Self {
             default_profile: "pwsh".to_owned(),
             profiles: vec![
                 profile("pwsh", "pwsh.exe", &["-NoLogo"], true),
-                profile("cmd", "cmd.exe", &[], true),
+                profile("cmd", "cmd.exe", &[], false),
                 profile("wsl", "wsl.exe", &[], true),
                 profile(
                     "claude",
@@ -443,17 +443,18 @@ pub struct TerminalProfile {
     /// Its arguments.
     #[serde(default)]
     pub args: Vec<String>,
-    /// Whether the window types a change-directory line into it when the
-    /// active pane changes folder. `false` for a program that is not a
-    /// shell: the line would be its input.
-    #[serde(default = "follows_pane_by_default")]
-    pub follows_pane: bool,
-}
-
-/// A profile that leaves `followsPane` out is a shell, as before the key
-/// existed.
-fn follows_pane_by_default() -> bool {
-    true
+    /// Whether a session of this profile may be `linked` to its pane, so it
+    /// follows the pane through a prompt hook. `false` for a program no
+    /// hook can be added to (cmd, Claude Code). Left out: `true` for
+    /// PowerShell and WSL, `false` for any other program.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linkable: Option<bool>,
+    /// Ignored. Until terminal unit 1 (2026-10-01) it said whether the
+    /// window typed a change-directory line into the session; the window
+    /// types none now. Kept so a file that has it still loads; the core
+    /// does not write it.
+    #[serde(default, skip_serializing)]
+    pub follows_pane: Option<bool>,
 }
 
 /// One change to a key binding.
@@ -685,13 +686,14 @@ mod tests {
             .map(|p| p.name.as_str())
             .collect();
         assert_eq!(names, ["pwsh", "cmd", "wsl", "claude"]);
-        let follows: Vec<bool> = config
+        // No prompt hook can be added to cmd or to Claude Code.
+        let linkable: Vec<Option<bool>> = config
             .terminal
             .profiles
             .iter()
-            .map(|p| p.follows_pane)
+            .map(|p| p.linkable)
             .collect();
-        assert_eq!(follows, [true, true, true, false]);
+        assert_eq!(linkable, [Some(true), Some(false), Some(true), Some(false)]);
         let claude = &config.terminal.profiles[3];
         assert_eq!(claude.command, "claude.exe");
         assert_eq!(claude.args[0], "--append-system-prompt");
@@ -728,25 +730,29 @@ mod tests {
     }
 
     #[test]
-    fn a_profile_follows_the_pane_unless_it_says_not() {
+    fn linkable_is_read_and_written_when_given_and_follows_pane_is_dropped() {
         let terminal: TerminalConfig = serde_json::from_str(
             r#"{"profiles": [
                 {"name": "a", "command": "a.exe"},
-                {"name": "b", "command": "b.exe", "followsPane": false},
-                {"name": "c", "command": "c.exe", "followsPane": true}
+                {"name": "b", "command": "b.exe", "linkable": false},
+                {"name": "c", "command": "c.exe", "linkable": true, "followsPane": false}
             ], "defaultProfile": "a"}"#,
         )
         .unwrap();
-        let follows: Vec<bool> = terminal.profiles.iter().map(|p| p.follows_pane).collect();
-        assert_eq!(follows, [true, false, true]);
-        // The key is always written out, like `args`.
+        let linkable: Vec<Option<bool>> = terminal.profiles.iter().map(|p| p.linkable).collect();
+        assert_eq!(linkable, [None, Some(false), Some(true)]);
+        // Left out stays left out: the core decides by the program then.
         let text = serde_json::to_string(&terminal.profiles[0]).unwrap();
+        assert_eq!(text, r#"{"name":"a","command":"a.exe","args":[]}"#);
+        // followsPane is read, so an older file loads, and never written again.
+        assert_eq!(terminal.profiles[2].follows_pane, Some(false));
+        let text = serde_json::to_string(&terminal.profiles[2]).unwrap();
         assert_eq!(
             text,
-            r#"{"name":"a","command":"a.exe","args":[],"followsPane":true}"#
+            r#"{"name":"c","command":"c.exe","args":[],"linkable":true}"#
         );
         let error = serde_json::from_str::<TerminalProfile>(
-            r#"{"name": "a", "command": "a.exe", "followsPane": "yes"}"#,
+            r#"{"name": "a", "command": "a.exe", "linkable": "yes"}"#,
         )
         .unwrap_err()
         .to_string();

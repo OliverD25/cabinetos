@@ -563,7 +563,7 @@ mod tests {
         assert!(error.message.contains("two terminal profiles"), "{error}");
 
         let error = parse(
-            r#"{"terminal": {"profiles": [{"name": "a", "command": "a.exe", "followsPane": "yes"}], "defaultProfile": "a"}}"#,
+            r#"{"terminal": {"profiles": [{"name": "a", "command": "a.exe", "linkable": "yes"}], "defaultProfile": "a"}}"#,
         )
         .unwrap_err();
         assert!(error.message.contains("invalid type: string"), "{error}");
@@ -571,7 +571,13 @@ mod tests {
             r#"{"terminal": {"profiles": [{"name": "a", "command": "a.exe"}], "defaultProfile": "a"}}"#,
         )
         .unwrap();
-        assert!(config.terminal.profiles[0].follows_pane);
+        assert_eq!(config.terminal.profiles[0].linkable, None);
+        // A file written before unit 1 of the terminal sprint still loads.
+        let config = parse(
+            r#"{"terminal": {"profiles": [{"name": "a", "command": "a.exe", "followsPane": false}], "defaultProfile": "a"}}"#,
+        )
+        .unwrap();
+        assert_eq!(config.terminal.profiles[0].follows_pane, Some(false));
     }
 
     #[test]

@@ -1,12 +1,16 @@
 //! `cabinetos-cli term`: a shell run by the core, in this console window;
-//! and `term list`, `term close`, `term cd` (`docs/terminal.md`).
+//! and `term list`, `term close`, `term type`, `term mode`
+//! (`docs/terminal.md`).
 
 use std::io::{Read, Write};
 use std::time::Duration;
 
 use anyhow::Context;
+use cabinetos_cli_args::{ModeArg, PaneArg};
 use cabinetos_ipc::PipeClient;
-use cabinetos_protocol::{Envelope, Event, Request, Response, TerminalSession, TerminalState};
+use cabinetos_protocol::{
+    Envelope, Event, Pane, Request, Response, TerminalMode, TerminalSession, TerminalState,
+};
 use cabinetos_terminal::console::{self, ConsoleInput, RawMode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
@@ -58,6 +62,7 @@ pub(crate) async fn run(
     client: &mut PipeClient,
     profile: Option<String>,
     cwd: String,
+    pane: Pane,
 ) -> anyhow::Result<()> {
     expect_welcome(client).await?;
     let mut events = client.events().context("the core's events were taken")?;
@@ -71,6 +76,8 @@ pub(crate) async fn run(
             cwd: Some(cwd),
             cols,
             rows,
+            pane,
+            mode: None,
         },
     )
     .await?;
@@ -78,6 +85,7 @@ pub(crate) async fn run(
         session_id,
         pipe,
         pid,
+        ..
     } = reply.body
     else {
         return Err(failure("terminal_open", &reply.body));
@@ -336,16 +344,21 @@ pub(crate) async fn list(client: &mut PipeClient) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `3 pwsh pid 4242 120x30 running attached E:\work`.
+/// `3 pwsh left locked pid 4242 120x30 running attached E:\work`.
 fn session_line(session: &TerminalSession) -> String {
     let state = match session.state {
         TerminalState::Running => "running".to_owned(),
         TerminalState::Exited { code } => format!("exited({code})"),
     };
+    let pane = match session.pane {
+        Pane::Left => "left",
+        Pane::Right => "right",
+    };
     format!(
-        "{} {} pid {} {}x{} {state} {} {}",
+        "{} {} {pane} {} pid {} {}x{} {state} {} {}",
         session.session_id,
         session.profile,
+        mode_word(session.mode),
         session.pid,
         session.cols,
         session.rows,
@@ -358,7 +371,32 @@ fn session_line(session: &TerminalSession) -> String {
     )
 }
 
-/// `term close <id>` and `term cd <id> <path>`: one request, `ok` back.
+/// The pane of `--pane`.
+pub(crate) fn pane(pane: PaneArg) -> Pane {
+    match pane {
+        PaneArg::Left => Pane::Left,
+        PaneArg::Right => Pane::Right,
+    }
+}
+
+/// The mode of `term mode`.
+pub(crate) fn mode(mode: ModeArg) -> TerminalMode {
+    match mode {
+        ModeArg::Locked => TerminalMode::Locked,
+        ModeArg::Linked => TerminalMode::Linked,
+    }
+}
+
+/// `locked` or `linked`, as the wire says it.
+pub(crate) fn mode_word(mode: TerminalMode) -> &'static str {
+    match mode {
+        TerminalMode::Locked => "locked",
+        TerminalMode::Linked => "linked",
+    }
+}
+
+/// `term close <id>`, `term type <id> <paths>` and `term mode <id> <mode>`:
+/// one request, `ok` back.
 pub(crate) async fn change(
     client: &mut PipeClient,
     request: Request,
@@ -403,16 +441,21 @@ mod tests {
             state: TerminalState::Running,
             pipe: r"\\.\pipe\cabinetos-term-0123456789abcdef".to_owned(),
             attached: true,
+            pane: Pane::Left,
+            mode: TerminalMode::Locked,
+            linkable: true,
         };
         assert_eq!(
             session_line(&session),
-            r"3 pwsh pid 4242 120x30 running attached E:\work"
+            r"3 pwsh left locked pid 4242 120x30 running attached E:\work"
         );
         session.state = TerminalState::Exited { code: 3 };
         session.attached = false;
+        session.pane = Pane::Right;
+        session.mode = TerminalMode::Linked;
         assert_eq!(
             session_line(&session),
-            r"3 pwsh pid 4242 120x30 exited(3) detached E:\work"
+            r"3 pwsh right linked pid 4242 120x30 exited(3) detached E:\work"
         );
     }
 }

@@ -403,28 +403,23 @@ pub struct TermArgs {
     /// The folder the shell starts in; without it, this folder.
     #[arg(long, value_name = "PATH")]
     pub cwd: Option<String>,
+    /// The file pane the session belongs to.
+    #[arg(long, value_enum, default_value_t = PaneArg::Left)]
+    pub pane: PaneArg,
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
 pub enum TermAction {
-    /// Print every session: its ID, profile, process ID, size, state,
-    /// whether a client is attached, and its folder.
+    /// Print every session: its ID, profile, pane, mode, process ID, size,
+    /// state, whether a client is attached, and the folder it started in.
     List,
     /// Close a session: its shell gets a hang-up.
     Close {
         /// The session's ID.
         id: u64,
     },
-    /// Type the shell's own change-directory command for PATH into a
-    /// session, as the pane does when it changes folder.
-    Cd {
-        /// The session's ID.
-        id: u64,
-        /// The folder.
-        path: String,
-    },
     /// Type paths at a session's prompt, quoted for its shell, without
-    /// Enter, as Ctrl+P and Ctrl+Shift+Enter do.
+    /// Enter, as Ctrl+Alt+P and Ctrl+Shift+Enter do.
     Type {
         /// The session's ID.
         id: u64,
@@ -432,6 +427,29 @@ pub enum TermAction {
         #[arg(required = true, value_name = "PATH")]
         paths: Vec<String>,
     },
+    /// Lock a session, or link it to its pane (a profile that is not
+    /// linkable stays locked).
+    Mode {
+        /// The session's ID.
+        id: u64,
+        /// The new mode.
+        #[arg(value_enum)]
+        mode: ModeArg,
+    },
+}
+
+/// A file pane on the command line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum PaneArg {
+    Left,
+    Right,
+}
+
+/// A terminal session's mode on the command line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ModeArg {
+    Locked,
+    Linked,
 }
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
@@ -1264,6 +1282,7 @@ mod tests {
                 action,
                 profile: profile.map(str::to_owned),
                 cwd: cwd.map(str::to_owned),
+                pane: PaneArg::Left,
             })
         };
         assert_eq!(parse(&["term"]).unwrap(), term(None, None, None));
@@ -1271,6 +1290,16 @@ mod tests {
             parse(&["term", "--profile", "pwsh", "--cwd", r"E:\"]).unwrap(),
             term(None, Some("pwsh"), Some(r"E:\"))
         );
+        assert_eq!(
+            parse(&["term", "--pane", "right"]).unwrap(),
+            Command::Term(TermArgs {
+                action: None,
+                profile: None,
+                cwd: None,
+                pane: PaneArg::Right,
+            })
+        );
+        assert!(parse(&["term", "--pane", "middle"]).is_err());
         assert_eq!(
             parse(&["term", "list"]).unwrap(),
             term(Some(TermAction::List), None, None)
@@ -1280,11 +1309,11 @@ mod tests {
             term(Some(TermAction::Close { id: 3 }), None, None)
         );
         assert_eq!(
-            parse(&["term", "cd", "3", r"D:\docs"]).unwrap(),
+            parse(&["term", "mode", "3", "linked"]).unwrap(),
             term(
-                Some(TermAction::Cd {
+                Some(TermAction::Mode {
                     id: 3,
-                    path: r"D:\docs".to_owned()
+                    mode: ModeArg::Linked
                 }),
                 None,
                 None
@@ -1295,7 +1324,12 @@ mod tests {
             "an action takes no options"
         );
         assert!(parse(&["term", "close"]).is_err(), "an ID is required");
-        assert!(parse(&["term", "cd", "3"]).is_err(), "a path is required");
+        assert!(parse(&["term", "mode", "3"]).is_err(), "a mode is required");
+        assert!(parse(&["term", "mode", "3", "follow"]).is_err());
+        assert!(
+            parse(&["term", "cd", "3", r"D:\docs"]).is_err(),
+            "the folder sync is gone"
+        );
     }
 
     #[test]
