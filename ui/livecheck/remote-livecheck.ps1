@@ -7,10 +7,11 @@
 #
 # What it does, in order: sends the commits the machine does not have yet as a git bundle and fast-forwards its
 # clone; copies this PC's Release window and release core into the clone's build paths (the machine builds
-# nothing); makes the 100,000-entry folder of the core's bench there (bench-folders.ps1: the machine has no Rust);
-# starts the task; waits for the run's DONE.md; copies the run's output into _io\live-check here with the machine's
-# name in the file name; prints DONE.md. Needs the Release window and the release core built on this PC (docs/ui.md,
-# "The live check"). Runs in Windows PowerShell 5.1 and PowerShell 7.
+# nothing); puts what the machine cannot build in place (the Agent extension's plugin, copied from the fixture the
+# repository commits, and the 100,000-entry folder of the core's bench, made by bench-folders.ps1); starts the task;
+# waits for the run's DONE.md; copies the run's output into _io\live-check here with the machine's name in the file
+# name; prints DONE.md. Needs the Release window and the release core built on this PC (docs/ui.md, "The live
+# check"). Runs in Windows PowerShell 5.1 and PowerShell 7.
 #
 # -Branch names the branch to send (main when left out): a git worktree sends its own branch, which must be a
 # fast-forward of what the machine's clone has. -Io names the folder for the output, for a worktree elsewhere.
@@ -76,8 +77,14 @@ if (-not $SkipBuilds) {
   "builds copied: the window of $((Get-Item (Join-Path $window 'CabinetOS.exe')).LastWriteTime.ToString('HH:mm')), the core of $((Get-Item $core).LastWriteTime.ToString('HH:mm'))"
 }
 
-# 3. What the machine cannot build, since it has no Rust: the core bench's 100,000-entry folder, which the live check
-# scrolls; the first time this takes a minute or two.
+# 3. What the machine cannot build, since it has no Rust. The Agent extension's plugin: without it the run's Agent
+# steps say WAITING. The copy the repository commits as the core tests' fixture is the same plugin, built by
+# sdk\extensions\build-extensions.ps1; it is copied again when the fixture is newer than the copy there, as a build
+# would be. Copy-Item keeps the fixture's time, so an unchanged fixture is not copied twice. Then the core bench's
+# 100,000-entry folder, which the live check scrolls; the first time this takes a minute or two.
+$agentBuilt = "$RemoteRepo\sdk\extensions\agent\plugin\plugin.wasm"
+$agentFixture = "$RemoteRepo\sdk\fixtures\plugins\agent\plugin.wasm"
+Remote "if (-not (Test-Path '$agentBuilt') -or (Get-Item '$agentFixture').LastWriteTimeUtc -gt (Get-Item '$agentBuilt').LastWriteTimeUtc) { Copy-Item '$agentFixture' '$agentBuilt' -Force; 'the Agent plugin: copied from sdk\fixtures\plugins\agent' } else { 'the Agent plugin: in place' }" | Select-Object -Last 1
 Remote "powershell -NoProfile -ExecutionPolicy Bypass -File '$RemoteRepo\ui\livecheck\bench-folders.ps1'" | ForEach-Object { "bench folders: $_" }
 
 # 4. The run, in the machine's own session, and the wait for its DONE.md. The task stays "Running" while the
