@@ -227,24 +227,27 @@ brackets are the handout's, for any theme that shows the bar.
 | `radiusSurface` | px | 0 | 16 | 8 | 0 | The corner radius of the panes, the sidebar, the terminal and the marketplace. |
 | `gap` | px | 0 | 48 | 8 | 0 | The space between the window's surfaces: the sidebar, the panes and the docks. |
 | `bodyPadding` | px | 0 | 64 | 8 | 0 | The space between the window's edges and its surfaces, at the sides and the bottom. |
-| `hairlineOpacity` | number | 0 | 1 | 0.06 | 0.08 | The opacity of the 1 px lines under the top row, the tab strips and the breadcrumb rows, and between tabs, in the theme's text colour. |
-| `topRowHeight` | px | 14 | 80 | 40 | 32 | The height of the top row: the menu, the workspace pill, the command center, the view buttons and the caption buttons. Never lower than 32 px on screen: Windows draws the caption buttons that high. |
+| `hairlineOpacity` | number | 0 | 1 | 0.06 | 0.08 | The opacity of the 1 px lines under the top row, the tab strips, the path rows and the sidebar's workspace row, in the theme's text colour. |
+| `topRowHeight` | px | 14 | 80 | 40 | 32 | The height of the top row: the menu, the app's title, the Quick Open chip, the view buttons and the caption buttons. Never lower than 32 px on screen: Windows draws the caption buttons that high. |
 | `topRowButtonSize` | px | 14 | 80 | 36 | 26 | The width and height of the top row's menu and view buttons. |
-| `workspacePillHeight` | px | 14 | 80 | 24 | 22 | The height of the workspace pill. |
-| `workspacePillRadius` | px | 0 | 16 | 4 | 2 | The corner radius of the workspace pill. |
-| `commandCenterHeight` | px | 14 | 80 | 24 | 22 | The height of the command center. |
-| `commandCenterRadius` | px | 0 | 16 | 4 | 3 | The corner radius of the command center. |
+| `workspacePillHeight` | px | 14 | 80 | 24 | 22 | Nothing since v2 of the shell redesign: the height of the workspace pill, which the sidebar's workspace row replaced. |
+| `workspacePillRadius` | px | 0 | 16 | 4 | 2 | Nothing since v2 of the shell redesign: the corner radius of the workspace pill. |
+| `commandCenterHeight` | px | 14 | 80 | 24 | 22 | Nothing since v2 of the shell redesign: the height of the command center, which the Quick Open chip replaced. |
+| `commandCenterRadius` | px | 0 | 16 | 4 | 3 | Nothing since v2 of the shell redesign: the corner radius of the command center. |
+| `quickOpenChipHeight` | px | 14 | 80 | 24 | 22 | The height of the Quick Open chip at the right of the top row: a search glyph and Ctrl+P. Its corners are `radiusControl`. |
 | `titleBarHeight` | px | 14 | 80 | 40 | 30 | Nothing since Phase 16: the height of the title bar, which the top row replaced. |
 | `tabHeight` | px | 14 | 80 | 32 | 24 | Nothing since Phase 16: the height of the title bar's workspace tab. |
 | `tabPaddingX` | px | 0 | 64 | 14 | 10 | Nothing since Phase 16: the space at each side of the workspace tab's text. |
 | `tabMinWidth` | px | 40 | 240 | 96 | 80 | Nothing since Phase 16: the narrowest the workspace tab got. |
 | `tabFontSize` | px | 8 | 32 | 12 | 11 | The text size of a tab in a pane's tab strip. |
-| `tabRadius` | px | 0 | 16 | 0 | 3 | The radius of a tab's two top corners. The default look has square tabs. |
+| `tabRadius` | px | 0 | 16 | 8 | 6 | The radius of a tab's two top corners: the tab in front is a card with these corners. |
+| `tabMaxWidth` | px | 80 | 400 | 160 | 170 | The widest a pane's tab gets; a longer name ends with an ellipsis. |
 | `captionButtonWidth` | px | 24 | 96 | 46 | 40 | The width of the minimize, maximize and close buttons. |
 | `commandBarHeight` | px | 14 | 80 | 48 | 32 | Nothing since Phase 16: the height of the command bar. |
 | `iconButtonSize` | px | 14 | 80 | 32 | 26 | Nothing since Phase 16: an icon button in the command bar. |
 | `fieldHeight` | px | 14 | 80 | 32 | 24 | Nothing since Phase 16: the address and search fields. |
 | `toggleHeight` | px | 14 | 80 | 32 | 26 | Nothing since Phase 16: the dual and single pane toggle. |
+| `workspaceHeaderHeight` | px | 14 | 80 | 28 | 26 | The height of the sidebar's first row, the workspace switcher: a dot, the workspace's name, its branch and a chevron. |
 | `sidebarMinWidth` | px | 100 | 600 | 180 | 150 | The narrowest the sidebar gets. |
 | `sidebarWidthPercent` | % | 5 | 50 | 20 | 17 | The sidebar's width as a share of the window's, kept between its narrowest and widest. |
 | `sidebarMaxWidth` | px | 100 | 600 | 224 | 190 | The widest the sidebar gets. |
@@ -261,9 +264,11 @@ brackets are the handout's, for any theme that shows the bar.
 | `tagRadius` | px | 0 | 16 | 12 | 2 | The corner radius of a tag chip in the sidebar. |
 | `tagFontSize` | px | 8 | 32 | 12 | 11 | The text size of a tag chip. |
 | `paneHeaderHeight` | px | 14 | 80 | 36 | 24 | Nothing since Phase 16: the height of the pane's header, which the tab strip and the breadcrumb row replaced. |
-| `tabRow` | px | 14 | 80 | 32 | 24 | The height of a pane's tab strip, at the top of the pane; it shows from the first tab. |
-| `breadcrumbRowHeight` | px | 14 | 80 | 28 | 22 | The height of a pane's breadcrumb row, under its tab strip: Back, Forward, Up and the folder's path. |
-| `navButtonSize` | px | 14 | 80 | 20 | 20 | The width and height of the breadcrumb row's Back, Forward and Up. |
+| `tabRow` | px | 14 | 80 | 36 | 28 | The height of a pane's tab strip, the band at the top of the pane; it shows from the first tab. The tab in front stands on the strip's bottom edge, lower than the strip by a quarter of what the strip has over 20 px (32 and 26 px); the other tabs are lower by twice that and 2 px more (26 and 22 px), 3 px above the edge. |
+| `toolbarRowHeight` | px | 14 | 80 | 28 | 24 | The height of a pane's toolbar row, under its tab strip: Back, Forward, Up, the drive chip, the drive's free space and Find. |
+| `pathRowHeight` | px | 14 | 80 | 24 | 20 | The height of a pane's path row, under its toolbar row: the folder's path and the filter label. |
+| `breadcrumbRowHeight` | px | 14 | 80 | 28 | 22 | Nothing since v2 of the shell redesign: the height of the breadcrumb row, which the toolbar row and the path row replaced. |
+| `navButtonSize` | px | 14 | 80 | 20 | 20 | The height of a toolbar row's buttons (Back, Forward, Up, Find); each is 2 px wider than high, the handout's 22 x 20. |
 | `columnHeaderPaddingY` | px | 0 | 64 | 4 | 2 | The space above and below the column headers' text. |
 | `columnHeaderPaddingX` | px | 0 | 64 | 14 | 8 | The space at each side of the column headers' row. |
 | `nameColumnWeight` | number | 0.1 | 10 | 1 | 1.6 | The Name column's share of a file list's width, against the other weighted columns. Once the user drags or fits a column, the user's saved widths (`ui.columns`) override the three weights and `sizeColumnWidth` in every theme ([ui.md](ui.md), "Column widths"). |
@@ -300,7 +305,7 @@ brackets are the handout's, for any theme that shows the bar.
 | `marketplaceCardRadius` | px | 0 | 16 | 8 | 2 | The corner radius of a marketplace card. |
 | `paletteRowHeight` | px | 14 | 80 | 36 | 28 | The height of a row in the command palette. |
 | `menuRowHeight` | px | 14 | 80 | 32 | 26 | The height of an item in a context menu. |
-| `dropdownRowHeight` | px | 14 | 80 | 26 | 26 | The height of a row in the top row's dropdowns: the menu and the workspace pill's list. |
+| `dropdownRowHeight` | px | 14 | 80 | 26 | 26 | The height of a row in the shell's dropdowns: the menu and the workspace row's list. |
 | `statusBarHeight` | px | 14 | 80 | 26 | 22 | The height of the status bar. |
 | `statusBarPaddingX` | px | 0 | 64 | 14 | 8 | The space at each side of the status bar's content. |
 | `statusBarGap` | px | 0 | 48 | 16 | 12 | The space between the status bar's items. |
@@ -309,17 +314,23 @@ brackets are the handout's, for any theme that shows the bar.
 | `fkeyButtonRadius` | px | 0 | 16 | (2) | 2 | The corner radius of a function-key button. |
 | `fkeyBarFontSize` | px | 8 | 32 | (11) | 11 | The text size of the function-key bar. |
 
-The ten metrics of the shell redesign (Phase 16, the creator's
-`SHELL_REDESIGN.md`) come with the default look's value and Commander
-Compact's, which the handout gives in brackets. The nine of the shell
-before it (`titleBarHeight`, the four `tab…` of the workspace tab but
-`tabFontSize` and `tabRadius`, `commandBarHeight`, `iconButtonSize`,
-`fieldHeight`, `toggleHeight` and `paneHeaderHeight`) are still read, so a
-theme written before stays valid, and size nothing. The handout lets a
-theme set the top row's height and fill, the tab strip's and breadcrumb
-row's heights, the radii, the hairlines' opacity and the accent; it may
-not remove the tab strip, the breadcrumb row, the workspace pill or the
-command center, and no theme changes a key.
+The metrics of the shell redesign (Phase 16, and v2 of 2026-10-01 in
+Phase 20, the creator's `SHELL_REDESIGN.md`) come with the default look's
+value and Commander Compact's, which the handout gives in brackets. v2
+added five (`quickOpenChipHeight`, `workspaceHeaderHeight`,
+`toolbarRowHeight`, `pathRowHeight` and `tabMaxWidth`) and changed
+`tabRow` (32 and 24 before) and `tabRadius` (0 and 3 before). The nine of
+the shell before Phase 16 (`titleBarHeight`, the four `tab…` of the
+workspace tab but `tabFontSize` and `tabRadius`, `commandBarHeight`,
+`iconButtonSize`, `fieldHeight`, `toggleHeight` and `paneHeaderHeight`)
+and the five of Phase 16 that v2 took away (`workspacePillHeight`,
+`workspacePillRadius`, `commandCenterHeight`, `commandCenterRadius` and
+`breadcrumbRowHeight`) are still read, so a theme written before stays
+valid, and size nothing. The handout lets a theme set the top row's
+height and fill, the tab strip's, toolbar row's and path row's heights,
+the radii, the hairlines' opacity and the accent; it may not remove the
+tab strip, the toolbar row, the path row or the sidebar's workspace row,
+and no theme changes a key.
 
 The bounds, by kind: text sizes 8 to 32 px; line heights 1 to 2.5; the
 heights of rows, bars and controls 14 to 80 px; corner radii 0 to 16 px;

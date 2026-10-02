@@ -6,32 +6,34 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 
 namespace CabinetOS.Views;
 
 /// <summary>
-/// A pane's tab strip (Phases 12 and 16; docs/ui.md, "Tabs"). It shows the
-/// pane's <see cref="TabStrip"/>, one tab or more, and reports what the user
-/// does as commands (<c>tab.select</c>, <c>tab.close</c>, <c>tab.new</c> from
-/// its "+", <c>tab.toggleLock</c>, <c>tab.moveToOtherPane</c>), each with the
-/// pane and the tab it concerns: the window decides and changes the strip,
-/// and the strip follows its <see cref="TabStrip.Changed"/>. A middle click
-/// closes any tab; the tab in front shows its ×. The keyboard never rests on
-/// the strip. The tabs are the window's own elements, drawn as the design
-/// draws them: flat, a 2 px bar over the tab in front, no icon.
+/// A pane's tab strip (Phases 12 and 16, and v2 of the shell redesign;
+/// docs/ui.md, "Tabs in the shell"). It shows the pane's
+/// <see cref="TabStrip"/>, one tab or more, and reports what the user does as
+/// commands (<c>tab.select</c>, <c>tab.close</c>, <c>tab.new</c> from its "+",
+/// <c>tab.toggleLock</c>, <c>tab.moveToOtherPane</c>), each with the pane and
+/// the tab it concerns: the window decides and changes the strip, and the
+/// strip follows its <see cref="TabStrip.Changed"/>. A middle click closes
+/// any tab; the tab in front shows its × while the pane has more than one
+/// (<see cref="TabLook"/>). The keyboard never rests on the strip. The tabs
+/// are the window's own elements, drawn as the design draws them: a recessed
+/// band, the tab in front a card in the toolbar row's fill, the others lower
+/// with dividers between them, a glyph before every name, no accent line.
 /// </summary>
 public sealed partial class PaneTabs : UserControl
 {
-    // The design's tab: 10 px at each side, at most 160 px wide, a 1 px hairline at its right, the × 16 px wide with 6 px before it.
-    private const double TabPadding = 10;
-    private const double MaxTabWidth = 160;
-    private const double HairlineWidth = 1;
+    // The design's tab: 9 px before its glyph, 6 after its ×, 7 between them; the folder glyph 14 px, the × 16 px wide.
+    private const double PaddingLeft = 9;
+    private const double PaddingRight = 6;
+    private const double ItemGap = 7;
+    private const double GlyphSize = 14;
     private const double CloseWidth = 16;
-    private const double CloseGap = 2;
-    private const double ClosePadding = 5;
-    private const double StateGlyphWidth = 12;
-    private const double StateGlyphGap = 6;
+    private const double DividerInset = 6;
 
     // A fill that draws nothing but still takes the pointer: a tab with no fill must hear it over its whole box.
     private static readonly Brush Clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -39,7 +41,7 @@ public sealed partial class PaneTabs : UserControl
     private readonly List<PaneTab> _shown = [];
     private readonly List<Cell> _cells = [];
     private TabStrip? _strip;
-    private bool _accent;
+    private bool _active;
     private bool _settleQueued;
     private bool _scrollPending;
     private bool _addPinned;
@@ -50,8 +52,12 @@ public sealed partial class PaneTabs : UserControl
     {
         InitializeComponent();
         AddButton.Click += (_, _) => _ = RunCommand?.Invoke("tab.new", CommandArgs.Object(("pane", PaneIndex)), "button");
-        OpenWithButton.Click += (_, _) => _ = RunCommand?.Invoke("palette.show", CommandArgs.With("query", "Editor"), "button");
-        Scroller.SizeChanged += (_, _) => QueueSettle(scroll: true);
+        Scroller.SizeChanged += (_, _) =>
+        {
+            // The band reaches the strip's end: the row is at least as wide as the room it scrolls in.
+            TabRow.MinWidth = Scroller.ActualWidth;
+            QueueSettle(scroll: true);
+        };
         TabList.SizeChanged += (_, _) => QueueSettle(scroll: false);
         Loaded += (_, _) =>
         {
@@ -94,42 +100,52 @@ public sealed partial class PaneTabs : UserControl
     }
 
     /// <summary>
-    /// Whether the strip belongs to the active pane: the 2 px bar over its
-    /// front tab is the accent then, and white at 30 % in the other pane.
+    /// Whether the strip belongs to the active pane (or the only one): the
+    /// tab in front is then filled white 9 %, else white 5 %, as the toolbar
+    /// row under it is.
     /// </summary>
-    public bool ShowsAccent
+    public bool IsActivePane
     {
-        get => _accent;
+        get => _active;
         set
         {
-            if (_accent != value)
+            if (_active != value)
             {
-                _accent = value;
+                _active = value;
                 foreach (var cell in _cells)
                 {
-                    Layout(cell);
                     Paint(cell);
                 }
             }
         }
     }
 
+    /// <summary>The brush the tab in front is filled with now, by its name (the snapshot aid's log compares it with the toolbar's).</summary>
+    public string FrontFillKey => _active ? "CbFrontTabFillBrush" : "CbFrontTabInactiveFillBrush";
+
     /// <summary>The tabs as the row shows them, for the snapshot aid's log: titles, the one in front marked with *.</summary>
     public string Describe() => _strip is null
         ? ""
         : string.Join(" | ", _strip.Tabs.Select((tab, i) => $"{(i == _strip.ActiveIndex ? "*" : "")}{tab.Title}{(tab.Locked ? " (locked)" : "")}{(tab.IsTool ? " (tool)" : "")}"));
 
+    /// <summary>
+    /// How the row draws each tab, for the snapshot aid's log: its glyph, and
+    /// "divider" and "close" where it shows them, the one in front marked with
+    /// * and its height, "folder,divider | *folder,close,32 | folder".
+    /// </summary>
+    public string DescribeLook() => string.Join(" | ", _cells.Select(cell =>
+        $"{(cell.Front ? "*" : "")}{cell.Kind.ToString().ToLowerInvariant()}{(cell.Divider.Visibility == Visibility.Visible ? ",divider" : "")}{(cell.Close.Opacity > 0 ? ",close" : "")}{(cell.Front ? $",{cell.Face.ActualHeight:0}" : "")}"));
+
     /// <summary>The strip's height now, 0 while it is hidden (the snapshot aid's <c>layout:</c> step).</summary>
     public double RowHeight => Visibility == Visibility.Visible ? ActualHeight : 0;
 
-    /// <summary>Lays the strip out with the window's sizes now: the theme's <c>tabRow</c> as its height, the tab text at <c>tabFontSize</c>, the tabs' top corners at <c>tabRadius</c>.</summary>
+    /// <summary>Lays the strip out with the window's sizes now: the theme's <c>tabRow</c> as its height, the tab text at <c>tabFontSize</c>, the tabs' top corners at <c>tabRadius</c>, their widest at <c>tabMaxWidth</c>.</summary>
     public void ApplyMetrics()
     {
         var m = WindowMetrics.Current;
         Root.Height = m.TabRow;
-        AddButton.Height = m.TabRow;
-        OpenWithButton.Height = Math.Max(14, m.TabRow - 4);
-        OpenWithButton.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
+        var heights = TabLook.Heights(m.TabRow);
+        AddButton.Height = Math.Max(14, Math.Min(22, heights.Behind));
         foreach (var cell in _cells)
         {
             Layout(cell);
@@ -142,7 +158,7 @@ public sealed partial class PaneTabs : UserControl
     private void NameAddButton() =>
         ToolTipService.SetToolTip(AddButton, KeysOf?.Invoke("tab.new") is { } keys ? $"New tab ({keys})" : "New tab");
 
-    /// <summary>Makes the row show the strip as it is now: the tabs, their titles, locks and close buttons, and the one in front.</summary>
+    /// <summary>Makes the row show the strip as it is now: the tabs, their titles, glyphs and close buttons, and the one in front.</summary>
     public void Refresh()
     {
         if (_strip is not { } strip)
@@ -161,7 +177,7 @@ public sealed partial class PaneTabs : UserControl
             foreach (var tab in strip.Tabs)
             {
                 var cell = NewCell();
-                TabList.Children.Insert(_cells.Count, cell.Outer);
+                TabList.Children.Add(cell.Outer);
                 _cells.Add(cell);
                 _shown.Add(tab);
             }
@@ -180,13 +196,16 @@ public sealed partial class PaneTabs : UserControl
     private Cell NewCell()
     {
         var cell = new Cell();
-        cell.Row.Children.Add(cell.State);
+        cell.Row.Children.Add(cell.FolderGlyph);
+        cell.Row.Children.Add(cell.StateGlyph);
         cell.Row.Children.Add(cell.Title);
         cell.Row.Children.Add(cell.Close);
         cell.Face.Child = cell.Row;
-        cell.Outer.Child = cell.Face;
+        cell.Outer.Children.Add(cell.Band);
+        cell.Outer.Children.Add(cell.Face);
+        cell.Outer.Children.Add(cell.Divider);
 
-        cell.Close.Content = cell.CloseText;
+        cell.Close.Content = new FontIcon { Glyph = "", FontSize = 8 };
         cell.Close.Style = (Style)Resources["TabGlyphButtonStyle"];
         cell.Close.IsTabStop = false;
         cell.Close.AllowFocusOnInteraction = false;
@@ -232,66 +251,77 @@ public sealed partial class PaneTabs : UserControl
         {
             cell.Title.Text = title;
         }
-        // No icon for a folder: a mark stays only where the tab has a state.
-        cell.Glyph = tab.IsTool ? "" : tab.Locked ? "" : null;
-        if (cell.Glyph is not null && cell.State.Glyph != cell.Glyph)
+        // A folder shows the design's folder; a locked tab its lock and a tool tab its tool's glyph in the folder's place.
+        cell.Kind = TabLook.Glyph(tab);
+        var glyph = cell.Kind switch
         {
-            cell.State.Glyph = cell.Glyph;
+            TabGlyph.Tool => "",
+            TabGlyph.Lock => "",
+            _ => null,
+        };
+        if (glyph is not null && cell.StateGlyph.Glyph != glyph)
+        {
+            cell.StateGlyph.Glyph = glyph;
         }
         cell.Front = index == strip.ActiveIndex;
-        // The tab in front has a ×; the others close with a middle click or their menu.
-        cell.Closable = cell.Front && strip.CanClose(index);
+        cell.Closable = TabLook.ShowsClose(cell.Front, strip.CanClose(index));
+        cell.Divider.Visibility = TabLook.Divider(index, strip.ActiveIndex, strip.Count) ? Visibility.Visible : Visibility.Collapsed;
         ToolTipService.SetToolTip(cell.Outer, tab.IsTool ? $"{tab.ToolName}: {tab.Path}" : tab.Locked ? $"{tab.Path} (locked)" : tab.Path);
         AutomationProperties.SetName(cell.Outer, tab.Locked ? $"{title}, locked" : title);
         Layout(cell);
         Paint(cell);
     }
 
-    // What the tab's size depends on: the theme's metrics, and whether it shows a mark and its ×.
+    // What the tab's size depends on: the theme's metrics, whether it is in front, and its glyph.
     private void Layout(Cell cell)
     {
         var m = WindowMetrics.Current;
+        var heights = TabLook.Heights(m.TabRow);
         cell.Outer.Height = m.TabRow;
-        // The 2 px bar is the face's own top border, so it follows the curve when a theme rounds the corners.
+        // The tab in front stands on the strip's bottom edge, the band above it; the others are lower, 3 px above that edge,
+        // on the band, and the band's bottom line runs under them.
+        cell.Face.Height = cell.Front ? heights.Front : heights.Behind;
+        cell.Face.Margin = new Thickness(0, 0, 0, cell.Front ? 0 : heights.BehindMargin);
         cell.Face.CornerRadius = WindowMetrics.TopCorners(m.TabRadius);
-        cell.Title.FontSize = cell.CloseText.FontSize = m.TabFontSize;
-        cell.State.Visibility = cell.Glyph is null ? Visibility.Collapsed : Visibility.Visible;
-        // In the other pane the tab in front shows its × only under the pointer: the design draws that tab without one.
-        var close = cell.Closable && (_accent || cell.Hover);
-        cell.Close.Visibility = close ? Visibility.Visible : Visibility.Collapsed;
-        var right = close ? ClosePadding : TabPadding;
-        cell.Face.Padding = new Thickness(TabPadding, 0, right, 0);
-        // The name takes what the tab's 160 px leave after its padding, hairline, mark and ×; it ends with an ellipsis.
-        var around = TabPadding + right + HairlineWidth
-            + (cell.Glyph is null ? 0 : StateGlyphWidth + StateGlyphGap)
-            + (close ? CloseGap + CloseWidth : 0);
-        cell.Title.MaxWidth = Math.Max(0, MaxTabWidth - around);
+        cell.Band.Height = cell.Front ? Math.Max(0, m.TabRow - heights.Front) : double.NaN;
+        cell.Band.VerticalAlignment = cell.Front ? VerticalAlignment.Top : VerticalAlignment.Stretch;
+        cell.Band.BorderThickness = new Thickness(0, 0, 0, cell.Front ? 0 : 1);
+        cell.Divider.Height = Math.Max(0, heights.Behind - (2 * DividerInset));
+        cell.Divider.Margin = new Thickness(0, 0, 0, heights.BehindMargin + DividerInset);
+        cell.Title.FontSize = m.TabFontSize;
+        cell.FolderGlyph.Visibility = cell.Kind == TabGlyph.Folder ? Visibility.Visible : Visibility.Collapsed;
+        cell.StateGlyph.Visibility = cell.Kind == TabGlyph.Folder ? Visibility.Collapsed : Visibility.Visible;
+        // The × keeps its place on every tab, shown or not, so a tab's width does not change when it comes to the front.
+        cell.Close.Opacity = cell.Closable ? 1 : 0;
+        cell.Close.IsHitTestVisible = cell.Closable;
+        // The name takes what the tab's widest leaves after its padding, glyph and ×; it ends with an ellipsis.
+        cell.Title.MaxWidth = Math.Max(0, m.TabMaxWidth - (PaddingLeft + PaddingRight + GlyphSize + ItemGap + ItemGap + CloseWidth));
     }
 
-    // What the tab looks like: the design's tab in front (of the active pane or of the other), and the others, resting or under the pointer.
+    // What the tab looks like: the card in front (of the active pane or of the other), and the others, resting or under the pointer.
     private void Paint(Cell cell)
     {
-        Brush fill, bar, text;
+        Brush fill, text;
         if (cell.Front)
         {
-            fill = ThemeResources.Brush(_accent ? "CbTabActiveFillBrush" : "CbHoverFillBrush");
-            bar = ThemeResources.Brush(_accent ? "CbAccentBrush" : "CbTabFrontBarInactiveBrush");
-            // White at 85 % in the other pane: the nearest token is the row text's 90 %.
-            text = ThemeResources.Brush(_accent ? "CbTextPrimaryBrush" : "CbRowTextBrush");
+            fill = ThemeResources.Brush(FrontFillKey);
+            text = ThemeResources.Brush("CbTextPrimaryBrush");
         }
         else
         {
-            fill = cell.Hover ? ThemeResources.Brush("CbHoverFillBrush") : Clear;
-            bar = Clear;
+            fill = cell.Hover ? ThemeResources.Brush("CbTabHoverFillBrush") : Clear;
             text = ThemeResources.Brush(cell.Hover ? "CbTextPrimaryBrush" : "CbTabInactiveTextBrush");
         }
         cell.Face.Background = fill;
-        cell.Face.BorderBrush = bar;
-        // The hairline at the right of every tab but the one in front; it keeps its 1 px there, so a tab's width does not change with the front.
-        cell.Outer.BorderBrush = cell.Front ? Clear : ThemeResources.Brush("CbShellHairlineBrush");
+        // The card's top highlight, inset 1 px: white 12 % in the active pane, 8 % in the other; none on the others.
+        cell.Face.BorderBrush = cell.Front ? ThemeResources.Brush(_active ? "CbTabHighlightBrush" : "CbHairlineBrush") : Clear;
+        cell.Band.Background = ThemeResources.Brush("CbTabBandFillBrush");
+        cell.Band.BorderBrush = ThemeResources.Brush("CbShellHairlineBrush");
+        cell.Divider.Fill = ThemeResources.Brush("CbTabDividerBrush");
         cell.Title.Foreground = text;
-        cell.State.Foreground = text;
+        cell.StateGlyph.Foreground = text;
         cell.Title.FontWeight = cell.Front ? FontWeights.SemiBold : FontWeights.Normal;
+        cell.FolderGlyph.Opacity = cell.StateGlyph.Opacity = cell.Front || cell.Hover ? 1 : 0.6;
     }
 
     private void Hover(Cell cell, bool on)
@@ -299,7 +329,6 @@ public sealed partial class PaneTabs : UserControl
         if (cell.Hover != on)
         {
             cell.Hover = on;
-            Layout(cell);
             Paint(cell);
         }
     }
@@ -340,19 +369,16 @@ public sealed partial class PaneTabs : UserControl
 
     // The "+" is right after the last tab while the tabs fit. When they do not, it leaves the scrolling row for its own
     // place at the strip's end, so it does not scroll away. Whether they fit does not depend on where the "+" is (the
-    // tabs' widths plus its 24 px against the room), so the two places cannot flip each other.
+    // band's padding, the tabs' widths and the "+" with its margin against the room), so the two places cannot flip each other.
     private bool PlaceAddButton()
     {
         var room = Root.ActualWidth;
-        if (OpenWithButton.Visibility == Visibility.Visible)
-        {
-            room -= OpenWithButton.ActualWidth + OpenWithButton.Margin.Left + OpenWithButton.Margin.Right;
-        }
         if (room <= 0)
         {
             return false;
         }
-        var pin = _cells.Sum(cell => cell.Outer.ActualWidth) + AddButton.Width > room + 0.5;
+        var add = AddButton.Width + AddButton.Margin.Left + AddButton.Margin.Right;
+        var pin = LeftPad.Width + _cells.Sum(cell => cell.Outer.ActualWidth) + add > room + 0.5;
         if (pin == _addPinned)
         {
             return false;
@@ -360,13 +386,13 @@ public sealed partial class PaneTabs : UserControl
         _addPinned = pin;
         if (pin)
         {
-            TabList.Children.Remove(AddButton);
+            AddCell.Child = null;
             PinnedAdd.Child = AddButton;
         }
         else
         {
             PinnedAdd.Child = null;
-            TabList.Children.Add(AddButton);
+            AddCell.Child = AddButton;
         }
         return true;
     }
@@ -383,7 +409,7 @@ public sealed partial class PaneTabs : UserControl
             return;
         }
         _scrollPending = false;
-        var left = tab.TransformToVisual(TabList).TransformPoint(new Point(0, 0)).X;
+        var left = tab.TransformToVisual(TabRow).TransformPoint(new Point(0, 0)).X;
         var right = left + tab.ActualWidth;
         if (left < Scroller.HorizontalOffset)
         {
@@ -432,21 +458,45 @@ public sealed partial class PaneTabs : UserControl
         return item;
     }
 
-    // One tab's elements and what its look depends on. Outer holds the 1 px hairline at the right, Face the fill and the
-    // 2 px top bar (its top border), Row the mark, the name and the ×.
+    // One tab's elements and what its look depends on. Outer is the tab's whole height and takes the pointer; Band draws
+    // the strip's band there (above the card in front, behind the others, with the band's bottom line); Face is the tab
+    // itself: the card in front, or the fill a tab behind shows under the pointer; Divider is the line at a tab's right.
     private sealed class Cell
     {
-        public Border Outer { get; } = new() { BorderThickness = new Thickness(0, 0, HairlineWidth, 0) };
+        public Grid Outer { get; } = new() { Background = Clear };
 
-        public Border Face { get; } = new() { BorderThickness = new Thickness(0, 2, 0, 0) };
+        public Border Band { get; } = new();
 
-        public StackPanel Row { get; } = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-
-        public FontIcon State { get; } = new()
+        public Border Face { get; } = new()
         {
-            FontSize = StateGlyphWidth,
-            Width = StateGlyphWidth,
-            Margin = new Thickness(0, 0, StateGlyphGap, 0),
+            VerticalAlignment = VerticalAlignment.Bottom,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(PaddingLeft, 0, PaddingRight, 0),
+        };
+
+        public Rectangle Divider { get; } = new()
+        {
+            Width = 1,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            IsHitTestVisible = false,
+        };
+
+        public StackPanel Row { get; } = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Spacing = ItemGap };
+
+        public Viewbox FolderGlyph { get; } = new()
+        {
+            Width = GlyphSize,
+            Height = GlyphSize,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false,
+            Child = new FolderGlyph(),
+        };
+
+        public FontIcon StateGlyph { get; } = new()
+        {
+            FontSize = 12,
+            Width = GlyphSize,
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,
         };
@@ -459,17 +509,15 @@ public sealed partial class PaneTabs : UserControl
             IsHitTestVisible = false,
         };
 
-        public TextBlock CloseText { get; } = new() { Text = "×", FontWeight = FontWeights.Normal };
-
         public Button Close { get; } = new()
         {
             Width = CloseWidth,
             Height = CloseWidth,
-            Margin = new Thickness(CloseGap, 0, 0, 0),
+            CornerRadius = new CornerRadius(3),
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        public string? Glyph { get; set; }
+        public TabGlyph Kind { get; set; }
 
         public bool Front { get; set; }
 

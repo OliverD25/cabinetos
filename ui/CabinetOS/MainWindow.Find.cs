@@ -41,8 +41,24 @@ public sealed partial class MainWindow
         }
     }
 
-    private void RegisterFindCommands() =>
-        _router.RegisterUiHandler("search.focus", _ => OpenFind(_active));
+    // search.focus acts on the pane it names (the path row's filter label), else on the active one; the toolbar's Find
+    // button toggles its pane's find (a command of the window's own, as its other buttons' are).
+    private void RegisterFindCommands()
+    {
+        _router.RegisterUiHandler("search.focus", invocation => OpenFind(PaneOf(invocation)));
+        _router.RegisterLocal("search.toggle", invocation =>
+        {
+            var pane = PaneOf(invocation);
+            if (_panes[pane].Find.IsOpen && !_editorViews[pane].IsOpen)
+            {
+                CloseFind(pane, focusPane: true);
+            }
+            else
+            {
+                OpenFind(pane);
+            }
+        });
+    }
 
     /// <summary>Opens the find widget of <paramref name="pane"/>'s tab, or gives it the keyboard with its text selected.</summary>
     private void OpenFind(int pane)
@@ -61,6 +77,10 @@ public sealed partial class MainWindow
         if (model.Path.Length == 0)
         {
             return;
+        }
+        if (pane != _active)
+        {
+            SetActive(pane);
         }
         EndQuickSearch();
         EndAddressEdit();
@@ -143,11 +163,13 @@ public sealed partial class MainWindow
         return false;
     }
 
-    // The widget shows what the pane's find holds: open or not, its text, the folder it finds in, the count.
+    // The widget shows what the pane's find holds: open or not, its text, the folder it finds in, the count. The toolbar's
+    // Find button and the path row's filter label follow it.
     private void UpdateFind(int pane)
     {
         var find = _panes[pane].Find;
         var view = _findViews[pane];
+        _crumbViews[pane].SetFind(find.IsOpen && !_editorViews[pane].IsOpen, find.Query);
         // A tool tab in front covers the folder tab, and its find with it: the find comes back with the folder tab.
         if (!find.IsOpen || _editorViews[pane].IsOpen)
         {

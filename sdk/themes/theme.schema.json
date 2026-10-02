@@ -204,7 +204,7 @@
           "minimum": 0
         },
         "breadcrumbRowHeight": {
-          "description": "The height of a pane's breadcrumb row, under its tab strip: Back, Forward, Up and the folder's path. Whole pixels from 14 to 80; left out, 28.",
+          "description": "The height of a pane's breadcrumb row of the shell before v2 of the redesign; the toolbar row and the path row replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 28.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -246,13 +246,13 @@
           "minimum": 14
         },
         "commandCenterHeight": {
-          "description": "The height of the command center, the box in the middle of the top row that opens Quick Open. Whole pixels from 14 to 80; left out, 24.",
+          "description": "The height of the command center of the shell before v2 of the redesign; the Quick Open chip (quickOpenChipHeight) replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 24.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
         },
         "commandCenterRadius": {
-          "description": "The corner radius of the command center. Whole pixels from 0 to 16; left out, 4.",
+          "description": "The corner radius of the command center of the shell before v2 of the redesign; it sizes nothing now. Whole pixels from 0 to 16; left out, 4.",
           "type": "integer",
           "maximum": 16,
           "minimum": 0
@@ -324,7 +324,7 @@
           "minimum": 0
         },
         "hairlineOpacity": {
-          "description": "The opacity of the 1 px lines under the top row, the tab strips and the breadcrumb rows, and between tabs, in the theme's text colour. A number from 0 to 1; left out, 0.06.",
+          "description": "The opacity of the 1 px lines under the top row, the tab strips, the path rows and the sidebar's workspace row, in the theme's text colour. A number from 0 to 1; left out, 0.06.",
           "type": "number",
           "maximum": 1,
           "minimum": 0
@@ -432,7 +432,7 @@
           "minimum": 0.1
         },
         "navButtonSize": {
-          "description": "The width and height of the Back, Forward and Up buttons in a pane's breadcrumb row. Whole pixels from 14 to 80; left out, 20.",
+          "description": "The height of a button in a pane's toolbar row (Back, Forward, Up, Find); the button is 2 px wider than high. Whole pixels from 14 to 80; left out, 20.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -445,6 +445,18 @@
         },
         "paneHeaderHeight": {
           "description": "The height of a pane's header in the shell before Phase 16; the breadcrumb row replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 36.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "pathRowHeight": {
+          "description": "The height of a pane's path row, under its toolbar row: the folder's path and the filter. Whole pixels from 14 to 80; left out, 24.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
+        "quickOpenChipHeight": {
+          "description": "The height of the Quick Open chip at the right of the top row: a search glyph and Ctrl+P. Whole pixels from 14 to 80; left out, 24.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -593,6 +605,12 @@
           "maximum": 80,
           "minimum": 14
         },
+        "tabMaxWidth": {
+          "description": "The widest a pane's tab gets; a longer name ends with an ellipsis. Whole pixels from 80 to 400; left out, 160.",
+          "type": "integer",
+          "maximum": 400,
+          "minimum": 80
+        },
         "tabMinWidth": {
           "description": "The narrowest a workspace tab got in the shell before Phase 16; it sizes nothing now. Whole pixels from 40 to 240; left out, 96.",
           "type": "integer",
@@ -606,13 +624,13 @@
           "minimum": 0
         },
         "tabRadius": {
-          "description": "The radius of the two top corners of a pane's tabs. Whole pixels from 0 to 16; left out, 0.",
+          "description": "The radius of the two top corners of a pane's tabs: the tab in front is a card with these corners. Whole pixels from 0 to 16; left out, 8.",
           "type": "integer",
           "maximum": 16,
           "minimum": 0
         },
         "tabRow": {
-          "description": "The height of a pane's tab strip, at the top of the pane. Whole pixels from 14 to 80; left out, 32.",
+          "description": "The height of a pane's tab strip, the band at the top of the pane. The tab in front stands on its bottom edge, lower than the strip by a quarter of what the strip has over 20 px; the other tabs are lower by twice that and 2 px more. Whole pixels from 14 to 80; left out, 36.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -689,6 +707,12 @@
           "maximum": 80,
           "minimum": 14
         },
+        "toolbarRowHeight": {
+          "description": "The height of a pane's toolbar row, under its tab strip: Back, Forward, Up, the drive, its free space and Find. Whole pixels from 14 to 80; left out, 28.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
         "topRowButtonSize": {
           "description": "The width and height of an icon button in the top row: the menu and the view buttons. Whole pixels from 14 to 80; left out, 36.",
           "type": "integer",
@@ -696,7 +720,7 @@
           "minimum": 14
         },
         "topRowHeight": {
-          "description": "The height of the top row: the menu, the workspace pill, the command center, the view buttons and the caption buttons. Windows draws the caption buttons 32 px high, so the row is never lower. Whole pixels from 14 to 80; left out, 40.",
+          "description": "The height of the top row: the menu, the app's title, the Quick Open chip, the view buttons and the caption buttons. Windows draws the caption buttons 32 px high, so the row is never lower. Whole pixels from 14 to 80; left out, 40.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
@@ -707,14 +731,20 @@
           "maximum": 10,
           "minimum": 0.1
         },
+        "workspaceHeaderHeight": {
+          "description": "The height of the sidebar's first row, the workspace switcher: a dot, the workspace's name, its branch and a chevron. Whole pixels from 14 to 80; left out, 28.",
+          "type": "integer",
+          "maximum": 80,
+          "minimum": 14
+        },
         "workspacePillHeight": {
-          "description": "The height of the workspace pill in the top row. Whole pixels from 14 to 80; left out, 24.",
+          "description": "The height of the workspace pill in the top row of the shell before v2 of the redesign; the sidebar's workspace row replaced it, so it sizes nothing now. Whole pixels from 14 to 80; left out, 24.",
           "type": "integer",
           "maximum": 80,
           "minimum": 14
         },
         "workspacePillRadius": {
-          "description": "The corner radius of the workspace pill. Whole pixels from 0 to 16; left out, 4.",
+          "description": "The corner radius of the workspace pill of the shell before v2 of the redesign; it sizes nothing now. Whole pixels from 0 to 16; left out, 4.",
           "type": "integer",
           "maximum": 16,
           "minimum": 0

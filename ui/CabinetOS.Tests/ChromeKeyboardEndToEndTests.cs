@@ -16,7 +16,7 @@ public class ChromeKeyboardEndToEndTests
     private const string OptIn = "CABINETOS_UI_E2E";
 
     [Fact]
-    public async Task The_keyboard_stays_in_the_pane_after_the_top_rows_buttons_are_pressed()
+    public async Task The_keyboard_stays_in_the_pane_after_the_top_rows_buttons_and_the_workspace_row_are_pressed()
     {
         var (run, root, data) = Prepare("chrome-keyboard");
         try
@@ -27,7 +27,7 @@ public class ChromeKeyboardEndToEndTests
                 $"path:{data}",
                 "wait:500",
                 "focus:start",
-                // The dual toggle twice: one pane, then two again; the hamburger and the workspace pill open a dropdown that Esc closes.
+                // The dual toggle twice: one pane, then two again; the hamburger and the sidebar's workspace row open a dropdown that Esc closes.
                 "click:Toggle dual pane",
                 "wait:400",
                 "focus:after-dual",

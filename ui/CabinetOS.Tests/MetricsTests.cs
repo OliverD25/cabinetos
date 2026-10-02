@@ -30,7 +30,7 @@ public partial class MetricsTests
         using var schema = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo.Root, "sdk", "themes", "theme.schema.json")));
         var properties = schema.RootElement.GetProperty("$defs").GetProperty("Metrics").GetProperty("properties");
         var names = properties.EnumerateObject().Select(p => p.Name).ToList();
-        Assert.Equal(88, names.Count);
+        Assert.Equal(93, names.Count);
         Assert.Equal(names.Order(StringComparer.Ordinal), MetricsMapper.Specs.Select(s => s.Name).Order(StringComparer.Ordinal));
 
         var defaults = MetricsMapper.Map(null);
@@ -62,7 +62,7 @@ public partial class MetricsTests
     {
         var compact = Shipped("commander-compact");
         Assert.NotNull(compact.Metrics);
-        Assert.Equal(88, compact.Metrics.Count);
+        Assert.Equal(93, compact.Metrics.Count);
 
         var look = ThemeMapper.Map(compact, DesignAccent);
         var metrics = look.Metrics;
@@ -74,6 +74,11 @@ public partial class MetricsTests
         Assert.True(metrics.IsPreset);
         Assert.Empty(metrics.Ignored);
         Assert.Equal(new ChromeLook(FkeyBar: true, RowStripes: true, Hairlines: true), look.Chrome);
+        // v2 of the shell redesign (SHELL_REDESIGN.md §1 and §2, the bracketed values): the top row, the sidebar's
+        // workspace row, the pane's three rows and its tabs.
+        Assert.Equal((32.0, 26.0, 22.0, 26.0), (metrics.TopRowHeight, metrics.TopRowButtonSize, metrics.QuickOpenChipHeight, metrics.WorkspaceHeaderHeight));
+        Assert.Equal((28.0, 24.0, 20.0, 20.0), (metrics.TabRow, metrics.ToolbarRowHeight, metrics.PathRowHeight, metrics.NavButtonSize));
+        Assert.Equal((6.0, 170.0), (metrics.TabRadius, metrics.TabMaxWidth));
 
         // The handout's numbers, through the typed names the window uses.
         Assert.Equal((12.0, 1.3, 20.0, 24.0, 0.0, 0.0), (metrics.FontSize, metrics.LineHeight, metrics.RowHeight, metrics.PaneHeaderHeight, metrics.Gap, metrics.RadiusSurface));
@@ -101,6 +106,9 @@ public partial class MetricsTests
         Assert.Null(back.Mica);
         Assert.Equal((30.0, 13.0, 32.0), (back.Metrics.RowHeight, back.Metrics.FontSize, back.Metrics.PinnedRowHeight()));
         Assert.Equal(220.0, back.Metrics.ColumnViewWidth);
+        // v2 of the shell redesign's default values: the pane's three rows, the sidebar's workspace row, the chip, the tabs.
+        Assert.Equal((36.0, 28.0, 24.0, 28.0, 24.0), (back.Metrics.TabRow, back.Metrics.ToolbarRowHeight, back.Metrics.PathRowHeight, back.Metrics.WorkspaceHeaderHeight, back.Metrics.QuickOpenChipHeight));
+        Assert.Equal((8.0, 160.0), (back.Metrics.TabRadius, back.Metrics.TabMaxWidth));
         // The design's clamp(180px, 20%, 224px) and clamp(120px, 30%, 240px).
         Assert.Equal((180.0, 200.0, 224.0), (back.Metrics.SidebarWidth(800), back.Metrics.SidebarWidth(1000), back.Metrics.SidebarWidth(2000)));
         Assert.Equal((120.0, 150.0, 240.0), (back.Metrics.BottomDockHeight(300), back.Metrics.BottomDockHeight(500), back.Metrics.BottomDockHeight(1000)));

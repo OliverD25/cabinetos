@@ -1614,7 +1614,7 @@ Shot $h "$ShotDir\edge-deleted-live.png"
 "the junction is gone: $(-not (Test-Path -LiteralPath "$edge\links\junction to target"))"
 "the files behind it stayed: $((@(Get-ChildItem -LiteralPath "$edge\link-target" | ForEach-Object { $_.Name }) -join ',') -eq 'kept 1.txt,kept 2.txt,kept 3.txt')"
 
-# ----- 16: the shell (docs/ui.md, "The top row", "The breadcrumb row", "Find in pane", "Quick Open") -----
+# ----- 16: the shell (docs/ui.md, "The top row", "The sidebar header", "The pane's rows", "Find in pane", "Quick Open") -----
 # The creator's SHELL_REDESIGN.md with real keys and clicks. The window's log says what happened: "find opened",
 # "find filtered" (how many rows match), "find closed", "quick open shown", "menu shown", and "command executed"
 # with each command and what started it. The hamburger and a crumb are found by their accessible names, as a
@@ -1711,7 +1711,7 @@ Shot $h "$ShotDir\shell16-quick-open-live.png"
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
 $quickOpen = WaitShellLines 'quick open shown' $shown
 "16: Quick Open showed: $([bool]$quickOpen)"
-"16: the workspace pill shows the branch, live-16: $($quickOpen.fields.branch -eq 'live-16')"
+"16: the workspace has the branch, live-16: $($quickOpen.fields.branch -eq 'live-16')"
 "16: Esc left the pane where it was: $((SelectionText) -match 'other-16')"
 
 Step "16: Ctrl+P, type, Enter: the file's folder in the pane, the file under the cursor"
@@ -1748,11 +1748,94 @@ if ($menu) {
 
 Step "16: a click on the shell16 crumb takes the pane there"
 $crumb = ShellElement $sh
-"16: the breadcrumb row has a crumb for shell16: $([bool]$crumb)"
+"16: the path row has a crumb for shell16: $([bool]$crumb)"
 if ($crumb) {
   ClickElement $crumb; Start-Sleep -Milliseconds 1000
   "16: the pane is in shell16: $((SelectionText) -match '\.git|alpha|beta')"
   Shot $h "$ShotDir\shell16-crumb-live.png"
+}
+
+# v2 of the shell redesign (SHELL_REDESIGN.md, 2026-10-01): the left pane's toolbar row (Up and the drive chip), the
+# sidebar's workspace row and the top row's Quick Open chip, each clicked with the real mouse and found by its accessible
+# name. Of several buttons whose names match, the one highest and then leftmost is taken: the left pane's, not the right's.
+function ShellButtonLike([string]$pattern) {
+  $ae = [System.Windows.Automation.AutomationElement]
+  $buttons = $ae::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants,
+    (New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))
+  @($buttons | Where-Object { $_.Current.Name -like $pattern } | Sort-Object { $_.Current.BoundingRectangle.Top }, { $_.Current.BoundingRectangle.Left })[0]
+}
+# How many elements of the app have that accessible name now (Quick Open's box shares its name with the chip).
+function AppElementCount([string]$name) {
+  $ae = [System.Windows.Automation.AutomationElement]
+  $mine = New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, [int]$script:p.Id)
+  $named = New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $name)
+  $count = 0
+  foreach ($window in $ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $mine)) {
+    $count += $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $named).Count
+  }
+  $count
+}
+
+Step "16: a real click on the left toolbar's Up: the pane goes from shell16 to its parent"
+$up = ShellButtonLike 'Up'
+"16: the toolbar row has an Up button: $([bool]$up)"
+if ($up) {
+  $commands = @(ShellLines 'command executed').Count
+  PressToFolder { ClickElement $up } $files 800
+  $ran = WaitShellLines 'command executed' $commands -until { param($line) $line.fields.command -eq 'go.up' }
+  "16: the click ran go.up from the toolbar's button: $($ran.fields.command -eq 'go.up' -and $ran.fields.trigger -eq 'button')"
+  "16: the pane is in shell16's parent: $((SelectionText) -match 'shell16')"
+}
+
+Step "16: a real click on the left toolbar's drive chip: the drive list shows; Esc closes it"
+$chipDrive = ShellButtonLike 'Drive *'
+"16: the toolbar row has a drive chip ($($chipDrive.Current.Name)): $([bool]$chipDrive)"
+if ($chipDrive) {
+  $prompts = @(ShellLines 'prompt shown').Count
+  ClickElement $chipDrive; Start-Sleep -Milliseconds 700
+  $list = WaitShellLines 'prompt shown' $prompts
+  "16: the chip opened the drive list: $($list.fields.label -eq 'Drives')"
+  Shot $h "$ShotDir\shell16-drives-live.png"
+  $closes = @(ShellLines 'prompt closed').Count
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+  $closed = WaitShellLines 'prompt closed' $closes
+  "16: Esc closed the drive list without a drive: $([bool]$closed -and $closed.fields.answered -eq $false)"
+}
+
+Step "16: the sidebar's workspace row, clicked: its dropdown shows; Default goes to the repository's root; Esc closes it"
+GoPath "$sh\alpha" 1000
+$openFolder = "Open folder as workspace$([char]0x2026)"
+$header = ShellButtonLike 'Workspace Default*'
+"16: the sidebar has the workspace row ($($header.Current.Name)): $([bool]$header)"
+"16: the workspace row shows the branch, live-16: $($header.Current.Name -like '*branch live-16')"
+if ($header) {
+  $menus = @(ShellLines 'workspace menu shown').Count
+  ClickElement $header; Start-Sleep -Milliseconds 700
+  $menu = WaitShellLines 'workspace menu shown' $menus
+  $row = AppElement $openFolder 2
+  "16: the dropdown showed under the row at its width ($($menu.fields.width) px): $([bool]$row -and $menu.fields.width -ge 220)"
+  Shot $h "$ShotDir\shell16-workspace-live.png"
+  $default = ShellButtonLike 'Default'
+  if ($default) {
+    PressToFolder { ClickElement $default } $sh 800
+    "16: Default took the left pane to the repository's root: $((SelectionText) -match '\.git|alpha|beta')"
+  } else { "16: the dropdown has a Default row: False" }
+  ClickElement $header; Start-Sleep -Milliseconds 700
+  $again = AppElement $openFolder 2
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+  "16: Esc closed the dropdown: $([bool]$again -and (AppElementGone $openFolder))"
+}
+
+Step "16: a real click on the top row's Quick Open chip: Quick Open shows; Esc closes it"
+$chip = TopRowButton 'Quick Open'
+"16: the top row has the Quick Open chip: $([bool]$chip)"
+if ($chip) {
+  $shown = @(ShellLines 'quick open shown').Count
+  ClickElement $chip; Start-Sleep -Milliseconds 700
+  "16: the chip opened Quick Open: $([bool](WaitShellLines 'quick open shown' $shown))"
+  $named = AppElementCount 'Quick Open'
+  [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+  "16: Esc closed Quick Open (the chip alone keeps the name): $($named -ge 2 -and (AppElementCount 'Quick Open') -eq 1)"
 }
 
 # ----- 18: the context menu (docs/ui.md, "The context menu") -----

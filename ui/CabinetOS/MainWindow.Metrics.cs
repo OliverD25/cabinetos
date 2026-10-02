@@ -31,7 +31,8 @@ public sealed partial class MainWindow
         var m = look.Metrics;
         Diag.Info(Target, "metrics applied", new LogField("theme", look.Id), new LogField("preset", m.IsPreset),
             new LogField("row_height", m.RowHeight), new LogField("font_size", m.FontSize), new LogField("top_row_height", m.TopRowHeight),
-            new LogField("breadcrumb_row_height", m.BreadcrumbRowHeight), new LogField("tab_row", m.TabRow),
+            new LogField("tab_row", m.TabRow), new LogField("toolbar_row_height", m.ToolbarRowHeight), new LogField("path_row_height", m.PathRowHeight),
+            new LogField("workspace_header_height", m.WorkspaceHeaderHeight), new LogField("quick_open_chip_height", m.QuickOpenChipHeight),
             new LogField("fkey_bar", look.Chrome.FkeyBar), new LogField("row_stripes", look.Chrome.RowStripes), new LogField("hairlines", look.Chrome.Hairlines),
             new LogField("ignored", m.Ignored.Count == 0 ? null : string.Join(",", m.Ignored)));
         // The user's column widths stay; the theme's gap and Name's minimum, or its weights when there are none, apply.
@@ -47,8 +48,8 @@ public sealed partial class MainWindow
         // WinUI's own controls made from now on (dialogs, menus' text boxes) take the theme's control radius too.
         Application.Current.Resources["ControlCornerRadius"] = control;
 
-        // The top row (Phase 16): its height (never lower than Windows' caption buttons), its buttons, the pill, the
-        // command center and the app icon.
+        // The top row: its height (never lower than Windows' caption buttons), its buttons, the Quick Open chip and the app
+        // icon. The pill's and the command center's metrics of Phase 16 size nothing since v2 of the redesign.
         TopRow.Height = new GridLength(Math.Max(m.TopRowHeight, CaptionButtonsHeight));
         AppTile.CornerRadius = WindowMetrics.Inner(4);
         foreach (var button in new[] { MenuButton, DualButton, TerminalButton, MarketplaceButton, PaletteButton, SettingsButton })
@@ -56,13 +57,15 @@ public sealed partial class MainWindow
             button.Width = button.Height = m.TopRowButtonSize;
             button.CornerRadius = control;
         }
-        WorkspacePill.Height = m.WorkspacePillHeight;
-        WorkspacePill.CornerRadius = WorkspacePillFrame.CornerRadius = WindowMetrics.Corners(m.WorkspacePillRadius);
-        CommandCenterFrame.Height = m.CommandCenterHeight;
-        CommandCenterFrame.CornerRadius = WindowMetrics.Corners(m.CommandCenterRadius);
-        CommandCenter.CornerRadius = WindowMetrics.Corners(Math.Max(0, m.CommandCenterRadius - 1));
+        QuickOpenChipFrame.Height = m.QuickOpenChipHeight;
+        QuickOpenChipFrame.CornerRadius = control;
+        QuickOpenChip.CornerRadius = WindowMetrics.Corners(Math.Max(0, m.RadiusControl - 1));
         // Inside the frame's 1 px border: the subtle button style's own 32 px would push the text down and be cut.
-        CommandCenter.Height = Math.Max(0, m.CommandCenterHeight - 2);
+        QuickOpenChip.Height = Math.Max(0, m.QuickOpenChipHeight - 2);
+        // The sidebar's workspace row: its height with the line under it, its top corners as the surfaces' (square in
+        // Commander Compact).
+        WorkspaceHeaderFrame.Height = m.WorkspaceHeaderHeight;
+        WorkspaceHeaderFrame.CornerRadius = WorkspaceHeader.CornerRadius = WindowMetrics.TopCorners(m.RadiusSurface);
         foreach (var crumbs in _crumbViews)
         {
             crumbs.ApplyMetrics();
@@ -70,6 +73,8 @@ public sealed partial class MainWindow
         foreach (var find in _findViews)
         {
             find.ApplyMetrics();
+            // It hangs from the toolbar row's bottom edge, over the path row (SHELL_REDESIGN.md v2 §3).
+            find.Margin = new Thickness(0, m.ToolbarRowHeight, 0, 0);
         }
 
         // Body: the space at its edges, between the sidebar and the panes, and between the panes; under the top
@@ -243,7 +248,7 @@ public sealed partial class MainWindow
         // The sizes the metrics set, element by element: two looks compare by this line.
         var named = new (string Name, FrameworkElement Element)[]
         {
-            ("top", TopBar), ("menu", MenuButton), ("tile", AppTile), ("pill", WorkspacePillFrame), ("center", CommandCenterFrame),
+            ("top", TopBar), ("menu", MenuButton), ("tile", AppTile), ("chip", QuickOpenChipFrame), ("wsheader", WorkspaceHeaderFrame),
             ("dual", DualButton), ("settings", SettingsButton), ("body", Body), ("sidebar", SidebarView), ("lefttabs", LeftTabs),
             ("leftcrumbs", LeftCrumbs), ("left", LeftPane), ("righttabs", RightTabs), ("rightcrumbs", RightCrumbs), ("right", RightPane),
             ("fkeys", FkeyBar), ("status", StatusGrid), ("dock", Dock),
@@ -251,6 +256,12 @@ public sealed partial class MainWindow
         var sizes = named.Where(n => n.Element.Visibility == Visibility.Visible)
             .Select(n => string.Create(CultureInfo.InvariantCulture, $"{n.Name}={n.Element.ActualWidth:0.#}x{n.Element.ActualHeight:0.#}"));
         fields.Add(new("sizes", string.Join(" ", sizes)));
+        // v2's rows of each pane, which "sizes" takes together as lefttabs and leftcrumbs: the strip, the toolbar, the path row.
+        for (var i = 0; i < _crumbViews.Length; i++)
+        {
+            var (toolbar, path) = _crumbViews[i].RowHeights;
+            fields.Add(new($"pane{i}_rows", string.Create(CultureInfo.InvariantCulture, $"tabs {_tabViews[i].RowHeight:0.#}, toolbar {toolbar:0.#}, path {path:0.#}")));
+        }
         fields.Add(new("pane_sizes", _paneViews[0].SizeSignature()));
         var (radius, over) = RadiiOverThree();
         fields.Add(new("max_radius", radius));

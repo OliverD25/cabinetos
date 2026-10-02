@@ -16,9 +16,9 @@
             </Grid.RowDefinitions>
 
             <!--
-              The top row (Phase 16; docs/ui.md, "The top row"): the menu, the app icon and the workspace pill on the left,
-              the command center in the middle, the view buttons and Windows' caption buttons on the right. The whole row
-              is the window's drag area except over its controls (MainWindow.Shell.cs, UpdateDragRegions).
+              The top row (v2 of the shell redesign; docs/ui.md, "The top row"): the menu, the app icon and the title
+              "CabinetOS · folder" on the left, the Quick Open chip, the view buttons and Windows' caption buttons on the
+              right. The whole row is the window's drag area except over its controls (MainWindow.Shell.cs, UpdateDragRegions).
             -->
             <Border
                 x:Name="TopBar"
@@ -64,110 +64,63 @@
                             AutomationProperties.AccessibilityView="Raw"
                             Background="{StaticResource CbAppTileBrush}"
                             CornerRadius="4" />
-                        <!-- The accent at 18 % under the button, so its hover fill lies over the accent. -->
-                        <Border
-                            x:Name="WorkspacePillFrame"
+                        <!--
+                          "CabinetOS · folder", the folder of the active pane's front tab at 60 %. Its widest is the room up to
+                          the Quick Open chip (TopRowLayout.TitleRoom): it ends with an ellipsis rather than reach the chip. Its
+                          three runs are made in code (MainWindow.Shell.cs): the markup's line breaks between runs would be spaces.
+                        -->
+                        <TextBlock
+                            x:Name="TitleText"
                             VerticalAlignment="Center"
-                            Background="{ThemeResource CbWorkspacePillFillBrush}"
-                            CornerRadius="4">
-                            <Button
-                                x:Name="WorkspacePill"
-                                Height="24"
-                                Padding="8,0"
-                                AllowFocusOnInteraction="False"
-                                AutomationProperties.Name="Workspace"
-                                CornerRadius="4"
-                                IsTabStop="False"
-                                Style="{StaticResource CbSubtleButtonStyle}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Ellipse
-                                        Width="8"
-                                        Height="8"
-                                        VerticalAlignment="Center"
-                                        Fill="{ThemeResource CbAccentBrush}" />
-                                    <TextBlock
-                                        x:Name="WorkspaceName"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        FontWeight="SemiBold"
-                                        Foreground="{ThemeResource CbTextPrimaryBrush}"
-                                        Text="Default" />
-                                    <TextBlock
-                                        x:Name="WorkspaceBranch"
-                                        VerticalAlignment="Center"
-                                        FontFamily="{StaticResource CbMonoFont}"
-                                        FontSize="10"
-                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
-                                        Visibility="Collapsed" />
-                                    <FontIcon
-                                        VerticalAlignment="Center"
-                                        FontSize="8"
-                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
-                                        Glyph="&#xE70D;" />
-                                </StackPanel>
-                            </Button>
-                        </Border>
+                            FontSize="12"
+                            IsHitTestVisible="False"
+                            MaxLines="1"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
                     </StackPanel>
-
-                    <!-- The command center, placed by TopRowLayout: centred, clamp(200px, 34%, 380px), hidden below 640 px. -->
-                    <Canvas x:Name="CenterLayer">
-                        <Border
-                            x:Name="CommandCenterFrame"
-                            Height="24"
-                            Background="{ThemeResource CbControlFillBrush}"
-                            BorderBrush="{ThemeResource CbOverlayStrokeBrush}"
-                            BorderThickness="1"
-                            CornerRadius="4">
-                            <Button
-                                x:Name="CommandCenter"
-                                Padding="8,0"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                HorizontalContentAlignment="Stretch"
-                                AllowFocusOnInteraction="False"
-                                AutomationProperties.Name="Quick Open"
-                                CornerRadius="3"
-                                IsTabStop="False"
-                                Style="{StaticResource CbSubtleButtonStyle}"
-                                ToolTipService.ToolTip="Quick Open (Ctrl+P)">
-                                <Grid ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <FontIcon
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
-                                        Glyph="&#xE721;" />
-                                    <TextBlock
-                                        x:Name="CommandCenterText"
-                                        Grid.Column="1"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
-                                        Text="Default"
-                                        TextTrimming="CharacterEllipsis" />
-                                    <TextBlock
-                                        x:Name="CommandCenterKeys"
-                                        Grid.Column="2"
-                                        VerticalAlignment="Center"
-                                        FontFamily="{StaticResource CbMonoFont}"
-                                        FontSize="11"
-                                        Foreground="{ThemeResource CbHintTextBrush}"
-                                        Text="Ctrl+P" />
-                                </Grid>
-                            </Button>
-                        </Border>
-                    </Canvas>
 
                     <StackPanel
                         x:Name="TopRight"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Orientation="Horizontal">
+                        <!-- The Quick Open chip: a search glyph and its key; it never hides (the title gives way to it). -->
+                        <Border
+                            x:Name="QuickOpenChipFrame"
+                            Height="24"
+                            Margin="0,0,6,0"
+                            VerticalAlignment="Center"
+                            BorderBrush="{ThemeResource CbHairlineBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                            <Button
+                                x:Name="QuickOpenChip"
+                                Height="22"
+                                MinWidth="0"
+                                Padding="8,0"
+                                VerticalAlignment="Stretch"
+                                AllowFocusOnInteraction="False"
+                                AutomationProperties.Name="Quick Open"
+                                CornerRadius="3"
+                                IsTabStop="False"
+                                Style="{StaticResource CbSubtleButtonStyle}"
+                                ToolTipService.ToolTip="Quick Open (Ctrl+P) · type &gt; for commands">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                        Glyph="&#xE721;" />
+                                    <TextBlock
+                                        x:Name="QuickOpenKeys"
+                                        VerticalAlignment="Center"
+                                        FontFamily="{StaticResource CbMonoFont}"
+                                        FontSize="10"
+                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                        Text="Ctrl+P" />
+                                </StackPanel>
+                            </Button>
+                        </Border>
                         <Button
                             x:Name="DualButton"
                             Width="36"
@@ -269,14 +222,87 @@
                     Visibility="Collapsed" />
 
                 <!--
-                  The sidebar's column: the Explorer (pinned folders, drives, and in the rail layout the folder tree), the Search
-                  view, and the pages of tools with a sidebar page, one over another; the divider lies over the gap on its right.
+                  The sidebar's column: the workspace row on top (v2 of the shell redesign, whatever the sidebar shows), then the
+                  Explorer (pinned folders, drives, and in the rail layout the folder tree), the Search view, and the pages of
+                  tools with a sidebar page, one over another; the divider lies over the gap on its right.
                 -->
                 <Grid x:Name="SidebarHost" Grid.Column="1">
                     <Grid x:Name="SidebarColumn" Margin="0,0,8,0">
-                        <views:Sidebar x:Name="SidebarView" />
-                        <views:SearchPanel x:Name="SearchPanelView" Visibility="Collapsed" />
-                        <Grid x:Name="ToolViews" Visibility="Collapsed" />
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <!--
+                          The workspace switcher (docs/ui.md, "The sidebar header"): a dot, the workspace's name, its branch in
+                          the mono font and a chevron, on the accent at 18 % with a 1 px line under it. A click opens the
+                          dropdown at the row's full width; Ctrl+K Ctrl+W does too. Like the rest of the chrome it never takes
+                          the keyboard, so Ctrl+Shift+E still lands on the sidebar's first folder.
+                        -->
+                        <Border
+                            x:Name="WorkspaceHeaderFrame"
+                            Height="28"
+                            Background="{ThemeResource CbWorkspacePillFillBrush}"
+                            BorderBrush="{ThemeResource CbShellHairlineBrush}"
+                            BorderThickness="0,0,0,1">
+                            <Button
+                                x:Name="WorkspaceHeader"
+                                Padding="8,0"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                AllowFocusOnInteraction="False"
+                                AutomationProperties.Name="Workspace Default"
+                                CornerRadius="0"
+                                IsTabStop="False"
+                                Style="{StaticResource CbSubtleButtonStyle}">
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse
+                                        Width="8"
+                                        Height="8"
+                                        VerticalAlignment="Center"
+                                        Fill="{ThemeResource CbAccentBrush}" />
+                                    <TextBlock
+                                        x:Name="WorkspaceName"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Foreground="{ThemeResource CbTextPrimaryBrush}"
+                                        Text="Default"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
+                                    <TextBlock
+                                        x:Name="WorkspaceBranch"
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        FontFamily="{StaticResource CbMonoFont}"
+                                        FontSize="10"
+                                        Foreground="{ThemeResource CbTextTertiaryBrush}"
+                                        Visibility="Collapsed" />
+                                    <FontIcon
+                                        Grid.Column="3"
+                                        VerticalAlignment="Center"
+                                        FontSize="8"
+                                        Foreground="{ThemeResource CbTextSecondaryBrush}"
+                                        Glyph="&#xE70D;" />
+                                </Grid>
+                            </Button>
+                        </Border>
+                        <views:Sidebar x:Name="SidebarView" Grid.Row="1" />
+                        <views:SearchPanel
+                            x:Name="SearchPanelView"
+                            Grid.Row="1"
+                            Visibility="Collapsed" />
+                        <Grid
+                            x:Name="ToolViews"
+                            Grid.Row="1"
+                            Visibility="Collapsed" />
                     </Grid>
                     <views:SplitterBar
                         x:Name="SidebarSplitter"
@@ -309,9 +335,10 @@
                             <ColumnDefinition x:Name="RightColumn" Width="*" />
                         </Grid.ColumnDefinitions>
                         <!--
-                          Each pane, top to bottom (Phase 16): its tab strip, its breadcrumb row with Back, Forward and
-                          Up, and its listing. A Tool Extension's editor (design view D) covers the listing while the
-                          pane's front tab shows one.
+                          Each pane, top to bottom (v2 of the shell redesign): its tab strip, its toolbar row and path row
+                          (PaneCrumbs), and its listing. A Tool Extension's editor (design view D) covers the listing while
+                          the pane's front tab shows one. The find widget drops from the toolbar row's right end and lies
+                          over the path row (its top margin is the toolbar row's height, MainWindow.Metrics.cs).
                         -->
                         <Grid x:Name="LeftSide" Margin="0,0,4,0">
                             <Grid.RowDefinitions>
@@ -325,9 +352,12 @@
                             <views:EditorPane x:Name="LeftEditor" Grid.Row="2" />
                             <views:FindWidget
                                 x:Name="LeftFind"
-                                Grid.Row="2"
+                                Grid.Row="1"
+                                Grid.RowSpan="2"
+                                Margin="0,28,0,0"
                                 HorizontalAlignment="Right"
-                                VerticalAlignment="Top" />
+                                VerticalAlignment="Top"
+                                Canvas.ZIndex="1" />
                             <views:PreviewPane x:Name="LeftPreview" Grid.Row="2" />
                         </Grid>
                         <Grid
@@ -345,9 +375,12 @@
                             <views:EditorPane x:Name="RightEditor" Grid.Row="2" />
                             <views:FindWidget
                                 x:Name="RightFind"
-                                Grid.Row="2"
+                                Grid.Row="1"
+                                Grid.RowSpan="2"
+                                Margin="0,28,0,0"
                                 HorizontalAlignment="Right"
-                                VerticalAlignment="Top" />
+                                VerticalAlignment="Top"
+                                Canvas.ZIndex="1" />
                             <views:PreviewPane x:Name="RightPreview" Grid.Row="2" />
                         </Grid>
                     </Grid>

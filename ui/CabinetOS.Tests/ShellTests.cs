@@ -15,42 +15,51 @@ namespace CabinetOS.Tests;
 /// </summary>
 public class ShellTests
 {
-    // ----- The breadcrumb row -----
+    // ----- The path row -----
 
     [Fact]
-    public void The_handout_path_in_a_dual_pane_collapses_to_drive_ellipsis_parent_and_current()
+    public void The_handout_path_shows_whole_in_a_dual_pane_and_a_seven_part_path_collapses_to_drive_ellipsis_parent_and_current()
     {
-        // SHELL_REDESIGN.md §7: C:\Users\dev\Projects\fileforge in a 380 px pane. The rule counts
+        // SHELL_REDESIGN.md v2 §7: C:\Users\dev\Projects\fileforge in a 440 px pane renders in full. The rule counts
         // parts, not pixels, so the width does not change it, and no segment is cut short on its own.
-        var segments = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge", dual: true);
+        var whole = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge", dual: true);
+        Assert.Equal("C: \u203A Users \u203A dev \u203A Projects \u203A fileforge", Breadcrumbs.Text(whole));
+        Assert.DoesNotContain(whole, s => s.IsEllipsis);
 
-        Assert.Equal("C: \u203A \u2026 \u203A Projects \u203A fileforge", Breadcrumbs.Text(segments));
-        Assert.Equal([@"C:\", @"C:\Users\dev", @"C:\Users\dev\Projects", @"C:\Users\dev\Projects\fileforge"], segments.Select(s => s.Path));
+        // A 7-part path in dual mode: C: › … › parent › current.
+        var segments = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge\src\app", dual: true);
+        Assert.Equal("C: \u203A \u2026 \u203A src \u203A app", Breadcrumbs.Text(segments));
+        Assert.Equal([@"C:\", @"C:\Users\dev\Projects\fileforge", @"C:\Users\dev\Projects\fileforge\src", @"C:\Users\dev\Projects\fileforge\src\app"], segments.Select(s => s.Path));
         Assert.Equal([false, true, false, false], segments.Select(s => s.IsEllipsis));
         Assert.DoesNotContain(segments, s => s.Label.EndsWith('\u2026') && !s.IsEllipsis);
     }
 
     [Fact]
-    public void One_pane_shows_five_parts_whole_and_collapses_from_six()
+    public void One_pane_shows_eight_parts_whole_and_collapses_from_nine()
     {
-        var five = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge", dual: false);
-        Assert.Equal("C: \u203A Users \u203A dev \u203A Projects \u203A fileforge", Breadcrumbs.Text(five));
-        Assert.DoesNotContain(five, s => s.IsEllipsis);
+        var eight = Breadcrumbs.Segments(@"C:\a\b\c\d\e\f\g", dual: false);
+        Assert.Equal("C: \u203A a \u203A b \u203A c \u203A d \u203A e \u203A f \u203A g", Breadcrumbs.Text(eight));
+        Assert.DoesNotContain(eight, s => s.IsEllipsis);
 
-        var six = Breadcrumbs.Segments(@"C:\Users\dev\Projects\fileforge\src", dual: false);
-        Assert.Equal("C: \u203A \u2026 \u203A fileforge \u203A src", Breadcrumbs.Text(six));
+        var nine = Breadcrumbs.Segments(@"C:\a\b\c\d\e\f\g\h", dual: false);
+        Assert.Equal("C: \u203A \u2026 \u203A g \u203A h", Breadcrumbs.Text(nine));
         // The "…" goes to the last folder it hides.
-        Assert.Equal(@"C:\Users\dev\Projects", six[1].Path);
+        Assert.Equal(@"C:\a\b\c\d\e\f", nine[1].Path);
+        Assert.Equal((5, 8), (Breadcrumbs.DualLimit, Breadcrumbs.SingleLimit));
     }
 
     [Theory]
     [InlineData(@"C:\a\b", true, "C: \u203A a \u203A b")]
-    [InlineData(@"C:\a\b\c", true, "C: \u203A \u2026 \u203A b \u203A c")]
+    [InlineData(@"C:\a\b\c\d", true, "C: \u203A a \u203A b \u203A c \u203A d")]
+    [InlineData(@"C:\a\b\c\d\e", true, "C: \u203A \u2026 \u203A d \u203A e")]
     [InlineData(@"C:\", true, "C:")]
     [InlineData(@"D:\", false, "D:")]
     [InlineData(@"C:\Users\", true, "C: \u203A Users")]
-    [InlineData(@"C:\Users\dev\Projects\fileforge\", true, "C: \u203A \u2026 \u203A Projects \u203A fileforge")]
-    [InlineData(@"\\server\share\a\b", true, "\\\\server \u203A \u2026 \u203A a \u203A b")]
+    [InlineData(@"C:\Users\dev\Projects\fileforge\", true, "C: \u203A Users \u203A dev \u203A Projects \u203A fileforge")]
+    [InlineData(@"C:\Users\dev\Projects\fileforge\src\", true, "C: \u203A \u2026 \u203A fileforge \u203A src")]
+    [InlineData(@"C:\Users\dev\Projects\fileforge\src\", false, "C: \u203A Users \u203A dev \u203A Projects \u203A fileforge \u203A src")]
+    [InlineData(@"\\server\share\a\b", true, "\\\\server \u203A share \u203A a \u203A b")]
+    [InlineData(@"\\server\share\a\b\c\d", true, "\\\\server \u203A \u2026 \u203A c \u203A d")]
     public void Paths_of_every_length_keep_their_rule(string path, bool dual, string expected) =>
         Assert.Equal(expected, Breadcrumbs.Text(Breadcrumbs.Segments(path, dual)));
 
@@ -60,6 +69,39 @@ public class ShellTests
         var root = Assert.Single(Breadcrumbs.Segments(@"C:\", dual: true));
         Assert.Equal(("C:", @"C:\", false), (root.Label, root.Path, root.IsEllipsis));
         Assert.Empty(Breadcrumbs.Segments("", dual: true));
+    }
+
+    [Theory]
+    [InlineData(null, "*.*")]
+    [InlineData("", "*.*")]
+    [InlineData("   ", "*.*")]
+    [InlineData("rep", "*rep*")]
+    [InlineData("a b", "*a b*")]
+    public void The_filter_label_reads_star_dot_star_and_the_find_text_while_a_find_holds_one(string? query, string label) =>
+        Assert.Equal(label, PaneRows.FilterLabel(query));
+
+    [Fact]
+    public void The_toolbar_shows_the_drive_s_letter_and_its_free_space_from_the_core_s_volumes()
+    {
+        var volumes = new List<VolumeDetails>
+        {
+            new("C", @"\\?\Volume{1}\", "NTFS", "", 512UL << 30, 118UL << 30, null),
+            new("D", @"\\?\Volume{2}\", "NTFS", "Data", 2UL << 40, (14UL << 40) / 10, null),
+            new(null, @"\\?\Volume{3}\", "NTFS", "Recovery", 1UL << 30, 1UL << 29, null),
+        };
+
+        Assert.Equal("C:", PaneRows.DriveLabel(@"C:\Users\dev"));
+        Assert.Equal("D:", PaneRows.DriveLabel(@"d:\"));
+        Assert.Equal("C:", PaneRows.DriveLabel(@"\\?\C:\very\long"));
+        Assert.Equal(@"\\", PaneRows.DriveLabel(@"\\server\share\a"));
+        Assert.Equal("", PaneRows.DriveLabel(""));
+
+        Assert.Equal($"{Core.Presentation.DisplayFormat.Bytes(118UL << 30)} free", PaneRows.FreeSpace(volumes, @"C:\Users"));
+        Assert.Equal($"{Core.Presentation.DisplayFormat.Bytes((14UL << 40) / 10)} free", PaneRows.FreeSpace(volumes, @"d:\work"));
+        // A share, a drive the core did not list, and no list at all: the toolbar shows nothing there.
+        Assert.Equal("", PaneRows.FreeSpace(volumes, @"\\server\share"));
+        Assert.Equal("", PaneRows.FreeSpace(volumes, @"E:\"));
+        Assert.Equal("", PaneRows.FreeSpace(null, @"C:\"));
     }
 
     [Fact]
@@ -78,44 +120,32 @@ public class ShellTests
 
     // ----- The top row -----
 
-    // The default look's clusters: menu 36 + icon + pill on the left; five 36 px buttons, a divider and
-    // Windows' three 46 px caption buttons on the right.
-    private const double DefaultLeftEnd = 8 + 36 + 8 + 16 + 8 + 150;
-    private const double DefaultRight = (5 * 36) + 13 + (3 * 46);
+    [Theory]
+    [InlineData("fileforge", "CabinetOS · fileforge")]
+    [InlineData("C:", "CabinetOS · C:")]
+    [InlineData("README.md", "CabinetOS · README.md")]
+    [InlineData("", "CabinetOS")]
+    [InlineData("   ", "CabinetOS")]
+    [InlineData(null, "CabinetOS")]
+    public void The_title_is_the_app_and_the_folder_of_the_active_pane_s_front_tab(string? folder, string expected) =>
+        Assert.Equal(expected, TopRowLayout.Title(folder));
 
     [Fact]
-    public void At_924_px_the_command_center_is_at_least_200_px_and_covers_neither_cluster()
+    public void The_title_gives_way_to_the_chip_and_the_chip_never_hides()
     {
-        var place = TopRowLayout.Place(924, DefaultLeftEnd, 924 - DefaultRight);
+        // The default look at 924 px: menu 36 and icon 16 with 8 px between, from 4 px; the chip starts where the right
+        // cluster does (five 36 px buttons, a 13 px divider, Windows' three 46 px caption buttons, the chip about 76 px).
+        const double titleLeft = 4 + 36 + 8 + 16 + 8;
+        const double chipLeft = 924 - ((5 * 36) + 13 + (3 * 46) + 76 + 6);
+        Assert.Equal(chipLeft - TopRowLayout.Gap - titleLeft, TopRowLayout.TitleRoom(titleLeft, chipLeft));
+        Assert.True(TopRowLayout.TitleRoom(titleLeft, chipLeft) > 150, "924 px leave the title room for a folder's name");
 
-        Assert.True(place.Visible);
-        Assert.True(place.Width >= 200, $"{place.Width}");
-        Assert.True(place.Left >= DefaultLeftEnd + TopRowLayout.Gap, $"{place.Left}");
-        Assert.True(place.Left + place.Width <= 924 - DefaultRight - TopRowLayout.Gap, $"{place.Left + place.Width}");
-    }
-
-    [Fact]
-    public void Below_640_px_the_command_center_hides()
-    {
-        Assert.False(TopRowLayout.Place(639, 60, 600).Visible);
-        Assert.False(TopRowLayout.Place(400, 10, 390).Visible);
-        // At 640 px it shows when the clusters leave room for it.
-        Assert.True(TopRowLayout.Place(640, 60, 600).Visible);
-    }
-
-    [Fact]
-    public void A_wide_window_centres_a_box_of_at_most_380_px_and_a_crowded_one_hides_it()
-    {
-        var wide = TopRowLayout.Place(1600, DefaultLeftEnd, 1600 - DefaultRight);
-        Assert.Equal((380.0, 610.0), (wide.Width, wide.Left));
-        Assert.Equal(0.34 * 1000, TopRowLayout.PreferredWidth(1000), 6);
-        Assert.Equal((200.0, 380.0), (TopRowLayout.PreferredWidth(300), TopRowLayout.PreferredWidth(3000)));
-        // 700 px leaves a narrower box between the clusters; 660 px less than the least width: hidden, nothing overlaps.
-        var narrow = TopRowLayout.Place(700, DefaultLeftEnd, 700 - DefaultRight);
-        Assert.True(narrow.Visible);
-        Assert.True(narrow.Width is >= TopRowLayout.LeastWidth and < 200, $"{narrow.Width}");
-        Assert.True(narrow.Left >= DefaultLeftEnd + TopRowLayout.Gap && narrow.Left + narrow.Width <= 700 - DefaultRight - TopRowLayout.Gap);
-        Assert.False(TopRowLayout.Place(660, DefaultLeftEnd, 660 - DefaultRight).Visible);
+        // A window too narrow for any title: the title gets no room, nothing lies over the chip.
+        Assert.Equal(0, TopRowLayout.TitleRoom(titleLeft, titleLeft + 4));
+        Assert.Equal(0, TopRowLayout.TitleRoom(titleLeft, 10));
+        // The window's least width keeps the chip and the buttons: 600 px hold both clusters.
+        Assert.Equal(600, TopRowLayout.MinWindowWidth);
+        Assert.True(TopRowLayout.TitleRoom(titleLeft, TopRowLayout.MinWindowWidth - ((5 * 36) + 13 + (3 * 46) + 76 + 6)) >= 0);
     }
 
     [Fact]

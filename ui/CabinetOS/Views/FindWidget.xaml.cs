@@ -114,13 +114,13 @@ public sealed partial class FindWidget : UserControl
     /// <summary>Enter as the box takes it (the snapshot aid's <c>find-key:enter</c>).</summary>
     public void PressEnter() => FirstMatchRequested?.Invoke();
 
-    /// <summary>Lays the widget out with the window's sizes now: its corners follow radiusControl, its box the breadcrumb row.</summary>
+    /// <summary>Lays the widget out with the window's sizes now: its corners follow radiusControl, its box the path row it lies over.</summary>
     public void ApplyMetrics()
     {
         var m = WindowMetrics.Current;
         var radius = m.RadiusControl;
         Frame.CornerRadius = new CornerRadius(0, 0, radius, radius);
-        Input.Height = Math.Max(18, m.BreadcrumbRowHeight - 4);
+        Input.Height = Math.Max(18, m.PathRowHeight - 2);
         Input.CornerRadius = WindowMetrics.Corners(radius);
         Input.Padding = new Thickness(6, WindowMetrics.TextTop(Input.Height, 12), 6, 0);
         CloseButton.CornerRadius = WindowMetrics.Corners(radius);

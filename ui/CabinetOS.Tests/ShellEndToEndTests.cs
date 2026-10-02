@@ -30,6 +30,14 @@ public class ShellEndToEndTests
             {
                 File.WriteAllText(Path.Combine(many, $"file-{i:000}.txt"), "x");
             }
+            // §7's paths: a folder of five parts like the handout's C:\Users\dev\Projects\fileforge, which every user has
+            // (C:\Users\<name>\AppData\Local), and one of seven parts above the test's own folder.
+            var fiveParts = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var sevenParts = root;
+            while (sevenParts.Split('\\', StringSplitOptions.RemoveEmptyEntries).Length > 7)
+            {
+                sevenParts = Path.GetDirectoryName(sevenParts)!;
+            }
             var process = run.Start("find", string.Join(';',
                 "size:924x700",
                 "pane:1",
@@ -46,6 +54,15 @@ public class ShellEndToEndTests
                 "shell:none",
                 "find-key:esc",
                 "shell:closed",
+                // §7: in a 440 px pane the five-part path renders whole; a seven-part one collapses to C: › … › parent › current.
+                "size:1136x700",
+                "wait:500",
+                $"path:{fiveParts}",
+                "shell:five-parts",
+                $"path:{sevenParts}",
+                "shell:seven-parts",
+                "size:924x700",
+                "wait:500",
                 // §7: the first tab's folder, cursor and scroll come back after a second tab went elsewhere.
                 $"path:{many}",
                 "scroll:4",
@@ -61,7 +78,7 @@ public class ShellEndToEndTests
                 "tab:close",
                 "cmd:tab.select {\"tab\":8}",
                 "shell:one-tab",
-                // §7: below 640 px the command center hides and the rest stays.
+                // Near the window's least width the Quick Open chip still shows and the title gives way to it.
                 "size:620x700",
                 "wait:500",
                 "shell:narrow",
@@ -70,18 +87,36 @@ public class ShellEndToEndTests
 
             State(logs, "start", state =>
             {
+                // §7: at 924 px in dual mode the top row shows every control and nothing lies over anything else.
                 Assert.Equal(40, state.GetProperty("top_row").GetDouble());
-                var (left, width) = Center(state);
-                Assert.True(width >= 200, $"the command center is {width} px at 924 px");
-                Assert.True(state.GetProperty("left_cluster_end").GetDouble() <= left, "the command center lies over the left cluster");
-                Assert.True(left + width <= state.GetProperty("right_cluster_start").GetDouble(), "the command center lies over the right cluster");
+                Assert.Equal($"CabinetOS · {Path.GetFileName(data)}", state.GetProperty("title").GetString());
+                TopRowFits(state);
                 Assert.Equal(5, state.GetProperty("pane0_count").GetInt32());
+                // §7: each pane's toolbar shows nav, the drive chip, the free space and Find, none of them cut off.
+                foreach (var pane in new[] { "pane0", "pane1" })
+                {
+                    Assert.Equal((pane, "back forward up drive free find"), (pane, state.GetProperty($"{pane}_toolbar_items").GetString()));
+                    Assert.Equal((pane, 28.0, 24.0), (pane, state.GetProperty($"{pane}_toolbar_row").GetDouble(), state.GetProperty($"{pane}_path_row").GetDouble()));
+                    Assert.Equal((pane, "C:"), (pane, state.GetProperty($"{pane}_drive").GetString()));
+                    Assert.EndsWith(" free", state.GetProperty($"{pane}_free").GetString());
+                    Assert.Equal((pane, "*.*"), (pane, state.GetProperty($"{pane}_filter").GetString()));
+                }
+                // The active pane's toolbar has the 9 % fill, the other's 5 %.
+                Assert.StartsWith("CbFrontTabFillBrush ", state.GetProperty("pane0_toolbar_fill").GetString());
+                Assert.StartsWith("CbFrontTabInactiveFillBrush ", state.GetProperty("pane1_toolbar_fill").GetString());
             });
             State(logs, "found", state =>
             {
                 Assert.Equal("alpha", state.GetProperty("pane0_find").GetString());
                 Assert.True(state.GetProperty("pane0_find_open").GetBoolean());
                 Assert.Equal(2, state.GetProperty("pane0_shown").GetInt32());
+                // §7: the path row's filter label reads *query*, and the toolbar's Find shows the find open.
+                Assert.Equal("*alpha*", state.GetProperty("pane0_filter").GetString());
+                Assert.True(state.GetProperty("pane0_find_button_open").GetBoolean());
+                Assert.Equal("*.*", state.GetProperty("pane1_filter").GetString());
+                // The widget drops from the toolbar row's right end and lies over the path row.
+                Assert.Equal(state.GetProperty("pane0_toolbar_bottom").GetDouble(), state.GetProperty("pane0_find_top").GetDouble(), 0.6);
+                Assert.InRange(state.GetProperty("pane0_find_right_gap").GetDouble(), 0, 8);
                 // The other pane shows every row: the find is the active pane's only.
                 Assert.Equal(state.GetProperty("pane1_count").GetInt32(), state.GetProperty("pane1_shown").GetInt32());
                 Assert.False(state.GetProperty("pane1_find_open").GetBoolean());
@@ -102,8 +137,26 @@ public class ShellEndToEndTests
                 Assert.False(state.GetProperty("pane0_find_open").GetBoolean());
                 Assert.Equal("", state.GetProperty("pane0_find").GetString());
                 Assert.Equal(5, state.GetProperty("pane0_shown").GetInt32());
+                // §7: Esc restores the full list and *.*.
+                Assert.Equal("*.*", state.GetProperty("pane0_filter").GetString());
+                Assert.False(state.GetProperty("pane0_find_button_open").GetBoolean());
                 // The selection survives the filter: the cursor stays on the match Enter chose.
                 Assert.StartsWith("alpha", state.GetProperty("pane0_cursor").GetString(), StringComparison.OrdinalIgnoreCase);
+            });
+            State(logs, "five-parts", state =>
+            {
+                Assert.InRange(state.GetProperty("pane0_width").GetDouble(), 438, 442);
+                var parts = fiveParts.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+                Assert.Equal(5, parts.Length);
+                Assert.Equal(string.Join(" › ", parts), state.GetProperty("pane0_crumbs").GetString());
+                Assert.True(state.GetProperty("pane0_crumbs_fit").GetBoolean(), "the five-part path does not fit its 440 px pane");
+            });
+            State(logs, "seven-parts", state =>
+            {
+                var parts = sevenParts.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+                Assert.Equal(7, parts.Length);
+                Assert.Equal($"{parts[0]} › … › {parts[^2]} › {parts[^1]}", state.GetProperty("pane0_crumbs").GetString());
+                Assert.True(state.GetProperty("pane0_crumbs_fit").GetBoolean());
             });
             var scrolled = 0.0;
             string? cursor = null;
@@ -118,6 +171,11 @@ public class ShellEndToEndTests
                 Assert.Equal(deep, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
                 Assert.Equal("C: › … › Projects › fileforge", state.GetProperty("pane0_crumbs").GetString());
                 Assert.Equal("many | *fileforge", state.GetProperty("pane0_tabs").GetString());
+                // §7: the tab in front and the toolbar row under it share one fill, so they read as one surface.
+                Assert.Equal(state.GetProperty("pane0_toolbar_fill").GetString(), state.GetProperty("pane0_tab_fill").GetString());
+                Assert.StartsWith("CbFrontTabFillBrush ", state.GetProperty("pane0_tab_fill").GetString());
+                Assert.Equal(state.GetProperty("pane1_toolbar_fill").GetString(), state.GetProperty("pane1_tab_fill").GetString());
+                Assert.Equal("folder | *folder,close,32", state.GetProperty("pane0_tab_look").GetString());
             });
             State(logs, "first-again", state =>
             {
@@ -134,7 +192,7 @@ public class ShellEndToEndTests
             });
             State(logs, "narrow", state =>
             {
-                Assert.Equal("hidden", state.GetProperty("command_center").GetString());
+                TopRowFits(state);
                 Assert.Equal(40, state.GetProperty("top_row").GetDouble());
             });
             Assert.Contains(logs, l => Message(l) == "find opened");
@@ -153,7 +211,7 @@ public class ShellEndToEndTests
         var (run, root, data) = Prepare("shell-quick-open");
         try
         {
-            // A repository on a branch: the pill shows it, and Quick Open searches the whole repository from a folder in it.
+            // A repository on a branch: the sidebar's workspace row shows it, and Quick Open searches the whole repository from a folder in it.
             var project = Directory.CreateDirectory(Path.Combine(data, "proj")).FullName;
             Directory.CreateDirectory(Path.Combine(project, ".git"));
             File.WriteAllText(Path.Combine(project, ".git", "HEAD"), "ref: refs/heads/phase-16\n");
@@ -169,7 +227,23 @@ public class ShellEndToEndTests
                 $"path:{Path.Combine(project, "src")}",
                 // The core's answer about the workspace (the branch) comes after the folder is listed; a busy machine is late with it.
                 "until:workspace",
-                "shell:pill",
+                "shell:header",
+                // §7: the sidebar header opens the workspace dropdown at its full width; picking the workspace goes to its
+                // root in the left pane's tab in front. With the sidebar hidden, Ctrl+K Ctrl+W opens it under the top row.
+                "click:Workspace Default, branch phase-16",
+                "wait:300",
+                "shell:ws-menu",
+                "click:Default",
+                "wait:800",
+                "shell:ws-picked",
+                "cmd:view.toggleSidebar",
+                "wait:300",
+                "cmd:workspace.switch",
+                "wait:300",
+                "shell:ws-collapsed",
+                "cmd:overlay.close",
+                "cmd:view.toggleSidebar",
+                "wait:300",
                 "quick-open:notes",
                 "shell:typed",
                 "quick-open-key:enter",
@@ -188,11 +262,42 @@ public class ShellEndToEndTests
                 "shot:done"));
             var logs = await run.FinishAsync("quick", process, "done");
 
-            State(logs, "pill", state =>
+            State(logs, "header", state =>
             {
                 Assert.Equal("phase-16", state.GetProperty("branch").GetString());
                 Assert.Equal(project, state.GetProperty("workspace_root").GetString(), ignoreCase: true);
+                // The sidebar's first row shows the workspace and its branch, at the default look's 28 px.
+                Assert.True(state.GetProperty("workspace_header").GetBoolean());
+                Assert.Equal(28, state.GetProperty("workspace_header_height").GetDouble());
+                Assert.Equal("phase-16", state.GetProperty("workspace_header_branch").GetString());
             });
+            double headerLeft = 0, headerWidth = 0, headerBottom = 0;
+            State(logs, "ws-menu", state =>
+            {
+                Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString());
+                headerLeft = state.GetProperty("workspace_header_left").GetDouble();
+                headerWidth = state.GetProperty("workspace_header_width").GetDouble();
+                headerBottom = state.GetProperty("workspace_header_bottom").GetDouble();
+            });
+            var menus = logs.Where(l => Message(l) == "workspace menu shown").ToList();
+            Assert.Equal(2, menus.Count);
+            // Anchored to the row's full width (at least the design's 220 px), right under it.
+            Assert.Equal(headerLeft, Field(menus[0], "left").GetDouble(), 0.6);
+            Assert.Equal(Math.Max(220, headerWidth), Field(menus[0], "width").GetDouble(), 0.6);
+            Assert.Equal(headerBottom, Field(menus[0], "top").GetDouble(), 0.6);
+            State(logs, "ws-picked", state =>
+            {
+                Assert.Equal(project, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
+                Assert.Equal("", state.GetProperty("menu").GetString());
+            });
+            State(logs, "ws-collapsed", state =>
+            {
+                Assert.False(state.GetProperty("sidebar_shown").GetBoolean());
+                Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString());
+            });
+            // With the sidebar hidden: under the top row, at the menu's own width.
+            Assert.Equal(40, Field(menus[1], "top").GetDouble(), 0.6);
+            Assert.Equal(JsonValueKind.Null, Field(menus[1], "width").ValueKind);
             State(logs, "typed", state =>
             {
                 Assert.True(state.GetProperty("quick_open").GetBoolean());
@@ -263,17 +368,38 @@ public class ShellEndToEndTests
                 "cmd:workspace.switch",
                 "shell:workspace-key",
                 "cmd:overlay.close",
-                // A click on a crumb goes there; Back comes back; Ctrl+L makes the row a text box, Esc ends it.
+                // A click on a crumb goes there; Back comes back; Up goes to the parent; Ctrl+L makes the row a text box, Esc
+                // ends it. The toolbar's drive chip opens the pane's drive list, which Esc closes.
                 $"click:{projects}",
                 "wait:400",
                 "shell:crumb",
                 "click:Back",
                 "wait:400",
                 "shell:back",
+                "click:Up",
+                "wait:400",
+                "shell:up",
+                "click:Drive C:",
+                "wait:400",
+                "shell:drives",
+                "cmd:overlay.close",
+                "wait:300",
+                "shell:drives-closed",
                 "cmd:go.toPath",
                 "shell:editing",
                 "cmd:overlay.close",
                 "shell:edited",
+                // The toolbar's Find opens the pane's find and closes it again; a click on the filter label opens it too.
+                "click:Find in pane",
+                "wait:300",
+                "shell:find-button",
+                "click:Find in pane",
+                "wait:300",
+                "shell:find-button-off",
+                "click:Filter",
+                "wait:300",
+                "shell:filter-click",
+                "cmd:overlay.close",
                 "cmd:settings.open",
                 "wait:1000",
                 "shot:done"));
@@ -296,8 +422,16 @@ public class ShellEndToEndTests
                 Assert.Equal(deep, state.GetProperty("pane0_path").GetString(), ignoreCase: true);
                 Assert.Equal("back forward up", state.GetProperty("pane0_nav").GetString());
             });
+            State(logs, "up", state => Assert.Equal(projects, state.GetProperty("pane0_path").GetString(), ignoreCase: true));
+            State(logs, "drives", state => Assert.True(state.GetProperty("prompt_open").GetBoolean(), "the drive chip opened no drive list"));
+            State(logs, "drives-closed", state => Assert.False(state.GetProperty("prompt_open").GetBoolean()));
+            Assert.Contains(logs, l => Message(l) == "prompt shown" && Field(l, "label").GetString() == "Drives");
+            Assert.Contains(logs, l => Message(l) == "command executed" && Field(l, "command").GetString() == "go.chooseDriveLeft");
             State(logs, "editing", state => Assert.True(state.GetProperty("pane0_editing").GetBoolean()));
             State(logs, "edited", state => Assert.False(state.GetProperty("pane0_editing").GetBoolean()));
+            State(logs, "find-button", state => Assert.True(state.GetProperty("pane0_find_open").GetBoolean() && state.GetProperty("pane0_find_button_open").GetBoolean()));
+            State(logs, "find-button-off", state => Assert.False(state.GetProperty("pane0_find_open").GetBoolean() || state.GetProperty("pane0_find_button_open").GetBoolean()));
+            State(logs, "filter-click", state => Assert.True(state.GetProperty("pane0_find_open").GetBoolean()));
             Assert.Contains(logs, l => Message(l) == "notice shown" && Field(l, "text").GetString()!.StartsWith("Cannot edit cabinetos.json", StringComparison.Ordinal));
         }
         finally
@@ -393,13 +527,17 @@ public class ShellEndToEndTests
         }
     }
 
-    // "left+width" of the command center, as the shell state logs it.
-    private static (double Left, double Width) Center(JsonElement state)
+    // The top row as the shell state logs it: the chip shows at its height, the title ends before it, and the chip ends
+    // before the view buttons, which end before Windows' caption buttons.
+    private static void TopRowFits(JsonElement state)
     {
-        var text = state.GetProperty("command_center").GetString()!;
-        var parts = text.Split('+');
-        Assert.Equal(2, parts.Length);
-        return (double.Parse(parts[0], CultureInfo.InvariantCulture), double.Parse(parts[1], CultureInfo.InvariantCulture));
+        Assert.True(state.GetProperty("chip_visible").GetBoolean(), "the Quick Open chip is not shown");
+        Assert.Equal(24, state.GetProperty("chip_height").GetDouble());
+        Assert.Equal("Ctrl+P", state.GetProperty("chip_keys").GetString());
+        var chipLeft = state.GetProperty("chip_left").GetDouble();
+        Assert.True(state.GetProperty("title_right").GetDouble() <= chipLeft, $"the title lies over the chip at {chipLeft}");
+        Assert.True(state.GetProperty("chip_right").GetDouble() <= state.GetProperty("right_cluster_end").GetDouble(), "the chip lies over the view buttons");
+        Assert.True(state.GetProperty("right_cluster_end").GetDouble() <= state.GetProperty("caption_start").GetDouble() + 0.5, "the view buttons lie over the caption buttons");
     }
 
     private sealed class Run(string root, string exe, string core)

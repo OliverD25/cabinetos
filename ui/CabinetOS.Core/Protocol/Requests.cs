@@ -613,7 +613,7 @@ public sealed class SaveLogBundleRequest(uint minutes) : CoreRequest("save_log_b
 /// Asks which workspace a folder belongs to (Phase 16): until workspaces exist, the git
 /// repository that holds it, and its branch, for the top row's pill and Quick Open. The core
 /// reads the repository's small files; the window reads none (brief §1). The reply is
-/// <c>workspace_info</c>; an older core answers <c>unknown_request</c>, and the pill shows no branch.
+/// <c>workspace_info</c>; an older core answers <c>unknown_request</c>, and the workspace row shows no branch.
 /// </summary>
 public sealed class WorkspaceInfoRequest(string path) : CoreRequest("workspace_info")
 {

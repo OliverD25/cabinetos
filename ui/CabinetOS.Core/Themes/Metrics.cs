@@ -81,6 +81,7 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
     public double TabMinWidth => this["tabMinWidth"];
     public double TabFontSize => this["tabFontSize"];
     public double TabRadius => this["tabRadius"];
+    public double TabMaxWidth => this["tabMaxWidth"];
     public double CaptionButtonWidth => this["captionButtonWidth"];
 
     // ----- Command bar (the shell before Phase 16; they size nothing now) -----
@@ -89,15 +90,17 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
     public double FieldHeight => this["fieldHeight"];
     public double ToggleHeight => this["toggleHeight"];
 
-    // ----- Top row (Phase 16) -----
+    // ----- Top row (Phase 16; the pill and the command center went in v2 of the redesign and size nothing now) -----
     public double TopRowHeight => this["topRowHeight"];
     public double TopRowButtonSize => this["topRowButtonSize"];
     public double WorkspacePillHeight => this["workspacePillHeight"];
     public double WorkspacePillRadius => this["workspacePillRadius"];
     public double CommandCenterHeight => this["commandCenterHeight"];
     public double CommandCenterRadius => this["commandCenterRadius"];
+    public double QuickOpenChipHeight => this["quickOpenChipHeight"];
 
     // ----- Sidebar -----
+    public double WorkspaceHeaderHeight => this["workspaceHeaderHeight"];
     public double SidebarMinWidth => this["sidebarMinWidth"];
     public double SidebarWidthPercent => this["sidebarWidthPercent"];
     public double SidebarMaxWidth => this["sidebarMaxWidth"];
@@ -117,6 +120,8 @@ public sealed class ThemeMetrics : IEquatable<ThemeMetrics>
     // ----- Panes -----
     public double PaneHeaderHeight => this["paneHeaderHeight"];
     public double TabRow => this["tabRow"];
+    public double ToolbarRowHeight => this["toolbarRowHeight"];
+    public double PathRowHeight => this["pathRowHeight"];
     public double BreadcrumbRowHeight => this["breadcrumbRowHeight"];
     public double NavButtonSize => this["navButtonSize"];
     public double ColumnHeaderPaddingY => this["columnHeaderPaddingY"];
@@ -238,7 +243,8 @@ public static class MetricsMapper
         Px("tabPaddingX", 0, 64, 14),
         Px("tabMinWidth", 40, 240, 96),
         Px("tabFontSize", 8, 32, 12),
-        Px("tabRadius", 0, 16, 0),
+        Px("tabRadius", 0, 16, 8),
+        Px("tabMaxWidth", 80, 400, 160),
         Px("captionButtonWidth", 24, 96, 46),
         // Command bar
         Px("commandBarHeight", 14, 80, 48),
@@ -252,7 +258,9 @@ public static class MetricsMapper
         Px("workspacePillRadius", 0, 16, 4),
         Px("commandCenterHeight", 14, 80, 24),
         Px("commandCenterRadius", 0, 16, 4),
+        Px("quickOpenChipHeight", 14, 80, 24),
         // Sidebar
+        Px("workspaceHeaderHeight", 14, 80, 28),
         Px("sidebarMinWidth", 100, 600, 180),
         Pct("sidebarWidthPercent", 5, 50, 20),
         Px("sidebarMaxWidth", 100, 600, 224),
@@ -270,7 +278,9 @@ public static class MetricsMapper
         Px("tagFontSize", 8, 32, 12),
         // Panes
         Px("paneHeaderHeight", 14, 80, 36),
-        Px("tabRow", 14, 80, 32),
+        Px("tabRow", 14, 80, 36),
+        Px("toolbarRowHeight", 14, 80, 28),
+        Px("pathRowHeight", 14, 80, 24),
         Px("breadcrumbRowHeight", 14, 80, 28),
         Px("navButtonSize", 14, 80, 20),
         Px("columnHeaderPaddingY", 0, 64, 4),

@@ -224,7 +224,10 @@ The core's commands, in palette order:
   the tab's index. `quickOpen.show` takes `ctrl+p`, so Total Commander's
   `terminal.insertPath` moved to `ctrl+alt+p`. `search.focus` keeps
   `ctrl+f` and `alt+f7` and now opens the pane's find widget; its title is
-  "Find in Pane". `settings.open` opens `cabinetos.json` with the program
+  "Find in Pane". With `{"pane": 0 or 1}` (the path row's filter label)
+  it opens that pane's find; the toolbar's Find button runs the window's
+  own `search.toggle` with the pane's index, which no key has.
+  `settings.open` opens `cabinetos.json` with the program
   F4 uses, and `menu.show` (the top row's hamburger) has no key. The ID
   test allows a camelCase category, as `quickOpen` is one. None of these
   keys was bound before in the same context, and the Immutable System Tier
@@ -282,7 +285,8 @@ The core's commands, in palette order:
   "Ctrl+K then Ctrl+W" in another (PLAN.md, conflict E). The registry uses
   `ctrl+k ctrl+w`: Ctrl stays held for the second key, like every other chord
   here. The UI shows it as "Ctrl+K Ctrl+W". Since Phase 16 it opens the
-  workspace pill's dropdown ([ui.md](ui.md), "The shell").
+  workspace dropdown, since v2 of the shell redesign under the sidebar's
+  workspace row ([ui.md](ui.md), "The sidebar header").
 - `f2` has two commands in two contexts: in a file pane it renames
   (`file.rename`), in the open palette it records new keys for the chosen
   command (`keys.rebind`). Two commands may share keys only this way
