@@ -73,7 +73,10 @@ zips anything, when its release folder holds a file named `*onnxruntime*`,
 `DirectML*`, `*.AI.*` or `*.MachineLearning.*`, and says that the project
 must not reference the whole package or an AI or machine-learning
 component. So a package that brings them back cannot reach a release
-unseen.
+unseen. Tried on the scratch publish above (the whole package), the check
+names 11 of the 15 files: the ML ones; the Search, Widgets and imaging
+projections and `System.Numerics.Tensors.dll` come along with them and are
+small.
 
 ReadyToRun (since 2026-10-01) makes the window's folder bigger and its start
 shorter. The window's own files grow from 41 to 57 MB unpacked (45 files
@@ -286,7 +289,7 @@ the build's last step.
 `CabinetOS-<version>-win-x64-symbols.zip`, with its `.sha256`, holds the
 `.pdb` files of the release: `cabinetos_core.pdb`, `cabinetos_cli.pdb` and
 `cabinetos_indexer.pdb` (the Rust programs'; 116, 26 and 16 MB unpacked) and
-`CabinetOS.pdb` and `CabinetOS.Core.pdb` (the window's; 0.4 and 0.8 MB). It is
+`CabinetOS.pdb` and `CabinetOS.Core.pdb` (the window's; 0.4 and 0.7 MB). It is
 43.6 MB zipped, and neither the release zip nor the setup file carries it:
 nobody needs symbols to run CabinetOS, and they were more than half of the
 zip ([ADR 0019](decisions/0019-symbols-in-their-own-zip.md)). `release.ps1`
@@ -410,6 +413,122 @@ stays. An all-users install needs "Run as administrator" to remove.
 `-Destination <folder>` names the install folder when the script runs from
 somewhere else.
 
+## The indexer service
+
+The indexer (`cabinetos-indexer.exe`, [indexer.md](indexer.md)) is optional:
+without it, search walks one folder tree itself. It runs as a Windows
+service named `cabinetos-indexer`, as LocalSystem, and only after someone
+installed it: `install.ps1 -AllUsers -Indexer` does it for an all-users
+install, and `cabinetos-indexer --install` does it by hand, from a terminal
+started with "Run as administrator" (one UAC prompt,
+[ADR 0009](decisions/0009-packaging.md)).
+
+- **It starts by itself.** `--install` registers the service as automatic
+  with a delayed start, and starts it once
+  ([ADR 0020](decisions/0020-indexer-service-starts-by-itself.md)). After
+  every restart of Windows it comes up on its own, a little after the other
+  automatic services (about two minutes after the boot), so building the
+  index does not slow down the start of Windows. `sc qc cabinetos-indexer`
+  says `START_TYPE : 2 AUTO_START (DELAYED)`. Until 2026-10-02 the start
+  was manual, and the service stayed off after each restart until someone
+  ran `sc start`. A service an earlier build registered with a manual start
+  is replaced with `--uninstall` and then `--install`.
+- **`--uninstall` is the reverse**: it stops the service, waits up to 30
+  seconds for it, and deletes it. `uninstall.ps1` does the same for an
+  install made with `-Indexer`.
+- **A service that does not run** after its first start makes `--install`
+  say so, with the state it found, and exit with an error. The service
+  stays registered, and its log in `%ProgramData%\CabinetOS\logs` says
+  why.
+- **Tests.** A unit test in the indexer crate reads what `--install` asks
+  the service manager for (start type automatic, the delayed flag,
+  LocalSystem, the command line) without touching it. The test that installs
+  a real service (`tests/elevated.rs`, ignored, CI only) checks `sc qc` and
+  `sc query` after `--install`, with no `sc start` in between.
+- **Checked in the VM, by hand once.** `ui\livecheck\vm-indexer-check.ps1`
+  shows in the VirtualBox VM that the service comes up by itself after
+  Windows restarts (below).
+
+**The restart check in the VM.** The VM's user is an administrator, but
+VirtualBox's guest control gives that user's token with UAC applied
+(medium integrity), and installing a service needs the full token. Seen
+2026-10-02: `Register-ScheduledTask` with the highest run level answers
+"Access is denied", and nothing can answer a UAC prompt from outside the
+VM. So the check has one manual step, which a person does in the VM, and
+the rest runs by script:
+
+1. On this PC, with a release built (`build\release.ps1`):
+
+   ```powershell
+   # PowerShell - the VM is VirtualBox's
+   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\vm-indexer-check.ps1
+   ```
+
+   It starts the VM (headless) when it is off, lets it settle, tries the
+   install through guest control, finds that it is not elevated, and writes
+   `_io\live-check\DONE-indexer.md` with the manual step; exit code 2.
+2. In the VM, in a Windows PowerShell started with "Run as administrator"
+   (to see the VM, stop the headless one with
+   `VBoxManage controlvm CabinetOS-LiveCheck acpipowerbutton` and start it
+   with a window: `VBoxManage startvm CabinetOS-LiveCheck --type separate`;
+   the user and password are in `_io\vm\vm-user.txt`):
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File \\VBoxSvr\cabinetos\_io\indexer-check\vm-indexer-guest.ps1 -Phase install
+   ```
+
+   It copies the release folder to `C:\Program Files\CabinetOS-indexer-check`,
+   runs `cabinetos-indexer --install` there, and says whether `sc qc`
+   reads `AUTO_START (DELAYED)` and `sc query` reads `RUNNING`.
+3. Back on this PC, with the VM running:
+
+   ```powershell
+   # PowerShell
+   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\vm-indexer-check.ps1 -AfterInstall
+   ```
+
+   It reads the service's state, restarts Windows inside the VM
+   (`shutdown /r`), waits for the desktop and for the VM to settle, and then
+   runs the read-only `-Phase check` in the VM: nobody starts the service,
+   and the check records when it was first `RUNNING`, how long after the
+   boot began, that its process is younger than the boot, that its pipe
+   `\\.\pipe\cabinetos-indexer` exists, and the last lines of its log.
+   `DONE-indexer.md` has the times. Exit code 0 when all of it holds.
+4. To remove the service again, in an elevated PowerShell in the VM:
+   `... vm-indexer-guest.ps1 -Phase uninstall`.
+
+**What was seen on 2026-10-02, and what was not.** The guest session's
+token was checked first: `whoami /groups` in a guest-control session says
+medium integrity and "Group used for deny only" for Administrators
+(`EnableLUA=1`, `ConsentPromptBehaviorAdmin=5`), so run 1 ends at its first
+phase: "elevated: False", state `needs-elevation`, exit code 2 (at 21:53,
+10 s after the phase started). The install phase itself, and so the proof
+that the service is `RUNNING` after a restart, were **not run**: nobody was
+at the VM to answer UAC, and nothing was changed in the VM's security
+settings to avoid the prompt. The rest of the script was tried with no
+service installed (`-AfterInstall -SkipInstalledCheck`), and found what the
+real run will meet:
+
+- `shutdown /r` through guest control works: at 21:59 the VM went down
+  (run level 0 at 21:59:34) and was back at run level 3 at 22:00:00. But
+  guest control often answers "Error starting guest session (current status
+  is: starting)" for many minutes after a restart of the VM, and at 22:28
+  `shutdown /r` could not even start for that reason. The script then resets
+  the VM (`controlvm reset`; 22:30:59, back at run level 3 at 22:31:24),
+  retries the start of a phase for up to 20 minutes, and writes
+  `DONE-indexer.md` with what it did even when it stops. `-Restart` restarts
+  the VM first, the one cure seen for a stuck guest control.
+- the CPU-load answer that ends the settle wait often does not come in time
+  right after a boot (guest control is slow then), so the wait runs to its
+  limit (`-SettleMinutes`, 30 by default).
+- the read-only check phase works: it reported the boot time, the service
+  "not installed" and `sc qc` 1060, polled for its minute and failed, as it
+  must when no service exists.
+
+The success branch (the service `RUNNING` with a process younger than the
+boot, its pipe and its log) is therefore not yet shown in a real run. The
+manual step above, done once by a person, will show it.
+
 ## Updates
 
 A per-user install updates itself from inside the app
@@ -507,12 +626,12 @@ creator's.
 2. **Build and sign** as above.
 3. **Make the repository public.** The release asset's address must work
    for strangers and for winget.
-4. **Tag and publish the release** with the zip, the setup file and their
-   hashes. The notes are the version's section of `CHANGELOG.md`, which
+4. **Tag and publish the release** with the zip, the setup file, the
+   symbols zip and their hashes. The notes are the version's section of `CHANGELOG.md`, which
    the build wrote as `dist/update/stable/notes-0.1.0.md`:
 
    ```bash
-   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git tag v0.1.0 && git push origin v0.1.0 && gh release create v0.1.0 dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 dist/CabinetOS-0.1.0-win-x64-setup.exe dist/CabinetOS-0.1.0-win-x64-setup.exe.sha256 --verify-tag --title "CabinetOS 0.1.0" --notes-file dist/update/stable/notes-0.1.0.md
+   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git tag v0.1.0 && git push origin v0.1.0 && gh release create v0.1.0 dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 dist/CabinetOS-0.1.0-win-x64-setup.exe dist/CabinetOS-0.1.0-win-x64-setup.exe.sha256 dist/CabinetOS-0.1.0-win-x64-symbols.zip dist/CabinetOS-0.1.0-win-x64-symbols.zip.sha256 --verify-tag --title "CabinetOS 0.1.0" --notes-file dist/update/stable/notes-0.1.0.md
    ```
 
    For a preview (a version such as `0.2.0-preview.1`, built with

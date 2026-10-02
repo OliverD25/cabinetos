@@ -1678,6 +1678,30 @@ prerequisite; it keeps stopping with the winget command (and, for the
 Windows App Runtime, Microsoft's installer address), as `install.ps1` does.
 Nothing else changed.
 
+**Status (2026-10-02, 23:25): unit 3 built; its real check in the VM waits for
+one manual step.** `cabinetos-indexer --install` registers the service as
+automatic with a delayed start and starts it once (waiting up to 20 s for
+Running; otherwise it exits with an error naming the state and the log
+folder); `--uninstall` stays the reverse; `install.ps1 -Indexer` no longer
+calls `Start-Service`. Made with `windows-service`'s
+`set_delayed_auto_start` (`ChangeServiceConfig2W`, no `unsafe`), not the
+`windows` crate the handout named. A unit test reads the registration, and
+[ADR 0020](decisions/0020-indexer-service-starts-by-itself.md) records the
+decision (it amends ADR 0009's manual start). In the VM: guest control gives
+the VM user's token with UAC applied (medium integrity), `Register-ScheduledTask`
+with the highest run level answers "Access is denied", and no UAC prompt can
+be answered from outside, so the service could not be installed there by
+script and nothing in the VM's security settings was changed to get round
+it. `ui/livecheck/vm-indexer-check.ps1` and `vm-indexer-guest.ps1` do the
+rest: run 1 stops with exit code 2 and the manual step; after one elevated
+`-Phase install` in the VM, `-AfterInstall` restarts Windows there, waits,
+and records when the service came up by itself. Tried with no service
+installed: the restart (`shutdown /r`, or `controlvm reset` when guest control
+is stuck), the settle wait and the read-only check phase all ran; the trial
+found and fixed a hang (the guest helper `Sc` was shadowed by `sc`, the alias of
+`Set-Content`). Not shown yet: the service `RUNNING` after a restart
+([release.md](release.md), "The indexer service").
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
