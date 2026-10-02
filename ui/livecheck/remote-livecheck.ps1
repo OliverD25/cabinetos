@@ -78,7 +78,11 @@ if (-not $SkipBuilds) {
   Remote "New-Item -ItemType Directory -Force '$RemoteRepo\ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0', '$RemoteRepo\core\target\release' | Out-Null" | Out-Null
   Send $window "$remoteWindow/"
   Send $core "$remoteRepoFwd/core/target/release/cabinetos-core.exe"
-  "builds copied: the window of $((Get-Item (Join-Path $window 'CabinetOS.exe')).LastWriteTime.ToString('HH:mm')), the core of $((Get-Item $core).LastWriteTime.ToString('HH:mm'))"
+  # The shell started by the core finds cabinetos-cli.exe next to the core (that folder goes on its PATH): without
+  # it the prompt hook and every cab command have nothing to run (nine False lines on the laptop, 2026-10-02).
+  $cli = Join-Path $repo 'core\target\release\cabinetos-cli.exe'
+  if (Test-Path -LiteralPath $cli) { Send $cli "$remoteRepoFwd/core/target/release/cabinetos-cli.exe" }
+  "builds copied: the window of $((Get-Item (Join-Path $window 'CabinetOS.exe')).LastWriteTime.ToString('HH:mm')), the core of $((Get-Item $core).LastWriteTime.ToString('HH:mm'))$(if (Test-Path -LiteralPath $cli) { ', the CLI' })"
 }
 
 # 3. What the machine cannot build, since it has no Rust. The Agent extension's plugin: without it the run's Agent
