@@ -387,6 +387,86 @@ public class TerminalEndToEndTests
     }
 
     /// <summary>
+    /// The GUI context for <c>cab</c> (unit 4), with the real window, a real shell and the real command line: the
+    /// shell asks the window's core what the panes show. With every row of the left pane marked, <c>cab selection</c>
+    /// prints all three paths and <c>cab copy --selection --dest opposite_pane</c> puts them in the right pane's
+    /// folder; after one row is selected, <c>cab selection</c> prints that row and <c>cab move --selection --dest
+    /// &lt;path&gt;</c> takes it to a folder of its own. Each command's exit code is written next to its output. A shell
+    /// of a CabinetOS terminal has the core's pipe in <c>CABINETOS_PIPE</c> and <c>cabinetos-cli</c> on its PATH, so
+    /// nothing names either. The shell waits for the window's state to catch up with each selection (a loop on
+    /// <c>cab selection</c> itself), and says it is done by changing folder, which its prompt hook reports.
+    /// </summary>
+    [Fact]
+    public async Task Cab_in_a_shell_sees_the_window_s_selection_and_copies_and_moves_it()
+    {
+        var (run, root, left) = Prepare("terminal-cab");
+        try
+        {
+            var gamma = Path.Combine(left, "gamma.txt");
+            File.WriteAllText(gamma, "x");
+            var (right, third, marker1, marker2) = (Path.Combine(root, "right"), Path.Combine(root, "third"), Path.Combine(root, "marker1"), Path.Combine(root, "marker2"));
+            foreach (var folder in new[] { right, third, marker1, marker2 })
+            {
+                Directory.CreateDirectory(folder);
+            }
+            var (selection1, copyOutput, selection2, moveOutput, codes) = (Path.Combine(root, "selection1.txt"), Path.Combine(root, "copy.txt"), Path.Combine(root, "selection2.txt"), Path.Combine(root, "move.txt"), Path.Combine(root, "codes.txt"));
+            var process = run.Start("cab", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{right}",
+                "pane:0",
+                $"path:{left}",
+                "wait:500",
+                "cmd:terminal.new {\"profile\":\"ps\"}",
+                "until:terminals:1",
+                $"until:terminal-folder:{left}",
+                // All three rows of the left pane are marked; the shell goes on when cab says so.
+                "selectall",
+                "terminal:while ((cabinetos-cli selection | Measure-Object).Count -ne 3) { Start-Sleep -Milliseconds 50 }{enter}",
+                $"terminal:cabinetos-cli selection | Out-File -Encoding utf8 -LiteralPath '{selection1}'{{enter}}",
+                $"terminal:Add-Content -LiteralPath '{codes}' \"selection=$LASTEXITCODE\"{{enter}}",
+                $"terminal:cabinetos-cli copy --selection --dest opposite_pane | Out-File -Encoding utf8 -LiteralPath '{copyOutput}'{{enter}}",
+                $"terminal:Add-Content -LiteralPath '{codes}' \"copy=$LASTEXITCODE\"{{enter}}",
+                $"terminal:Set-Location -LiteralPath '{marker1}'{{enter}}",
+                $"until:terminal-folder:{marker1}",
+                // One row selected: the selection is the row the cursor is on.
+                "select:gamma.txt",
+                $"terminal:while ((cabinetos-cli selection | Out-String).Trim() -ne '{gamma}') {{ Start-Sleep -Milliseconds 50 }}{{enter}}",
+                $"terminal:cabinetos-cli selection | Out-File -Encoding utf8 -LiteralPath '{selection2}'{{enter}}",
+                $"terminal:cabinetos-cli move --selection --dest '{third}' | Out-File -Encoding utf8 -LiteralPath '{moveOutput}'{{enter}}",
+                $"terminal:Add-Content -LiteralPath '{codes}' \"move=$LASTEXITCODE\"{{enter}}",
+                $"terminal:Set-Location -LiteralPath '{marker2}'{{enter}}",
+                $"until:terminal-folder:{marker2}",
+                "shot:done"));
+            var logs = await run.FinishAsync("cab", process, "done");
+
+            string[] Lines(string file) => File.Exists(file) ? [.. File.ReadAllLines(file).Select(l => l.Trim()).Where(l => l.Length > 0)] : [$"(no file {Path.GetFileName(file)})"];
+            string[] names = ["alpha.txt", "beta.txt", "gamma.txt"];
+            Assert.True(Lines(codes).SequenceEqual(["selection=0", "copy=0", "move=0"]), $"the exit codes were {string.Join(", ", Lines(codes))}" + Evidence(logs));
+            Assert.Equal(names.Select(n => Path.Combine(left, n)), Lines(selection1));
+            var copied = string.Join('\n', Lines(copyOutput));
+            Assert.Contains($"copying 3 selected items of the left pane to {right}", copied);
+            Assert.Contains("completed", copied);
+            Assert.All(names, n => Assert.True(File.Exists(Path.Combine(right, n)), $"{n} is in the right pane's folder"));
+
+            Assert.Equal([gamma], Lines(selection2));
+            Assert.Contains($"moving 1 selected item of the left pane to {third}", string.Join('\n', Lines(moveOutput)));
+            Assert.True(File.Exists(Path.Combine(third, "gamma.txt")) && !File.Exists(gamma), "the move took gamma.txt to the folder the path names");
+            Assert.True(File.Exists(Path.Combine(right, "gamma.txt")), "the copy of the first round stays");
+
+            // The core started the two jobs and logged them: a copy of the three rows, a move of the one.
+            var jobs = LogFiles.Core(Path.Combine(root, "logs-cab")).Where(l => Message(l) == "job queued").ToList();
+            Assert.Equal(["Copy", "Move"], jobs.Select(l => Field(l, "kind").GetString()));
+            Assert.Equal([3, 1], jobs.Select(l => Field(l, "sources").GetInt32()));
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
     /// The split mirror (unit 3): Ctrl+\ in the terminal splits the dock under the two panes, the left session under
     /// the left pane and the right under the right, with the badges in the panes' colours; in a pane the same keys
     /// still go to Up to Root. Ctrl+Shift+W in a half with one tab leaves the hint there and the other half alone.
