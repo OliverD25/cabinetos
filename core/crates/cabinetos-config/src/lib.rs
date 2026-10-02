@@ -36,12 +36,12 @@ pub use menu::{
     PROGRAM_PREFIX, PROGRAM_TOKENS, ProgramEntry, is_program_name, parse_arg,
 };
 pub use model::{
-    ColumnWidths, CompactOverlay, Config, DEFAULT_MARKETPLACE_INDEX, DockSize, EditorProgram,
-    FORMAT_VERSION, FilesConfig, KeybindingEntry, Keys, Layout, LogLevel, LoggingConfig,
-    MAX_COLUMN_WIDTH, MAX_COMPACT_SIZE, MIN_COLUMN_WIDTH, MIN_COMPACT_SIZE, MarketplaceConfig,
-    PaneTabs, PanesConfig, PluginSettings, ProfileHook, SCHEMA_REFERENCE, SavedTerminal,
-    SelectionMode, ShownTerminals, SortConfig, TabEntry, TabMode, TabsConfig, TerminalConfig,
-    TerminalProfile, TerminalTabs, UiConfig, UpdateConfig,
+    ColumnWidths, CompactOverlay, Config, DEFAULT_MARKETPLACE_INDEX, DEFAULT_MARKETPLACE_THEMES,
+    DockSize, EditorProgram, FORMAT_VERSION, FilesConfig, KeybindingEntry, Keys, Layout, LogLevel,
+    LoggingConfig, MAX_COLUMN_WIDTH, MAX_COMPACT_SIZE, MIN_COLUMN_WIDTH, MIN_COMPACT_SIZE,
+    MarketplaceConfig, PaneTabs, PanesConfig, PluginSettings, ProfileHook, SCHEMA_REFERENCE,
+    SavedTerminal, SelectionMode, ShownTerminals, SortConfig, TabEntry, TabMode, TabsConfig,
+    TerminalConfig, TerminalProfile, TerminalTabs, UiConfig, UpdateConfig,
 };
 pub use parse::{ConfigError, Rejection, file_text, parse, parse_checked};
 pub use store::{

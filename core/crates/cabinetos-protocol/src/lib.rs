@@ -44,8 +44,8 @@ pub use job::{
     JobRequest, JobState, JobStep, LinkPolicy, Rate, Resolution, UndoLeft, UndoLeftReason,
 };
 pub use market::{
-    Author, Download, ExtensionKind, INDEX_SCHEMA_VERSION, MarketCapability, MarketIndex,
-    MarketItem, Rating, Stars, ToolInfo,
+    Author, Catalogue, Download, ExtensionKind, INDEX_SCHEMA_VERSION, MarketCapability,
+    MarketIndex, MarketItem, Rating, Stars, Tile, ToolInfo,
 };
 pub use message::{
     CommandInfo, CommandInput, CommandSource, CommandTarget, DiskIdentity, EntryDetail, Envelope,
@@ -130,5 +130,9 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// the reply `gui_context`, and `marked_total` in a pane of `window_state`;
 /// version 19 `dual` in `window_state` and in the reply `gui_context`:
 /// whether the window shows both panes, so "the other pane" can be refused
-/// when only one shows (unit 5 of the terminal sprint).
-pub const PROTOCOL_VERSION: u32 = 19;
+/// when only one shows (unit 5 of the terminal sprint); version 20 the two
+/// marketplace catalogues (Phase 23, ADR 0022): `marketplace_refresh` and
+/// `marketplace_search` take an optional `catalogue` (`extensions`, the
+/// default, or `themes`), and a theme's item carries `appearance`,
+/// `density` and `tile`.
+pub const PROTOCOL_VERSION: u32 = 20;

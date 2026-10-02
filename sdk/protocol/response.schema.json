@@ -2384,6 +2384,17 @@
       "description": "One extension, in one version, as the index offers it.",
       "type": "object",
       "properties": {
+        "appearance": {
+          "description": "For a theme: dark, light, or as Windows is set (the theme file's\n`kind`), so the gallery can filter without reading the file.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThemeKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "author": {
           "description": "Who publishes it.",
           "$ref": "#/$defs/Author"
@@ -2394,6 +2405,13 @@
           "items": {
             "$ref": "#/$defs/MarketCapability"
           }
+        },
+        "density": {
+          "description": "For a theme: whether it sets metrics, which makes it a density\npreset such as Commander Compact.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "description": {
           "description": "One or two sentences, for the card.",
@@ -2463,6 +2481,17 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "tile": {
+          "description": "For a theme: three colours the gallery paints its tile with.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tile"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "version": {
           "description": "`major.minor.patch`.",
@@ -3927,6 +3956,29 @@
           "type": "string",
           "const": "system"
         }
+      ]
+    },
+    "Tile": {
+      "description": "The three colours of a theme's gallery tile, each `#RRGGBB` (ADR 0022):\nthe list background (the theme's `layerFill` laid over its Mica tint),\nthe primary text (`textPrimary`) and the accent.",
+      "type": "object",
+      "properties": {
+        "accent": {
+          "description": "The selection pill and the check.",
+          "type": "string"
+        },
+        "background": {
+          "description": "The tile's fill: the colour behind the rows of a file list.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The text colour of the tile's rows and name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "background",
+        "text",
+        "accent"
       ]
     },
     "ToolInfo": {

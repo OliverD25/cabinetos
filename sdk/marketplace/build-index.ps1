@@ -1,10 +1,20 @@
-# Builds a local marketplace index for development and tests: every plugin
-# in sdk/fixtures/plugins (a zip of its plugin.json and plugin.wasm) and
-# every theme in sdk/themes, each with its SHA-256, into one folder:
+# Builds the marketplace's two catalogues, for development and tests and for
+# the public site: every plugin in sdk/fixtures/plugins (a zip of its
+# plugin.json and plugin.wasm) and every theme in sdk/themes, each with its
+# SHA-256, into one folder (ADR 0022):
 #
-#   <OutDir>\index.json
-#   <OutDir>\files\<id>-<version>.zip    (plugins)
-#   <OutDir>\files\<id>-<version>.json   (themes)
+#   <OutDir>\index.json                    (extensions: plugins and tools)
+#   <OutDir>\themes.json                   (themes)
+#   <OutDir>\files\<id>-<version>.zip      (plugins and tools)
+#   <OutDir>\files\<id>-<version>.json     (themes)
+#
+# The two files have one format (sdk/marketplace/index.schema.json). A theme
+# item also says its appearance (the theme file's kind: dark, light or
+# system), its density (true when the theme sets metrics, like Commander
+# Compact) and its tile: the three colours, #RRGGBB, that the theme gallery
+# paints the theme's tile with. The script checks every item against the
+# format before it writes (kinds per file, the hash, the version, the tile)
+# and stops with a message when one is wrong.
 #
 # With -Collection, the index also offers the theme collection in
 # sdk/themes/collection, one item per theme file, in the order of
@@ -28,9 +38,9 @@
 # without -Extensions it is not offered at all.
 #
 # Point the core at it with marketplace.index (the folder, or its
-# index.json). Nothing is uploaded or published: the folder stays on this
-# machine. The format: sdk/marketplace/index.schema.json and
-# docs/marketplace.md.
+# index.json) and marketplace.themes (the folder, or its themes.json).
+# Nothing is uploaded or published: the folder stays on this machine. The
+# format: sdk/marketplace/index.schema.json and docs/marketplace.md.
 #
 # Run from anywhere, in Windows PowerShell or PowerShell 7:
 #   powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-ThemesOnly] [-Extensions]
@@ -68,7 +78,56 @@ function Read-Json([string] $Path) {
     Get-Content -Path $Path -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
+# The extensions' items (index.json) and the themes' items (themes.json).
 $items = New-Object System.Collections.ArrayList
+$themeItems = New-Object System.Collections.ArrayList
+
+# The colours of a theme's gallery tile (ADR 0022). The rows of the window
+# are the theme's layerFill laid over its Mica tint, over plain Mica when the
+# theme has no tint; their text is textPrimary; the selection pill and the
+# check are the accent. A colour is #RRGGBB or #RRGGBBAA; the result is
+# always #RRGGBB, so the tile can be painted opaque.
+function ConvertFrom-ThemeColor([string] $Text) {
+    $hex = $Text.TrimStart('#')
+    $alpha = 1.0
+    if ($hex.Length -eq 8) { $alpha = [Convert]::ToInt32($hex.Substring(6, 2), 16) / 255.0 }
+    , @([Convert]::ToInt32($hex.Substring(0, 2), 16), [Convert]::ToInt32($hex.Substring(2, 2), 16), [Convert]::ToInt32($hex.Substring(4, 2), 16), $alpha)
+}
+
+# $Top laid over $Under, scaled by $Opacity as well: the result is opaque.
+function Merge-ThemeColor($Top, $Under, [double] $Opacity = 1.0) {
+    $a = $Top[3] * $Opacity
+    $out = @(0, 0, 0)
+    for ($i = 0; $i -lt 3; $i++) { $out[$i] = [int][Math]::Round($Top[$i] * $a + $Under[$i] * (1 - $a)) }
+    , @($out[0], $out[1], $out[2], 1.0)
+}
+
+function ConvertTo-ThemeHex($Color) {
+    '#{0:X2}{1:X2}{2:X2}' -f [int]$Color[0], [int]$Color[1], [int]$Color[2]
+}
+
+function Get-ThemeTile($Theme) {
+    # Plain Mica: Windows 11's own backdrop colour. A system theme's palette is
+    # its dark-mode look (docs/themes.md), so it is painted on dark Mica.
+    $mica = ConvertFrom-ThemeColor '#202020'
+    $defaultAccent = '#60CDFF'
+    if ($Theme.kind -eq 'light') {
+        $mica = ConvertFrom-ThemeColor '#F3F3F3'
+        $defaultAccent = '#005FB8'
+    }
+    if ($Theme.mica) {
+        $mica = Merge-ThemeColor (ConvertFrom-ThemeColor $Theme.mica.tint) $mica ([double]$Theme.mica.opacity)
+    }
+    $background = Merge-ThemeColor (ConvertFrom-ThemeColor $Theme.palette.layerFill) $mica
+    $text = Merge-ThemeColor (ConvertFrom-ThemeColor $Theme.palette.textPrimary) $background
+    $accent = $defaultAccent
+    if ($Theme.accent) { $accent = $Theme.accent }
+    [ordered]@{
+        background = (ConvertTo-ThemeHex $background)
+        text       = (ConvertTo-ThemeHex $text)
+        accent     = (ConvertTo-ThemeHex (ConvertFrom-ThemeColor $accent))
+    }
+}
 
 # One theme file as an index item. The long description adds the theme's
 # attribution; $Url, when given, is where the colours come from.
@@ -80,7 +139,9 @@ function Add-ThemeItem($File, $Theme, [string] $Description, [string] $License, 
     if ($Theme.attribution) { $long = "$long $($Theme.attribution)" }
     $author = [ordered]@{ name = $Theme.author; verified = $false }
     if ($Url) { $author.url = $Url }
-    [void]$items.Add([ordered]@{
+    $density = $false
+    if ($Theme.metrics -and @($Theme.metrics.PSObject.Properties).Count -gt 0) { $density = $true }
+    [void]$themeItems.Add([ordered]@{
         id             = $Theme.id
         kind           = 'theme'
         name           = $Theme.name
@@ -98,6 +159,9 @@ function Add-ThemeItem($File, $Theme, [string] $Description, [string] $License, 
             kind    = $Theme.kind
             accent  = $Theme.accent
         }
+        appearance     = $Theme.kind
+        density        = $density
+        tile           = (Get-ThemeTile $Theme)
         minCoreVersion = '0.1.0'
         license        = $License
     })
@@ -246,14 +310,44 @@ if ($Collection) {
     if ($missing.Count -gt 0) { throw "marketplace.csv has no row for: $($missing -join ', ')" }
 }
 
-$index = [ordered]@{
-    schemaVersion = 1
-    generatedAt   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-    items         = @($items)
+# The format's rules, checked before anything is written (the core applies the
+# same ones when it reads a file, and leaves out an item that breaks them).
+function Assert-Catalogue([string] $File, $Items, [string[]] $Kinds) {
+    $seen = @{}
+    foreach ($item in $Items) {
+        $where = "$File item '$($item.id)'"
+        if ($item.id -notmatch '^[a-z][a-z0-9-]{0,63}$') { throw "${where}: the id is not 1 to 64 lower case letters, digits and -" }
+        if ($item.version -notmatch '^\d+\.\d+\.\d+$') { throw "${where}: version '$($item.version)' is not major.minor.patch" }
+        if ($Kinds -notcontains $item.kind) { throw "${where}: kind '$($item.kind)' does not belong in $File (it holds $($Kinds -join ', '))" }
+        if ($seen.ContainsKey("$($item.id)@$($item.version)")) { throw "${where}: listed twice in $File" }
+        $seen["$($item.id)@$($item.version)"] = $true
+        if ($item.download.sha256 -notmatch '^[0-9a-f]{64}$') { throw "${where}: sha256 is not 64 hex digits" }
+        if ($item.size -le 0) { throw "${where}: size is 0" }
+        if (-not $item.name -or -not $item.author.name) { throw "${where}: name and author are needed" }
+        if ($item.kind -eq 'theme') {
+            if (@('dark', 'light', 'system') -notcontains $item.appearance) { throw "${where}: appearance '$($item.appearance)' is not dark, light or system" }
+            if ($item.density -isnot [bool]) { throw "${where}: density must be true or false" }
+            foreach ($key in 'background', 'text', 'accent') {
+                if ($item.tile[$key] -notmatch '^#[0-9A-F]{6}$') { throw "${where}: tile.$key '$($item.tile[$key])' is not #RRGGBB" }
+            }
+        }
+    }
 }
-$indexPath = Join-Path $OutDir 'index.json'
-[System.IO.File]::WriteAllText($indexPath, ($index | ConvertTo-Json -Depth 20), $utf8)
-foreach ($item in $items) {
-    Write-Output ("{0,-6} {1,-22} {2,-8} {3,8:N0} bytes  sha256 {4}" -f $item.kind, $item.id, $item.version, $item.size, $item.download.sha256)
+Assert-Catalogue 'index.json' $items @('plugin', 'tool')
+Assert-Catalogue 'themes.json' $themeItems @('theme')
+
+function Write-Catalogue([string] $File, $Items) {
+    $catalogue = [ordered]@{
+        schemaVersion = 1
+        generatedAt   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        items         = @($Items)
+    }
+    $path = Join-Path $OutDir $File
+    [System.IO.File]::WriteAllText($path, ($catalogue | ConvertTo-Json -Depth 20), $utf8)
+    foreach ($item in $Items) {
+        Write-Output ("{0,-6} {1,-22} {2,-8} {3,8:N0} bytes  sha256 {4}" -f $item.kind, $item.id, $item.version, $item.size, $item.download.sha256)
+    }
+    Write-Output ("{0} items -> {1}" -f @($Items).Count, $path)
 }
-Write-Output ("{0} items -> {1}" -f $items.Count, $indexPath)
+Write-Catalogue 'index.json' $items
+Write-Catalogue 'themes.json' $themeItems

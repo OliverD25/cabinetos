@@ -1048,9 +1048,20 @@
       ]
     },
     {
-      "description": "Reads the marketplace index named by `marketplace.index` in the\nconfiguration: from disk, or from the web. The core answers\n`marketplace_index`. The core reaches the network only for this\nrequest, `marketplace_search` and `install_extension`.",
+      "description": "Reads a marketplace catalogue: the extensions' `index.json` named by\n`marketplace.index`, or the themes' `themes.json` named by\n`marketplace.themes` (while that address answers 404, the theme items\nof `index.json`). From disk, or from the web. The core answers\n`marketplace_index`. The core reaches the network only for this\nrequest, `marketplace_search` and `install_extension`.",
       "type": "object",
       "properties": {
+        "catalogue": {
+          "description": "Which list: the extensions (`index.json`, the default) or the\nthemes (`themes.json`). Each is read, cached and answered on\nits own, so one that cannot be reached does not hide the other.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Catalogue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "type": {
           "type": "string",
           "const": "marketplace_refresh"
@@ -1061,9 +1072,20 @@
       ]
     },
     {
-      "description": "Searches the index read last (read first when there is none, or when\n`marketplace.index` changed). The core answers `marketplace_index`\nwith the matching items, best first.",
+      "description": "Searches the catalogue read last (read first when there is none, or\nwhen its address changed). The core answers `marketplace_index`\nwith the matching items, best first.",
       "type": "object",
       "properties": {
+        "catalogue": {
+          "description": "Which list; without it, the extensions.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Catalogue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "kind": {
           "description": "Only items of this kind.",
           "anyOf": [
@@ -1522,6 +1544,21 @@
     "id"
   ],
   "$defs": {
+    "Catalogue": {
+      "description": "Which of the two lists a client asks for (protocol version 20, ADR 0022).\nThe marketplace publishes extensions and colour themes in separate\nfiles, so the window can show them on separate pages.",
+      "oneOf": [
+        {
+          "description": "Core Plugins and Tool Extensions: `index.json`\n(`marketplace.index`). The default when a request names none.",
+          "type": "string",
+          "const": "extensions"
+        },
+        {
+          "description": "Colour themes: `themes.json` (`marketplace.themes`), or the theme\nitems of `index.json` while the themes address answers 404.",
+          "type": "string",
+          "const": "themes"
+        }
+      ]
+    },
     "ChangeKind": {
       "description": "What a row of a preview would do.",
       "oneOf": [

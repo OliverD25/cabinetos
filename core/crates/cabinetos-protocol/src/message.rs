@@ -6,7 +6,7 @@ use crate::index::{FileHit, SearchSource, VolumeStatus, default_file_search_limi
 use crate::job::{
     Conflict, JobAction, JobInfo, JobProgress, JobRequest, JobState, Resolution, UndoLeft,
 };
-use crate::market::{ExtensionKind, MarketItem, ToolInfo};
+use crate::market::{Catalogue, ExtensionKind, MarketItem, ToolInfo};
 use crate::plugin::{PluginInfo, PluginState};
 use crate::preview::{OpenedListing, PreviewRow};
 use crate::secret::SecretText;
@@ -422,13 +422,21 @@ pub enum Request {
     },
     /// Asks for every installed Tool Extension. The core answers `tools`.
     ListTools,
-    /// Reads the marketplace index named by `marketplace.index` in the
-    /// configuration: from disk, or from the web. The core answers
+    /// Reads a marketplace catalogue: the extensions' `index.json` named by
+    /// `marketplace.index`, or the themes' `themes.json` named by
+    /// `marketplace.themes` (while that address answers 404, the theme items
+    /// of `index.json`). From disk, or from the web. The core answers
     /// `marketplace_index`. The core reaches the network only for this
     /// request, `marketplace_search` and `install_extension`.
-    MarketplaceRefresh,
-    /// Searches the index read last (read first when there is none, or when
-    /// `marketplace.index` changed). The core answers `marketplace_index`
+    MarketplaceRefresh {
+        /// Which list: the extensions (`index.json`, the default) or the
+        /// themes (`themes.json`). Each is read, cached and answered on
+        /// its own, so one that cannot be reached does not hide the other.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        catalogue: Option<Catalogue>,
+    },
+    /// Searches the catalogue read last (read first when there is none, or
+    /// when its address changed). The core answers `marketplace_index`
     /// with the matching items, best first.
     MarketplaceSearch {
         /// Text to look for in the name, the ID or the publisher, ranked as
@@ -437,6 +445,9 @@ pub enum Request {
         /// Only items of this kind.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         kind: Option<ExtensionKind>,
+        /// Which list; without it, the extensions.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        catalogue: Option<Catalogue>,
     },
     /// Downloads an extension from the index, checks its SHA-256, and
     /// installs it. The core answers `ok` once it is in place; a plugin then
@@ -742,7 +753,7 @@ impl Request {
             Self::ListThemes => "list_themes",
             Self::GetTheme { .. } => "get_theme",
             Self::ListTools => "list_tools",
-            Self::MarketplaceRefresh => "marketplace_refresh",
+            Self::MarketplaceRefresh { .. } => "marketplace_refresh",
             Self::MarketplaceSearch { .. } => "marketplace_search",
             Self::InstallExtension { .. } => "install_extension",
             Self::UninstallExtension { .. } => "uninstall_extension",
@@ -1879,7 +1890,7 @@ mod tests {
 
     use super::*;
     use crate::job::{ConflictKind, ConflictPolicy, JobKind, JobOptions, LinkPolicy, Rate};
-    use crate::market::{Author, Download, MarketCapability};
+    use crate::market::{Author, Download, MarketCapability, Tile};
     use crate::theme::ThemeKind;
 
     const ID: &str = "01J9ZQ4X7K3M5N8P2R6S0T1V4W";
@@ -1983,6 +1994,27 @@ mod tests {
             min_core_version: "0.1.0".to_owned(),
             license: "MIT".to_owned(),
             installed_version: Some("0.1.0".to_owned()),
+            appearance: None,
+            density: None,
+            tile: None,
+        }
+    }
+
+    fn theme_item() -> MarketItem {
+        MarketItem {
+            id: "nord".to_owned(),
+            kind: ExtensionKind::Theme,
+            name: "Nord".to_owned(),
+            appearance: Some(ThemeKind::Dark),
+            density: Some(false),
+            tile: Some(Tile {
+                background: "#353B49".to_owned(),
+                text: "#ECEFF4".to_owned(),
+                accent: "#88C0D0".to_owned(),
+            }),
+            capabilities: Vec::new(),
+            installed_version: None,
+            ..market_item()
         }
     }
 
@@ -2157,10 +2189,13 @@ mod tests {
                 theme_id: Some("nord".to_owned()),
             },
             Request::ListTools,
-            Request::MarketplaceRefresh,
+            Request::MarketplaceRefresh {
+                catalogue: Some(Catalogue::Themes),
+            },
             Request::MarketplaceSearch {
                 query: "nord".to_owned(),
                 kind: Some(ExtensionKind::Theme),
+                catalogue: Some(Catalogue::Themes),
             },
             Request::InstallExtension {
                 extension_id: "hello".to_owned(),
@@ -2530,7 +2565,7 @@ mod tests {
                 tools: vec![tool()],
             },
             Response::MarketplaceIndex {
-                items: vec![market_item()],
+                items: vec![market_item(), theme_item()],
                 source: r"C:\market\index.json".to_owned(),
                 fetched_at_ms: 1_790_000_000_000,
             },
@@ -3531,8 +3566,31 @@ mod tests {
             Request::MarketplaceSearch {
                 query: String::new(),
                 kind: None,
+                catalogue: None,
             }
         );
+        // Protocol 20: both requests may name a catalogue; one that does not
+        // is for the extensions, as every older client's requests are.
+        let refresh = json!({"id": ID, "type": "marketplace_refresh"});
+        let envelope: Envelope<Request> = serde_json::from_value(refresh).unwrap();
+        assert_eq!(
+            envelope.body,
+            Request::MarketplaceRefresh { catalogue: None }
+        );
+        let themes = json!({"id": ID, "type": "marketplace_refresh", "catalogue": "themes"});
+        let envelope: Envelope<Request> = serde_json::from_value(themes).unwrap();
+        assert_eq!(
+            envelope.body,
+            Request::MarketplaceRefresh {
+                catalogue: Some(Catalogue::Themes)
+            }
+        );
+        let wire = serde_json::to_value(Envelope::new(
+            id(),
+            Request::MarketplaceRefresh { catalogue: None },
+        ))
+        .unwrap();
+        assert!(wire.get("catalogue").is_none(), "{wire}");
         let index = every_response()
             .into_iter()
             .find(|response| matches!(response, Response::MarketplaceIndex { .. }))

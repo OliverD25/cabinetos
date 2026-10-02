@@ -56,8 +56,8 @@ use cabinetos_cli_args::{
 use cabinetos_diag::{Boundary, DiagConfig, span_for_action};
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
-    ConflictPolicy, Envelope, ExtensionKind, JobAction, JobKind, JobOptions, JobRequest, Request,
-    RequestId, Resolution, Response, SortKey, SortSpec, VolumeDetails,
+    Catalogue, ConflictPolicy, Envelope, ExtensionKind, JobAction, JobKind, JobOptions, JobRequest,
+    Request, RequestId, Resolution, Response, SortKey, SortSpec, VolumeDetails,
 };
 use clap::Parser;
 use tracing::Instrument;
@@ -583,11 +583,24 @@ async fn extension_command(client: &mut PipeClient, command: &Command) -> anyhow
             ThemesAction::Show { id } => themes::show(client, id.as_deref()).await,
         },
         Command::Market { action } => match action {
-            MarketAction::Refresh => market::list(client, Request::MarketplaceRefresh).await,
-            MarketAction::Search { query, kind } => {
+            MarketAction::Refresh { themes } => {
+                let request = Request::MarketplaceRefresh {
+                    catalogue: themes.then_some(Catalogue::Themes),
+                };
+                market::list(client, request).await
+            }
+            MarketAction::Search {
+                query,
+                kind,
+                themes,
+            } => {
+                // A theme is in the themes catalogue only: `--kind theme`
+                // asks for it without the second flag.
+                let in_themes = *themes || *kind == Some(KindArg::Theme);
                 let request = Request::MarketplaceSearch {
                     query: query.clone(),
                     kind: kind.map(extension_kind),
+                    catalogue: in_themes.then_some(Catalogue::Themes),
                 };
                 market::list(client, request).await
             }

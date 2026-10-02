@@ -405,7 +405,7 @@ impl Session {
                 request @ (Request::ListThemes
                 | Request::GetTheme { .. }
                 | Request::ListTools
-                | Request::MarketplaceRefresh
+                | Request::MarketplaceRefresh { .. }
                 | Request::MarketplaceSearch { .. }
                 | Request::InstallExtension { .. }
                 | Request::UninstallExtension { .. }) => {
@@ -1176,11 +1176,19 @@ impl Session {
             Request::ListTools => self.spawn_reply(id, span, kind, move || Response::Tools {
                 tools: market.tools(),
             }),
-            Request::MarketplaceRefresh => {
-                self.spawn_reply(id, span, kind, move || market.refresh());
+            Request::MarketplaceRefresh { catalogue } => {
+                self.spawn_reply(id, span, kind, move || {
+                    market.refresh(catalogue.unwrap_or_default())
+                });
             }
-            Request::MarketplaceSearch { query, kind: only } => {
-                self.spawn_reply(id, span, kind, move || market.search(&query, only));
+            Request::MarketplaceSearch {
+                query,
+                kind: only,
+                catalogue,
+            } => {
+                self.spawn_reply(id, span, kind, move || {
+                    market.search(&query, only, catalogue.unwrap_or_default())
+                });
             }
             Request::InstallExtension {
                 extension_id,

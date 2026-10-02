@@ -1,9 +1,13 @@
-//! The index: where it is, reading it, and searching it.
+//! The catalogues: where they are, reading them, and searching them. The
+//! marketplace has two, `index.json` for extensions and `themes.json` for
+//! themes, in one format (ADR 0022).
 
 use std::path::{Path, PathBuf};
 
 use cabinetos_commands::rank;
-use cabinetos_protocol::{ExtensionKind, INDEX_SCHEMA_VERSION, MarketItem, extension_id_problem};
+use cabinetos_protocol::{
+    Catalogue, ExtensionKind, INDEX_SCHEMA_VERSION, MarketItem, extension_id_problem,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
@@ -11,16 +15,37 @@ use url::Url;
 use crate::transfer::{self, Base, Client, Fetched, Http, Location};
 use crate::{MarketError, now_ms, parse_version};
 
-/// The file an index folder holds.
-pub(crate) const INDEX_FILE: &str = "index.json";
+/// The file of a catalogue in a folder, on the web, and in the cache.
+const fn file_of(catalogue: Catalogue) -> &'static str {
+    match catalogue {
+        Catalogue::Extensions => "index.json",
+        Catalogue::Themes => "themes.json",
+    }
+}
+
+/// The file that keeps a cached catalogue's `ETag`.
+const fn meta_of(catalogue: Catalogue) -> &'static str {
+    match catalogue {
+        Catalogue::Extensions => "index.meta.json",
+        Catalogue::Themes => "themes.meta.json",
+    }
+}
+
+/// What messages call a catalogue.
+const fn what_of(catalogue: Catalogue) -> &'static str {
+    match catalogue {
+        Catalogue::Extensions => "the index",
+        Catalogue::Themes => "the themes catalogue",
+    }
+}
 
 /// The most bytes an index may have.
 const MAX_INDEX_BYTES: u64 = 16 * 1024 * 1024;
 
-/// Where an index is (`marketplace.index`).
+/// Where a catalogue is (`marketplace.index` or `marketplace.themes`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
-    /// An `index.json` on this machine, or the folder that holds it.
+    /// A catalogue file on this machine, or the folder that holds it.
     Local(PathBuf),
     /// An `https:` URL, or `http:` when the configuration allows it.
     Remote(Url),
@@ -31,25 +56,39 @@ impl Source {
     /// when `allow_insecure`; a `file:` URL; or an absolute path to an
     /// `index.json` or to its folder.
     pub fn parse(location: &str, allow_insecure: bool) -> Result<Self, MarketError> {
+        Self::parse_setting("marketplace.index", location, allow_insecure)
+    }
+
+    /// Reads `marketplace.themes` the same way: an `https:` URL, a `file:`
+    /// URL, or an absolute path to a `themes.json` or to its folder.
+    pub fn parse_themes(location: &str, allow_insecure: bool) -> Result<Self, MarketError> {
+        Self::parse_setting("marketplace.themes", location, allow_insecure)
+    }
+
+    fn parse_setting(
+        setting: &str,
+        location: &str,
+        allow_insecure: bool,
+    ) -> Result<Self, MarketError> {
         let location = location.trim();
         if location.is_empty() {
-            return Err(MarketError::market("marketplace.index is empty"));
+            return Err(MarketError::market(format!("{setting} is empty")));
         }
         match transfer::parse_location(location, allow_insecure, Client::Market)
             .map_err(MarketError::market)?
         {
-            Location::File(path) => local(path),
+            Location::File(path) => local(setting, path),
             Location::Web(url) => Ok(Self::Remote(url)),
         }
     }
 }
 
-fn local(path: PathBuf) -> Result<Source, MarketError> {
+fn local(setting: &str, path: PathBuf) -> Result<Source, MarketError> {
     if path.is_absolute() {
         Ok(Source::Local(path))
     } else {
         Err(MarketError::market(format!(
-            "marketplace.index `{}` must be an absolute path or a URL",
+            "{setting} `{}` must be an absolute path or a URL",
             path.display()
         )))
     }
@@ -70,6 +109,21 @@ pub struct Index {
 }
 
 impl Index {
+    /// The same index with only the items of `catalogue`: a theme belongs
+    /// to the themes catalogue, a plugin or a tool to the extensions.
+    #[must_use]
+    pub fn only(&self, catalogue: Catalogue) -> Self {
+        Self {
+            items: self
+                .items
+                .iter()
+                .filter(|item| catalogue.holds(item.kind))
+                .cloned()
+                .collect(),
+            ..self.clone()
+        }
+    }
+
     /// Where a download named in this index is: an absolute URL, or a path
     /// relative to the index. An index on the web may only name downloads
     /// on the web.
@@ -92,74 +146,88 @@ struct CacheMeta {
     fetched_at_ms: u64,
 }
 
-/// Reads the index at `source`: from disk, or from the web with the cache
-/// in `cache_dir`.
+/// Reads a catalogue at `source`: from disk, or from the web with the cache
+/// in `cache_dir`. `Ok(None)` only for the themes catalogue, when the file
+/// is not there: a 404 on the web, or no such file on this machine. The
+/// extensions' `index.json` must exist.
 pub(crate) fn fetch(
     source: &Source,
+    catalogue: Catalogue,
     cache_dir: &Path,
     http: &Http,
     allow_insecure: bool,
-) -> Result<Index, MarketError> {
+) -> Result<Option<Index>, MarketError> {
     match source {
         Source::Local(path) => {
             let file = if path.is_dir() {
-                path.join(INDEX_FILE)
+                path.join(file_of(catalogue))
             } else {
                 path.clone()
             };
-            let bytes = read_limited(&file)?;
-            let items = parse_index(&text_of(&bytes, &file.display().to_string())?)?;
+            if catalogue == Catalogue::Themes && !file.exists() {
+                return Ok(None);
+            }
+            let bytes = read_limited(&file, catalogue)?;
+            let items = parse_catalogue(
+                &text_of(&bytes, &file.display().to_string(), catalogue)?,
+                catalogue,
+            )?;
             let folder = file.parent().map(Path::to_path_buf).unwrap_or_default();
-            Ok(Index {
+            Ok(Some(Index {
                 items,
                 source: file.display().to_string(),
                 fetched_at_ms: now_ms(),
                 base: Base::Folder(folder),
-            })
+            }))
         }
-        Source::Remote(url) => fetch_remote(url, cache_dir, http, allow_insecure),
+        Source::Remote(url) => fetch_remote(url, catalogue, cache_dir, http, allow_insecure),
     }
 }
 
-fn read_limited(file: &Path) -> Result<Vec<u8>, MarketError> {
-    transfer::read_limited(file, MAX_INDEX_BYTES, "the index").map_err(MarketError::market)
+fn read_limited(file: &Path, catalogue: Catalogue) -> Result<Vec<u8>, MarketError> {
+    transfer::read_limited(file, MAX_INDEX_BYTES, what_of(catalogue)).map_err(MarketError::market)
 }
 
-fn text_of(bytes: &[u8], what: &str) -> Result<String, MarketError> {
+fn text_of(bytes: &[u8], at: &str, catalogue: Catalogue) -> Result<String, MarketError> {
     String::from_utf8(bytes.to_vec())
-        .map_err(|_| MarketError::market(format!("the index {what} is not UTF-8 text")))
+        .map_err(|_| MarketError::market(format!("{} {at} is not UTF-8 text", what_of(catalogue))))
 }
 
-/// The file that keeps the cached index's `ETag`.
-const META_FILE: &str = "index.meta.json";
-
-/// Fetches an index from the web. The cache in `cache_dir` holds the last
-/// copy and its `ETag`; an unchanged index costs one `304 Not Modified`.
-/// A cached copy that cannot be read (half written, damaged) is fetched
-/// again whole: a 304 alone would send every later refresh back to it.
+/// Fetches a catalogue from the web. The cache in `cache_dir` holds the
+/// last copy and its `ETag`; an unchanged catalogue costs one `304 Not
+/// Modified`. A cached copy that cannot be read (half written, damaged) is
+/// fetched again whole: a 304 alone would send every later refresh back to
+/// it. `Ok(None)` for a themes catalogue the server does not have (404).
 fn fetch_remote(
     url: &Url,
+    catalogue: Catalogue,
     cache_dir: &Path,
     http: &Http,
     allow_insecure: bool,
-) -> Result<Index, MarketError> {
-    let cached = cache_dir.join(INDEX_FILE);
-    let meta = std::fs::read(cache_dir.join(META_FILE))
+) -> Result<Option<Index>, MarketError> {
+    let what = what_of(catalogue);
+    let cached = cache_dir.join(file_of(catalogue));
+    let meta = std::fs::read(cache_dir.join(meta_of(catalogue)))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<CacheMeta>(&bytes).ok())
         .filter(|meta| meta.source == url.as_str() && cached.is_file());
     let tag = meta.as_ref().and_then(|meta| meta.etag.clone());
-    let (items, fresh, etag) = match download(url, tag.as_deref(), http, allow_insecure)? {
-        Downloaded::Whole { text, etag } => (parse_index(&text)?, Some(text), etag),
-        Downloaded::NotModified => match read_cached(&cached, url) {
+    let first = download(url, catalogue, tag.as_deref(), http, allow_insecure)?;
+    let (items, fresh, etag) = match first {
+        Downloaded::Missing => return Ok(None),
+        Downloaded::Whole { text, etag } => (parse_catalogue(&text, catalogue)?, Some(text), etag),
+        Downloaded::NotModified => match read_cached(&cached, url, catalogue) {
             Ok(items) => (items, None, tag),
             Err(error) => {
-                tracing::warn!(%url, error = %error.message, "the cached copy of the index cannot be read; fetching the whole index again");
-                match download(url, None, http, allow_insecure)? {
-                    Downloaded::Whole { text, etag } => (parse_index(&text)?, Some(text), etag),
+                tracing::warn!(%url, error = %error.message, "the cached copy of {what} cannot be read; fetching the whole file again");
+                match download(url, catalogue, None, http, allow_insecure)? {
+                    Downloaded::Whole { text, etag } => {
+                        (parse_catalogue(&text, catalogue)?, Some(text), etag)
+                    }
+                    Downloaded::Missing => return Ok(None),
                     Downloaded::NotModified => {
                         return Err(MarketError::market(format!(
-                            "the server answered 304 for the index {url} without being asked"
+                            "the server answered 304 for {what} {url} without being asked"
                         )));
                     }
                 }
@@ -169,6 +237,7 @@ fn fetch_remote(
     let fetched_at_ms = now_ms();
     keep_in_cache(
         cache_dir,
+        catalogue,
         fresh.as_deref(),
         &CacheMeta {
             source: url.to_string(),
@@ -176,71 +245,89 @@ fn fetch_remote(
             fetched_at_ms,
         },
     );
-    Ok(Index {
+    Ok(Some(Index {
         items,
         source: url.to_string(),
         fetched_at_ms,
         base: Base::Web(url.clone()),
-    })
+    }))
 }
 
-/// What one request for the index brought.
+/// What one request for a catalogue brought.
 enum Downloaded {
     /// The server confirmed the tag sent: the cached copy is current.
     NotModified,
-    /// The index itself, with its tag.
+    /// The server does not have the file (404), and the catalogue may be
+    /// missing.
+    Missing,
+    /// The catalogue itself, with its tag.
     Whole { text: String, etag: Option<String> },
 }
 
-/// Asks for the index, with `If-None-Match: tag` when there is a tag. A 304
-/// counts only as the answer to a tag.
+/// Asks for a catalogue, with `If-None-Match: tag` when there is a tag. A
+/// 304 counts only as the answer to a tag. A 404 is `Missing` for the
+/// themes catalogue and an error for the extensions' index.
 fn download(
     url: &Url,
+    catalogue: Catalogue,
     tag: Option<&str>,
     http: &Http,
     allow_insecure: bool,
 ) -> Result<Downloaded, MarketError> {
-    let fetched = transfer::get(
+    let what = what_of(catalogue);
+    let fetched = transfer::get_optional(
         http,
         url,
         tag,
         allow_insecure,
         MAX_INDEX_BYTES,
-        "the index",
+        what,
         Client::Market,
     )
     .map_err(MarketError::market)?;
     Ok(match fetched {
-        Fetched::NotModified => Downloaded::NotModified,
-        Fetched::Whole { bytes, etag } => Downloaded::Whole {
-            text: text_of(&bytes, url.as_str())?,
+        None if catalogue == Catalogue::Themes => Downloaded::Missing,
+        None => {
+            return Err(MarketError::market(format!(
+                "the server answered 404 for {what} {url}"
+            )));
+        }
+        Some(Fetched::NotModified) => Downloaded::NotModified,
+        Some(Fetched::Whole { bytes, etag }) => Downloaded::Whole {
+            text: text_of(&bytes, url.as_str(), catalogue)?,
             etag,
         },
     })
 }
 
-/// The items of the cached copy of the index at `url`.
-fn read_cached(cached: &Path, url: &Url) -> Result<Vec<MarketItem>, MarketError> {
-    let bytes = read_limited(cached)?;
-    parse_index(&text_of(&bytes, url.as_str())?)
+/// The items of the cached copy of the catalogue at `url`.
+fn read_cached(
+    cached: &Path,
+    url: &Url,
+    catalogue: Catalogue,
+) -> Result<Vec<MarketItem>, MarketError> {
+    let bytes = read_limited(cached, catalogue)?;
+    parse_catalogue(&text_of(&bytes, url.as_str(), catalogue)?, catalogue)
 }
 
-/// Best effort: without a cache the next fetch downloads the whole index.
+/// Best effort: without a cache the next fetch downloads the whole file.
 /// Each file is replaced through a temporary file and a rename, so an
 /// interrupted write leaves the old file whole. `text` is `None` when the
 /// server confirmed the cached copy: only its time changes.
-fn keep_in_cache(cache_dir: &Path, text: Option<&str>, meta: &CacheMeta) {
+fn keep_in_cache(cache_dir: &Path, catalogue: Catalogue, text: Option<&str>, meta: &CacheMeta) {
     let written = std::fs::create_dir_all(cache_dir)
         .and_then(|()| match text {
-            Some(text) => transfer::replace_file(&cache_dir.join(INDEX_FILE), text.as_bytes()),
+            Some(text) => {
+                transfer::replace_file(&cache_dir.join(file_of(catalogue)), text.as_bytes())
+            }
             None => Ok(()),
         })
         .and_then(|()| {
             let meta = serde_json::to_vec_pretty(meta).map_err(std::io::Error::other)?;
-            transfer::replace_file(&cache_dir.join(META_FILE), &meta)
+            transfer::replace_file(&cache_dir.join(meta_of(catalogue)), &meta)
         });
     if let Err(error) = written {
-        tracing::warn!(dir = %cache_dir.display(), %error, "cannot keep the index in the cache");
+        tracing::warn!(dir = %cache_dir.display(), %error, "cannot keep {} in the cache", what_of(catalogue));
     }
 }
 
@@ -252,17 +339,25 @@ struct RawIndex {
     items: Vec<Value>,
 }
 
-/// Reads an index's text. An item that does not follow the format (an
-/// unknown `kind` from a newer index, a missing key, a bad ID, version or
-/// hash, a second copy of one ID and version) is logged and left out, so
-/// one bad item does not hide the others.
+/// Reads the text of an `index.json`; see [`parse_catalogue`].
 pub fn parse_index(text: &str) -> Result<Vec<MarketItem>, MarketError> {
+    parse_catalogue(text, Catalogue::Extensions)
+}
+
+/// Reads a catalogue's text (`catalogue` only changes the words of an
+/// error). An item that does not follow the format (an unknown `kind` from
+/// a newer index, a missing key, a bad ID, version, hash or tile colour, a
+/// second copy of one ID and version) is logged and left out, so one bad
+/// item does not hide the others. Which items belong in the catalogue is
+/// not decided here: [`Index::only`] does that.
+pub fn parse_catalogue(text: &str, catalogue: Catalogue) -> Result<Vec<MarketItem>, MarketError> {
+    let what = what_of(catalogue);
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let raw: RawIndex = serde_json::from_str(text)
-        .map_err(|error| MarketError::market(format!("the index is not valid: {error}")))?;
+        .map_err(|error| MarketError::market(format!("{what} is not valid: {error}")))?;
     if raw.schema_version != INDEX_SCHEMA_VERSION {
         return Err(MarketError::market(format!(
-            "the index has schemaVersion {}; this core reads version {INDEX_SCHEMA_VERSION}",
+            "{what} has schemaVersion {}; this core reads version {INDEX_SCHEMA_VERSION}",
             raw.schema_version
         )));
     }
@@ -313,6 +408,13 @@ fn check_item(item: &MarketItem) -> Result<(), String> {
     let hash = &item.download.sha256;
     if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(format!("sha256 `{hash}` is not 64 hex digits"));
+    }
+    if item
+        .tile
+        .as_ref()
+        .is_some_and(|tile| !tile.is_well_formed())
+    {
+        return Err("`tile` has a colour that is not #RRGGBB".to_owned());
     }
     for (field, value) in [
         ("name", &item.name),

@@ -11,9 +11,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use cabinetos_protocol::{ErrorCode, ExtensionKind, MarketItem, ToolInfo};
+use cabinetos_protocol::{Catalogue, ErrorCode, ExtensionKind, MarketItem, ToolInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -48,6 +49,15 @@ pub struct Dirs {
     pub market: PathBuf,
 }
 
+/// The one log line for theme items of `index.json` that nobody reads
+/// because `themes.json` exists.
+fn note_ignored_themes(count: usize) {
+    tracing::info!(
+        count,
+        "themes.json is there; the theme items of index.json are ignored"
+    );
+}
+
 /// What one install put in place, as `installed.json` keeps it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,6 +86,12 @@ pub struct Market {
     http: Http,
     /// One install or uninstall at a time: they share `installed.json`.
     busy: Mutex<()>,
+    /// How many theme items the last `index.json` read listed (they are
+    /// not the extensions' business), and whether `themes.json` was there
+    /// the last time it was asked for: together they say when the log
+    /// should note that those items are ignored.
+    index_theme_items: AtomicUsize,
+    themes_file_seen: AtomicBool,
 }
 
 impl Market {
@@ -88,6 +104,8 @@ impl Market {
             core_version: core_version.to_owned(),
             http: Http::default(),
             busy: Mutex::new(()),
+            index_theme_items: AtomicUsize::new(0),
+            themes_file_seen: AtomicBool::new(false),
         }
     }
 
@@ -97,10 +115,78 @@ impl Market {
         &self.dirs
     }
 
-    /// Reads the index at `source`: from disk, or from the web (with the
-    /// cache in the marketplace folder). Blocking.
+    /// Reads the index at `source` (`index.json`): from disk, or from the
+    /// web (with the cache in the marketplace folder), whole. Use
+    /// [`Index::only`] for the extensions alone. Blocking.
     pub fn fetch(&self, source: &Source, allow_insecure: bool) -> Result<Index, MarketError> {
-        index::fetch(source, &self.dirs.market, &self.http, allow_insecure)
+        let index = index::fetch(
+            source,
+            Catalogue::Extensions,
+            &self.dirs.market,
+            &self.http,
+            allow_insecure,
+        )?
+        .ok_or_else(|| MarketError::market("the index is missing"))?;
+        let themes = index
+            .items
+            .iter()
+            .filter(|item| item.kind == ExtensionKind::Theme)
+            .count();
+        self.index_theme_items.store(themes, Ordering::Relaxed);
+        if themes > 0 && self.themes_file_seen.load(Ordering::Relaxed) {
+            note_ignored_themes(themes);
+        }
+        Ok(index)
+    }
+
+    /// Reads the themes catalogue (ADR 0022, the transition rule): the
+    /// theme items of `themes.json` at `themes`. While that file is not
+    /// there (a 404 on the web, no such file on this machine), the theme
+    /// items of the `index.json` at `index` take its place, with one log
+    /// line. When `themes.json` is there, the theme items of `index.json`
+    /// are ignored. Items of another kind in `themes.json` are left out.
+    /// Any other failure (no network, a damaged file) is an error. `index`
+    /// gives the index's address, and is asked only when the fallback needs
+    /// it. Blocking.
+    pub fn fetch_themes(
+        &self,
+        themes: &Source,
+        index: impl FnOnce() -> Result<Source, MarketError>,
+        allow_insecure: bool,
+    ) -> Result<Index, MarketError> {
+        let own = index::fetch(
+            themes,
+            Catalogue::Themes,
+            &self.dirs.market,
+            &self.http,
+            allow_insecure,
+        )?;
+        self.themes_file_seen
+            .store(own.is_some(), Ordering::Relaxed);
+        if let Some(own) = own {
+            let kept = own.only(Catalogue::Themes);
+            if kept.items.len() < own.items.len() {
+                tracing::warn!(
+                    left_out = own.items.len() - kept.items.len(),
+                    source = %own.source,
+                    "the themes catalogue lists items that are not themes; they were left out"
+                );
+            }
+            let ignored = self.index_theme_items.load(Ordering::Relaxed);
+            if ignored > 0 {
+                note_ignored_themes(ignored);
+            }
+            return Ok(kept);
+        }
+        let legacy = self
+            .fetch(&index()?, allow_insecure)?
+            .only(Catalogue::Themes);
+        tracing::info!(
+            themes = legacy.items.len(),
+            source = %legacy.source,
+            "themes.json is not there; the theme items of index.json are used instead"
+        );
+        Ok(legacy)
     }
 
     /// The item to install: `version` of `id`, or without a version the

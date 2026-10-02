@@ -405,15 +405,26 @@ pub enum SecretAction {
 
 #[derive(Debug, PartialEq, Eq, Subcommand)]
 pub enum MarketAction {
-    /// Read the index now and print its items.
-    Refresh,
-    /// Search the index (read first when needed), best first.
+    /// Read the extensions' index now and print its items (plugins and
+    /// tools); with --themes, the themes catalogue instead.
+    Refresh {
+        /// The themes catalogue (marketplace.themes), with each theme's
+        /// appearance, instead of the extensions.
+        #[arg(long)]
+        themes: bool,
+    },
+    /// Search the extensions' index (read first when needed), best first;
+    /// with --themes, the themes catalogue.
     Search {
         /// Text to look for in the name, the ID or the publisher.
         query: String,
-        /// Only items of this kind.
+        /// Only items of this kind. `--kind theme` searches the themes.
         #[arg(long, value_enum)]
         kind: Option<KindArg>,
+        /// Search the themes catalogue (marketplace.themes) instead of the
+        /// extensions.
+        #[arg(long)]
+        themes: bool,
     },
     /// Download an extension, check its SHA-256 and install it, with a
     /// progress line. A plugin then waits for review (plugins list).
@@ -1579,12 +1590,25 @@ mod tests {
                 other => panic!("expected market, got {other:?}"),
             }
         };
-        assert_eq!(parse(&["refresh"]), MarketAction::Refresh);
+        assert_eq!(parse(&["refresh"]), MarketAction::Refresh { themes: false });
+        assert_eq!(
+            parse(&["refresh", "--themes"]),
+            MarketAction::Refresh { themes: true }
+        );
         assert_eq!(
             parse(&["search", "nord", "--kind", "theme"]),
             MarketAction::Search {
                 query: "nord".to_owned(),
-                kind: Some(KindArg::Theme)
+                kind: Some(KindArg::Theme),
+                themes: false
+            }
+        );
+        assert_eq!(
+            parse(&["search", "nord", "--themes"]),
+            MarketAction::Search {
+                query: "nord".to_owned(),
+                kind: None,
+                themes: true
             }
         );
         assert_eq!(

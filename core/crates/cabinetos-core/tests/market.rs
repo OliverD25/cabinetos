@@ -11,8 +11,8 @@ use std::time::{Duration, Instant};
 
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
-    CapabilityLevel, Envelope, ErrorCode, Event, ExtensionKind, PluginInfo, PluginState, Request,
-    Response,
+    CapabilityLevel, Catalogue, Envelope, ErrorCode, Event, ExtensionKind, PluginInfo, PluginState,
+    Request, Response, ThemeKind,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -96,6 +96,41 @@ fn hello_item(dir: &Path) -> Value {
     )
 }
 
+fn write_themes(dir: &Path, items: &[Value]) {
+    let themes = json!({"schemaVersion": 1, "generatedAt": "2026-10-03T00:00:00Z", "items": items});
+    fs::write(dir.join("themes.json"), themes.to_string()).unwrap();
+}
+
+/// A theme offered with the gallery's keys: a real theme file as the
+/// download, so it installs.
+fn theme_offer(dir: &Path, id: &str, appearance: &str, density: bool) -> Value {
+    let mut theme: Value = serde_json::from_str(cabinetos_themes::SHIPPED[1].1).unwrap();
+    theme["id"] = json!(id);
+    theme["version"] = json!("1.0.0");
+    offer(
+        dir,
+        "theme",
+        id,
+        &serde_json::to_vec(&theme).unwrap(),
+        &json!({
+            "appearance": appearance,
+            "density": density,
+            "tile": {"background": "#2E3440", "text": "#ECEFF4", "accent": "#88C0D0"}
+        }),
+    )
+}
+
+fn ids_of(reply: Response) -> Vec<String> {
+    match reply {
+        Response::MarketplaceIndex { items, .. } => items.into_iter().map(|item| item.id).collect(),
+        other => panic!("expected the index, got {other:?}"),
+    }
+}
+
+fn refresh_of(catalogue: Option<Catalogue>) -> Request {
+    Request::MarketplaceRefresh { catalogue }
+}
+
 struct Core {
     child: Child,
     pipe: PipeName,
@@ -118,6 +153,16 @@ impl Core {
 /// Starts a core whose index is `index/index.json` in its folder, holding
 /// what `items` makes, with `config` (the index location is added).
 fn start_core(items: impl FnOnce(&Path) -> Vec<Value>, config: &Value) -> Core {
+    start_core_with_themes(items, |_| None, config)
+}
+
+/// Like [`start_core`], and `themes` may make the items of a
+/// `index/themes.json` beside the index.
+fn start_core_with_themes(
+    items: impl FnOnce(&Path) -> Vec<Value>,
+    themes: impl FnOnce(&Path) -> Option<Vec<Value>>,
+    config: &Value,
+) -> Core {
     let root = std::env::temp_dir().join("cabinetos-core-test");
     fs::create_dir_all(&root).unwrap();
     let dir = tempfile::Builder::new()
@@ -128,9 +173,18 @@ fn start_core(items: impl FnOnce(&Path) -> Vec<Value>, config: &Value) -> Core {
     fs::create_dir_all(&index_dir).unwrap();
     let index = json!({"schemaVersion": 1, "generatedAt": "2026-09-28T00:00:00Z", "items": items(&index_dir)});
     fs::write(index_dir.join("index.json"), index.to_string()).unwrap();
+    if let Some(items) = themes(&index_dir) {
+        write_themes(&index_dir, &items);
+    }
     let mut config = config.clone();
-    if config.pointer("/marketplace/index").is_none() {
-        config["marketplace"] = json!({"index": index_dir.display().to_string()});
+    // The themes address is the same folder, which has no themes.json
+    // unless a test writes one: the theme items of index.json stand in for
+    // it (ADR 0022). Left to its default it would be the public site.
+    let folder = index_dir.display().to_string();
+    for key in ["index", "themes"] {
+        if config.pointer(&format!("/marketplace/{key}")).is_none() {
+            config["marketplace"][key] = json!(folder);
+        }
     }
     let config_path = dir.path().join("cabinetos.json");
     fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap()).unwrap();
@@ -273,7 +327,7 @@ async fn a_plugin_from_a_local_index_installs_for_review_and_uninstalls_exactly(
     let (mut client, mut events) = greeted(&core).await;
 
     let Response::MarketplaceIndex { items, source, .. } =
-        ask(&mut client, Request::MarketplaceRefresh).await
+        ask(&mut client, Request::MarketplaceRefresh { catalogue: None }).await
     else {
         panic!("expected the index");
     };
@@ -285,6 +339,7 @@ async fn a_plugin_from_a_local_index_installs_for_review_and_uninstalls_exactly(
         Request::MarketplaceSearch {
             query: "hel".to_owned(),
             kind: Some(ExtensionKind::Plugin),
+            catalogue: None,
         },
     )
     .await
@@ -316,7 +371,7 @@ async fn a_plugin_from_a_local_index_installs_for_review_and_uninstalls_exactly(
         }
     );
     let Response::MarketplaceIndex { items, .. } =
-        ask(&mut client, Request::MarketplaceRefresh).await
+        ask(&mut client, Request::MarketplaceRefresh { catalogue: None }).await
     else {
         panic!("expected the index");
     };
@@ -339,6 +394,7 @@ async fn a_plugin_from_a_local_index_installs_for_review_and_uninstalls_exactly(
         Request::MarketplaceSearch {
             query: "hello".to_owned(),
             kind: None,
+            catalogue: None,
         },
     )
     .await
@@ -442,7 +498,10 @@ async fn a_plain_http_index_is_refused_without_reaching_it() {
         &json!({"marketplace": {"index": "http://127.0.0.1:9/index.json"}}),
     );
     let (mut client, _events) = greeted(&core).await;
-    for request in [Request::MarketplaceRefresh, install("hello")] {
+    for request in [
+        Request::MarketplaceRefresh { catalogue: None },
+        install("hello"),
+    ] {
         let (error_code, message) = error_of(ask(&mut client, request).await);
         assert_eq!(error_code, ErrorCode::MarketplaceError);
         assert!(message.contains("plain http"), "{message}");
@@ -518,4 +577,99 @@ async fn a_theme_and_a_tool_install_with_their_events() {
         "{seen:?}"
     );
     assert!(!core.path("tools").join("md-preview").exists());
+}
+
+/// The two catalogues (Phase 23, ADR 0022): a request names the one it
+/// wants, and an install finds an item in either. Before the site has a
+/// `themes.json`, the theme items of `index.json` are the themes; once
+/// there is one, it is the themes and `index.json`'s are ignored.
+#[tokio::test]
+async fn the_two_catalogues_are_asked_for_and_answered_apart() {
+    let core = start_core(
+        |dir| {
+            vec![
+                hello_item(dir),
+                theme_offer(dir, "solarized", "dark", false),
+            ]
+        },
+        &json!({}),
+    );
+    let (mut client, _events) = greeted(&core).await;
+
+    // No name: the extensions, as every client before protocol 20 asked.
+    assert_eq!(ids_of(ask(&mut client, refresh_of(None)).await), ["hello"]);
+    assert_eq!(
+        ids_of(ask(&mut client, refresh_of(Some(Catalogue::Extensions))).await),
+        ["hello"]
+    );
+    // themes.json is missing: the theme items of index.json stand in.
+    let Response::MarketplaceIndex { items, source, .. } =
+        ask(&mut client, refresh_of(Some(Catalogue::Themes))).await
+    else {
+        panic!("expected the themes");
+    };
+    assert_eq!(items.len(), 1);
+    assert!(source.ends_with("index.json"), "{source}");
+    assert_eq!(items[0].appearance, Some(ThemeKind::Dark));
+    assert_eq!(items[0].tile.as_ref().unwrap().accent, "#88C0D0");
+    let search = |query: &str, catalogue| Request::MarketplaceSearch {
+        query: query.to_owned(),
+        kind: None,
+        catalogue,
+    };
+    assert_eq!(
+        ids_of(ask(&mut client, search("sol", Some(Catalogue::Themes))).await),
+        ["solarized"]
+    );
+    assert!(ids_of(ask(&mut client, search("sol", None)).await).is_empty());
+
+    // The site publishes themes.json: it is the themes now.
+    let index_dir = core.path("index");
+    let fresh = theme_offer(&index_dir, "fresh", "light", true);
+    write_themes(&index_dir, &[fresh]);
+    let Response::MarketplaceIndex { items, source, .. } =
+        ask(&mut client, refresh_of(Some(Catalogue::Themes))).await
+    else {
+        panic!("expected the themes");
+    };
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].id, "fresh");
+    assert_eq!(items[0].appearance, Some(ThemeKind::Light));
+    assert_eq!(items[0].density, Some(true));
+    assert!(source.ends_with("themes.json"), "{source}");
+
+    // An install finds an item in the themes catalogue; one only the old
+    // index.json lists is no longer there.
+    assert_eq!(ask(&mut client, install("fresh")).await, Response::Ok);
+    assert!(core.path("themes").join("fresh.json").is_file());
+    let (error_code, _) = error_of(ask(&mut client, install("solarized")).await);
+    assert_eq!(error_code, ErrorCode::NoSuchExtension);
+    // The extensions are what they were.
+    assert_eq!(ids_of(ask(&mut client, refresh_of(None)).await), ["hello"]);
+}
+
+/// A themes server that is down is the gallery's problem alone: the
+/// extensions page still reads its index.
+#[tokio::test]
+async fn a_themes_server_that_is_down_does_not_hide_the_extensions() {
+    let closed = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let core = start_core(
+        |dir| vec![hello_item(dir)],
+        &json!({"marketplace": {
+            "themes": format!("http://127.0.0.1:{closed}/themes.json"),
+            "allowInsecure": true
+        }}),
+    );
+    let (mut client, _events) = greeted(&core).await;
+    let (error_code, message) =
+        error_of(ask(&mut client, refresh_of(Some(Catalogue::Themes))).await);
+    assert_eq!(error_code, ErrorCode::MarketplaceError);
+    assert!(
+        message.contains("cannot fetch the themes catalogue"),
+        "{message}"
+    );
+    assert_eq!(ids_of(ask(&mut client, refresh_of(None)).await), ["hello"]);
 }

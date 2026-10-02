@@ -1,25 +1,37 @@
 # The marketplace
 
 The marketplace is how users find, install and remove extensions: Core
-Plugins, colour themes and Tool Extensions. Constitution Article 8
+Plugins and Tool Extensions, and colour themes. Constitution Article 8
 ("users can write, install, and share extensions via a centralized
 marketplace") and Article 2 (the marketplace infrastructure stays free and
-open source): an index is a static JSON file and a folder of downloads,
+open source): a catalogue is a static JSON file and a folder of downloads,
 which any web server, or a folder on disk, can serve.
 
+There are two catalogues, one file each, in one format
+([ADR 0022](decisions/0022-two-catalogues-extensions-and-themes.md)):
+`index.json` lists the extensions (kinds `plugin` and `tool`) and
+`themes.json` lists the themes (kind `theme`). The window shows them on two
+pages, the Extensions page and the theme gallery ([ui.md](ui.md), "The
+marketplace" and "The theme gallery"), because a user who wants a colour
+scheme does not want to look for it among WebAssembly plugins.
+
 The client is the crate `core/crates/cabinetos-market`; the core serves it
-to the UI (`core/crates/cabinetos-core/src/market.rs`). The index format is
-[sdk/marketplace/index.schema.json](../sdk/marketplace/index.schema.json).
+to the UI (`core/crates/cabinetos-core/src/market.rs`). The format of both
+files is [sdk/marketplace/index.schema.json](../sdk/marketplace/index.schema.json).
 
 ## At a glance
 
-- `marketplace.index` in `cabinetos.json` says where the index is: an
-  `https:` URL, a `file:` URL, or the path of an `index.json` or of its
-  folder. A plain `http:` index is refused unless `marketplace.allowInsecure`
-  is `true` (for testing only).
-- The core reads the index only when a client asks (`marketplace_refresh`,
-  or a search or an install before any index was read). There is no
-  background refresh.
+- `marketplace.index` in `cabinetos.json` says where the extensions' index
+  is, and `marketplace.themes` where the themes catalogue is: each an
+  `https:` URL, a `file:` URL, or the path of the file or of its folder. A
+  plain `http:` address is refused unless `marketplace.allowInsecure` is
+  `true` (for testing only).
+- The core reads a catalogue only when a client asks (`marketplace_refresh`,
+  or a search or an install before it was read). There is no background
+  refresh. The two are read apart: a themes server that is down does not
+  hide the extensions, and the other way round.
+- While the site has no `themes.json` yet, the theme items of `index.json`
+  stand in for it ("The two catalogues", below).
 - An install downloads the item into a temporary file, checks its SHA-256
   against the index, unpacks it into a staging folder, checks it, and only
   then puts it in place. Nothing is run while installing.
@@ -44,9 +56,47 @@ the core, which the window starts, inherits the window's environment.
 
 The marketplace folder holds `installed.json` (the record of installs:
 each extension's kind, version, SHA-256, index, time and exact files), the
-cache of a web index (`index.json` and `index.meta.json` with its `ETag`),
-and `downloads\` and `staging\` while an install runs; an install removes
-its own download and staging folder when it ends, whether it worked or not.
+cache of a web catalogue (`index.json` and `index.meta.json` with its
+`ETag`, and the same two for the themes, `themes.json` and
+`themes.meta.json`), and `downloads\` and `staging\` while an install
+runs; an install removes its own download and staging folder when it ends,
+whether it worked or not.
+
+## The two catalogues
+
+| | Extensions | Themes |
+|---|---|---|
+| File | `index.json` | `themes.json` |
+| Setting | `marketplace.index` | `marketplace.themes` |
+| Default | `https://oliverd25.github.io/cabinetos-marketplace/index.json` | `https://oliverd25.github.io/cabinetos-marketplace/themes.json` |
+| Holds | kinds `plugin` and `tool` | kind `theme` |
+| Shown on | the Extensions page | the theme gallery |
+| Cache | `index.json`, `index.meta.json` | `themes.json`, `themes.meta.json` |
+
+Both are read with the same rules: the same cache and `ETag`, the same trust
+rules, the same `marketplace.allowInsecure` rule, and the same limits. An
+item of the wrong kind in a file (a theme in `index.json`, a plugin in
+`themes.json`) is not offered from that file.
+
+**The transition rule.** The public site served only `index.json`, with the
+themes inside it, until the creator publishes `themes.json`. So that the
+window keeps working in both states:
+
+- When the themes address answers **404** (or, for a folder on this machine,
+  has no `themes.json`), the core offers the theme items of `index.json`
+  as the themes, and its log says so in one line: `themes.json is not
+  there; the theme items of index.json are used instead`. Their downloads
+  are found next to `index.json`.
+- When `themes.json` **exists**, it is the themes. The theme items of
+  `index.json` are ignored, with one log line (`themes.json is there; the
+  theme items of index.json are ignored`), however many there are.
+- Any other failure of the themes address (no network, a damaged file, a
+  500) is an error for the themes catalogue only: the gallery shows the
+  themes already installed and a one-line notice. It is not a reason to use
+  `index.json`: only a 404 means "not published yet".
+
+Once a release with the two files is published, the transition rule can go
+in a later version.
 
 ## The index
 
@@ -84,7 +134,10 @@ its own download and staging folder when it ends, whether it worked or not.
 | `schemaVersion` | `1`. An index with another version is refused whole. |
 | `generatedAt` | When the index was built, ISO 8601 in UTC. |
 | `items[].id` | 1 to 64 lower case letters, digits and `-`, starting with a letter; not a name Windows keeps for a device (`con`, `nul`, `com1`, …). It becomes a file or folder name. |
-| `items[].kind` | `plugin`, `theme` or `tool`. |
+| `items[].kind` | `plugin`, `theme` or `tool`. A plugin or a tool belongs in `index.json`, a theme in `themes.json`. |
+| `items[].appearance` | Themes only, optional: `dark`, `light` or `system`, the theme file's `kind`. The gallery filters on it. |
+| `items[].density` | Themes only, optional: `true` when the theme sets metrics, which makes it a density preset such as Commander Compact. |
+| `items[].tile` | Themes only, optional: `{ "background", "text", "accent" }`, each `#RRGGBB`: the colours the gallery paints the theme's tile with ([themes.md](themes.md), "The gallery's tile"). A theme without it gets a plain tile. |
 | `items[].name`, `description`, `long` | What the card and the detail view show. `long` may be left out. |
 | `items[].author` | `name`, `verified` (default `false`) and `url` (optional). |
 | `items[].version` | `major.minor.patch`. An index may list several versions of one ID. |
@@ -97,9 +150,10 @@ its own download and staging folder when it ends, whether it worked or not.
 | `items[].license` | Its license, for example `MIT`. |
 | `items[].installedVersion` | Left out of an index. The core fills it in when it sends the item to a client: the version installed from the marketplace, if one is. |
 
-An item that does not follow the format (an unknown `kind` from a newer
-index, a missing key, a bad ID, version or hash, a second copy of one ID and
-version) is left out, and the core's log says why; the other items stay.
+An item that does not follow the format (an unknown `kind` or `appearance`
+from a newer index, a missing key, a bad ID, version, hash or tile colour, a
+second copy of one ID and version) is left out, and the core's log says why;
+the other items stay.
 Keys the core does not know are ignored, so a newer index still works.
 
 A client is offered one item per extension: the newest version this core
@@ -200,23 +254,31 @@ install and uninstall holds `.installed.json.lock` in the marketplace
 folder (`LockFileEx`) from its first read of the record to its last write;
 Windows releases it if a core ends.
 
-## The public index
+## The public catalogues
 
 `marketplace.index` defaults to the public index,
 `https://oliverd25.github.io/cabinetos-marketplace/index.json`
-([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)). It is
-GitHub Pages of the separate public repository
+([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)), and
+`marketplace.themes` to `https://oliverd25.github.io/cabinetos-marketplace/themes.json`.
+They are GitHub Pages of the separate public repository
 [cabinetos-marketplace](https://github.com/OliverD25/cabinetos-marketplace),
-which holds `index.json` and the `files\` folder beside it. The index is
-built in this repository and committed in that one:
+which holds `index.json`, `themes.json` and the `files\` folder beside
+them. Both files are built in this repository and committed in that one, by
+one script:
 
 ```text
 powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <cabinetos-marketplace checkout> -Collection -ThemesOnly
 ```
 
 `-ThemesOnly` leaves the fixture plugins out: they are test material, not
-extensions for the public. The first index (2026-09-29) offers 41 themes:
-the five shipped themes and the 36 of the collection.
+extensions for the public. So the public `index.json` has no item yet (no
+real plugin exists), and `themes.json` offers 41 themes: the five shipped
+themes and the 36 of the collection (the first index, 2026-09-29, offered
+the same 41 in `index.json`). **Publishing this changes what older
+versions see**: CabinetOS 0.1.0 and 0.1.1 read `index.json` only, so once
+the new `index.json` replaces the old one they list no theme in their
+marketplace until they update. The 41 themes stay installable by name from
+the new versions, and files already installed are not touched.
 
 A configuration file written before 2026-09-30 may still name the old
 placeholder, `https://marketplace.cabinetos.invalid/index.json`, which can
@@ -225,22 +287,30 @@ public index is used.
 
 ## A local index
 
-`sdk/marketplace/build-index.ps1` builds an index from the fixture plugins
-in `sdk/fixtures/plugins` (each as a zip) and the shipped themes in
-`sdk/themes`, with their hashes, into a folder of your choice:
+`sdk/marketplace/build-index.ps1` builds both catalogues from the fixture
+plugins in `sdk/fixtures/plugins` (each as a zip) and the shipped themes in
+`sdk/themes`, with their hashes, into a folder of your choice. It checks
+every item against the format before it writes, and stops with a message
+that names the item when one is wrong:
 
 ```text
 powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-Extensions]
 cabinetos-cli config set marketplace.index "<folder>"
+cabinetos-cli config set marketplace.themes "<folder>"
 cabinetos-cli market refresh
+cabinetos-cli market refresh --themes
 cabinetos-cli market install hello
 cabinetos-cli plugins list
 cabinetos-cli market uninstall hello
 ```
 
-The shipped themes are in the index too, but installing one is refused
+Set both settings: `marketplace.themes` is the public address until you
+change it, so a local `marketplace.index` alone leaves the themes coming
+from the public site.
+
+The shipped themes are in `themes.json` too, but installing one is refused
 while its file is in the themes folder (trust rule 7). With `-Collection`
-the index also offers the 36 themes of `sdk/themes/collection`
+the catalogue also offers the 36 themes of `sdk/themes/collection`
 ([themes.md](themes.md), "The collection").
 
 With `-Extensions` the index also offers the extensions of `sdk/extensions`:
@@ -257,7 +327,8 @@ extension only when the creator publishes it.
 
 ## The messages
 
-`marketplace_refresh`, `marketplace_search`, `install_extension`,
+`marketplace_refresh` and `marketplace_search` (each with an optional
+`catalogue`, `extensions` or `themes`), `install_extension`,
 `uninstall_extension`, `list_tools`, and the events `install_progress`,
 `install_finished` and `tools_changed`: [ipc.md](ipc.md), "The
 marketplace".
@@ -265,12 +336,18 @@ marketplace".
 ## The command line
 
 ```text
-cabinetos-cli market refresh
-cabinetos-cli market search <query> [--kind plugin|theme|tool]
+cabinetos-cli market refresh [--themes]
+cabinetos-cli market search <query> [--kind plugin|theme|tool] [--themes]
 cabinetos-cli market install <id> [--version <version>]
 cabinetos-cli market uninstall <id>
 cabinetos-cli market tools
 ```
+
+`market refresh` and `market search` list the extensions; with `--themes`
+they list the themes catalogue instead, and a theme's line says its
+appearance (`dark`, `light` or `system`) and `density preset` when it is
+one. `market search --kind theme` asks for the themes without `--themes`.
+`market install` finds the ID in either catalogue.
 
 `market install` shows the download's progress and then what the core did,
 with the version installed now from `install_finished`

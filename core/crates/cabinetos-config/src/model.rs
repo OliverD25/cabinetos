@@ -24,6 +24,11 @@ pub const FORMAT_VERSION: u32 = 1;
 pub const DEFAULT_MARKETPLACE_INDEX: &str =
     "https://oliverd25.github.io/cabinetos-marketplace/index.json";
 
+/// The default `marketplace.themes`: the public themes catalogue, beside
+/// the public index (ADR 0022).
+pub const DEFAULT_MARKETPLACE_THEMES: &str =
+    "https://oliverd25.github.io/cabinetos-marketplace/themes.json";
+
 /// The narrowest a column of `ui.columns` may be set, in pixels.
 pub const MIN_COLUMN_WIDTH: u32 = 24;
 
@@ -653,6 +658,12 @@ pub struct MarketplaceConfig {
     /// `index.json` or of its folder. The core reads it only when a client
     /// asks.
     pub index: String,
+    /// Where the themes catalogue is, `themes.json`: an `https:` URL, a
+    /// `file:` URL, or the path of a `themes.json` or of its folder. The core
+    /// reads it only when the theme gallery asks. While it answers 404 (or
+    /// the file is missing from a local folder), the theme items of
+    /// `index.json` are used instead.
+    pub themes: String,
     /// Also accept a plain `http:` index and downloads, which anyone on the
     /// network could change on the way. For testing only.
     pub allow_insecure: bool,
@@ -662,6 +673,7 @@ impl Default for MarketplaceConfig {
     fn default() -> Self {
         Self {
             index: DEFAULT_MARKETPLACE_INDEX.to_owned(),
+            themes: DEFAULT_MARKETPLACE_THEMES.to_owned(),
             allow_insecure: false,
         }
     }
@@ -817,6 +829,7 @@ mod tests {
         assert!(config.keybindings.is_empty());
         assert_eq!(config.logging.level, LogLevel::Info);
         assert_eq!(config.marketplace.index, DEFAULT_MARKETPLACE_INDEX);
+        assert_eq!(config.marketplace.themes, DEFAULT_MARKETPLACE_THEMES);
         assert!(!config.marketplace.allow_insecure);
         assert!(config.update.check && !config.update.allow_insecure);
         assert!(config.update.auto_install);
