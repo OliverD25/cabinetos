@@ -201,9 +201,11 @@ public class ColumnViewEndToEndTests
             Assert.Equal(1, Field(Assert.Single(again, l => Message(l) == "shell state" && Text(l, "label") == "start"), "pane0_listings").GetInt32());
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-second"), "crash-*.json"));
         }
-        catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
+        catch (Xunit.Sdk.XunitException error)
         {
-            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe first window's last log lines (times in UTC):\n{WindowLog.Last(seen, 90, fieldChars: 420)}");
+            // A window that never reached its last snapshot has no "seen" yet: its log is read now.
+            var window = seen.Count > 0 ? seen : LogFiles.Ui(Path.Combine(root, "logs-first"));
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe first window's last log lines (times in UTC):\n{WindowLog.Last(window, 90, fieldChars: 420)}");
         }
         finally
         {

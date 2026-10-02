@@ -53,7 +53,14 @@ public class RailEndToEndTests
         // Waits for the last snapshot, closes the window the way a user does and returns the UI's log lines.
         public async Task<List<string>> FinishAsync(string name, Process process, string lastShot)
         {
-            await WaitForAsync(() => File.Exists(Shot(name, lastShot)), $"the {name} window's last snapshot", TimeSpan.FromSeconds(90));
+            try
+            {
+                await WaitForAsync(() => File.Exists(Shot(name, lastShot)), $"the {name} window's last snapshot", TimeSpan.FromSeconds(90));
+            }
+            catch (Xunit.Sdk.XunitException error)
+            {
+                throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(LogFiles.Ui(Path.Combine(root, "logs-" + name)), 60)}");
+            }
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));

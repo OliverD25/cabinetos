@@ -129,7 +129,9 @@ public class KeptListingEndToEndTests
         }
         catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
         {
-            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(seen, 90)}");
+            // A window that never reached its last snapshot has no "seen" yet: its log is read now.
+            var window = seen.Count > 0 ? seen : Directory.Exists(Path.Combine(root, "logs")) ? Lines(Path.Combine(root, "logs"), "ui.*.jsonl") : new List<string>();
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(window, 90)}");
         }
         finally
         {
