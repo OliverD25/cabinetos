@@ -568,9 +568,12 @@ signing."
 The steps that put 0.1.0 in front of people, in order. Each one is
 outward-facing, so they are the creator's: no session runs them. Prepared on
 2026-10-02 in Phase 22, unit 6
-([report](log/2026-10-02/public-repository-preparation.md)); none of them
-has run yet. Paste each block whole into the WSL terminal. A block stops at
-its first failing command.
+([report](log/2026-10-02/public-repository-preparation.md)). Step (a) ran on
+2026-10-02 at 21:36, and the creator's word of the same evening ("do this by
+yourself") handed steps (b) and (c) to the planning session, which runs them
+once Phase 22's units 1 to 3 are on `main`; (d) and (e) stay the creator's
+until they say otherwise. Paste each block whole into the WSL terminal. A
+block stops at its first failing command.
 
 Signing is not a step for 0.1.0: no certificate exists, and code signing
 (the SignPath card on the desk) comes after the repository is public. If a
