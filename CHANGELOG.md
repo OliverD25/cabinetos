@@ -6,6 +6,12 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-02
+
+### Changed
+
+- The setup file installs a missing prerequisite itself: it downloads Microsoft's installer for the Windows App Runtime, the WebView2 Runtime or the .NET 10 runtime, runs it, and checks again. Before, it named the winget command and stopped. The .NET runtime installs for the whole PC, so Windows asks for administrator rights for it; a silent setup without them still stops and names the winget command. The winget package is now this setup file instead of the zip.
+
 ## [0.1.0] - 2026-10-02
 
 Code signing policy: see the [README](https://github.com/OliverD25/cabinetos#code-signing-policy).
@@ -128,5 +134,6 @@ The first version. How it is built, signed and published:
 - A plugin's folders and the folders a pane opens are compared in their long form, so a short 8.3 spelling such as `C:\Users\CABINE~1\AppData\Local\Temp` is the same folder as `C:\Users\cabinetos\AppData\Local\Temp`. Before, the host compared the text: the Agent extension was never told about a pane that opened a folder in the short form (the preview did not show), and a plugin could not watch a folder under its roots by that name. A root written in the short form in `plugin.json` counts too, and a path that does not exist yet is judged by the folder it will be in.
 - `CabinetOS.exe` has its own icon, the blue folder with the terminal badge, in the taskbar, in Explorer and in the Alt+Tab list. Before, Windows showed the generic program icon for the file itself; only the setup's shortcuts and the Settings > Apps entry had the icon. `ui/CabinetOS/Assets/CabinetOS.ico` is committed (made by `build/make-icon.ps1` from the design's size cuts) and the release ships that file.
 
-[Unreleased]: https://github.com/OliverD25/cabinetos/compare/v0.1.0...main
+[Unreleased]: https://github.com/OliverD25/cabinetos/compare/v0.1.1...main
+[0.1.1]: https://github.com/OliverD25/cabinetos/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/OliverD25/cabinetos/releases/tag/v0.1.0

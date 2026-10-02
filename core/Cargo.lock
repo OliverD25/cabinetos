@@ -176,7 +176,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cabinetos-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -199,14 +199,14 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-cli-args"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
 ]
 
 [[package]]
 name = "cabinetos-commands"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-protocol",
  "thiserror",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-config"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-commands",
  "cabinetos-config",
@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "cabinetos-commands",
@@ -263,7 +263,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-diag"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-protocol",
  "crossbeam-channel",
@@ -281,7 +281,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-fs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-ipc",
  "cabinetos-protocol",
@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-index"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hashbrown 0.17.1",
  "memchr",
@@ -309,7 +309,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-indexer"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-diag",
  "cabinetos-index",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-ipc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-protocol",
  "rand",
@@ -342,7 +342,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-jobs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-fs",
  "cabinetos-protocol",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-market"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-commands",
  "cabinetos-protocol",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-plugins"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "cabinetos-commands",
@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-protocol",
  "schemars",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-secrets"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror",
  "windows",
@@ -415,7 +415,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-terminal"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-ipc",
  "cabinetos-protocol",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-themes"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-protocol",
  "serde_json",
@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "cabinetos-update"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cabinetos-fs",
  "cabinetos-market",
