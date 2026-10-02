@@ -6,13 +6,15 @@ using CabinetOS.Tests.Support;
 namespace CabinetOS.Tests;
 
 /// <summary>
-/// Unit 1 of the terminal sprint on a real window and core (docs/ui.md, "The terminal"): sessions bound to a pane,
-/// Ctrl+` summoning the pane's own session, the Zero-Hijack rule, the mode toggle with the core's event, and the
-/// terminal's tab keys. The snapshot step <c>key:</c> sends a key as key messages to the window's input window, or
+/// Units 1 and 2 of the terminal sprint on a real window and core (docs/ui.md, "The terminal"): sessions bound to a
+/// pane, Ctrl+` summoning the pane's own session, the Zero-Hijack rule, the mode toggle with the core's event, the
+/// terminal's tab keys, and the prompt hook: a linked shell follows its pane at its next prompt, a locked one stays,
+/// and the caption shows the folder each shell reports. The snapshot step <c>key:</c> sends a key as key messages to the window's input window, or
 /// through DevTools into the terminal's page when the page has the keyboard, so the page's own key path runs.
 /// <c>terminal-state:</c> logs the header's tabs ("*1 cmd [Left] Locked", the shown one marked) and who has the
-/// keyboard. The shells are cmd (always on Windows) and a cmd profile that says it is linkable. Opt-in with
-/// <c>CABINETOS_UI_E2E=1</c>, like the other end-to-end tests.
+/// keyboard. The shells are cmd (always on Windows), a cmd profile that says it is linkable, and Windows PowerShell
+/// (always on Windows too), which gets the prompt hook. Opt-in with <c>CABINETOS_UI_E2E=1</c>, like the other
+/// end-to-end tests.
 /// </summary>
 public class TerminalEndToEndTests
 {
@@ -281,11 +283,114 @@ public class TerminalEndToEndTests
         }
     }
 
+    /// <summary>
+    /// The prompt hook in the window: a PowerShell session linked by its tab's toggle follows its pane's folder when
+    /// Enter draws its next prompt, and the caption names the folder the shell reports ("in sub"). Nothing reaches
+    /// the shell until it draws a prompt.
+    /// </summary>
+    [Fact]
+    public async Task A_linked_session_follows_its_pane_at_the_next_prompt_and_the_caption_shows_it()
+    {
+        var (run, root, data) = Prepare("terminal-follow");
+        try
+        {
+            var sub = Path.Combine(data, "sub folder");
+            Directory.CreateDirectory(sub);
+            var process = run.Start("follow", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "cmd:terminal.new {\"profile\":\"ps\"}",
+                "until:terminals:1",
+                $"until:terminal-folder:{data}",
+                "terminal-state:start",
+                "click:Locked, ps on the left pane",
+                "wait:1200",
+                "terminal-state:linked",
+                $"path:{sub}",
+                "wait:1500",
+                "terminal-state:moved",
+                "terminal:{enter}",
+                $"until:terminal-folder:{sub}",
+                "terminal-state:followed",
+                "shot:done"));
+            var logs = await run.FinishAsync("follow", process, "done");
+            var state = States(logs);
+            string Caption(string label) => Field(state[label], "caption").GetString()!;
+            string? Folder(string label) => Field(state[label], "folder").GetString();
+
+            Assert.True(Folder("start") == data, "the shell reported its first folder" + Evidence(logs));
+            Assert.Equal("in data", Caption("start"));
+            Assert.EndsWith(" ps [Left] Linked", Field(state["linked"], "tabs").GetString(), StringComparison.Ordinal);
+            // The pane moved, but the shell has not drawn a prompt since: nothing reached it.
+            Assert.Equal((data, "in data"), (Folder("moved"), Caption("moved")));
+            Assert.True(Folder("followed") == sub, "Enter's prompt followed the pane" + Evidence(logs));
+            Assert.Equal("in sub folder", Caption("followed"));
+            var reported = logs.Where(l => Message(l) == "terminal folder changed").Select(l => Field(l, "folder").GetString()).ToList();
+            Assert.Equal([data, sub], reported);
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
+    /// A locked PowerShell session stays where it is when its pane moves, also after Enter; a <c>cd</c> of the
+    /// user's own moves it, and the caption follows the shell's report.
+    /// </summary>
+    [Fact]
+    public async Task A_locked_session_stays_and_the_caption_follows_the_user_s_own_cd()
+    {
+        var (run, root, data) = Prepare("terminal-locked");
+        try
+        {
+            var sub = Path.Combine(data, "sub");
+            var own = Path.Combine(data, "own");
+            Directory.CreateDirectory(sub);
+            Directory.CreateDirectory(own);
+            var process = run.Start("locked", string.Join(';',
+                "size:1200x700",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "cmd:terminal.new {\"profile\":\"ps\"}",
+                "until:terminals:1",
+                $"until:terminal-folder:{data}",
+                $"path:{sub}",
+                "wait:800",
+                "terminal:{enter}",
+                "wait:2500",
+                "terminal-state:stayed",
+                $"terminal:Set-Location -LiteralPath '{own}'{{enter}}",
+                $"until:terminal-folder:{own}",
+                "terminal-state:own",
+                "shot:done"));
+            var logs = await run.FinishAsync("locked", process, "done");
+            var state = States(logs);
+
+            Assert.EndsWith(" ps [Left] Locked", Field(state["stayed"], "tabs").GetString(), StringComparison.Ordinal);
+            Assert.True(Field(state["stayed"], "folder").GetString() == data, "the locked shell stayed" + Evidence(logs));
+            Assert.Equal("in data", Field(state["stayed"], "caption").GetString());
+            Assert.True(Field(state["own"], "folder").GetString() == own, "the user's own cd was reported" + Evidence(logs));
+            Assert.Equal("in own", Field(state["own"], "caption").GetString());
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
     // The lines that say what the keys and the terminal did, for the message of a failed assertion.
     private static string Evidence(List<string> logs) => "\n" + string.Join('\n', logs
         .Where(l => Message(l) is "key sent" or "key sent to a page" or "command executed" or "a key the page did not get" or "keyboard owner"
             or "terminal summoned" or "terminal state" or "terminal tab shown" or "terminal session opened" or "a page has the keyboard"
-            or "terminal mode changed" or "notice shown")
+            or "terminal mode changed" or "terminal folder changed" or "notice shown")
         .Select(l => l.Length > 360 ? l[..360] : l));
 
     private static Dictionary<string, string> States(List<string> logs) =>
@@ -357,8 +462,9 @@ public class TerminalEndToEndTests
         }
     }
 
-    // A window's setting up: dual panes on a data folder, and two terminal profiles: cmd, which is not linkable, and a
-    // cmd that says it is (the hook of unit 2 does not exist yet, so the mode changes nothing in the shell).
+    // A window's setting up: dual panes on a data folder, and three terminal profiles: cmd, which is not linkable, a
+    // cmd that says it is (cmd gets no prompt hook, so its mode changes nothing in the shell), and Windows PowerShell,
+    // which gets the prompt hook.
     private static (Run Run, string Root, string Data) Prepare(string purpose, string defaultProfile = "cmd")
     {
         if (Environment.GetEnvironmentVariable(OptIn) != "1")
@@ -383,7 +489,8 @@ public class TerminalEndToEndTests
             { "version": 1, "ui": { "dualPane": true },
               "terminal": { "defaultProfile": "{{defaultProfile}}", "profiles": [
                 { "name": "cmd", "command": "cmd.exe" },
-                { "name": "hooked", "command": "cmd.exe", "linkable": true } ] } }
+                { "name": "hooked", "command": "cmd.exe", "linkable": true },
+                { "name": "ps", "command": "powershell.exe", "args": ["-NoLogo", "-NoProfile"] } ] } }
             """);
         return (new Run(root, exe, core), root, data);
     }
