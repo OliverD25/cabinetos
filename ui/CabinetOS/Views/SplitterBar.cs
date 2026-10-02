@@ -11,7 +11,9 @@ namespace CabinetOS.Views;
 /// The 8 px gap between the panes and the Tool Dock, which also moves it: a
 /// drag reports how far the pointer went from where it was pressed, and the
 /// window turns that into the dock's size. A thin accent line shows while
-/// the pointer is over it.
+/// the pointer is over it. The same bar is the divider between the two
+/// panes and the one between the sidebar and the panes (a double-click on
+/// those two gives their default sizes back).
 /// </summary>
 public sealed partial class SplitterBar : Grid
 {
@@ -32,6 +34,11 @@ public sealed partial class SplitterBar : Grid
         PointerMoved += OnPointerMoved;
         PointerReleased += (_, e) => EndDrag(e.Pointer);
         PointerCaptureLost += (_, e) => EndDrag(e.Pointer);
+        DoubleTapped += (_, e) =>
+        {
+            e.Handled = true;
+            DoubleClicked?.Invoke();
+        };
     }
 
     /// <summary>A drag started.</summary>
@@ -42,6 +49,9 @@ public sealed partial class SplitterBar : Grid
 
     /// <summary>A drag ended: the button was released, or the pointer was lost.</summary>
     public event Action? DragCompleted;
+
+    /// <summary>A double-click on the bar. Its first click was a drag that moved nothing.</summary>
+    public event Action? DoubleClicked;
 
     /// <summary><c>Horizontal</c>: a bar under the panes that moves up and down; <c>Vertical</c>: one beside them.</summary>
     public Orientation Orientation

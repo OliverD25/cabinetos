@@ -210,6 +210,33 @@ public class SidebarSizingTests
         Assert.Equal(150U, SidebarSizing.ToSetting(10));
         Assert.Equal(480U, SidebarSizing.ToSetting(9000));
     }
+
+    // Since Phase 24 the classic and right layouts have the divider too (docs/ui.md, "The sidebar's divider"):
+    // the width is the design's clamp until one is dragged, in every layout, and the same limits hold.
+    [Theory]
+    [InlineData(600, 180)]
+    [InlineData(1000, 200)]
+    [InlineData(1400, 224)]
+    [InlineData(2400, 224)]
+    public void Without_a_dragged_width_every_layout_shows_the_default_looks_design_width(double window, double design)
+    {
+        var metrics = Core.Themes.MetricsMapper.Default;
+        Assert.Equal(design, metrics.SidebarWidth(window));
+        Assert.Equal(design, SidebarSizing.Effective(null, metrics.SidebarWidth(window), window));
+    }
+
+    [Fact]
+    public void A_dragged_width_wins_over_the_design_and_follows_the_windows_limits_in_every_layout()
+    {
+        var metrics = Core.Themes.MetricsMapper.Default;
+        Assert.Equal(300, SidebarSizing.Effective(300, metrics.SidebarWidth(1400), 1400));
+        // The window shrinks: half of it is the most, and 150 px the least.
+        Assert.Equal(300, SidebarSizing.Effective(400, metrics.SidebarWidth(600), 600));
+        Assert.Equal(150, SidebarSizing.Effective(100, metrics.SidebarWidth(1400), 1400));
+        // Dragging it wider than the design's width keeps it open; under 150 px closes it, as in the rail layout.
+        Assert.Equal(new SidebarDrag(false, 260), SidebarSizing.Drag(224 + 36, 1400));
+        Assert.True(SidebarSizing.Drag(149, 1400).Close);
+    }
 }
 
 /// <summary>Which hidden web page of the sidebar stays awake.</summary>

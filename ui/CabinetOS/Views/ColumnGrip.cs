@@ -48,6 +48,8 @@ public sealed partial class ColumnGrip : Grid
         PointerMoved += OnPointerMoved;
         PointerReleased += (_, e) => EndPointerDrag(e.Pointer);
         PointerCaptureLost += (_, e) => EndPointerDrag(e.Pointer);
+        // A click on a grip resizes and never sorts: it does not reach the header row, which sorts by the column under a click.
+        Tapped += (_, e) => e.Handled = true;
         DoubleTapped += (_, e) =>
         {
             e.Handled = true;

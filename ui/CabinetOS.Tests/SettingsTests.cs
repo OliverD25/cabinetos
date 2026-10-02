@@ -68,6 +68,41 @@ public class SettingsTests
     }
 
     [Fact]
+    public void Ui_paneSplit_is_the_left_panes_share_and_null_is_equal_panes()
+    {
+        Assert.Null(UiSettings.Defaults.PaneSplitShare);
+        Assert.Null(UiSettings.FromConfig(JsonDocument.Parse("{}").RootElement).PaneSplitShare);
+
+        using var split = JsonDocument.Parse("""{"version":1,"ui":{"paneSplit":0.375}}""");
+        Assert.True(Schemas.Config.Evaluate(split.RootElement).IsValid);
+        Assert.Equal(0.375, UiSettings.FromConfig(split.RootElement).PaneSplitShare);
+
+        using var equal = JsonDocument.Parse("""{"version":1,"ui":{"paneSplit":null}}""");
+        Assert.True(Schemas.Config.Evaluate(equal.RootElement).IsValid);
+        Assert.Null(UiSettings.FromConfig(equal.RootElement).PaneSplitShare);
+
+        // The schema refuses what the core refuses, and the window reads none of it.
+        using var wide = JsonDocument.Parse("""{"ui":{"paneSplit":0.9}}""");
+        Assert.False(Schemas.Config.Evaluate(wide.RootElement).IsValid);
+        Assert.Null(UiSettings.FromConfig(wide.RootElement).PaneSplitShare);
+    }
+
+    [Fact]
+    public async Task A_number_with_decimals_and_a_null_are_written_through_the_core_as_json()
+    {
+        var core = new FakeChannel(_ => new OkReply());
+        var writer = new SettingsWriter(core);
+
+        Assert.True(await writer.SetNumberAsync("ui.paneSplit", 0.375));
+        Assert.True(await writer.SetNullAsync("ui.paneSplit"));
+
+        var share = Assert.IsType<SetValueRequest>(core.Requests[0]);
+        Assert.Equal(("ui.paneSplit", "0.375"), (share.Path, share.Value.GetRawText()));
+        var reset = Assert.IsType<SetValueRequest>(core.Requests[1]);
+        Assert.Equal(("ui.paneSplit", JsonValueKind.Null), (reset.Path, reset.Value.ValueKind));
+    }
+
+    [Fact]
     public async Task A_setting_is_written_through_the_core_as_json()
     {
         var core = new FakeChannel(_ => new OkReply());

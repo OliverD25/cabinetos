@@ -164,6 +164,8 @@ public sealed partial class MainWindow : Window
         SetUpMarket();
         SetUpRail();
         SetUpColumns();
+        SetUpHeaderSort();
+        SetUpPaneSplit();
         SetUpCompact();
 
         Palette.Model = _palette;
@@ -591,6 +593,12 @@ public sealed partial class MainWindow : Window
                 case "columns" or "column-drag" or "column-fit":
                     RunColumnStep(step.Kind, step.Argument);
                     break;
+                case "header-click" or "header-doubleclick" or "sort-state":
+                    RunHeaderStep(step.Kind, step.Argument);
+                    break;
+                case "pane-divider" or "pane-divider-reset" or "sidebar-divider-reset" or "pane-split":
+                    await RunDividerStepAsync(step.Kind, step.Argument);
+                    break;
                 case "column-view" or "column-open" or "column-key" or "column-click":
                     await RunColumnViewStepAsync(step.Kind, step.Argument);
                     break;
@@ -866,6 +874,7 @@ public sealed partial class MainWindow : Window
     {
         var configReads = _configReads;
         var configErrors = _configErrors;
+        var sortsDone = _sortsDone;
         for (var waited = 0; waited < 20_000; waited += 100)
         {
             var met = condition switch
@@ -919,6 +928,12 @@ public sealed partial class MainWindow : Window
                 _ when condition.StartsWith("sidebar-view:", StringComparison.Ordinal) => _sidebarView == condition["sidebar-view:".Length..],
                 // The rail's settings (its order, the sidebar's width and view) have all been written to the core: no write is out.
                 "rail-saved" => _railWrites == 0 && _widthWrites == 0 && _viewWrites == 0,
+                // The two dividers' widths have been written to the core: no write of ui.paneSplit or ui.sidebarWidth is out.
+                "split-saved" => _paneSplitWrites == 0 && _widthWrites == 0,
+                // A sort of a pane's listing (a heading's click, a key, a double-click taking one back) finished after this step began.
+                "sorted" => _sortsDone > sortsDone,
+                // pane-split:<share> or pane-split:none: ui.paneSplit is that share (or null) as the window knows it, which an edit of the file brings.
+                _ when condition.StartsWith("pane-split:", StringComparison.Ordinal) => PaneSplitIs(condition["pane-split:".Length..]),
                 // The configuration the window holds has what a test wrote or saved, which until:config cannot say: the window reads the
                 // configuration for its own writes too (the tabs it saves a second after the last folder it opened), and that read
                 // ends the wait. file-menu-rows:<n>: the file menu has n rows; shell-menu: contextMenu.shellMenu is on; command:<id>:
@@ -1132,6 +1147,7 @@ public sealed partial class MainWindow : Window
         }
         ApplyStoredDockSize(settings);
         ApplyStoredSplit(settings, previous, firstStart);
+        ApplyStoredPaneSplit(settings, previous, firstStart);
         ApplyRailSettings(settings, previous, firstStart);
         ApplyColumnSettings(settings);
         ApplyCompactSettings(settings, previous);
@@ -1619,6 +1635,7 @@ public sealed partial class MainWindow : Window
         RegisterMarketCommands();
         RegisterRailCommands();
         RegisterColumnCommands();
+        RegisterPaneSplitCommands();
         RegisterCompactCommands();
         RegisterColumnViewCommands();
         RegisterAboutCommand();
@@ -2434,8 +2451,8 @@ public sealed partial class MainWindow : Window
                 _ = RequestSafelyAsync(new PreviewCancelRequest(dropped));
             }
         }
-        RightColumn.Width = dual ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         RightSide.Visibility = dual ? Visibility.Visible : Visibility.Collapsed;
+        // The columns' widths (the panes' shares) and the divider between the panes follow, in ApplyPaneSplit.
         ApplyPaneGaps();
         UpdateDualButton();
         foreach (var pane in _panes)

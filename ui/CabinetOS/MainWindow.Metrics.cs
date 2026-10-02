@@ -131,6 +131,8 @@ public sealed partial class MainWindow
         var overlap = gap == 0 && WindowMetrics.Chrome.Hairlines ? 1 : 0;
         LeftSide.Margin = _dual ? new Thickness(0, 0, gap / 2, 0) : new Thickness(0);
         RightSide.Margin = new Thickness((gap / 2) - overlap, 0, 0, 0);
+        // The columns' shares and the divider over the gap (MainWindow.PaneSplit.cs).
+        ApplyPaneSplit();
     }
 
     // The status bar's layout: a density preset's name before it ("Commander Compact · Terminal: bottom").

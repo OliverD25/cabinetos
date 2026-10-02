@@ -724,8 +724,8 @@ public sealed partial class MainWindow
         }
     }
 
-    // Ctrl+F3 to Ctrl+F6: the active pane's own order, sent with its listings; the same key again
-    // reverses it. The other pane and panes.sort stay as they are.
+    // Ctrl+F3 to Ctrl+F6, and a click on a column heading (MainWindow.Headers.cs): the active pane's own order, sent with its
+    // listings; the same key again reverses it. The other pane and panes.sort stay as they are.
     private async Task SortActiveAsync(string key, CommandInvocation invocation)
     {
         var pane = Active;
@@ -739,7 +739,7 @@ public sealed partial class MainWindow
             return;
         }
         var sort = PaneSort.Next(pane.EffectiveSort, key);
-        if (await pane.SortAsync(sort, invocation.RequestId))
+        if (await SortPaneAsync(pane, sort, invocation.RequestId))
         {
             ShowNotice($"Sorted by {PaneSort.Describe(sort)}.");
         }

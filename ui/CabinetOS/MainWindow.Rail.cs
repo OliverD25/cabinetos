@@ -74,6 +74,7 @@ public sealed partial class MainWindow
         };
         SidebarSplitter.Dragged += delta => ResizeSidebar(_sidebarDragStart + delta);
         SidebarSplitter.DragCompleted += EndSidebarDrag;
+        SidebarSplitter.DoubleClicked += ResetSidebarWidth;
 
         // The Search view's field drives the search (the command bar's field is gone since Phase 16).
         SearchPanelView.QueryChanged += SetSearchText;
@@ -120,17 +121,14 @@ public sealed partial class MainWindow
 
     private void ReapplyWidths() => UpdateWidths(_windowWidth > 0 ? _windowWidth : RootGrid.ActualWidth);
 
-    // The sidebar's width: the design's clamp, or in the rail layout the width the user dragged it to.
-    private double SidebarWidthFor(double windowWidth)
-    {
-        var design = WindowMetrics.Current.SidebarWidth(windowWidth);
-        return _railLayout ? SidebarSizing.Effective(_sidebarWidth, design, windowWidth) : design;
-    }
+    // The sidebar's width, in every layout: the design's clamp, or the width the user dragged the divider to.
+    private double SidebarWidthFor(double windowWidth) =>
+        SidebarSizing.Effective(_sidebarWidth, WindowMetrics.Current.SidebarWidth(windowWidth), windowWidth);
 
     // What shows in the sidebar's column, and what the rail says, after any change of the layout, the open state or the view.
     private void UpdateSidebarChrome()
     {
-        SidebarSplitter.Visibility = _railLayout && _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
+        SidebarSplitter.Visibility = _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
         var explorer = _railLayout ? _sidebarView == RailModel.Explorer : !_searchInSidebar;
         SidebarView.Visibility = explorer ? Visibility.Visible : Visibility.Collapsed;
         var search = _railLayout ? _sidebarView == RailModel.Search : _searchInSidebar;
@@ -466,6 +464,18 @@ public sealed partial class MainWindow
         _ = PersistSidebarWidthAsync(width);
     }
 
+    // A double-click on the divider: the design's width again, and null in the file. One that changes nothing writes nothing.
+    private void ResetSidebarWidth()
+    {
+        if (_sidebarWidth is null)
+        {
+            return;
+        }
+        _sidebarWidth = null;
+        ReapplyWidths();
+        _ = PersistSidebarWidthResetAsync();
+    }
+
     // ----- What the rail keeps in the configuration (ui.rail, ui.sidebarWidth, ui.sidebarView) -----
 
     private void OnRailMoveRequested(string id, int delta)
@@ -510,6 +520,19 @@ public sealed partial class MainWindow
         try
         {
             await _settingsWriter.SetAsync("ui.sidebarWidth", SidebarSizing.ToSetting(width));
+        }
+        finally
+        {
+            _widthWrites--;
+        }
+    }
+
+    private async Task PersistSidebarWidthResetAsync()
+    {
+        _widthWrites++;
+        try
+        {
+            await _settingsWriter.SetNullAsync("ui.sidebarWidth");
         }
         finally
         {

@@ -22,6 +22,7 @@ namespace CabinetOS.Core.Settings;
 /// <see cref="CompactOverlay"/> is <c>ui.compactOverlay</c>: the drawer's size the user last resized it to, or null for 480 by 640.
 /// <see cref="TerminalSplit"/> is <c>terminal.split</c>: whether the Tool Dock is split under the two panes.
 /// <see cref="TerminalRestore"/> is <c>terminal.restore</c>: whether the terminal tabs come back after a restart (the first show of the dock).
+/// <see cref="PaneSplitShare"/> is <c>ui.paneSplit</c>: the left pane's share of the two panes' width, 0.2 to 0.8, or null for equal.
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -43,7 +44,8 @@ public sealed record UiSettings(
     bool FolderSizes = false,
     CompactSize? CompactOverlay = null,
     bool TerminalSplit = false,
-    bool TerminalRestore = true)
+    bool TerminalRestore = true,
+    double? PaneSplitShare = null)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -78,7 +80,8 @@ public sealed record UiSettings(
             Bool(panes, "folderSizes") ?? Defaults.FolderSizes,
             CompactOverlayLayout.FromConfig(config),
             Bool(Section(config, "terminal"), "split") ?? Defaults.TerminalSplit,
-            Bool(Section(config, "terminal"), "restore") ?? Defaults.TerminalRestore);
+            Bool(Section(config, "terminal"), "restore") ?? Defaults.TerminalRestore,
+            PaneSplit.FromConfig(config));
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).

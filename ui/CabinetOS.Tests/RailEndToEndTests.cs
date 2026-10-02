@@ -127,7 +127,8 @@ public class RailEndToEndTests
             Assert.Equal(layout, Field(start, "layout").GetString());
             Assert.Equal(rail, Field(start, "rail_visible").GetBoolean());
             Assert.Equal(rail, Field(start, "tree_visible").GetBoolean());
-            Assert.Equal(rail, Field(start, "splitter_visible").GetBoolean());
+            // The divider is in every layout since Phase 24 (docs/ui.md, "The activity rail and the sidebar").
+            Assert.True(Field(start, "splitter_visible").GetBoolean());
             Assert.True(Field(start, "sidebar_open").GetBoolean());
             // Today's sidebar: the design's clamp(180 px, 20 %, 224 px) in a window 1400 px wide, in every layout.
             Assert.Equal(224, Field(start, "sidebar_width").GetInt32());

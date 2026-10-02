@@ -417,8 +417,11 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// <summary>The order the listing is in: the pane's own, else <c>panes.sort</c>.</summary>
     public SortSpec EffectiveSort => _sort ?? _defaultSort;
 
-    /// <summary>Lists the folder again in <paramref name="sort"/>, keeping the focused and the marked entries.</summary>
-    public async Task<bool> SortAsync(SortSpec sort, string? requestId = null)
+    /// <summary>
+    /// Lists the folder again in <paramref name="sort"/>, keeping the focused and the marked entries; null
+    /// takes the pane's own order away, which leaves it to <c>panes.sort</c>.
+    /// </summary>
+    public async Task<bool> SortAsync(SortSpec? sort, string? requestId = null)
     {
         var previous = _sort;
         _sort = sort;
