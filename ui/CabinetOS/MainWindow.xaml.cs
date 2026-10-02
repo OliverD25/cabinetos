@@ -856,6 +856,8 @@ public sealed partial class MainWindow : Window
                 "tree" => TreeFollowsActiveFolder(),
                 // The right-click menu is on screen (a newer one no longer waits for the one before it), or it is gone.
                 "menu" => _contextMenu.IsSettled,
+                // Its place has been measured and logged too ("context menu placed"): a few dispatcher turns after "menu".
+                "menu-placed" => _contextMenu.IsSettled && _menuPlaced,
                 "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,
