@@ -1522,11 +1522,15 @@ configuration says where it is; the core reads it only when a client asks.
 ## Updates
 
 The core updates its own install: it reads a channel's `latest.json`,
-downloads the release's zip, checks its SHA-256, unpacks it, and at the
-user's word swaps it into the install folder, keeping the version before
-for a rollback ([release.md](release.md), "Updates";
-[ADR 0014](decisions/0014-in-app-updates.md)). The settings are `update.*`
-in the configuration ([config.md](config.md)).
+downloads the release's zip, checks its SHA-256, unpacks it, and swaps it
+into the install folder, keeping the version before for a rollback: at
+once with `update.autoInstall` (the default), else at the user's word
+([release.md](release.md), "Updates";
+[ADR 0014](decisions/0014-in-app-updates.md),
+[ADR 0018](decisions/0018-setup-file-and-silent-updates.md)). The settings
+are `update.*` in the configuration ([config.md](config.md)). The messages
+are the same either way; protocol 14 brought them, and the automatic swap
+changed none of them.
 
 ```json
 {"id":"01M…","type":"update_status"}
@@ -1586,17 +1590,27 @@ in the configuration ([config.md](config.md)).
   times a second and always once when it is complete; checks its SHA-256
   (a mismatch deletes it: `hash_mismatch`); unpacks it; and checks that
   its `release.json` names the same version and that `CabinetOS.exe` and
-  `cabinetos-core.exe` are there.
+  `cabinetos-core.exe` are there. With `update.autoInstall` it goes on with
+  the swap of `update_apply` in the same step: the states are
+  `downloading`, `applying`, `ready` (or `failed`), never `downloaded`, and
+  the reply is the state after the swap. A download staged earlier and not
+  swapped (a swap that failed, or one made with the setting off) is
+  swapped by the next `update_download`, and by the daily check.
 - `update_apply` moves every file of the install folder into `previous\`
   inside it (a running program's files can be renamed), copies the new
   ones in, carries the installer's record over and updates the Settings >
-  Apps entry. When a move or a copy fails half way, everything goes back
-  and the state is `failed` with the reason; the old version runs on. The
-  window then starts the new `CabinetOS.exe` from `install_dir` and
-  closes; its new core confirms the swap in the state file at its start.
+  Apps entries (install.ps1's `CabinetOS` and the setup file's
+  `CabinetOS_is1`, each only when it names this folder). The setup file's
+  uninstaller (`unins000.exe`, `unins000.dat`) stays where it is. When a
+  move or a copy fails half way, everything goes back and the state is
+  `failed` with the reason; the old version runs on. After the user's
+  Restart now the window starts the new `CabinetOS.exe` from `install_dir`
+  and closes; its new core confirms the swap in the state file at its
+  start.
 - `update_rollback` is the same swap from `previous\`, which is then gone.
-- `update_snooze` records "not before a day from now"; the window opens no
-  update dialog before `snoozed_until_ms`.
+- `update_snooze` records "not before a day from now"; with
+  `update.autoInstall: false` the window opens no update dialog before
+  `snoozed_until_ms`.
 - A development build (no `release.json` next to the core), an all-users
   install and a folder the user cannot change are `not_updatable`: the
   core checks nothing, writes nothing, and answers every step but

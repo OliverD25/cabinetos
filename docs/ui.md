@@ -433,6 +433,76 @@ The screenshot the script takes at the end is made inside the VM, from
 its own desktop: VirtualBox's own screenshot of a headless VM with 3D
 acceleration is a stale frame.
 
+**The install check** (Phase 21, unit 6;
+[ADR 0018](decisions/0018-setup-file-and-silent-updates.md)) proves a
+release's whole life in the same VM with nobody at either keyboard:
+`vm-install-check.ps1` (Windows PowerShell 5.1 or 7; the builds need
+PowerShell 7 and Inno Setup 6.7). Its five steps:
+
+1. On this PC, two real releases: first the next patch version with
+   `build\release.ps1 -NoSetup`, with the version raised in
+   `core\Cargo.toml`, `core\Cargo.lock` and `ui\Directory.Build.props`
+   for that build only and written back byte for byte after it (the script
+   refuses to start while any of the three has uncommitted changes); then
+   this version with its setup file. The next version's zip is staged as an
+   update feed in `_io\update-test\stable` (`latest.json` for a `file:`
+   source, its notes, the zip), and the setup file is copied to
+   `_io\install-check`. A copy of the zip with only its `release.json`
+   changed would not do: its programs would report the old version, and
+   the restart could not prove the new one runs. Before each build the
+   three programs' `main.rs` get a newer time, so cargo builds them again
+   for that version: without it, this version's release once took the next
+   version's programs from `core\target\release`. Each release folder's
+   `cabinetos-cli --version` is checked, also with `-SkipBuild`, which
+   takes the files of an earlier run. About 15 minutes, more after a
+   change to the core.
+2. In the VM, `vm-install-guest.ps1` (which travels through
+   `_io\install-check` with its arguments, so the guest command stays
+   short) removes an earlier run's install, runs the setup with
+   `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=X:\_io\vm\setup-<time>.log`,
+   and checks the install folder, the Start Menu shortcut and the
+   `CabinetOS_is1` entry with its values.
+3. `livecheck.ps1 -Exe <the installed CabinetOS.exe> -Core <its core>
+   -Strict -Virtual`, from a copy of the repository's tree on the VM's
+   disk (`C:\cabinetos\install-tree`), output in
+   `run-<time>-install-vm.txt`. `%TEMP%` is given in its long form
+   (`C:\Users\cabinetos\...`, not `C:\Users\CABINE~1\...`): the core
+   compares the Agent extension's paths with its root `%USERPROFILE%` as
+   text, and section 14 failed on the short form. `-SkipLiveCheck` leaves
+   it out. A live
+   check that has not ended after `-LiveCheckMinutes` (30) is stopped,
+   with a screenshot (`livecheck-hung`) and the window's and the core's
+   logs kept in `vm-install-<time>-livecheck-logs`; step 3 fails, and
+   steps 4 and 5 still run.
+4. The installed CabinetOS starts with its own configuration, logs and
+   update folder in `C:\cabinetos\install-check` and `update.source` on
+   the feed. No command at all: its daily check, 10 seconds after the
+   start, finds the next version, downloads it and swaps it in; the
+   script waits for the window's "update notice shown", checks that the
+   window saw no `downloaded`, the core's log lines, the folders and the
+   Apps entry, presses the notice's Restart now through UI Automation, and
+   proves the new version runs: `cabinetos-cli update --json` against the
+   new core (its pipe token from the window's "core started" line) and
+   the state file's confirmed swap.
+5. Inno's uninstaller runs silently with its log in `_io\vm`; the install
+   folder (with `previous\`), the Apps entry and the shortcut must be
+   gone, and a marker file in `%LOCALAPPDATA%\CabinetOS` must stay.
+
+The VM writes its progress into `_io\live-check\vm-install-progress.txt`
+and its result into `vm-install-result-<time>.json`, and takes its own
+screenshots (`vm-install-<time>-<step>.png`); the script reads only those
+files while the VM works, then writes `DONE-install.md` (and a dated
+copy) with each step's result, its details and the screenshots. It exits
+1 when a step failed. `-Restart` restarts the VM first, as for the live
+check. A VM the script starts or restarts gets up to `-SettleMinutes`
+(30) to finish what Windows does after a start: the script asks the
+guest's CPU load every half minute and goes on after two answers under
+20 %. Right after a restart on 2026-10-02, before this wait existed, an
+uninstall took 22 minutes and a window took 11 minutes to show. Every
+program the guest waits for (the uninstaller, the press on Restart now,
+`cabinetos-cli`) has a time limit, so one that hangs costs its step, not
+the run.
+
 On this PC a window run (the end-to-end suite, the live check, the speed
 runner, a manual start) also needs the creator's consent, their rule of
 2026-10-02: the planning session asks in the chat, a yes or one minute of
@@ -3966,16 +4036,19 @@ second before the preparation, put off again by each key or pointer event.
 
 ## Updates
 
-In-app updates (Phase 17, [ADR 0014](decisions/0014-in-app-updates.md)).
+In-app updates (Phase 17, [ADR 0014](decisions/0014-in-app-updates.md);
+with no wizard since Phase 21, [ADR 0018](decisions/0018-setup-file-and-silent-updates.md)).
 The core does the work: it reads the channel's `latest.json`, downloads
 the release's zip, checks its SHA-256, unpacks it, and swaps it into the
-install folder ([ipc.md](ipc.md), "Updates"; [release.md](release.md),
-"Updates"). The window shows where the updater is, shows the release
-notes, and restarts itself into the new version. It reads no file and
-fetches nothing itself (brief §1): the notes come in `update_state`. The
-rules below are in `CabinetOS.Core.Updates` (`UpdateModel`, `UpdateText`,
-`ReleaseNotes`), with tests; the window's part is `MainWindow.Update.cs`
-and `Views/UpdateDialog.cs`.
+install folder, by itself with `update.autoInstall` (the default)
+([ipc.md](ipc.md), "Updates"; [release.md](release.md), "Updates"). The
+window shows where the updater is, asks for the restart in the status
+bar, shows the release notes, and restarts itself into the new version.
+It reads no file and fetches nothing itself (brief §1): the notes come in
+`update_state`, and `update.autoInstall` in the configuration the core
+sends. The rules below are in `CabinetOS.Core.Updates` (`UpdateModel`,
+`UpdateText`, `ReleaseNotes`), with tests; the window's part is
+`MainWindow.Update.cs` and `Views/UpdateDialog.cs`.
 
 - **The state.** After every start of a core the window asks
   `update_status`, which the core answers from memory; then it follows
@@ -3987,7 +4060,7 @@ and `Views/UpdateDialog.cs`.
 
   | Command | What it does |
   |---|---|
-  | `update.check` "Check for Updates" | Asks `update_check`. A newer version downloads at once (`update_download`) with the pill, and its dialog opens when the download is complete, even after Later, because the user asked just now. Otherwise a notice: "CabinetOS 0.1.0 is the newest version on the stable channel.", why a development build or an all-users install does not update itself, or why the check failed. While a version waits, it opens that version's dialog instead. |
+  | `update.check` "Check for Updates" | Asks `update_check`. A newer version downloads at once (`update_download`) with the pill. With `update.autoInstall` the core swaps it in too, and the status bar's notice asks for the restart; without it, its dialog opens when the download is complete, even after Later, because the user asked just now. Otherwise a notice: "CabinetOS 0.1.0 is the newest version on the stable channel.", why a development build or an all-users install does not update itself, or why the check failed. While a version waits, it opens that version's dialog instead. |
   | `update.apply` "Restart to Update" | Swaps the downloaded version in (`update_apply`), then restarts. A swap done already (state `ready`, after `cabinetos-cli update apply` or in another window) restarts at once. It refuses while a transfer runs, because the core stops with the window and the transfer with it. |
   | `update.rollback` "Roll Back to the Previous Version" | Asks first (Cancel is the default button), then `update_rollback`, then restarts into the version kept in `previous\`. |
   | `update.showNotes` "Show Release Notes" | Opens the dialog of the newest version the core knows, at any time. |
@@ -3996,7 +4069,24 @@ and `Views/UpdateDialog.cs`.
   download runs, the 80 × 4 px track and "Update · 45% · 4.2 MB/s" (the
   tooltip has the bytes, "34.3 MB of 76.3 MB"); "Update · installing"
   during the swap; "Update ready · Restart" while a version waits, and a
-  click on it runs `update.apply`. No pill in any other state.
+  click on it runs `update.apply`. No pill in any other state, and none
+  while the notice below shows (the notice holds Restart now).
+- **The notice** (`UpdateText.Notice`, ADR 0018), one quiet line in the
+  status bar beside the pill, never a dialog: when a version is in place
+  and waits for a restart (`ready`: swapped in by itself with
+  `update.autoInstall`, by `cabinetos-cli update apply` or by another
+  window), "CabinetOS 0.2.0 is installed; restart to use it" with Restart
+  now (`update.apply`) and Later. The text opens the release notes (the
+  dialog of `update.showNotes`). Later closes the notice for this run:
+  the session runs on, the pill "Update ready · Restart" and the menu's
+  dot stay, and the next start is the new version anyway. A swap that
+  fails (`failed` right after `applying`) says so in the same place, in
+  the error colour: "CabinetOS 0.2.0 could not be installed; 0.1.0 keeps
+  running", with the reason as the tooltip and Close; the next step clears
+  it. Its buttons never take the keyboard (the Zero-Hijack rule of Phase
+  21); "Update: Restart to Update" in the palette is the keyboard's way.
+  The window logs "update notice shown" (text, version, failed, reason)
+  and "update notice closed"; the shell state line has `update_notice`.
 - **The dialog** (`UpdateDialog`, a ContentDialog like the others, so no
   command runs while it is open): "CabinetOS 0.2.0 is ready", "You have
   0.1.0. Published 2026-10-01 on the stable channel.", the notes in a
@@ -4013,9 +4103,11 @@ and `Views/UpdateDialog.cs`.
   text. Underscores never mark emphasis, so a name such as `update_status`
   outside a code span stays as written. When the core could not read the
   notes, the dialog says so and links them.
-- **The snooze rule.** The dialog opens by itself when a download is
-  complete (`update_state_changed` with `downloaded`), once per version in
-  a run, and not while `snoozed_until_ms` is still ahead. Later, Esc and
+- **The snooze rule.** With `update.autoInstall: false`, the dialog opens
+  by itself when a download is complete (`update_state_changed` with
+  `downloaded`), once per version in a run, and not while
+  `snoozed_until_ms` is still ahead. With `update.autoInstall` it never
+  opens by itself: the core swaps the download in, and the notice asks. Later, Esc and
   every other way of closing the dialog of a downloaded version send
   `update_snooze`: no dialog by itself for a day. The pill, the dot and the
   commands stay. A dialog already open is not pushed aside.
@@ -4034,13 +4126,21 @@ and `Views/UpdateDialog.cs`.
 Checked by the tests: the notes of CHANGELOG.md's own Unreleased section
 (every heading, item, link and code span), the dialog in each state, the
 pill's texts, the snooze rule, the dot, the menu entry, About's row, and
-the six requests, `update_state` and the two events against the schemas.
-The end-to-end tests run against the release core with protocol 14, and
-one of them (`ShellEndToEndTests`) runs the window with a copy of that
-core in a folder with `release.json` 0.1.0: Check for Updates downloads
-"0.2.0" from a local feed, the dialog opens by itself once, Esc snoozes
-it, the pill and the dot stay, and nothing is swapped. The shell state
-line logs `update_pill` and `update_dot` for such checks.
+the six requests, `update_state` and the two events against the schemas;
+since Phase 21 also the notice (installed, Later, a failed swap, a failed
+check that brings none), `update.autoInstall` from the configuration, and
+that the dialog never opens by itself with it. The end-to-end tests run
+against the release core, and three of them (`ShellEndToEndTests`) run the
+window with a copy of that core in a folder with `release.json` 0.1.0 and
+a local feed with "0.2.0": with `update.autoInstall: false`, Check for
+Updates downloads it, the dialog opens by itself once, Esc snoozes it, the
+pill and the dot stay, and nothing is swapped; with `update.autoInstall`,
+the same command swaps it in while the core runs from the folder (0.1.0
+and the running core in `previous\`), the window sees no `downloaded`,
+the notice shows with no pill, and Later leaves the pill and the dot; and
+with a file of the install held open, the swap fails, everything stays,
+and the notice says so until Close. The shell state line logs
+`update_pill`, `update_dot` and `update_notice` for such checks.
 
 Checked once with the snapshot aid (2026-09-30): the dialog with the real
 Unreleased section as its notes, the menu with "Restart to Update (0.2.0)"

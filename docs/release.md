@@ -2,13 +2,17 @@
 
 How a CabinetOS release is made, installed and removed, and the steps that
 are still for the creator: signing and publishing. Why it ships this way:
-[ADR 0009](decisions/0009-packaging.md). Commands are for the WSL bash
-terminal unless marked `# PowerShell`, as in [dev-setup.md](dev-setup.md).
+[ADR 0009](decisions/0009-packaging.md), and for the setup file and the
+updates that install themselves
+[ADR 0018](decisions/0018-setup-file-and-silent-updates.md). Commands are
+for the WSL bash terminal unless marked `# PowerShell`, as in
+[dev-setup.md](dev-setup.md).
 
 ## What a release is
 
-One folder, zipped as `CabinetOS-<version>-win-x64.zip`, with its files at
-the zip's root:
+One folder, zipped as `CabinetOS-<version>-win-x64.zip`, and the same
+folder wrapped in a setup file, `CabinetOS-<version>-win-x64-setup.exe`
+("The setup file", below). The zip has its files at its root:
 
 | Part | What it is |
 |---|---|
@@ -21,6 +25,7 @@ the zip's root:
 | `extras\themes\` | Copies of the four built-in themes and their schema, as a start for your own. The core also writes them into `%LOCALAPPDATA%\CabinetOS\themes` |
 | `extras\tools\markdown-preview\` | The Markdown Preview tool. Opt-in (Constitution Article 10): the window does not load it from here |
 | `install.ps1`, `uninstall.ps1` | The installer and its undo |
+| `CabinetOS.ico` | The app's icon, made by the release script from the design's size cuts (`docs/design/icons`, 16 to 256 px): the setup file's icon, its shortcuts' and its Settings > Apps entry's |
 | `release.json` | The version, the commit, and the runtime versions `install.ps1` checks |
 | `LICENSE`, `THIRD-PARTY-NOTICES.md` | The MIT license, and the license text of every third-party component |
 
@@ -58,7 +63,9 @@ It writes, into `dist\` (ignored by git):
 - `dist\winget\<version>\`, the winget manifests with this version and the
   zip's SHA-256, checked with `winget validate` when winget is installed;
 - `dist\update\<channel>\latest.json` and `notes-<version>.md`, what the
-  in-app updater reads ("Updates", below).
+  in-app updater reads ("Updates", below);
+- `dist\CabinetOS-<version>-win-x64-setup.exe` and its `.sha256`, the
+  setup file ("The setup file", below).
 
 What it runs, in order:
 
@@ -76,7 +83,8 @@ What it runs, in order:
    if the `.pri` file is missing.
 3. Copies the three programs and their `.pdb` files, `cabinetos-cli.exe`
    once more as `cab.exe`, the themes, Markdown Preview, `LICENSE` and the
-   two install scripts; writes `release.json`
+   two install scripts; makes `CabinetOS.ico` from the design's PNG size
+   cuts (each image kept as the PNG it is); writes `release.json`
    from the publish output and the Windows App SDK package (the minimum
    Windows App Runtime is the one the SDK's bootstrapper asks for).
 4. `build\notices.ps1` writes `THIRD-PARTY-NOTICES.md`: every Rust crate the
@@ -98,6 +106,15 @@ What it runs, in order:
    version has no section yet, the notes are the `## [Unreleased]` section,
    and the script says so. The stable channel refuses a version with a
    pre-release tag.
+7. Compiles `build\setup.iss` with Inno Setup 6.7 or newer (`ISCC.exe` on
+   the PATH, or where Inno's installer puts it, per user or for every user)
+   around the release folder, with the facts of its `release.json` as
+   defines (the version, the runtimes, the Windows App Runtime's installer
+   address), into `dist\CabinetOS-<version>-win-x64-setup.exe`, and writes
+   its SHA-256. Without Inno Setup the step is skipped with a warning that
+   names the command that installs it, and the rest of the release is
+   complete:
+   `winget install --id JRSoftware.InnoSetup --exact --scope user`.
 
 Switches:
 
@@ -105,8 +122,9 @@ Switches:
   without this switch the script stops when they differ, with this switch it
   writes the Cargo version there first (commit that change).
 - `-PackageOnly`: builds nothing; zips the existing release folder again and
-  writes a new hash, new manifests and new update files. For after signing
-  (below).
+  writes a new hash, new manifests, new update files and a new setup file.
+  For after signing (below).
+- `-NoSetup`: no setup file (step 7).
 - `-Channel stable|preview`: which channel's `latest.json` to write;
   `stable` by default. A version such as `0.2.0-preview.1` needs
   `preview`.
@@ -134,6 +152,64 @@ cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabineto
 
 It has not run yet: on 2026-09-28 GitHub Actions started no jobs for this
 account (a billing setting).
+
+## The setup file
+
+`CabinetOS-<version>-win-x64-setup.exe` is the first install for most
+users: a double-click, no script, no administrator rights
+([ADR 0018](decisions/0018-setup-file-and-silent-updates.md)). It is
+`build\setup.iss`, Inno Setup 6.7 around the release folder, compiled by
+the build's last step.
+
+- **Where it installs.** For the current user only, into
+  `%LOCALAPPDATA%\Programs\CabinetOS`, the folder `install.ps1` uses, so
+  the install updates itself ("Updates", below). The folder cannot be
+  chosen in the wizard.
+- **What it asks.** Almost nothing: an unchecked "Create a desktop
+  shortcut", then "Start CabinetOS", checked, at the end. A Start Menu
+  shortcut is always made. The wizard follows Windows' light or dark mode.
+- **The prerequisites** (Windows 11 22H2 or newer, x64; the .NET 10
+  runtime; the Windows App Runtime 2.5.1 or newer; WebView2) are checked
+  before the wizard, as `install.ps1` checks them. A missing one stops the
+  setup with a message that names the winget command (and, for the Windows
+  App Runtime, Microsoft's installer). The setup downloads nothing.
+- **Over an install.ps1 install** in the same folder the setup stops and
+  names that install's `uninstall.ps1`: the two keep separate records and
+  Apps entries and must not mix. `install.ps1` likewise refuses the setup's
+  folder. A setup over an earlier setup install is an update: the files
+  are replaced (a running CabinetOS is closed first, through Windows'
+  Restart Manager).
+- **Settings > Apps** lists it as "CabinetOS" (publisher CabinetOS, with
+  its version, size and icon) under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\CabinetOS_is1`,
+  Inno's own entry. The in-app updater keeps its version and size current
+  after each update.
+- **Silent**, for scripts and the VM check:
+
+  ```powershell
+  # PowerShell - the setup is a Windows program
+  & "$env:USERPROFILE\Downloads\CabinetOS-0.1.0-win-x64-setup.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="$env:TEMP\cabinetos-setup.log"
+  ```
+
+  Exit code 0 is a finished install; 1 means the setup stopped before it
+  began (a missing prerequisite: the log says which); 7 means it refused
+  the folder (an install.ps1 install there). `/SKIPPREREQUISITECHECK`
+  installs even when a prerequisite looks missing. A silent setup does not
+  start CabinetOS at the end.
+- **Uninstall**: Settings > Apps > CabinetOS > Uninstall, or
+  `unins000.exe` in the install folder (silently:
+  `"%LOCALAPPDATA%\Programs\CabinetOS\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART`).
+  It refuses to start while CabinetOS runs from the folder. It removes the
+  whole install folder, with what the updater added (`previous\`,
+  `previous-old\`, a later version's files), the shortcuts and the Apps
+  entry. Settings, plugins, themes, logs and the update state stay in
+  `%APPDATA%\CabinetOS` and `%LOCALAPPDATA%\CabinetOS`, as with
+  `uninstall.ps1`; delete those two folders by hand to remove them too.
+- **Checked in the VM.** `ui\livecheck\vm-install-check.ps1` installs the
+  setup silently in the VirtualBox VM, runs the live check against the
+  installed program, lets it update itself to a real next version, restarts
+  it through the notice and uninstalls it ([ui.md](ui.md), "The live check
+  in a virtual machine"). Its report is `_io\live-check\DONE-install.md`.
 
 ## Install
 
@@ -234,11 +310,21 @@ A per-user install updates itself from inside the app
   unpacked into `%LOCALAPPDATA%\CabinetOS\update\staging\<version>\`
   (`CABINETOS_UPDATE_DIR` or the core's `--update-dir` name another
   folder), and its `release.json` must name the same version.
-- **The swap.** The dialog shows the version and its release notes, with
-  Restart now and Later. Restart now moves the install's files into
-  `previous\` inside it, copies the new ones in, updates the Apps entry,
-  starts the new `CabinetOS.exe` and closes the window. A copy that fails
-  half way puts everything back. Later waits a day.
+- **The swap, by itself** (`update.autoInstall`, the default;
+  [ADR 0018](decisions/0018-setup-file-and-silent-updates.md)). Right
+  after the download the core moves the install's files into `previous\`
+  inside it, copies the new ones in and updates the Apps entry, while
+  CabinetOS runs on from `previous\`. The setup file's uninstaller stays
+  where it is. The status bar then says "CabinetOS 0.2.0 is installed;
+  restart to use it", with Restart now and Later; nothing else asks.
+  Restart now closes the window and starts the new `CabinetOS.exe`. Later
+  keeps the session; the next start runs the new version. A copy that
+  fails half way puts everything back, the status bar says so, and the
+  next daily check tries the swap again.
+- **The swap, at the user's word** (`update.autoInstall: false`, as in
+  ADR 0014). A dialog shows the version and its release notes, with
+  Restart now and Later. Restart now swaps as above, starts the new
+  `CabinetOS.exe` and closes the window. Later waits a day.
 - **The rollback.** "Update: Roll Back to the Previous Version" brings
   `previous\` back the same way, until the next update replaces it.
 - **Who updates.** Only a release with `release.json` next to the core
@@ -249,8 +335,9 @@ A per-user install updates itself from inside the app
   last check, the `ETag`, the snooze, the staged version, and the last swap
   with the start that confirmed it.
 - **From a terminal:** `cabinetos-cli update` prints the state; `update
-  check`, `download`, `apply`, `rollback` and `snooze` run the steps;
-  `--json` prints the core's reply.
+  check`, `download`, `apply`, `rollback` and `snooze` run the steps
+  (`download` also swaps with `update.autoInstall`); `--json` prints the
+  core's reply.
 
 ## Sign (not done yet)
 
@@ -280,8 +367,9 @@ $release = 'E:\codespace\_claude_code\_rde\_cabinetos_windows_system_manager\cab
 ```
 
 The timestamp keeps the signatures valid after the certificate expires.
-Then zip the signed folder again; the hash and the winget manifests change
-with it:
+Then zip the signed folder again; the hash, the winget manifests and the
+setup file change with it (sign the new setup file with the same
+`signtool` line afterwards, and write its hash again):
 
 ```bash
 cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && pwsh.exe -NoProfile -File build/release.ps1 -PackageOnly
@@ -301,12 +389,12 @@ creator's.
 2. **Build and sign** as above.
 3. **Make the repository public.** The release asset's address must work
    for strangers and for winget.
-4. **Tag and publish the release** with the zip and its hash. The notes
-   are the version's section of `CHANGELOG.md`, which the build wrote as
-   `dist/update/stable/notes-0.1.0.md`:
+4. **Tag and publish the release** with the zip, the setup file and their
+   hashes. The notes are the version's section of `CHANGELOG.md`, which
+   the build wrote as `dist/update/stable/notes-0.1.0.md`:
 
    ```bash
-   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git tag v0.1.0 && git push origin v0.1.0 && gh release create v0.1.0 dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 --verify-tag --title "CabinetOS 0.1.0" --notes-file dist/update/stable/notes-0.1.0.md
+   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git tag v0.1.0 && git push origin v0.1.0 && gh release create v0.1.0 dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 dist/CabinetOS-0.1.0-win-x64-setup.exe dist/CabinetOS-0.1.0-win-x64-setup.exe.sha256 --verify-tag --title "CabinetOS 0.1.0" --notes-file dist/update/stable/notes-0.1.0.md
    ```
 
    For a preview (a version such as `0.2.0-preview.1`, built with
@@ -359,3 +447,12 @@ them (checked 2026-09-28 with winget 1.29.380).
 - The window's project references the whole Windows App SDK, so the
   release carries its AI and machine-learning libraries (about 40 MB
   unpacked) that CabinetOS does not use.
+- The setup file installs no prerequisite: it names the winget commands
+  and stops. It is per user only (no all-users install, no indexer
+  service, no PATH entry: `install.ps1` does those), and unsigned like the
+  rest.
+- The setup does not remove files an earlier version had and the new one
+  lacks when it installs over an earlier setup install; the in-app update,
+  which replaces the whole folder, does.
+- `CabinetOS.exe` itself has no icon yet: the taskbar shows the default
+  one. The shortcuts and the Apps entry use `CabinetOS.ico`.

@@ -85,7 +85,8 @@ file itself shows everything that can be set:
     "check": true,
     "channel": "stable",
     "source": "https://oliverd25.github.io/cabinetos-marketplace/update",
-    "allowInsecure": false
+    "allowInsecure": false,
+    "autoInstall": true
   }
 }
 ```
@@ -163,6 +164,7 @@ while you type.
 | `update.channel` | `stable`, `preview` | `stable` | Which releases: `stable`, or `preview`, which also offers versions with a pre-release tag such as `0.2.0-preview.1` |
 | `update.source` | an `https:` URL, a `file:` URL, or a folder path | `https://oliverd25.github.io/cabinetos-marketplace/update` | The folder that holds one folder per channel, each with its `latest.json` ([sdk/update/latest.schema.json](../sdk/update/latest.schema.json)) |
 | `update.allowInsecure` | `true`, `false` | `false` | Also accept a plain `http:` source and download, which anyone on the network could change on the way. For testing only |
+| `update.autoInstall` | `true`, `false` | `true` | Install a downloaded version at once, in the background, once its SHA-256 is checked; the window then only says "CabinetOS <version> is installed; restart to use it" in the status bar, with Restart now and Later ([ADR 0018](decisions/0018-setup-file-and-silent-updates.md)). `cabinetos-cli update download` installs too. `false`: the download waits, and a dialog with the release notes asks Restart now or Later before the swap ([ADR 0014](decisions/0014-in-app-updates.md)) |
 
 A pane with tabs, as the window saves it:
 

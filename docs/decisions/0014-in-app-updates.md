@@ -1,6 +1,6 @@
 # ADR 0014: A per-user install updates itself from inside the app, with a swap it can roll back
 
-- Status: accepted
+- Status: accepted; amended by [ADR 0018](0018-setup-file-and-silent-updates.md) for the swap without a dialog
 - Date: 2026-09-30
 - Decided by: the creator, in two question rounds in chat on 2026-09-30
   (every answer the recommended option: the source, the flow, the channels,
