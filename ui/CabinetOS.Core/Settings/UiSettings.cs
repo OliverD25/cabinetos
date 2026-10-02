@@ -20,6 +20,7 @@ namespace CabinetOS.Core.Settings;
 /// <see cref="Columns"/> is <c>ui.columns</c>: the file panes' Modified, Type and Size widths, or null for the theme's.
 /// <see cref="FolderSizes"/> is <c>panes.folderSizes</c>: whether every folder of a listing is measured when it opens.
 /// <see cref="CompactOverlay"/> is <c>ui.compactOverlay</c>: the drawer's size the user last resized it to, or null for 480 by 640.
+/// <see cref="TerminalSplit"/> is <c>terminal.split</c>: whether the Tool Dock is split under the two panes.
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -39,7 +40,8 @@ public sealed record UiSettings(
     bool SidebarAutoReveal = true,
     ColumnWidths? Columns = null,
     bool FolderSizes = false,
-    CompactSize? CompactOverlay = null)
+    CompactSize? CompactOverlay = null,
+    bool TerminalSplit = false)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -72,7 +74,8 @@ public sealed record UiSettings(
             Bool(ui, "sidebarAutoReveal") ?? Defaults.SidebarAutoReveal,
             ColumnLayout.FromConfig(config),
             Bool(panes, "folderSizes") ?? Defaults.FolderSizes,
-            CompactOverlayLayout.FromConfig(config));
+            CompactOverlayLayout.FromConfig(config),
+            Bool(Section(config, "terminal"), "split") ?? Defaults.TerminalSplit);
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).

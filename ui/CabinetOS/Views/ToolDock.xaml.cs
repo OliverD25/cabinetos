@@ -6,16 +6,16 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
 
 namespace CabinetOS.Views;
 
 /// <summary>
 /// The Tool Dock: the panel under or beside the panes. Its first occupant is
-/// the terminal (design view A, "Integrated terminal"): one tab per shell
-/// session with its pane's badge and its mode, "+" for the default shell and
-/// a menu of the others, the caption, and the xterm.js page in one WebView2.
-/// Every button runs a command through the window's router.
+/// the terminal (design view A, "Integrated terminal"): a header (one view, or one
+/// per half in the split mirror) with a tab per shell session, its pane's badge and
+/// its mode, "+" for the default shell and a menu of the others, the caption, and
+/// the xterm.js page in one WebView2. Every button runs a command through the
+/// window's router.
 /// </summary>
 public sealed partial class ToolDock : UserControl
 {
@@ -23,13 +23,14 @@ public sealed partial class ToolDock : UserControl
     private const double CellWidth = 7.2;
     private const double CellHeight = 15;
 
+    private Func<string, JsonElement?, string, Task>? _run;
+    private double[]? _halfWidths;
+
     /// <summary>Creates the dock; the terminal's WebView2 starts when the first shell does.</summary>
     public ToolDock()
     {
         InitializeComponent();
         TerminalPage = new WebViewHost(TerminalFrame, "terminal");
-        NewButton.Click += (_, _) => Run("terminal.new");
-        CloseButton.Click += (_, _) => Run("view.toggleTerminal", CommandArgs.Object(("visible", false)));
         ReloadButton.Click += (_, _) => Run("terminal.reload");
         // GotFocus bubbles: the page's WebView2 inside the frame got XAML's focus (a click, a hand-over).
         TerminalFrame.GotFocus += (_, _) => TerminalFocused?.Invoke();
@@ -39,7 +40,16 @@ public sealed partial class ToolDock : UserControl
     public event Action? TerminalFocused;
 
     /// <summary>Runs a command by ID through the window's router: (command, arguments, trigger).</summary>
-    public Func<string, JsonElement?, string, Task>? RunCommand { get; set; }
+    public Func<string, JsonElement?, string, Task>? RunCommand
+    {
+        get => _run;
+        set
+        {
+            _run = value;
+            LeftHeader.RunCommand = value;
+            RightHeader.RunCommand = value;
+        }
+    }
 
     /// <summary>
     /// Lays the dock out with the window's sizes and chrome now (docs/ui.md,
@@ -63,64 +73,105 @@ public sealed partial class ToolDock : UserControl
             Frame.BorderThickness = new Thickness(1);
         }
         HeaderRow.Height = new GridLength(m.TerminalHeaderHeight);
-        HeaderGrid.Padding = new Thickness(m.TerminalPaddingX, 0, 6, 0);
-        foreach (var button in new[] { NewButton, ProfilesButton })
-        {
-            button.Height = m.TerminalTabHeight;
-            button.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
-        }
-        NewButton.MinWidth = m.TerminalTabHeight;
-        CloseButton.Width = CloseButton.Height = CloseButton.MinWidth = Math.Min(24, m.TerminalHeaderHeight);
-        CloseButton.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
+        LeftHeader.ApplyMetrics();
+        RightHeader.ApplyMetrics();
     }
 
     /// <summary>The terminal page's WebView2.</summary>
     internal WebViewHost TerminalPage { get; }
 
     /// <summary>A control of the header the keyboard can rest on for a moment, while the window hands it to the page again.</summary>
-    internal Control HeaderStop => CloseButton;
+    internal Control HeaderStop => RightHeader.Visibility == Visibility.Visible ? RightHeader.Close : LeftHeader.Close;
 
     /// <summary>Whether the terminal page has the keyboard.</summary>
     public bool HasTerminalFocus =>
         XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused && IsInside(focused, TerminalFrame);
 
-    /// <summary>How many cells the body holds now, for a new session; the page then fits it exactly.</summary>
-    public (ushort Cols, ushort Rows) EstimateCells()
+    /// <summary>
+    /// How far the page starts from the dock's left edge: the frame's border. The places the window measures for the halves
+    /// are from the dock's edge; the page's are from its own.
+    /// </summary>
+    public double BodyInset => Frame.BorderThickness.Left;
+
+    /// <summary>How much of the dock's width the frame's border takes: the page is as wide as the dock less this.</summary>
+    public double BodyInsets => Frame.BorderThickness.Left + Frame.BorderThickness.Right;
+
+    /// <summary>
+    /// How many cells a new session of <paramref name="pane"/> gets to start with: the body's, or in the split the
+    /// width of the pane's half; the page then fits it exactly.
+    /// </summary>
+    public (ushort Cols, ushort Rows) EstimateCells(int pane)
     {
-        var width = Math.Max(0, Body.ActualWidth - 30);
+        var whole = _halfWidths is { } halves && pane >= 0 && pane < halves.Length && halves[pane] > 0 ? halves[pane] : Body.ActualWidth;
+        var width = Math.Max(0, whole - 30);
         var height = Math.Max(0, Body.ActualHeight - 12);
         return ((ushort)Math.Clamp((int)(width / CellWidth), 20, 1000), (ushort)Math.Clamp((int)(height / CellHeight), 5, 500));
     }
 
-    /// <summary>Draws the tabs: a green dot for a running shell, its profile, its pane's badge, its mode, and ×.</summary>
+    /// <summary>
+    /// Lays the dock out as the one view (<paramref name="halves"/> null) or as the split mirror: a header over each half
+    /// at the half's place, a line in the gap between them, and "+" in a half starting a session for its pane. With
+    /// one pane shown there is one half, which is the whole dock.
+    /// </summary>
+    internal void ApplySplit(IReadOnlyList<SplitHalf>? halves)
+    {
+        if (halves is null)
+        {
+            _halfWidths = null;
+            FirstColumn.Width = new GridLength(1, GridUnitType.Star);
+            GapColumn.Width = new GridLength(0);
+            SecondColumn.Width = new GridLength(0);
+            SplitDivider.Visibility = Visibility.Collapsed;
+            RightHeader.Visibility = Visibility.Collapsed;
+            LeftHeader.BindToPane(null);
+            LeftHeader.Close.Visibility = Visibility.Visible;
+            return;
+        }
+        _halfWidths = [.. halves.Select(h => h.Width)];
+        var two = halves.Count > 1;
+        var (first, gap) = TerminalSplitLayout.Columns(halves);
+        FirstColumn.Width = two ? new GridLength(first) : new GridLength(1, GridUnitType.Star);
+        GapColumn.Width = new GridLength(gap);
+        SecondColumn.Width = two ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        SplitDivider.Visibility = two ? Visibility.Visible : Visibility.Collapsed;
+        RightHeader.Visibility = two ? Visibility.Visible : Visibility.Collapsed;
+        LeftHeader.BindToPane(halves[0].Pane);
+        LeftHeader.Close.Visibility = two ? Visibility.Collapsed : Visibility.Visible;
+        if (two)
+        {
+            RightHeader.BindToPane(halves[1].Pane);
+            RightHeader.Close.Visibility = Visibility.Visible;
+        }
+    }
+
+    /// <summary>The header of the pane's half in the split (the left one for pane 0), or the one view's.</summary>
+    internal TerminalHalfHeader HeaderOf(int pane) => pane == 1 ? RightHeader : LeftHeader;
+
+    /// <summary>Draws the one view's tabs: a green dot for a running shell, its profile, its pane's badge, its mode, and ×.</summary>
     internal void SetTabs(IReadOnlyList<TerminalTab> tabs, TerminalTab? shown)
     {
-        TabStrip.Children.Clear();
-        foreach (var tab in tabs)
-        {
-            TabStrip.Children.Add(TabFor(tab, tab == shown));
-        }
+        LeftHeader.SetTabs(tabs, shown);
+        StartingText.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Draws the tabs of the pane's half in the split: only that pane's sessions, <paramref name="shown"/> marked.</summary>
+    internal void SetHalfTabs(int pane, IReadOnlyList<TerminalTab> tabs, TerminalTab? shown)
+    {
+        HeaderOf(pane).SetTabs(tabs, shown);
         StartingText.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>The caption right of the tabs, and its tooltip (the whole folder), if any.</summary>
-    public void SetCaption(string text, string? tip)
-    {
-        CaptionText.Text = text;
-        ToolTipService.SetToolTip(CaptionText, tip);
-    }
+    public void SetCaption(string text, string? tip) => LeftHeader.SetCaption(text, tip);
+
+    /// <summary>The caption of the pane's half in the split.</summary>
+    public void SetHalfCaption(int pane, string text, string? tip) => HeaderOf(pane).SetCaption(text, tip);
 
     /// <summary>The menu of the other shells (<c>terminal.profiles</c> without the default).</summary>
     public void SetProfiles(TerminalProfiles profiles)
     {
-        ProfilesMenu.Items.Clear();
-        foreach (var name in profiles.Names)
-        {
-            var item = new MenuFlyoutItem { Text = name == profiles.DefaultProfile ? $"{name} (default)" : name };
-            item.Click += (_, _) => Run("terminal.new", CommandArgs.With("profile", name));
-            ProfilesMenu.Items.Add(item);
-        }
-        ProfilesButton.Visibility = profiles.Names.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        LeftHeader.SetProfiles(profiles);
+        RightHeader.SetProfiles(profiles);
     }
 
     /// <summary>Shows "Starting the terminal…" until the first tab.</summary>
@@ -142,117 +193,7 @@ public sealed partial class ToolDock : UserControl
         TerminalFrame.Visibility = Visibility.Visible;
     }
 
-    private FrameworkElement TabFor(TerminalTab tab, bool active)
-    {
-        var look = TerminalHeader.Tab(tab.Profile, tab.Pane, tab.Mode, tab.Linkable);
-        var textBrush = ThemeResources.Brush(active ? "CbTextPrimaryBrush" : "CbStatusTextBrush");
-        var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        title.Children.Add(new Ellipse
-        {
-            Width = 6,
-            Height = 6,
-            VerticalAlignment = VerticalAlignment.Center,
-            Fill = ThemeResources.Brush(tab.Running ? "CbRunningBrush" : "CbTextDisabledBrush"),
-        });
-        title.Children.Add(new TextBlock { Text = look.Title, VerticalAlignment = VerticalAlignment.Center, Foreground = textBrush });
-        // The pane's badge, in the accent the active pane's tab row has; both panes share the theme's one accent.
-        title.Children.Add(new TextBlock
-        {
-            Text = look.Badge,
-            FontSize = 11,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = ThemeResources.Brush("CbAccentBrush"),
-        });
-
-        var m = WindowMetrics.Current;
-        var select = new Button
-        {
-            Content = title,
-            Style = (Style)ThemeResources.Get("CbDockTabButtonStyle")!,
-            Height = m.TerminalTabHeight,
-            Padding = new Thickness(10, 0, 4, 0),
-            CornerRadius = WindowMetrics.Corners(m.RadiusControl),
-            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            AllowFocusOnInteraction = false,
-            IsTabStop = false,
-        };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(select, $"{tab.Profile} {look.Badge}, session {tab.SessionId}");
-        select.Click += (_, _) => Run("terminal.show", CommandArgs.Object(("session", tab.SessionId)));
-        var mode = ModeFor(tab, look, m);
-
-        var close = new Button
-        {
-            Content = new FontIcon { Glyph = "", FontSize = 8 },
-            Style = (Style)ThemeResources.Get("CbDockTabButtonStyle")!,
-            Width = 18,
-            Height = 18,
-            MinWidth = 18,
-            Padding = new Thickness(0),
-            Margin = new Thickness(0, 0, 4, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            AllowFocusOnInteraction = false,
-            IsTabStop = false,
-        };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(close, $"Close {tab.Profile}");
-        ToolTipService.SetToolTip(close, "Close this shell");
-        close.Click += (_, _) => Run("terminal.close", CommandArgs.Object(("session", tab.SessionId)));
-
-        close.Width = close.Height = close.MinWidth = Math.Min(18, m.TerminalTabHeight - 2);
-        close.CornerRadius = WindowMetrics.Corners(m.RadiusControl);
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        row.Children.Add(select);
-        row.Children.Add(mode);
-        row.Children.Add(close);
-        return new Border
-        {
-            Height = m.TerminalTabHeight,
-            CornerRadius = WindowMetrics.Corners(m.RadiusControl),
-            Background = active ? ThemeResources.Brush("CbTabActiveFillBrush") : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            Child = row,
-        };
-    }
-
-    // The mode: a small text button that switches it (terminal.setMode), or the same text without a
-    // button when the profile cannot be linked; the tooltip says what the mode means, or why not.
-    private FrameworkElement ModeFor(TerminalTab tab, TerminalTabLook look, ThemeMetrics m)
-    {
-        FrameworkElement mode;
-        if (look.ModeToggles)
-        {
-            var toggle = new Button
-            {
-                Content = new TextBlock { Text = look.ModeText, FontSize = 11 },
-                Style = (Style)ThemeResources.Get("CbDockTabButtonStyle")!,
-                Height = Math.Min(20, m.TerminalTabHeight - 2),
-                Padding = new Thickness(6, 0, 6, 0),
-                Margin = new Thickness(0, 0, 2, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                CornerRadius = WindowMetrics.Corners(m.RadiusControl),
-                Foreground = ThemeResources.Brush("CbStatusTextBrush"),
-                AllowFocusOnInteraction = false,
-                IsTabStop = false,
-            };
-            var next = TerminalBinding.ModeName(look.NextMode);
-            toggle.Click += (_, _) => Run("terminal.setMode", CommandArgs.Object(("session", tab.SessionId), ("mode", next)));
-            mode = toggle;
-        }
-        else
-        {
-            mode = new TextBlock
-            {
-                Text = look.ModeText,
-                FontSize = 11,
-                Margin = new Thickness(6, 0, 8, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = ThemeResources.Brush("CbTextDisabledBrush"),
-            };
-        }
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(mode, look.ModeName);
-        ToolTipService.SetToolTip(mode, look.ModeTip);
-        return mode;
-    }
-
-    private void Run(string command, JsonElement? args = null) => _ = RunCommand?.Invoke(command, args, "button");
+    private void Run(string command, JsonElement? args = null) => _ = _run?.Invoke(command, args, "button");
 
     private static bool IsInside(DependencyObject element, DependencyObject ancestor)
     {

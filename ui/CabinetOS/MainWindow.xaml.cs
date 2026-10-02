@@ -1047,6 +1047,7 @@ public sealed partial class MainWindow : Window
             ApplyRailLayout(settings.Layout == "rail");
         }
         ApplyStoredDockSize(settings);
+        ApplyStoredSplit(settings, previous, firstStart);
         ApplyRailSettings(settings, previous, firstStart);
         ApplyColumnSettings(settings);
         ApplyCompactSettings(settings, previous);

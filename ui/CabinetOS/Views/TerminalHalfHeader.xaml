@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CabinetOS.Views.TerminalHalfHeader"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+      The terminal's header, 34 px (design view A), for one view of the dock or for one half of the split:
+      the pane's badge (the split only), a tab per session (its pane's badge, its mode), "+", the other
+      profiles, the caption, and close (the last header only). The default look's sizes; the theme's metrics
+      replace them (TerminalHalfHeader.ApplyMetrics).
+    -->
+    <Border x:Name="Root" BorderBrush="{ThemeResource CbDividerBrush}" BorderThickness="0,0,0,1">
+        <Grid
+            x:Name="HeaderGrid"
+            Padding="12,0,6,0"
+            ColumnSpacing="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <!-- The split: which pane this half sits under, in the pane's colour, even when the pane has no session. -->
+            <TextBlock
+                x:Name="PaneBadge"
+                Margin="0,0,8,0"
+                VerticalAlignment="Center"
+                FontSize="11"
+                Visibility="Collapsed" />
+            <ScrollViewer
+                x:Name="TabScroller"
+                Grid.Column="1"
+                HorizontalScrollBarVisibility="Hidden"
+                HorizontalScrollMode="Enabled"
+                IsTabStop="False"
+                VerticalScrollBarVisibility="Disabled"
+                VerticalScrollMode="Disabled">
+                <StackPanel
+                    x:Name="TabStrip"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="2" />
+            </ScrollViewer>
+            <Button
+                x:Name="NewButton"
+                Grid.Column="2"
+                Padding="0"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="New terminal"
+                IsTabStop="False"
+                Style="{StaticResource CbDockTabButtonStyle}"
+                ToolTipService.ToolTip="New terminal">
+                <FontIcon FontSize="12" Glyph="&#xE710;" />
+            </Button>
+            <Button
+                x:Name="ProfilesButton"
+                Grid.Column="3"
+                Width="20"
+                MinWidth="20"
+                Padding="0"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Other shells"
+                IsTabStop="False"
+                Style="{StaticResource CbDockTabButtonStyle}"
+                ToolTipService.ToolTip="Other shells">
+                <FontIcon FontSize="9" Glyph="&#xE70D;" />
+                <Button.Flyout>
+                    <MenuFlyout x:Name="ProfilesMenu" Placement="BottomEdgeAlignedLeft" />
+                </Button.Flyout>
+            </Button>
+            <TextBlock
+                x:Name="CaptionText"
+                Grid.Column="4"
+                Padding="0,0,10,0"
+                VerticalAlignment="Center"
+                FontSize="11"
+                Foreground="{ThemeResource CbHintTextBrush}"
+                TextAlignment="Right"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <Button
+                x:Name="CloseButton"
+                Grid.Column="5"
+                Width="24"
+                Height="24"
+                MinWidth="24"
+                Padding="0"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Hide the terminal"
+                IsTabStop="False"
+                Style="{StaticResource CbDockTabButtonStyle}"
+                ToolTipService.ToolTip="Hide the terminal">
+                <FontIcon FontSize="9" Glyph="&#xE711;" />
+            </Button>
+        </Grid>
+    </Border>
+</UserControl>

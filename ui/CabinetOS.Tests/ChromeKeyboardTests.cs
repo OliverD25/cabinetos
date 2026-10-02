@@ -43,6 +43,7 @@ public class ChromeKeyboardTests
     [InlineData("Views/PaneTabs.xaml")]
     [InlineData("Views/ActivityRail.xaml")]
     [InlineData("Views/ToolDock.xaml")]
+    [InlineData("Views/TerminalHalfHeader.xaml")]
     [InlineData("Views/EditorPane.xaml")]
     public void Every_button_of_the_chrome_takes_no_keyboard(string relative)
     {
@@ -92,7 +93,7 @@ public class ChromeKeyboardTests
 
     [Theory]
     [InlineData("Views/PaneCrumbs.xaml.cs", true)]
-    [InlineData("Views/ToolDock.xaml.cs", true)]
+    [InlineData("Views/TerminalHalfHeader.xaml.cs", true)]
     [InlineData("Views/ActivityRail.xaml.cs", false)]
     public void Every_button_the_code_builds_takes_no_keyboard_from_a_click(string relative, bool alsoNoTabStop)
     {

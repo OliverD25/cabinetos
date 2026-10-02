@@ -92,6 +92,15 @@ internal sealed class TerminalController
     private bool _pageReady;
     private bool _starting;
     private long _shownCount;
+    // The split mirror: whether the dock shows two halves, and where the panes lie across it (the window
+    // measures them; docs/ui.md, "The terminal"). The view the page was last sent, so a layout that did not
+    // change sends nothing.
+    private bool _split;
+    private bool _dual = true;
+    private PaneSpan _leftSpan;
+    private PaneSpan _rightSpan;
+    private double _dockWidth;
+    private string? _lastView;
 
     /// <summary>A controller whose page lives in <paramref name="page"/>.</summary>
     public TerminalController(ICoreChannel core, DispatcherQueue dispatcher, WebViewHost page)
@@ -127,18 +136,30 @@ internal sealed class TerminalController
     /// <summary>The sessions, oldest first.</summary>
     public IReadOnlyList<TerminalTab> Tabs => _tabs;
 
-    /// <summary>The tab on screen.</summary>
+    /// <summary>
+    /// The tab the keys go to: the one view's shown tab, or in the split mirror the shown tab of the half that has
+    /// the keyboard (null when that half shows the hint).
+    /// </summary>
     public TerminalTab? Shown { get; private set; }
+
+    /// <summary>Whether the dock shows two halves, one under each pane (<see cref="TerminalSplitLayout"/>).</summary>
+    public bool Split => _split;
+
+    /// <summary>The half that has the keyboard, in the split mirror: the pane of the tab shown last, or last clicked into.</summary>
+    public int KeyboardPane { get; private set; }
 
     /// <summary>The profiles from <c>terminal.profiles</c>.</summary>
     public TerminalProfiles Profiles { get; set; } = TerminalProfiles.Defaults;
 
-    /// <summary>How many cells fit the pane now: the size a new session starts with.</summary>
-    public Func<(ushort Cols, ushort Rows)> EstimateSize { get; set; } = () => (100, 24);
+    /// <summary>How many cells fit a new session of a pane now (the pane's half in the split): the size it starts with.</summary>
+    public Func<int, (ushort Cols, ushort Rows)> EstimateSize { get; set; } = _ => (100, 24);
 
     /// <summary>The header's caption: how the shown shell ended, else its folder (<see cref="TerminalCaption"/>).</summary>
-    public CaptionLook Caption() =>
-        TerminalCaption.Decide(new CaptionFacts(Shown?.Profile, Shown?.Running ?? false, Shown?.ExitCode, Shown?.StartFolder, Shown?.Folder));
+    public CaptionLook Caption() => CaptionFor(Shown);
+
+    /// <summary>The caption of a half's header: the same rule for the session that half shows.</summary>
+    public static CaptionLook CaptionFor(TerminalTab? tab) =>
+        TerminalCaption.Decide(new CaptionFacts(tab?.Profile, tab?.Running ?? false, tab?.ExitCode, tab?.StartFolder, tab?.Folder));
 
     /// <summary>The tabs in one line, the shown one marked (<see cref="TerminalHeader.Describe"/>).</summary>
     public string Describe() =>
@@ -147,6 +168,55 @@ internal sealed class TerminalController
     /// <summary>The pane's most recent running session, or null (<see cref="TerminalTabs.MostRecent"/>).</summary>
     public TerminalTab? MostRecentFor(int pane) =>
         TerminalTabs.MostRecent(_tabs.Select(t => t.Facts), pane) is { } session ? Find(session) : null;
+
+    /// <summary>
+    /// The halves of the split dock now, left first (<see cref="TerminalSplitLayout.Halves"/>): one under each pane, or
+    /// one for the left pane alone while one pane is shown. The one view has none of its own, but this answers for it
+    /// too, from the panes the window last measured.
+    /// </summary>
+    public IReadOnlyList<SplitHalf> Halves() =>
+        TerminalSplitLayout.Halves([.. _tabs.Select(t => t.Facts)], _dual, _leftSpan, _rightSpan, _dockWidth);
+
+    /// <summary>
+    /// The pane whose session Ctrl+` pressed in <paramref name="activePane"/> counts as shown (<see cref="TerminalSplitLayout.SummonShownPane"/>):
+    /// the shown tab's pane, or in the split the active pane's own half when it shows a session.
+    /// </summary>
+    public int? ShownPaneFor(int activePane) =>
+        TerminalSplitLayout.SummonShownPane(_split, [.. _tabs.Select(t => t.Facts)], activePane, Shown?.Pane);
+
+    /// <summary>The tab a half shows: the pane's one shown last, or null for the hint.</summary>
+    public TerminalTab? ShownIn(int pane) =>
+        TerminalSplitLayout.ShownIn(_tabs.Select(t => t.Facts), pane) is { } session ? Find(session) : null;
+
+    /// <summary>
+    /// The window measured the dock's layout: whether it is split (<see cref="TerminalSplitLayout.Active"/>), whether two
+    /// panes are shown, where the panes lie across the dock, and how wide the dock is. The page gets the new places when
+    /// they differ from the ones it has. Leaving the split shows the session the half with the keyboard showed.
+    /// </summary>
+    public void SetSplit(bool split, bool dual, PaneSpan left, PaneSpan right, double dockWidth)
+    {
+        var (was, wasDual) = (_split, _dual);
+        (_split, _dual, _leftSpan, _rightSpan, _dockWidth) = (split, dual, left, right, dockWidth);
+        var before = Shown;
+        if (!split)
+        {
+            if (was)
+            {
+                Shown = Find(TerminalSplitLayout.ShownWhenUnsplit([.. _tabs.Select(t => t.Facts)], KeyboardPane) ?? 0);
+            }
+        }
+        else
+        {
+            // Turned on, the half of the shown tab has the keyboard; with one pane shown, the left half is all there is.
+            KeyboardPane = !dual ? 0 : !was && Shown is { } current ? current.Pane : KeyboardPane;
+            Shown = ShownIn(KeyboardPane);
+        }
+        PostView();
+        if (was != split || wasDual != dual || before != Shown)
+        {
+            Changed?.Invoke();
+        }
+    }
 
     /// <summary>The keymap changed: the page passes on the new ways out.</summary>
     public void SetKeymap(Keymap keymap)
@@ -171,8 +241,8 @@ internal sealed class TerminalController
         }
     }
 
-    /// <summary>Gives the shown terminal the keyboard (the view focused the WebView2 first).</summary>
-    public void FocusPage() => _page.Post(TerminalPageMessages.Focus());
+    /// <summary>Gives the shown terminal the keyboard (the view focused the WebView2 first); in the split, the half that has it.</summary>
+    public void FocusPage() => _page.Post(TerminalPageMessages.Focus(Shown?.SessionId));
 
     /// <summary>
     /// Starts a shell bound to <paramref name="pane"/> (0 left, 1 right): <paramref name="profile"/>
@@ -186,7 +256,7 @@ internal sealed class TerminalController
             return null;
         }
         var name = profile ?? Profiles.DefaultProfile;
-        var (cols, rows) = EstimateSize();
+        var (cols, rows) = EstimateSize(pane);
         CoreReply reply;
         try
         {
@@ -232,7 +302,8 @@ internal sealed class TerminalController
     /// </summary>
     public bool ShowNext(int step)
     {
-        var next = TerminalTabs.Cycle([.. _tabs.Select(t => t.SessionId)], Shown?.SessionId, step);
+        // In the split mirror the round is the tabs of the half that has the keyboard.
+        var next = TerminalSplitLayout.CycleTarget([.. _tabs.Select(t => t.Facts)], _split ? KeyboardPane : null, Shown?.SessionId, step);
         if (next is not { } session || session == Shown?.SessionId)
         {
             return false;
@@ -325,12 +396,21 @@ internal sealed class TerminalController
         if (Shown == tab)
         {
             Shown = null;
-            // The pane's other session comes to the front before another pane's.
-            if ((MostRecentFor(tab.Pane) ?? _tabs.LastOrDefault()) is { } next)
+            // The pane's other session comes to the front before another pane's. In the split mirror it only comes
+            // to the front of its own half: a half with no other session shows the hint, and nothing moves to it.
+            if (_split)
+            {
+                if (ShownIn(tab.Pane) is { } half)
+                {
+                    ShowTab(half);
+                }
+            }
+            else if ((MostRecentFor(tab.Pane) ?? _tabs.LastOrDefault()) is { } next)
             {
                 ShowTab(next);
             }
         }
+        PostView();
         Changed?.Invoke();
         if (_tabs.Count == 0)
         {
@@ -383,6 +463,7 @@ internal sealed class TerminalController
         var tabs = _tabs.ToList();
         _tabs.Clear();
         Shown = null;
+        PostView();
         foreach (var tab in tabs)
         {
             tab.CloseTimer?.Stop();
@@ -510,14 +591,34 @@ internal sealed class TerminalController
     private void ShowTab(TerminalTab tab)
     {
         tab.LastShown = ++_shownCount;
+        // Showing a tab gives its half the keyboard (a tab button, Ctrl+`, a new session): the half is the tab's pane's.
+        KeyboardPane = tab.Pane;
         if (Shown != tab)
         {
             Shown = tab;
-            _page.Post(TerminalPageMessages.Show(tab.SessionId));
             Diag.Info(Target, "terminal tab shown", new LogField("session_id", tab.SessionId), new LogField("profile", tab.Profile),
                 new LogField("pane", TerminalBinding.PaneName(tab.Pane)), new LogField("tabs", Describe()));
         }
+        PostView();
         Changed?.Invoke();
+    }
+
+    // What the page shows now: the one view's shown tab, or in the split the halves, each with its session or its hint.
+    // A view the page already has is not sent again.
+    private void PostView()
+    {
+        var message = _split
+            ? TerminalPageMessages.View([.. Halves().Select(h => new ViewPlace(h.Session, h.X, h.Width, h.Empty ? TerminalSplitLayout.Hint : null))])
+            : Shown is { } shown ? TerminalPageMessages.Show(shown.SessionId) : TerminalPageMessages.View([]);
+        if (message == _lastView)
+        {
+            return;
+        }
+        _lastView = message;
+        if (_pageReady)
+        {
+            _page.Post(message);
+        }
     }
 
     private TerminalTab? Find(ulong sessionId) => _tabs.Find(t => t.SessionId == sessionId);
@@ -596,6 +697,9 @@ internal sealed class TerminalController
                     KeyCommand?.Invoke(command);
                 }
                 break;
+            case "focused":
+                OnTerminalFocused(message.Session);
+                break;
             case "paste":
                 var running = Find(message.Session) is { Running: true };
                 Diag.Info(Target, "terminal paste asked", new LogField("session_id", message.Session), new LogField("running", running));
@@ -605,6 +709,21 @@ internal sealed class TerminalController
                 }
                 break;
         }
+    }
+
+    // A session's terminal got the keyboard, by a click into its text or by the window's own focus message. In the split
+    // that says which half the keys go to; nothing else moves it (the Zero-Hijack rule): the window never moves the
+    // keyboard between halves by itself. The one view has one terminal on screen, so there is nothing to learn.
+    private void OnTerminalFocused(ulong sessionId)
+    {
+        if (!_split || Find(sessionId) is not { } tab || tab == Shown || ShownIn(tab.Pane) != tab)
+        {
+            return;
+        }
+        KeyboardPane = tab.Pane;
+        Shown = tab;
+        Diag.Info(Target, "terminal half focused", new LogField("session_id", tab.SessionId), new LogField("pane", TerminalBinding.PaneName(tab.Pane)));
+        Changed?.Invoke();
     }
 
     /// <summary>Pastes text into a session's terminal, as if the user had pasted it there.</summary>
@@ -635,11 +754,14 @@ internal sealed class TerminalController
                 _page.Post(TerminalPageMessages.Exited(tab.SessionId, code));
             }
         }
-        if (Shown is { } shown)
+        _lastView = null;
+        PostView();
+        // A resize to another size makes the pseudo-console paint the whole screen (docs/terminal.md): every
+        // session on screen, which is the shown one, or each half's in the split.
+        IEnumerable<TerminalTab?> onScreen = _split ? Halves().Select(h => h.Session is { } s ? Find(s) : null) : [Shown];
+        foreach (var shown in onScreen)
         {
-            _page.Post(TerminalPageMessages.Show(shown.SessionId));
-            // A resize to another size makes the pseudo-console paint the whole screen (docs/terminal.md).
-            if (shown.Running && shown.Size.Cols > 1)
+            if (shown is { Running: true, Size.Cols: > 1 })
             {
                 var (cols, rows) = shown.Size;
                 _ = RepaintAsync(shown, cols, rows);

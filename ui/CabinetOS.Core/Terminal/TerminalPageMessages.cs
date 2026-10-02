@@ -35,9 +35,17 @@ public sealed record TerminalSpacing(double LineHeight, double Top, double Right
 /// <c>ready</c>, <c>input</c> (keys as text), <c>binary</c> (keys as base64),
 /// <c>resize</c> (the fit addon's cells), <c>buffer</c> (the alternate screen
 /// came or went), <c>key</c> (a shortcut of the window pressed in the terminal),
-/// or <c>paste</c> (Ctrl+Shift+V: the page asks for the clipboard's text).
+/// <c>paste</c> (Ctrl+Shift+V: the page asks for the clipboard's text), or
+/// <c>focused</c> (a session's terminal got the keyboard: a click into its text, or the window's focus).
 /// </summary>
 public sealed record TerminalPageMessage(string Type, ulong Session, string? Data, int Cols, int Rows, bool Alternate, string? Keys);
+
+/// <summary>
+/// One place of the page's view (<see cref="TerminalPageMessages.View"/>): a session's terminal, or a hint, at
+/// <paramref name="X"/> pixels from the page's left edge and <paramref name="Width"/> wide; a width of 0 is the
+/// whole page.
+/// </summary>
+public readonly record struct ViewPlace(ulong? Session, double X, double Width, string? Hint = null);
 
 /// <summary>
 /// The web-message protocol between the window and its terminal page. The
@@ -77,7 +85,7 @@ public static class TerminalPageMessages
                     new TerminalPageMessage(type, session, null, 0, 0, alternate.GetBoolean(), null),
                 "key" when Text(root, "keys") is { Length: > 0 and < 64 } keys =>
                     new TerminalPageMessage(type, 0, null, 0, 0, false, keys),
-                "paste" when session > 0 => new TerminalPageMessage(type, session, null, 0, 0, false, null),
+                "paste" or "focused" when session > 0 => new TerminalPageMessage(type, session, null, 0, 0, false, null),
                 _ => null,
             };
         }
@@ -98,8 +106,34 @@ public static class TerminalPageMessages
     public static string Output(ulong session, string base64) =>
         Write(w => { w.WriteString("type", "output"); w.WriteNumber("session", session); w.WriteString("data", base64); });
 
-    /// <summary>Shows one session's terminal (the tabs).</summary>
+    /// <summary>Shows one session's terminal across the whole page (the tabs).</summary>
     public static string Show(ulong session) => Write(w => { w.WriteString("type", "show"); w.WriteNumber("session", session); });
+
+    /// <summary>
+    /// The split mirror's view: each session on screen at its place across the page, and a hint in the place of
+    /// a pane that has no session. Every session not named is hidden.
+    /// </summary>
+    public static string View(IReadOnlyList<ViewPlace> places) => Write(w =>
+    {
+        w.WriteString("type", "view");
+        w.WriteStartArray("places");
+        foreach (var place in places)
+        {
+            w.WriteStartObject();
+            if (place.Session is { } session)
+            {
+                w.WriteNumber("session", session);
+            }
+            if (place.Hint is { } hint)
+            {
+                w.WriteString("hint", hint);
+            }
+            w.WriteNumber("x", Math.Round(place.X, 1));
+            w.WriteNumber("width", Math.Round(place.Width, 1));
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+    });
 
     /// <summary>Drops a session's terminal.</summary>
     public static string Close(ulong session) => Write(w => { w.WriteString("type", "close"); w.WriteNumber("session", session); });
@@ -108,8 +142,18 @@ public static class TerminalPageMessages
     public static string Exited(ulong session, uint code) =>
         Write(w => { w.WriteString("type", "exited"); w.WriteNumber("session", session); w.WriteNumber("code", code); });
 
-    /// <summary>Gives the shown terminal the keyboard.</summary>
-    public static string Focus() => Write(w => w.WriteString("type", "focus"));
+    /// <summary>
+    /// Gives a session's terminal the keyboard: <paramref name="session"/>, which in the split mirror is the
+    /// half that has it; without one, the first session on screen.
+    /// </summary>
+    public static string Focus(ulong? session = null) => Write(w =>
+    {
+        w.WriteString("type", "focus");
+        if (session is { } id)
+        {
+            w.WriteNumber("session", id);
+        }
+    });
 
     /// <summary>
     /// The clipboard's text for a session, which xterm.js pastes as typed text (bracketed when the shell asked for

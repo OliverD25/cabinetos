@@ -7,21 +7,51 @@ body {
   background: transparent;
 }
 
-/* The design's body padding: 8px 12px. */
-#terminals {
-  position: absolute;
-  inset: 8px 4px 4px 12px;
+/* The design's body padding: 8px 12px; a theme's metrics replace it (terminal.js sets these). */
+:root {
+  --pad-top: 8px;
+  --pad-right: 4px;
+  --pad-bottom: 4px;
+  --pad-left: 12px;
 }
 
-/* Hidden sessions keep their size (visibility, not display), so they fit and draw at once when shown. */
-.session {
+#terminals {
   position: absolute;
   inset: 0;
+}
+
+/*
+  A session fills the page inside the padding. In the split mirror the window gives each one its place across
+  the page: --x is where it starts, --right how far its right edge is from the page's, in pixels.
+  Hidden sessions keep their size (visibility, not display), so they fit and draw at once when shown.
+*/
+.session {
+  position: absolute;
+  top: var(--pad-top);
+  bottom: var(--pad-bottom);
+  left: calc(var(--x, 0px) + var(--pad-left));
+  right: calc(var(--right, 0px) + var(--pad-right));
   visibility: hidden;
 }
 
 .session.shown {
   visibility: visible;
+}
+
+/* What a pane without a session shows in the split mirror: the hint, quietly, and nothing else. */
+.hint {
+  position: absolute;
+  top: var(--pad-top);
+  left: calc(var(--x, 0px) + var(--pad-left));
+  right: calc(var(--right, 0px) + var(--pad-right));
+  color: var(--hint-color, #ffffffe6);
+  opacity: 0.5;
+  font: 12px 'Cascadia Code', 'Cascadia Mono', Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+  pointer-events: none;
 }
 
 .xterm .xterm-viewport,

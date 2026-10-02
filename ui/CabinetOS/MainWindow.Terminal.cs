@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using CabinetOS.Core.Commands;
 using CabinetOS.Core.Diagnostics;
@@ -28,6 +29,11 @@ public sealed partial class MainWindow
     // What cabinetos.json holds for each placement, as far as the window knows: its own last
     // write, or what the file said. A config_changed that brings the same value changes nothing.
     private readonly Dictionary<DockPlacement, uint?> _dockKnown = [];
+    // terminal.split as the window knows it: its own last write, or what the file said. The dock shows two halves while
+    // it is on and the dock sits under the panes (TerminalSplitLayout.Active); the signature is what the dock's
+    // columns were laid out for, so a layout that did not change redraws nothing.
+    private bool _splitSetting;
+    private string? _dockSplitSignature;
     private bool _paletteFromTerminal;
     // The pane Ctrl+` gave the keyboard back to from the terminal, until the terminal gets it again or the dock
     // hides: Ctrl+` there is the "second" one, which hides the dock. A pane switch in between (closing a tool in
@@ -66,6 +72,11 @@ public sealed partial class MainWindow
         RightSplitter.Dragged += delta => ResizeDock(_dockDragStart - delta);
         RightSplitter.DragCompleted += EndDockDrag;
         MainColumn.SizeChanged += (_, _) => ApplyDockSize();
+        // The halves lie under the panes and follow them: when a pane's place or width changes (the window, the sidebar,
+        // the second pane coming or going), the halves are laid out again.
+        PanesGrid.SizeChanged += (_, _) => ApplySplitLayout();
+        LeftSide.SizeChanged += (_, _) => ApplySplitLayout();
+        RightSide.SizeChanged += (_, _) => ApplySplitLayout();
         TerminalButton.Click += (_, _) => _ = _router.ExecuteAsync("view.toggleTerminal", trigger: "button");
         RootGrid.ActualThemeChanged += (_, _) => SendTerminalTheme();
         SendTerminalTheme();
@@ -95,6 +106,7 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("terminal.previousTab", _ => CycleTerminalTabs(-1));
         _router.RegisterUiHandler("terminal.nextTab", _ => CycleTerminalTabs(1));
         _router.RegisterUiHandler("terminal.setMode", SetTerminalModeAsync);
+        _router.RegisterUiHandler("terminal.toggleSplit", ToggleSplitAsync);
     }
 
     // Ctrl+` and the top row's terminal button. A key (or the palette) summons the active pane's session
@@ -125,7 +137,7 @@ public sealed partial class MainWindow
         _dockVisible,
         _dockVisible && Dock.HasTerminalFocus,
         _active,
-        _terminal.Shown?.Pane,
+        _terminal.ShownPaneFor(_active),
         _terminal.MostRecentFor(_active)?.SessionId,
         _terminalHandedBackTo == _active);
 
@@ -156,6 +168,11 @@ public sealed partial class MainWindow
         {
             case SummonAction.FocusShown:
                 SetDockVisible(true);
+                // In the split the half under this pane gets the keyboard, whichever half had it.
+                if (_terminal.Split && _terminal.ShownIn(_active) is { } half)
+                {
+                    _terminal.Show(half.SessionId);
+                }
                 FocusTerminal();
                 break;
             case SummonAction.ShowSession when summon.Session is { } session:
@@ -175,7 +192,8 @@ public sealed partial class MainWindow
         {
             return;
         }
-        var bound = pane ?? _active;
+        // Ctrl+Shift+T acts for the active pane, also while the other half has the keyboard; a half's own "+" names its pane.
+        var bound = pane ?? TerminalSplitLayout.NewTabPane(_dual, _active);
         await OpenInDockAsync(profile, folder ?? PaneFolder(bound), bound, requestId);
     }
 
@@ -320,6 +338,8 @@ public sealed partial class MainWindow
         // Under hairlines the line is on the edge that meets the panes.
         Dock.ApplyMetrics(bottom);
         SetDockVisible(_dockVisible);
+        // The split holds only under the panes; beside them the dock shows one view (the setting stays).
+        ApplySplitLayout();
         UpdateDockHeader();
     }
 
@@ -392,19 +412,175 @@ public sealed partial class MainWindow
         ApplyDockSize();
     }
 
+    // The header: the one view's tabs and caption, or in the split each half's own, with only its pane's sessions.
     private void UpdateDockHeader()
     {
-        Dock.SetTabs(_terminal.Tabs, _terminal.Shown);
-        var caption = _terminal.Caption();
-        Dock.SetCaption(caption.Text, caption.Tip);
+        var halves = _terminal.Split ? _terminal.Halves() : null;
+        Dock.ApplySplit(halves);
+        _dockSplitSignature = SplitSignature(halves);
+        if (halves is null)
+        {
+            Dock.SetTabs(_terminal.Tabs, _terminal.Shown);
+            var caption = _terminal.Caption();
+            Dock.SetCaption(caption.Text, caption.Tip);
+            return;
+        }
+        foreach (var half in halves)
+        {
+            var shown = _terminal.ShownIn(half.Pane);
+            Dock.SetHalfTabs(half.Pane, [.. _terminal.Tabs.Where(t => t.Pane == half.Pane)], shown);
+            var caption = TerminalController.CaptionFor(shown);
+            Dock.SetHalfCaption(half.Pane, caption.Text, caption.Tip);
+        }
     }
 
-    // The snapshot aid's terminal-state:<label> step: the tabs as the header shows them, who has the keyboard.
-    private void LogTerminalState(string label) =>
-        Diag.Info(TerminalTarget, "terminal state", new LogField("label", label), new LogField("tabs", _terminal.Describe()),
-            new LogField("shown", _terminal.Shown?.SessionId), new LogField("dock", _dockVisible),
-            new LogField("terminal_keyboard", _dockVisible && Dock.HasTerminalFocus), new LogField("active_pane", TerminalBinding.PaneName(_active)),
-            new LogField("caption", _terminal.Caption().Text), new LogField("folder", _terminal.Shown?.Folder));
+    private static string SplitSignature(IReadOnlyList<SplitHalf>? halves) =>
+        halves is null ? "" : string.Join('|', halves.Select(h => string.Create(CultureInfo.InvariantCulture, $"{h.Pane}:{h.X:0.#}:{h.Width:0.#}")));
+
+    // ----- The split mirror (docs/ui.md, "The terminal") -----
+
+    // terminal.toggleSplit: Ctrl+\ in the terminal, or the palette. {"split": true|false} sets it instead of flipping it.
+    // The dock splits only under the panes, so beside them it says so and the setting stays as it is.
+    private Task ToggleSplitAsync(CommandInvocation invocation)
+    {
+        if (RefuseInCompact("terminal"))
+        {
+            return Task.CompletedTask;
+        }
+        if (_dockPlacement != DockPlacement.Bottom)
+        {
+            ShowNotice("The terminal splits only when the dock is under the panes (ui.layout classic or rail).");
+            return Task.CompletedTask;
+        }
+        var wanted = SplitArgument(invocation.Args) ?? !_splitSetting;
+        var hadKeyboard = _dockVisible && Dock.HasTerminalFocus;
+        SetSplit(wanted);
+        if (hadKeyboard)
+        {
+            // The terminal that had the keyboard moved on the page, not away: its half keeps it.
+            _terminal.FocusPage();
+        }
+        return Task.CompletedTask;
+    }
+
+    private static bool? SplitArgument(JsonElement? args) =>
+        args is { ValueKind: JsonValueKind.Object } value && value.TryGetProperty("split", out var split)
+            && split.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? split.GetBoolean()
+            : null;
+
+    // The user's toggle: applied at once, then written (terminal.split); the configuration the core sends back meanwhile
+    // does not flip it back (IsOwnWrite). Logged with the halves' widths.
+    private void SetSplit(bool on)
+    {
+        if (on == _splitSetting)
+        {
+            return;
+        }
+        _splitSetting = on;
+        ApplySplitLayout();
+        LogSplit(on);
+        _ = PersistAsync(SplitKey, on);
+    }
+
+    private const string SplitKey = "terminal.split";
+
+    // terminal.split at start, and after a hand edit of cabinetos.json or another window's toggle.
+    private void ApplyStoredSplit(UiSettings settings, UiSettings previous, bool firstStart)
+    {
+        if (!firstStart && settings.TerminalSplit == previous.TerminalSplit)
+        {
+            return;
+        }
+        // The window's own toggle is on its way to the file: the configuration that comes meanwhile may still hold the old value.
+        if (IsOwnWrite(SplitKey, settings.TerminalSplit) || settings.TerminalSplit == _splitSetting)
+        {
+            return;
+        }
+        _splitSetting = settings.TerminalSplit;
+        ApplySplitLayout();
+        if (!firstStart)
+        {
+            Diag.Info(TerminalTarget, "the terminal split follows the configuration", new LogField("split", _splitSetting));
+            LogSplit(_splitSetting);
+        }
+    }
+
+    // Measures the panes and gives the terminal and the dock their layout: where each pane lies across the dock decides
+    // where each half goes. Runs when a pane's place or width changes, the setting changes, or the dock changes place.
+    private void ApplySplitLayout()
+    {
+        if (_terminal is null)
+        {
+            return;
+        }
+        var bottom = _dockPlacement == DockPlacement.Bottom;
+        var inset = Dock.BodyInset;
+        var left = new PaneSpan(LeftSide.ActualOffset.X - inset, LeftSide.ActualWidth);
+        var right = new PaneSpan(RightSide.ActualOffset.X - inset, RightSide.ActualWidth);
+        var width = Math.Max(0, PanesGrid.ActualWidth - Dock.BodyInsets);
+        _terminal.SetSplit(TerminalSplitLayout.Active(_splitSetting, bottom), _dual, left, right, width);
+        var halves = _terminal.Split ? _terminal.Halves() : null;
+        if (SplitSignature(halves) != _dockSplitSignature)
+        {
+            UpdateDockHeader();
+        }
+    }
+
+    // "terminal split": the split turned on or off, and the halves' widths and the panes' (device-independent pixels).
+    private void LogSplit(bool on) =>
+        Diag.Info(TerminalTarget, "terminal split", new LogField("split", on), new LogField("effective", _terminal.Split),
+            new LogField("halves", _terminal.Split ? SplitSignature(_terminal.Halves()) : "none"),
+            new LogField("left_pane_width", Math.Round(LeftSide.ActualWidth, 1)), new LogField("right_pane_width", Math.Round(_dual ? RightSide.ActualWidth : 0, 1)));
+
+    // The snapshot aid's terminal-state:<label> step: the tabs as the header shows them, who has the keyboard, and the
+    // split: each half's shown session and place on the window, and each pane's, so a test judges the halves against the panes.
+    private void LogTerminalState(string label)
+    {
+        var fields = new List<LogField>
+        {
+            new("label", label), new("tabs", _terminal.Describe()), new("shown", _terminal.Shown?.SessionId), new("dock", _dockVisible),
+            new("terminal_keyboard", _dockVisible && Dock.HasTerminalFocus), new("active_pane", TerminalBinding.PaneName(_active)),
+            new("caption", _terminal.Caption().Text), new("folder", _terminal.Shown?.Folder),
+            new("split", _terminal.Split), new("split_setting", _splitSetting), new("dual", _dual),
+            new("keyboard_half", _terminal.Split ? TerminalBinding.PaneName(_terminal.KeyboardPane) : null),
+        };
+        if (_dockVisible)
+        {
+            IReadOnlyList<SplitHalf> halves = _terminal.Split ? _terminal.Halves() : [];
+            foreach (var pane in new[] { 0, 1 })
+            {
+                var name = TerminalBinding.PaneName(pane);
+                var side = pane == 1 ? RightSide : LeftSide;
+                if (pane == 0 || _dual)
+                {
+                    var (x, w) = AcrossWindow(side);
+                    fields.Add(new($"{name}_pane_x", x));
+                    fields.Add(new($"{name}_pane_width", w));
+                }
+                if (halves.FirstOrDefault(h => h.Pane == pane) is not { } half)
+                {
+                    continue;
+                }
+                var header = Dock.HeaderOf(pane);
+                var (hx, hw) = AcrossWindow(header);
+                fields.Add(new($"{name}_half_x", hx));
+                fields.Add(new($"{name}_half_width", hw));
+                fields.Add(new($"{name}_half_session", half.Session));
+                fields.Add(new($"{name}_half_tabs", string.Join(",", half.Tabs)));
+                fields.Add(new($"{name}_half_hint", half.Empty));
+                fields.Add(new($"{name}_badge", header.BadgeColors.Half));
+            }
+        }
+        Diag.Info(TerminalTarget, "terminal state", [.. fields]);
+    }
+
+    // Where an element lies on the window, in device-independent pixels: its left edge and its width.
+    private (double X, double Width) AcrossWindow(FrameworkElement element)
+    {
+        var box = element.TransformToVisual(RootGrid).TransformBounds(new Windows.Foundation.Rect(0, 0, element.ActualWidth, element.ActualHeight));
+        return (Math.Round(box.X, 1), Math.Round(box.Width, 1));
+    }
 
     // The theme's terminal colours (docs/themes.md, "terminal"); before the core sent a theme,
     // the design's text colour on a clear background with the accent's cursor.

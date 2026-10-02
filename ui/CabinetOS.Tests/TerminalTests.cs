@@ -278,6 +278,7 @@ public class TerminalTests
     [InlineData("""{"type":"buffer","session":3,"alternate":true}""", "buffer")]
     [InlineData("""{"type":"key","keys":"ctrl+backquote"}""", "key")]
     [InlineData("""{"type":"paste","session":3}""", "paste")]
+    [InlineData("""{"type":"focused","session":3}""", "focused")]
     public void The_page_messages_the_window_takes(string json, string type) =>
         Assert.Equal(type, TerminalPageMessages.Parse(json)?.Type);
 
@@ -290,6 +291,7 @@ public class TerminalTests
     [InlineData("""{"type":"resize","session":3,"cols":40000,"rows":30}""")]
     [InlineData("""{"type":"launch","session":3}""")]
     [InlineData("""{"type":"paste"}""")]
+    [InlineData("""{"type":"focused"}""")]
     public void Malformed_or_unknown_page_messages_are_dropped(string json) =>
         Assert.Null(TerminalPageMessages.Parse(json));
 
@@ -303,6 +305,35 @@ public class TerminalTests
         Assert.Equal(("output", 3UL, "aGk="), (output.RootElement.GetProperty("type").GetString(), output.RootElement.GetProperty("session").GetUInt64(), output.RootElement.GetProperty("data").GetString()));
         using var keys = JsonDocument.Parse(TerminalPageMessages.PassKeys(["ctrl+shift+p", "ctrl+backquote"]));
         Assert.Equal(2, keys.RootElement.GetProperty("keys").GetArrayLength());
+    }
+
+    [Fact]
+    public void The_split_view_names_each_session_on_screen_with_its_place_and_a_hint_where_a_pane_has_none()
+    {
+        using var split = JsonDocument.Parse(TerminalPageMessages.View(
+        [
+            new ViewPlace(3, 0, 596.04),
+            new ViewPlace(null, 604, 592, TerminalSplitLayout.Hint),
+        ]));
+        Assert.Equal("view", split.RootElement.GetProperty("type").GetString());
+        var places = split.RootElement.GetProperty("places").EnumerateArray().ToList();
+        Assert.Equal((3UL, 0d, 596d), (places[0].GetProperty("session").GetUInt64(), places[0].GetProperty("x").GetDouble(), places[0].GetProperty("width").GetDouble()));
+        Assert.False(places[0].TryGetProperty("hint", out _));
+        Assert.False(places[1].TryGetProperty("session", out _));
+        Assert.Equal(("Ctrl+` starts a shell for this pane", 604d, 592d), (places[1].GetProperty("hint").GetString(), places[1].GetProperty("x").GetDouble(), places[1].GetProperty("width").GetDouble()));
+
+        // No view at all hides every terminal; the one view's show is a view of one session across the page.
+        using var none = JsonDocument.Parse(TerminalPageMessages.View([]));
+        Assert.Equal(0, none.RootElement.GetProperty("places").GetArrayLength());
+        using var show = JsonDocument.Parse(TerminalPageMessages.Show(7));
+        Assert.Equal(("show", 7UL), (show.RootElement.GetProperty("type").GetString(), show.RootElement.GetProperty("session").GetUInt64()));
+    }
+
+    [Fact]
+    public void The_focus_message_names_the_session_that_gets_the_keyboard_when_the_window_knows_it()
+    {
+        Assert.Equal("""{"type":"focus"}""", TerminalPageMessages.Focus());
+        Assert.Equal("""{"type":"focus","session":5}""", TerminalPageMessages.Focus(5));
     }
 
     [Fact]
@@ -537,6 +568,21 @@ public class TerminalTests
         Assert.Equal("ui.dockSize.right", DockLayout.ConfigKey(DockPlacement.Right));
         Assert.Equal(213u, DockLayout.ToSetting(212.6));
         Assert.Equal(0u, DockLayout.ToSetting(-3));
+    }
+
+    [Fact]
+    public void The_terminal_split_is_read_from_the_terminal_section_and_is_off_unless_it_says_true()
+    {
+        using var on = JsonDocument.Parse("""{"terminal":{"defaultProfile":"pwsh","split":true}}""");
+        Assert.True(UiSettings.FromConfig(on.RootElement).TerminalSplit);
+        using var off = JsonDocument.Parse("""{"terminal":{"split":false}}""");
+        Assert.False(UiSettings.FromConfig(off.RootElement).TerminalSplit);
+        // Missing, or of the wrong kind: one view, the default.
+        using var missing = JsonDocument.Parse("""{"terminal":{"defaultProfile":"pwsh"}}""");
+        Assert.False(UiSettings.FromConfig(missing.RootElement).TerminalSplit);
+        using var odd = JsonDocument.Parse("""{"terminal":{"split":"yes"}}""");
+        Assert.False(UiSettings.FromConfig(odd.RootElement).TerminalSplit);
+        Assert.False(UiSettings.Defaults.TerminalSplit);
     }
 
     [Fact]
