@@ -326,6 +326,7 @@ public class RailEndToEndTests
     public async Task Every_way_of_picking_a_folder_in_the_sidebar_runs_go_toPath_once()
     {
         var (run, root, data) = Prepare("rail-pick", "{}");
+        List<string> seen = [];
         try
         {
             var clickTarget = Path.Combine(data, "a", "click-target");
@@ -367,6 +368,7 @@ public class RailEndToEndTests
             await WaitForAsync(() => LogFiles.Ui(Path.Combine(root, "logs-run")).Any(l => Message(l) == "listing shown" && SamePath(Field(l, "path").GetString()!, enterTarget)),
                 "the pane to show the folder Enter in the tree took it to", TimeSpan.FromSeconds(60));
             var logs = await run.FinishAsync("run", process, "done");
+            seen = logs;
 
             Assert.DoesNotContain(logs, l => Message(l) == "snapshot click: no shown button has that name");
             Assert.Equal(1, SidebarRuns(logs, "start", "drive"));
@@ -383,6 +385,10 @@ public class RailEndToEndTests
                 Assert.True(at >= 0, $"the pane never showed {expected} after the earlier picks; it showed: {string.Join(" | ", shown)}");
                 searchFrom = at + 1;
             }
+        }
+        catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(seen, 120)}");
         }
         finally
         {
@@ -499,7 +505,14 @@ public class RailEndToEndTests
     {
         var line = Assert.Single(logs, l => Message(l) == "rail state" && Field(l, "label").GetString() == label);
         using var parsed = JsonDocument.Parse(line);
-        check(parsed.RootElement.GetProperty("fields"));
+        try
+        {
+            check(parsed.RootElement.GetProperty("fields"));
+        }
+        catch (Xunit.Sdk.XunitException error)
+        {
+            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe window's log lines around the state (times in UTC):\n{WindowLog.Around(logs, logs.IndexOf(line))}");
+        }
     }
 
     private static void CopyFolder(string from, string to)

@@ -170,6 +170,7 @@ public class ContextMenuEndToEndTests
     public async Task The_menu_opens_with_its_corner_at_the_point_and_flips_before_the_windows_edge()
     {
         var (run, root, data) = Prepare("menu-place");
+        List<string> seen = [];
         try
         {
             var process = run.Start("place", string.Join(';',
@@ -208,6 +209,7 @@ public class ContextMenuEndToEndTests
                 "wait:500",
                 "shot:done"));
             var logs = await run.FinishAsync("place", process, "done");
+            seen = logs;
 
             var shown = logs.Where(l => Message(l) == "context menu shown").ToList();
             var placed = logs.Where(l => Message(l) == "context menu placed").ToList();
@@ -246,6 +248,10 @@ public class ContextMenuEndToEndTests
             {
                 Assert.True(Number(line, "left") >= 0 && Right(line) <= windowWidth && Number(line, "top") >= 0 && Bottom(line) <= windowHeight, line);
             });
+        }
+        catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's log lines (times in UTC):\n{WindowLog.Last(seen, 70)}");
         }
         finally
         {
@@ -882,7 +888,15 @@ public class ContextMenuEndToEndTests
     {
         var line = Assert.Single(logs, l => Message(l) == "shell state" && Field(l, "label").GetString() == label);
         using var parsed = JsonDocument.Parse(line);
-        check(parsed.RootElement.GetProperty("fields"));
+        try
+        {
+            check(parsed.RootElement.GetProperty("fields"));
+        }
+        catch (Xunit.Sdk.XunitException error)
+        {
+            // What the window did before the state was read, and after: a late menu shows as a line that comes after the state.
+            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe window's log lines around the state (times in UTC):\n{WindowLog.Around(logs, logs.IndexOf(line))}");
+        }
     }
 
     private static string? Message(string line)

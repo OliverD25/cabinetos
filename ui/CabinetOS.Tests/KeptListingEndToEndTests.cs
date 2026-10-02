@@ -34,6 +34,7 @@ public class KeptListingEndToEndTests
 
         var root = Repo.NewTempFolder("kept-listing-e2e");
         Process? process = null;
+        List<string> seen = [];
         try
         {
             var home = Directory.CreateDirectory(Path.Combine(root, "data", "home")).FullName;
@@ -90,6 +91,7 @@ public class KeptListingEndToEndTests
 
             var ui = Lines(Path.Combine(root, "logs"), "ui.*.jsonl");
             var core = Lines(Path.Combine(root, "logs"), "core.*.jsonl");
+            seen = ui;
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs"), "crash-*.json"));
             Assert.DoesNotContain(ui, l => Text(l, "level", top: true) == "ERROR");
             int At(string label) => ui.FindIndex(l => Message(l) == "tabs shown" && Text(l, "label") == label);
@@ -124,6 +126,10 @@ public class KeptListingEndToEndTests
             Assert.Equal(3, Opened(one));
             var again = ui.Last(l => Message(l) == "listing shown" && Text(l, "path") == one);
             Assert.False(Field(again, "kept").GetBoolean());
+        }
+        catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(seen, 90)}");
         }
         finally
         {

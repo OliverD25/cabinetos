@@ -36,6 +36,8 @@ public class ColumnViewEndToEndTests
 
         var root = Repo.NewTempFolder("column-view-e2e");
         var started = new List<Process>();
+        // The first window's log, for the message of a failed check.
+        List<string> seen = [];
         try
         {
             // data\a\b\c, a file in each folder; folders sort first, so a folder's first row is its subfolder.
@@ -110,6 +112,7 @@ public class ColumnViewEndToEndTests
             Assert.True(first.WaitForExit(15_000), "the first window did not close");
 
             var logs = LogFiles.Ui(Path.Combine(root, "logs-first"));
+            seen = logs;
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-first"), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
             string Shown(string label, string field) => Text(Assert.Single(logs, l => Message(l) == "column view shown" && Text(l, "label") == label), field);
@@ -197,6 +200,10 @@ public class ColumnViewEndToEndTests
             Assert.Equal(("columns", "1", b, "c>|b.txt"), (Text(start, "mode"), Text(start, "depth"), Text(start, "folders"), Text(start, "rows")));
             Assert.Equal(1, Field(Assert.Single(again, l => Message(l) == "shell state" && Text(l, "label") == "start"), "pane0_listings").GetInt32());
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-second"), "crash-*.json"));
+        }
+        catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe first window's last log lines (times in UTC):\n{WindowLog.Last(seen, 90, fieldChars: 420)}");
         }
         finally
         {
