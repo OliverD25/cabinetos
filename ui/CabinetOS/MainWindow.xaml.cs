@@ -469,7 +469,10 @@ public sealed partial class MainWindow : Window
                     {
                         MenuEditorView.HandleKey(editKey.Value);
                     }
-                    await Task.Delay(300);
+                    // Until the keyboard is on the row the key left the focus on, and a frame more for the events XAML raises late
+                    // (a fixed 300 ms let the next key come before them: a Delete after a move took out the row beside the moved one).
+                    await WaitForConditionAsync(() => MenuEditorView.FocusSettled, 5000);
+                    await SettleFramesAsync();
                     break;
                 case "menu-click":
                     if (!_contextMenu.Click(step.Argument))

@@ -91,6 +91,12 @@ public sealed partial class ContextMenuEditor : UserControl
     /// <summary>Whether nothing of the edit mode is in flight: no "Add Command…" prompt is open for it and no save is out (the snapshot aid's <c>until:menu-edit-idle</c>).</summary>
     public bool IsIdle => !_adding && !_saving;
 
+    /// <summary>
+    /// Whether the keyboard is on the row the model says has the focus (or on "Add Command…" when it has none), or the edit
+    /// mode is closed: the snapshot aid's <c>menu-edit-key</c> waits for it before the next key.
+    /// </summary>
+    public bool FocusSettled => _model is not { } model || IsFocusWithin(model.Focus >= 0 && model.Focus < _rows.Count ? _rows[model.Focus] : AddButton);
+
     /// <summary>The list being edited, while open.</summary>
     public ContextMenuEditModel? Model => _model;
 
@@ -493,6 +499,12 @@ public sealed partial class ContextMenuEditor : UserControl
         AutomationProperties.SetName(host, row.Title);
         host.GotFocus += (_, _) =>
         {
+            // XAML raises this a frame late on a busy machine. A row that a rebuild has replaced since (a move, an add)
+            // must not take the focus back to the index it had: the next Delete took out the row that was there then.
+            if (index >= _rows.Count || !ReferenceEquals(_rows[index], host))
+            {
+                return;
+            }
             _model?.SetFocus(index);
             MarkFocus();
         };
