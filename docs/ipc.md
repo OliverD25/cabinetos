@@ -75,7 +75,8 @@ because it duplicates shared-memory handles into that process. A
 configuration events (`config_changed`, `config_error`, `keymap_changed`),
 the job events (`job_progress`, `job_conflict`, `job_state_changed`),
 the plugin events (`plugin_state_changed`, `plugin_crashed`,
-`plugin_event`), `terminal_exited`, `terminal_mode_changed`, `volumes_changed`,
+`plugin_event`), `terminal_exited`, `terminal_mode_changed`,
+`terminal_folder_changed`, `volumes_changed`,
 `theme_changed`, and the marketplace events (`install_progress`,
 `install_finished`, `tools_changed`), and right after
 `welcome` a `job_conflict` for every conflict that already waits for a
@@ -156,7 +157,11 @@ terminal sprint, 2026-10-01) bound each terminal session to a file pane:
 (`terminal_list` the pane too), and it added `terminal_set_mode`, the
 event `terminal_mode_changed` and the error code `not_linkable`
 ("Terminal sessions"). `terminal_sync_cwd` is gone: a client of version
-15 that sends it gets `unknown_request`.
+15 that sends it gets `unknown_request`. Version 17 (unit 2 of the
+terminal sprint, 2026-10-02) added the prompt hook's messages:
+`terminal_pane_folder` with its reply `terminal_pane_folder`, the event
+`terminal_folder_changed`, and the shell's reported `folder` in
+`terminal_list` ("Terminal sessions").
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -212,6 +217,7 @@ as absent from an older core.
 | `terminal_type_paths` | `session_id`, `paths` | `ok` |
 | `terminal_set_mode` | `session_id`, `mode` | `ok` |
 | `terminal_list` | — | `terminal_sessions` (`sessions`) |
+| `terminal_pane_folder` | `session_id` | `terminal_pane_folder` (`session_id`, `pane`, `mode`, `folder`: a path or `null`) |
 | `list_themes` | — | `themes` (`themes`) |
 | `get_theme` | `theme_id` (without it: the theme in effect) | `theme` (`theme`) |
 | `list_tools` | — | `tools` (`tools`) |
@@ -1281,11 +1287,11 @@ restarts, finds its sessions in `terminal_list` and attaches again.
 - `pane` is the file pane the session belongs to, `left` or `right`; it
   never changes. `mode` is `locked` (the default) or `linked`; `linked`
   for a profile that is not linkable fails with `not_linkable` and starts
-  no shell. In this version the mode changes nothing in how the shell
-  runs: a linked session will follow its pane through the prompt hook of
-  a later version. `linkable` in the reply says whether the session may be
-  linked (the profile's `linkable`, [terminal.md](terminal.md),
-  "Profiles").
+  no shell. A linked session follows its pane through its shell's prompt
+  hook, at the shell's next prompt (`terminal_pane_folder` below;
+  [terminal.md](terminal.md), "The prompt hook"). `linkable` in the reply
+  says whether the session may be linked (the profile's `linkable`,
+  [terminal.md](terminal.md), "Profiles").
 - The shell's bytes travel on `pipe`, not on this channel: raw bytes, no
   framing, both ways. The client reads the shell's output (UTF-8 text with
   VT sequences) and writes keys (text, `\r` for Enter, VT sequences for the
@@ -1309,12 +1315,14 @@ restarts, finds its sessions in `terminal_list` and attaches again.
 {"id":"01M…","type":"terminal_sessions","sessions":[{"session_id":3,"profile":"pwsh",
  "cwd":"E:\\work","cols":120,"rows":30,"pid":4242,"state":{"type":"running"},
  "pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","attached":true,
- "pane":"left","mode":"locked","linkable":true}]}
+ "pane":"left","mode":"locked","linkable":true,"folder":"E:\\work\\docs"}]}
 ```
 
 `sessions` come oldest first. `state` is `{"type":"running"}` or
 `{"type":"exited","code":3}`. `cwd` is the folder the session started in;
-the shell may have moved since. `attached` says whether a client holds the
+the shell may have moved since. `folder` is the shell's folder as its
+prompt hook last reported it, left out before the first report and for a
+shell without a hook (cmd). `attached` says whether a client holds the
 pipe. `pane`, `mode` and `linkable` are as in `terminal_open`.
 
 ```json
@@ -1342,6 +1350,34 @@ every session. `terminal_close` closes the pseudo-console,
 which the shell sees as a hang-up, and forgets the session; the reply
 comes once the shell has ended (a shell still running 2 s later is ended
 by force). When the core stops, it closes every session.
+
+```json
+{"id":"01M…","type":"terminal_pane_folder","session_id":3}
+{"id":"01M…","type":"terminal_pane_folder","session_id":3,"pane":"left","mode":"linked","folder":"E:\\work\\docs"}
+```
+
+What a shell's prompt hook asks at each prompt, through `cab term cwd`
+([terminal.md](terminal.md), "The prompt hook"): the session's pane and
+mode, and the folder that pane shows. The folder is the pane's tab in
+front, in the newest `window_state` any window sent ("What the window
+shows"), when that tab shows a folder by an absolute path; `null` when no
+window has said what it shows, or the tab shows a tool. The core answers
+from memory at once, reads no file, and needs no `hello`; it logs the
+request at debug level only, as it does `window_state`. A locked session
+gets the folder too, with its mode: the command line prints it only for a
+linked one. An unknown session is `no_such_session`.
+
+Each time a shell's prompt hook reports a folder that differs from the
+one it reported last (a linked shell that followed its pane, a `cd` of the
+user's own), every connection that said `hello` gets:
+
+```json
+{"id":"01M…","type":"terminal_folder_changed","session_id":3,"folder":"E:\\work\\docs"}
+```
+
+The folder is a Windows path as the shell names it; a WSL shell's Linux
+folders come as `\\wsl.localhost\…` paths. A client that fell behind on
+events gets one for every session with a reported folder.
 
 ## Colour themes
 

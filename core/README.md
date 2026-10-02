@@ -32,7 +32,7 @@ protocol between UI and core, with the shared-memory layout:
 | `cabinetos-config` | library | `cabinetos.json`: strict parsing with line and column errors, defaults, JSON Schema export, directory watch, diff, atomic rewrite ([../docs/config.md](../docs/config.md)) | 6 |
 | `cabinetos-commands` | library | Command registry, key grammar and chords, keymap compilation with the Immutable System Tier, palette search ([../docs/keybindings.md](../docs/keybindings.md)) | 7, 4 |
 | `cabinetos-plugins` | library | `PluginHost`: Core Plugins as WebAssembly components in `wasmtime`, strict manifests, capabilities, the WASI sandbox, fuel, deadline and memory limits per call, trap containment and restarts ([../docs/plugins.md](../docs/plugins.md)) | 8, 10, 11 |
-| `cabinetos-terminal` | library | `Terminals`: shells in pseudo-consoles (ConPTY), a byte pipe per session for one client at a time, output bounded to 1 MiB with backpressure, the change-directory line of each shell, and the console side of `cabinetos-cli term` ([../docs/terminal.md](../docs/terminal.md)) | 9, 4, 1 |
+| `cabinetos-terminal` | library | `Terminals`: shells in pseudo-consoles (ConPTY), a byte pipe per session for one client at a time, output bounded to 1 MiB with backpressure, the change-directory line of each shell, the prompt hook of PowerShell and WSL and the folder reports it prints, and the console side of `cabinetos-cli term` ([../docs/terminal.md](../docs/terminal.md)) | 9, 4, 1 |
 | `cabinetos-themes` | library | `ThemeFolder`: the strict checks of the JSON theme format, the themes folder (the shipped themes written when missing, the schema for editors), listing and loading themes by ID ([../docs/themes.md](../docs/themes.md)) | 6, 8 |
 | `cabinetos-secrets` | library | `Secrets`: named secrets (API keys, tokens) in the Windows Credential Manager as `CabinetOS/<name>`, with a value type that prints as `<hidden>`; the core adds one to a plugin's web request, and no plugin ever reads it ([../docs/ipc.md](../docs/ipc.md), "Secrets") | 8 |
 | `cabinetos-market` | library | `Market`: the marketplace index (from disk, or over HTTPS with `ureq`, rustls and the Windows certificate store, cached with its `ETag`), search, and installs checked by SHA-256, unpacked in a staging folder and recorded file by file, so an uninstall removes exactly them ([../docs/marketplace.md](../docs/marketplace.md)); `transfer`, the addresses, downloads and zips it shares with the updater | 2, 8 |
@@ -209,6 +209,7 @@ cargo run -p cabinetos-cli -- --pipe demo index status
 cargo run -p cabinetos-cli -- --pipe demo term --profile cmd
 cargo run -p cabinetos-cli -- --pipe demo term list
 cargo run -p cabinetos-cli -- --pipe demo term mode 1 linked
+cargo run -p cabinetos-cli -- --pipe demo term cwd --session 1
 cargo run -p cabinetos-cli -- --pipe demo term close 1
 cargo run -p cabinetos-cli -- --pipe demo themes list
 cargo run -p cabinetos-cli -- --pipe demo themes show nord

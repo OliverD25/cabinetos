@@ -7,7 +7,9 @@ window). The pane shows what the shell prints and sends what the user types.
 Nothing runs until a client asks: the terminal is hidden by default
 (Constitution Article 4; [ADR 0005](decisions/0005-terminal-in-core-hidden.md)).
 Each session belongs to one file pane and is locked or linked to it
-(Article 9; "Panes and modes" below).
+(Article 9; "Panes and modes" below). A linked shell follows its pane
+through its own prompt hook, never by typing into it ("The prompt hook"
+below).
 
 The code is in `core/crates/cabinetos-terminal`. The core wires it to the
 pipe; the messages are in [ipc.md](ipc.md), "Terminal sessions". The
@@ -56,13 +58,20 @@ profile's note is quoted below.)
   with.
 - `linkable` says whether a session of this profile may be linked to its
   pane ("Panes and modes" below). Left out, it is `true` for PowerShell
-  (`pwsh`, `powershell`) and WSL, and `false` for any other program. It is
-  `false` for cmd and Claude Code: a linked shell will follow its pane
-  through a prompt hook (a few lines the shell runs each time it shows
-  its prompt; unit 2 of the terminal sprint adds it), and no such hook can
-  be added to them. Linking such a session fails with `not_linkable`.
-  Typing paths at its prompt (Ctrl+Alt+P) still works: that is the user's
-  own request.
+  (`pwsh`, `powershell`) and WSL while the profile's `hook` is on, and
+  `false` for any other program. It is `false` for cmd and Claude Code: a
+  linked shell follows its pane through a prompt hook (a few lines the
+  shell runs each time it shows its prompt, "The prompt hook" below), and
+  no such hook can be added to them. Linking such a session fails with
+  `not_linkable`. Typing paths at its prompt (Ctrl+Alt+P) still works:
+  that is the user's own request. A profile that says `"linkable": true`
+  for a program without a hook (cmd) may be linked, but nothing follows.
+- `hook` is the prompt hook, for PowerShell and WSL (bash): `true` when
+  left out (CabinetOS's own), `false` (none: the session neither follows
+  its pane nor reports its folder, and it is not linkable unless
+  `linkable` says so), or a string, the user's own code in the shell's
+  language, run at each prompt in place of the follow step (the folder
+  report stays). Any other program ignores it.
 - `followsPane`, the key of the old folder sync, is ignored since
   2026-10-01: a file that has it still loads, and the core no longer
   writes it.
@@ -95,10 +104,16 @@ profile's note is quoted below.)
   so each one reaches the program as one argument.
 - The shell starts in the folder the client names (an absolute path to a
   folder), or in the user's profile folder.
-- It gets the core's environment plus two variables: `TERM=xterm-256color`
-  (the pseudo-console speaks the VT sequences of xterm) and
+- It gets the core's environment plus three variables: `TERM=xterm-256color`
+  (the pseudo-console speaks the VT sequences of xterm),
   `CABINETOS_SESSION=<session id>`, so a script can tell it runs in a
-  CabinetOS terminal.
+  CabinetOS terminal, and `CABINETOS_PIPE=<the core's pipe token>`, so
+  `cab` run in it reaches the core of the window it sits in (the window
+  starts its core on a random pipe; `cab` without `--pipe` reads this
+  variable before it falls back to `dev`). Neither names a folder: a
+  folder is asked of the core when it is needed, so it is never stale. A
+  PowerShell or WSL shell also gets its prompt hook ("The prompt hook"
+  below).
 - The core's own folder is added at the end of the session's `PATH`
   (unless `PATH` lists it already; a `PATH` that is missing or empty
   becomes that folder alone). That folder holds `cabinetos-cli.exe`, and in
@@ -154,10 +169,17 @@ left pane stays the left pane's. Each session also has a mode:
 
 - **`locked`** (the default): the shell stays where the user takes it.
   Nothing the panes do reaches it.
-- **`linked`**: the session is meant to follow its pane. Since unit 1 of
-  the terminal sprint (2026-10-01) the core records and reports the mode,
-  but the shell behaves exactly as when locked. Unit 2 adds the prompt
-  hook ("Profiles" above) that makes a linked shell follow its pane.
+- **`linked`**: the session follows its pane. Each time the shell draws
+  its prompt, its prompt hook asks the core for the pane's folder and,
+  when the pane has moved since the hook last looked (or the session was
+  just linked) and the shell is elsewhere, changes to it before the
+  prompt is drawn ("The prompt hook" below). Nothing follows until the
+  shell reaches its prompt: while a command runs, or while the user types
+  a line, the pane may move freely, and the line runs where its prompt
+  was drawn; the prompt after it is in the pane's folder. A `cd` of the
+  user's own stays until the pane moves again. Linking a session makes
+  its next prompt follow (press Enter at an empty prompt to follow at
+  once). cmd and Claude Code cannot be linked.
 
 `terminal_open` takes the mode too (`locked` when left out).
 `terminal_set_mode` changes it later. Every connection that said `hello`
@@ -176,7 +198,59 @@ own `cd` command and Enter whenever the window's active pane changed
 folder. It is gone, with the window's following of the active pane. A
 line typed into a shell the user did not touch can land in a half-typed
 command or in a running program, so only the user's own request types
-into a shell now ([ui.md](ui.md), "The terminal").
+into a shell now ([ui.md](ui.md), "The terminal"), and a linked shell
+follows through its prompt hook.
+
+## The prompt hook
+
+A few lines a shell runs each time it draws its prompt, added by the core
+when it starts the shell, without touching the user's own profile files
+(unit 2 of the terminal sprint, 2026-10-02). At each prompt it does two
+things, in this order:
+
+1. **Follow** (a linked session only). It runs `cabinetos-cli term cwd`
+   (`cab` below), by the full path of the one next to the core, so a
+   program of the same name on the `PATH` cannot stand in. It asks the core
+   for the session's mode and its pane's folder (`terminal_pane_folder`,
+   [ipc.md](ipc.md), "Terminal sessions") and prints the folder only for
+   a linked session, and only when a window has said what its panes show.
+   Nothing printed: the hook forgets the folder it followed last. A folder
+   it has not followed yet (the pane moved, or the session was just
+   linked): it remembers it and, when the shell is elsewhere, changes to
+   it (`Set-Location -LiteralPath` in PowerShell, `builtin cd` in bash).
+   The same folder as last time changes nothing, so a `cd` of the user's
+   own stays. A run of `cab` that failed changes nothing either.
+2. **Report** (every session). It prints the shell's folder as
+   `ESC ] 9 ; 9 ; <folder> ESC \` (OSC 9;9, the sequence Windows Terminal
+   reads). The session's output thread reads it from the bytes it already
+   sees and, when the folder changed, every connection that said `hello`
+   gets `terminal_folder_changed`; `terminal_list` reports it as
+   `folder`. The bytes stay in the stream; xterm.js ignores the sequence.
+   The window's header shows it ([ui.md](ui.md), "The terminal").
+
+The hook prints nothing else, swallows every error, and hands the user's
+prompt the last command's status (`$?` and `$LASTEXITCODE` in
+PowerShell, `$?` in bash). It runs only when the prompt is drawn: a
+running command or a half-typed line is never touched, and nothing is
+ever typed into the shell. Keys typed while it runs wait and arrive whole.
+
+Per shell:
+
+| Shell | How the hook is added |
+|---|---|
+| PowerShell (`pwsh`, `powershell`) | `-NoExit -Command <script>` after the profile's own arguments. The user's profile loads first; the script keeps the `prompt` function the profile left and wraps it, so the user's own prompt (oh-my-posh, starship) still draws. A command line, not a script file: Windows PowerShell's default execution policy refuses script files, and nothing is written to disk. `cab` runs through .NET's process API, which reads the folder as UTF-8 whatever the console's code page. A profile whose arguments already give PowerShell a command or a script (`-Command`, `-File`, `-EncodedCommand`, a script name) gets no hook, and the core logs a warning. |
+| WSL (bash) | `PROMPT_COMMAND`, passed into Linux by `WSLENV` together with `CABINETOS_SESSION` and `CABINETOS_PIPE`. It defines the function `__cabinetos_prompt` at the first prompt and calls it at each. `cab` (a Windows program, found by `wslpath`) runs with its input from `/dev/null`: WSL hands a Windows program the terminal's input, and keys typed while it ran were lost (seen 2026-10-02). The pane's folder becomes a Linux one with `wslpath -u`, the shell's folder a Windows one with `wslpath -w` (only when it changed). A `~/.bashrc` that sets `PROMPT_COMMAND` replaces the hook (one that adds to it keeps it); zsh and fish do not read it. |
+| cmd, Claude Code, any other program | No hook: they cannot be linked, and they report no folder. |
+
+**The cost.** One process start per prompt, locked or linked: the hook
+must ask the core whether the session is linked now. Measured on
+2026-10-02 on the development PC (release build, a core with one
+session, 30 runs each): `cab term cwd` takes 19 ms in the middle
+(median), 65 ms at the 90th percentile, run as `& cab` or through .NET's
+process API alike; `cmd /c rem` takes 21 ms on the same PC, so the start
+of a Windows process is most of it. `cab term cwd` waits at most 1 s for
+the pipe and 1 s for the reply, so a stuck core cannot hold a prompt
+longer. `"hook": false` in a profile turns it off.
 
 ## Typing paths
 
@@ -306,6 +380,14 @@ cabinetos-cli --pipe demo term --profile pwsh --cwd E:\ --pane right
 - Without `--profile`, the default profile; without `--cwd`, the CLI's own
   folder; without `--pane`, the left pane. The session starts locked.
 
+`cabinetos-cli term cwd` is what a prompt hook runs: it prints the folder
+a linked session follows (its pane's folder), one line, or nothing for a
+locked session or when no window says what its panes show. The session
+comes from `--session <id>`, else `CABINETOS_SESSION`; the pipe from
+`--pipe`, else `CABINETOS_PIPE` (both are set in every CabinetOS
+terminal). Exit code 0 when the core answered, 1 for no session, no
+core, or an unknown session.
+
 The other commands act on any session, from any CLI:
 
 ```text
@@ -328,9 +410,14 @@ it, and `term-<id>-exit` waits for the shell and reports its exit. One
 async task serves the byte pipe. Every log line about a session names it
 in `session_id` (under `fields`, [diagnostics.md](diagnostics.md)):
 `terminal session opened` (with the profile, program, process ID, folder,
-size, pane, mode and `linkable`), `terminal mode changed` (with the new
-mode), `terminal shell exited` (with the exit code), `terminal session
-closed`, and the warning `terminal output backpressure`.
+size, pane, mode, `linkable`, and `hooked`: whether the shell got its
+prompt hook), `terminal mode changed` (with the new mode), `terminal
+shell exited` (with the exit code), `terminal session closed`, the
+warnings `terminal output backpressure` and `the prompt hook was not
+added` (with the reason), and at debug level `terminal folder reported`
+(with the folder). `term-<id>-out` also reads the prompt hook's folder
+reports. The hook's `terminal_pane_folder` requests are logged at debug
+level, one per prompt.
 
 ## Tests
 
@@ -338,7 +425,16 @@ closed`, and the warning `terminal output backpressure`.
 Windows PowerShell and WSL when installed (skipped with a message
 otherwise; CI has no WSL). The core's `tests/terminal.rs` and the CLI's
 `tests/term.rs` add the protocol, a session that outlives its connection,
-the shells ending with the core, and `term` itself. To test `term` in a
+the shells ending with the core, and `term` itself. The prompt hook is
+tested at three levels: its text per shell and the folder report's reader
+(unit tests); real shells running a hook of the test's own (the terminal
+crate: the hook runs at each prompt, `$LASTEXITCODE` and the pipe token
+reach the shell, a profile with its own `-Command` gets none); and a real
+core, `cab` and shell with the test as the window (the CLI's tests: a
+linked pwsh, Windows PowerShell and WSL bash follow their pane at the next
+prompt, a half-typed line runs as typed where its prompt was drawn, a
+`cd` of the user's own stays, a locked session stays, keys typed while
+the hook runs arrive whole, and each change of folder is reported once). To test `term` in a
 real console, a CLI test runs `cabinetos-cli term` as the program of a
 session of its own and types into that pseudo-console, `Ctrl+]` included.
 
