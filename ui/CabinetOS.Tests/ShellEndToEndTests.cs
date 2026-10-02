@@ -440,7 +440,7 @@ public class ShellEndToEndTests
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
             // The error lines themselves, not the whole log as the collection assert prints it.
             var errors = logs.Where(l => Level(l) == "ERROR").ToList();
-            Assert.True(errors.Count == 0, $"the {name} window logged {errors.Count} error line(s):\n{string.Join('\n', errors.Select(l => l.Length > 500 ? l[..500] : l))}");
+            Assert.True(errors.Count == 0, $"the {name} window logged {errors.Count} error line(s):\n{string.Join('\n', errors.Select(ErrorText))}");
             return logs;
         }
 
@@ -511,6 +511,15 @@ public class ShellEndToEndTests
     {
         using var parsed = JsonDocument.Parse(line);
         return parsed.RootElement.GetProperty("message").GetString();
+    }
+
+    // An error line as text: its message, then the error field's first 40 lines (an exception with its stack), one to a line.
+    private static string ErrorText(string line)
+    {
+        using var parsed = JsonDocument.Parse(line);
+        var fields = parsed.RootElement.GetProperty("fields");
+        var text = fields.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String ? error.GetString()! : fields.ToString();
+        return $"{parsed.RootElement.GetProperty("message").GetString()}\n{string.Join('\n', text.Replace("\r", "", StringComparison.Ordinal).Split('\n').Take(40).Select(t => "    " + t))}";
     }
 
     private static string? Level(string line)
