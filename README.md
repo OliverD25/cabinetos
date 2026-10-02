@@ -139,7 +139,8 @@ This is the first release. Please report problems and ideas as
 happened, and the CabinetOS version (the palette's "Help: About CabinetOS"
 shows it). A crash writes a `crash-*.json` trace into
 `%LOCALAPPDATA%\CabinetOS\logs` ([docs/diagnostics.md](docs/diagnostics.md));
-attaching it helps.
+attaching it helps. For anything that does not fit an issue, write to
+redrickcarter39@gmail.com.
 
 ## License
 
