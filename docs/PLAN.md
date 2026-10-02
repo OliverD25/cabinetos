@@ -1580,7 +1580,12 @@ while the VM is off), and the plugin host compares a plugin's paths with its
 roots as text, so an 8.3 short path is taken as outside the user's profile.
 Still for the creator: the GitHub Release with the zip, the setup file and
 `latest.json`, the signing, and whether the setup should download missing
-prerequisites.
+prerequisites. Both small findings of the unit are fixed afterwards
+([short-paths-and-icon-report.md](log/2026-10-02/short-paths-and-icon-report.md)):
+the plugin host compares a plugin's paths with its roots in their long form
+(`cabinetos_fs::long_path`, `GetLongPathNameW`), so a short 8.3 path is the
+same folder as its long one, and `CabinetOS.exe` has an icon of its own
+(`ui/CabinetOS/Assets/CabinetOS.ico`, made by `build/make-icon.ps1`).
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
