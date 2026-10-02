@@ -673,3 +673,47 @@ async fn a_themes_server_that_is_down_does_not_hide_the_extensions() {
     );
     assert_eq!(ids_of(ask(&mut client, refresh_of(None)).await), ["hello"]);
 }
+
+/// A theme of the catalogue is read for a preview without being installed,
+/// whether it comes from `themes.json` or from the theme items of an old
+/// `index.json`; an ID the catalogue does not have is an error.
+#[tokio::test]
+async fn a_theme_is_previewed_through_the_core_without_installing_it() {
+    let core = start_core_with_themes(
+        |dir| vec![theme_offer(dir, "solarized", "dark", false)],
+        |dir| Some(vec![theme_offer(dir, "fresh", "light", true)]),
+        &json!({}),
+    );
+    let (mut client, _events) = greeted(&core).await;
+    let preview = |id: &str| Request::PreviewTheme {
+        extension_id: id.to_owned(),
+    };
+
+    let Response::Theme { theme } = ask(&mut client, preview("fresh")).await else {
+        panic!("expected a theme");
+    };
+    assert_eq!(theme.id, "fresh");
+    assert!(
+        !core.path("themes").join("fresh.json").exists(),
+        "a preview installs nothing"
+    );
+    // Asked again, it is answered from memory: the file may be gone.
+    fs::remove_file(core.path("index").join("files").join("fresh.bin")).unwrap();
+    let Response::Theme { theme } = ask(&mut client, preview("fresh")).await else {
+        panic!("expected a theme from memory");
+    };
+    assert_eq!(theme.id, "fresh");
+
+    // themes.json wins, so an old index.json theme is not in the catalogue.
+    let (error_code, _) = error_of(ask(&mut client, preview("solarized")).await);
+    assert_eq!(error_code, ErrorCode::NoSuchExtension);
+    let (error_code, _) = error_of(ask(&mut client, preview("hello")).await);
+    assert_eq!(error_code, ErrorCode::NoSuchExtension);
+    assert!(
+        fs::read_dir(core.path("themes"))
+            .map(|entries| entries
+                .flatten()
+                .all(|entry| entry.file_name() != "fresh.json"))
+            .unwrap_or(true)
+    );
+}

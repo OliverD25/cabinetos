@@ -15,6 +15,7 @@
 //! - A theme install applies at once when `ui.theme` names it; a tool
 //!   install or uninstall sends `tools_changed`.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -23,7 +24,8 @@ use cabinetos_market::{Index, Installed, Market, MarketError, Source};
 use cabinetos_plugins::PluginHost;
 use cabinetos_plugins::manifest::{self, Capability};
 use cabinetos_protocol::{
-    CapabilityLevel, Catalogue, ErrorCode, Event, ExtensionKind, MarketItem, Response, ToolInfo,
+    CapabilityLevel, Catalogue, ErrorCode, Event, ExtensionKind, MarketItem, Response, Theme,
+    ToolInfo,
 };
 
 use crate::CORE_VERSION;
@@ -33,6 +35,10 @@ use crate::themes::Themes;
 
 /// Progress events of one download: at most 30 a second.
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(33);
+
+/// How many previewed themes the core keeps (about 2 KB each): the whole
+/// collection and some to spare. A full memory starts over.
+const PREVIEWS_KEPT: usize = 64;
 
 /// A catalogue read last, with the settings it came from.
 type Read = Option<(String, Arc<Index>)>;
@@ -47,6 +53,8 @@ pub(crate) struct Marketplace {
     /// `marketplace.index` they came from: while `themes.json` is missing
     /// the themes are the index's own, so both settings decide.
     read_themes: Mutex<Read>,
+    /// Themes read for a preview, by ID, version and hash.
+    previews: Mutex<HashMap<String, Theme>>,
     settings: Arc<Settings>,
     events: Arc<EventHub>,
     /// `None` when the plugin host could not start.
@@ -66,6 +74,7 @@ impl Marketplace {
             market,
             read_extensions: Mutex::new(None),
             read_themes: Mutex::new(None),
+            previews: Mutex::new(HashMap::new()),
             settings,
             events,
             plugins,
@@ -97,6 +106,40 @@ impl Marketplace {
             }
             Err(error) => failure(error),
         }
+    }
+
+    /// The reply to `preview_theme`: the whole theme of the themes
+    /// catalogue, read without installing it. A theme read lately is
+    /// answered from memory: the gallery asks again each time the selection
+    /// returns to a tile. Blocking when it downloads.
+    pub(crate) fn preview_theme(&self, id: &str) -> Response {
+        match self.try_preview_theme(id) {
+            Ok(theme) => Response::Theme {
+                theme: Box::new(theme),
+            },
+            Err(error) => failure(error),
+        }
+    }
+
+    fn try_preview_theme(&self, id: &str) -> Result<Theme, MarketError> {
+        let themes = self.current(Catalogue::Themes)?;
+        let item = self.market.choose(&themes, id, None)?;
+        let key = format!("{}@{}@{}", item.id, item.version, item.download.sha256);
+        if let Some(theme) = self.lock_previews().get(&key) {
+            return Ok(theme.clone());
+        }
+        let allow_insecure = self.settings.snapshot().config.marketplace.allow_insecure;
+        let theme = self.market.preview_theme(&themes, item, allow_insecure)?;
+        let mut previews = self.lock_previews();
+        if previews.len() >= PREVIEWS_KEPT {
+            previews.clear();
+        }
+        previews.insert(key, theme.clone());
+        Ok(theme)
+    }
+
+    fn lock_previews(&self) -> MutexGuard<'_, HashMap<String, Theme>> {
+        self.previews.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Every installed Tool Extension. Blocking: it reads their folders.

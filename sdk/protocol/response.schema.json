@@ -709,7 +709,7 @@
       ]
     },
     {
-      "description": "Reply to `get_theme`.",
+      "description": "Reply to `get_theme` and `preview_theme`.",
       "type": "object",
       "properties": {
         "theme": {

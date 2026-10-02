@@ -407,6 +407,7 @@ impl Session {
                 | Request::ListTools
                 | Request::MarketplaceRefresh { .. }
                 | Request::MarketplaceSearch { .. }
+                | Request::PreviewTheme { .. }
                 | Request::InstallExtension { .. }
                 | Request::UninstallExtension { .. }) => {
                     self.extension_request(&id, &span, kind, request)
@@ -1189,6 +1190,9 @@ impl Session {
                 self.spawn_reply(id, span, kind, move || {
                     market.search(&query, only, catalogue.unwrap_or_default())
                 });
+            }
+            Request::PreviewTheme { extension_id } => {
+                self.spawn_reply(id, span, kind, move || market.preview_theme(&extension_id));
             }
             Request::InstallExtension {
                 extension_id,

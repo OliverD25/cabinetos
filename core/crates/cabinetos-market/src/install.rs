@@ -336,6 +336,64 @@ impl Market {
         Ok(installed)
     }
 
+    /// Reads a theme of `index` without installing it: downloads its file
+    /// into the marketplace's `previews` folder, checks its SHA-256 and the
+    /// theme, deletes the file, and returns the theme. Nothing is put in
+    /// the themes folder and the record of installs is not touched, so no
+    /// lock is taken. The gallery uses it to show a theme on the whole
+    /// window before the user installs it. Blocking.
+    pub fn preview_theme(
+        &self,
+        index: &Index,
+        item: &MarketItem,
+        allow_insecure: bool,
+    ) -> Result<cabinetos_protocol::Theme, MarketError> {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        if item.kind != ExtensionKind::Theme {
+            return Err(MarketError::market(format!(
+                "`{}` is not a theme, so there is nothing to preview",
+                item.id
+            )));
+        }
+        let folder = self.dirs.market.join("previews");
+        fs::create_dir_all(&folder).map_err(|error| {
+            MarketError::market(format!("cannot prepare {}: {error}", folder.display()))
+        })?;
+        // Two previews of one theme at once (two windows) do not share a file.
+        let file = folder.join(format!(
+            "{}-{}-{}.preview",
+            item.id,
+            item.version,
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let result = self
+            .download(index, item, allow_insecure, &file, &mut |_, _, _| {})
+            .and_then(|()| {
+                let text = fs::read_to_string(&file).map_err(|_| {
+                    MarketError::market(format!(
+                        "the download of {} {} is not UTF-8 text",
+                        item.id, item.version
+                    ))
+                })?;
+                let theme = cabinetos_themes::parse(&text, Some(&item.id)).map_err(|problem| {
+                    MarketError::market(format!(
+                        "the download of {} {} is not a valid theme: {problem}",
+                        item.id, item.version
+                    ))
+                })?;
+                if theme.version == item.version {
+                    Ok(theme)
+                } else {
+                    Err(MarketError::market(format!(
+                        "the download of {} {} is version {} of the theme",
+                        item.id, item.version, theme.version
+                    )))
+                }
+            });
+        let _ = fs::remove_file(&file);
+        result
+    }
+
     /// Removes exactly the files the install of `id` put in place, and the
     /// folders that leaves empty; nothing else. `before` runs first, with
     /// what was installed: it may refuse (the theme in effect) or prepare

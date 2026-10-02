@@ -1112,6 +1112,24 @@
       ]
     },
     {
+      "description": "Reads a theme of the themes catalogue without installing it, so the\ngallery can preview it on the whole window before the user installs\nit: the core downloads the theme file (into memory, nothing is put\nin the themes folder), checks its SHA-256 and the theme, and answers\n`theme` with the whole theme. An installed theme is read with\n`get_theme`.",
+      "type": "object",
+      "properties": {
+        "extension_id": {
+          "description": "The theme's ID in the catalogue. (Named `extension_id`, not `id`:\n`id` is the request's own ID in the same object.)",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "preview_theme"
+        }
+      },
+      "required": [
+        "type",
+        "extension_id"
+      ]
+    },
+    {
       "description": "Downloads an extension from the index, checks its SHA-256, and\ninstalls it. The core answers `ok` once it is in place; a plugin then\nwaits in `needs_review`. `install_progress` and `install_finished`\nfollow its way.",
       "type": "object",
       "properties": {

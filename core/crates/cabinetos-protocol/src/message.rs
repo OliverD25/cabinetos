@@ -449,6 +449,17 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         catalogue: Option<Catalogue>,
     },
+    /// Reads a theme of the themes catalogue without installing it, so the
+    /// gallery can preview it on the whole window before the user installs
+    /// it: the core downloads the theme file (into memory, nothing is put
+    /// in the themes folder), checks its SHA-256 and the theme, and answers
+    /// `theme` with the whole theme. An installed theme is read with
+    /// `get_theme`.
+    PreviewTheme {
+        /// The theme's ID in the catalogue. (Named `extension_id`, not `id`:
+        /// `id` is the request's own ID in the same object.)
+        extension_id: String,
+    },
     /// Downloads an extension from the index, checks its SHA-256, and
     /// installs it. The core answers `ok` once it is in place; a plugin then
     /// waits in `needs_review`. `install_progress` and `install_finished`
@@ -676,6 +687,7 @@ impl Request {
         "list_tools",
         "marketplace_refresh",
         "marketplace_search",
+        "preview_theme",
         "install_extension",
         "uninstall_extension",
         "window_state",
@@ -755,6 +767,7 @@ impl Request {
             Self::ListTools => "list_tools",
             Self::MarketplaceRefresh { .. } => "marketplace_refresh",
             Self::MarketplaceSearch { .. } => "marketplace_search",
+            Self::PreviewTheme { .. } => "preview_theme",
             Self::InstallExtension { .. } => "install_extension",
             Self::UninstallExtension { .. } => "uninstall_extension",
             Self::WindowState(_) => "window_state",
@@ -1016,7 +1029,7 @@ pub enum Response {
         /// The themes.
         themes: Vec<ThemeInfo>,
     },
-    /// Reply to `get_theme`.
+    /// Reply to `get_theme` and `preview_theme`.
     Theme {
         /// The whole theme, as its file has it.
         theme: Box<Theme>,
@@ -2196,6 +2209,9 @@ mod tests {
                 query: "nord".to_owned(),
                 kind: Some(ExtensionKind::Theme),
                 catalogue: Some(Catalogue::Themes),
+            },
+            Request::PreviewTheme {
+                extension_id: "nord".to_owned(),
             },
             Request::InstallExtension {
                 extension_id: "hello".to_owned(),

@@ -1077,3 +1077,75 @@ fn a_missing_index_is_still_an_error() {
         "{error}"
     );
 }
+
+/// A theme is read for a preview without being installed: nothing lands in
+/// the themes folder or the record, the download is checked, and the
+/// preview's file is gone afterwards.
+#[test]
+fn a_theme_is_previewed_without_being_installed() {
+    let mut setup = Setup::new();
+    let mut paper: Value = serde_json::from_str(cabinetos_themes::SHIPPED[1].1).unwrap();
+    paper["id"] = json!("paper");
+    paper["version"] = json!("1.0.0");
+    setup.offer(
+        "theme",
+        "paper",
+        "1.0.0",
+        &serde_json::to_vec(&paper).unwrap(),
+        &json!({}),
+    );
+    setup.offer_hello(&zip(&[("plugin.json", &fixture("plugin.json"))]));
+    setup.write_index();
+    let market = setup.market();
+    let index = market
+        .fetch(&Source::Local(setup.index_dir()), false)
+        .unwrap();
+
+    let item = market.choose(&index, "paper", None).unwrap();
+    let theme = market.preview_theme(&index, item, false).unwrap();
+    assert_eq!(
+        (theme.id.as_str(), theme.version.as_str()),
+        ("paper", "1.0.0")
+    );
+    assert!(!setup.dirs().themes.exists(), "nothing is installed");
+    assert!(market.installed().is_empty());
+    assert!(
+        files_under(&setup.dirs().market.join("previews")).is_empty(),
+        "the preview's file is deleted"
+    );
+
+    // Only a theme can be previewed.
+    let hello = market.choose(&index, "hello", None).unwrap();
+    let error = market.preview_theme(&index, hello, false).unwrap_err();
+    assert!(error.message.contains("not a theme"), "{error}");
+}
+
+/// A preview checks the download as an install does: a theme file that is
+/// not the one the catalogue hashed is refused.
+#[test]
+fn a_preview_with_the_wrong_hash_is_refused() {
+    let mut setup = Setup::new();
+    let mut paper: Value = serde_json::from_str(cabinetos_themes::SHIPPED[1].1).unwrap();
+    paper["id"] = json!("paper");
+    paper["version"] = json!("1.0.0");
+    setup.offer(
+        "theme",
+        "paper",
+        "1.0.0",
+        &serde_json::to_vec(&paper).unwrap(),
+        &json!({}),
+    );
+    setup.items[0]["download"]["sha256"] = json!("0".repeat(64));
+    setup.write_index();
+    let market = setup.market();
+    let index = market
+        .fetch(&Source::Local(setup.index_dir()), false)
+        .unwrap();
+    let item = market.choose(&index, "paper", None).unwrap();
+    let error = market.preview_theme(&index, item, false).unwrap_err();
+    assert_eq!(error.code, ErrorCode::HashMismatch);
+    assert!(
+        files_under(&setup.dirs().market.join("previews")).is_empty(),
+        "a refused download is deleted"
+    );
+}
