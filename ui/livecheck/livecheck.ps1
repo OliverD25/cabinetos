@@ -2524,6 +2524,61 @@ if (-not $ukrainian) {
   }
 }
 
+Step "21: cab pane, cab selection and cab copy --selection --dest opposite_pane, typed in the shell"
+# The GUI context for cab (terminal unit 4): a cab typed in a CabinetOS terminal asks the window's core what the panes
+# show, as the window last said it. The left pane shows three marked files (Ctrl+A), the right pane an empty folder; the
+# shell writes each answer into a file (the shell's own words, which is what a script would read), and the copy's files
+# then lie in the right pane's folder. The core logs the job it was asked to run ("job queued"). The program is
+# cabinetos-cli: a release's cab.exe is the same file under a short name, and this run's build has only the long one.
+$cabLeft = "$t21\cab-left"; $cabRight = "$t21\cab-right"; $cabOut = "$t21\cab-out"
+New-Item -ItemType Directory -Force $cabLeft, $cabRight, $cabOut | Out-Null
+foreach ($name in 'one.txt', 'two.txt', 'three.txt') { Set-Content -LiteralPath "$cabLeft\$name" -Value "cab $name" }
+# Ctrl+Backquote in the terminal gives the keyboard back to the left pane, which Ctrl+L takes to the folder; Tab and the
+# same in the right pane; Tab back, and Ctrl+A marks every row.
+[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 800
+GoPath $cabLeft
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 500
+GoPath $cabRight
+[Live]::Press($VK.Tab); Start-Sleep -Milliseconds 500
+[Live]::Press($VK.Ctrl, $VK.A); Start-Sleep -Milliseconds 500
+$handed = @(ShellLines 'a page has the keyboard').Count
+# A click into the left session's text gives it the keyboard (a second Ctrl+Backquote from the pane would hide the dock,
+# since the terminal has not had the keyboard since the first), and shows the left session when Alt+] left the right one.
+$tab = ShellElement "pwsh [Left], session $leftSession"
+if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
+  $r = $tab.Current.BoundingRectangle
+  [Live]::Click([int]($r.Left + 200 * $scale), [int]($r.Bottom + 90 * $scale))
+}
+$cabKeys = PageHasKeys $handed
+Start-Sleep -Milliseconds 800
+$cabCommand ="cabinetos-cli pane | Set-Content -LiteralPath '$cabOut\pane.txt'; " +
+  "cabinetos-cli pane --right | Set-Content -LiteralPath '$cabOut\right.txt'; " +
+  "cabinetos-cli pane --json | Set-Content -LiteralPath '$cabOut\json.txt'; " +
+  "cabinetos-cli selection | Set-Content -LiteralPath '$cabOut\selection.txt'; " +
+  "cabinetos-cli copy --selection --dest opposite_pane | Set-Content -LiteralPath '$cabOut\copy.txt'; " +
+  "`$LASTEXITCODE | Set-Content -LiteralPath '$cabOut\code.txt'"
+# Ctrl+C drops a half-typed line, if an earlier step left one.
+[Live]::Press($VK.Ctrl, $VK.C); Start-Sleep -Milliseconds 500
+[Live]::Type($cabCommand); [Live]::Press($VK.Enter)
+$cabDeadline = (Get-Date).AddSeconds(20)
+while (-not (Test-Path -LiteralPath "$cabOut\code.txt") -and (Get-Date) -lt $cabDeadline) { Start-Sleep -Milliseconds 200 }
+Start-Sleep -Milliseconds 300
+function CabAnswer([string]$file) { if (Test-Path -LiteralPath "$cabOut\$file") { @(Get-Content -LiteralPath "$cabOut\$file" | Where-Object { $_ -and $_.Trim() }) } else { @() } }
+$cabJson = if (Test-Path -LiteralPath "$cabOut\json.txt") { Get-Content -LiteralPath "$cabOut\json.txt" -Raw | ConvertFrom-Json } else { $null }
+"21: the terminal had the keyboard when the commands were typed: $cabKeys"
+"21: cab pane printed the left pane's folder ('$((CabAnswer 'pane.txt') -join '|')'), cab pane --right the right pane's ('$((CabAnswer 'right.txt') -join '|')'): $(@(CabAnswer 'pane.txt') -eq $cabLeft -and @(CabAnswer 'right.txt') -eq $cabRight)"
+"21: cab pane --json named the active pane, both folders and the three marked files: $($cabJson.active -eq 'left' -and $cabJson.left -eq $cabLeft -and $cabJson.right -eq $cabRight -and @($cabJson.selection).Count -eq 3 -and $cabJson.selection_total -eq 3)"
+"21: cab selection printed the three files, one path to a line ('$((CabAnswer 'selection.txt') -join '|')'): $((@(CabAnswer 'selection.txt') | Sort-Object) -join '|' -eq ((@('one.txt', 'three.txt', 'two.txt') | ForEach-Object { "$cabLeft\$_" }) -join '|'))"
+"21: cab copy --selection --dest opposite_pane ended with exit code '$((CabAnswer 'code.txt') -join '')' and said '$((CabAnswer 'copy.txt') -join ' / ')': $(@(CabAnswer 'code.txt') -eq '0' -and ((CabAnswer 'copy.txt') -join ' ') -match 'copying 3 selected items of the left pane to' -and ((CabAnswer 'copy.txt') -join ' ') -match 'completed')"
+"21: the three files are in the right pane's folder, with their text: $(@(Get-ChildItem -LiteralPath $cabRight -File -ErrorAction SilentlyContinue).Count -eq 3 -and (Get-Content -LiteralPath "$cabRight\two.txt" -ErrorAction SilentlyContinue) -eq 'cab two.txt')"
+$cabJob = $null
+for ($k = 0; $k -lt 25 -and -not $cabJob; $k++) {
+  $cabJob = @(LogObjects (LogOf 'core') '"job queued"') | Where-Object { $_.fields.destination -eq $cabRight } | Select-Object -Last 1
+  if (-not $cabJob) { Start-Sleep -Milliseconds 200 }
+}
+"21: the core logged the job it was asked to run (a copy of 3 sources into the right pane's folder): $([bool]$cabJob -and $cabJob.fields.kind -eq 'Copy' -and $cabJob.fields.sources -eq 3)"
+Shot $h "$ShotDir\21-cab-live.png"
+
 Step "21: Ctrl+Backslash: Up to Root in a pane, the split dock in the terminal"
 # The split mirror (terminal unit 3): the same keys, by where the keyboard is. In the left pane they are Up to Root
 # (go.root); in the terminal they split the dock under the two panes, the left session under the left pane and the right
