@@ -393,6 +393,176 @@ setup file change with it (sign the new setup file with the same
 cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && pwsh.exe -NoProfile -File build/release.ps1 -PackageOnly
 ```
 
+### Apply to SignPath Foundation (the creator's steps)
+
+Prepared on 2026-10-02 from the application form at
+<https://signpath.org/apply> (sixteen fields and three consent boxes, read
+that day) and from the conditions at <https://signpath.org/terms> (their
+"Code of conduct", marked a draft on their side). The application is
+outward-facing: the creator fills and submits it; no session does.
+
+**What the program gives, and the two answers.** SignPath.io signs the
+files that a GitHub Actions workflow built, with a certificate issued to
+SignPath Foundation. Windows then shows "SignPath Foundation" as the
+verified publisher in the SmartScreen and UAC dialogs and in the file's
+properties; the product name in the file details stays "CabinetOS". Their
+terms: "The code signing certificate is issued to SignPath Foundation. This
+means that SignPath Foundation is the publisher of the OSS project."
+
+- **The signer shown to users is "SignPath Foundation": accepted** (the
+  planning session's decision of 2026-10-02, on the creator's word to
+  decide it). The free program has no other form, and the alternatives
+  cost money: Azure Trusted Signing, about 10 US dollars a month after an
+  identity check, or an OV certificate on a hardware token, 100 to 400 US
+  dollars a year, which must earn SmartScreen's trust first. Undo: switch
+  to an own certificate later; only the signing step changes.
+- **A second approver: none is needed.** The terms ask for roles, not for a
+  head count: "each signing request must be approved by a team member
+  trusted by the entire team to decide if a certain release can be code
+  signed". Nothing forbids one person holding all three roles (Authors,
+  Reviewers, Approvers). The creator, `OliverD25`, holds all three. If
+  SignPath asks for a second person during the review, it must be a human
+  with a GitHub account and two-factor authentication; a Claude session
+  cannot be an approver.
+
+**The conditions that matter for CabinetOS** (from the terms):
+
+- "Released: The project must already be released in the form that should
+  be signed." No GitHub Release exists yet, so the application comes after
+  steps (b) and (c) of "Publish" below.
+- Reputation. The form's "Reputation" field is required, and the terms
+  say: "For executable programs that may be downloaded and executed based
+  on our signature, we require a certain verifiable reputation." On
+  2026-10-02 the repository had been public for one day, with no star and
+  no release. An application without any sign of use may be refused; a
+  refusal costs nothing but a new application later. The recommendation:
+  apply after the 0.1.0 release and the first public posts about it (a
+  "Show HN" post, a Reddit post, a blog article), and name them in the
+  field.
+- "All team members must use multi-factor authentication for both
+  SignPath and source code repository access (e.g. GitHub)." Step 1.
+- A "Code signing policy" with fixed wording on the home page and the
+  download page. Step 3.
+- "All signed binaries must have metadata attributes set and enforced":
+  the product name "CabinetOS" and one version in every signed file.
+  `CabinetOS.exe` and its libraries have them (`ui/Directory.Build.props`);
+  the four Rust programs (`cabinetos-core.exe`, `cabinetos-indexer.exe`,
+  `cabinetos-cli.exe`, `cab.exe`) carry no version resource yet. A session
+  adds one per program (a `build.rs` with a version resource) before the
+  first signing request.
+- The rest holds already: MIT without dual licensing; no proprietary
+  component (the Microsoft libraries in the zip are signed upstream
+  binaries, which the terms allow in signed packages); an uninstaller; the
+  indexer service's install asks before it changes the system; the
+  program's function is described in the README and in the release notes.
+
+**Step 1. Two-factor authentication on GitHub.** Open
+<https://github.com/settings/security>. Under "Two-factor authentication"
+it must say that it is enabled. If not: "Enable two-factor authentication",
+with an authenticator app (Microsoft Authenticator, or the password
+manager's one), and keep the recovery codes. A session cannot read this
+status: the `gh` token lacks the scope for it.
+
+**Step 2. The 0.1.0 release.** Steps (b) and (c) of "Publish", after Phase
+22's units 1 to 3 are on `main`. The release page
+<https://github.com/OliverD25/cabinetos/releases> is the form's "Download
+URL".
+
+**Step 3. The "Code signing policy" section.** Before the form is
+submitted, the README gets the section below, and the release notes of
+0.1.0 get one line, "Code signing policy: see the README", so that the
+download page carries the term too (the terms: "Use the term 'Code signing
+policy' on your project's home page and download/release pages"). A
+session adds both on the creator's word; it is a commit to the public
+repository. If SignPath refuses the application, one commit removes them.
+
+```markdown
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io),
+certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [OliverD25](https://github.com/OliverD25)
+- Approvers: [OliverD25](https://github.com/OliverD25)
+
+Privacy: this program sends no information about the user or the system
+anywhere. Its one automatic network request is the daily update check,
+which downloads `latest.json` from the marketplace site and carries nothing
+else; `update.check: false` in the settings turns it off, and "Update:
+Check for Updates" in the palette checks on demand.
+```
+
+**Step 4. The form**, <https://signpath.org/apply>, field by field (an
+asterisk marks a required field). Everything that is not a link or a name
+is a proposal; change it freely.
+
+1. Project Name\*: `CabinetOS`. (Their note: "A Google search for this
+   name should clearly identify your project.")
+2. Repository URL\*: `https://github.com/OliverD25/cabinetos`.
+3. Homepage URL\*: `https://github.com/OliverD25/cabinetos`. The
+   repository page is allowed ("This can be a dedicated website or the
+   repository page"); the landing page replaces it once it exists.
+4. Download URL: `https://github.com/OliverD25/cabinetos/releases`.
+   Their note: "This page must mention that the project uses the SignPath
+   Foundation for code signing" (step 3's line in the release notes).
+5. Privacy Policy URL:
+   `https://github.com/OliverD25/cabinetos#code-signing-policy` (step 3's
+   section; the program collects no user data).
+6. Wikipedia URL: empty.
+7. Tagline\*: `A fast dual-pane file manager for Windows 11 with a Rust
+   core, a WinUI 3 window, WebAssembly plugins and a command palette.`
+8. Description\* (their note: a short paragraph, no version-specific
+   features): `CabinetOS is an open-source (MIT) file manager for Windows
+   11 in the dual-pane tradition of Total Commander, built for the
+   keyboard: every action is a named command in a searchable command
+   palette and can be bound to a key or a key chord. A Rust core does all
+   file work off the UI thread; a WinUI 3 window with Fluent Design and
+   Mica shows it. Extensions are WebAssembly plugins in capability
+   sandboxes, installed from a marketplace, and the core ships without
+   them. A single maintainer develops it in the open, with the plan, the
+   decisions and the daily build log in the repository.`
+9. Reputation\*: only what is true on the day. A frame: `The project is
+   new: public on GitHub since 2026-10-02, first release 0.1.0 on <date>.
+   Signs of use so far: <stars and forks>, <release download counts>,
+   <links to posts or articles>. The repository holds the full history
+   (over 750 commits), the governing documents and the build log.`
+10. Maintainer Type: `Individual maintainer(s)`. (The options: Independent
+    community project (no formal organization); Non-profit foundation or
+    research/educational institution; For-profit company or
+    corporate-backed project; Individual maintainer(s); Other.)
+11. Build System\*: `GitHub Actions`. (The only other option is GitLab
+    CI/CD.)
+12. First Name\* and Last Name\*: the creator's real name; SignPath creates
+    the user account with it.
+13. Email\*: the address for the SignPath account; the review's e-mails go
+    there.
+14. Company Name: empty.
+15. Primary Discovery Channel\*: whatever is true (Organic search; AI /
+    LLM tools; Developer platforms (e.g. GitHub); Community platforms;
+    Social media; Events; Referral; Direct contact; Other), and the
+    optional "Please specify the exact source".
+16. The three boxes: "I have read and agree to the SignPath Foundation
+    Code of Conduct ..." (required; it links to the terms, read them
+    once), "I agree to receive other communications from SignPath"
+    (optional; leave it empty), "I agree to allow SignPath to store and
+    process my personal data" (required). Then the reCAPTCHA and Submit.
+
+**Step 5. After the submission.** SignPath reviews by hand; their site
+names no time. Questions and the answer come to the e-mail of the form. On
+acceptance: an invitation to <https://app.signpath.io>, two-factor
+authentication there, and the organization with the project appears. Then
+the session's part, on the creator's word (the SignPath card on the desk):
+the trusted build system "GitHub.com" linked to the project; an artifact
+configuration for the release zip with metadata restrictions (product name
+CabinetOS, one version); a release-signing policy with manual approval and
+a test-signing policy; an API token stored as the repository secret
+`SIGNPATH_API_TOKEN`; the release job in `release.yml` with
+`actions/upload-artifact` and `signpath/github-action-submit-signing-request`;
+the version resources of the four Rust programs; and the updater's
+Authenticode check (ADR 0014). Every release signing needs the creator's
+approval in SignPath's web UI: "Every release needs manual approval for
+signing."
+
 ## Publish
 
 The steps that put 0.1.0 in front of people, in order. Each one is

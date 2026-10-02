@@ -1656,6 +1656,20 @@ anonymous request for the repository and its README gets HTTP 200. From
 here the SignPath card and CI can start, and the release steps (b) to (e)
 wait for units 1 to 3.
 
+**Status (2026-10-02, 22:13): the public repository's description, topics and
+private vulnerability reporting are set** (the optional block after step (a)
+of the publish sheet, run by the planning session on the creator's word at
+21:58: `gh repo view` shows the description and sixteen topics, and the
+private-reporting switch reads true). The SignPath application has its
+sheet in `docs/release.md`, "Sign", "Apply to SignPath Foundation": the
+form's sixteen fields with proposed values, the two answers the creator left
+to the session (the signer shown to users is "SignPath Foundation",
+accepted; no second approver is needed), the conditions that matter (a
+release must exist first, verifiable reputation, two-factor authentication,
+a "Code signing policy" section, version resources for the four Rust
+programs), and the order: the 0.1.0 release, then the README section, then
+the form.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
