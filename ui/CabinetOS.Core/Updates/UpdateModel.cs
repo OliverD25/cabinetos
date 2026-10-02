@@ -20,7 +20,7 @@ public sealed record UpdatePill(bool Visible, string Text = "", string ToolTip =
 public sealed record UpdateAboutRow(string Text, bool Dot);
 
 /// <summary>
-/// The status bar's quiet notice (docs/ui.md, "Updates"; ADR 0015): a version the core swapped in by itself
+/// The status bar's quiet notice (docs/ui.md, "Updates"; ADR 0018): a version the core swapped in by itself
 /// ("CabinetOS 0.2.0 is installed; restart to use it", with Restart now and Later), or a swap that failed and left
 /// the running version as it was (with Close). <see cref="Key"/> tells one notice from another, so Later closes
 /// that one only.

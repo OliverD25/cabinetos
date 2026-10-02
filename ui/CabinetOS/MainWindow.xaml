@@ -507,7 +507,7 @@
                                 Foreground="{ThemeResource CbAccentBrush}" />
                         </Button>
                         <!--
-                          The update's quiet notice (docs/ui.md, "Updates"; ADR 0015): a version swapped in by itself waits
+                          The update's quiet notice (docs/ui.md, "Updates"; ADR 0018): a version swapped in by itself waits
                           for a restart, or a swap failed and the running version stays. Its text opens the release notes.
                         -->
                         <StackPanel

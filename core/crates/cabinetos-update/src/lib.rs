@@ -1,4 +1,4 @@
-//! In-app updates (ADR 0014, amended by ADR 0015; `docs/ipc.md`,
+//! In-app updates (ADR 0014, amended by ADR 0018; `docs/ipc.md`,
 //! "Updates"): the core checks a channel's `latest.json`, downloads the
 //! release's zip and checks its SHA-256, unpacks it into a staging folder,
 //! and swaps it into the install folder, keeping the version before for a
@@ -129,7 +129,7 @@ pub struct Settings {
     pub source: String,
     /// Plain `http:` too.
     pub allow_insecure: bool,
-    /// A download that is checked is swapped in at once (ADR 0015); the
+    /// A download that is checked is swapped in at once (ADR 0018); the
     /// window then only asks for a restart.
     pub auto_install: bool,
 }

@@ -284,7 +284,7 @@ public class UpdateTests
         Assert.False(model.Pill().Visible);
     }
 
-    // ----- update.autoInstall and the notice (ADR 0015) -----
+    // ----- update.autoInstall and the notice (ADR 0018) -----
 
     [Fact]
     public void Auto_install_is_on_unless_the_configuration_says_false()

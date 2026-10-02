@@ -1,4 +1,4 @@
-; The setup file of a CabinetOS release (docs\release.md, "The setup file"; ADR 0015): Inno Setup 6 around the
+; The setup file of a CabinetOS release (docs\release.md, "The setup file"; ADR 0018): Inno Setup 6 around the
 ; release folder that build\release.ps1 has just made. release.ps1 compiles it and passes every fact below as a /D
 ; define read from that folder's release.json, so the setup never disagrees with the release it wraps.
 ;

@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace CabinetOS;
 
-// In-app updates (Phase 17; docs/ui.md, "Updates"; ADR 0014, amended by ADR 0015): the core checks, downloads,
+// In-app updates (Phase 17; docs/ui.md, "Updates"; ADR 0014, amended by ADR 0018): the core checks, downloads,
 // verifies and swaps (cabinetos-update), with update.autoInstall by itself; the window shows where it is (the pill, the
 // status bar's notice, the dot on the menu button and in About), shows the notes in the update dialog, and restarts
 // itself into the new version. It reads no file and fetches nothing itself (brief section 1): the notes come in
