@@ -38,6 +38,12 @@ pub const MAX_COMPACT_SIZE: u32 = 4000;
 /// The widest a column of `ui.columns` may be set, in pixels.
 pub const MAX_COLUMN_WIDTH: u32 = 2000;
 
+/// The least `ui.paneSplit` may be: the left pane's share of the panes' width.
+pub const MIN_PANE_SPLIT: f64 = 0.2;
+
+/// The most `ui.paneSplit` may be.
+pub const MAX_PANE_SPLIT: f64 = 0.8;
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -164,7 +170,25 @@ pub struct UiConfig {
     /// user last resized it, so the drawer opens that size again. `null`:
     /// 480 by 640. The window owns it; the core only checks and stores it.
     pub compact_overlay: Option<CompactOverlay>,
+    /// The left pane's share of the width the two panes have, as the user
+    /// last dragged the divider between them: a number from 0.2 to 0.8.
+    /// `null`: the panes are equal. The window owns it; the core only checks
+    /// and stores it.
+    pub pane_split: Option<PaneSplit>,
 }
+
+/// The left pane's share of the panes' width, from 0.2 to 0.8.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(transparent)]
+pub struct PaneSplit(
+    #[cfg_attr(feature = "schema", schemars(range(min = MIN_PANE_SPLIT, max = MAX_PANE_SPLIT)))]
+    pub f64,
+);
+
+// JSON has no NaN, and `parse` refuses a share outside 0.2 to 0.8, so equality
+// holds for every value a configuration can carry.
+impl Eq for PaneSplit {}
 
 /// The size of the compact overlay, in device-independent pixels, each a
 /// whole number from 240 to 4000.
@@ -289,6 +313,7 @@ impl Default for UiConfig {
             sidebar_auto_reveal: true,
             columns: None,
             compact_overlay: None,
+            pane_split: None,
         }
     }
 }
@@ -771,6 +796,7 @@ mod tests {
         assert_eq!(config.ui.tabs, TabsConfig::default());
         assert_eq!(config.ui.columns, None, "the theme's column widths");
         assert_eq!(config.ui.compact_overlay, None, "480 by 640");
+        assert_eq!(config.ui.pane_split, None, "equal panes");
         assert!(config.ui.tabs.left.items.is_empty() && config.ui.tabs.right.items.is_empty());
         assert_eq!(
             (config.ui.tabs.left.active, config.ui.tabs.right.active),
@@ -1099,6 +1125,9 @@ mod tests {
             serde_json::from_str::<UiConfig>(r#"{"compactOverlay": {"width": 400}}"#).is_err(),
             "both sides are needed"
         );
+        assert!(text.contains("\"paneSplit\":null"), "{text}");
+        let panes: UiConfig = serde_json::from_str(r#"{"paneSplit": 0.35}"#).unwrap();
+        assert_eq!(serde_json::to_string(&panes.pane_split).unwrap(), "0.35");
         assert!(text.contains("\"showHidden\":false"));
         assert!(text.contains("\"selection\":\"windows\""), "{text}");
         assert!(text.contains("\"folderSizes\":false"), "{text}");

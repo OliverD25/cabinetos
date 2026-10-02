@@ -506,7 +506,7 @@ fn content_hash(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ColumnWidths, CompactOverlay, Layout};
+    use crate::{ColumnWidths, CompactOverlay, Layout, PaneSplit};
 
     fn temp_config() -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().unwrap();
@@ -1308,6 +1308,58 @@ mod tests {
         assert_eq!(store.config().ui.compact_overlay, None);
         let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(file["ui"]["compactOverlay"], Value::Null);
+    }
+
+    #[test]
+    fn the_pane_split_round_trips_through_the_file() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(store.config().ui.pane_split, None, "null: equal panes");
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["paneSplit"], Value::Null);
+
+        assert_eq!(
+            store
+                .set_value("ui.paneSplit", Value::from(0.375), accept)
+                .unwrap(),
+            ["ui.paneSplit"]
+        );
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["paneSplit"], 0.375);
+        let (reopened, opened) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(opened, Opened::Loaded);
+        assert_eq!(reopened.config().ui.pane_split, Some(PaneSplit(0.375)));
+
+        // A share out of bounds or not a number is refused, and the file stays as it was.
+        let before = std::fs::read_to_string(&path).unwrap();
+        for value in [
+            Value::from(0.19),
+            Value::from(0.81),
+            Value::from(1),
+            Value::from("half"),
+        ] {
+            let result = store.set_value("ui.paneSplit", value.clone(), accept);
+            let Err(UpdateError::Rejected(rejection)) = result else {
+                panic!("{value}: {result:?}")
+            };
+            assert!(
+                rejection.message.contains("ui.paneSplit"),
+                "{value}: {}",
+                rejection.message
+            );
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+
+        // Equal panes again with `null`.
+        assert_eq!(
+            store
+                .set_value("ui.paneSplit", Value::Null, accept)
+                .unwrap(),
+            ["ui.paneSplit"]
+        );
+        assert_eq!(store.config().ui.pane_split, None);
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["ui"]["paneSplit"], Value::Null);
     }
 
     #[test]

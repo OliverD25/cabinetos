@@ -219,6 +219,7 @@
         "dualPane": true,
         "lastPaths": [],
         "layout": "classic",
+        "paneSplit": null,
         "pinned": [],
         "rail": [],
         "sidebar": true,
@@ -812,6 +813,13 @@
         }
       ]
     },
+    "PaneSplit": {
+      "description": "The left pane's share of the panes' width, from 0.2 to 0.8.",
+      "type": "number",
+      "format": "double",
+      "maximum": 0.8,
+      "minimum": 0.2
+    },
     "PaneTabs": {
       "description": "One pane's tabs, left to right, and which one is in front.",
       "type": "object",
@@ -1338,6 +1346,18 @@
           "description": "Where the sidebar, panes and terminal go.",
           "$ref": "#/$defs/Layout",
           "default": "classic"
+        },
+        "paneSplit": {
+          "description": "The left pane's share of the width the two panes have, as the user\nlast dragged the divider between them: a number from 0.2 to 0.8.\n`null`: the panes are equal. The window owns it; the core only checks\nand stores it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PaneSplit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "pinned": {
           "description": "Folders the user pinned to the sidebar, in the sidebar's order.",
