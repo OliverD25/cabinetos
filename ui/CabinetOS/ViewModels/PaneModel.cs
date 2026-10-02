@@ -1033,6 +1033,9 @@ public sealed class PaneModel : ObservableObject, IRowDetails
     /// </summary>
     public void ReleaseKeptUnlessAmong(IEnumerable<PaneTab> tabs) => _kept.ReleaseUnlessAmong(tabs);
 
+    /// <summary>Whether a listing is kept for a tab that went behind (the snapshot aid's <c>until:kept-released</c> waits for none).</summary>
+    public bool HasKeptListing => _kept.Held is not null;
+
     /// <summary>Goes to the parent folder and selects the folder it came from.</summary>
     public Task GoUpAsync(string requestId) =>
         DisplayFormat.Parent(Path) is { } parent

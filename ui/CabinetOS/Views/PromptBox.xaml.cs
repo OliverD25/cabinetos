@@ -29,6 +29,7 @@ public sealed partial class PromptBox : UserControl
     private PromptKind _kind;
     private bool _showsInput = true;
     private bool _settingText;
+    private string _listText = "";
 
     /// <summary>Creates the prompt, hidden.</summary>
     public PromptBox()
@@ -40,6 +41,7 @@ public sealed partial class PromptBox : UserControl
             if (!_settingText)
             {
                 _list.SetText(Input.Text);
+                _listText = Input.Text;
                 BuildRows();
             }
         };
@@ -78,6 +80,7 @@ public sealed partial class PromptBox : UserControl
         _kind = request.Kind;
         _showsInput = request.ShowInput;
         _list = new PromptList(request.Kind, request.Rows);
+        _listText = request.Text;
         LabelText.Text = request.Label;
         AutomationPropertiesName(request.Label);
         _settingText = true;
@@ -157,6 +160,9 @@ public sealed partial class PromptBox : UserControl
         }
         Close(new PromptResult(Input.Text, _kind == PromptKind.Pick ? _list.Highlighted : null, Option.IsChecked == true));
     }
+
+    /// <summary>Whether the rows follow <paramref name="text"/>: XAML has raised the box's text change for it (the snapshot aid waits for this after <see cref="Type"/>).</summary>
+    public bool ListFollows(string text) => _listText == text;
 
     /// <summary>Puts text in the box as if typed (the snapshot aid).</summary>
     public void Type(string text)

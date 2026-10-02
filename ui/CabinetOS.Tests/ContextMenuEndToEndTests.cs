@@ -42,12 +42,21 @@ public class ContextMenuEndToEndTests
         {
             var stub = Path.Combine(root, "record paths.js");
             var recorded = Path.Combine(root, "record paths.js.log");
-            // A stand-in program with no window, as the live check's editor: each start adds its argument as a line.
+            // A stand-in program with no window, as the live check's editor: each start adds its argument as a line. Two starts a
+            // moment apart (a busy machine starts a program late) may meet at the file, and the one that finds it open tries again.
             File.WriteAllText(stub, """
                 var fso = new ActiveXObject("Scripting.FileSystemObject");
-                var log = fso.OpenTextFile(WScript.ScriptFullName + ".log", 8, true, -1);
-                log.WriteLine(WScript.Arguments.length > 0 ? WScript.Arguments(0) : "(nothing)");
-                log.Close();
+                var line = WScript.Arguments.length > 0 ? WScript.Arguments(0) : "(nothing)";
+                for (var attempt = 0; attempt < 200; attempt++) {
+                    try {
+                        var log = fso.OpenTextFile(WScript.ScriptFullName + ".log", 8, true, -1);
+                        log.WriteLine(line);
+                        log.Close();
+                        break;
+                    } catch (error) {
+                        WScript.Sleep(50);
+                    }
+                }
                 """);
             var process = run.Start("config", string.Join(';',
                 "size:1200x700",
@@ -63,26 +72,39 @@ public class ContextMenuEndToEndTests
                 "shell:background",
                 "cmd:overlay.close",
                 "shellmenu:alpha.txt",
+                "until:windows-menu",
                 "shell:shell-off",
                 "cmd:overlay.close",
-                // The test writes the file now, as an editor would; the window reads it again.
-                "until:config",
-                "wait:500",
+                // The test writes the file when it sees this state, as an editor would (it did not wait for "background": the window read
+                // the file while the steps before ran, and until:config then waited for nothing). The window is waited for until it holds
+                // the file's shellMenu and its program, not for "a read": it reads the configuration for its own writes too (the tabs it
+                // saves a second after the last folder it opened), and a menu built after that read had no Record Paths.
+                "shell:edit-now",
+                "until:shell-menu",
+                "until:command:program.record",
+                // The core builds Windows' menu through the shell's handlers, which the first call loads: it gave up after its 3 s
+                // ("Windows took longer than 3 s") beside two test runs, once in 5 runs. A user asks again; so does the test, once,
+                // and the second answer is quick since the handlers are loaded.
+                "shellmenu:alpha.txt",
+                "until:windows-menu",
+                "cmd:overlay.close",
                 "menu:Alphabet.md",
+                "until:menu",
                 "shell:md",
                 "menu-click:Record Paths",
-                "wait:2000",
+                "until:menu-closed",
                 "menu:alpha.txt",
                 "shell:txt",
                 "cmd:overlay.close",
                 "cmd:program.record",
-                "wait:2000",
                 "cmd:program.nosuch",
                 "shellmenu:alpha.txt",
+                // The core builds Windows' menu through the shell's handlers: 1.6 s for the first one beside two test runs.
+                "until:windows-menu",
                 "shell:windows",
                 "cmd:overlay.close",
                 "shot:done"));
-            await run.WaitForStateAsync("config", "background");
+            await run.WaitForStateAsync("config", "edit-now");
             File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), JsonSerializer.Serialize(new Dictionary<string, object>
             {
                 ["version"] = 1,
@@ -137,16 +159,19 @@ public class ContextMenuEndToEndTests
                 Assert.Equal("", state.GetProperty("context_menu").GetString());
                 Assert.True(state.GetProperty("windows_menu").GetString()!.Split('|').Length > 3, state.GetProperty("windows_menu").GetString());
             });
-            // From the menu the right-clicked file, from the palette the cursor's.
-            Assert.Equal([Path.Combine(data, "Alphabet.md"), Path.Combine(data, "alpha.txt")], await ReadLinesAsync(recorded, 2));
+            // From the menu the right-clicked file, from the palette the cursor's. Two programs started a moment apart finish in the
+            // operating system's order, so the lines are compared as a set.
+            Assert.Equal(new[] { Path.Combine(data, "Alphabet.md"), Path.Combine(data, "alpha.txt") }.Order(StringComparer.Ordinal),
+                (await ReadLinesAsync(recorded, 2)).Order(StringComparer.Ordinal));
             Assert.Contains(logs, l => Message(l) == "command failed" && Field(l, "command").GetString() == "program.nosuch"
                 && Field(l, "code").GetString() == "unknown_program");
             // The ID no command has is logged once, though the file menu opened twice.
             Assert.Single(logs, l => Message(l) == "context menu entry left out: no command has this ID" && Field(l, "command").GetString() == "hex.view");
-            var windowsShown = Assert.Single(logs, l => Message(l) == "windows menu shown");
+            // The last of Windows' menus: the first of two is the one asked for to load the shell's handlers.
+            var windowsShown = logs.Last(l => Message(l) == "windows menu shown");
             // Windows' menu hangs from the focused row as well: its corner is where it was asked for. WinUI moves a menu this
             // long up only when the screen is too low for it, so the top may also lie above the point, never below it.
-            var windowsPlaced = Assert.Single(logs, l => Message(l) == "windows menu placed");
+            var windowsPlaced = logs.Last(l => Message(l) == "windows menu placed");
             var (askedX, askedY) = (Field(windowsShown, "x").GetDouble(), Field(windowsShown, "y").GetDouble());
             Assert.InRange(Field(windowsPlaced, "left").GetDouble(), askedX - 2, askedX + 2);
             Assert.InRange(Field(windowsPlaced, "top").GetDouble(), double.MinValue, askedY + 2);
@@ -170,6 +195,7 @@ public class ContextMenuEndToEndTests
     public async Task The_menu_opens_with_its_corner_at_the_point_and_flips_before_the_windows_edge()
     {
         var (run, root, data) = Prepare("menu-place");
+        List<string> seen = [];
         try
         {
             var process = run.Start("place", string.Join(';',
@@ -179,35 +205,38 @@ public class ContextMenuEndToEndTests
                 "pane:0",
                 $"path:{data}",
                 "wait:500",
+                // Each menu is waited for until it is on screen and has logged where WinUI put it, and its close until it is gone: that
+                // line is written some low-priority dispatcher turns after the menu opens, a busy machine runs them late, and a menu
+                // closed before them logs no place (5 lines where 6 were asked for).
                 "menu-at:alpha.txt|300,200",
-                "wait:900",
+                "until:menu-placed",
                 "cmd:overlay.close",
-                "wait:500",
+                "until:menu-closed",
                 "menu:beta.txt",
-                "wait:900",
+                "until:menu-placed",
                 "cmd:overlay.close",
-                "wait:500",
+                "until:menu-closed",
                 // The first showing of this shape near an edge is placed from an estimate of its size, the ones after from the measured one.
                 "size:900x420",
-                "wait:800",
                 "menu-at:beta.txt|300,400",
-                "wait:900",
+                "until:menu-placed",
                 "cmd:overlay.close",
-                "wait:500",
+                "until:menu-closed",
                 "menu-at:beta.txt|850,150",
-                "wait:900",
+                "until:menu-placed",
                 "cmd:overlay.close",
-                "wait:500",
+                "until:menu-closed",
                 "menu-at:beta.txt|850,400",
-                "wait:900",
+                "until:menu-placed",
                 "cmd:overlay.close",
-                "wait:500",
+                "until:menu-closed",
                 "menu-at:beta.txt|300,400",
-                "wait:900",
+                "until:menu-placed",
                 "cmd:overlay.close",
-                "wait:500",
+                "until:menu-closed",
                 "shot:done"));
             var logs = await run.FinishAsync("place", process, "done");
+            seen = logs;
 
             var shown = logs.Where(l => Message(l) == "context menu shown").ToList();
             var placed = logs.Where(l => Message(l) == "context menu placed").ToList();
@@ -246,6 +275,10 @@ public class ContextMenuEndToEndTests
             {
                 Assert.True(Number(line, "left") >= 0 && Right(line) <= windowWidth && Number(line, "top") >= 0 && Bottom(line) <= windowHeight, line);
             });
+        }
+        catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's log lines (times in UTC):\n{WindowLog.Last(seen, 70)}");
         }
         finally
         {
@@ -347,19 +380,20 @@ public class ContextMenuEndToEndTests
                 $"path:{data}",
                 "wait:500",
                 "menu:alpha.txt",
-                "wait:600",
+                // The menu is waited for until it is on screen and the edit mode until it is shown: a loaded machine opens a flyout
+                // seconds late, and a click on a menu that WinUI has not opened yet runs nothing.
+                "until:menu",
                 "menu-click:Edit Menu…",
-                "wait:500",
+                "until:menu-edit",
                 "shell:editing",
                 // The row's X, pressed through its automation peer as a screen reader would.
                 "click:Remove Open in Terminal",
                 "shell:removed",
                 "menu-edit-key:insert",
-                "wait:300",
+                // type: waits until the prompt's rows follow the text, and until:menu-edit-idle until the added command is in the list.
                 "type:New folder",
-                "wait:300",
                 "accept",
-                "wait:300",
+                "until:menu-edit-idle",
                 "shell:added",
                 "menu-edit-key:alt+up",
                 "shell:moved",
@@ -371,8 +405,9 @@ public class ContextMenuEndToEndTests
                 "menu-edit-drag:Copy to other pane|Open in other pane",
                 "shell:dragged-back",
                 "click:Done",
-                "until:config",
-                "wait:300",
+                // The read of the saved list, not any read: the window reads the configuration for its own writes too.
+                "until:file-menu-rows:3",
+                "until:menu-edit-closed",
                 "shell:saved",
                 "menu:alpha.txt",
                 "shell:after",
@@ -380,36 +415,37 @@ public class ContextMenuEndToEndTests
                 "cmd:overlay.close",
                 // The file gets an error while the list is edited: the core refuses the save.
                 "menu:alpha.txt",
-                "wait:600",
+                "until:menu",
                 "menu-click:Edit Menu…",
-                "wait:500",
+                "until:menu-edit",
                 "click:Remove Copy to other pane",
                 "shell:break-the-file",
                 "until:config-error",
                 "click:Done",
-                "wait:1000",
+                "until:menu-edit-idle",
                 "shell:refused",
                 // The test puts the file back; the core says it is valid again.
                 "until:config",
                 "click:Done",
-                "wait:1000",
+                "until:file-menu-rows:2",
+                "until:menu-edit-closed",
                 "shell:saved-again",
                 // Esc leaves without saving.
                 "menu:alpha.txt",
-                "wait:600",
+                "until:menu",
                 "menu-click:Edit Menu…",
-                "wait:500",
+                "until:menu-edit",
                 "menu-edit-key:delete",
                 "shell:before-esc",
                 "menu-edit-key:escape",
                 "shell:after-esc",
                 "menu:alpha.txt",
-                "wait:600",
+                "until:menu",
                 "shell:unchanged",
                 "cmd:overlay.close",
                 // From the palette there is no open menu: the focused row's is edited; overlay.close leaves it.
                 "cmd:menu.edit",
-                "wait:300",
+                "until:menu-edit",
                 "shell:from-palette",
                 "cmd:overlay.close",
                 "shell:closed",
@@ -550,19 +586,22 @@ public class ContextMenuEndToEndTests
             var process = run.Start("prepared", string.Join(';',
                 "size:1200x700",
                 "pane:0",
-                "wait:500",
+                // The window builds the menu shapes while it is idle after start, one low-priority dispatcher turn each, and a busy
+                // machine is late with them: a right-click before they are done builds its menu itself, and the test judged the
+                // order of the log lines (the last shape prepared before the first right-click) after a fixed 2 s.
+                "until:menus-prepared",
                 "menu:alpha.txt",
-                "wait:500",
+                "until:menu",
                 "cmd:overlay.close",
-                "wait:300",
+                "until:menu-closed",
                 "menu:gamma",
-                "wait:500",
+                "until:menu",
                 "cmd:overlay.close",
-                "wait:300",
+                "until:menu-closed",
                 "menu:*",
-                "wait:500",
+                "until:menu",
                 "cmd:overlay.close",
-                "wait:300",
+                "until:menu-closed",
                 "shot:done"));
             var logs = await run.FinishAsync("prepared", process, "done");
 
@@ -754,19 +793,28 @@ public class ContextMenuEndToEndTests
 
     private static async Task<List<string>> ReadLinesAsync(string path, int count)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+        var found = "no file";
         while (true)
         {
             if (File.Exists(path))
             {
-                // wscript writes UTF-16 (the last argument of OpenTextFile).
-                var lines = File.ReadAllLines(path, System.Text.Encoding.Unicode).Where(l => l.Length > 0).ToList();
-                if (lines.Count >= count)
+                try
                 {
-                    return lines;
+                    // wscript writes UTF-16 (the last argument of OpenTextFile).
+                    var lines = File.ReadAllLines(path, System.Text.Encoding.Unicode).Where(l => l.Length > 0).ToList();
+                    found = $"{lines.Count} line(s): {string.Join(" | ", lines)}";
+                    if (lines.Count >= count)
+                    {
+                        return lines;
+                    }
+                }
+                catch (IOException)
+                {
+                    // A program has the file open just now: look again.
                 }
             }
-            Assert.True(DateTime.UtcNow < deadline, $"{path} did not get {count} lines");
+            Assert.True(DateTime.UtcNow < deadline, $"{path} did not get {count} lines in 60 s; it has {found}");
             await Task.Delay(200);
         }
     }
@@ -805,17 +853,31 @@ public class ContextMenuEndToEndTests
         public async Task WaitForStateAsync(string name, string label)
         {
             var folder = Path.Combine(root, "logs-" + name);
-            await WaitForAsync(() => LogFiles.Ui(folder).Any(l => Message(l) == "shell state" && Field(l, "label").GetString() == label),
-                $"the {name} window's state {label}", TimeSpan.FromSeconds(60));
+            try
+            {
+                await WaitForAsync(() => LogFiles.Ui(folder).Any(l => Message(l) == "shell state" && Field(l, "label").GetString() == label),
+                    $"the {name} window's state {label}", TimeSpan.FromSeconds(180));
+            }
+            catch (Xunit.Sdk.XunitException error)
+            {
+                throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(LogFiles.Ui(folder), 60)}");
+            }
         }
 
         // Waits for the last snapshot, closes the window the way a user does and returns the UI's log lines.
         public async Task<List<string>> FinishAsync(string name, Process process, string lastShot)
         {
             var shot = Path.Combine(root, "shots-" + name, lastShot + ".png");
-            await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", TimeSpan.FromSeconds(120));
+            try
+            {
+                await WaitForAsync(() => File.Exists(shot), $"the {name} window's last snapshot", TimeSpan.FromSeconds(240));
+            }
+            catch (Xunit.Sdk.XunitException error)
+            {
+                throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(LogFiles.Ui(Path.Combine(root, "logs-" + name)), 60)}");
+            }
             process.CloseMainWindow();
-            Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
+            Assert.True(process.WaitForExit(60_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
             // The error lines themselves, not the whole log as the collection assert prints it.
@@ -882,7 +944,15 @@ public class ContextMenuEndToEndTests
     {
         var line = Assert.Single(logs, l => Message(l) == "shell state" && Field(l, "label").GetString() == label);
         using var parsed = JsonDocument.Parse(line);
-        check(parsed.RootElement.GetProperty("fields"));
+        try
+        {
+            check(parsed.RootElement.GetProperty("fields"));
+        }
+        catch (Xunit.Sdk.XunitException error)
+        {
+            // What the window did before the state was read, and after: a late menu shows as a line that comes after the state.
+            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe window's log lines around the state (times in UTC):\n{WindowLog.Around(logs, logs.IndexOf(line))}");
+        }
     }
 
     private static string? Message(string line)

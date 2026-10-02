@@ -170,8 +170,11 @@ public sealed partial class MainWindow
             {
                 break;
             }
+            var (wasWidth, wasHeight) = (RootGrid.ActualWidth, RootGrid.ActualHeight);
             GrowClient(dx, dy);
             await Task.Delay(800);
+            // A busy machine applies the new size frames later than that: wait until the content has changed, at most 5 s.
+            await WaitForConditionAsync(() => Math.Abs(RootGrid.ActualWidth - wasWidth) >= 0.5 || Math.Abs(RootGrid.ActualHeight - wasHeight) >= 0.5, 5_000);
         }
         Diag.Info("cabinetos_ui::snapshot", "window sized", new LogField("width", RootGrid.ActualWidth), new LogField("height", RootGrid.ActualHeight),
             new LogField("scale", RootGrid.XamlRoot?.RasterizationScale));

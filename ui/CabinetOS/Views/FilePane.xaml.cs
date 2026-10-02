@@ -47,6 +47,9 @@ public sealed partial class FilePane : UserControl
     private NavigationTiming? _timing;
     private long _firstRowTicks;
     private bool _renderingHooked;
+
+    /// <summary>Whether a listing was bound and its first frame has not been drawn yet: "listing shown" is not logged until then (the snapshot aid's <c>until:listing-drawn</c>).</summary>
+    internal bool TimingPending => _timing is not null;
     private TaskCompletionSource<string?>? _rename;
     private bool _clearButtonHidden;
     private int _renameIndex = -1;

@@ -26,6 +26,9 @@ public sealed partial class MainWindow
 
         public bool Started { get; set; }
 
+        // The page is up: "a sidebar page started" is logged (the snapshot aid's until:sidebar-page).
+        public bool Up { get; set; }
+
         public bool Stopped { get; set; }
 
         public bool WantsKeys { get; set; }
@@ -95,6 +98,7 @@ public sealed partial class MainWindow
             Diag.Info(ToolsTarget, "a sidebar page stopped", new LogField("tool", toolId), new LogField("reason", reason));
             page.Stopped = true;
             page.Started = false;
+            page.Up = false;
             _warmPages.Forget(toolId);
             ShowNotice($"{tool.Manifest.Name} stopped: {reason}.", isError: true);
             UpdateSidebarChrome();
@@ -117,6 +121,7 @@ public sealed partial class MainWindow
             UpdateSidebarChrome();
             return;
         }
+        page.Up = true;
         Diag.Info(ToolsTarget, "a sidebar page started", new LogField("tool", id));
         if (page.WantsKeys && _sidebarView == id)
         {

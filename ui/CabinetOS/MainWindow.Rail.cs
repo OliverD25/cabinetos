@@ -636,6 +636,8 @@ public sealed partial class MainWindow
                 OnRailMoveRequested(id, step);
                 break;
             case "rail-state":
+                // What the sidebar's column, the rows and the views measure is laid out on XAML's next frames.
+                await SettleFramesAsync();
                 LogRailState(argument);
                 break;
             case "tree-state" when argument.Split('|') is [var stateLabel, var stateFolder]:
@@ -656,5 +658,8 @@ public sealed partial class MainWindow
                 break;
         }
         await Task.Delay(400);
+        // A new sidebar width, a view shown or a row drawn is laid out on XAML's next frames, which a busy machine draws late:
+        // "rail-state" read the old width (224 where 320 was set) after the 400 ms.
+        await SettleFramesAsync();
     }
 }

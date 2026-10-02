@@ -150,6 +150,16 @@ public sealed partial class ColumnView : UserControl
     public IReadOnlyList<string> DescribeRows() =>
         [.. _lists.Select(list => string.Join("|", list.RealizedRows.Select(row => row.ShowsChevron ? row.RowName + ">" : row.RowName)))];
 
+    /// <summary>
+    /// Whether the view is drawn as its columns say: every column has a width, a column with rows has drawn some, and the
+    /// keyboard's column lies whole inside the strip. XAML builds the rows and applies the strip's scroll on its next frames,
+    /// which a busy machine draws a few hundred milliseconds late; the snapshot aid waits for this before it logs what is shown.
+    /// </summary>
+    public bool IsLaidOut() =>
+        _columns is { } columns && _lists.Count == columns.Count
+        && _lists.All(list => list.ActualWidth > 0 && (list.RowCount == 0 || list.RealizedRows.Any()))
+        && KeyboardInView();
+
     /// <summary>Whether the keyboard's column lies whole inside the strip's visible part.</summary>
     public bool KeyboardInView()
     {

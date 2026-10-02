@@ -59,6 +59,8 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The right-click menu opens inside the window also on a busy computer. The window noted a menu's size when only its icon row had been drawn (60 high, not 268), and the next menu of that shape then opened without flipping above the pointer near the window's bottom edge, partly outside the window. It notes the size now once every button of the menu is drawn.
+- In the edit mode of the right-click menu, Delete takes out the row that has the keyboard, also right after Alt+Up or an added command. On a busy computer the window's UI framework (WinUI) told the window about a row's focus a frame late, after the rows were rebuilt, and Delete then took out the row beside the one that was moved.
 - The command palette ignores a search answer that comes after it closed. Closing it in the few milliseconds the core needs to answer could end with an error in the log ("a background task failed and nobody observed it"); nothing showed on screen.
 - A click from the terminal into a file pane gives the pane the keyboard: the keys pressed right after it (Home, Enter, Backspace, any pane key) act on the pane. They used to do nothing, and did not reach the shell either: right after the click, the window's UI framework (WinUI) moved the keyboard a second time, to the window's background.
 - A run of the window that ended without closing, as a native failure of WinUI does without a crash trace, is noted in the log at the next start: a WARN line, `previous run ended without closing`, with the time that run started. Nothing is shown on screen. The window now writes its clean end into `ui.last-start`, in the log folder.

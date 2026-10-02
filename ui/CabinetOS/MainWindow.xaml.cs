@@ -443,13 +443,15 @@ public sealed partial class MainWindow : Window
                     OnContextMenuRequested(_paneViews[_active], MenuRowForStep(menuRow), menuPoint);
                     break;
                 case "shellmenu":
-                    // Shift+right-click on the same rows; Windows' menu comes when the core answers.
-                    OnShellMenuRequested(_paneViews[_active], MenuRowForStep(step.Argument), null);
-                    await Task.Delay(1500);
+                    // Shift+right-click on the same rows; Windows' menu comes when the core answers. Until the core has answered and the
+                    // menu is placed, not a fixed 1.5 s: the core's first answer took 1.6 s and over 3 s beside test runs, and a plain
+                    // menu that this step opened (the setting is off) stood open for the whole time, where a window that another
+                    // test's window had taken the keyboard from closes it. An answer of "took longer than 3 s" is asked for again.
+                    var shellName = step.Argument;
+                    await AskForWindowsMenuForSnapshotAsync(() => OnShellMenuRequested(_paneViews[_active], MenuRowForStep(shellName), null));
                     break;
                 case "shellmenu-at" when TryParseMenuAt(step.Argument, out var shellRow, out var shellPoint):
-                    OnShellMenuRequested(_paneViews[_active], MenuRowForStep(shellRow), shellPoint);
-                    await Task.Delay(1500);
+                    await AskForWindowsMenuForSnapshotAsync(() => OnShellMenuRequested(_paneViews[_active], MenuRowForStep(shellRow), shellPoint));
                     break;
                 case "menu-edit-drag":
                     // A row dragged onto another in the menu's edit mode, by their titles: "menu-edit-drag:Open|Copy to other pane".
@@ -466,7 +468,10 @@ public sealed partial class MainWindow : Window
                     {
                         MenuEditorView.HandleKey(editKey.Value);
                     }
-                    await Task.Delay(300);
+                    // Until the keyboard is on the row the key left the focus on, and a frame more for the events XAML raises late
+                    // (a fixed 300 ms let the next key come before them: a Delete after a move took out the row beside the moved one).
+                    await WaitForConditionAsync(() => MenuEditorView.FocusSettled, 5000);
+                    await SettleFramesAsync();
                     break;
                 case "menu-click":
                     if (!_contextMenu.Click(step.Argument))
@@ -487,6 +492,9 @@ public sealed partial class MainWindow : Window
                     if (PromptView.IsOpen)
                     {
                         PromptView.Type(step.Argument);
+                        // The prompt's rows follow the text when XAML raises the box's text change, on its next frame, which a busy
+                        // machine draws late; an accept before then takes the highlighted row of the old text.
+                        await WaitForConditionAsync(() => !PromptView.IsOpen || PromptView.ListFollows(step.Argument));
                     }
                     else
                     {
@@ -554,7 +562,7 @@ public sealed partial class MainWindow : Window
                     LogLayoutForSnapshot(step.Argument);
                     break;
                 case "click":
-                    ClickForSnapshot(step.Argument);
+                    await ClickForSnapshotAsync(step.Argument);
                     break;
                 case "focus":
                     LogFocusForSnapshot(step.Argument);
@@ -659,6 +667,15 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // Waits until the condition holds, at most 20 s: a window that never gets there fails the check that follows, which says what it saw.
+    private static async Task WaitForConditionAsync(Func<bool> met, int limitMilliseconds = 20_000)
+    {
+        for (var waited = 0; waited < limitMilliseconds && !met(); waited += 20)
+        {
+            await Task.Delay(20);
+        }
+    }
+
     // The snapshot aid's scroll:<pages> step: PageDown in the active pane, 30 times a second as a
     // held key repeats. A press that falls due during a slow frame is made at the next frame,
     // as queued key messages are. scroll:<pages>/<n> presses once every n frames instead: with the
@@ -711,8 +728,23 @@ public sealed partial class MainWindow : Window
 
     // The snapshot aid's click: step: the first shown button or menu item (open menus included) with that
     // accessible name, pressed as assistive technology may press it: the keyboard moves to it, then its
-    // automation peer invokes it.
-    private void ClickForSnapshot(string name)
+    // automation peer invokes it. A button that is not drawn yet is waited for, at most 20 s: XAML builds the rows of a list (the
+    // sidebar's, the tree's) and the items of a menu on its next frames, which a busy machine draws a few hundred milliseconds
+    // late, and a click that found no button logged "no shown button" and went on (a run beside two full test runs).
+    private async Task ClickForSnapshotAsync(string name)
+    {
+        for (var waited = 0; waited < 20_000; waited += 100)
+        {
+            if (TryClickForSnapshot(name))
+            {
+                return;
+            }
+            await Task.Delay(100);
+        }
+        Diag.Info(Target, "snapshot click: no shown button has that name", new LogField("name", name));
+    }
+
+    private bool TryClickForSnapshot(string name)
     {
         var pending = new Stack<DependencyObject>();
         pending.Push(RootGrid);
@@ -737,14 +769,14 @@ public sealed partial class MainWindow : Window
                 // Best effort: the window's chrome buttons refuse the keyboard (IsTabStop off, as under a real click), and the press goes on.
                 _ = button.Focus(FocusState.Keyboard);
                 invoke.Invoke();
-                return;
+                return true;
             }
             for (var i = VisualTreeHelper.GetChildrenCount(element) - 1; i >= 0; i--)
             {
                 pending.Push(VisualTreeHelper.GetChild(element, i));
             }
         }
-        Diag.Info(Target, "snapshot click: no shown button has that name", new LogField("name", name));
+        return false;
     }
 
     // The snapshot aid's tooltip: step: opens the tooltip of the first element with that accessible
@@ -861,6 +893,45 @@ public sealed partial class MainWindow : Window
                 // Its place has been measured and logged too ("context menu placed"): a few dispatcher turns after "menu".
                 "menu-placed" => _contextMenu.IsSettled && _menuPlaced,
                 "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,
+                // The menu's edit mode is on screen, has nothing in flight (no "Add Command…" prompt open for it, no save out), or is gone.
+                "menu-edit" => MenuEditorView.IsOpen,
+                "menu-edit-idle" => MenuEditorView.IsIdle,
+                "menu-edit-closed" => !MenuEditorView.IsOpen,
+                // Windows' menu: the core has answered every question for it, and the menu shown has logged where it is.
+                "windows-menu" => _windowsMenuAsking == 0 && (!_windowsMenu.IsOpen || _windowsMenuPlaced),
+                // What ui.tabs holds in the file is what the window shows: the save after the last change is done.
+                "tabs-saved" => !_tabsSaveTimer.IsRunning && _tabsWritten == CurrentTabs().ToJson().GetRawText(),
+                // No pane keeps a listing for a tab that went behind: its time was up and the core closed it.
+                "kept-released" => _panes.All(p => !p.HasKeptListing),
+                // pane-at:<folder>: the active pane shows that folder (a pick has run and its listing is shown); case and a trailing
+                // backslash do not count.
+                _ when condition.StartsWith("pane-at:", StringComparison.Ordinal) =>
+                    string.Equals(Active.Path.TrimEnd('\\'), condition["pane-at:".Length..].TrimEnd('\\'), StringComparison.OrdinalIgnoreCase),
+                // sidebar-page:<tool>: that tool's sidebar page has started ("a sidebar page started" is logged);
+                // page-suspended:<tool> and page-awake:<tool>: its page is put to sleep (WebView2's TrySuspend), or is awake.
+                _ when condition.StartsWith("sidebar-page:", StringComparison.Ordinal) =>
+                    _sidebarPages.TryGetValue(condition["sidebar-page:".Length..], out var startedPage) && startedPage.Up,
+                _ when condition.StartsWith("page-suspended:", StringComparison.Ordinal) =>
+                    _sidebarPages.TryGetValue(condition["page-suspended:".Length..], out var sleepingPage) && sleepingPage.Host.Page.IsSuspended,
+                _ when condition.StartsWith("page-awake:", StringComparison.Ordinal) =>
+                    _sidebarPages.TryGetValue(condition["page-awake:".Length..], out var wakePage) && !wakePage.Host.Page.IsSuspended,
+                // sidebar-view:<id>: the sidebar shows that view, which a tool's view does once the tools are read (a busy machine reads them late).
+                _ when condition.StartsWith("sidebar-view:", StringComparison.Ordinal) => _sidebarView == condition["sidebar-view:".Length..],
+                // The rail's settings (its order, the sidebar's width and view) have all been written to the core: no write is out.
+                "rail-saved" => _railWrites == 0 && _widthWrites == 0 && _viewWrites == 0,
+                // The configuration the window holds has what a test wrote or saved, which until:config cannot say: the window reads the
+                // configuration for its own writes too (the tabs it saves a second after the last folder it opened), and that read
+                // ends the wait. file-menu-rows:<n>: the file menu has n rows; shell-menu: contextMenu.shellMenu is on; command:<id>:
+                // the core's command list has that command (a program of the file, after the read that follows the change).
+                _ when condition.StartsWith("file-menu-rows:", StringComparison.Ordinal) && int.TryParse(condition["file-menu-rows:".Length..], out var fileRows) =>
+                    _menuConfig.File.Items.Count == fileRows,
+                "shell-menu" => _menuConfig.ShellMenu,
+                // The context menu's shapes have all been built ahead ("context menu prepared" for each of the four).
+                "menus-prepared" => _menusPrepared,
+                // Every listing a pane bound has had its first frame drawn, and "listing shown" is logged for it (a switch that is
+                // followed by another before the frame drops the line: a busy machine draws a frame every few hundred milliseconds).
+                "listing-drawn" => _panes.All(p => p.PendingTiming is null) && _paneViews.All(v => !v.TimingPending),
+                _ when condition.StartsWith("command:", StringComparison.Ordinal) => _router.Commands.Any(c => c.Id == condition["command:".Length..]),
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,
                 // The core has answered every question about the active folder's workspace (the workspace row's branch, Quick Open's root).
