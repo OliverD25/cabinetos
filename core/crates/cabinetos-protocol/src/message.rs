@@ -1058,6 +1058,10 @@ pub enum Response {
         /// The full path of the row the cursor is on in the active pane;
         /// `null` in an empty folder or in a tab that shows a tool.
         cursor: Option<String>,
+        /// Whether the window shows both panes (protocol version 19). With
+        /// one pane shown, `right` is a folder nobody sees: a program that
+        /// means "the other pane" must refuse.
+        dual: bool,
     },
     /// Reply to `preview_listing` and `open_preview`: the preview is
     /// complete in shared memory.
@@ -2296,6 +2300,7 @@ mod tests {
                     marked_total: Some(1500),
                 },
             },
+            dual: true,
         }
     }
 
@@ -2541,6 +2546,7 @@ mod tests {
                 selection: vec![r"D:\work\a.txt".to_owned()],
                 selection_total: 1500,
                 cursor: None,
+                dual: false,
             },
             Response::PreviewOpened {
                 preview: "preview-3".to_owned(),
@@ -2867,6 +2873,7 @@ mod tests {
             selection: vec![r"E:\work\a.txt".to_owned(), r"E:\work\b.txt".to_owned()],
             selection_total: 2,
             cursor: Some(r"E:\work\b.txt".to_owned()),
+            dual: true,
         })
         .unwrap();
         // A pane that shows no folder is null, not left out.
@@ -2875,7 +2882,7 @@ mod tests {
             json!({
                 "type": "gui_context", "active": "left", "left": "E:\\work", "right": null,
                 "selection": ["E:\\work\\a.txt", "E:\\work\\b.txt"], "selection_total": 2,
-                "cursor": "E:\\work\\b.txt"
+                "cursor": "E:\\work\\b.txt", "dual": true
             })
         );
         let bare = serde_json::to_value(Response::GuiContext {
@@ -2885,10 +2892,33 @@ mod tests {
             selection: Vec::new(),
             selection_total: 0,
             cursor: None,
+            dual: false,
         })
         .unwrap();
         assert_eq!(bare["cursor"], Value::Null);
         assert_eq!(bare["selection"], json!([]));
+        assert_eq!(bare["dual"], json!(false));
+    }
+
+    #[test]
+    fn a_window_state_says_whether_both_panes_show_and_older_ones_mean_yes() {
+        let state = window_state();
+        assert!(state.dual, "the sample window shows both panes");
+        let wire = serde_json::to_value(&state).unwrap();
+        assert_eq!(wire["dual"], json!(true));
+        let single = WindowState {
+            dual: false,
+            ..window_state()
+        };
+        let back: WindowState =
+            serde_json::from_value(serde_json::to_value(&single).unwrap()).unwrap();
+        assert!(!back.dual);
+        // A window older than protocol 19 sends no `dual`: both panes show.
+        let mut older = wire;
+        older.as_object_mut().unwrap().remove("dual");
+        let read: WindowState = serde_json::from_value(older).unwrap();
+        assert!(read.dual);
+        assert!(WindowState::default().dual);
     }
 
     #[test]

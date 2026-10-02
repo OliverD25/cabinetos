@@ -300,10 +300,31 @@ public class TabTests
         var json = Encode(request);
 
         Assert.Equal(
-            """{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"window_state","active_pane":"left","panes":{"left":{"tabs":[{"path":"C:\\Users\\me","locked":false},{"path":"E:\\work\\README.md","locked":false,"tool":"md-preview"}],"active":1,"cursor":"C:\\Users\\me\\notes.txt","marked":["C:\\Users\\me\\notes.txt"]},"right":{"tabs":[{"path":"D:\\","locked":true}],"active":0,"marked":[]}}}""",
+            """{"id":"01J9ZQ4X7K3M5N8P2R6S0T1V4W","type":"window_state","active_pane":"left","panes":{"left":{"tabs":[{"path":"C:\\Users\\me","locked":false},{"path":"E:\\work\\README.md","locked":false,"tool":"md-preview"}],"active":1,"cursor":"C:\\Users\\me\\notes.txt","marked":["C:\\Users\\me\\notes.txt"]},"right":{"tabs":[{"path":"D:\\","locked":true}],"active":0,"marked":[]}},"dual":true}""",
             json);
         AssertValid(json);
         Assert.Equal("right", WindowStateBuilder.Build(1, new PaneSnapshot(left.Tabs, 0, null, []), new PaneSnapshot(right.Tabs, 0, null, [])).ActivePane);
+    }
+
+    [Fact]
+    public void The_window_state_says_whether_both_panes_show()
+    {
+        var left = Strip(@"C:\Users\me");
+        var right = Strip(@"D:\");
+        PaneSnapshot Of(TabStrip strip) => new(strip.Tabs, strip.ActiveIndex, null, []);
+
+        // Both panes shown is the default and is on the wire, so a core older than protocol 19 is the only one without it.
+        var both = WindowStateBuilder.Build(0, Of(left), Of(right));
+        Assert.True(both.Dual);
+        Assert.Contains("\"dual\":true", Encode(both));
+
+        // One pane shown: the right pane's folder is still listed, and `dual` says nobody sees it.
+        var single = WindowStateBuilder.Build(0, Of(left), Of(right), dual: false);
+        Assert.False(single.Dual);
+        var json = Encode(single);
+        Assert.Contains("\"dual\":false", json);
+        Assert.Contains(@"""path"":""D:\\""", json);
+        AssertValid(json);
     }
 
     [Fact]

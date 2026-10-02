@@ -598,6 +598,12 @@ public sealed class WindowStateRequest(string activePane, WindowPanesState panes
 
     /// <summary>Both panes.</summary>
     public WindowPanesState Panes { get; } = panes;
+
+    /// <summary>
+    /// Whether the window shows both panes (protocol 19). With one pane shown the right pane's folder is one
+    /// nobody sees, so <c>cab copy --dest opposite_pane</c> refuses, as the window's own "copy to the other pane" does.
+    /// </summary>
+    public bool Dual { get; init; } = true;
 }
 
 /// <summary>

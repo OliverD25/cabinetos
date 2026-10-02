@@ -32,9 +32,12 @@ public static class WindowStateBuilder
     /// </summary>
     public const int MaxMarked = 1000;
 
-    /// <summary>The request for the pane at <paramref name="activePane"/> (0 left, 1 right) having the keyboard.</summary>
-    public static WindowStateRequest Build(int activePane, PaneSnapshot left, PaneSnapshot right) =>
-        new(activePane == 0 ? "left" : "right", new WindowPanesState(Pane(left), Pane(right)));
+    /// <summary>
+    /// The request for the pane at <paramref name="activePane"/> (0 left, 1 right) having the keyboard, and
+    /// <paramref name="dual"/> saying whether both panes are shown (protocol 19).
+    /// </summary>
+    public static WindowStateRequest Build(int activePane, PaneSnapshot left, PaneSnapshot right, bool dual = true) =>
+        new(activePane == 0 ? "left" : "right", new WindowPanesState(Pane(left), Pane(right))) { Dual = dual };
 
     private static WindowPaneState Pane(PaneSnapshot pane) => new(
         [.. pane.Tabs.Select((tab, index) => new WindowTabState(index == pane.Active && pane.FrontFolder is { } front ? front : tab.Path, tab.Locked, tab.Tool))],

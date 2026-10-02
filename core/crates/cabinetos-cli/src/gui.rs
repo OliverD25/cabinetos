@@ -49,6 +49,8 @@ pub(crate) struct Context {
     pub(crate) selection: Vec<String>,
     pub(crate) selection_total: u32,
     pub(crate) cursor: Option<String>,
+    /// Whether the window shows both panes.
+    pub(crate) dual: bool,
 }
 
 fn pane_word(pane: Pane) -> &'static str {
@@ -92,15 +94,21 @@ impl Context {
             "selection": self.selection,
             "selection_total": self.selection_total,
             "cursor": self.cursor,
+            "dual": self.dual,
         })
     }
 
     /// Where `--dest` says: `opposite_pane`, the folder the other pane
     /// shows, or a path as the other commands read one (against the folder
-    /// the shell is in).
+    /// the shell is in). With one pane shown the other pane is hidden, and
+    /// a copy into a folder the user cannot see is refused, as the window's
+    /// own "copy to the other pane" refuses it.
     fn destination(&self, dest: &str) -> anyhow::Result<String> {
         if dest != "opposite_pane" {
             return absolute(dest);
+        }
+        if !self.dual {
+            bail!("the other pane is hidden; show both panes or name a path");
         }
         let other = match self.active {
             Pane::Left => Pane::Right,
@@ -126,6 +134,7 @@ async fn context(client: &mut PipeClient) -> anyhow::Result<Context> {
             selection,
             selection_total,
             cursor,
+            dual,
         } => Ok(Context {
             active,
             left,
@@ -133,6 +142,7 @@ async fn context(client: &mut PipeClient) -> anyhow::Result<Context> {
             selection,
             selection_total,
             cursor,
+            dual,
         }),
         Response::Error {
             code: ErrorCode::NoWindow,
@@ -266,7 +276,26 @@ mod tests {
             selection: paths.iter().map(|path| (*path).to_owned()).collect(),
             selection_total: u32::try_from(paths.len()).unwrap(),
             cursor: paths.first().map(|path| (*path).to_owned()),
+            dual: true,
         }
+    }
+
+    #[test]
+    fn the_opposite_pane_is_refused_while_only_one_pane_shows() {
+        let mut single = context(Pane::Left, Some(r"E:\l"), Some(r"D:\r"), &["a"]);
+        single.dual = false;
+        let refused = single.destination("opposite_pane").unwrap_err();
+        assert_eq!(
+            refused.to_string(),
+            "the other pane is hidden; show both panes or name a path"
+        );
+        assert!(
+            !refused.is::<NothingToUse>(),
+            "a refused destination is a failure (1), not nothing (2)"
+        );
+        // A named path is still a destination with one pane shown.
+        assert_eq!(single.destination(r"C:\x").unwrap(), r"C:\x");
+        assert_eq!(single.json()["dual"], false);
     }
 
     #[test]
@@ -308,7 +337,8 @@ mod tests {
             shown,
             serde_json::json!({
                 "active": "right", "left": "E:\\l", "right": null,
-                "selection": ["D:\\r\\a"], "selection_total": 1, "cursor": "D:\\r\\a"
+                "selection": ["D:\\r\\a"], "selection_total": 1, "cursor": "D:\\r\\a",
+                "dual": true
             })
         );
     }

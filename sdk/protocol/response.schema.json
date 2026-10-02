@@ -825,6 +825,10 @@
             "null"
           ]
         },
+        "dual": {
+          "description": "Whether the window shows both panes (protocol version 19). With\none pane shown, `right` is a folder nobody sees: a program that\nmeans \"the other pane\" must refuse.",
+          "type": "boolean"
+        },
         "left": {
           "description": "The folder the left pane shows (its tab in front); `null` when\nthat tab shows a tool, or the folder is not an absolute path.",
           "type": [
@@ -861,7 +865,8 @@
         "type",
         "active",
         "selection",
-        "selection_total"
+        "selection_total",
+        "dual"
       ]
     },
     {
@@ -4413,6 +4418,11 @@
         "active_pane": {
           "description": "The pane that has the keyboard.",
           "$ref": "#/$defs/Pane"
+        },
+        "dual": {
+          "description": "Whether the window shows both panes (protocol version 19). With one\npane shown, the right pane's folder is a pane nobody sees, so a\nprogram that means \"the other pane\" must refuse. Left out: `true`,\nsince a window older than version 19 did not say.",
+          "type": "boolean",
+          "default": true
         },
         "panes": {
           "description": "Both panes.",

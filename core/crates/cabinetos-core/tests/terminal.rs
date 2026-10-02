@@ -528,6 +528,7 @@ fn window_showing(left: &str, right: &str) -> Request {
             left: pane(left),
             right: pane(right),
         },
+        dual: true,
     })
 }
 

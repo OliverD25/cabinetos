@@ -21,13 +21,33 @@ pub enum Pane {
 }
 
 /// What a window shows, as its `window_state` request says it.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct WindowState {
     /// The pane that has the keyboard.
     pub active_pane: Pane,
     /// Both panes.
     pub panes: WindowPanes,
+    /// Whether the window shows both panes (protocol version 19). With one
+    /// pane shown, the right pane's folder is a pane nobody sees, so a
+    /// program that means "the other pane" must refuse. Left out: `true`,
+    /// since a window older than version 19 did not say.
+    #[serde(default = "both_panes_shown")]
+    pub dual: bool,
+}
+
+const fn both_panes_shown() -> bool {
+    true
+}
+
+impl Default for WindowState {
+    fn default() -> Self {
+        Self {
+            active_pane: Pane::default(),
+            panes: WindowPanes::default(),
+            dual: true,
+        }
+    }
 }
 
 /// The two panes of a window.

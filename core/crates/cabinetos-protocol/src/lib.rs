@@ -127,5 +127,8 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// reply `terminal_pane_folder`, the event `terminal_folder_changed`, and
 /// the shell's reported `folder` in `terminal_list`; version 18 the GUI
 /// context for `cab` (unit 4 of the terminal sprint): `gui_context` with
-/// the reply `gui_context`, and `marked_total` in a pane of `window_state`.
-pub const PROTOCOL_VERSION: u32 = 18;
+/// the reply `gui_context`, and `marked_total` in a pane of `window_state`;
+/// version 19 `dual` in `window_state` and in the reply `gui_context`:
+/// whether the window shows both panes, so "the other pane" can be refused
+/// when only one shows (unit 5 of the terminal sprint).
+pub const PROTOCOL_VERSION: u32 = 19;

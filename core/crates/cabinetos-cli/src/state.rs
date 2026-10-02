@@ -139,6 +139,7 @@ mod tests {
                     marked_total: None,
                 },
             },
+            dual: true,
         };
         let lines = table("CabinetOS#2", 1_790_000_000_000, &state);
         assert!(

@@ -2373,6 +2373,8 @@ public sealed partial class MainWindow : Window
         {
             UpdateTabRows();
         }
+        // The core keeps whether both panes show, so `cab` can refuse "the other pane" while one is hidden.
+        ScheduleWindowState();
         // Two panes show 3 parts of a path whole, one pane 5 (Breadcrumbs).
         UpdateCrumbs();
     }

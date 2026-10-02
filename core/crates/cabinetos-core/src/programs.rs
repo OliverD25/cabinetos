@@ -198,6 +198,7 @@ mod tests {
                 left: PaneState::default(),
                 right: pane,
             },
+            dual: true,
         }
     }
 

@@ -883,6 +883,7 @@ async fn a_plugin_proposes_a_preview_and_undoes_it_through_core_requests() {
             },
             right: cabinetos_protocol::PaneState::default(),
         },
+        dual: true,
     };
     assert_eq!(
         ask(&mut client, Request::WindowState(window)).await,
