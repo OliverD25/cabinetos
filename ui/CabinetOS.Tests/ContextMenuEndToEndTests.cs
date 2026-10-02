@@ -586,19 +586,22 @@ public class ContextMenuEndToEndTests
             var process = run.Start("prepared", string.Join(';',
                 "size:1200x700",
                 "pane:0",
-                "wait:500",
+                // The window builds the menu shapes while it is idle after start, one low-priority dispatcher turn each, and a busy
+                // machine is late with them: a right-click before they are done builds its menu itself, and the test judged the
+                // order of the log lines (the last shape prepared before the first right-click) after a fixed 2 s.
+                "until:menus-prepared",
                 "menu:alpha.txt",
-                "wait:500",
+                "until:menu",
                 "cmd:overlay.close",
-                "wait:300",
+                "until:menu-closed",
                 "menu:gamma",
-                "wait:500",
+                "until:menu",
                 "cmd:overlay.close",
-                "wait:300",
+                "until:menu-closed",
                 "menu:*",
-                "wait:500",
+                "until:menu",
                 "cmd:overlay.close",
-                "wait:300",
+                "until:menu-closed",
                 "shot:done"));
             var logs = await run.FinishAsync("prepared", process, "done");
 

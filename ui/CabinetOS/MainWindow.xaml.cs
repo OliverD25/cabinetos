@@ -921,6 +921,11 @@ public sealed partial class MainWindow : Window
                 _ when condition.StartsWith("file-menu-rows:", StringComparison.Ordinal) && int.TryParse(condition["file-menu-rows:".Length..], out var fileRows) =>
                     _menuConfig.File.Items.Count == fileRows,
                 "shell-menu" => _menuConfig.ShellMenu,
+                // The context menu's shapes have all been built ahead ("context menu prepared" for each of the four).
+                "menus-prepared" => _menusPrepared,
+                // Every listing a pane bound has had its first frame drawn, and "listing shown" is logged for it (a switch that is
+                // followed by another before the frame drops the line: a busy machine draws a frame every few hundred milliseconds).
+                "listing-drawn" => _panes.All(p => p.PendingTiming is null) && _paneViews.All(v => !v.TimingPending),
                 _ when condition.StartsWith("command:", StringComparison.Ordinal) => _router.Commands.Any(c => c.Id == condition["command:".Length..]),
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,

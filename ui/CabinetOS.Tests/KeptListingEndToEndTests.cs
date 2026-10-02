@@ -73,17 +73,25 @@ public class KeptListingEndToEndTests
                 "tab:new",
                 $"path:{two}",
                 "tabs:switching",
+                // "listing shown" is logged at the first frame after the listing is bound, and a switch that comes before that frame
+                // drops the line (beside three test runs a frame came every few hundred milliseconds: 0 of 4 lines), so each switch
+                // waits for its frame.
                 "tab:next",
+                "until:listing-drawn",
                 "shell:back-in-one",
                 "tab:next",
+                "until:listing-drawn",
                 "tab:next",
+                "until:listing-drawn",
                 "tab:next",
+                "until:listing-drawn",
                 "tabs:switched",
                 // The listing of one, kept since the last switch, goes when its 10 s are up: waited for until it is let go (a timer that
                 // a busy machine runs late made a fixed wait of 1.5 s more than the lifetime too short).
                 "until:kept-released",
                 "tabs:expired",
                 "tab:next",
+                "until:listing-drawn",
                 "shell:listed-again",
                 "wait:500",
                 "shot:done");

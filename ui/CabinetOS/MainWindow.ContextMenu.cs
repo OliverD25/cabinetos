@@ -53,6 +53,10 @@ public sealed partial class MainWindow
     // snapshot aid's until:menu-placed. That comes some dispatcher turns after the menu is on screen (until:menu).
     private bool _menuPlaced;
 
+    // The menu shapes are built ahead while the window is idle after start (PrepareContextMenusSoonAsync): the snapshot aid's
+    // until:menus-prepared. A busy machine runs those low-priority turns late.
+    private bool _menusPrepared;
+
     private void SetUpContextMenu()
     {
         foreach (var view in _paneViews)
@@ -188,6 +192,7 @@ public sealed partial class MainWindow
             }
             if (kinds.Count == 0)
             {
+                _menusPrepared = true;
                 // The same idle slot, one turn after the last shape.
                 PrepareMarketplaceWhenQuiet();
                 return;
