@@ -41,6 +41,18 @@ impl PartialOrd for Identifier {
 }
 
 impl Version {
+    /// The first number.
+    #[must_use]
+    pub const fn major(&self) -> u64 {
+        self.major
+    }
+
+    /// The second number.
+    #[must_use]
+    pub const fn minor(&self) -> u64 {
+        self.minor
+    }
+
     /// Reads `1.2.3`, `1.2.3-preview.1` or `1.2.3+build`; `None` for
     /// anything else.
     #[must_use]

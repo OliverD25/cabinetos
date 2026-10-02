@@ -1,7 +1,9 @@
-//! In-app updates (ADR 0014; `docs/ipc.md`, "Updates"): the core checks a
-//! channel's `latest.json`, downloads the release's zip and checks its
-//! SHA-256, unpacks it into a staging folder, and at the user's word swaps
-//! it into the install folder, keeping the version before for a rollback.
+//! In-app updates (ADR 0014, amended by ADR 0015; `docs/ipc.md`,
+//! "Updates"): the core checks a channel's `latest.json`, downloads the
+//! release's zip and checks its SHA-256, unpacks it into a staging folder,
+//! and swaps it into the install folder, keeping the version before for a
+//! rollback: at once with `update.autoInstall` (the default), else at the
+//! user's word.
 //!
 //! - [`Updater::check`] reads `<update.source>/<channel>/latest.json`, with
 //!   its `ETag`, and compares its version with the running one (semantic
@@ -9,14 +11,16 @@
 //! - [`Updater::download`] downloads the zip into
 //!   `staging\<version>\download.zip` with progress (at most 4 notices a
 //!   second), checks its SHA-256, unpacks it into `staging\<version>\files`
-//!   and checks that its `release.json` names the same version.
+//!   and checks that its `release.json` names the same version; with
+//!   `auto_install` the swap follows in the same step.
 //! - [`Updater::apply`] swaps: the install folder's files go into
 //!   `previous\` inside it, the staged ones are copied in, the installer's
-//!   record and the Settings > Apps entry follow. A failed copy puts
-//!   everything back. The window then restarts itself.
+//!   record and the Settings > Apps entries follow. A failed copy puts
+//!   everything back. The window then asks for a restart, or restarts
+//!   itself when the user said so.
 //! - [`Updater::rollback`] swaps back from `previous\`.
 //! - [`Updater::run_daily`] is the quiet check once a day: check, and
-//!   download what is newer.
+//!   download what is newer (and swap it in, with `auto_install`).
 //!
 //! The install folder is the running core's folder. Only a release (with
 //! `release.json` there) that this user may change without administrator
@@ -51,7 +55,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use cabinetos_market::transfer::{self, Client, DownloadError, Http, ZipLimits};
 use cabinetos_protocol::{UpdateChannel, UpdatePhase, UpdateRelease, UpdateStatus};
 
-pub use apps::{APPS_KEY, APPS_KEY_ENV, apps_key};
+pub use apps::{APPS_KEY, APPS_KEY_ENV, SETUP_APPS_KEY, apps_keys};
 pub use install::{RECORD_FILE, RELEASE_FILE, RELEASE_PAGE, not_updatable, read_release};
 pub use source::{LATEST_FILE, parse_release};
 pub use state::{STATE_FILE, Saved, Swap, SwapKind};
@@ -125,6 +129,9 @@ pub struct Settings {
     pub source: String,
     /// Plain `http:` too.
     pub allow_insecure: bool,
+    /// A download that is checked is swapped in at once (ADR 0015); the
+    /// window then only asks for a restart.
+    pub auto_install: bool,
 }
 
 impl Default for Settings {
@@ -134,6 +141,7 @@ impl Default for Settings {
             channel: UpdateChannel::Stable,
             source: DEFAULT_SOURCE.to_owned(),
             allow_insecure: false,
+            auto_install: true,
         }
     }
 }
@@ -206,8 +214,9 @@ pub struct Paths {
     pub install: PathBuf,
     /// The updater's own folder (`state.json`, `staging\`, the notes).
     pub dir: PathBuf,
-    /// The Apps entry's key under `HKEY_CURRENT_USER`.
-    pub apps_key: String,
+    /// The Apps entries' keys under `HKEY_CURRENT_USER`: install.ps1's and
+    /// the setup file's.
+    pub apps_keys: Vec<String>,
 }
 
 /// What the updater knows now.
@@ -404,7 +413,9 @@ impl Updater {
     }
 
     /// The quiet check once a day: when it is due, checks, and downloads a
-    /// newer version. `None` when it was not due. Blocking.
+    /// newer version, which with `auto_install` is swapped in too; a
+    /// download an earlier swap left in staging is swapped in again then.
+    /// `None` when it was not due. Blocking.
     pub fn run_daily(&self, settings: &Settings) -> Option<Result<UpdateStatus, UpdateError>> {
         if !self.due(settings, now_ms()) {
             return None;
@@ -412,6 +423,9 @@ impl Updater {
         tracing::info!(channel = settings.channel.name(), "the daily update check");
         Some(match self.check(settings) {
             Ok(status) if status.state == UpdatePhase::Available => self.download(settings),
+            Ok(status) if status.state == UpdatePhase::Downloaded && settings.auto_install => {
+                self.apply()
+            }
             other => other,
         })
     }
@@ -555,7 +569,11 @@ impl Updater {
     }
 
     /// Downloads the newer version the last check found, checks its
-    /// SHA-256, and unpacks it into the staging folder. Blocking.
+    /// SHA-256, and unpacks it into the staging folder. With
+    /// `auto_install` the swap follows in the same step, so no client sees
+    /// `downloaded` in between: the state goes from `downloading` to
+    /// `applying` and on to `ready` (or `failed`, with the old version
+    /// whole). Blocking.
     pub fn download(&self, settings: &Settings) -> Result<UpdateStatus, UpdateError> {
         let _step = self.begin(true)?;
         let release = {
@@ -581,6 +599,9 @@ impl Updater {
                 && staged_release(&self.paths.dir, &release.version).is_some()
             {
                 drop(live);
+                if settings.auto_install {
+                    return self.swap_staged();
+                }
                 self.enter(UpdatePhase::Downloaded);
                 return Ok(self.status());
             }
@@ -592,12 +613,16 @@ impl Updater {
             Ok(()) => {
                 let version = release.version.clone();
                 self.edit_saved(|saved| saved.staged = Some(version));
+                tracing::info!(version = %release.version, folder = %folder.display(), "the update is downloaded, checked and unpacked");
+                if settings.auto_install {
+                    tracing::info!(version = %release.version, "update.autoInstall: the swap follows the download");
+                    return self.swap_staged();
+                }
                 {
                     let mut live = self.lock();
                     live.phase = UpdatePhase::Downloaded;
                     live.message = None;
                 }
-                tracing::info!(version = %release.version, folder = %folder.display(), "the update is downloaded, checked and unpacked");
                 self.publish();
                 Ok(self.status())
             }
@@ -710,6 +735,11 @@ impl Updater {
     /// Swaps the downloaded version into the install folder. Blocking.
     pub fn apply(&self) -> Result<UpdateStatus, UpdateError> {
         let _step = self.begin(true)?;
+        self.swap_staged()
+    }
+
+    /// The swap of [`Self::apply`], inside a step that holds the locks.
+    fn swap_staged(&self) -> Result<UpdateStatus, UpdateError> {
         let Some(version) = self.lock().saved.staged.clone() else {
             return Err(UpdateError::refused(
                 "nothing is downloaded; download the update first",
@@ -935,12 +965,12 @@ impl Updater {
     }
 
     fn refresh_apps_entry(&self, version: &str, bytes: u64) {
-        match apps::refresh(&self.paths.apps_key, &self.paths.install, version, bytes) {
-            Ok(true) => {}
-            Ok(false) => {
-                tracing::debug!(key = %self.paths.apps_key, "no Apps entry names this install");
+        for key in &self.paths.apps_keys {
+            match apps::refresh(key, &self.paths.install, version, bytes) {
+                Ok(true) => {}
+                Ok(false) => tracing::debug!(key, "this Apps entry does not name this install"),
+                Err(problem) => tracing::warn!(problem, "the Apps entry keeps the old version"),
             }
-            Err(problem) => tracing::warn!(problem, "the Apps entry keeps the old version"),
         }
     }
 

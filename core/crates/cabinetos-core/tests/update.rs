@@ -2,8 +2,10 @@
 //! development build it is (which never updates itself), and once copied
 //! into a fake install folder with `release.json`, where its daily check
 //! finds a newer version in a feed folder, downloads it, and the swap moves
-//! the running core's own program aside. The Apps entry is a test key;
-//! nothing here reaches the network or the real install.
+//! the running core's own program aside: by itself with
+//! `update.autoInstall` (the default), or on request without it. The two
+//! Apps entries are test keys; nothing here reaches the network or the real
+//! install.
 
 use std::fs;
 use std::io::{Cursor, Write};
@@ -63,7 +65,10 @@ struct Core {
     child: Child,
     pipe: PipeName,
     dir: TempDir,
+    /// The entry install.ps1 writes.
     apps_key: String,
+    /// The entry the setup file (Inno Setup) writes.
+    setup_apps_key: String,
 }
 
 impl Drop for Core {
@@ -71,6 +76,7 @@ impl Drop for Core {
         let _ = self.child.kill();
         let _ = self.child.wait();
         let _ = registry::delete_user_key(&self.apps_key);
+        let _ = registry::delete_user_key(&self.setup_apps_key);
     }
 }
 
@@ -90,7 +96,7 @@ fn scratch() -> TempDir {
 }
 
 /// Starts `exe` with its own folders under `dir`, `config` as its
-/// configuration, and the Apps entry at a test key.
+/// configuration, and the two Apps entries at test keys.
 fn start(dir: TempDir, exe: &Path, config: &Value, name: &str) -> Core {
     let config_path = dir.path().join("cabinetos.json");
     fs::write(&config_path, serde_json::to_string_pretty(config).unwrap()).unwrap();
@@ -98,6 +104,7 @@ fn start(dir: TempDir, exe: &Path, config: &Value, name: &str) -> Core {
         r"Software\CabinetOS-test-core-update-{}-{name}",
         std::process::id()
     );
+    let setup_apps_key = format!("{apps_key}_is1");
     let pipe = PipeName::random();
     let child = Command::new(exe)
         .args(["--pipe", pipe.token()])
@@ -117,7 +124,10 @@ fn start(dir: TempDir, exe: &Path, config: &Value, name: &str) -> Core {
         .arg(dir.path().join("update"))
         .env("CABINETOS_LOG_DIR", dir.path().join("logs"))
         .env("CABINETOS_UNDO_DIR", dir.path().join("undo"))
-        .env("CABINETOS_UPDATE_APPS_KEY", &apps_key)
+        .env(
+            "CABINETOS_UPDATE_APPS_KEY",
+            format!("{apps_key};{setup_apps_key}"),
+        )
         .env_remove("CABINETOS_CONFIG")
         .env_remove("CABINETOS_LOG")
         .env_remove("CABINETOS_LOG_STDERR")
@@ -131,6 +141,7 @@ fn start(dir: TempDir, exe: &Path, config: &Value, name: &str) -> Core {
         pipe,
         dir,
         apps_key,
+        setup_apps_key,
     }
 }
 
@@ -212,9 +223,10 @@ async fn wait_for(
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn the_daily_check_downloads_and_the_core_swaps_itself_and_rolls_back() {
-    let dir = scratch();
+/// A fake install in `dir`: a copy of the real core with `release.json` of
+/// this version beside it, and a feed whose `latest.json` names [`NEWER`].
+/// Returns the install folder, the core's bytes and the release zip.
+fn fake_install(dir: &TempDir) -> (PathBuf, Vec<u8>, Vec<u8>) {
     let install = dir.path().join("install");
     fs::create_dir_all(&install).unwrap();
     let core_bytes = fs::read(CORE_EXE).unwrap();
@@ -240,7 +252,17 @@ async fn the_daily_check_downloads_and_the_core_swaps_itself_and_rolls_back() {
         "notes": {"url": format!("notes-{NEWER}.md")}
     });
     fs::write(feed.join("latest.json"), latest.to_string()).unwrap();
-    let config = json!({"update": {"source": dir.path().join("feed").display().to_string()}});
+    (install, core_bytes, zip)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_auto_install_the_daily_check_downloads_and_the_swap_waits_for_apply() {
+    let dir = scratch();
+    let (install, core_bytes, zip) = fake_install(&dir);
+    let config = json!({"update": {
+        "source": dir.path().join("feed").display().to_string(),
+        "autoInstall": false
+    }});
     let apps_install = format!("{}\\", install.display());
 
     let core = start(dir, &install.join("cabinetos-core.exe"), &config, "swap");
@@ -310,4 +332,81 @@ async fn the_daily_check_downloads_and_the_core_swaps_itself_and_rolls_back() {
     // Later: no dialog for a day.
     let snoozed = state_of(ask(&mut client, Request::UpdateSnooze).await);
     assert!(snoozed.snoozed_until_ms.is_some());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_daily_check_installs_by_itself_and_the_setup_entry_follows() {
+    let dir = scratch();
+    let (install, core_bytes, _) = fake_install(&dir);
+    // The setup file's uninstaller beside the release (Inno Setup's).
+    fs::write(install.join("unins000.exe"), b"the uninstaller").unwrap();
+    let config = json!({"update": {"source": dir.path().join("feed").display().to_string()}});
+    let apps_install = format!("{}\\", install.display());
+    let core = start(dir, &install.join("cabinetos-core.exe"), &config, "auto");
+    registry::write_user_values(
+        &core.setup_apps_key,
+        &[
+            ("DisplayVersion", RegValue::Text(VERSION)),
+            ("InstallLocation", RegValue::Text(&apps_install)),
+            ("MajorVersion", RegValue::Number(0)),
+            ("MinorVersion", RegValue::Number(1)),
+        ],
+    )
+    .unwrap();
+    let (mut client, mut events) = greeted(&core).await;
+
+    // No request at all: the daily check finds, downloads and swaps.
+    let deadline = tokio::time::Instant::now() + DAILY_DEADLINE;
+    let mut seen = Vec::new();
+    let ready = loop {
+        let event = tokio::time::timeout_at(deadline, events.recv())
+            .await
+            .expect("no update_state_changed to ready in time")
+            .expect("the event stream ended");
+        if let Event::UpdateStateChanged(status) = event.body {
+            seen.push(status.state);
+            match status.state {
+                UpdatePhase::Ready => break *status,
+                UpdatePhase::Failed => panic!("the update failed: {:?}", status.message),
+                _ => {}
+            }
+        }
+    };
+    assert!(seen.contains(&UpdatePhase::Applying), "{seen:?}");
+    assert!(
+        !seen.contains(&UpdatePhase::Downloaded),
+        "nothing waits for a click between the download and the swap: {seen:?}"
+    );
+    assert_eq!(ready.installed.as_deref(), Some(NEWER));
+    assert_eq!(ready.previous.as_deref(), Some(VERSION));
+    assert_eq!(
+        fs::read(install.join("cabinetos-core.exe")).unwrap(),
+        b"the new core"
+    );
+    assert_eq!(
+        fs::read(install.join("previous").join("cabinetos-core.exe")).unwrap(),
+        core_bytes
+    );
+    assert!(
+        install.join("unins000.exe").is_file(),
+        "the uninstaller stays"
+    );
+    assert!(
+        matches!(ask(&mut client, Request::Ping).await, Response::Pong { .. }),
+        "the core still runs from previous"
+    );
+    assert_eq!(
+        registry::read_user_string(&core.setup_apps_key, "DisplayVersion").as_deref(),
+        Some(NEWER)
+    );
+    assert_eq!(
+        registry::read_user_number(&core.setup_apps_key, "MajorVersion"),
+        Some(99)
+    );
+    assert!(
+        !registry::user_key_exists(&core.apps_key),
+        "install.ps1's entry is never made"
+    );
+    let status = state_of(ask(&mut client, Request::UpdateStatus).await);
+    assert_eq!(status.state, UpdatePhase::Ready);
 }

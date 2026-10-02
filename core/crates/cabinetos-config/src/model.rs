@@ -612,6 +612,10 @@ pub struct UpdateConfig {
     /// Also accept a plain `http:` source and download, which anyone on the
     /// network could change on the way. For testing only.
     pub allow_insecure: bool,
+    /// Install a downloaded version at once, in the background, and then
+    /// only ask for a restart. `false`: a dialog with the release notes asks
+    /// first.
+    pub auto_install: bool,
 }
 
 impl Default for UpdateConfig {
@@ -621,6 +625,7 @@ impl Default for UpdateConfig {
             channel: UpdateChannel::Stable,
             source: DEFAULT_UPDATE_SOURCE.to_owned(),
             allow_insecure: false,
+            auto_install: true,
         }
     }
 }
@@ -734,16 +739,20 @@ mod tests {
         assert_eq!(config.marketplace.index, DEFAULT_MARKETPLACE_INDEX);
         assert!(!config.marketplace.allow_insecure);
         assert!(config.update.check && !config.update.allow_insecure);
+        assert!(config.update.auto_install);
         assert_eq!(config.update.channel, UpdateChannel::Stable);
         assert_eq!(config.update.source, DEFAULT_UPDATE_SOURCE);
     }
 
     #[test]
     fn the_update_section_is_read_and_unknown_keys_refused() {
-        let config: Config =
-            serde_json::from_str(r#"{"update": {"channel": "preview", "check": false}}"#).unwrap();
+        let config: Config = serde_json::from_str(
+            r#"{"update": {"channel": "preview", "check": false, "autoInstall": false}}"#,
+        )
+        .unwrap();
         assert_eq!(config.update.channel, UpdateChannel::Preview);
         assert!(!config.update.check);
+        assert!(!config.update.auto_install);
         assert_eq!(config.update.source, DEFAULT_UPDATE_SOURCE);
         for (bad, expected) in [
             (

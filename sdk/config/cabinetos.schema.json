@@ -237,6 +237,7 @@
       "$ref": "#/$defs/UpdateConfig",
       "default": {
         "allowInsecure": false,
+        "autoInstall": true,
         "channel": "stable",
         "check": true,
         "source": "https://oliverd25.github.io/cabinetos-marketplace/update"
@@ -1285,6 +1286,11 @@
           "description": "Also accept a plain `http:` source and download, which anyone on the\nnetwork could change on the way. For testing only.",
           "type": "boolean",
           "default": false
+        },
+        "autoInstall": {
+          "description": "Install a downloaded version at once, in the background, and then\nonly ask for a restart. `false`: a dialog with the release notes asks\nfirst.",
+          "type": "boolean",
+          "default": true
         },
         "channel": {
           "description": "Which releases: `stable`, or `preview`, which also offers versions\nwith a pre-release tag.",

@@ -8,8 +8,8 @@ use std::io;
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS, WIN32_ERROR};
 use windows::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_DWORD, REG_OPTION_NON_VOLATILE,
-    REG_SZ, RRF_RT_REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegGetValueW,
-    RegOpenKeyExW, RegSetValueExW,
+    REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteTreeW,
+    RegGetValueW, RegOpenKeyExW, RegSetValueExW,
 };
 use windows::core::PCWSTR;
 
@@ -103,6 +103,30 @@ pub fn read_user_string(key: &str, name: &str) -> Option<String> {
     String::from_utf16(&buffer[..end]).ok()
 }
 
+/// The number value `name` of `key` under `HKEY_CURRENT_USER`; `None` when
+/// the key or the value is missing, or the value is not a `REG_DWORD`.
+#[must_use]
+pub fn read_user_number(key: &str, name: &str) -> Option<u32> {
+    let (key, name) = (wide(key), wide(name));
+    let mut value = 0u32;
+    let mut size = 4u32;
+    // SAFETY: both names are NUL-terminated and outlive the call; `value`
+    // holds the four bytes `size` gives, and RRF_RT_REG_DWORD makes Windows
+    // refuse any value that is not exactly a DWORD.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            PCWSTR(key.as_ptr()),
+            PCWSTR(name.as_ptr()),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&raw mut value).cast()),
+            Some(&raw mut size),
+        )
+    };
+    (status == ERROR_SUCCESS).then_some(value)
+}
+
 /// Writes `values` into `key` under `HKEY_CURRENT_USER`, creating the key
 /// (and the keys on its way) when it is missing.
 pub fn write_user_values(key: &str, values: &[(&str, RegValue<'_>)]) -> io::Result<()> {
@@ -194,6 +218,13 @@ mod tests {
         );
         assert_eq!(read_user_string(&key, "NoModify"), None, "not text");
         assert_eq!(read_user_string(&key, "Missing"), None);
+        assert_eq!(read_user_number(&key, "NoModify"), Some(1));
+        assert_eq!(
+            read_user_number(&key, "DisplayVersion"),
+            None,
+            "not a number"
+        );
+        assert_eq!(read_user_number(&key, "Missing"), None);
         delete_user_key(&key).unwrap();
         assert!(!user_key_exists(&key));
         delete_user_key(&key).unwrap();

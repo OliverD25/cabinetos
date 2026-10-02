@@ -364,7 +364,8 @@ pub enum UpdateAction {
     /// Read the channel's latest.json now.
     Check,
     /// Download the newer version, check its SHA-256 and unpack it, with a
-    /// progress line.
+    /// progress line. With update.autoInstall (the default) it is also put
+    /// in place at once, as apply does.
     Download,
     /// Put the downloaded version in place; the running version goes into
     /// previous\ in the install folder. Restart CabinetOS to run it.

@@ -83,7 +83,10 @@ fn release_zip(version: &str, extra: &[(&str, &[u8])]) -> Vec<u8> {
 struct Setup {
     root: TempDir,
     notices: Arc<Mutex<Vec<Notice>>>,
+    /// The entry install.ps1 writes.
     apps_key: String,
+    /// The entry the setup file (Inno Setup) writes.
+    inno_key: String,
 }
 
 impl Setup {
@@ -92,13 +95,23 @@ impl Setup {
         for folder in ["install", "update", "feed"] {
             fs::create_dir_all(root.path().join(folder)).unwrap();
         }
+        let apps_key = format!(
+            r"Software\CabinetOS-test-update-{}-{name}",
+            std::process::id()
+        );
         Self {
             root,
             notices: Arc::new(Mutex::new(Vec::new())),
-            apps_key: format!(
-                r"Software\CabinetOS-test-update-{}-{name}",
-                std::process::id()
-            ),
+            inno_key: format!("{apps_key}_is1"),
+            apps_key,
+        }
+    }
+
+    fn paths(&self) -> Paths {
+        Paths {
+            install: self.install(),
+            dir: self.dir(),
+            apps_keys: vec![self.apps_key.clone(), self.inno_key.clone()],
         }
     }
 
@@ -171,27 +184,23 @@ impl Setup {
         fs::write(folder.join("latest.json"), latest.to_string()).unwrap();
     }
 
+    /// The settings of the steps one by one: no swap follows a download
+    /// (`update.autoInstall: false`).
     fn settings(&self, channel: UpdateChannel) -> Settings {
         Settings {
             check: true,
             channel,
             source: self.feed().display().to_string(),
             allow_insecure: false,
+            auto_install: false,
         }
     }
 
     fn open(&self, current: &str, settings: &Settings) -> Updater {
         let notices = Arc::clone(&self.notices);
-        Updater::open(
-            Paths {
-                install: self.install(),
-                dir: self.dir(),
-                apps_key: self.apps_key.clone(),
-            },
-            current,
-            settings,
-            move |notice| notices.lock().unwrap().push(notice),
-        )
+        Updater::open(self.paths(), current, settings, move |notice| {
+            notices.lock().unwrap().push(notice);
+        })
     }
 
     fn states(&self) -> Vec<UpdatePhase> {
@@ -214,6 +223,7 @@ impl Setup {
 impl Drop for Setup {
     fn drop(&mut self) {
         let _ = registry::delete_user_key(&self.apps_key);
+        let _ = registry::delete_user_key(&self.inno_key);
     }
 }
 
@@ -326,6 +336,122 @@ fn a_newer_version_is_found_downloaded_checked_and_unpacked() {
     let status = reopened.status();
     assert_eq!(status.state, UpdatePhase::Downloaded);
     assert!(status.notes.unwrap().contains("In-app updates"));
+}
+
+#[test]
+fn with_auto_install_the_download_is_swapped_in_at_once() {
+    let setup = Setup::new("auto");
+    setup.install_version("0.1.0");
+    let install = setup.install();
+    registry::write_user_values(
+        &setup.apps_key,
+        &[
+            ("DisplayVersion", RegValue::Text("0.1.0")),
+            (
+                "InstallLocation",
+                RegValue::Text(&install.display().to_string()),
+            ),
+        ],
+    )
+    .unwrap();
+    let zip = release_zip("0.2.0", &[]);
+    setup.publish("stable", "0.2.0", &zip, None);
+    let settings = Settings {
+        auto_install: true,
+        ..setup.settings(UpdateChannel::Stable)
+    };
+    let updater = setup.open("0.1.0", &settings);
+    assert_eq!(
+        updater.check(&settings).unwrap().state,
+        UpdatePhase::Available
+    );
+
+    let installed = updater.download(&settings).unwrap();
+    assert_eq!(installed.state, UpdatePhase::Ready);
+    assert_eq!(installed.installed.as_deref(), Some("0.2.0"));
+    assert_eq!(installed.previous.as_deref(), Some("0.1.0"));
+    assert_eq!(
+        setup.states(),
+        [
+            UpdatePhase::Checking,
+            UpdatePhase::Available,
+            UpdatePhase::Downloading,
+            UpdatePhase::Applying,
+            UpdatePhase::Ready
+        ],
+        "no client sees downloaded: nothing asks before the swap"
+    );
+    assert_eq!(
+        fs::read(install.join("CabinetOS.exe")).unwrap(),
+        b"the new window"
+    );
+    assert_eq!(
+        fs::read(install.join(PREVIOUS_DIR).join("CabinetOS.exe")).unwrap(),
+        b"the old window"
+    );
+    assert!(!setup.dir().join("staging").join("0.2.0").exists());
+    assert!(setup.saved().get("staged").is_none_or(Value::is_null));
+    assert_eq!(setup.saved()["swap"]["to"], "0.2.0");
+    assert_eq!(
+        registry::read_user_string(&setup.apps_key, "DisplayVersion").as_deref(),
+        Some("0.2.0")
+    );
+
+    // The next start runs 0.2.0 and confirms the swap, as after Restart now.
+    drop(updater);
+    let restarted = setup.open("0.2.0", &settings);
+    assert!(setup.saved()["swap"]["confirmedAtMs"].is_u64());
+    assert_eq!(restarted.status().state, UpdatePhase::UpToDate);
+}
+
+#[test]
+fn an_automatic_swap_that_fails_keeps_the_old_version_and_the_next_daily_check_swaps() {
+    let setup = Setup::new("autofail");
+    setup.install_version("0.1.0");
+    let install = setup.install();
+    let zip = release_zip("0.2.0", &[]);
+    setup.publish("stable", "0.2.0", &zip, None);
+    let settings = Settings {
+        auto_install: true,
+        ..setup.settings(UpdateChannel::Stable)
+    };
+    let updater = setup.open("0.1.0", &settings);
+    updater.check(&settings).unwrap();
+    let before = tree(&install);
+
+    // A file held open without delete sharing (FILE_SHARE_READ only) cannot
+    // be moved aside.
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(install.join("cabinetos-core.exe"))
+        .unwrap();
+    let error = updater.download(&settings).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Failed);
+    assert!(error.message.contains("nothing was changed"), "{error}");
+    let status = updater.status();
+    assert_eq!(status.state, UpdatePhase::Failed);
+    assert_eq!(status.message.as_deref(), Some(error.message.as_str()));
+    assert_eq!(tree(&install), before, "the running version is whole");
+    assert_eq!(*setup.states().last().unwrap(), UpdatePhase::Failed);
+    assert!(setup.states().contains(&UpdatePhase::Applying));
+    assert_eq!(setup.saved()["staged"], "0.2.0", "the download stays");
+    drop(held);
+    drop(updater);
+
+    // The next start shows the download; the daily check swaps it in.
+    let mut saved = setup.saved();
+    saved["lastCheckMs"] = json!(now_ms() - 25 * 60 * 60 * 1000);
+    fs::write(setup.dir().join(STATE_FILE), saved.to_string()).unwrap();
+    let reopened = setup.open("0.1.0", &settings);
+    assert_eq!(reopened.status().state, UpdatePhase::Downloaded);
+    let done = reopened.run_daily(&settings).unwrap().unwrap();
+    assert_eq!(done.state, UpdatePhase::Ready);
+    assert_eq!(done.installed.as_deref(), Some("0.2.0"));
+    assert_eq!(
+        fs::read(install.join("CabinetOS.exe")).unwrap(),
+        b"the new window"
+    );
 }
 
 #[test]
@@ -750,6 +876,91 @@ fn an_apps_entry_that_names_another_folder_is_left_alone() {
 }
 
 #[test]
+fn a_setup_install_keeps_its_uninstaller_and_its_apps_entry_follows_the_swap() {
+    let setup = Setup::new("inno");
+    setup.install_version("0.1.0");
+    let install = setup.install();
+    // What the setup file (Inno Setup) leaves beside the release: its
+    // uninstaller and its log, and no installer's record.
+    fs::remove_file(install.join(RECORD_FILE)).unwrap();
+    fs::write(install.join("unins000.exe"), b"the uninstaller").unwrap();
+    fs::write(install.join("unins000.dat"), b"its log").unwrap();
+    let key = &setup.inno_key;
+    registry::write_user_values(
+        key,
+        &[
+            ("DisplayName", RegValue::Text("CabinetOS")),
+            ("DisplayVersion", RegValue::Text("0.1.0")),
+            (
+                "InstallLocation",
+                RegValue::Text(&format!("{}\\", install.display())),
+            ),
+            ("EstimatedSize", RegValue::Number(999_999)),
+            ("MajorVersion", RegValue::Number(0)),
+            ("MinorVersion", RegValue::Number(1)),
+        ],
+    )
+    .unwrap();
+    let zip = release_zip("1.2.0", &[]);
+    setup.publish("stable", "1.2.0", &zip, None);
+    let settings = setup.settings(UpdateChannel::Stable);
+    let updater = setup.open("0.1.0", &settings);
+    updater.check(&settings).unwrap();
+    updater.download(&settings).unwrap();
+    assert_eq!(updater.apply().unwrap().state, UpdatePhase::Ready);
+
+    for kept in ["unins000.exe", "unins000.dat"] {
+        assert!(install.join(kept).is_file(), "{kept} stays in place");
+        assert!(
+            !install.join(PREVIOUS_DIR).join(kept).exists(),
+            "{kept} belongs to no version"
+        );
+    }
+    assert!(
+        !install.join(RECORD_FILE).exists(),
+        "a setup install gets no installer's record"
+    );
+    assert_eq!(
+        registry::read_user_string(key, "DisplayVersion").as_deref(),
+        Some("1.2.0")
+    );
+    assert_eq!(registry::read_user_number(key, "MajorVersion"), Some(1));
+    assert_eq!(registry::read_user_number(key, "MinorVersion"), Some(2));
+    assert!(registry::read_user_number(key, "EstimatedSize").unwrap() < 999_999);
+    assert_eq!(
+        registry::read_user_string(key, "DisplayName").as_deref(),
+        Some("CabinetOS")
+    );
+    assert!(
+        !registry::user_key_exists(&setup.apps_key),
+        "install.ps1's entry is never made"
+    );
+
+    drop(updater);
+    let restarted = setup.open("1.2.0", &settings);
+    assert_eq!(
+        restarted.rollback().unwrap().installed.as_deref(),
+        Some("0.1.0")
+    );
+    for kept in ["unins000.exe", "unins000.dat"] {
+        assert!(
+            install.join(kept).is_file(),
+            "{kept} stays through the rollback"
+        );
+    }
+    assert_eq!(
+        fs::read(install.join("CabinetOS.exe")).unwrap(),
+        b"the old window"
+    );
+    assert_eq!(
+        registry::read_user_string(key, "DisplayVersion").as_deref(),
+        Some("0.1.0")
+    );
+    assert_eq!(registry::read_user_number(key, "MajorVersion"), Some(0));
+    assert_eq!(registry::read_user_number(key, "MinorVersion"), Some(1));
+}
+
+#[test]
 fn a_snooze_is_remembered_for_a_day() {
     let setup = Setup::new("snooze");
     setup.install_version("0.1.0");
@@ -963,11 +1174,7 @@ fn stopping_ends_a_download_and_leaves_nothing() {
     let started = Arc::new(Mutex::new(false));
     let seen = Arc::clone(&started);
     let updater = Arc::new(Updater::open(
-        Paths {
-            install: setup.install(),
-            dir: setup.dir(),
-            apps_key: setup.apps_key.clone(),
-        },
+        setup.paths(),
         "0.1.0",
         &settings,
         move |notice| {

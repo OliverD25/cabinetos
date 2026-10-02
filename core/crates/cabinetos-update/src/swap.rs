@@ -8,6 +8,11 @@
 //! What a swap replaces goes into `previous-old\` first and is deleted at
 //! once where it can be: the files of a program that still runs cannot be
 //! deleted, and go at the next start.
+//!
+//! The setup file's uninstaller (`unins000.exe` and its `unins000.dat`,
+//! Inno Setup's) belongs to the install, not to a version: it stays where
+//! it is through a swap and a rollback, so Settings > Apps can always
+//! remove the install.
 
 use std::fs;
 use std::io;
@@ -60,7 +65,7 @@ pub fn apply(install: &Path, staged: &Path) -> Result<Placed, String> {
     };
 
     let mut moved = Journal::new();
-    if let Err(error) = move_tree(install, &previous, &[PREVIOUS_DIR, DISCARD_DIR], &mut moved) {
+    if let Err(error) = move_tree(install, &previous, &stays_in_place, &mut moved) {
         return Err(undo_all(
             &moved,
             &[],
@@ -111,7 +116,7 @@ pub fn rollback(install: &Path) -> Result<String, String> {
     clear(&discard)?;
 
     let mut out = Journal::new();
-    if let Err(error) = move_tree(install, &discard, &[PREVIOUS_DIR, DISCARD_DIR], &mut out) {
+    if let Err(error) = move_tree(install, &discard, &stays_in_place, &mut out) {
         let problems = undo(&out);
         if problems.is_empty() {
             let _ = fs::remove_dir_all(&discard);
@@ -122,7 +127,7 @@ pub fn rollback(install: &Path) -> Result<String, String> {
         ));
     }
     let mut back = Journal::new();
-    if let Err(error) = move_tree(&previous, install, &[], &mut back) {
+    if let Err(error) = move_tree(&previous, install, &|_| false, &mut back) {
         let mut problems = undo(&back);
         problems.extend(undo(&out));
         return Err(failure(
@@ -224,25 +229,43 @@ fn release_files(staged: &Path) -> Result<(Vec<String>, u64), String> {
     Ok((files, bytes))
 }
 
+/// The entries at the top of the install folder that no swap moves: the
+/// version kept for a rollback, what a swap replaced, and the setup file's
+/// uninstaller (`unins000.exe`, `unins000.dat`, and `unins000.msg` where
+/// Inno Setup writes one; the number grows when another setup used it).
+fn stays_in_place(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    if name == PREVIOUS_DIR || name == DISCARD_DIR {
+        return true;
+    }
+    let bytes = name.as_bytes();
+    bytes.len() == 12
+        && name.starts_with("unins")
+        && bytes[5..8].iter().all(u8::is_ascii_digit)
+        && matches!(&name[8..], ".exe" | ".dat" | ".msg")
+}
+
 /// Moves every file under `from` to the same place under `to`, except the
-/// entries at the top of `from` named in `skip`, and records each move;
+/// entries at the top of `from` that `skip` names, and records each move;
 /// folders it empties are removed. On an error, the journal holds the moves
 /// done so far.
-fn move_tree(from: &Path, to: &Path, skip: &[&str], journal: &mut Journal) -> io::Result<()> {
+fn move_tree(
+    from: &Path,
+    to: &Path,
+    skip: &dyn Fn(&str) -> bool,
+    journal: &mut Journal,
+) -> io::Result<()> {
     fs::create_dir_all(to)?;
     let mut entries = fs::read_dir(from)?.collect::<io::Result<Vec<_>>>()?;
     entries.sort_by_key(fs::DirEntry::file_name);
     for entry in entries {
         let name = entry.file_name();
-        if skip
-            .iter()
-            .any(|skipped| name.to_string_lossy().eq_ignore_ascii_case(skipped))
-        {
+        if skip(&name.to_string_lossy()) {
             continue;
         }
         let (source, target) = (entry.path(), to.join(&name));
         if entry.file_type()?.is_dir() {
-            move_tree(&source, &target, &[], journal)?;
+            move_tree(&source, &target, &|_| false, journal)?;
             // Fails while something is left in it, which then stays.
             let _ = fs::remove_dir(&source);
         } else {
@@ -384,5 +407,33 @@ fn remove_now_or_later(dir: &Path) {
         && error.kind() != io::ErrorKind::NotFound
     {
         tracing::debug!(dir = %dir.display(), %error, "what the swap replaced goes at the next start");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_kept_folders_and_the_setup_uninstaller_stay_in_place() {
+        for name in [
+            "previous",
+            "Previous-Old",
+            "unins000.exe",
+            "UNINS000.DAT",
+            "unins001.msg",
+        ] {
+            assert!(stays_in_place(name), "{name}");
+        }
+        for name in [
+            "CabinetOS.exe",
+            "uninstall.ps1",
+            "unins000.exe.bak",
+            "unins00x.exe",
+            "unins0000.exe",
+            "unins000.dll",
+        ] {
+            assert!(!stays_in_place(name), "{name}");
+        }
     }
 }

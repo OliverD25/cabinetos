@@ -41,6 +41,7 @@ pub(crate) fn settings_of(snapshot: &Snapshot) -> cabinetos_update::Settings {
         channel: update.channel,
         source: update.source.clone(),
         allow_insecure: update.allow_insecure,
+        auto_install: update.auto_install,
     }
 }
 
@@ -58,7 +59,7 @@ pub(crate) fn open(
     let paths = Paths {
         install,
         dir: cabinetos_update::update_dir(update_dir),
-        apps_key: cabinetos_update::apps_key(),
+        apps_keys: cabinetos_update::apps_keys(),
     };
     let events = Arc::clone(events);
     Arc::new(Updater::open(
