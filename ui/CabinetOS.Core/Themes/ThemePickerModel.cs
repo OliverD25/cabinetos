@@ -22,7 +22,9 @@ public sealed record ThemeChoice(ThemeInfo Info, string? Tint, bool IsCurrent);
 /// picker is open the highlighted theme is previewed: <see cref="PreviewDelay"/>
 /// after the highlight stops, <c>get_theme</c> fetches it whole and
 /// <see cref="Preview"/> hands it to the window, which paints it without
-/// writing anything.
+/// writing anything. After the themes comes one more row, "Browse more
+/// themes…" (<see cref="BrowseRow"/>, Phase 23): Enter on it opens the theme
+/// gallery. It is not a theme: highlighting it paints the theme in effect.
 /// </summary>
 public sealed class ThemePickerModel(ICoreChannel core)
 {
@@ -50,8 +52,17 @@ public sealed class ThemePickerModel(ICoreChannel core)
     /// <summary>The themes, in the core's order.</summary>
     public IReadOnlyList<ThemeChoice> Rows { get; private set; } = [];
 
-    /// <summary>The highlighted row, or -1.</summary>
+    /// <summary>
+    /// The highlighted row, or -1 before the themes are read. The row after the last theme is the
+    /// "Browse more themes…" row (<see cref="BrowseRow"/>).
+    /// </summary>
     public int Highlight { get; private set; } = -1;
+
+    /// <summary>The index of the "Browse more themes…" row: just after the last theme.</summary>
+    public int BrowseRow => Rows.Count;
+
+    /// <summary>Whether the highlight is on the "Browse more themes…" row.</summary>
+    public bool BrowseHighlighted => Highlight == Rows.Count;
 
     /// <summary>Why the last step failed, for the picker's footer; null when it did not.</summary>
     public string? Error { get; private set; }
@@ -85,7 +96,8 @@ public sealed class ThemePickerModel(ICoreChannel core)
             case ThemesReply themes:
                 Rows = themes.Themes.Select(t => new ThemeChoice(t, t.Mica?.Tint, t.Id == currentId)).ToList();
                 var current = Rows.ToList().FindIndex(r => r.IsCurrent);
-                Highlight = Rows.Count == 0 ? -1 : Math.Max(0, current);
+                // With no theme the only row is the one that browses for more.
+                Highlight = Math.Max(0, current);
                 Changed?.Invoke();
                 // On the current row this sends nothing; with no current row, row 0 is shown as the highlight says.
                 SchedulePreview();
@@ -99,19 +111,19 @@ public sealed class ThemePickerModel(ICoreChannel core)
         }
     }
 
-    /// <summary>Moves the highlight by <paramref name="delta"/> rows, staying on the list.</summary>
+    /// <summary>Moves the highlight by <paramref name="delta"/> rows, staying on the list (the browse row is its last).</summary>
     public void Move(int delta)
     {
-        if (Rows.Count > 0)
+        if (Highlight >= 0)
         {
-            SetHighlight(Math.Clamp(Highlight + delta, 0, Rows.Count - 1));
+            SetHighlight(Math.Clamp(Highlight + delta, 0, Rows.Count));
         }
     }
 
-    /// <summary>Puts the highlight on row <paramref name="index"/>.</summary>
+    /// <summary>Puts the highlight on row <paramref name="index"/>: a theme, or the browse row.</summary>
     public void SetHighlight(int index)
     {
-        if ((uint)index < (uint)Rows.Count && index != Highlight)
+        if ((uint)index <= (uint)Rows.Count && index != Highlight)
         {
             Highlight = index;
             Changed?.Invoke();
@@ -160,6 +172,16 @@ public sealed class ThemePickerModel(ICoreChannel core)
         if (_previews && (uint)Highlight < (uint)Rows.Count)
         {
             _ = PreviewAsync(++_preview, Highlight);
+        }
+        else if (_previews && BrowseHighlighted)
+        {
+            // The browse row is no theme: the window shows the theme in effect, and a preview on its way is dropped.
+            _preview++;
+            if (IsPreviewShown)
+            {
+                IsPreviewShown = false;
+                Preview?.Invoke(null);
+            }
         }
     }
 
@@ -220,6 +242,7 @@ public sealed class ThemePickerModel(ICoreChannel core)
     public async Task<bool> ApplyAsync(int? index = null, string? requestId = null)
     {
         var row = index ?? Highlight;
+        // The browse row applies nothing: the picker opens the gallery for it.
         if ((uint)row >= (uint)Rows.Count || IsApplying)
         {
             return false;
