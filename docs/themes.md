@@ -153,7 +153,7 @@ pane's colour, so the two panes are told apart at a glance and the split dock
 (`terminal.split`, [ui.md](ui.md), "The terminal") has a colour for each half.
 Both keys are optional, and a theme that leaves them out gets:
 
-- the left badge in the **accent**, as the active pane's tab row has it;
+- the left badge in the **accent**;
 - the right badge in the accent with its **hue turned by 150 degrees** at the
   same saturation and lightness (HSL), so any accent gets a second colour that
   fits it. For the design's `#60CDFF` that is `#FF607E`. A fixed colour from

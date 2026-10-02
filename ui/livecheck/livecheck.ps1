@@ -1673,7 +1673,7 @@ function AppElementGone([string]$name, [double]$seconds = 1.5) {
 $sh = "$files\shell16"
 # The workspace is the git repository that holds the active folder, else that folder, and Quick Open searches the workspace.
 # A fake repository (a .git folder with a HEAD file, no git process; the core reads that file) makes shell16 the workspace:
-# from alpha, Quick Open then finds target-16.md in beta\deep, and the pill shows the branch.
+# from alpha, Quick Open then finds target-16.md in beta\deep, and the sidebar's workspace row shows the branch.
 New-Item -ItemType Directory -Force "$sh\alpha", "$sh\beta\deep", "$sh\.git" | Out-Null
 [System.IO.File]::WriteAllText("$sh\.git\HEAD", "ref: refs/heads/live-16`n")
 Set-Content -LiteralPath "$sh\alpha\notes-16.txt" -Value "x" -NoNewline

@@ -633,7 +633,7 @@ public class ShellEndToEndTests
     private static string FindTimeline(List<string> logs) =>
         string.Join('\n', logs.Where(l => Message(l) is "find opened" or "find filtered" or "find closed" or "shell state"
             or "quick open shown" or "quick open went to a row" or "quick-open step ended" or "quick-open step ended before Quick Open answered"
-            or "workspace pill shows a branch").Select(l =>
+            or "workspace shows a branch").Select(l =>
         {
             using var parsed = JsonDocument.Parse(l);
             var fields = parsed.RootElement.GetProperty("fields");
