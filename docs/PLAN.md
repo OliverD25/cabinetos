@@ -1279,7 +1279,7 @@ browser keys are off); live check section 21. Checks: core 821 passed;
 window 1237 tests; the live check 209 True, 0 False (its two product faults,
 the second Ctrl+` after a pane switch and the paste, found and fixed on
 the way). The planning session's checks after the rebase: the five core checks green (821 passed, 6 ignored), the window build with warnings as errors, 1251 window tests (1202 passed, 49 end-to-end skipped), the full suite with the end-to-end tests 1251 of 1251 (2 min 6 s), and the live check on the rebased Release build 215 True, 0 False (`run-2026-10-02-0225.txt`); merged as 0fc1d4b..411f9e1.
-**Status (2026-10-02, 04:30): unit 2 done on its branch, not merged.**
+**Status (2026-10-02, 04:40): unit 2 done and merged** (8f7ccfc..7dc6d22 after a rebase; the planning session's checks on the rebased branch: the five core checks green with 841 tests, 1254 window tests with the end-to-end suite 1254 of 1254, the live check 223 True, 0 False in 7 min 57 s, `run-2026-10-02-0430.txt`). Two coders started at 04:40: unit 3, the split mirror, on Sonnet, and on Opus an investigation of the fault both terminal coders saw with the real mouse (keys pressed right after a click from the terminal into a pane reach nothing; the end-to-end tests cannot see it, since they post keys to the window). The unit 2 coder's own status follows.
 Built the night of 2026-10-01/02 by a coder on Opus, 004cc26..6e9b195 and
 the report's commit on `worktree-agent-a1d5e9555812c7418`
 ([log/2026-10-02/terminal-unit2-report.md](log/2026-10-02/terminal-unit2-report.md)):
