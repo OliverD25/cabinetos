@@ -57,8 +57,19 @@ if (-not $NoSync) {
   if ($theirs -ne $ours) {
     $bundle = Join-Path $env:TEMP 'cabinetos-tests.bundle'
     $base = (Remote "git -C $RemoteRepo rev-parse HEAD") | Select-Object -Last 1
-    & git -C $repo bundle create $bundle "$base..$Branch" 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { & git -C $repo bundle create $bundle $Branch 2>&1 | Out-Null }
+    # A live check may have sent the commits already (it fast-forwards the clone's current branch), leaving only
+    # the branch name to make there; an empty bundle makes git write to stderr, which 5.1 turns into a stop.
+    $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $missing = & git -C $repo rev-list --count "$base..$Branch" 2>$null
+    $ErrorActionPreference = $eap
+    if ($LASTEXITCODE -ne 0) { $missing = 'unknown' }
+    if ("$missing".Trim() -eq '0') {
+      Remote "git -C $RemoteRepo checkout -q -B $Branch $ours; git -C $RemoteRepo log --oneline -1" | Select-Object -Last 1
+      $bundle = $null
+    } elseif ($missing -eq 'unknown') { & git -C $repo bundle create $bundle $Branch 2>&1 | Out-Null }
+    else { & git -C $repo bundle create $bundle "$base..$Branch" 2>&1 | Out-Null }
+  }
+  if ($bundle) {
     Remote "New-Item -ItemType Directory -Force '$remoteIo\inbox' | Out-Null" | Out-Null
     Send $bundle "$remoteIoFwd/inbox/cabinetos-tests.bundle"
     Remote "git -C $RemoteRepo fetch -q '$remoteIo\inbox\cabinetos-tests.bundle' '${Branch}:refs/remotes/bundle/$Branch'; git -C $RemoteRepo checkout -q -B $Branch refs/remotes/bundle/$Branch; git -C $RemoteRepo log --oneline -1" | Select-Object -Last 1
