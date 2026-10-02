@@ -1862,6 +1862,68 @@ Articles: 3, 4, 6, 7, 8, 10.
 
 **Status (2026-10-03, 00:33): handed to a coder on Sonnet.**
 
+### Phase 24 — Sorting by the column headers, and the pane dividers (small; the desk cards of 2026-10-02)
+
+Covers the desk cards "Clickable column headers" and item 1 of "New
+features" (the dragging of frames). Checked on 2026-10-03: a pane's column
+headers have grips for the widths but a click sorts nothing, and of the
+window's dividers only the Tool Dock's two and the rail layout's sidebar
+divider can be dragged; the two panes always share the width equally, and
+the classic layout's sidebar has no divider.
+
+Produces: a click on Name, Modified, Type or Size sorts the active pane by
+that column, a second click reverses it, and the sorted header shows an
+arrow; the sort goes through `panes.sort.*` and `set_value`, so the headers,
+the palette commands and the file agree; a grip click is a resize, never a
+sort. A splitter between the two panes: `ui.paneSplit`, the left pane's
+share of the width (0.2 to 0.8, `null` for equal), saved once per drag as
+the dock's size is, double-click for equal, and "View: Equal Panes"
+(`view.equalPanes`) for the keyboard; the sidebar's divider works in every
+layout with `ui.sidebarWidth`, double-click for the design's width. Docs:
+`ui.md`, `config.md`, `keybindings.md`, CHANGELOG lines that name the ways.
+
+Done when: the header click and its reversal, the pane divider and the
+sidebar divider each have a window test and an end-to-end test; the live
+check drags both dividers and reads the saved keys; the laptop's panel goal
+holds.
+
+Articles: 3, 4, 6, 7.
+
+**Status (2026-10-03, 00:46): handed to a coder on Sonnet, beside Phase 23.**
+
+### Phase 25 — Quick View (the "New features" card, item 2; decided 2026-10-03)
+
+A floating panel over the window, like macOS: Space on a selected file
+opens it, Space or Esc closes it, Up and Down move to the next or previous
+file while it stays open, Enter opens the file in its program; the panes
+stay where they are. The panel shows Windows' thumbnail of the file at once
+(the shell's image factory, the thumbnails Explorer shows), then the
+viewer's full view replaces it. By Article 10 the core owns only Space and
+the panel; every viewer is a Tool Extension from the marketplace, the
+viewer pack of 11e pulled forward: images (Windows' image stack), video and
+audio (Windows' media stack, with play, pause, seek and volume), text, code
+and Markdown (the Markdown Preview tool reused), PDF and Office documents
+(WebView2 for PDF; Windows' preview handlers, the ones Explorer's preview
+pane uses, where they are installed). The first Space on a kind with no
+viewer installed offers to install the free pack with one click.
+
+Produces, in order: 1. a design note on Opus: the viewer contract between
+the panel and a Tool Extension page (which kinds a page claims, how the file
+is handed over, what the page reports back, the thumbnail-first rule, the
+keys), as an ADR; 2. the panel in the core with Space, the keys, the
+thumbnail and the offer to install; 3. the viewer pack in the marketplace:
+images and media first, then text and Markdown, then PDF and Office.
+
+Done when: Space on an image shows the thumbnail within 100 ms and the full
+image within a second on the laptop; a video plays within a second; Up and
+Down walk the folder; Esc and Space close; a kind without a viewer offers
+the pack; the panel never blocks the window (Article 1); the live check
+covers it on the laptop.
+
+Articles: 1, 3, 4, 7, 10, 11.
+
+**Status (2026-10-03, 00:46): planned, to start after Phase 23.**
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
