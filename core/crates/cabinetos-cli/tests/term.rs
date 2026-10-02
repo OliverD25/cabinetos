@@ -1,9 +1,10 @@
 //! `cabinetos-cli term` against a real core: a shell fed from a pipe;
 //! `term list`, `term mode`, `term type` and `term close` from a second CLI
 //! while the first is attached; `term cwd`, which a prompt hook runs, with
-//! this test as the window that says what its panes show; and `term` in a
-//! console window, which here is a pseudo-console of this test's own, so
-//! the test types the keys. The
+//! this test as the window that says what its panes show; real PowerShell
+//! and WSL shells whose prompt hook follows that window's pane; and `term`
+//! in a console window, which here is a pseudo-console of this test's own,
+//! so the test types the keys. The
 //! shells run only `echo`, `cd`, `mode con` (which prints the console's
 //! size) and `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which
 //! the tests remove; typed paths are never run.
@@ -21,7 +22,7 @@ use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
     Event, Pane, PaneState, Request, Response, TerminalMode, WindowPanes, WindowState, WindowTab,
 };
-use cabinetos_terminal::{Binding, EventSink, Opened, Profile, Terminals};
+use cabinetos_terminal::{Binding, EventSink, Hook, Opened, Profile, Terminals};
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
@@ -394,19 +395,281 @@ impl Window {
     }
 
     fn open(&mut self, cwd: &str, pane: Pane, mode: TerminalMode) -> u64 {
+        self.open_shell("hooked", cwd, pane, mode).0
+    }
+
+    /// Opens a session of `profile`; its ID and its byte pipe.
+    fn open_shell(
+        &mut self,
+        profile: &str,
+        cwd: &str,
+        pane: Pane,
+        mode: TerminalMode,
+    ) -> (u64, String) {
         let reply = self.ask(Request::TerminalOpen {
-            profile: Some("hooked".to_owned()),
+            profile: Some(profile.to_owned()),
             cwd: Some(cwd.to_owned()),
-            cols: 80,
+            cols: 300,
             rows: 25,
             pane,
             mode: Some(mode),
         });
-        let Response::TerminalOpened { session_id, .. } = reply else {
+        let Response::TerminalOpened {
+            session_id, pipe, ..
+        } = reply
+        else {
             panic!("expected terminal_opened, got {reply:?}");
         };
-        session_id
+        (session_id, pipe)
     }
+
+    fn attach(&mut self, pipe: &str) -> Shell {
+        let pipe = self
+            .runtime
+            .block_on(async { ClientOptions::new().open(pipe) })
+            .unwrap();
+        Shell {
+            pipe,
+            seen: Vec::new(),
+        }
+    }
+
+    fn send(&mut self, shell: &mut Shell, keys: &str) {
+        self.runtime
+            .block_on(shell.pipe.write_all(keys.as_bytes()))
+            .unwrap();
+    }
+
+    /// Reads the shell until its prompt hook reported a folder (OSC 9;9):
+    /// the shell has drawn a prompt.
+    fn wait_for_report(&mut self, shell: &mut Shell) {
+        self.read_while(shell, |_, seen| {
+            !seen.windows(5).any(|bytes| bytes == b"]9;9;")
+        });
+    }
+
+    /// Reads the shell until `done` holds for its plain text since the last
+    /// [`Shell::forget`]; returns that text.
+    fn read_until(&mut self, shell: &mut Shell, done: impl Fn(&str) -> bool) -> String {
+        self.read_while(shell, |output, _| !done(output))
+    }
+
+    /// Reads while `waiting` holds for the plain text and the bytes since
+    /// the last [`Shell::forget`]; returns the text.
+    fn read_while(&mut self, shell: &mut Shell, waiting: impl Fn(&str, &[u8]) -> bool) -> String {
+        let Shell { pipe, seen } = shell;
+        self.runtime.block_on(async {
+            let deadline = tokio::time::Instant::now() + DEADLINE;
+            let mut buffer = vec![0; 64 * 1024];
+            loop {
+                let output = plain(seen);
+                if !waiting(&output, seen) {
+                    return output;
+                }
+                match tokio::time::timeout_at(deadline, pipe.read(&mut buffer)).await {
+                    Ok(Ok(0)) => panic!("the output ended; it was:\n{output}"),
+                    Ok(Ok(read)) => seen.extend_from_slice(&buffer[..read]),
+                    Ok(Err(error)) => panic!("reading failed: {error}; the output:\n{output}"),
+                    Err(elapsed) => panic!(
+                        "{elapsed}; the output so far:\n{output}\nas bytes: {}",
+                        String::from_utf8_lossy(seen).escape_debug()
+                    ),
+                }
+            }
+        })
+    }
+}
+
+/// A session's byte pipe as the window reads it.
+struct Shell {
+    pipe: NamedPipeClient,
+    seen: Vec<u8>,
+}
+
+impl Shell {
+    /// Later reads look only at output from now on.
+    fn forget(&mut self) {
+        self.seen.clear();
+    }
+}
+
+/// Whether `program` is in one of the `PATH`'s folders.
+fn on_path(program: &str) -> bool {
+    std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()))
+}
+
+/// Whether one line of the output is exactly `wanted`.
+fn has_line(output: &str, wanted: &str) -> bool {
+    output.lines().any(|line| line.trim_end() == wanted)
+}
+
+/// `path` spelled with long names, as PowerShell prints it (`%TEMP%` may
+/// contain a short name).
+fn long_name(path: &Path) -> PathBuf {
+    let full = std::fs::canonicalize(path).unwrap();
+    let full = full.to_string_lossy();
+    PathBuf::from(full.strip_prefix(r"\\?\").unwrap_or(&full))
+}
+
+/// A core whose profile `shell` runs `program` with `args`, and a folder
+/// of the test's own.
+fn core_with_shell(prefix: &str, program: &str, args: &[&str]) -> (TempDir, Core) {
+    let dir = scratch(prefix);
+    let config = serde_json::json!({"terminal": {"defaultProfile": "shell", "profiles": [
+        {"name": "shell", "command": program, "args": args}
+    ]}});
+    std::fs::write(dir.path().join("cabinetos.json"), config.to_string()).unwrap();
+    let core = start_core(dir.path());
+    (dir, core)
+}
+
+/// A linked PowerShell follows its pane at its next prompt: the prompt hook
+/// asks `term cwd` and changes folder before the prompt is drawn. A
+/// half-typed line is left alone: nothing is typed into it, and it runs
+/// where its prompt was drawn; the next prompt follows. A `cd` of the
+/// user's own stays until the pane moves again. A locked session stays
+/// where it is. Both PowerShell versions, when installed.
+#[test]
+fn a_linked_powershell_follows_its_pane_at_the_next_prompt_when_installed() {
+    let mut tested = 0;
+    for program in ["pwsh.exe", "powershell.exe"] {
+        if !on_path(program) {
+            println!("skipped {program}: it is not on the PATH");
+            continue;
+        }
+        let (dir, core) = core_with_shell("cli-follow", program, &["-NoLogo", "-NoProfile"]);
+        let root = long_name(dir.path());
+        let folder = |name: &str| {
+            let path = root.join(name);
+            std::fs::create_dir(&path).unwrap();
+            shown(&path)
+        };
+        let start = folder("start");
+        let first = folder("Звіт 'проєкт' $HOME ’q’");
+        let second = folder("b [1]");
+        let own = folder("own");
+        let third = folder("c");
+        let prompt = |folder: &str| format!("PS {folder}>");
+
+        let mut window = Window::connect(&core);
+        window.show(&first, &third);
+        let (linked, linked_pipe) =
+            window.open_shell("shell", &start, Pane::Left, TerminalMode::Linked);
+        let (locked, locked_pipe) =
+            window.open_shell("shell", &start, Pane::Right, TerminalMode::Locked);
+        let mut left = window.attach(&linked_pipe);
+        let mut right = window.attach(&locked_pipe);
+        // The first prompt: the linked shell is in its pane's folder already.
+        window.read_until(&mut left, |output| output.contains(&prompt(&first)));
+        window.read_until(&mut right, |output| output.contains(&prompt(&start)));
+
+        // A half-typed line; the pane moves; then Enter.
+        left.forget();
+        window.send(&mut left, "echo half-typed; (Get-Location).Path");
+        window.read_until(&mut left, |output| output.contains("(Get-Location).Path"));
+        window.show(&second, &third);
+        window.send(&mut left, "\r");
+        let ran = window.read_until(&mut left, |output| output.contains(&prompt(&second)));
+        assert!(
+            has_line(&ran, "half-typed") && has_line(&ran, &first),
+            "{program}: the line ran as typed, where its prompt was drawn:\n{ran}"
+        );
+
+        // The user's own cd stays while the pane stays.
+        left.forget();
+        window.send(&mut left, &format!("Set-Location -LiteralPath '{own}'\r"));
+        window.read_until(&mut left, |output| output.contains(&prompt(&own)));
+        left.forget();
+        window.send(&mut left, "\r");
+        let stayed = window.read_until(&mut left, |output| output.contains(&prompt(&own)));
+        assert!(!stayed.contains(&prompt(&second)), "{program}:\n{stayed}");
+        // The pane moves; `(Get-Location).Path` is typed while the hook
+        // runs for the empty line's prompt, and arrives whole after it.
+        window.show(&third, &third);
+        left.forget();
+        window.send(&mut left, "\r(Get-Location).Path\r");
+        window.read_until(&mut left, |output| has_line(output, &third));
+
+        // The locked session's pane moves; it stays.
+        right.forget();
+        window.send(&mut right, "\r");
+        let stayed = window.read_until(&mut right, |output| output.contains(&prompt(&start)));
+        assert!(!stayed.contains(&prompt(&third)), "{program}:\n{stayed}");
+
+        for session_id in [linked, locked] {
+            assert_eq!(
+                window.ask(Request::TerminalClose { session_id }),
+                Response::Ok
+            );
+        }
+        tested += 1;
+    }
+    println!("{tested} PowerShell version(s) tested");
+}
+
+/// Whether WSL has a Linux to run: `wsl.exe` may exist without one.
+fn wsl_runs(folder: &Path) -> bool {
+    if !on_path("wsl.exe") {
+        println!("skipped: wsl.exe is not on the PATH");
+        return false;
+    }
+    let probe = Command::new("wsl.exe")
+        .args(["-e", "sh", "-c", "exit 0"])
+        .current_dir(folder)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    match probe {
+        Ok(status) if status.success() => true,
+        other => {
+            println!("skipped: WSL has no Linux to run ({other:?})");
+            false
+        }
+    }
+}
+
+/// A linked WSL shell (bash) follows its pane at its next prompt through
+/// `PROMPT_COMMAND`, which `WSLENV` passes into Linux; `pwd` shows the
+/// pane's folder seen from Linux.
+#[test]
+fn a_linked_wsl_shell_follows_its_pane_at_the_next_prompt_when_installed() {
+    let (dir, core) = core_with_shell("cli-follow-wsl", "wsl.exe", &[]);
+    if !wsl_runs(dir.path()) {
+        return;
+    }
+    let start = dir.path().join("start");
+    let target = dir.path().join("Звіт 'проєкт' $HOME");
+    for folder in [&start, &target] {
+        std::fs::create_dir(folder).unwrap();
+    }
+    let mut window = Window::connect(&core);
+    window.show(&shown(&start), &shown(&start));
+    let (session_id, pipe) =
+        window.open_shell("shell", &shown(&start), Pane::Left, TerminalMode::Linked);
+    let mut shell = window.attach(&pipe);
+    let in_linux = |output: &str, tail: &str| {
+        output
+            .lines()
+            .any(|line| line.starts_with("/mnt/") && line.trim_end().ends_with(tail))
+    };
+    window.wait_for_report(&mut shell);
+    window.send(&mut shell, "pwd\r");
+    window.read_until(&mut shell, |output| in_linux(output, "/start"));
+    window.show(&shown(&target), &shown(&start));
+    shell.forget();
+    // `pwd` is typed while the hook runs for the empty line's prompt.
+    window.send(&mut shell, "\rpwd\r");
+    window.read_until(&mut shell, |output| {
+        in_linux(output, "/Звіт 'проєкт' $HOME")
+    });
+    window.send(&mut shell, "exit\r");
+    let closed = window.ask(Request::TerminalClose { session_id });
+    assert!(
+        matches!(closed, Response::Ok | Response::Error { .. }),
+        "{closed:?}"
+    );
 }
 
 /// `term cwd` prints the folder of a linked session's pane, one line, and
@@ -504,8 +767,12 @@ fn plain(bytes: &[u8]) -> String {
                     }
                 }
                 Some(']') => {
-                    for c in chars.by_ref() {
+                    while let Some(c) = chars.next() {
                         if c == '\u{7}' {
+                            break;
+                        }
+                        if c == '\u{1b}' {
+                            chars.next();
                             break;
                         }
                     }
@@ -573,6 +840,7 @@ impl InConsole {
             .map(|arg| (*arg).to_owned())
             .collect(),
             linkable: false,
+            hook: Hook::Off,
         };
         let opened = terminals
             .open(&cli, Some(cwd), 120, 30, Binding::default())

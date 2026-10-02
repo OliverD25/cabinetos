@@ -14,6 +14,7 @@
 //!   the buffer to the client, keys from the client to the input thread.
 
 use std::collections::VecDeque;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -30,8 +31,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::conpty::{self, Child, PseudoConsole};
+use crate::hook;
 use crate::shell::{self, ShellKind};
-use crate::{Binding, EventSink, OUTPUT_LIMIT, PIPE_PREFIX, Profile, TerminalError};
+use crate::{Binding, EventSink, HookHost, OUTPUT_LIMIT, PIPE_PREFIX, Profile, TerminalError};
 
 /// Bytes read from the pseudo-console at a time.
 const READ_CHUNK: usize = 16 * 1024;
@@ -285,6 +287,8 @@ pub(crate) struct Start<'a> {
     pub(crate) cols: u16,
     pub(crate) rows: u16,
     pub(crate) binding: Binding,
+    /// What the prompt hook needs; `None`: no hook.
+    pub(crate) host: Option<&'a HookHost>,
 }
 
 /// One running (or exited) shell.
@@ -319,11 +323,12 @@ fn no_longer_running(id: u64) -> TerminalError {
 
 /// Starts a shell: its byte pipe first (nothing to undo if that fails), then
 /// the pseudo-console and the process, then the threads and the pipe task.
+/// Also says whether the shell got its prompt hook.
 pub(crate) fn start(
     start: &Start<'_>,
     runtime: &Handle,
     sink: EventSink,
-) -> Result<Arc<Session>, String> {
+) -> Result<(Arc<Session>, bool), String> {
     let Start {
         id,
         profile,
@@ -332,6 +337,7 @@ pub(crate) fn start(
         cols,
         rows,
         binding,
+        host,
     } = *start;
     let pipe = PipeName::from_full(format!("{PIPE_PREFIX}{:016x}", rand::random::<u64>()));
     let server = {
@@ -349,7 +355,6 @@ pub(crate) fn start(
     // ends when the pseudo-console closes.
     drop((input_read, output_write));
 
-    let session_text = id.to_string();
     let mut inherited: Vec<_> = std::env::vars_os().collect();
     // The core's own folder holds `cabinetos-cli` (and `cab` in a release),
     // so the shell can run the command line of the window it sits in.
@@ -360,14 +365,14 @@ pub(crate) fn start(
     {
         shell::append_to_path(&mut inherited, folder);
     }
-    let environment = shell::environment_block(
-        inherited,
-        &[
-            ("TERM", "xterm-256color"),
-            ("CABINETOS_SESSION", &session_text),
-        ],
-    );
-    let line = shell::command_line(program, &profile.args);
+    let kind = ShellKind::of(&profile.command);
+    let (args, set, hooked) = shell_start(id, kind, profile, host, &inherited);
+    let set: Vec<(&str, &str)> = set
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.as_str()))
+        .collect();
+    let environment = shell::environment_block(inherited, &set);
+    let line = shell::command_line(program, &args);
     let Child { process, pid } = match conpty::spawn(&console, program, &line, &environment, cwd) {
         Ok(child) => child,
         Err(error) => {
@@ -384,7 +389,7 @@ pub(crate) fn start(
     let session = Arc::new(Session {
         id,
         profile: profile.name.clone(),
-        kind: ShellKind::of(&profile.command),
+        kind,
         pane: binding.pane,
         linkable: profile.linkable,
         pipe,
@@ -427,7 +432,55 @@ pub(crate) fn start(
         return Err(format!("cannot start the session's threads: {error}"));
     }
     runtime.spawn(Arc::clone(&session).serve_pipe(server).instrument(span));
-    Ok(session)
+    Ok((session, hooked))
+}
+
+/// The shell's arguments and the variables the core adds to what it
+/// inherits: `TERM` and the session's ID; with a host, the core's pipe
+/// token and the prompt hook. Also whether the hook was added.
+fn shell_start(
+    id: u64,
+    kind: ShellKind,
+    profile: &Profile,
+    host: Option<&HookHost>,
+    inherited: &[(OsString, OsString)],
+) -> (Vec<String>, Vec<(String, String)>, bool) {
+    let mut set = vec![
+        ("TERM".to_owned(), "xterm-256color".to_owned()),
+        ("CABINETOS_SESSION".to_owned(), id.to_string()),
+    ];
+    let mut args = profile.args.clone();
+    let Some(host) = host else {
+        return (args, set, false);
+    };
+    set.push(("CABINETOS_PIPE".to_owned(), host.pipe_token.clone()));
+    let wslenv = inherited
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("WSLENV"))
+        .map(|(_, value)| value.to_string_lossy().into_owned());
+    match hook::setup(
+        kind,
+        &profile.hook,
+        host.cli.as_deref(),
+        &profile.args,
+        wslenv.as_deref(),
+    ) {
+        Ok(Some(setup)) => {
+            args.extend(setup.args);
+            set.extend(setup.env);
+            (args, set, true)
+        }
+        Ok(None) => (args, set, false),
+        Err(reason) => {
+            tracing::warn!(
+                session_id = id,
+                profile = %profile.name,
+                %reason,
+                "the prompt hook was not added: the session cannot follow its pane or report its folder"
+            );
+            (args, set, false)
+        }
+    }
 }
 
 fn spawn_thread(

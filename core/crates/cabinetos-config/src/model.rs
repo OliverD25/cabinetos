@@ -412,6 +412,7 @@ impl Default for TerminalConfig {
             command: command.to_owned(),
             args: args.iter().map(|arg| (*arg).to_owned()).collect(),
             linkable: Some(linkable),
+            hook: None,
             follows_pane: None,
         };
         Self {
@@ -446,15 +447,34 @@ pub struct TerminalProfile {
     /// Whether a session of this profile may be `linked` to its pane, so it
     /// follows the pane through a prompt hook. `false` for a program no
     /// hook can be added to (cmd, Claude Code). Left out: `true` for
-    /// PowerShell and WSL, `false` for any other program.
+    /// PowerShell and WSL (unless `hook` is `false`), `false` for any other
+    /// program.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub linkable: Option<bool>,
+    /// The prompt hook, for PowerShell and WSL: `true` (the default)
+    /// CabinetOS's own, which makes a linked session follow its pane and
+    /// reports the shell's folder; `false` none; a string is the user's own
+    /// code in the shell's language, run at each prompt in place of the
+    /// follow step. Ignored for any other program.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook: Option<ProfileHook>,
     /// Ignored. Until terminal unit 1 (2026-10-01) it said whether the
     /// window typed a change-directory line into the session; the window
     /// types none now. Kept so a file that has it still loads; the core
     /// does not write it.
     #[serde(default, skip_serializing)]
     pub follows_pane: Option<bool>,
+}
+
+/// A terminal profile's `hook`: on, off, or the user's own code.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(untagged)]
+pub enum ProfileHook {
+    /// `true`: CabinetOS's own hook; `false`: none.
+    On(bool),
+    /// The user's own code, run at each prompt in place of the follow step.
+    Code(String),
 }
 
 /// One change to a key binding.
@@ -750,6 +770,34 @@ mod tests {
         assert_eq!(
             text,
             r#"{"name":"c","command":"c.exe","args":[],"linkable":true}"#
+        );
+        // hook: a switch, or the user's own code; left out stays left out.
+        let hooks: TerminalConfig = serde_json::from_str(
+            r#"{"profiles": [
+                {"name": "a", "command": "pwsh.exe", "hook": false},
+                {"name": "b", "command": "pwsh.exe", "hook": true},
+                {"name": "c", "command": "wsl.exe", "hook": "my_follow"}
+            ], "defaultProfile": "a"}"#,
+        )
+        .unwrap();
+        let read: Vec<_> = hooks.profiles.iter().map(|p| p.hook.clone()).collect();
+        assert_eq!(
+            read,
+            [
+                Some(ProfileHook::On(false)),
+                Some(ProfileHook::On(true)),
+                Some(ProfileHook::Code("my_follow".to_owned()))
+            ]
+        );
+        assert_eq!(
+            serde_json::to_string(&hooks.profiles[2]).unwrap(),
+            r#"{"name":"c","command":"wsl.exe","args":[],"hook":"my_follow"}"#
+        );
+        assert!(
+            serde_json::from_str::<TerminalProfile>(
+                r#"{"name": "a", "command": "a.exe", "hook": 1}"#
+            )
+            .is_err()
         );
         let error = serde_json::from_str::<TerminalProfile>(
             r#"{"name": "a", "command": "a.exe", "linkable": "yes"}"#,

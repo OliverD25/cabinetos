@@ -866,6 +866,19 @@
       },
       "additionalProperties": false
     },
+    "ProfileHook": {
+      "description": "A terminal profile's `hook`: on, off, or the user's own code.",
+      "anyOf": [
+        {
+          "description": "`true`: CabinetOS's own hook; `false`: none.",
+          "type": "boolean"
+        },
+        {
+          "description": "The user's own code, run at each prompt in place of the follow step.",
+          "type": "string"
+        }
+      ]
+    },
     "ProgramEntry": {
       "description": "A program a menu entry, a key or the palette may start: the command\n`program.<name>`. Nothing else can be started from the menu.",
       "type": "object",
@@ -1097,8 +1110,19 @@
           ],
           "writeOnly": true
         },
+        "hook": {
+          "description": "The prompt hook, for PowerShell and WSL: `true` (the default)\nCabinetOS's own, which makes a linked session follow its pane and\nreports the shell's folder; `false` none; a string is the user's own\ncode in the shell's language, run at each prompt in place of the\nfollow step. Ignored for any other program.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProfileHook"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "linkable": {
-          "description": "Whether a session of this profile may be `linked` to its pane, so it\nfollows the pane through a prompt hook. `false` for a program no\nhook can be added to (cmd, Claude Code). Left out: `true` for\nPowerShell and WSL, `false` for any other program.",
+          "description": "Whether a session of this profile may be `linked` to its pane, so it\nfollows the pane through a prompt hook. `false` for a program no\nhook can be added to (cmd, Claude Code). Left out: `true` for\nPowerShell and WSL (unless `hook` is `false`), `false` for any other\nprogram.",
           "type": [
             "boolean",
             "null"

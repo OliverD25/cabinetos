@@ -272,7 +272,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         Arc::clone(&updates),
         settings.subscribe(),
     ));
-    let terminals = terminal::start(&events);
+    let terminals = terminal::start(&events, pipe.token());
     let previews = preview::Previews::start(&events);
     // Dropping the watcher at the end stops it.
     let _drives = volumes::watch(Arc::clone(&events));

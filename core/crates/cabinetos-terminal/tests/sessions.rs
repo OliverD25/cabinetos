@@ -4,7 +4,9 @@
 //! the console's size), `Get-Location`, `pwd` and `exit`, in folders under
 //! `%TEMP%\cabinetos-term-test\`, which the tests remove. A `cd` the test
 //! types itself, with the folder typed by `type_paths`, shows that each
-//! shell reads a typed path literally.
+//! shell reads a typed path literally. The prompt hook's tests give the
+//! shells hook code of their own (the core's own hook asks the core, which
+//! `cabinetos-cli`'s tests run).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -15,8 +17,8 @@ use std::time::{Duration, Instant};
 use cabinetos_ipc::{PipeName, PipeServer};
 use cabinetos_protocol::{ErrorCode, Event, Pane, TerminalMode, TerminalSession, TerminalState};
 use cabinetos_terminal::{
-    Binding, EventSink, MAX_SESSIONS, OUTPUT_LIMIT, Opened, PIPE_PREFIX, Profile, Terminals,
-    linkable_by_default,
+    Binding, EventSink, Hook, HookHost, MAX_SESSIONS, OUTPUT_LIMIT, Opened, PIPE_PREFIX, Profile,
+    Terminals, linkable_by_default,
 };
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -58,6 +60,7 @@ fn profile(name: &str, command: &str, args: &[&str]) -> Profile {
         command: command.to_owned(),
         args: args.iter().map(|arg| (*arg).to_owned()).collect(),
         linkable: linkable_by_default(command),
+        hook: Hook::Off,
     }
 }
 
@@ -221,6 +224,23 @@ impl Harness {
     }
 
     fn with_limit(limit: usize) -> Self {
+        Self::build(limit, None)
+    }
+
+    /// Shells that take a prompt hook get one, and every shell the pipe
+    /// token `test-pipe`; no command line: only a profile's own hook code
+    /// follows anything.
+    fn with_hooks() -> Self {
+        Self::build(
+            MAX_SESSIONS,
+            Some(HookHost {
+                pipe_token: "test-pipe".to_owned(),
+                cli: None,
+            }),
+        )
+    }
+
+    fn build(limit: usize, host: Option<HookHost>) -> Self {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
@@ -230,7 +250,10 @@ impl Harness {
         let sink: EventSink = Arc::new(move |event| {
             let _ = sender.send(event);
         });
-        let terminals = Terminals::with_limit(runtime.handle().clone(), sink, limit);
+        let mut terminals = Terminals::with_limit(runtime.handle().clone(), sink, limit);
+        if let Some(host) = host {
+            terminals = terminals.with_host(host);
+        }
         Self {
             terminals,
             events,
@@ -1012,4 +1035,95 @@ fn a_session_has_a_pane_and_a_mode_and_only_a_linkable_one_may_be_linked() {
             .code,
         ErrorCode::NoSuchSession
     );
+}
+
+/// A PowerShell profile's hook code runs before each prompt is drawn (here
+/// it moves the shell, as the core's own hook does for a linked session),
+/// the user's own prompt still draws, `$LASTEXITCODE` stays the last
+/// command's, and every shell gets the core's pipe token. A profile whose
+/// arguments already run a command gets no hook and still runs.
+#[test]
+fn powershell_runs_its_hook_at_each_prompt_when_installed() {
+    let mut tested = 0;
+    for program in ["pwsh.exe", "powershell.exe"] {
+        if !on_path(program) {
+            println!("skipped {program}: it is not on the PATH");
+            continue;
+        }
+        let dir = scratch("powershell-hook");
+        let harness = Harness::with_hooks();
+        let target = long_name(dir.path()).join("Звіт 'проєкт' ’q’");
+        std::fs::create_dir(&target).unwrap();
+        let quoted = shown(&target).replace('\'', "''").replace('’', "’’");
+        let shell = Profile {
+            hook: Hook::Custom(format!("Set-Location -LiteralPath '{quoted}'")),
+            ..profile("ps", program, &["-NoLogo", "-NoProfile"])
+        };
+        let opened = harness.open(&shell, dir.path(), 300, 25);
+        let mut client = harness.attach(&opened);
+        let prompt = format!("PS {}>", shown(&target));
+        harness.read_until(&mut client, |output| output.contains(&prompt));
+
+        client.forget();
+        harness.send(&mut client, "cmd /c exit 3\r");
+        harness.read_until(&mut client, |output| output.contains(&prompt));
+        client.forget();
+        harness.send(
+            &mut client,
+            "\"code $LASTEXITCODE pipe $env:CABINETOS_PIPE\"\r",
+        );
+        harness.read_until(&mut client, |output| {
+            has_line(output, "code 3 pipe test-pipe")
+        });
+        harness.send(&mut client, "exit\r");
+        harness.read_to_end(&mut client);
+        assert_eq!(harness.exit_code(opened.session_id), 0, "{program}");
+
+        // A command of the profile's own: no hook, the command runs.
+        let once = profile(
+            "once",
+            program,
+            &[
+                "-NoLogo",
+                "-NoProfile",
+                "-Command",
+                "Write-Output hook-free",
+            ],
+        );
+        let opened = harness.open(&once, dir.path(), 300, 25);
+        let mut client = harness.attach(&opened);
+        let output = plain(&harness.read_to_end(&mut client));
+        assert!(has_line(&output, "hook-free"), "{program}: {output}");
+        assert_eq!(harness.exit_code(opened.session_id), 0, "{program}");
+        tested += 1;
+    }
+    println!("{tested} PowerShell version(s) tested");
+}
+
+/// WSL's bash gets its hook as `PROMPT_COMMAND` through `WSLENV`, with the
+/// session's ID and the core's pipe token.
+#[test]
+fn wsl_runs_its_hook_at_each_prompt_when_installed() {
+    let dir = scratch("wsl-hook");
+    if !wsl_runs(dir.path()) {
+        return;
+    }
+    let harness = Harness::with_hooks();
+    let shell = Profile {
+        hook: Hook::Custom("builtin cd /tmp".to_owned()),
+        ..profile("wsl", "wsl.exe", &[])
+    };
+    let opened = harness.open(&shell, dir.path(), 300, 25);
+    let mut client = harness.attach(&opened);
+    harness.read_until(&mut client, |output| output.contains("/tmp"));
+    client.forget();
+    harness.send(
+        &mut client,
+        "echo \"in $PWD session $CABINETOS_SESSION pipe $CABINETOS_PIPE\"\r",
+    );
+    let wanted = format!("in /tmp session {} pipe test-pipe", opened.session_id);
+    harness.read_until(&mut client, |output| has_line(output, &wanted));
+    harness.send(&mut client, "exit\r");
+    harness.read_to_end(&mut client);
+    assert_eq!(harness.exit_code(opened.session_id), 0);
 }

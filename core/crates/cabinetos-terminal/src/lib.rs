@@ -4,9 +4,13 @@
 //! - [`Terminals::open`] finds the profile's program on the `PATH`, creates
 //!   a pseudo-console of the asked size with two pipes (input to the shell,
 //!   output from it), and starts the program attached to it in the asked
-//!   folder, with the core's environment plus `TERM=xterm-256color` and
-//!   `CABINETOS_SESSION=<id>`, and the core's own folder added at the end
-//!   of `PATH`, so `cabinetos-cli` runs from any of its shells.
+//!   folder, with the core's environment plus `TERM=xterm-256color`,
+//!   `CABINETOS_SESSION=<id>` and the core's pipe token
+//!   (`CABINETOS_PIPE`, [`HookHost`]), and the core's own folder added at
+//!   the end of `PATH`, so `cabinetos-cli` runs from any of its shells.
+//! - A PowerShell or WSL shell gets a prompt hook ([`Hook`], the `hook`
+//!   module): at each prompt a linked session follows its pane's folder,
+//!   and every session reports its own folder.
 //! - Each session's bytes travel on a byte pipe of its own,
 //!   `\\.\pipe\cabinetos-term-<random>`: raw bytes, no framing, both ways,
 //!   one client at a time, the current user only and no remote clients (the
@@ -24,7 +28,8 @@
 //!   `linked` ([`Terminals::set_mode`]); a change of mode goes to the event
 //!   sink as `terminal_mode_changed`. Nothing here types into a shell on
 //!   its own: a shell gets only what a client sends, and the paths of
-//!   [`Terminals::type_paths`].
+//!   [`Terminals::type_paths`]; a linked shell follows its pane through
+//!   its own prompt hook.
 //!
 //! [`console`] is the other end, for a client in a console window: raw
 //! mode, the window size and keys as VT text.
@@ -41,6 +46,7 @@
 mod conpty;
 #[allow(unsafe_code)]
 pub mod console;
+mod hook;
 mod session;
 mod shell;
 
@@ -92,6 +98,37 @@ pub struct Profile {
     pub args: Vec<String>,
     /// Whether its sessions may be `linked`.
     pub linkable: bool,
+    /// Its prompt hook. Only PowerShell and WSL get one; for any other
+    /// program it is ignored.
+    pub hook: Hook,
+}
+
+/// A profile's prompt hook (`terminal.profiles[].hook`): what its shell
+/// runs each time it draws its prompt.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Hook {
+    /// None: the shell neither follows its pane nor reports its folder.
+    #[default]
+    Off,
+    /// CabinetOS's own: a linked session follows its pane's folder (it asks
+    /// the core through `cabinetos-cli term cwd`), and every session
+    /// reports its folder.
+    Builtin,
+    /// The user's own code, in the profile's shell's language, in place of
+    /// the follow step; the folder report stays.
+    Custom(String),
+}
+
+/// What the shells' prompt hooks need of the core that runs them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HookHost {
+    /// The core's pipe token: every shell gets it as `CABINETOS_PIPE`, so
+    /// `cabinetos-cli` in it reaches this core.
+    pub pipe_token: String,
+    /// The command-line program the built-in hook runs
+    /// (`cabinetos-cli.exe` next to the core); `None` when it is missing:
+    /// the hook then only reports the folder.
+    pub cli: Option<PathBuf>,
 }
 
 /// Whether a profile that does not say `linkable` may be linked: the
@@ -173,6 +210,8 @@ struct Registry {
 pub struct Terminals {
     runtime: Handle,
     sink: EventSink,
+    /// `None`: no shell gets a prompt hook or the pipe token.
+    host: Option<HookHost>,
     limit: usize,
     next_id: AtomicU64,
     registry: Mutex<Registry>,
@@ -193,6 +232,7 @@ impl Terminals {
         Self {
             runtime,
             sink,
+            host: None,
             limit,
             next_id: AtomicU64::new(1),
             registry: Mutex::new(Registry {
@@ -201,6 +241,14 @@ impl Terminals {
                 shut_down: false,
             }),
         }
+    }
+
+    /// The same, with prompt hooks for the shells that take one, and the
+    /// core's pipe token in every shell.
+    #[must_use]
+    pub fn with_host(mut self, host: HookHost) -> Self {
+        self.host = Some(host);
+        self
     }
 
     fn registry(&self) -> MutexGuard<'_, Registry> {
@@ -276,13 +324,14 @@ impl Terminals {
                 cols,
                 rows,
                 binding,
+                host: self.host.as_ref(),
             },
             &self.runtime,
             Arc::clone(&self.sink),
         );
         let mut registry = self.registry();
         registry.starting -= 1;
-        let session = started.map_err(TerminalError::spawn_failed)?;
+        let (session, hooked) = started.map_err(TerminalError::spawn_failed)?;
         if registry.shut_down {
             drop(registry);
             session.begin_close();
@@ -302,6 +351,7 @@ impl Terminals {
             pane = ?binding.pane,
             mode = ?binding.mode,
             linkable = profile.linkable,
+            hooked,
             "terminal session opened"
         );
         Ok(Opened {

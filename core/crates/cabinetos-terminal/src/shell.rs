@@ -57,7 +57,7 @@ impl ShellKind {
 /// `path` for the inside of a PowerShell single-quoted string: every
 /// single-quote character is doubled. PowerShell counts the typographic
 /// quotes ‘ ’ ‚ ‛ as single quotes too, and a Windows name may contain them.
-fn powershell_quoted(path: &str) -> String {
+pub(crate) fn powershell_quoted(path: &str) -> String {
     let mut quoted = String::with_capacity(path.len() + 2);
     for c in path.chars() {
         if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
