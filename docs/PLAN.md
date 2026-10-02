@@ -1671,6 +1671,13 @@ with no file and line. So a trace without symbols still names functions for
 the window only, not for the Rust programs ([release.md](release.md), "The
 symbols").
 
+**Status (2026-10-02, 21:46): unit 5 done.** Recorded where the decision
+lives: [release.md](release.md), "The setup file" (and its known gaps), and
+the header comment of `build/setup.iss`. The setup file downloads no
+prerequisite; it keeps stopping with the winget command (and, for the
+Windows App Runtime, Microsoft's installer address), as `install.ps1` does.
+Nothing else changed.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):

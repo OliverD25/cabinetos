@@ -10,7 +10,9 @@
 ; settings, logs and update state under %APPDATA%\CabinetOS and %LOCALAPPDATA%\CabinetOS stay.
 ;
 ; The prerequisites are checked as install.ps1 checks them; a missing one stops the setup with the winget command
-; that installs it. The setup downloads nothing.
+; that installs it (for the Windows App Runtime, Microsoft's installer address as well). The setup downloads nothing,
+; and that is decided: Phase 22, unit 5, 2026-10-02, on the planning session's recommendation. It keeps stopping with
+; the winget command; nobody should add a download here without a new decision (docs\release.md, "The setup file").
 ;
 ; Silent: CabinetOS-<version>-win-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=<file>
 ; /SKIPPREREQUISITECHECK installs even when a prerequisite looks missing.

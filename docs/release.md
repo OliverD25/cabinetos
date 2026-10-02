@@ -235,7 +235,11 @@ the build's last step.
   runtime; the Windows App Runtime 2.5.1 or newer; WebView2) are checked
   before the wizard, as `install.ps1` checks them. A missing one stops the
   setup with a message that names the winget command (and, for the Windows
-  App Runtime, Microsoft's installer). The setup downloads nothing.
+  App Runtime, Microsoft's installer). The setup downloads nothing, and
+  that is decided (Phase 22, unit 5, 2026-10-02, on the planning session's
+  recommendation): it keeps stopping with the winget command, as
+  `install.ps1` does, and nobody should add a download without a new
+  decision.
 - **No symbols.** The setup holds no `.pdb` file: `release.ps1` takes them
   out of the folder first, and `setup.iss` excludes `*.pdb` besides ("The
   symbols"). It is 20.0 MB.
@@ -558,8 +562,8 @@ them (checked 2026-09-28 with winget 1.29.380).
 - The indexer service starts manually, so it is off after each restart of
   Windows until started again.
 - x64 only; ARM64 is untested.
-- The setup file installs no prerequisite: it names the winget commands
-  and stops. It is per user only (no
+- The setup file installs no prerequisite, by decision (Phase 22, unit 5):
+  it names the winget commands and stops. It is per user only (no
   all-users install, no indexer service, no PATH entry: `install.ps1` does
   those), and unsigned like the rest.
 - The setup does not remove files an earlier version had and the new one
