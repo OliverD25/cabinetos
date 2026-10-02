@@ -617,7 +617,11 @@ impl HostInner {
                 if !root.is_dir() {
                     return Err(format!("the folder {} does not exist", root.display()));
                 }
-                roots.push(root);
+                // The long form, so a path judged against it later is too;
+                // it is also the name the plugin sees the folder under.
+                roots.push(PathBuf::from(sandbox::long_form(
+                    &root.display().to_string(),
+                )));
             }
         }
         Ok(Loaded {
@@ -1137,7 +1141,22 @@ impl PluginHost {
     /// Tells the plugins that may read `path` (`fs:read`) that a pane opened
     /// it, with the path as the plugin sees it (`/C:/...`). Never waits.
     pub fn listing_opened(&self, path: &str, entries: u32) {
-        let lowered = path.to_lowercase();
+        // Most installs run no plugin that reads; they skip the lookup below.
+        let any_reader = lock(&self.inner.slots).values().any(|slot| {
+            slot.worker.is_some()
+                && matches!(slot.state, PluginState::Active)
+                && slot.loaded.as_ref().is_some_and(|loaded| {
+                    !loaded.read_roots.is_empty() || !loaded.write_roots.is_empty()
+                })
+        });
+        if !any_reader {
+            return;
+        }
+        // A pane may open a folder by its short (8.3) name, as a `%TEMP%`
+        // can be written. A plugin's roots are in the long form, and so is
+        // the path it can open, so it is told that one when only that one
+        // lies under its roots. Looked up before the lock is taken.
+        let long = sandbox::long_form(path);
         let slots = lock(&self.inner.slots);
         for slot in slots.values() {
             let (Some(loaded), Some(worker), PluginState::Active) =
@@ -1145,20 +1164,18 @@ impl PluginHost {
             else {
                 continue;
             };
-            let readable = loaded
+            let roots: Vec<&PathBuf> = loaded
                 .read_roots
                 .iter()
                 .chain(&loaded.write_roots)
-                .any(|root| {
-                    let root = root.display().to_string().to_lowercase();
-                    let root = root.trim_end_matches('\\');
-                    lowered == root || lowered.starts_with(&format!("{root}\\"))
-                });
-            if readable && worker.activity.queued.load(Ordering::Relaxed) < MAX_QUEUED_NOTIFICATIONS
-            {
+                .collect();
+            let Some(told) = sandbox::told_path(&roots, path, &long) else {
+                continue;
+            };
+            if worker.activity.queued.load(Ordering::Relaxed) < MAX_QUEUED_NOTIFICATIONS {
                 worker.activity.queued.fetch_add(1, Ordering::Relaxed);
                 let _ = worker.calls.send(Call::Listing {
-                    path: sandbox::guest_path(Path::new(path)),
+                    path: sandbox::guest_path(Path::new(told)),
                     entries,
                     cause: tracing::Span::current(),
                 });

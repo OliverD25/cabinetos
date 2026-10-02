@@ -931,6 +931,129 @@ fn a_watched_folder_s_changes_arrive_gathered_and_only_under_the_roots() {
     assert_eq!(folder_changes(&setup.recorder).len(), before, "unwatched");
 }
 
+/// An existing folder with a long name, and its short (8.3) spelling, both
+/// under the setup's temporary folder; `None`, with a message, when this
+/// volume keeps no short names.
+fn folder_with_a_short_name(setup: &Setup, name: &str) -> Option<(PathBuf, PathBuf)> {
+    use std::os::windows::process::CommandExt;
+
+    let long = setup.temp.path().join(name);
+    std::fs::create_dir_all(&long).unwrap();
+    // `%~s` is cmd's own way to say the short form of a path.
+    let answer = std::process::Command::new("cmd")
+        .raw_arg(format!(
+            r#"/c for %I in ("{}") do @echo %~sI"#,
+            long.display()
+        ))
+        .output()
+        .unwrap();
+    let short = PathBuf::from(String::from_utf8_lossy(&answer.stdout).trim());
+    if short == long || !short.display().to_string().contains('~') {
+        eprintln!("skipped: this volume keeps no 8.3 names");
+        return None;
+    }
+    Some((long, short))
+}
+
+#[test]
+fn a_short_spelling_of_a_folder_is_the_folder_for_a_watch() {
+    let setup = Setup::new(&["watcher"]);
+    let Some((root, short)) = folder_with_a_short_name(&setup, "a watched folder, long named")
+    else {
+        return;
+    };
+    let Some((other, other_short)) = folder_with_a_short_name(&setup, "another long named folder")
+    else {
+        return;
+    };
+    let host = watcher(&setup, &root);
+    let watch = |path: &Path| {
+        host.execute(
+            "watcher",
+            "watcher.watch",
+            &serde_json::json!({ "path": path.display().to_string() }).to_string(),
+        )
+    };
+    let unwatch = |path: &Path| {
+        host.execute(
+            "watcher",
+            "watcher.unwatch",
+            &serde_json::json!({ "path": path.display().to_string() }).to_string(),
+        )
+        .unwrap();
+    };
+
+    // The root is written in the long form and the folder in the short one.
+    watch(&short).unwrap();
+    // The same folder in its other spelling: the same watch, not a second.
+    watch(&root).unwrap();
+    std::fs::write(root.join("a.txt"), "one").unwrap();
+    let created = |name: &PathBuf| {
+        changes_in(&folder_changes(&setup.recorder))
+            .iter()
+            .filter(|(kind, path, _)| kind == "created" && *path == name.display().to_string())
+            .count()
+    };
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while created(&short.join("a.txt")) == 0 {
+        assert!(Instant::now() < deadline, "the change did not come");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    std::thread::sleep(Duration::from_millis(600));
+    // One watch names the file once, under the folder as the plugin named it.
+    assert_eq!(created(&short.join("a.txt")), 1);
+    assert_eq!(created(&root.join("a.txt")), 0);
+
+    // Either spelling ends it.
+    unwatch(&root);
+    let before = folder_changes(&setup.recorder).len();
+    std::fs::write(root.join("after.txt"), "x").unwrap();
+    std::thread::sleep(Duration::from_millis(600));
+    assert_eq!(folder_changes(&setup.recorder).len(), before, "unwatched");
+
+    // A folder outside the root stays outside, in either spelling.
+    for outside in [other.as_path(), other_short.as_path(), setup.temp.path()] {
+        let refused = watch(outside).unwrap_err();
+        assert!(refused.message.contains("not under a folder"), "{refused}");
+    }
+    // A path that does not exist yet is judged by its text: under the root,
+    // it passes the root check and fails only for lack of the folder; outside
+    // it, it is refused for that.
+    let missing = watch(&short.join("not yet")).unwrap_err();
+    assert!(missing.message.contains("cannot watch"), "{missing}");
+    let missing = watch(&other_short.join("not yet")).unwrap_err();
+    assert!(missing.message.contains("not under a folder"), "{missing}");
+    let missing = watch(&setup.temp.path().join("never")).unwrap_err();
+    assert!(missing.message.contains("not under a folder"), "{missing}");
+}
+
+#[test]
+fn a_root_written_in_its_short_form_is_the_long_folder() {
+    let setup = Setup::new(&["watcher"]);
+    let Some((root, short)) = folder_with_a_short_name(&setup, "a watched folder, long named")
+    else {
+        return;
+    };
+    let host = watcher(&setup, &short);
+    let watch = |path: &Path| {
+        host.execute(
+            "watcher",
+            "watcher.watch",
+            &serde_json::json!({ "path": path.display().to_string() }).to_string(),
+        )
+    };
+
+    // The plugin gets its root in the one form it can open.
+    let answer: serde_json::Value = serde_json::from_str(&watch(&root).unwrap()).unwrap();
+    assert_eq!(
+        answer["roots"],
+        serde_json::json!([root.display().to_string()])
+    );
+    watch(&short).unwrap();
+    let refused = watch(setup.temp.path()).unwrap_err();
+    assert!(refused.message.contains("not under a folder"), "{refused}");
+}
+
 #[test]
 fn watches_end_with_the_plugin() {
     let setup = Setup::new(&["watcher"]);

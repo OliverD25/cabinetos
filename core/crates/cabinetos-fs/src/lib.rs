@@ -31,10 +31,12 @@
 //! [`Hydrator`] gives the shell's type names and icons of listed entries;
 //! size, times and attributes need no such step, as they arrive with the
 //! listing itself.
+//! [`long_path`] spells out the short (8.3) names of a path, so two
+//! spellings of one folder compare equal.
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
 //! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `shellmenu`, `com`,
-//! `hydrate`, `link`, `system`, `registry`, and one function in `sort`),
+//! `hydrate`, `link`, `long_path`, `system`, `registry`, and one function in `sort`),
 //! each block with a `SAFETY:` comment.
 //!
 //! [`registry`] reads and writes values under the current user's hive: the
@@ -51,6 +53,8 @@ mod error;
 mod hydrate;
 #[allow(unsafe_code)]
 mod link;
+#[allow(unsafe_code)]
+mod long_path;
 mod measure;
 #[allow(unsafe_code)]
 mod open;
@@ -82,6 +86,7 @@ use cabinetos_protocol::shm::{EntryKind, ListingMeta};
 pub use drives::DriveWatcher;
 pub use error::FsError;
 pub use hydrate::{DrawnAhead, Hydrator, ICON_KEYS_PER_LISTING, ICON_SIZES, ICONS_KEPT};
+pub use long_path::long_path;
 pub use measure::{MeasureError, Tree, measure_tree};
 pub use open::{
     Editor, check_editable, command_line, edit_path, open_path, show_properties, start_program,

@@ -24,6 +24,36 @@ pub(crate) fn guest_path(host: &Path) -> String {
     format!("/{}", host.display().to_string().replace('\\', "/"))
 }
 
+/// `path` with its short (8.3) names spelled out. `C:\Users\CABINE~1\Temp`
+/// and `C:\Users\cabinetos\Temp` are one folder, which a comparison of the
+/// text would call two; the roots of a plugin and the paths judged against
+/// them both go through this first.
+pub(crate) fn long_form(path: &str) -> String {
+    cabinetos_fs::long_path(Path::new(path))
+        .display()
+        .to_string()
+}
+
+/// Whether the lower-case `folder` is one of `roots` or lies under one. Both
+/// are in their long form.
+pub(crate) fn under_a_root<'a>(roots: impl IntoIterator<Item = &'a PathBuf>, folder: &str) -> bool {
+    roots.into_iter().any(|root| {
+        let root = root.display().to_string().to_lowercase();
+        let root = root.trim_end_matches('\\');
+        folder == root || folder.starts_with(&format!("{root}\\"))
+    })
+}
+
+/// What a plugin whose folders are `roots` is told of the folder a pane
+/// opened, or `None` when it may not read there: `path` as it is when it lies
+/// under a root as written, else `long` (its long form) when that does. The
+/// long form is also the only one the plugin can open, as its roots are in it.
+pub(crate) fn told_path<'a>(roots: &[&PathBuf], path: &'a str, long: &'a str) -> Option<&'a str> {
+    [path, long]
+        .into_iter()
+        .find(|folder| under_a_root(roots.iter().copied(), &folder.to_lowercase()))
+}
+
 /// The folders a plugin's instance sees.
 pub(crate) struct Mounts {
     pub(crate) data_dir: PathBuf,
@@ -286,6 +316,55 @@ mod tests {
             guest_path(Path::new(r"C:\Users\me\root")),
             "/C:/Users/me/root"
         );
+    }
+
+    #[test]
+    fn a_folder_is_under_a_root_by_whole_parts_and_without_regard_to_case() {
+        let roots = [PathBuf::from(r"C:\Users\Me\Inbox")];
+        assert!(under_a_root(&roots, r"c:\users\me\inbox"));
+        assert!(under_a_root(&roots, r"c:\users\me\inbox\sub"));
+        assert!(!under_a_root(&roots, r"c:\users\me\inbox2"));
+        assert!(!under_a_root(&roots, r"c:\users\me"));
+        assert!(under_a_root(&[PathBuf::from(r"D:\")], r"d:\x"));
+    }
+
+    #[test]
+    fn a_plugin_is_told_the_form_of_a_folder_that_lies_under_its_roots() {
+        let root = PathBuf::from(r"C:\Users\cabinetos");
+        let roots = [&root];
+        // As written: told as written, whatever the long form says.
+        assert_eq!(
+            told_path(
+                &roots,
+                r"C:\Users\Cabinetos\Temp",
+                r"C:\Users\cabinetos\Temp"
+            ),
+            Some(r"C:\Users\Cabinetos\Temp")
+        );
+        // The short form is outside the root as written: told the long one.
+        assert_eq!(
+            told_path(
+                &roots,
+                r"C:\Users\CABINE~1\Temp",
+                r"C:\Users\cabinetos\Temp"
+            ),
+            Some(r"C:\Users\cabinetos\Temp")
+        );
+        // Outside either way, or a folder that does not exist (its long form
+        // is then its text): not told.
+        assert_eq!(
+            told_path(&roots, r"C:\Users\other\Temp", r"C:\Users\other\Temp"),
+            None
+        );
+        assert_eq!(
+            told_path(&roots, r"C:\Users\OTHER~1\Temp", r"C:\Users\other\Temp"),
+            None
+        );
+        assert_eq!(
+            told_path(&roots, r"C:\Users\cabinetos2", r"C:\Users\cabinetos2"),
+            None
+        );
+        assert_eq!(told_path(&[], r"C:\x", r"C:\x"), None);
     }
 
     #[test]

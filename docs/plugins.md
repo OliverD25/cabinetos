@@ -87,6 +87,15 @@ A root may use environment variables as `%NAME%`, for example
 `%USERPROFILE%\Documents`. After that it must be an absolute path, and the
 folder must exist when the plugin starts.
 
+The host compares a plugin's paths with its roots by folder, not by text: a
+short 8.3 name (`C:\Users\CABINE~1\Temp`, how a `%TEMP%` is often written)
+is the long name it stands for, and case does not matter. A root is kept in
+its long form, which is how the plugin sees it (`activate` and the sandbox
+form), and a path is judged in its long form too. A path that does not exist
+yet is judged by the folder it will be in, so a file the plugin is about to
+create counts as under the root when its folder does. Links are not
+followed: a junction keeps its own name.
+
 ## Capabilities
 
 | Capability | Level | What it allows |
@@ -334,8 +343,8 @@ crash itself is handled as above.
 
 When a pane opens a folder under one of a plugin's `fs:read` or `fs:write`
 roots, the plugin gets `on-listing-opened(path, entry-count)`, with the path
-as the plugin sees it. It is a notification: the listing does not wait for
-it. At most 64 notifications wait for one plugin; more are dropped.
+as the plugin sees it (in its long form when the pane opened the folder by a
+short 8.3 name). It is a notification: the listing does not wait for it. At most 64 notifications wait for one plugin; more are dropped.
 
 ## Watching folders: `fs:watch`
 

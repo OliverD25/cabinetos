@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use cabinetos_fs::{DetailedChange, DirectoryWatcher, EntryChange, EntryChangeKind};
 
-use crate::HostInner;
+use crate::{HostInner, sandbox};
 
 /// How long changes to one folder are gathered into one message.
 pub(crate) const COALESCE: Duration = Duration::from_millis(200);
@@ -71,8 +71,8 @@ impl Watches {
         notifier: &Notifier,
     ) -> Result<(), String> {
         let folder = windows_path(path)?;
-        let key = folder.to_lowercase();
-        if !under_a_root(roots, &key) {
+        let key = key_of(&folder);
+        if !sandbox::under_a_root(roots, &key) {
             return Err(format!(
                 "{folder} is not under a folder plugin.json names for fs:watch"
             ));
@@ -117,8 +117,15 @@ impl Watches {
 
     /// Stops watching `path`. Whether it was watched.
     pub(crate) fn unwatch(&mut self, path: &str) -> bool {
-        windows_path(path).is_ok_and(|folder| self.folders.remove(&folder.to_lowercase()).is_some())
+        windows_path(path).is_ok_and(|folder| self.folders.remove(&key_of(&folder)).is_some())
     }
+}
+
+/// The key of a watched folder, and the form its roots are judged in: the
+/// long form in lower case, so a short (8.3) spelling of a folder is the same
+/// folder, and a plugin cannot watch it twice under two spellings.
+fn key_of(folder: &str) -> String {
+    sandbox::long_form(folder).to_lowercase()
 }
 
 /// `C:\a\b` from `C:\a\b`, `C:/a/b` or the sandbox form `/C:/a/b`, without
@@ -145,15 +152,6 @@ fn windows_path(path: &str) -> Result<String, String> {
         return Err(format!("`{path}` may not contain `.` or `..`"));
     }
     Ok(folder)
-}
-
-/// Whether the lower-case `folder` is one of `roots` or lies under one.
-fn under_a_root(roots: &[PathBuf], folder: &str) -> bool {
-    roots.iter().any(|root| {
-        let root = root.display().to_string().to_lowercase();
-        let root = root.trim_end_matches('\\');
-        folder == root || folder.starts_with(&format!("{root}\\"))
-    })
 }
 
 /// The watch's thread: gathers each burst of changes for 200 ms and sends
@@ -284,11 +282,6 @@ mod tests {
         for bad in ["a\\b", "/a/b", r"C:\a\..\b", r"C:\a\.\b", ""] {
             assert!(windows_path(bad).is_err(), "{bad}");
         }
-        let roots = [PathBuf::from(r"C:\Users\Me\Inbox")];
-        assert!(under_a_root(&roots, r"c:\users\me\inbox"));
-        assert!(under_a_root(&roots, r"c:\users\me\inbox\sub"));
-        assert!(!under_a_root(&roots, r"c:\users\me\inbox2"));
-        assert!(!under_a_root(&roots, r"c:\users\me"));
     }
 
     #[test]
