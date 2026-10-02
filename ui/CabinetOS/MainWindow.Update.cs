@@ -9,10 +9,11 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace CabinetOS;
 
-// In-app updates (Phase 17; docs/ui.md, "Updates"; ADR 0014): the core checks, downloads, verifies and swaps
-// (cabinetos-update); the window shows where it is (the pill, the dot on the menu button and in About), shows the
-// notes in the update dialog, and restarts itself into the new version. It reads no file and fetches nothing itself
-// (brief section 1): the notes come in update_state.
+// In-app updates (Phase 17; docs/ui.md, "Updates"; ADR 0014, amended by ADR 0015): the core checks, downloads,
+// verifies and swaps (cabinetos-update), with update.autoInstall by itself; the window shows where it is (the pill, the
+// status bar's notice, the dot on the menu button and in About), shows the notes in the update dialog, and restarts
+// itself into the new version. It reads no file and fetches nothing itself (brief section 1): the notes come in
+// update_state.
 public sealed partial class MainWindow
 {
     private const string UpdateTarget = "cabinetos_ui::update";
@@ -22,6 +23,9 @@ public sealed partial class MainWindow
     // Set by a restart into a new version: the CabinetOS.exe the window starts once its core has stopped.
     private string? _restartExe;
 
+    // The notice last logged, so each one is logged once.
+    private string? _noticeLogged;
+
     private void SetUpUpdates()
     {
         _router.RegisterUiHandler("update.check", CheckForUpdatesAsync);
@@ -29,8 +33,14 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("update.rollback", RollBackAsync);
         _router.RegisterUiHandler("update.showNotes", invocation => ShowNotesAsync(invocation, automatic: false));
         UpdatePill.Click += (_, _) => _ = _router.ExecuteAsync("update.apply", trigger: "button");
+        UpdateNoticeRestart.Click += (_, _) => _ = _router.ExecuteAsync("update.apply", trigger: "button");
+        UpdateNoticeNotes.Click += (_, _) => _ = _router.ExecuteAsync("update.showNotes", trigger: "button");
+        UpdateNoticeLater.Click += (_, _) => CloseUpdateNotice();
         ShowUpdate();
     }
+
+    // update.autoInstall, from the configuration the core sent (ReadConfigAsync).
+    private void ApplyUpdateConfig(System.Text.Json.JsonElement config) => _update.AutoInstall = UpdateText.AutoInstallFrom(config);
 
     // ----- The state -----
 
@@ -83,17 +93,52 @@ public sealed partial class MainWindow
                 new LogField("installed", status.Installed ?? ""), new LogField("event", fromEvent));
         }
         ShowUpdate();
-        // The snooze rule (UpdateText.OpensDialog): a download that finished opens the dialog once, unless Later was
-        // chosen less than a day ago. A dialog already open is not pushed aside; the pill and the dot stay.
+        // The snooze rule (UpdateText.OpensDialog): without update.autoInstall a download that finished opens the dialog
+        // once, unless Later was chosen less than a day ago. A dialog already open is not pushed aside; the pill and the
+        // dot stay. With update.autoInstall the core swaps the download in, and the status bar's notice asks instead.
         if (_update.OpensDialog(DateTimeOffset.UtcNow) && _openDialog is null)
         {
             _ = ShowNotesAsync(null, automatic: true);
         }
     }
 
-    // The pill in the status bar, the dot on the menu button.
+    // Later, or Close on a failed swap's notice: the session runs on; the pill and the dot still offer the restart.
+    private void CloseUpdateNotice()
+    {
+        if (_update.Notice is not { } notice)
+        {
+            return;
+        }
+        _update.CloseNotice();
+        Diag.Info(UpdateTarget, "update notice closed", new LogField("version", notice.Version), new LogField("failed", notice.Failed));
+        ShowUpdate();
+    }
+
+    // The pill and the notice in the status bar, the dot on the menu button.
     private void ShowUpdate()
     {
+        var notice = _update.Notice;
+        UpdateNotice.Visibility = notice is null ? Visibility.Collapsed : Visibility.Visible;
+        if (notice is not null)
+        {
+            UpdateNoticeText.Text = notice.Text;
+            UpdateNoticeText.Foreground = ThemeResources.Brush(notice.Failed ? "CbErrorTextBrush" : "CbTextPrimaryBrush");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(UpdateNoticeNotes, notice.Text);
+            ToolTipService.SetToolTip(UpdateNoticeNotes, notice.ToolTip);
+            UpdateNoticeRestart.Visibility = notice.Failed ? Visibility.Collapsed : Visibility.Visible;
+            UpdateNoticeLaterText.Text = notice.Failed ? "Close" : "Later";
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(UpdateNoticeLater, UpdateNoticeLaterText.Text);
+        }
+        if (notice?.Key != _noticeLogged)
+        {
+            _noticeLogged = notice?.Key;
+            if (notice is not null)
+            {
+                // The line the install check in the VM waits for (ui/livecheck/vm-install-check.ps1).
+                Diag.Info(UpdateTarget, "update notice shown", new LogField("text", notice.Text), new LogField("version", notice.Version),
+                    new LogField("failed", notice.Failed), new LogField("reason", notice.Failed ? notice.ToolTip : ""));
+            }
+        }
         var pill = _update.Pill();
         UpdatePill.Visibility = pill.Visible ? Visibility.Visible : Visibility.Collapsed;
         if (pill.Visible)
@@ -114,8 +159,9 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// Update: Check for Updates. A version that already waits shows its dialog; otherwise the core reads the
-    /// channel's latest.json now, and a newer version downloads at once with the pill. Its dialog then opens even
-    /// after Later, since the user asked just now.
+    /// channel's latest.json now, and a newer version downloads at once with the pill. With update.autoInstall the
+    /// core swaps it in too, and the status bar's notice asks for the restart; without it, its dialog opens even after
+    /// Later, since the user asked just now.
     /// </summary>
     private async Task CheckForUpdatesAsync(CommandInvocation invocation)
     {
@@ -151,11 +197,16 @@ public sealed partial class MainWindow
         if (status.State == UpdatePhases.Available)
         {
             ShowNotice($"Downloading CabinetOS {status.Latest?.Version}…");
-            if (await UpdateStepAsync(new UpdateDownloadRequest(), "The download failed") is not { State: UpdatePhases.Downloaded })
+            var failure = _update.AutoInstall ? "The update failed" : "The download failed";
+            if (await UpdateStepAsync(new UpdateDownloadRequest(), failure) is not { State: UpdatePhases.Downloaded or UpdatePhases.Ready } after)
             {
                 return;
             }
             ShowNotice("");
+            if (after.State == UpdatePhases.Ready)
+            {
+                return;
+            }
         }
         if (_update.WaitingVersion is { } waiting && _update.DialogShownFor != waiting)
         {
@@ -287,6 +338,10 @@ public sealed partial class MainWindow
                 return reply.Status;
             case ErrorReply { Code: ErrorCodes.UnknownRequest }:
                 ShowNotice("Updates need a newer core.");
+                return null;
+            case ErrorReply when _update.Notice is { Failed: true }:
+                // A swap that failed: the status bar's notice says so already, with the reason as its tooltip.
+                ShowNotice("");
                 return null;
             case ErrorReply error:
                 ShowNotice($"{failure}: {error.Message}", isError: true);

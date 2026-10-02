@@ -493,6 +493,7 @@ public sealed partial class MainWindow
             new("active_pane", _active),
             new("update_pill", UpdatePill.Visibility == Visibility.Visible ? UpdatePillText.Text : ""),
             new("update_dot", MenuUpdateDot.Visibility == Visibility.Visible),
+            new("update_notice", UpdateNotice.Visibility == Visibility.Visible ? UpdateNoticeText.Text : ""),
         };
         for (var i = 0; i < _panes.Length; i++)
         {

@@ -266,7 +266,7 @@ public class UpdateTests
     [Fact]
     public void The_model_remembers_the_shown_version_and_keeps_progress_only_while_downloading()
     {
-        var model = new UpdateModel();
+        var model = new UpdateModel { AutoInstall = false };
         model.Apply(Status(UpdatePhases.Downloaded));
         Assert.True(model.OpensDialog(Now));
         model.MarkDialogShown("0.2.0");
@@ -282,6 +282,97 @@ public class UpdateTests
         model.Forget();
         Assert.Null(model.Status);
         Assert.False(model.Pill().Visible);
+    }
+
+    // ----- update.autoInstall and the notice (ADR 0015) -----
+
+    [Fact]
+    public void Auto_install_is_on_unless_the_configuration_says_false()
+    {
+        static bool Read(string json) => UpdateText.AutoInstallFrom(System.Text.Json.JsonDocument.Parse(json).RootElement);
+
+        Assert.True(Read("{}"));
+        Assert.True(Read("""{"update":{"check":false}}"""));
+        Assert.True(Read("""{"update":{"autoInstall":true}}"""));
+        Assert.False(Read("""{"update":{"autoInstall":false}}"""));
+        Assert.True(Read("""{"update":{"autoInstall":"no"}}"""), "not a boolean: the default");
+        Assert.True(Read("""{"update":true}"""));
+    }
+
+    [Fact]
+    public void With_auto_install_the_dialog_never_opens_by_itself()
+    {
+        var model = new UpdateModel();
+        Assert.True(model.AutoInstall, "the default until the configuration is read");
+        model.Apply(Status(UpdatePhases.Downloaded));
+        Assert.False(model.OpensDialog(Now));
+        model.AutoInstall = false;
+        Assert.True(model.OpensDialog(Now));
+    }
+
+    [Fact]
+    public void A_version_swapped_in_by_itself_shows_the_notice_until_Later_and_then_the_pill()
+    {
+        var invariant = CultureInfo.InvariantCulture;
+        var model = new UpdateModel();
+        model.Apply(Status(UpdatePhases.Downloading));
+        Assert.Null(model.Notice);
+        model.Apply(Status(UpdatePhases.Applying));
+        Assert.Null(model.Notice);
+        Assert.Equal("Update · installing", model.Pill(invariant).Text);
+
+        var ready = Status(UpdatePhases.Ready) with { Installed = "0.2.0", Previous = "0.1.0" };
+        model.Apply(ready);
+        var notice = Assert.IsType<UpdateNoticeView>(model.Notice);
+        Assert.Equal(("CabinetOS 0.2.0 is installed; restart to use it", false, "0.2.0"), (notice.Text, notice.Failed, notice.Version));
+        Assert.Equal("CabinetOS 0.1.0 runs until the restart. Click for the release notes.", notice.ToolTip);
+        Assert.False(model.Pill(invariant).Visible, "the notice holds Restart now");
+        Assert.Equal("0.2.0", model.WaitingVersion);
+
+        // Later: the session runs on, the pill offers the restart, and the same state brings no notice back.
+        model.CloseNotice();
+        Assert.Null(model.Notice);
+        Assert.Equal("Update ready \u00b7 Restart", model.Pill(invariant).Text);
+        model.Apply(ready);
+        Assert.Null(model.Notice);
+        Assert.Equal("0.2.0", model.WaitingVersion);
+        // Another version in place later (a second update in a long session) is a new notice.
+        model.Apply(ready with { Installed = "0.3.0" });
+        Assert.Equal("CabinetOS 0.3.0 is installed; restart to use it", model.Notice?.Text);
+
+        // A rollback to the version that runs leaves nothing to restart into.
+        Assert.Null(UpdateText.Notice(UpdatePhases.Applying, ready with { Installed = "0.1.0" }, null));
+        // A swap made by cabinetos-cli update apply or another window: the same notice, also at a window's start.
+        Assert.Equal("installed 0.2.0", UpdateText.Notice(null, ready, null)?.Key);
+    }
+
+    [Fact]
+    public void A_failed_swap_says_so_in_the_notice_and_a_failed_check_does_not()
+    {
+        var model = new UpdateModel();
+        model.Apply(Status(UpdatePhases.Applying));
+        var failed = Status(UpdatePhases.Failed) with { Message = @"cannot move C:\x\cabinetos-core.exe; nothing was changed" };
+        model.Apply(failed);
+        var notice = Assert.IsType<UpdateNoticeView>(model.Notice);
+        Assert.Equal(("CabinetOS 0.2.0 could not be installed; 0.1.0 keeps running", true), (notice.Text, notice.Failed));
+        Assert.Equal(@"cannot move C:\x\cabinetos-core.exe; nothing was changed", notice.ToolTip);
+        Assert.False(model.Pill().Visible);
+        // The same state again (update_status after the event) keeps it; the next step clears it.
+        model.Apply(failed);
+        Assert.Same(notice, model.Notice);
+        model.Apply(Status(UpdatePhases.Checking));
+        Assert.Null(model.Notice);
+        model.Apply(failed with { Message = "offline" });
+        Assert.Null(model.Notice);
+
+        // Close works as Later does.
+        model.Apply(Status(UpdatePhases.Applying));
+        model.Apply(failed);
+        model.CloseNotice();
+        model.Apply(failed);
+        Assert.Null(model.Notice);
+        model.Forget();
+        Assert.Null(model.Notice);
     }
 
     // ----- The pill, the dot and About -----

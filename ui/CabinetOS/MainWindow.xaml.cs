@@ -974,6 +974,7 @@ public sealed partial class MainWindow : Window
             SetPinnedFolders();
             ApplySettings(UiSettings.FromConfig(config.Config), firstStart);
             ApplyMenuConfig(config.Config);
+            ApplyUpdateConfig(config.Config);
             _terminal.Profiles = TerminalProfiles.FromConfig(config.Config);
             Dock.SetProfiles(_terminal.Profiles);
         }

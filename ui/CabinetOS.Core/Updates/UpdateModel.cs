@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
 
@@ -19,6 +20,14 @@ public sealed record UpdatePill(bool Visible, string Text = "", string ToolTip =
 public sealed record UpdateAboutRow(string Text, bool Dot);
 
 /// <summary>
+/// The status bar's quiet notice (docs/ui.md, "Updates"; ADR 0015): a version the core swapped in by itself
+/// ("CabinetOS 0.2.0 is installed; restart to use it", with Restart now and Later), or a swap that failed and left
+/// the running version as it was (with Close). <see cref="Key"/> tells one notice from another, so Later closes
+/// that one only.
+/// </summary>
+public sealed record UpdateNoticeView(string Key, string Text, string ToolTip, bool Failed, string Version);
+
+/// <summary>
 /// What the update dialog shows (docs/ui.md, "Updates"): the version, the notes as blocks, and
 /// its buttons. <see cref="RestartText"/> is null when nothing is downloaded yet; then the
 /// dialog only shows the notes, and closing it snoozes nothing.
@@ -37,10 +46,13 @@ public sealed record UpdateDialogView(
 
 /// <summary>
 /// The window's view of the core's updater: the last <c>update_state</c>, the download's
-/// progress, and which version's dialog already opened by itself in this run.
+/// progress, which version's dialog already opened by itself in this run, and the status bar's
+/// notice with the one the user closed.
 /// </summary>
 public sealed class UpdateModel
 {
+    private string? _closedNotice;
+
     /// <summary>The updater's state as the core sent it last; null before the first answer, or from a core before protocol 14.</summary>
     public UpdateStatus? Status { get; private set; }
 
@@ -50,14 +62,25 @@ public sealed class UpdateModel
     /// <summary>The version whose dialog opened by itself in this run; it does not open by itself again.</summary>
     public string? DialogShownFor { get; private set; }
 
-    /// <summary>Takes a new state; the progress is kept only while a download runs.</summary>
+    /// <summary>
+    /// <c>update.autoInstall</c> (<see cref="UpdateText.AutoInstallFrom"/>): the core swaps a download in by itself,
+    /// so the dialog never opens by itself. True, the default, until the configuration is read.
+    /// </summary>
+    public bool AutoInstall { get; set; } = true;
+
+    /// <summary>The status bar's notice now, or null (<see cref="UpdateText.Notice"/>).</summary>
+    public UpdateNoticeView? Notice { get; private set; }
+
+    /// <summary>Takes a new state; the progress is kept only while a download runs, and the notice follows.</summary>
     public void Apply(UpdateStatus status)
     {
+        var before = Status?.State;
         Status = status;
         if (status.State != UpdatePhases.Downloading)
         {
             Progress = null;
         }
+        Notice = UpdateText.Notice(before, status, Notice) is { } notice && notice.Key != _closedNotice ? notice : null;
     }
 
     /// <summary>Takes a download's progress.</summary>
@@ -68,6 +91,14 @@ public sealed class UpdateModel
     {
         Status = null;
         Progress = null;
+        Notice = null;
+    }
+
+    /// <summary>Later (or Close): the notice goes until another one is due; the pill and the dot stay.</summary>
+    public void CloseNotice()
+    {
+        _closedNotice = Notice?.Key ?? _closedNotice;
+        Notice = null;
     }
 
     /// <summary>Remembers that the dialog of <paramref name="version"/> was shown.</summary>
@@ -76,11 +107,12 @@ public sealed class UpdateModel
     /// <summary>The version that waits for a restart, or null (<see cref="UpdateText.WaitingVersion"/>).</summary>
     public string? WaitingVersion => UpdateText.WaitingVersion(Status);
 
-    /// <summary>Whether the dialog opens by itself now (<see cref="UpdateText.OpensDialog"/>).</summary>
-    public bool OpensDialog(DateTimeOffset now) => UpdateText.OpensDialog(Status, now, DialogShownFor);
+    /// <summary>Whether the dialog opens by itself now (<see cref="UpdateText.OpensDialog"/>): never with <see cref="AutoInstall"/>.</summary>
+    public bool OpensDialog(DateTimeOffset now) => !AutoInstall && UpdateText.OpensDialog(Status, now, DialogShownFor);
 
-    /// <summary>The status-bar pill now.</summary>
-    public UpdatePill Pill(CultureInfo? culture = null) => UpdateText.Pill(Status, Progress, culture);
+    /// <summary>The status-bar pill now; none while the notice of an installed version holds Restart now.</summary>
+    public UpdatePill Pill(CultureInfo? culture = null) =>
+        Notice is { Failed: false } ? UpdatePill.Hidden : UpdateText.Pill(Status, Progress, culture);
 }
 
 /// <summary>The update's texts and rules (docs/ui.md, "Updates"), apart from the window so they can be tested.</summary>
@@ -98,10 +130,50 @@ public static class UpdateText
         _ => null,
     };
 
+    /// <summary><c>update.autoInstall</c> of the core's configuration; true when it is missing or not a boolean.</summary>
+    public static bool AutoInstallFrom(JsonElement config) =>
+        !(config.ValueKind == JsonValueKind.Object
+            && config.TryGetProperty("update", out var update) && update.ValueKind == JsonValueKind.Object
+            && update.TryGetProperty("autoInstall", out var value) && value.ValueKind == JsonValueKind.False);
+
+    /// <summary>
+    /// The status bar's notice after <paramref name="status"/>, which came after a state of
+    /// <paramref name="before"/> while <paramref name="shown"/> was up: a version in place that waits for a restart
+    /// (<c>ready</c>: swapped in by itself, by <c>cabinetos-cli update apply</c> or by another window); a swap that
+    /// failed (<c>failed</c> right after <c>applying</c>), which stays while the state stays <c>failed</c>; else none.
+    /// </summary>
+    public static UpdateNoticeView? Notice(string? before, UpdateStatus status, UpdateNoticeView? shown)
+    {
+        switch (status.State)
+        {
+            case UpdatePhases.Ready when WaitingVersion(status) is { } version && version != status.Current:
+                return new UpdateNoticeView(
+                    $"installed {version}",
+                    $"CabinetOS {version} is installed; restart to use it",
+                    $"CabinetOS {status.Current} runs until the restart. Click for the release notes.",
+                    false,
+                    version);
+            case UpdatePhases.Failed when before == UpdatePhases.Applying:
+                var failed = status.Latest?.Version ?? "the update";
+                var reason = status.Message ?? "no reason given";
+                return new UpdateNoticeView(
+                    $"failed {failed} {reason}",
+                    $"CabinetOS {failed} could not be installed; {status.Current} keeps running",
+                    reason,
+                    true,
+                    failed);
+            case UpdatePhases.Failed when shown is { Failed: true }:
+                return shown;
+            default:
+                return null;
+        }
+    }
+
     /// <summary>
     /// The snooze rule: the dialog opens by itself when a version is downloaded, unless Later
     /// was chosen less than a day ago (<c>snoozed_until_ms</c> is still ahead) or its dialog
     /// already opened by itself in this run. The update commands open it at any time.
+    /// With <c>update.autoInstall</c> it never opens by itself (<see cref="UpdateModel.OpensDialog"/>).
     /// </summary>
     public static bool OpensDialog(UpdateStatus? status, DateTimeOffset now, string? shownFor) =>
         status is { State: UpdatePhases.Downloaded, Latest: { } latest }

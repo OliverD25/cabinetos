@@ -506,6 +506,69 @@
                                 FontWeight="SemiBold"
                                 Foreground="{ThemeResource CbAccentBrush}" />
                         </Button>
+                        <!--
+                          The update's quiet notice (docs/ui.md, "Updates"; ADR 0015): a version swapped in by itself waits
+                          for a restart, or a swap failed and the running version stays. Its text opens the release notes.
+                        -->
+                        <StackPanel
+                            x:Name="UpdateNotice"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            Visibility="Collapsed">
+                            <Button
+                                x:Name="UpdateNoticeNotes"
+                                Height="20"
+                                MinWidth="0"
+                                Padding="4,0"
+                                AllowFocusOnInteraction="False"
+                                Background="Transparent"
+                                IsTabStop="False"
+                                Style="{StaticResource CbSubtleButtonStyle}">
+                                <TextBlock
+                                    x:Name="UpdateNoticeText"
+                                    MaxWidth="420"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{ThemeResource CbTextPrimaryBrush}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Button>
+                            <Button
+                                x:Name="UpdateNoticeRestart"
+                                Height="20"
+                                MinWidth="0"
+                                Padding="8,0"
+                                AllowFocusOnInteraction="False"
+                                AutomationProperties.Name="Restart now"
+                                Background="{ThemeResource CbPillFillBrush}"
+                                CornerRadius="10"
+                                IsTabStop="False"
+                                Style="{StaticResource CbSubtleButtonStyle}">
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource CbAccentBrush}"
+                                    Text="Restart now" />
+                            </Button>
+                            <Button
+                                x:Name="UpdateNoticeLater"
+                                Height="20"
+                                MinWidth="0"
+                                Padding="8,0"
+                                AllowFocusOnInteraction="False"
+                                AutomationProperties.Name="Later"
+                                Background="{ThemeResource CbPillFillBrush}"
+                                CornerRadius="10"
+                                IsTabStop="False"
+                                Style="{StaticResource CbSubtleButtonStyle}">
+                                <TextBlock
+                                    x:Name="UpdateNoticeLaterText"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{ThemeResource CbStatusTextBrush}"
+                                    Text="Later" />
+                            </Button>
+                        </StackPanel>
                         <!-- An update (docs/ui.md, "Updates"): the transfer pill's look while it downloads, "Update ready · Restart" after. -->
                         <Button
                             x:Name="UpdatePill"
