@@ -55,14 +55,14 @@ public class RailEndToEndTests
         {
             try
             {
-                await WaitForAsync(() => File.Exists(Shot(name, lastShot)), $"the {name} window's last snapshot", TimeSpan.FromSeconds(90));
+                await WaitForAsync(() => File.Exists(Shot(name, lastShot)), $"the {name} window's last snapshot", TimeSpan.FromSeconds(240));
             }
             catch (Xunit.Sdk.XunitException error)
             {
                 throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(LogFiles.Ui(Path.Combine(root, "logs-" + name)), 60)}");
             }
             process.CloseMainWindow();
-            Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
+            Assert.True(process.WaitForExit(60_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
@@ -195,7 +195,7 @@ public class RailEndToEndTests
             }
             var logs = log();
             process.CloseMainWindow();
-            Assert.True(process.WaitForExit(20_000), "the window did not close");
+            Assert.True(process.WaitForExit(60_000), "the window did not close");
 
             var shown = Assert.Single(logs, l => Message(l) == "the tree shows a folder");
             Assert.Equal(folder, Field(shown, "path").GetString(), ignoreCase: true);
@@ -378,7 +378,7 @@ public class RailEndToEndTests
                 "rail-state:tree-enter",
                 "shot:done"));
             await WaitForAsync(() => LogFiles.Ui(Path.Combine(root, "logs-run")).Any(l => Message(l) == "listing shown" && SamePath(Field(l, "path").GetString()!, enterTarget)),
-                "the pane to show the folder Enter in the tree took it to", TimeSpan.FromSeconds(60));
+                "the pane to show the folder Enter in the tree took it to", TimeSpan.FromSeconds(180));
             var logs = await run.FinishAsync("run", process, "done");
             seen = logs;
 

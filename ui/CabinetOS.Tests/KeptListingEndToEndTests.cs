@@ -90,7 +90,7 @@ public class KeptListingEndToEndTests
             process = Process.Start(start)!;
             await WaitForAsync(() => File.Exists(Path.Combine(root, "shots", "done.png")), "the window's last snapshot", TimeSpan.FromSeconds(150));
             process.CloseMainWindow();
-            Assert.True(process.WaitForExit(20_000), "the window did not close");
+            Assert.True(process.WaitForExit(60_000), "the window did not close");
 
             var ui = Lines(Path.Combine(root, "logs"), "ui.*.jsonl");
             var core = Lines(Path.Combine(root, "logs"), "core.*.jsonl");

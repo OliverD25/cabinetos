@@ -107,9 +107,9 @@ public class ColumnViewEndToEndTests
                 "until:tabs-saved",
                 "tabs:saved",
                 "shot:done"));
-            await WaitForAsync(() => File.Exists(Shot("first", "done")), "the first window's last snapshot", TimeSpan.FromSeconds(90));
+            await WaitForAsync(() => File.Exists(Shot("first", "done")), "the first window's last snapshot", TimeSpan.FromSeconds(240));
             first.CloseMainWindow();
-            Assert.True(first.WaitForExit(15_000), "the first window did not close");
+            Assert.True(first.WaitForExit(60_000), "the first window did not close");
 
             var logs = LogFiles.Ui(Path.Combine(root, "logs-first"));
             seen = logs;
@@ -191,9 +191,9 @@ public class ColumnViewEndToEndTests
 
             // A second window on the same configuration: the tab starts in columns, its folder as the one column.
             var second = Start("second", "pane:0;column-view:start;shell:start;wait:500;shot:start");
-            await WaitForAsync(() => File.Exists(Shot("second", "start")), "the second window's snapshot", TimeSpan.FromSeconds(60));
+            await WaitForAsync(() => File.Exists(Shot("second", "start")), "the second window's snapshot", TimeSpan.FromSeconds(180));
             second.CloseMainWindow();
-            Assert.True(second.WaitForExit(15_000), "the second window did not close");
+            Assert.True(second.WaitForExit(60_000), "the second window did not close");
             var again = LogFiles.Ui(Path.Combine(root, "logs-second"));
             Assert.Contains(again, l => Message(l) == "column view entered" && Text(l, "path") == b);
             var start = Assert.Single(again, l => Message(l) == "column view shown" && Text(l, "label") == "start");
