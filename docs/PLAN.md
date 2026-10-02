@@ -1565,6 +1565,23 @@ its roots as text, so a short 8.3 path (`C:\Users\CABINE~1\...`) is outside
 the setup file with the zip and `latest.json`, signing, and whether the
 setup should download missing prerequisites.
 
+**Status (2026-10-02, 15:00): unit 6 merged into main, and with it the sprint's
+six units are all on main** (a fast-forward to 9352bcb; the branch had
+merged main's unit 5 already) after the planning session's own checks: the
+five core checks green (886 passed, 6 ignored), the window built with
+warnings as errors, 1279 fast tests; the coder's end-to-end suite 1339 of
+1339 and live check 248 True, 0 False on this PC, its VM chain of five steps
+in one run (`DONE-install-2026-10-02-1425.md`), and the planning session's
+live check on the laptop 262 True, 0 False (`run-2026-10-02-1449-rd-omen-laptop.txt`, the panel goal met: no frame of 266 with UI work over 20 ms). Two findings of the unit
+wait for a decision or a later unit: section 18's clipboard check fails on
+this PC whenever the VirtualBox VM runs (the VM's clipboard sharing; off
+with `VBoxManage modifyvm CabinetOS-LiveCheck --clipboard-mode disabled`
+while the VM is off), and the plugin host compares a plugin's paths with its
+roots as text, so an 8.3 short path is taken as outside the user's profile.
+Still for the creator: the GitHub Release with the zip, the setup file and
+`latest.json`, the signing, and whether the setup should download missing
+prerequisites.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
