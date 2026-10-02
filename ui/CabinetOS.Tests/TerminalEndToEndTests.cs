@@ -386,11 +386,281 @@ public class TerminalEndToEndTests
         }
     }
 
+    /// <summary>
+    /// The split mirror (unit 3): Ctrl+\ in the terminal splits the dock under the two panes, the left session under
+    /// the left pane and the right under the right, with the badges in the panes' colours; in a pane the same keys
+    /// still go to Up to Root. Ctrl+Shift+W in a half with one tab leaves the hint there and the other half alone.
+    /// The setting is saved, and a second window starts split. With one pane shown there is one half, as wide as the
+    /// dock; the right half returns with the second pane.
+    /// </summary>
+    [Fact]
+    public async Task Ctrl_backslash_splits_the_dock_under_the_panes_and_the_setting_survives_a_restart()
+    {
+        var (run, root, data) = Prepare("terminal-split");
+        try
+        {
+            var first = run.Start("split", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                // In a pane the same keys are Up to Root: nothing splits.
+                "key:ctrl+backslash",
+                "wait:600",
+                "terminal-state:pane-key",
+                "key:ctrl+backquote",
+                "until:terminals:1",
+                "wait:1200",
+                "pane:1",
+                "wait:400",
+                "key:ctrl+backquote",
+                "until:terminals:2",
+                "wait:1200",
+                "terminal-state:one",
+                // In the terminal (the right session has the keyboard) it splits, and writes the setting.
+                "key:ctrl+backslash",
+                "until:config",
+                "wait:1000",
+                "terminal-state:split",
+                // The right half has one tab: it closes and shows the hint; the left half is left alone.
+                "key:ctrl+shift+w",
+                "wait:1500",
+                "terminal-state:hint",
+                "key:ctrl+backslash",
+                "until:config",
+                "wait:800",
+                "terminal-state:unsplit",
+                "key:ctrl+backslash",
+                "until:config",
+                "wait:800",
+                "terminal-state:again",
+                "shot:done"));
+            var logs = await run.FinishAsync("split", first, "done");
+            var state = States(logs);
+            var opened = logs.Where(l => Message(l) == "terminal session opened").Select(l => Field(l, "session_id").GetUInt64()).ToList();
+            Assert.True(opened.Count == 2, "two sessions, one per pane" + Evidence(logs));
+            var (left, right) = (opened[0], opened[1]);
+
+            Assert.True(!Flag(state["pane-key"], "split"), "Ctrl+\\ in a pane did not split" + Evidence(logs));
+            Assert.Contains(logs, l => Message(l) == "command executed" && Field(l, "command").GetString() == "go.root" && Field(l, "trigger").GetString() == "key");
+            Assert.False(Flag(state["one"], "split"));
+
+            var split = state["split"];
+            Assert.True(Flag(split, "split") && Flag(split, "split_setting"), "Ctrl+\\ in the terminal split the dock" + Evidence(logs));
+            Assert.Equal("right", Field(split, "keyboard_half").GetString());
+            Assert.Equal((left, right), (Field(split, "left_half_session").GetUInt64(), Field(split, "right_half_session").GetUInt64()));
+            AssertHalvesUnderPanes(split, logs);
+            // The badges: the left in the accent, the right the accent's hue turned by 150 degrees.
+            var (leftBadge, rightBadge) = (Field(split, "left_badge").GetString()!, Field(split, "right_badge").GetString()!);
+            Assert.NotEqual(leftBadge, rightBadge);
+            Assert.Equal(TurnedHue(leftBadge), rightBadge);
+
+            var hint = state["hint"];
+            Assert.True(Flag(hint, "split") && Flag(hint, "right_half_hint") && !Flag(hint, "left_half_hint"), "the right half shows the hint, the left its session" + Evidence(logs));
+            Assert.Equal(JsonValueKind.Null, Field(hint, "right_half_session").ValueKind);
+            Assert.Equal(left, Field(hint, "left_half_session").GetUInt64());
+            Assert.Equal(left.ToString(System.Globalization.CultureInfo.InvariantCulture), Field(hint, "left_half_tabs").GetString());
+            Assert.Equal(1, logs.Count(l => Message(l) == "terminal tab closed"));
+
+            Assert.False(Flag(state["unsplit"], "split"));
+            Assert.False(Flag(state["unsplit"], "split_setting"));
+            Assert.True(Flag(state["again"], "split"));
+            var toggles = logs.Where(l => Message(l) == "command executed" && Field(l, "command").GetString() == "terminal.toggleSplit").ToList();
+            Assert.Equal(3, toggles.Count);
+            Assert.All(toggles, l => Assert.Equal("key", Field(l, "trigger").GetString()));
+            var lines = logs.Where(l => Message(l) == "terminal split").ToList();
+            Assert.Equal([true, false, true], lines.Select(l => Field(l, "split").GetBoolean()));
+
+            // The setting was written: the file says so, and a second window starts split with the panes' halves.
+            Assert.True(ReadSplitSetting(root), "terminal.split is in cabinetos.json");
+            var second = run.Start("second", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "key:ctrl+backquote",
+                "until:terminals:1",
+                "wait:1200",
+                "terminal-state:restart",
+                // One pane shown: one half, the left's, as wide as the dock.
+                "cmd:view.toggleDualPane",
+                "wait:800",
+                "terminal-state:single",
+                // The second pane comes back: so does the right half, empty, with its hint.
+                "cmd:view.toggleDualPane",
+                "wait:800",
+                "terminal-state:two",
+                "shot:done"));
+            var again = await run.FinishAsync("second", second, "done");
+            var restarted = States(again);
+            var restart = restarted["restart"];
+            Assert.True(Flag(restart, "split"), "the second window started split" + Evidence(again));
+            var session = Field(restart, "left_half_session").GetUInt64();
+            Assert.Equal(session, Field(Assert.Single(again, l => Message(l) == "terminal session opened"), "session_id").GetUInt64());
+            Assert.True(Flag(restart, "right_half_hint"), "the right pane has no session: the hint" + Evidence(again));
+            AssertHalvesUnderPanes(restart, again);
+
+            var single = restarted["single"];
+            Assert.True(Flag(single, "split") && !Flag(single, "dual"), "one pane shown, still split" + Evidence(again));
+            Assert.False(Has(single, "right_half_x"), "one half only");
+            // The left pane is the whole row now, and so is its half.
+            AssertHalvesUnderPanes(single, again, "left");
+            Assert.True(Number(single, "left_half_width")!.Value > 900, "the one half is the whole dock" + Evidence(again));
+            Assert.Equal(session, Field(single, "left_half_session").GetUInt64());
+
+            var two = restarted["two"];
+            Assert.True(Flag(two, "dual") && Flag(two, "right_half_hint"), "the right half came back with the second pane" + Evidence(again));
+            AssertHalvesUnderPanes(two, again);
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
+    /// The keys in the split: Ctrl+Shift+T opens a tab in the half of the active pane, Alt+[ and Alt+] go round the
+    /// tabs of the half that has the keyboard, Ctrl+` in the left pane gives the left half the keyboard, Ctrl+Shift+W
+    /// closes the shown tab of that half, and the last tab of a half leaves its hint, with the other half untouched.
+    /// </summary>
+    [Fact]
+    public async Task In_the_split_the_tab_keys_act_on_the_half_that_has_the_keyboard_and_the_active_pane_opens_its_own()
+    {
+        var (run, root, data) = Prepare("terminal-split-keys", split: true);
+        try
+        {
+            var process = run.Start("splitkeys", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "key:ctrl+backquote",
+                "until:terminals:1",
+                "wait:1200",
+                "pane:1",
+                "wait:400",
+                "key:ctrl+backquote",
+                "until:terminals:2",
+                "wait:1200",
+                "terminal-state:two",
+                // Ctrl+Shift+T from the right half: the active pane is the right one, so its half gets the tab.
+                "key:ctrl+shift+t",
+                "until:terminals:3",
+                "wait:1200",
+                "terminal-state:new-right",
+                "key:alt+bracketleft",
+                "wait:700",
+                "terminal-state:previous",
+                "key:alt+bracketright",
+                "wait:700",
+                "terminal-state:next",
+                // Ctrl+` in the terminal hands the keyboard to the active (right) pane; in the left pane it goes to the left half.
+                "key:ctrl+backquote",
+                "wait:800",
+                "pane:0",
+                "wait:400",
+                "key:ctrl+backquote",
+                "wait:1200",
+                "terminal-state:left-half",
+                "key:ctrl+shift+t",
+                "until:terminals:4",
+                "wait:1200",
+                "terminal-state:new-left",
+                "key:ctrl+shift+w",
+                "wait:1500",
+                "terminal-state:closed-left",
+                "key:ctrl+shift+w",
+                "wait:1500",
+                "terminal-state:hint-left",
+                "shot:done"));
+            var logs = await run.FinishAsync("splitkeys", process, "done");
+            var state = States(logs);
+            var opened = logs.Where(l => Message(l) == "terminal session opened").ToList();
+            Assert.True(opened.Count == 4, "four sessions were opened" + Evidence(logs));
+            var ids = opened.Select(l => Field(l, "session_id").GetUInt64()).ToList();
+            Assert.Equal(["left", "right", "right", "left"], opened.Select(l => Field(l, "pane").GetString()));
+            var (s1, s2, s3, s4) = (ids[0], ids[1], ids[2], ids[3]);
+            string Id(ulong id) => id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            ulong? Session(string label, string half) => Field(state[label], $"{half}_half_session") is { ValueKind: JsonValueKind.Number } n ? n.GetUInt64() : null;
+            string Tabs(string label, string half) => Field(state[label], $"{half}_half_tabs").GetString()!;
+
+            Assert.True(Flag(state["two"], "split"), "the setting in the file split the dock from the start" + Evidence(logs));
+            Assert.Equal((s1, s2), (Session("two", "left"), Session("two", "right")));
+            Assert.Equal($"{Id(s2)},{Id(s3)}", Tabs("new-right", "right"));
+            Assert.True(Session("new-right", "right") == s3 && Session("new-right", "left") == s1, "Ctrl+Shift+T opened in the active pane's half" + Evidence(logs));
+            Assert.True(Session("previous", "right") == s2 && Session("previous", "left") == s1, "Alt+[ went round the right half's tabs only" + Evidence(logs));
+            Assert.Equal(s3, Session("next", "right"));
+            Assert.Equal("right", Field(state["next"], "keyboard_half").GetString());
+
+            Assert.True(Field(state["left-half"], "keyboard_half").GetString() == "left" && Field(state["left-half"], "terminal_keyboard").GetBoolean(), "Ctrl+` in the left pane gave the left half the keyboard" + Evidence(logs));
+            Assert.Equal(s1, Field(state["left-half"], "shown").GetUInt64());
+            Assert.True(Session("new-left", "left") == s4 && Session("new-left", "right") == s3, "the new tab is the left half's" + Evidence(logs));
+            Assert.True(Session("closed-left", "left") == s1 && Session("closed-left", "right") == s3, "Ctrl+Shift+W closed the left half's shown tab only" + Evidence(logs));
+            var hint = state["hint-left"];
+            Assert.True(Flag(hint, "left_half_hint") && !Flag(hint, "right_half_hint"), "the last tab of the left half left its hint" + Evidence(logs));
+            Assert.True(Flag(hint, "split") && Flag(hint, "dock"), "the split and the dock stay" + Evidence(logs));
+            Assert.Equal(s3, Session("hint-left", "right"));
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    // The halves lie under the panes: each half's edges are its pane's, within 2 px.
+    private static void AssertHalvesUnderPanes(string state, List<string> logs, params string[] sides)
+    {
+        foreach (var side in sides.Length > 0 ? sides : ["left", "right"])
+        {
+            var (paneX, paneWidth) = (Number(state, $"{side}_pane_x")!.Value, Number(state, $"{side}_pane_width")!.Value);
+            var (halfX, halfWidth) = (Number(state, $"{side}_half_x")!.Value, Number(state, $"{side}_half_width")!.Value);
+            Assert.True(Math.Abs(halfX - paneX) <= 2, $"the {side} half starts at {halfX}, its pane at {paneX}" + Evidence(logs));
+            Assert.True(Math.Abs((halfX + halfWidth) - (paneX + paneWidth)) <= 2, $"the {side} half ends at {halfX + halfWidth}, its pane at {paneX + paneWidth}" + Evidence(logs));
+        }
+    }
+
+    // The accent's hue turned by 150 degrees, as the window draws the right badge (a WinUI colour, #AARRGGBB).
+    private static string TurnedHue(string accent)
+    {
+        var value = Convert.ToUInt32(accent.TrimStart('#'), 16);
+        var color = new CabinetOS.Core.Themes.Argb((byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value);
+        return color.RotateHue(CabinetOS.Core.Themes.ThemeMapper.RightBadgeHueShift).ToString();
+    }
+
+    private static bool ReadSplitSetting(string root)
+    {
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "cabinetos.json")));
+        return config.RootElement.GetProperty("terminal").GetProperty("split").GetBoolean();
+    }
+
+    private static bool Flag(string line, string name) => Field(line, name).ValueKind == JsonValueKind.True;
+
+    private static bool Has(string line, string name)
+    {
+        using var parsed = JsonDocument.Parse(line);
+        return parsed.RootElement.GetProperty("fields").TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null;
+    }
+
+    private static double? Number(string line, string name)
+    {
+        using var parsed = JsonDocument.Parse(line);
+        return parsed.RootElement.GetProperty("fields").TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null;
+    }
+
     // The lines that say what the keys and the terminal did, for the message of a failed assertion.
     private static string Evidence(List<string> logs) => "\n" + string.Join('\n', logs
         .Where(l => Message(l) is "key sent" or "key sent to a page" or "command executed" or "a key the page did not get" or "keyboard owner"
             or "terminal summoned" or "terminal state" or "terminal tab shown" or "terminal session opened" or "a page has the keyboard"
-            or "terminal mode changed" or "terminal folder changed" or "notice shown")
+            or "terminal mode changed" or "terminal folder changed" or "notice shown" or "terminal split" or "terminal half focused"
+            or "terminal tab closed")
         .Select(l => l.Length > 360 ? l[..360] : l));
 
     private static Dictionary<string, string> States(List<string> logs) =>
@@ -465,7 +735,7 @@ public class TerminalEndToEndTests
     // A window's setting up: dual panes on a data folder, and three terminal profiles: cmd, which is not linkable, a
     // cmd that says it is (cmd gets no prompt hook, so its mode changes nothing in the shell), and Windows PowerShell,
     // which gets the prompt hook.
-    private static (Run Run, string Root, string Data) Prepare(string purpose, string defaultProfile = "cmd")
+    private static (Run Run, string Root, string Data) Prepare(string purpose, string defaultProfile = "cmd", bool split = false)
     {
         if (Environment.GetEnvironmentVariable(OptIn) != "1")
         {
@@ -487,7 +757,7 @@ public class TerminalEndToEndTests
         Directory.CreateDirectory(Path.Combine(root, "config"));
         File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), $$"""
             { "version": 1, "ui": { "dualPane": true },
-              "terminal": { "defaultProfile": "{{defaultProfile}}", "profiles": [
+              "terminal": { "defaultProfile": "{{defaultProfile}}", "split": {{(split ? "true" : "false")}}, "profiles": [
                 { "name": "cmd", "command": "cmd.exe" },
                 { "name": "hooked", "command": "cmd.exe", "linkable": true },
                 { "name": "ps", "command": "powershell.exe", "args": ["-NoLogo", "-NoProfile"] } ] } }
