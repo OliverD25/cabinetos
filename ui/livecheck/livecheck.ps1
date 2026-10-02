@@ -2344,11 +2344,16 @@ Shot $h "$ShotDir\21-two-panes-live.png"
 Step "21: a click in the left pane and a folder opened there: the shown tab stays, nothing is typed into a shell"
 $shown = @(TermLines 'terminal tab shown').Count
 $requests = TermRequests
+$listings = UiCount '"listing shown"'
+# The terminal has the keyboard here. Until the fix of 2026-10-02, WinUI moved XAML's focus a second time after this click,
+# to the window's root, and Home, Enter and Backspace acted on nothing (docs/log/2026-10-02/terminal-click-focus-report.md).
 ClickLeftPane
 # Rows: inner.
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 200
 PressToFolder { [Live]::Press($VK.Enter) } "$t21\inner" 800
 PressToFolder { [Live]::Press($VK.Back) } $t21 800
+$afterClick = @(UiObjects '"listing shown"' $listings)
+"21: the keys right after the click acted on the pane: Home and Enter opened inner, Backspace came back ($(@($afterClick | ForEach-Object { Split-Path -Leaf $_.fields.path }) -join ', ')): $([bool]($afterClick | Where-Object { $_.fields.path -eq "$t21\inner" }) -and [bool]($afterClick | Where-Object { $_.fields.path -eq $t21 }))"
 "21: the click and the folder change showed no other tab and sent no terminal request: $(@(TermLines 'terminal tab shown').Count -eq $shown -and (TermRequests) -eq $requests)"
 
 Step "21: Ctrl+Backquote in the left pane: the left session comes to the front with the keyboard; the dock stays"
@@ -2462,9 +2467,8 @@ if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
 # Ctrl+C drops whatever is on the line; its new prompt is drawn while the session is linked and the pane is in term21.
 [Live]::Press($VK.Ctrl, $VK.C); Start-Sleep -Milliseconds 800
 [Live]::Type("Set-Content -LiteralPath '$half' -Value (Get-Location).Path"); Start-Sleep -Milliseconds 500
-# Ctrl+Backquote in the terminal gives the keyboard back to the active pane, the left one. Not ClickLeftPane: after a click
-# from the terminal into a pane, Home and Enter opened nothing in the runs of 2026-10-02 (the unit 1 step above waits out
-# its two folder changes, 5 s each, without a listing).
+# Ctrl+Backquote in the terminal gives the keyboard back to the active pane, the left one (HandBackToPane). The unit 1 step
+# above checks the other way, a click from the terminal into the pane.
 $summons = @(TermLines 'terminal summoned').Count
 [Live]::Press($VK.Ctrl, $VK.Backquote)
 $back = WaitShellLines 'terminal summoned' $summons 5
