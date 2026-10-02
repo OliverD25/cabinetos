@@ -160,9 +160,9 @@ fn release_zip() -> Vec<u8> {
     writer.finish().unwrap().into_inner()
 }
 
-#[test]
-fn a_release_checks_downloads_and_swaps_in_words() {
-    let dir = tempfile::tempdir().unwrap();
+/// A fake install with a copy of the core, and a feed whose `latest.json`
+/// names [`NEWER`], in `dir`. Returns the install folder and the feed.
+fn fake_release(dir: &TempDir) -> (PathBuf, PathBuf) {
     let install = dir.path().join("install");
     fs::create_dir_all(&install).unwrap();
     fs::copy(core_exe(), install.join("cabinetos-core.exe")).unwrap();
@@ -188,8 +188,19 @@ fn a_release_checks_downloads_and_swaps_in_words() {
         zip.len()
     );
     fs::write(stable.join("latest.json"), latest).unwrap();
-    let config =
-        serde_json::json!({"update": {"check": false, "source": feed.display().to_string()}});
+    (install, feed)
+}
+
+#[test]
+fn a_release_checks_downloads_and_swaps_in_words() {
+    let dir = tempfile::tempdir().unwrap();
+    let (install, feed) = fake_release(&dir);
+    // Step by step: the download waits for apply.
+    let config = serde_json::json!({"update": {
+        "check": false,
+        "autoInstall": false,
+        "source": feed.display().to_string()
+    }});
     let core = start_core(
         dir,
         &install.join("cabinetos-core.exe"),
@@ -223,6 +234,33 @@ fn a_release_checks_downloads_and_swaps_in_words() {
         "{words}"
     );
     assert!(words.contains("kept for a rollback"), "{words}");
+    assert_eq!(
+        fs::read(install.join("cabinetos-core.exe")).unwrap(),
+        b"the new core"
+    );
+}
+
+#[test]
+fn with_auto_install_a_download_is_put_in_place_at_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let (install, feed) = fake_release(&dir);
+    let config =
+        serde_json::json!({"update": {"check": false, "source": feed.display().to_string()}});
+    let core = start_core(
+        dir,
+        &install.join("cabinetos-core.exe"),
+        &config.to_string(),
+    );
+
+    let check = cli(&core, &["update", "check"]);
+    assert!(check.status.success(), "{}", stderr(&check));
+    let download = cli(&core, &["update", "download"]);
+    assert!(download.status.success(), "{}", stderr(&download));
+    let words = stdout(&download);
+    assert!(
+        words.contains(&format!("{NEWER} is in place; restart CabinetOS")),
+        "{words}"
+    );
     assert_eq!(
         fs::read(install.join("cabinetos-core.exe")).unwrap(),
         b"the new core"
