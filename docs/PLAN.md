@@ -462,6 +462,14 @@ Not in Phase 11: the Android app (feature 20; Articles 1 and 3), and Total
 Commander's own plugin DLLs, which are native code that cannot be sandboxed
 (Article 8).
 
+**Status (2026-10-02, 20:56): the rest starts.** The creator's word of the
+evening: 11b to 11f run in order, one sub-phase at a time, each handed to
+coders with an audit first of what Phases 12 to 21 already built (tabs per
+pane, Find in pane, the Commander Compact function-key bar, the context
+menu from the config, the files type sprint, the terminal sprint), so only
+what is missing is built. 11b starts when the laptop is free of the third
+flakes round; Phase 22 (release readiness) runs beside it.
+
 ### Phase 12 — Tabs per pane (the creator's card "Per Pane Tabs Design", 2026-09-29; started in the sleep-mode run of 2026-09-29/30)
 
 Goal: each pane has its own row of tabs, hidden while the pane has one tab
@@ -1586,6 +1594,51 @@ the plugin host compares a plugin's paths with its roots in their long form
 (`cabinetos_fs::long_path`, `GetLongPathNameW`), so a short 8.3 path is the
 same folder as its long one, and `CabinetOS.exe` has an icon of its own
 (`ui/CabinetOS/Assets/CabinetOS.ico`, made by `build/make-icon.ps1`).
+
+### Phase 22 — Release readiness (the creator's word of 2026-10-02, 20:56: "do all except the Linux core")
+
+A short phase that makes 0.1.0 a clean first release, from the open items
+of Phases 9, 10 and 21.
+
+Produces, as six units: 1. a release without the Windows App SDK's AI and
+machine-learning libraries that CabinetOS never uses (`onnxruntime.dll`,
+`DirectML.dll` and their projections, about 40 MB unpacked and 17 MB
+zipped; Article 10): the window's project references only the SDK
+components it needs, and `release.ps1` stops when one of those libraries
+turns up in the folder; 2. the `.pdb` symbols out of the release zip and
+the setup file, into `CabinetOS-<version>-win-x64-symbols.zip` beside them
+(38 MB less in the zip; a crash trace still names file and line when the
+symbols are unpacked next to the programs, and `release.md` says how): the
+planning session's recommendation, taken as the decision until the creator
+says otherwise; 3. the indexer service starts by itself after a Windows
+restart when it is installed (`cabinetos-indexer --install` registers it as
+automatic with a delayed start; the installer's `-Indexer` keeps its one
+UAC prompt); 4. publisher identities in the marketplace (Phase 9's open
+item: `verified` is only shown): a design note first, saying what a
+publisher is, how `verified` is earned and what the index carries, then
+the smallest build that makes `verified` mean something, with ADR 0012's
+index as the source; 5. the setup file downloads no prerequisites (decided
+2026-10-02 on the planning session's recommendation: it keeps stopping with
+the winget command); 6. the public-repository preparation, on the creator's
+word only: a scan of the whole git history for secrets and private paths,
+the README and the licence files read as a first visitor would, the release
+notes, and the exact publish commands ready to run; the session publishes
+nothing. Not in it: CI and the SignPath step (the desk card, after the
+repository is public), winget's submission (the creator's, after the
+release).
+
+Done when: `release.ps1` makes a zip under 60 MB and a setup file under
+35 MB with no machine-learning library inside and the symbols zip beside
+them; the live check passes against the trimmed Release build on the
+laptop and in the VM; a restart of the VM brings an installed indexer
+service up by itself; the marketplace shows a publisher per package with
+its identity from the index; the preparation report lists no secret.
+
+Articles: 2, 3, 10, 12.
+
+**Status (2026-10-02, 20:56): started.** Units 1, 2, 3 and 5 handed to a coder
+on Sonnet; unit 4's design note goes to a coder on Opus after them; unit 6
+waits for the creator's word on the public repository.
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
