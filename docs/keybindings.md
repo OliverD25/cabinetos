@@ -89,6 +89,7 @@ The core's commands, in palette order:
 | `terminal.previousTab` | Terminal: Previous Terminal Tab | `alt+bracketleft` | `terminalFocus` | UI |
 | `terminal.nextTab` | Terminal: Next Terminal Tab | `alt+bracketright` | `terminalFocus` | UI |
 | `terminal.setMode` | Terminal: Lock or Link Terminal to Its Pane | | | UI |
+| `terminal.toggleSplit` | Terminal: Split Terminal Under the Panes | `ctrl+backslash` | `terminalFocus` | UI |
 | `go.root` | Go: Up to Root | `ctrl+backslash` | | UI |
 | `go.chooseDriveLeft` | Go: Choose Drive for Left Pane… | `alt+f1` | | UI |
 | `go.chooseDriveRight` | Go: Choose Drive for Right Pane… | `alt+f2` | | UI |
@@ -192,9 +193,18 @@ The core's commands, in palette order:
   contexts are the research note's
   ([research/total-commander.md](research/total-commander.md), Part 3 (b),
   N1 to N31), and what each does is the window's ([ui.md](ui.md)). None of
-  their keys is used by another command in any context, and none starts a
-  chord; `ctrl+k ctrl+n` and `ctrl+k ctrl+p` are chords under `ctrl+k`,
-  like `ctrl+k ctrl+s`.
+  their keys is used by another command in any context, except `ctrl+backslash`
+  (below), and none starts a chord; `ctrl+k ctrl+n` and `ctrl+k ctrl+p` are
+  chords under `ctrl+k`, like `ctrl+k ctrl+s`.
+- **Ctrl+\ is two commands, by where the keyboard is** (terminal unit 3,
+  2026-10-02). In a file pane it is `go.root` (Up to Root, Total Commander's
+  key). In the terminal it is `terminal.toggleSplit`, bound with
+  `when: terminalFocus`, which splits the Tool Dock under the two panes or
+  joins it again ([ui.md](ui.md), "The terminal"). Two commands share the keys
+  in two contexts, as `f2` does ("Contexts" below): the binding with a context
+  is the more specific one, so in the terminal the split wins, and in a pane
+  `go.root` runs. The palette lists the command as "Terminal: Split Terminal
+  Under the Panes"; it joins the halves again when the dock is split.
 - The rows from `tab.new` to `tab.moveToOtherPane` are Phase 12's: tabs per
   pane ([ui.md](ui.md), "Tabs"). The window owns the tab state, so every one
   runs in the window. `ctrl+up` moves the cursor without selecting in a
@@ -434,7 +444,7 @@ no tab key came out of a page):
 |---|---|
 | a tool in a pane's tab (Markdown Preview) | the ways out (`palette.show`, `view.toggleTerminal`) and the tab keys: `tab.next`, `tab.previous`, `tab.close`, `tab.new`, `tab.select` (Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+W, Ctrl+T, Ctrl+1 to 9) |
 | a tool in the sidebar (the agent's chat) | the same, and `view.showExplorer`, `view.showSearch`, `view.toggleSidebar` |
-| the terminal | the ways out, the keys bound with `when: terminalFocus` (by default the terminal's tab keys: Ctrl+Shift+T, Ctrl+Shift+W, Alt+[ and Alt+]), and `tab.next` and `tab.previous` (Ctrl+Tab, Ctrl+Shift+Tab) |
+| the terminal | the ways out, the keys bound with `when: terminalFocus` (by default the terminal's tab keys: Ctrl+Shift+T, Ctrl+Shift+W, Alt+[ and Alt+], and Ctrl+\ for the split), and `tab.next` and `tab.previous` (Ctrl+Tab, Ctrl+Shift+Tab) |
 
 - **Why the tab keys come out.** They are `filesView` bindings, and a page in
   a pane's tab has the keyboard as that pane's list has it. With the page
@@ -469,7 +479,9 @@ no tab key came out of a page):
   shortcut is matched by the key's position (its virtual key), not by the
   character it types, so Alt+[ and Alt+] also work on the Ukrainian
   layout, where those two keys type х and ї ([ui.md](ui.md), "The
-  terminal").
+  terminal"). While the dock is split, Alt+[ and Alt+] go round the tabs
+  of the half that has the keyboard, Ctrl+Shift+W closes that half's tab,
+  and Ctrl+Shift+T opens a tab in the half of the active pane.
 - A key held down is passed once (the rule above), so Ctrl+Tab held in a page
   does not repeat; it repeats in a pane's list.
 

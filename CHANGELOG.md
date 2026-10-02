@@ -23,6 +23,8 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The terminal's caption follows the shell: it says "in docs" for the folder the shell is in, after a `cd` of your own too, and its tooltip names the whole folder.
 - `cab term cwd` prints the folder a linked terminal follows; in a CabinetOS terminal, `cab` reaches the window's own core without `--pipe`.
 - Keys for the terminal's tabs while it has the keyboard: Ctrl+Shift+T opens a terminal for the active pane, Ctrl+Shift+W closes the one in front, and Alt+[ and Alt+] show the tab before or after it. They also work on the Ukrainian keyboard layout. Ctrl+Shift+C copies the selected text and Ctrl+Shift+V pastes.
+- Ctrl+\ in the terminal splits the dock under the two panes ("Split Terminal Under the Panes"): the left pane's terminals sit under the left pane and the right pane's under the right, each half with its own tab row, header and caption, and the halves follow when the panes' width changes. A pane with no terminal shows "Ctrl+` starts a shell for this pane". Alt+[ and Alt+] go round the tabs of the half that has the keyboard, Ctrl+Shift+W closes that half's tab, Ctrl+Shift+T opens a tab in the half of the active pane, and Ctrl+` in a pane gives that pane's half the keyboard. In a file pane Ctrl+\ is still "Up to Root". The split is saved as `terminal.split` in `cabinetos.json`, off by default, and holds while the dock is under the panes.
+- A theme may set `terminalLeftBadge` and `terminalRightBadge`, the colours of the `[Left]` and `[Right]` badges. Without them, the left badge is the accent and the right badge is the accent with its hue turned by 150 degrees. The theme format is now version 3.
 
 ### Changed
 

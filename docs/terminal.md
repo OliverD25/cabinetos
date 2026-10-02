@@ -201,6 +201,30 @@ command or in a running program, so only the user's own request types
 into a shell now ([ui.md](ui.md), "The terminal"), and a linked shell
 follows through its prompt hook.
 
+## The split mirror
+
+Unit 3 of the terminal sprint (2026-10-02) splits the dock under the two
+panes, the left pane's sessions under the left pane and the right pane's
+under the right. It is the window's: the core and its messages did not
+change (protocol 17). The core has two small parts:
+
+- **The command** `terminal.toggleSplit`, bound to `ctrl+backslash` with
+  `when: terminalFocus` ([keybindings.md](keybindings.md)). In a file pane
+  the same keys stay `go.root`, Up to Root: a binding with a context is the
+  more specific one. The core routes the command to the window like any
+  other command of the UI.
+- **The setting** `terminal.split` in `cabinetos.json`, `false` by default
+  ([config.md](config.md)). The window writes it with `set_value` when the
+  user toggles and follows `config_changed`, as it does for `ui.dockSize`.
+
+What decides a half is the session's pane, which `terminal_open` named
+and never changes ("Panes and modes"): a session opened for the left pane
+shows in the left half, and `terminal_list` has what the window needs to draw
+both halves again after a restart of the window. A half whose pane has no
+session shows a hint; starting a session for that pane (Ctrl+` in it)
+fills it. The drawing, the keys and the halves' layout are in
+[ui.md](ui.md), "The terminal".
+
 ## The prompt hook
 
 A few lines a shell runs each time it draws its prompt, added by the core

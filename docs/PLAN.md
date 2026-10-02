@@ -1301,6 +1301,33 @@ passed, 51 end-to-end skipped); the full window suite with the end-to-end tests 
 (`run-unit2-0359.txt`). Seen on the way: in section 21's unit 1 step, the
 keys after a click from the terminal into a pane open nothing, and its
 check does not test the folder change (the report's "Seen on the way").
+**Status (2026-10-02, 06:00): unit 3 built, not merged yet.** The split
+mirror, by a coder on Sonnet, 4a9ee15..f72829d and the docs on the branch
+`worktree-agent-ab43609202ad0fd61`
+([log/2026-10-02/terminal-unit3-report.md](log/2026-10-02/terminal-unit3-report.md)):
+Ctrl+\ in the terminal (`terminal.toggleSplit`, `when: terminalFocus`; in a
+pane it stays Up to Root) splits the Tool Dock under the two panes, each
+half with its own header and tab row, as wide as its pane and following
+it; a pane with no session shows the hint "Ctrl+` starts a shell for this
+pane"; one pane shown gives one half. `terminal.split` in `cabinetos.json`
+(off by default, applied live, saved on a toggle). Alt+[ and Alt+], Ctrl+Shift+W
+and Ctrl+Shift+T act on the half that has the keyboard or the active pane's
+half; Ctrl+` in a pane focuses its half. The dock stays one WebView2, so the
+keyboard hand-over is unchanged (the page gets a `view` message and tells
+which terminal got the keyboard). The `[Left]` and `[Right]` badges have
+colours of their own: the theme's `terminalLeftBadge` and `terminalRightBadge`
+(optional, theme format 3), by default the accent and the accent's hue turned
+by 150 degrees. The rules are a pure class, `TerminalSplitLayout`. Checks:
+core 843 passed, 6 ignored, `cargo deny` clean; clippy `-D warnings` fails on
+code of unit 2 that this branch does not touch and that is byte for byte
+main's (`cabinetos-terminal` `report.rs`, four `match_same_arms`;
+`cabinetos-cli` `tests/term.rs`, six `cloned_ref_to_slice_refs` and an
+`Err(_)`); with those lints allowed the rest of the workspace is clean, and
+`cargo fmt --check` passes; window
+1279 tests, all 1279 with the end-to-end tests (3 min 29 s; 8 of 8 terminal
+end-to-end tests, two of them new); the live check on a fresh Release build
+224 True, 0 False (`run-unit3-b.txt`, 8 min 8 s; its first run, 223 True and
+one False, was the paste check meeting a clipboard another program held).
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 

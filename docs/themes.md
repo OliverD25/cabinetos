@@ -141,10 +141,28 @@ core sends them in upper case.
 | `folderIcon`, `folderIconFront` | The folder icon: body and front flap |
 | `fileTypeColors` | The stroke of file icons for `md`, `rs`, `toml`, `exe`, `dll`, `bin`, `pdf` and `zip` |
 | `permissionLow`, `permissionMedium`, `permissionHigh` | The capability levels in the review dialog |
+| `terminalLeftBadge`, `terminalRightBadge` | Optional. The `[Left]` and `[Right]` badges of the terminal's tabs and of the two halves of the split dock: the colour of the left pane and of the right pane |
 
 `terminal.background` is the colour scheme's background: reverse video, and
 cells drawn where the panel is opaque. Over the translucent panel, cells
 with the default background show `palette.terminalBackground`.
+
+**The terminal's badges** (terminal unit 3, 2026-10-02). Every terminal
+session belongs to a pane, and its tab shows `[Left]` or `[Right]` in that
+pane's colour, so the two panes are told apart at a glance and the split dock
+(`terminal.split`, [ui.md](ui.md), "The terminal") has a colour for each half.
+Both keys are optional, and a theme that leaves them out gets:
+
+- the left badge in the **accent**, as the active pane's tab row has it;
+- the right badge in the accent with its **hue turned by 150 degrees** at the
+  same saturation and lightness (HSL), so any accent gets a second colour that
+  fits it. For the design's `#60CDFF` that is `#FF607E`. A fixed colour from
+  the design's palette was left aside: it could be close to some theme's accent,
+  and the two badges would then not tell the panes apart.
+
+A theme names its own with a colour (`#RRGGBB` or `#RRGGBBAA`), for example
+`"terminalRightBadge": "#F27A6C"`. The window gets them as the brushes
+`CbTerminalLeftBadgeBrush` and `CbTerminalRightBadgeBrush`.
 
 ## Metrics and chrome
 
@@ -333,12 +351,16 @@ carry them:
 
 ### The format's version
 
-The schema's `$id` names the format's version: `urn:cabinetos:theme:2`.
-Version 1 had the colours only; version 2 adds `metrics` and `chrome`.
-Both are optional, so every version-1 theme is a valid version-2 theme,
-and a program that knows only version 1 reads the colours as before. The
-messages keep protocol version 11: the new keys and `has_metrics` are
-optional ([ipc.md](ipc.md), "What changes the version").
+The schema's `$id` names the format's version: `urn:cabinetos:theme:3`.
+Version 1 had the colours only; version 2 adds `metrics` and `chrome`;
+version 3 adds the palette's `terminalLeftBadge` and `terminalRightBadge`.
+All of them are optional, so every version-1 theme is a valid version-2
+and version-3 theme, and a program that knows only version 1 reads the
+colours as before. The messages keep their protocol version: the new keys
+and `has_metrics` are optional ([ipc.md](ipc.md), "What changes the version";
+version 2 left protocol version 11 as it was, version 3 leaves 17). A
+version-3 theme that names a badge is refused by a core of version 2, whose
+reading is strict about unknown keys; that is why the format number moved.
 
 ## The shipped themes
 

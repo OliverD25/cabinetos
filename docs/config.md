@@ -65,7 +65,8 @@ file itself shows everything that can be set:
       { "name": "cmd", "command": "cmd.exe", "args": [], "linkable": false },
       { "name": "wsl", "command": "wsl.exe", "args": [], "linkable": true },
       { "name": "claude", "command": "claude.exe", "args": ["--append-system-prompt", "…"], "linkable": false }
-    ]
+    ],
+    "split": false
   },
   "keybindings": [],
   "logging": {
@@ -143,6 +144,7 @@ while you type.
 | `contextMenu.<target>.items` | list of `{ "command", "extensions" }` or `{ "separator": true }` | the menus of Phase 5 | The menu's rows, top to bottom |
 | `terminal.defaultProfile` | a profile `name` | `pwsh` | The shell a new terminal starts with when the client names none; must name one of the profiles |
 | `terminal.profiles` | list of `{ "name", "command", "args", "linkable", "hook" }` | pwsh, cmd, wsl, claude | The programs a terminal can run. Names must be unique; `args`, `linkable` and `hook` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). `linkable`: whether a session of the profile may be linked to its pane ([terminal.md](terminal.md), "Panes and modes"); left out, `true` for PowerShell and WSL (while `hook` is not `false`) and `false` for any other program; `false` for cmd and `claude`, where no prompt hook can be added. `hook`: the prompt hook, the few lines the shell runs each time it draws its prompt ([terminal.md](terminal.md), "The prompt hook"); PowerShell and WSL (bash) only, ignored for any other program. `true` (the default when left out): CabinetOS's own, which makes a linked session follow its pane (one run of `cab term cwd` per prompt) and reports the shell's folder for the header's caption. `false`: none; the session does not follow and reports nothing. A string: your own code, in the shell's language (PowerShell, or bash for WSL), run at each prompt in place of the follow step; the folder report stays, and errors are swallowed. It may use `$env:CABINETOS_SESSION` and `$env:CABINETOS_PIPE` (`$CABINETOS_SESSION` and `$CABINETOS_PIPE` in bash) and `cab term cwd`. A change applies to the next session. `followsPane`, the key of the folder sync before 2026-10-01, is ignored: a file that has it still loads, and the core no longer writes it. |
+| `terminal.split` | `true` or `false` | `false` | Whether the Tool Dock is split under the two panes: the left pane's sessions under the left pane, the right pane's under the right (the split mirror, [ui.md](ui.md), "The terminal"). `terminal.toggleSplit` (Ctrl+\ in the terminal, or the palette) flips it; the window writes it when the user toggles, and follows a change of the file at once. It holds only while the dock is under the panes (`ui.layout` `classic` or `rail`): beside them (`right`) the dock shows one view and the setting waits. With one pane shown, the split shows one half, the left's. |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
 | `logging.heavy` | `true`, `false` | `false` | Heavy logging: every operation is also written, at every level, into `heavy-<process>.<date>.jsonl` files next to the logs, at most 2 GB in all, even when that slows an operation down. On until turned off ([diagnostics.md](diagnostics.md), "Heavy mode") |
@@ -198,7 +200,9 @@ Who uses what:
   `"plugins": { "reader": { "granted": ["cmd:register", "fs:read"] } }`.
 - `terminal`: the core, at each `terminal_open`. An edited profile applies
   to the next shell; running shells keep what they started with
-  ([terminal.md](terminal.md)).
+  ([terminal.md](terminal.md)). `terminal.split` is the window's, at once:
+  it splits or joins the dock when the file changes, except in the window
+  that wrote it ([ui.md](ui.md), "The terminal").
 - `files.editor`: the core, at each `edit_path` ([ipc.md](ipc.md), "Files
   and folders").
 - `programs`: the core, at once. Each entry becomes the command
