@@ -1,5 +1,5 @@
 {
-  "$id": "urn:cabinetos:theme:2",
+  "$id": "urn:cabinetos:theme:3",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CabinetOS theme",
   "description": "A colour theme: `<id>.json` in the themes folder.",
@@ -802,6 +802,28 @@
         "terminalBackground": {
           "description": "The terminal panel over the backdrop.",
           "$ref": "#/$defs/Color"
+        },
+        "terminalLeftBadge": {
+          "description": "The `[Left]` badge of a terminal tab, the left pane's colour. Left\nout, it is the accent.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "terminalRightBadge": {
+          "description": "The `[Right]` badge of a terminal tab, the right pane's colour. Left\nout, it is the accent with its hue turned by 150 degrees.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Color"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "textDisabled": {
           "description": "Commands that cannot run now.",

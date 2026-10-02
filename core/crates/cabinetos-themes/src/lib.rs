@@ -634,6 +634,53 @@ mod tests {
     }
 
     #[test]
+    fn the_terminal_badge_colours_are_optional_and_checked_when_given() {
+        // Format 3: a theme without them is as valid as before, and the wire has no key for them.
+        let plain = parse(SHIPPED[0].1, Some(DEFAULT_THEME)).unwrap();
+        assert_eq!(
+            (
+                &plain.palette.terminal_left_badge,
+                &plain.palette.terminal_right_badge
+            ),
+            (&None, &None)
+        );
+        let wire = serde_json::to_value(&plain).unwrap();
+        assert!(wire["palette"].get("terminalLeftBadge").is_none());
+        assert!(wire["palette"].get("terminalRightBadge").is_none());
+
+        let with = changed(|theme| {
+            theme["palette"]["terminalLeftBadge"] = json!("#60CDFF");
+            theme["palette"]["terminalRightBadge"] = json!("#F27A6CCC");
+        });
+        let theme = parse(&with, Some(DEFAULT_THEME)).unwrap();
+        assert_eq!(
+            theme
+                .palette
+                .terminal_left_badge
+                .as_ref()
+                .map(|colour| colour.as_str()),
+            Some("#60CDFF")
+        );
+        assert_eq!(
+            theme
+                .palette
+                .terminal_right_badge
+                .as_ref()
+                .map(|colour| colour.as_str()),
+            Some("#F27A6CCC")
+        );
+        let wire = serde_json::to_value(&theme).unwrap();
+        assert_eq!(wire["palette"]["terminalLeftBadge"], "#60CDFF");
+
+        let problem = parse(
+            &changed(|theme| theme["palette"]["terminalRightBadge"] = json!("pink")),
+            Some(DEFAULT_THEME),
+        )
+        .unwrap_err();
+        assert!(problem.contains("is not a colour"), "{problem}");
+    }
+
+    #[test]
     fn opening_writes_what_is_missing_and_keeps_edits() {
         let scratch = scratch();
         let dir = scratch.path().join("themes");

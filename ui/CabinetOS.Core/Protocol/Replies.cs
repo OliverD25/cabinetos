@@ -402,7 +402,9 @@ public sealed record ThemePalette(
     [property: JsonPropertyName("fileTypeColors")] IReadOnlyDictionary<string, string> FileTypeColors,
     [property: JsonPropertyName("permissionLow")] string PermissionLow,
     [property: JsonPropertyName("permissionMedium")] string PermissionMedium,
-    [property: JsonPropertyName("permissionHigh")] string PermissionHigh);
+    [property: JsonPropertyName("permissionHigh")] string PermissionHigh,
+    [property: JsonPropertyName("terminalLeftBadge")] string? TerminalLeftBadge = null,
+    [property: JsonPropertyName("terminalRightBadge")] string? TerminalRightBadge = null);
 
 /// <summary>The terminal's colours: the default text, the scheme's background, the cursor, and the 16 ANSI colours.</summary>
 public sealed record ThemeTerminal(string Foreground, string Background, string Cursor, IReadOnlyList<string> Ansi);

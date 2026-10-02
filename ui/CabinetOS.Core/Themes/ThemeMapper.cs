@@ -13,6 +13,9 @@ namespace CabinetOS.Core.Themes;
 /// </summary>
 public static class ThemeMapper
 {
+    /// <summary>How far the terminal's right badge turns the accent's hue (docs/themes.md, "palette").</summary>
+    public const double RightBadgeHueShift = 150;
+
     /// <summary>
     /// Maps <paramref name="theme"/>. <paramref name="systemAccent"/> is the
     /// Windows accent's shades, used when the theme's accent is null;
@@ -48,6 +51,11 @@ public static class ThemeMapper
         var shades = followsSystem ? systemAccent : Shades(Parse(theme.Accent, "accent"), isLight);
         // What WinUI fills accent controls with: Light2 in dark mode, Dark1 in light mode.
         var accent = (isLight ? shades.Dark1 : shades.Light2).WithAlpha(0xFF);
+
+        // The terminal's pane badges: the left is the accent, the right the accent turned by 150 degrees round the
+        // colour wheel at the same lightness, unless the theme names its own.
+        var leftBadge = p.TerminalLeftBadge is null ? accent : Parse(p.TerminalLeftBadge, "palette.terminalLeftBadge");
+        var rightBadge = p.TerminalRightBadge is null ? accent.RotateHue(RightBadgeHueShift) : Parse(p.TerminalRightBadge, "palette.terminalRightBadge");
 
         // Text-derived overlays: the design's white at an alpha, here the theme's text at that alpha.
         Argb Text(byte alpha) => text.ScaleAlpha(alpha / 255.0);
@@ -105,6 +113,8 @@ public static class ThemeMapper
             ["CbDialogFooterFillBrush"] = surfaceDark,
             ["CbDialogTextBrush"] = Text(0xCC),
             ["CbAccentBrush"] = accent,
+            ["CbTerminalLeftBadgeBrush"] = leftBadge,
+            ["CbTerminalRightBadgeBrush"] = rightBadge,
             // Text on accent fills: the design's near-black on its light blue, white on a dark accent.
             ["CbOnAccentBrush"] = OnAccent(accent),
             ["CbFolderBrush"] = folder,

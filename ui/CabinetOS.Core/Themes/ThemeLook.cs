@@ -42,6 +42,38 @@ public readonly record struct Argb(byte A, byte R, byte G, byte B)
     /// <summary>The red, green and blue parts multiplied by <paramref name="factor"/> (darker below 1); the alpha stays.</summary>
     public Argb ScaleRgb(double factor) => new(A, Clamp(R * factor), Clamp(G * factor), Clamp(B * factor));
 
+    /// <summary>
+    /// The colour with its hue turned by <paramref name="degrees"/> round the colour wheel, at the same saturation
+    /// and lightness (HSL); the alpha stays. The terminal's right badge is the accent turned by 150 degrees.
+    /// </summary>
+    public Argb RotateHue(double degrees)
+    {
+        var (r, g, b) = (R / 255.0, G / 255.0, B / 255.0);
+        var (max, min) = (Math.Max(r, Math.Max(g, b)), Math.Min(r, Math.Min(g, b)));
+        var delta = max - min;
+        var lightness = (max + min) / 2;
+        if (delta == 0)
+        {
+            return this;
+        }
+        var saturation = delta / (1 - Math.Abs((2 * lightness) - 1));
+        var hue = max == r ? ((g - b) / delta % 6) : max == g ? ((b - r) / delta) + 2 : ((r - g) / delta) + 4;
+        hue = (((hue * 60) + degrees) % 360 + 360) % 360;
+        var chroma = (1 - Math.Abs((2 * lightness) - 1)) * saturation;
+        var x = chroma * (1 - Math.Abs((hue / 60 % 2) - 1));
+        var m = lightness - (chroma / 2);
+        var (r1, g1, b1) = (int)(hue / 60) switch
+        {
+            0 => (chroma, x, 0.0),
+            1 => (x, chroma, 0.0),
+            2 => (0.0, chroma, x),
+            3 => (0.0, x, chroma),
+            4 => (x, 0.0, chroma),
+            _ => (chroma, 0.0, x),
+        };
+        return new Argb(A, Clamp((r1 + m) * 255), Clamp((g1 + m) * 255), Clamp((b1 + m) * 255));
+    }
+
     /// <summary>The relative luminance (WCAG 2): 0 for black, 1 for white; the alpha is ignored.</summary>
     public double Luminance()
     {

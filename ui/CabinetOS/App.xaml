@@ -67,6 +67,9 @@
             <SolidColorBrush x:Key="CbDialogTextBrush" Color="#CCFFFFFF" />
             <!-- The accent: the Windows accent until the theme says otherwise. -->
             <SolidColorBrush x:Key="CbAccentBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+            <!-- The terminal's pane badges: [Left] in the accent, [Right] in the accent turned by 150 degrees (#60CDFF's is #FF607E). -->
+            <SolidColorBrush x:Key="CbTerminalLeftBadgeBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+            <SolidColorBrush x:Key="CbTerminalRightBadgeBrush" Color="#FFFF607E" />
             <!-- The folder icon (the design's two-tone folder), a running shell's dot, and the marketplace's rating star. -->
             <SolidColorBrush x:Key="CbFolderBrush" Color="#FFF2C063" />
             <SolidColorBrush x:Key="CbFolderFrontBrush" Color="#FFF8D98A" />

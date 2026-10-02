@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn the_theme_schema_carries_metrics_and_chrome_with_their_bounds() {
         let schema = serde_json::to_value(theme_schema()).unwrap();
-        assert_eq!(schema["$id"], "urn:cabinetos:theme:2");
+        assert_eq!(schema["$id"], "urn:cabinetos:theme:3");
         let required = schema["required"].as_array().unwrap();
         for optional in ["metrics", "chrome"] {
             assert!(schema["properties"][optional].is_object(), "{optional}");

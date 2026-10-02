@@ -116,6 +116,42 @@ public class ThemeTests
     }
 
     [Fact]
+    public void The_terminal_badges_are_the_accent_and_the_accent_turned_150_degrees_unless_the_theme_names_its_own()
+    {
+        // The design's #60CDFF turned by 150 degrees at the same lightness is App.xaml's literal.
+        Assert.Equal("#FFFF607E", new Argb(0xFF, 0x60, 0xCD, 0xFF).RotateHue(ThemeMapper.RightBadgeHueShift).ToString());
+
+        var nord = ThemeMapper.Map(Shipped("nord"), DesignAccent);
+        Assert.Equal(nord.Accent, nord.Brushes["CbTerminalLeftBadgeBrush"]);
+        Assert.Equal(nord.Accent.RotateHue(150), nord.Brushes["CbTerminalRightBadgeBrush"]);
+        Assert.NotEqual(nord.Brushes["CbTerminalLeftBadgeBrush"], nord.Brushes["CbTerminalRightBadgeBrush"]);
+
+        // A theme may name either badge, with an alpha part like any colour.
+        var theme = Shipped("nord");
+        var named = ThemeMapper.Map(theme with { Palette = theme.Palette with { TerminalLeftBadge = "#112233", TerminalRightBadge = "#44556677" } }, DesignAccent);
+        Assert.Equal("#FF112233", named.Brushes["CbTerminalLeftBadgeBrush"].ToString());
+        Assert.Equal("#77445566", named.Brushes["CbTerminalRightBadgeBrush"].ToString());
+        var wrong = Assert.Throws<ThemeFormatException>(() =>
+            ThemeMapper.Map(theme with { Palette = theme.Palette with { TerminalRightBadge = "pink" } }, DesignAccent));
+        Assert.Contains("palette.terminalRightBadge", wrong.Message);
+    }
+
+    [Fact]
+    public void Turning_a_hue_keeps_the_lightness_the_alpha_and_greys()
+    {
+        var accent = new Argb(0x80, 0x88, 0xC0, 0xD0);
+        var turned = accent.RotateHue(150);
+        Assert.Equal(accent.A, turned.A);
+        // HSL lightness is the middle of the largest and the smallest part, which a turn keeps (to a rounding step).
+        double Lightness(Argb c) => (Math.Max(c.R, Math.Max(c.G, c.B)) + Math.Min(c.R, Math.Min(c.G, c.B))) / 2.0;
+        Assert.Equal(Lightness(accent), Lightness(turned), 1.0);
+        Assert.InRange(accent.RotateHue(360).R, accent.R - 1, accent.R + 1);
+        Assert.InRange(accent.RotateHue(-360).B, accent.B - 1, accent.B + 1);
+        var grey = new Argb(0xFF, 0x80, 0x80, 0x80);
+        Assert.Equal(grey, grey.RotateHue(150));
+    }
+
+    [Fact]
     public void A_light_theme_draws_WinUI_in_light_mode_with_Dark1_as_the_accent()
     {
         var nord = Shipped("nord");

@@ -115,6 +115,14 @@ pub struct Palette {
     pub permission_medium: Color,
     /// A capability of level `high`.
     pub permission_high: Color,
+    /// The `[Left]` badge of a terminal tab, the left pane's colour. Left
+    /// out, it is the accent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_left_badge: Option<Color>,
+    /// The `[Right]` badge of a terminal tab, the right pane's colour. Left
+    /// out, it is the accent with its hue turned by 150 degrees.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_right_badge: Option<Color>,
 }
 
 /// The stroke colour of a file's icon, by its extension.
@@ -201,10 +209,11 @@ impl From<&Theme> for ThemeInfo {
 }
 
 /// The version of the theme format, in the schema's `$id`
-/// (`urn:cabinetos:theme:2`). Format 1 held the colours; format 2 adds the
-/// optional `metrics` and `chrome`, so every format-1 theme is a valid
-/// format-2 theme.
-pub const THEME_FORMAT: u32 = 2;
+/// (`urn:cabinetos:theme:3`). Format 1 held the colours; format 2 adds the
+/// optional `metrics` and `chrome`; format 3 adds the palette's optional
+/// `terminalLeftBadge` and `terminalRightBadge`. Every format-1 and
+/// format-2 theme is a valid format-3 theme.
+pub const THEME_FORMAT: u32 = 3;
 
 /// How a metric is measured.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
