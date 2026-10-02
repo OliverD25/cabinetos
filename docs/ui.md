@@ -178,10 +178,11 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   exist), a drag over the shell's text and Ctrl+Shift+C (the clipboard
   must hold it), the Locked toggle clicked twice (Linked, then Locked
   again), the prompt hook (the left session linked by its toggle, a line
-  half typed at its prompt, the left pane moved to a subfolder, Ctrl+`
-  and Enter: the line must have run in the folder its prompt was drawn
-  in, the prompt after it must be in the subfolder as the window's log
-  says, and the caption must say "in inner"; then the toggle locks it
+  half typed at its prompt, Ctrl+` back to the left pane, Home and Enter
+  into a subfolder, a click into the shell's text: the line must not have
+  run yet; Enter: the line must have run in the folder its prompt was
+  drawn in, the prompt after it must be in the subfolder as the window's
+  log says, and the caption must say "in inner"; then the toggle locks it
   again), Alt+] as a physical key on the Ukrainian layout, and last the
   two Ctrl+` that give the keyboard back and hide the dock.
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then

@@ -2295,13 +2295,15 @@ if (-not $ukrainian) {
   }
 }
 
-# ----- 21: the terminal's panes (docs/ui.md, "The terminal"; terminal unit 1 of 2026-10-01) -----
+# ----- 21: the terminal's panes (docs/ui.md, "The terminal"; terminal units 1 and 2 of 2026-10-01/02) -----
 # Each terminal session belongs to a pane. Ctrl+Backquote in a pane reaches that pane's session (Active Summoning), and
 # nothing a pane does changes the shown tab or types into a shell (Zero-Hijack). With real keys and the real mouse: the
 # left pane's session, then the right pane's (the dock stays: switching panes never hides it), a click and a folder
 # change in the left pane (the shown tab stays), Ctrl+Backquote there (the left session comes back), the tab keys
 # Alt+] and Alt+[ and Ctrl+Shift+T and Ctrl+Shift+W, the Locked/Linked toggle clicked, Ctrl+Shift+V pasting a command
-# that writes a file and Ctrl+Shift+C copying a selection, and Alt+] as a physical key on the Ukrainian layout.
+# that writes a file and Ctrl+Shift+C copying a selection, the prompt hook (a linked session follows its pane when
+# Enter draws its next prompt, and a half-typed line runs as typed), and Alt+] as a physical key on the Ukrainian
+# layout.
 function TermLines([string]$message) { @(ShellLines $message | Where-Object { $_.target -eq 'cabinetos_ui::terminal' }) }
 function Summoned { TermLines 'terminal summoned' | Select-Object -Last 1 }
 function TermRequests { @(ShellLines 'request sent' | Where-Object { $_.fields.request -like 'terminal_*' -and $_.fields.request -ne 'terminal_resize' }).Count }
@@ -2435,6 +2437,64 @@ Start-Sleep -Milliseconds 400
 
 # The toggle takes no keyboard; a click into the shell's text gives the page the keys for the next step. The tab is
 # looked up again: the header was drawn anew when the mode changed, and the old element has no place on screen.
+$tab = ShellElement "pwsh [Left], session $leftSession"
+if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
+  $r = $tab.Current.BoundingRectangle
+  [Live]::Click([int]($r.Left + 200 * $scale), [int]($r.Bottom + 90 * $scale)); Start-Sleep -Milliseconds 500
+}
+
+Step "21: the left session linked; a half-typed line; the left pane moves; Enter: the line runs, the prompt follows"
+# Terminal unit 2's prompt hook: a linked shell asks the core for its pane's folder each time it draws its prompt and
+# changes to it. It never types into the shell, so the half-typed line runs as typed, in the folder its prompt was drawn
+# in; the prompt after it is in the pane's new folder, and the shell's folder report reaches the window.
+$half = "$t21\half-21.txt"
+$toggle = ShellElement "Locked, pwsh on the left pane"
+$changes = @(TermLines 'terminal mode changed').Count
+if ($toggle) { ClickElement $toggle }
+$linked = WaitShellLines 'terminal mode changed' $changes 5
+Start-Sleep -Milliseconds 400
+"21: the toggle linked session $($linked.fields.session_id): $([bool]$toggle -and $linked.fields.session_id -eq $leftSession -and $linked.fields.mode -eq 'linked')"
+$tab = ShellElement "pwsh [Left], session $leftSession"
+if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
+  $r = $tab.Current.BoundingRectangle
+  [Live]::Click([int]($r.Left + 200 * $scale), [int]($r.Bottom + 90 * $scale)); Start-Sleep -Milliseconds 500
+}
+# Ctrl+C drops whatever is on the line; its new prompt is drawn while the session is linked and the pane is in term21.
+[Live]::Press($VK.Ctrl, $VK.C); Start-Sleep -Milliseconds 800
+[Live]::Type("Set-Content -LiteralPath '$half' -Value (Get-Location).Path"); Start-Sleep -Milliseconds 500
+# Ctrl+Backquote in the terminal gives the keyboard back to the active pane, the left one. Not ClickLeftPane: after a click
+# from the terminal into a pane, Home and Enter opened nothing in the runs of 2026-10-02 (the unit 1 step above waits out
+# its two folder changes, 5 s each, without a listing).
+$summons = @(TermLines 'terminal summoned').Count
+[Live]::Press($VK.Ctrl, $VK.Backquote)
+$back = WaitShellLines 'terminal summoned' $summons 5
+Start-Sleep -Milliseconds 500
+# Rows: inner, then the pasted file; the folder comes first.
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 200
+PressToFolder { [Live]::Press($VK.Enter) } "$t21\inner" 800
+$paneAt = (ShellLines 'listing shown' | Select-Object -Last 1).fields.path
+"21: Ctrl+Backquote gave the keyboard back to the left pane ($($back.fields.action)), and Home and Enter took the pane to inner ($paneAt): $($back.fields.action -eq 'HandBackToPane' -and $paneAt -eq "$t21\inner")"
+$folders = @(TermLines 'terminal folder changed').Count
+$tab = ShellElement "pwsh [Left], session $leftSession"
+if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
+  $r = $tab.Current.BoundingRectangle
+  [Live]::Click([int]($r.Left + 200 * $scale), [int]($r.Bottom + 90 * $scale)); Start-Sleep -Milliseconds 700
+}
+"21: the pane's move sent the shell nothing: the half-typed line has not run: $(-not (Test-Path -LiteralPath $half))"
+[Live]::Press($VK.Enter)
+$followed = WaitShellLines 'terminal folder changed' $folders 10 { param($line) $line.fields.folder -eq "$t21\inner" }
+Start-Sleep -Milliseconds 600
+$ran = if (Test-Path -LiteralPath $half) { (Get-Content -LiteralPath $half -Raw).Trim() } else { '(no file)' }
+Shot $h "$ShotDir\21-followed-live.png"
+"21: the half-typed line ran as typed, in the folder its prompt was drawn in ('$ran'): $($ran -eq $t21)"
+"21: Enter's prompt followed the left pane to inner, as the window's log says ($($followed.fields.folder), session $($followed.fields.session_id)): $([bool]$followed -and $followed.fields.folder -eq "$t21\inner" -and $followed.fields.session_id -eq $leftSession)"
+"21: the caption says 'in inner': $([bool](ShellElement 'in inner'))"
+$linkedName = ShellElement "Linked, pwsh on the left pane"
+$changes = @(TermLines 'terminal mode changed').Count
+if ($linkedName) { ClickElement $linkedName }
+$relocked = WaitShellLines 'terminal mode changed' $changes 5
+Start-Sleep -Milliseconds 400
+"21: the toggle locked it again: $($relocked.fields.mode -eq 'locked')"
 $tab = ShellElement "pwsh [Left], session $leftSession"
 if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
   $r = $tab.Current.BoundingRectangle
