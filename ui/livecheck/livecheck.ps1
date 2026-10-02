@@ -2541,15 +2541,15 @@ GoPath $cabLeft
 GoPath $cabRight
 [Live]::Press($VK.Tab); Start-Sleep -Milliseconds 500
 [Live]::Press($VK.Ctrl, $VK.A); Start-Sleep -Milliseconds 500
-$handed = @(ShellLines 'a page has the keyboard').Count
 # A click into the left session's text gives it the keyboard (a second Ctrl+Backquote from the pane would hide the dock,
 # since the terminal has not had the keyboard since the first), and shows the left session when Alt+] left the right one.
+# The window logs no "a page has the keyboard" for a click, which Windows hands to the page itself; the typed line's
+# answers below are the proof that the keys arrived.
 $tab = ShellElement "pwsh [Left], session $leftSession"
 if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
   $r = $tab.Current.BoundingRectangle
   [Live]::Click([int]($r.Left + 200 * $scale), [int]($r.Bottom + 90 * $scale))
 }
-$cabKeys = PageHasKeys $handed
 Start-Sleep -Milliseconds 800
 $cabCommand ="cabinetos-cli pane | Set-Content -LiteralPath '$cabOut\pane.txt'; " +
   "cabinetos-cli pane --right | Set-Content -LiteralPath '$cabOut\right.txt'; " +
@@ -2565,7 +2565,6 @@ while (-not (Test-Path -LiteralPath "$cabOut\code.txt") -and (Get-Date) -lt $cab
 Start-Sleep -Milliseconds 300
 function CabAnswer([string]$file) { if (Test-Path -LiteralPath "$cabOut\$file") { @(Get-Content -LiteralPath "$cabOut\$file" | Where-Object { $_ -and $_.Trim() }) } else { @() } }
 $cabJson = if (Test-Path -LiteralPath "$cabOut\json.txt") { Get-Content -LiteralPath "$cabOut\json.txt" -Raw | ConvertFrom-Json } else { $null }
-"21: the terminal had the keyboard when the commands were typed: $cabKeys"
 "21: cab pane printed the left pane's folder ('$((CabAnswer 'pane.txt') -join '|')'), cab pane --right the right pane's ('$((CabAnswer 'right.txt') -join '|')'): $(@(CabAnswer 'pane.txt') -eq $cabLeft -and @(CabAnswer 'right.txt') -eq $cabRight)"
 "21: cab pane --json named the active pane, both folders and the three marked files: $($cabJson.active -eq 'left' -and $cabJson.left -eq $cabLeft -and $cabJson.right -eq $cabRight -and @($cabJson.selection).Count -eq 3 -and $cabJson.selection_total -eq 3)"
 "21: cab selection printed the three files, one path to a line ('$((CabAnswer 'selection.txt') -join '|')'): $((@(CabAnswer 'selection.txt') | Sort-Object) -join '|' -eq ((@('one.txt', 'three.txt', 'two.txt') | ForEach-Object { "$cabLeft\$_" }) -join '|'))"
