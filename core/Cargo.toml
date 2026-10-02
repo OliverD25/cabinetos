@@ -58,8 +58,8 @@ ulid = "3.0"
 # allow list, and the Windows certificate store is the one to trust anyway.
 ureq = { version = "3.4", default-features = false }
 url = "2.5"
-wasmtime = { version = "49.0.1", default-features = false }
-wasmtime-wasi = { version = "49.0.1", default-features = false }
+wasmtime = { version = "49.0.2", default-features = false }
+wasmtime-wasi = { version = "49.0.2", default-features = false }
 windows = "0.62"
 windows-service = "0.8.1"
 zip = { version = "8.6", default-features = false }
