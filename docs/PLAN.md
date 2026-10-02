@@ -1513,6 +1513,19 @@ sessions win" is wanted when a later unit lets a core outlive its window,
 and whether the saved front tab or the pane pressed should win at the first
 show.
 
+**Status (2026-10-02, 11:58): unit 5 merged into main** (a fast-forward to
+2ee3399, since main had not moved) after the planning session's own
+checks on the branch: the five core checks green (879 passed, 6 ignored),
+the window built with warnings as errors, 1275 fast tests; the coder's own
+end-to-end suites and live checks on both machines stand as the window
+runs (above). The two readings left open for the creator are the
+defaults until they say otherwise. Noticed by the coder and left: `cab
+pane --right` with one pane shown still prints the hidden pane's folder;
+the `cab state` table does not show `dual`; the live check's section 18
+reads the clipboard after a fixed 500 ms (the flake's cause); the rail
+test `Every_way_of_picking_a_folder_in_the_sidebar_runs_go_toPath_once`
+failed once under suite load here and is not in the flakes report yet.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
