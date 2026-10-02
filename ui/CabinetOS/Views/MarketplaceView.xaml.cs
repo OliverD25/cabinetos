@@ -51,6 +51,11 @@ public sealed partial class MarketplaceView : UserControl
     // Laid out once already, prepared while hidden or shown: the first layout's work is done.
     private bool _prepared;
 
+    // For the snapshot aid's until:market-prepared and until:market-complete: the hidden layout was done ahead and logged
+    // ("marketplace view prepared"); the set's last card was laid out and logged ("marketplace cards complete").
+    private bool _preparedAhead;
+    private bool _completeLogged;
+
     // A layout pass came after the last opening, so the view's sizes are this window's.
     private bool _laidOutSinceOpen;
 
@@ -134,6 +139,12 @@ public sealed partial class MarketplaceView : UserControl
     /// <summary>Whether the marketplace is shown.</summary>
     public bool IsOpen => Visibility == Visibility.Visible;
 
+    /// <summary>Whether <see cref="PrepareLayout"/> laid the view out ahead and logged it (the snapshot aid's <c>until:market-prepared</c>).</summary>
+    public bool WasPreparedAhead => _preparedAhead;
+
+    /// <summary>Whether every card of the set is made and "marketplace cards complete" is logged (the snapshot aid's <c>until:market-complete</c>).</summary>
+    public bool CardsComplete => _slices.IsComplete && _completeLogged;
+
     /// <summary>The marketplace's state.</summary>
     public MarketplaceModel? Model
     {
@@ -197,6 +208,7 @@ public sealed partial class MarketplaceView : UserControl
         Cards.Children.Remove(sample.Root);
         Visibility = Visibility.Collapsed;
         Diag.Info("cabinetos_ui::market", "marketplace view prepared", new LogField("ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds, 1)));
+        _preparedAhead = true;
         return true;
     }
 
@@ -391,12 +403,13 @@ public sealed partial class MarketplaceView : UserControl
         Cards.Children.Clear();
         // An opening's cards are timed from the opening, as "marketplace cards shown" is; a later set from now.
         _setStarted = _openedTicks != 0 ? _openedTicks : Stopwatch.GetTimestamp();
+        _completeLogged = false;
         _makeMs = 0;
         AddCards(model, _slices.Start(items, first, perSlice));
         if (_openedTicks != 0 && _slices.Made > 0)
         {
             // At the first frame that has a card laid out: this set's, or the one that took its place before that frame.
-            LogAtFrame("marketplace cards shown", _openedTicks, () => Cards.Children.Count > 0 && Cards.Children[0].ActualSize.Y > 0, () => false,
+            LogAtFrame("marketplace cards shown", _openedTicks, () => Cards.Children.Count > 0 && Cards.Children[0].ActualSize.Y > 0, () => false, null,
                 new LogField("cards", _slices.Made), new LogField("total", items.Count), new LogField("make_ms", Math.Round(_makeMs, 1)));
             _openedTicks = 0;
         }
@@ -452,7 +465,7 @@ public sealed partial class MarketplaceView : UserControl
             // Not for a set that a newer one replaced before its last card was laid out.
             var (last, generation) = (Cards.Children[^1], _slices.Generation);
             LogAtFrame("marketplace cards complete", _setStarted, () => last.ActualSize.Y > 0, () => generation != _slices.Generation,
-                new LogField("cards", _slices.Made), new LogField("slices", _slices.Slices), new LogField("make_ms", Math.Round(_makeMs, 1)));
+                () => _completeLogged = true, new LogField("cards", _slices.Made), new LogField("slices", _slices.Slices), new LogField("make_ms", Math.Round(_makeMs, 1)));
         }
     }
 
@@ -488,7 +501,7 @@ public sealed partial class MarketplaceView : UserControl
 
     // A line at the first frame for which <paramref name="laidOut"/> holds, with the ms since <paramref name="since"/>,
     // as "listing shown" is timed; none once <paramref name="replaced"/> holds.
-    private void LogAtFrame(string message, long since, Func<bool> laidOut, Func<bool> replaced, params LogField[] fields)
+    private void LogAtFrame(string message, long since, Func<bool> laidOut, Func<bool> replaced, Action? logged, params LogField[] fields)
     {
         void OnFrame(object? sender, object e)
         {
@@ -500,6 +513,7 @@ public sealed partial class MarketplaceView : UserControl
             if (IsOpen && !replaced())
             {
                 Diag.Info("cabinetos_ui::market", message, [.. fields, new LogField("ms", Math.Round(Stopwatch.GetElapsedTime(since).TotalMilliseconds, 1))]);
+                logged?.Invoke();
             }
         }
         CompositionTarget.Rendering += OnFrame;
