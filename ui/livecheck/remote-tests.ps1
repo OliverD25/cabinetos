@@ -57,8 +57,19 @@ if (-not $NoSync) {
   if ($theirs -ne $ours) {
     $bundle = Join-Path $env:TEMP 'cabinetos-tests.bundle'
     $base = (Remote "git -C $RemoteRepo rev-parse HEAD") | Select-Object -Last 1
-    & git -C $repo bundle create $bundle "$base..$Branch" 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { & git -C $repo bundle create $bundle $Branch 2>&1 | Out-Null }
+    # A live check may have sent the commits already (it fast-forwards the clone's current branch), leaving only
+    # the branch name to make there; an empty bundle makes git write to stderr, which 5.1 turns into a stop.
+    $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $missing = & git -C $repo rev-list --count "$base..$Branch" 2>$null
+    $ErrorActionPreference = $eap
+    if ($LASTEXITCODE -ne 0) { $missing = 'unknown' }
+    if ("$missing".Trim() -eq '0') {
+      Remote "git -C $RemoteRepo checkout -q -B $Branch $ours; git -C $RemoteRepo log --oneline -1" | Select-Object -Last 1
+      $bundle = $null
+    } elseif ($missing -eq 'unknown') { & git -C $repo bundle create $bundle $Branch 2>&1 | Out-Null }
+    else { & git -C $repo bundle create $bundle "$base..$Branch" 2>&1 | Out-Null }
+  }
+  if ($bundle) {
     Remote "New-Item -ItemType Directory -Force '$remoteIo\inbox' | Out-Null" | Out-Null
     Send $bundle "$remoteIoFwd/inbox/cabinetos-tests.bundle"
     Remote "git -C $RemoteRepo fetch -q '$remoteIo\inbox\cabinetos-tests.bundle' '${Branch}:refs/remotes/bundle/$Branch'; git -C $RemoteRepo checkout -q -B $Branch refs/remotes/bundle/$Branch; git -C $RemoteRepo log --oneline -1" | Select-Object -Last 1
@@ -66,12 +77,23 @@ if (-not $NoSync) {
     Remote "git -C $RemoteRepo checkout -q $Branch; git -C $RemoteRepo log --oneline -1" | Select-Object -Last 1
   }
 }
-$hasCore = (Remote "Test-Path '$RemoteRepo\core\target\release\cabinetos-core.exe'") | Select-Object -Last 1
-if ($hasCore -ne 'True') {
-  if (-not (Test-Path -LiteralPath $core)) { throw "$core is missing here and on ${Machine}: build it first" }
+# The core goes over when the machine's differs from this PC's (a stale core there fails the protocol-version test),
+# and cabinetos-cli.exe with it: the shell the core starts finds the CLI next to the core.
+$remoteCore = "$RemoteRepo\core\target\release\cabinetos-core.exe"
+$theirCore = (Remote "if (Test-Path '$remoteCore') { (Get-FileHash -LiteralPath '$remoteCore' -Algorithm SHA256).Hash } else { 'none' }") | Select-Object -Last 1
+if (-not (Test-Path -LiteralPath $core)) {
+  if ($theirCore -eq 'none') { throw "$core is missing here and on ${Machine}: build it first" }
+  "the machine keeps its own release core (none built here)"
+} elseif ($theirCore -ne (Get-FileHash -LiteralPath $core -Algorithm SHA256).Hash) {
   Remote "New-Item -ItemType Directory -Force '$RemoteRepo\core\target\release' | Out-Null" | Out-Null
   Send $core "$remoteRepoFwd/core/target/release/cabinetos-core.exe"
-  "release core copied"
+  $cli = Join-Path $repo 'core\target\release\cabinetos-cli.exe'
+  if (Test-Path -LiteralPath $cli) { Send $cli "$remoteRepoFwd/core/target/release/cabinetos-cli.exe" }
+  "release core copied (the CLI with it)"
+} else {
+  $cli = Join-Path $repo 'core\target\release\cabinetos-cli.exe'
+  $theirCli = (Remote "Test-Path '$RemoteRepo\core\target\release\cabinetos-cli.exe'") | Select-Object -Last 1
+  if ($theirCli -ne 'True' -and (Test-Path -LiteralPath $cli)) { Send $cli "$remoteRepoFwd/core/target/release/cabinetos-cli.exe"; "the CLI copied next to the core" }
 }
 
 # 2. The request the wrapper reads, then the task; the wait watches DONE-tests.md, and the task is ended afterwards.
