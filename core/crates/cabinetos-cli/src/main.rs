@@ -10,7 +10,9 @@
 //! cwd` is what a shell's prompt hook runs at each prompt), the
 //! colour themes (`themes`), the marketplace (`market`), what the window
 //! shows (`state`), secrets in the Credential Manager (`secret`), in-app
-//! updates (`update`), and the log folder (`log trace`, `log tail`: these read
+//! updates (`update`), the live GUI context (`pane`, `selection`, and `copy`
+//! or `move` with `--selection`: what a CabinetOS window shows, from a
+//! shell in it), and the log folder (`log trace`, `log tail`: these read
 //! files and need no core; `log bundle` asks the core for a zip).
 //!
 //! It stands in for the UI, so its diagnostics use the `frontend` boundary.
@@ -24,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 mod describe;
+mod gui;
 mod jobs;
 mod logs;
 mod ls;
@@ -62,7 +65,8 @@ use tracing::Instrument;
 /// How long to wait for a busy pipe.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long `term cwd` waits for the pipe and then for the reply: a
-/// shell's prompt waits for it.
+/// shell's prompt waits for it. The GUI context commands wait this long for
+/// the pipe too: typed in a shell, they fail fast when no core answers.
 const HOOK_TIMEOUT: Duration = Duration::from_secs(1);
 /// How long to wait for one reply. Listing a huge directory on a slow network
 /// share may take a while.
@@ -75,7 +79,16 @@ fn absolute(path: &str) -> anyhow::Result<String> {
         .with_context(|| format!("{path}: not a valid path"))
 }
 
-/// The job of a `copy` or `move` command.
+/// The options of a `copy` or `move` job.
+fn transfer_options(arguments: &TransferArgs) -> JobOptions {
+    JobOptions {
+        on_conflict: conflict_policy(arguments.on_conflict),
+        verify: arguments.verify,
+        ..JobOptions::default()
+    }
+}
+
+/// The job of a `copy` or `move` command with paths.
 fn transfer_job(kind: JobKind, arguments: &TransferArgs) -> anyhow::Result<jobs::JobRun> {
     let (destination, sources) = arguments
         .paths
@@ -89,11 +102,7 @@ fn transfer_job(kind: JobKind, arguments: &TransferArgs) -> anyhow::Result<jobs:
                 .map(|source| absolute(source))
                 .collect::<anyhow::Result<_>>()?,
             destination: Some(absolute(destination)?),
-            options: JobOptions {
-                on_conflict: conflict_policy(arguments.on_conflict),
-                verify: arguments.verify,
-                ..JobOptions::default()
-            },
+            options: transfer_options(arguments),
         },
         resolve: arguments.resolve.map(resolution_of_resolve),
         stats: arguments.stats,
@@ -177,7 +186,11 @@ fn main() -> ExitCode {
                 tracing::error!(error = format!("{error:#}"), "command failed");
             }
             eprintln!("cabinetos-cli: {error:#}");
-            ExitCode::FAILURE
+            if error.is::<gui::NothingToUse>() {
+                ExitCode::from(gui::NOTHING_TO_USE_EXIT)
+            } else {
+                ExitCode::FAILURE
+            }
         }
     }
 }
@@ -208,13 +221,30 @@ fn hook_session(command: &Command) -> anyhow::Result<Option<u64>> {
     }
 }
 
-async fn execute(cli: &Cli) -> anyhow::Result<()> {
-    if let Some(result) = without_core(&cli.command) {
-        return result;
+/// The commands that answer a person at a shell and must fail fast when no
+/// core is there: the GUI context commands.
+fn gui_context_command(command: &Command) -> bool {
+    match command {
+        Command::Pane { .. } | Command::Selection { .. } => true,
+        Command::Copy(arguments) | Command::Move(arguments) => arguments.selection,
+        _ => false,
     }
-    let hook_session = hook_session(&cli.command)?;
+}
+
+/// How long to wait for the pipe: a shell is waiting for `term cwd` and for
+/// the GUI context commands.
+fn connect_wait(command: &Command, hook_session: Option<u64>) -> Duration {
+    if hook_session.is_some() || gui_context_command(command) {
+        HOOK_TIMEOUT
+    } else {
+        CONNECT_TIMEOUT
+    }
+}
+
+/// Connects to the core's pipe and starts the run's trace.
+async fn connect(cli: &Cli, hook_session: Option<u64>) -> anyhow::Result<PipeClient> {
     let pipe = PipeName::new(&cli.pipe_token(std::env::var(PIPE_ENV).ok()));
-    let wait = hook_session.map_or(CONNECT_TIMEOUT, |_| HOOK_TIMEOUT);
+    let wait = connect_wait(&cli.command, hook_session);
     let mut client = PipeClient::connect(&pipe, wait).await.with_context(|| {
         format!(
             "cannot connect to {pipe}; is cabinetos-core running with --pipe {}?",
@@ -223,6 +253,15 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
     })?;
     // One trace per run: every request of this run is one action.
     client.set_trace(Some(RequestId::new()));
+    Ok(client)
+}
+
+async fn execute(cli: &Cli) -> anyhow::Result<()> {
+    if let Some(result) = without_core(&cli.command) {
+        return result;
+    }
+    let hook_session = hook_session(&cli.command)?;
+    let mut client = connect(cli, hook_session).await?;
 
     match &cli.command {
         Command::Ping { count } => ping(&mut client, *count).await?,
@@ -303,6 +342,9 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
             client: named,
         } => {
             state::state(&mut client, *json, named.as_deref()).await?;
+        }
+        Command::Pane { .. } | Command::Selection { .. } => {
+            gui::command(&mut client, &cli.command).await?;
         }
         Command::Secret { action } => secret_command(&mut client, action).await?,
         Command::Undo { job, .. } => undo::undo(&mut client, *job).await?,
@@ -623,6 +665,12 @@ async fn settings_command(client: &mut PipeClient, command: &Command) -> anyhow:
 /// The job commands: `copy`, `move`, `delete`, `jobs`, `job`.
 async fn job_command(client: &mut PipeClient, command: &Command) -> anyhow::Result<()> {
     match command {
+        Command::Copy(arguments) if arguments.selection => {
+            gui::transfer(client, JobKind::Copy, arguments).await?;
+        }
+        Command::Move(arguments) if arguments.selection => {
+            gui::transfer(client, JobKind::Move, arguments).await?;
+        }
         Command::Copy(arguments) => {
             jobs::run(client, transfer_job(JobKind::Copy, arguments)?).await?;
         }
@@ -853,6 +901,27 @@ mod tests {
         assert_eq!(binary_size(512), "512.00 B");
         assert_eq!(binary_size(1536), "1.50 KiB");
         assert_eq!(binary_size(1_999_433_101_312), "1.82 TiB");
+    }
+
+    #[test]
+    fn only_the_gui_context_commands_wait_one_second_for_the_pipe() {
+        let command = |args: &[&str]| {
+            let mut full = vec!["cabinetos-cli"];
+            full.extend_from_slice(args);
+            Cli::try_parse_from(full).unwrap().command
+        };
+        for fast in [
+            &["pane"][..],
+            &["pane", "--json"],
+            &["selection"],
+            &["copy", "--selection", "--dest", "opposite_pane"],
+            &["move", "--selection", "--dest", r"E:\x"],
+        ] {
+            assert!(gui_context_command(&command(fast)), "{fast:?}");
+        }
+        for slow in [&["ping"][..], &["copy", "a", "b"], &["state"], &["jobs"]] {
+            assert!(!gui_context_command(&command(slow)), "{slow:?}");
+        }
     }
 
     #[test]

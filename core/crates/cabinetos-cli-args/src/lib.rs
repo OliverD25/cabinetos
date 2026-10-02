@@ -210,9 +210,15 @@ pub enum Command {
         #[command(subcommand)]
         action: KeysAction,
     },
-    /// Copy files and folders into a folder, and follow the job.
+    /// Copy files and folders into a folder, and follow the job. With
+    /// --selection --dest: the active pane's selection, into the other
+    /// pane's folder or a path. Exit code 0 when it completed, 1 when it
+    /// did not, 2 when there is no window or nothing is selected.
     Copy(TransferArgs),
-    /// Move files and folders into a folder, and follow the job.
+    /// Move files and folders into a folder, and follow the job. With
+    /// --selection --dest: the active pane's selection, into the other
+    /// pane's folder or a path. Exit code 0 when it completed, 1 when it
+    /// did not, 2 when there is no window or nothing is selected.
     Move(TransferArgs),
     /// Delete files and folders (to the Recycle Bin unless --permanent), and
     /// follow the job.
@@ -291,6 +297,33 @@ pub enum Command {
         /// command prints (for example CabinetOS#2).
         #[arg(long, value_name = "ID")]
         client: Option<String>,
+    },
+    /// Print the folder a pane shows, as the window last said it: the active
+    /// pane's, or with --left or --right that pane's. --json prints the
+    /// whole GUI context instead: the active pane, both folders, and the
+    /// active pane's selection and cursor. Exit code 2 when no window has
+    /// said what it shows, or the pane shows no folder (a tool tab).
+    Pane {
+        /// Print the left pane's folder.
+        #[arg(long, conflicts_with_all = ["right", "json"])]
+        left: bool,
+        /// Print the right pane's folder.
+        #[arg(long, conflicts_with = "json")]
+        right: bool,
+        /// Print the whole context as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print what the active pane's commands would act on, one full path
+    /// per line: its marked rows, or the row the cursor is on when none is
+    /// marked. Exit code 2 when no window has said what it shows or nothing
+    /// is selected; exit code 1 when the window knows more marked rows than
+    /// it told the core (it sends the first 1000), since a part is not the
+    /// selection.
+    Selection {
+        /// Print a JSON list instead of lines.
+        #[arg(long)]
+        json: bool,
     },
     /// Store, read, remove or list secrets, such as an API key, in the
     /// Windows Credential Manager (as CabinetOS/<name>). The core adds one
@@ -538,11 +571,34 @@ pub enum EventsAction {
 #[derive(Debug, PartialEq, Eq, Args)]
 pub struct TransferArgs {
     /// The files and folders, then the folder they go into (created if it
-    /// does not exist).
-    #[arg(required = true, num_args = 2.., value_name = "PATH")]
+    /// does not exist). With --selection: none.
+    #[arg(
+        required_unless_present = "selection",
+        conflicts_with = "selection",
+        num_args = 2..,
+        value_name = "PATH"
+    )]
     pub paths: Vec<String>,
-    /// What to do when a file already exists at the destination.
-    #[arg(long, value_enum, default_value = "ask")]
+    /// Take the active pane's selection, as `cab selection` prints it,
+    /// instead of paths. Needs --dest. Exit code 2 when no window has said
+    /// what it shows or nothing is selected.
+    #[arg(long, requires = "dest")]
+    pub selection: bool,
+    /// With --selection, the folder the selection goes into:
+    /// `opposite_pane` (the folder the other pane shows) or a path (as with
+    /// the other form, relative to the folder you are in). A folder that is
+    /// called `opposite_pane` is `.\opposite_pane`.
+    #[arg(long, conflicts_with = "paths", value_name = "opposite_pane|PATH")]
+    pub dest: Option<String>,
+    /// What to do when a file already exists at the destination. With
+    /// --selection the default is skip, so that nothing waits for an
+    /// answer from a shell.
+    #[arg(
+        long,
+        value_enum,
+        default_value = "ask",
+        default_value_if("selection", "true", "skip")
+    )]
     pub on_conflict: OnConflictArg,
     /// Compare each copy with its source (sizes and sampled bytes).
     #[arg(long)]
@@ -1214,6 +1270,104 @@ mod tests {
                 action: JobCommand::Cancel { id: 3 }
             }
         );
+    }
+
+    #[test]
+    fn parses_the_gui_context_commands_and_the_selection_form_of_copy_and_move() {
+        let parse = |args: &[&str]| {
+            let mut full = vec!["cabinetos-cli"];
+            full.extend_from_slice(args);
+            Cli::try_parse_from(full).map(|cli| cli.command)
+        };
+        let pane = |left, right, json| Command::Pane { left, right, json };
+        assert_eq!(parse(&["pane"]).unwrap(), pane(false, false, false));
+        assert_eq!(
+            parse(&["pane", "--left"]).unwrap(),
+            pane(true, false, false)
+        );
+        assert_eq!(
+            parse(&["pane", "--right"]).unwrap(),
+            pane(false, true, false)
+        );
+        assert_eq!(
+            parse(&["pane", "--json"]).unwrap(),
+            pane(false, false, true)
+        );
+        for bad in [
+            &["pane", "--left", "--right"][..],
+            &["pane", "--left", "--json"],
+            &["pane", "--right", "--json"],
+        ] {
+            assert!(parse(bad).is_err(), "{bad:?}");
+        }
+        assert_eq!(
+            parse(&["selection"]).unwrap(),
+            Command::Selection { json: false }
+        );
+        assert_eq!(
+            parse(&["selection", "--json"]).unwrap(),
+            Command::Selection { json: true }
+        );
+
+        let Command::Copy(copy) =
+            parse(&["copy", "--selection", "--dest", "opposite_pane"]).unwrap()
+        else {
+            panic!("expected copy")
+        };
+        assert!(copy.selection && copy.paths.is_empty());
+        assert_eq!(copy.dest.as_deref(), Some("opposite_pane"));
+        assert_eq!(
+            copy.on_conflict,
+            OnConflictArg::Skip,
+            "the selection form never waits for an answer unless asked to"
+        );
+        let Command::Move(moved) = parse(&[
+            "move",
+            "--selection",
+            "--dest",
+            r"E:\x y",
+            "--on-conflict",
+            "rename",
+            "--stats",
+        ])
+        .unwrap() else {
+            panic!("expected move")
+        };
+        assert_eq!(moved.dest.as_deref(), Some(r"E:\x y"));
+        assert_eq!(moved.on_conflict, OnConflictArg::Rename);
+        assert!(moved.stats);
+        let Command::Copy(asking) = parse(&[
+            "copy",
+            "--selection",
+            "--dest",
+            "opposite_pane",
+            "--on-conflict",
+            "ask",
+        ])
+        .unwrap() else {
+            panic!("expected copy")
+        };
+        assert_eq!(
+            asking.on_conflict,
+            OnConflictArg::Ask,
+            "an explicit ask stays"
+        );
+
+        // The form with paths keeps its default.
+        let Command::Copy(paths) = parse(&["copy", "a", "b"]).unwrap() else {
+            panic!("expected copy")
+        };
+        assert_eq!(paths.on_conflict, OnConflictArg::Ask);
+        assert!(!paths.selection && paths.dest.is_none());
+        for bad in [
+            &["copy", "--selection"][..],
+            &["copy", "--dest", "x", "a", "b"],
+            &["copy", "--selection", "--dest", "x", "a", "b"],
+            &["copy", "--selection", "--dest", "x", "a"],
+            &["move", "--selection"],
+        ] {
+            assert!(parse(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

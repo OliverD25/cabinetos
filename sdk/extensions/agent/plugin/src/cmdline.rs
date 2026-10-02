@@ -218,6 +218,10 @@ fn unsupported(command: &str, option: &str) -> String {
 /// The sources and the folder of a `copy` or a `move`, with the options
 /// the agent leaves at their defaults: a preview cannot carry them.
 fn transfer(name: &str, arguments: TransferArgs) -> Result<(Vec<String>, String), String> {
+    // The window's selection is the user's, not the agent's: it names its paths.
+    if arguments.selection || arguments.dest.is_some() {
+        return Err(unsupported(name, "--selection and --dest"));
+    }
     if arguments.on_conflict != OnConflictArg::Ask {
         return Err(unsupported(name, "--on-conflict"));
     }
@@ -452,6 +456,8 @@ mod tests {
             "edit C:\\x",
             "log bundle",
             "ping",
+            "pane",
+            "selection",
             "--pipe other ls C:\\x",
         ] {
             let error = parse_line(line).unwrap_err();
@@ -465,6 +471,8 @@ mod tests {
         for (line, part) in [
             ("ls C:\\x --watch", "--watch"),
             ("state --client A#2", "--client"),
+            ("copy --selection --dest opposite_pane", "--selection"),
+            ("move --selection --dest C:\\b", "--selection"),
             ("copy C:\\a C:\\b --on-conflict overwrite", "--on-conflict"),
             ("move C:\\a C:\\b --verify", "--verify"),
             ("copy C:\\a C:\\b --resolve skip", "--resolve"),
