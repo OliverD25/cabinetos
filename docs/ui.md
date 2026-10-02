@@ -278,6 +278,20 @@ the window's UI work (`-Panel`, below).
 its own; it must be a fast-forward of what the clone has), and `-Io <folder>`
 names where the output lands.
 
+The scripts that write into the exchange folder `_io` (`run-livecheck.ps1`,
+`remote-livecheck.ps1`, `remote-tests.ps1`, `remote-script.ps1`,
+`vm-livecheck.ps1`, `vm-install-check.ps1`, `claude-terminal.ps1` and
+`click-focus-probe.ps1`) find the main checkout's `_io` also when they run
+from a git worktree. A worktree lives at
+`<main checkout>\.claude\worktrees\<name>`, so the folder next to it is not
+the project's `_io`, and three runs wrote their output into a stray
+`.claude\worktrees\_io` on 2026-10-02. `ui\livecheck\paths.ps1`, which each of
+them dot-sources, asks git for the `.git` folder that all worktrees share
+(`git rev-parse --git-common-dir`), takes its parent as the main checkout, and
+takes `_io` from the main checkout's parent folder. When git is missing or
+fails, the script uses its own repository, as before. `-Io <folder>` still
+overrides all of this, and then git is not asked at all.
+
 The three remote scripts first make sure someone is signed in on the
 machine (`quser` shows an Active session): a window run needs a signed-in
 desktop, and after a Windows Update restart nobody is signed in (the laptop
@@ -525,8 +539,8 @@ and the Agent steps with it (two coders lost a run that way on 2026-10-02).
 mouse in 5"; Esc or its button cancels the run, `-NoCountdown` skips it for
 a run that starts while nobody is there), the creator's rule of 2026-10-01
 so nobody is caught typing; then runs `livecheck.ps1 -Strict`, keeps the output in
-`_io\live-check\run-<time>.txt` next to the repository (`-Io <folder>`
-names another folder, for a git worktree elsewhere), and at the end writes
+`_io\live-check\run-<time>.txt` next to the main checkout (`-Io <folder>`
+names another folder), and at the end writes
 `DONE.md` there and opens it in Notepad: the sign, on a PC where someone is
 waiting, that the keyboard and mouse are free again. The script types into a
 name box only after the window's "rename box shown" line; into the address
