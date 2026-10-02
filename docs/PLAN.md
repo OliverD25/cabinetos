@@ -1279,7 +1279,28 @@ browser keys are off); live check section 21. Checks: core 821 passed;
 window 1237 tests; the live check 209 True, 0 False (its two product faults,
 the second Ctrl+` after a pane switch and the paste, found and fixed on
 the way). The planning session's checks after the rebase: the five core checks green (821 passed, 6 ignored), the window build with warnings as errors, 1251 window tests (1202 passed, 49 end-to-end skipped), the full suite with the end-to-end tests 1251 of 1251 (2 min 6 s), and the live check on the rebased Release build 215 True, 0 False (`run-2026-10-02-0225.txt`); merged as 0fc1d4b..411f9e1.
-Unit 2, the prompt hook, went to a coder on Opus the same night.
+**Status (2026-10-02, 04:30): unit 2 done on its branch, not merged.**
+Built the night of 2026-10-01/02 by a coder on Opus, 004cc26..6e9b195 and
+the report's commit on `worktree-agent-a1d5e9555812c7418`
+([log/2026-10-02/terminal-unit2-report.md](log/2026-10-02/terminal-unit2-report.md)):
+protocol 17 (`terminal_pane_folder`, answered from the window's last
+`window_state` in memory; the event `terminal_folder_changed`; `folder`
+in `terminal_list`), `cab term cwd` and `CABINETOS_PIPE` (every `cab` in a
+terminal reaches its window's core); the prompt hook for PowerShell
+(`-NoExit -Command`, wrapping the user's own prompt, no profile file
+touched) and WSL bash (`PROMPT_COMMAND` through `WSLENV`), with
+`terminal.profiles[].hook` (`true`, `false` or the user's own code); the
+OSC 9;9 folder report read by the output thread; the caption "in <folder>"
+(`TerminalCaption`); live check section 21's prompt hook step. A linked
+shell follows when it draws its next prompt; a half-typed line runs where
+its prompt was drawn, and a `cd` of the user's own stays until the pane
+moves again (both for the creator to confirm). Cost: one process start per
+prompt, 19 ms median, 65 ms at the 90th percentile. Checks: core 841
+passed, 6 ignored, clippy, fmt and deny clean; window 1254 tests (1203
+passed, 51 end-to-end skipped); the full window suite with the end-to-end tests 1254 of 1254 (2 min 4 s); the live check 218 True, 0 False
+(`run-unit2-0359.txt`). Seen on the way: in section 21's unit 1 step, the
+keys after a click from the terminal into a pane open nothing, and its
+check does not test the folder change (the report's "Seen on the way").
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
