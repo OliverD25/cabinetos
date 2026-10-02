@@ -248,7 +248,9 @@ logged-in session (a process started over SSH gets no desktop; the task is
 what gives it one), the .NET Desktop Runtime and the Windows App Runtime the
 window needs, and the Ukrainian keyboard layout; it builds nothing. The
 script sends the commits the clone lacks as a bundle, copies this PC's
-Release window and release core into the clone's build paths, starts the
+Release window, release core and `cabinetos-cli.exe` (the shell the core
+starts finds the CLI next to the core; without it the prompt hook and
+every `cab` command have nothing to run) into the clone's build paths, starts the
 task, waits for the run's `DONE.md`, and copies the run's output into
 `_io\live-check` here as `run-<time>-<machine>.txt`. The machine must be
 logged in and unlocked; its own countdown window shows there first. The
@@ -304,7 +306,9 @@ What else the machine needs, and what the script and the check do about it
 
 `remote-tests.ps1` runs the window's tests on the laptop the same way,
 so the end-to-end tests' windows open there: it sends the commits as a
-bundle, copies this PC's release core when the clone has none, writes the
+bundle, copies this PC's release core and `cabinetos-cli.exe` when the
+clone's core differs by hash (a stale core there fails the
+protocol-version test), writes the
 request (a `--filter`, whether the end-to-end tests run) into the
 laptop's `_io\inbox`, starts the task `CabinetOS-Tests` (its wrapper sets
 the per-user .NET SDK's variables, builds with warnings as errors and runs
