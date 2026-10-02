@@ -326,13 +326,14 @@ public class ProtocolTests
                 b => Assert.Equal(new IconReply("ext:.txt", 32, "iVBORw0KGgo="), b)),
             ($$$"""{"id":"{{{Id}}}","type":"terminal_opened","session_id":3,"pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","pid":4242,"mode":"linked","linkable":true}""",
                 b => Assert.Equal(new TerminalOpenedReply(3, @"\\.\pipe\cabinetos-term-9f3c01a2b4d5e6f7", 4242, "linked", true), b)),
-            ($$$"""{"id":"{{{Id}}}","type":"terminal_sessions","sessions":[{"session_id":3,"profile":"pwsh","cwd":"E:\\work","cols":120,"rows":30,"pid":4242,"state":{"type":"exited","code":3221225786},"pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","attached":false,"pane":"right","mode":"linked","linkable":true}]}""",
+            ($$$"""{"id":"{{{Id}}}","type":"terminal_sessions","sessions":[{"session_id":3,"profile":"pwsh","cwd":"E:\\work","cols":120,"rows":30,"pid":4242,"state":{"type":"exited","code":3221225786},"pipe":"\\\\.\\pipe\\cabinetos-term-9f3c01a2b4d5e6f7","attached":false,"pane":"right","mode":"linked","linkable":true,"folder":"E:\\work\\docs"}]}""",
                 b =>
                 {
                     var session = Assert.IsType<TerminalSessionsReply>(b).Sessions.Single();
                     Assert.Equal(new TerminalState(TerminalState.Exited, 3221225786), session.State);
                     Assert.Equal((120, 30), (session.Cols, session.Rows));
                     Assert.Equal(("right", "linked", true), (session.Pane, session.Mode, session.Linkable));
+                    Assert.Equal(@"E:\work\docs", session.Folder);
                 }),
             ($$$"""{"id":"{{{Id}}}","type":"file_search_results","hits":[{"path":"C:\\Users\\me\\Budget-2026.xlsx","kind":"file","frn":1407374883553540},{"path":"C:\\Users\\me\\old\\budget","kind":"directory"}],"source":"index","took_us":1210,"complete":true}""",
                 b =>
@@ -502,6 +503,8 @@ public class ProtocolTests
                 b => Assert.Equal(new TerminalExitedEvent(3, 0), b)),
             ($$$"""{"id":"{{{Id}}}","type":"terminal_mode_changed","session_id":3,"mode":"linked"}""",
                 b => Assert.Equal(new TerminalModeChangedEvent(3, "linked"), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"terminal_folder_changed","session_id":3,"folder":"D:\\Звіт 'a b'"}""",
+                b => Assert.Equal(new TerminalFolderChangedEvent(3, @"D:\Звіт 'a b'"), b)),
             ($$$"""{"id":"{{{Id}}}","type":"volumes_changed","volumes":[{"drive_letter":"F","volume_guid_path":"\\\\?\\Volume{2}\\","filesystem":"exFAT","label":"STICK","total_bytes":64000000000,"free_bytes":1000,"disk":null}]}""",
                 b => Assert.Equal(("F", "STICK"), (((VolumesChangedEvent)b).Volumes.Single().DriveLetter, ((VolumesChangedEvent)b).Volumes.Single().Label))),
             ($$$"""{"id":"{{{Id}}}","type":"job_state_changed","job_id":7,"state":{"type":"completed_with_errors"}}""",

@@ -846,6 +846,9 @@ public sealed partial class MainWindow : Window
                 // terminals:<n>: that many tabs, each with its pipe connected.
                 _ when condition.StartsWith("terminals:", StringComparison.Ordinal) && int.TryParse(condition["terminals:".Length..], out var tabs) =>
                     _terminal.Tabs.Count >= tabs && _terminal.Tabs.All(t => t.Pipe is not null),
+                // terminal-folder:<path>: the shown shell's prompt hook reported that folder (terminal_folder_changed).
+                _ when condition.StartsWith("terminal-folder:", StringComparison.Ordinal) =>
+                    TerminalCaption.IsFolder(_terminal.Shown?.Folder, condition["terminal-folder:".Length..]),
                 "search" => _search.Phase is SearchPhase.Done or SearchPhase.Failed,
                 "tool" => AllToolHosts().Any(h => h.IsReady),
                 // The folder tree has caught up with the active pane: the row it marks is the pane's folder.
@@ -1169,6 +1172,9 @@ public sealed partial class MainWindow : Window
                 return;
             case TerminalModeChangedEvent modeChanged:
                 _terminal.OnModeChanged(modeChanged);
+                return;
+            case TerminalFolderChangedEvent folderChanged:
+                _terminal.OnFolderChanged(folderChanged);
                 return;
             case PluginStateChangedEvent or PluginCrashedEvent:
                 _market.OnEvent(coreEvent);

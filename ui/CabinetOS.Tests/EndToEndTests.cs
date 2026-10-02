@@ -61,8 +61,8 @@ public class EndToEndTests
             var client = core.Client;
 
             var welcome = await client.HelloAsync();
-            // Version 16: terminal sessions bound to a pane (terminal unit 1), after 15's context menu.
-            Assert.Equal(16u, welcome.ProtocolVersion);
+            // Version 17: the terminal's prompt hook (terminal unit 2), after 16's sessions bound to a pane.
+            Assert.Equal(17u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);

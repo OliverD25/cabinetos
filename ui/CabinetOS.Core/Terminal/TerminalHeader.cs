@@ -1,5 +1,3 @@
-using CabinetOS.Core.Presentation;
-
 namespace CabinetOS.Core.Terminal;
 
 /// <summary>
@@ -44,24 +42,6 @@ public static class TerminalHeader
             tip,
             $"{modeText}, {profile} on the {side} pane",
             mode == TerminalMode.Linked ? TerminalMode.Locked : TerminalMode.Linked);
-    }
-
-    /// <summary>
-    /// The caption right of the tabs: how the shown session's shell ended, or the folder it started
-    /// in (the core does not see the shell move; the prompt hook of a later unit will report it).
-    /// Empty without a shown tab.
-    /// </summary>
-    public static string Caption(string? profile, bool running, uint? exitCode, string? folder)
-    {
-        if (profile is null)
-        {
-            return "";
-        }
-        if (!running)
-        {
-            return $"{profile} exited with code {exitCode}";
-        }
-        return folder is { Length: > 0 } ? $"started in {DisplayFormat.FolderName(folder)}" : "";
     }
 
     /// <summary>

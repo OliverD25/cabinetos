@@ -2,15 +2,15 @@ namespace CabinetOS.Core.Terminal;
 
 /// <summary>
 /// How a terminal session is bound to its pane (docs/terminal.md, "Panes and modes"). A locked
-/// session stays where the user takes it; a linked one is meant to follow its pane through a
-/// prompt hook, which is not built yet, so for now it behaves as a locked one.
+/// session stays where the user takes it; a linked one follows its pane: each time its shell draws
+/// its prompt, the shell's prompt hook asks the core for the pane's folder and changes to it.
 /// </summary>
 public enum TerminalMode
 {
     /// <summary>Nothing the pane does reaches the session.</summary>
     Locked,
 
-    /// <summary>The session follows its pane (once the prompt hook exists).</summary>
+    /// <summary>The session follows its pane, at its shell's next prompt.</summary>
     Linked,
 }
 

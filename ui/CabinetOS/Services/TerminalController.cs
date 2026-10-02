@@ -27,7 +27,10 @@ internal sealed class TerminalTab(ulong sessionId, string profile, int pane, str
     public bool Linkable { get; set; }
 
     /// <summary>The folder the session started in.</summary>
-    public string? Folder { get; } = folder;
+    public string? StartFolder { get; } = folder;
+
+    /// <summary>The shell's folder as its prompt hook last reported it (<c>terminal_folder_changed</c>); null before the first report.</summary>
+    public string? Folder { get; set; }
 
     /// <summary>When the tab was last shown, as a growing count; the pane's most recent session is the one shown last.</summary>
     public long LastShown { get; set; }
@@ -133,9 +136,9 @@ internal sealed class TerminalController
     /// <summary>How many cells fit the pane now: the size a new session starts with.</summary>
     public Func<(ushort Cols, ushort Rows)> EstimateSize { get; set; } = () => (100, 24);
 
-    /// <summary>The header's caption: how the shown shell ended, or the folder it started in.</summary>
-    public string Caption() =>
-        TerminalHeader.Caption(Shown?.Profile, Shown?.Running ?? false, Shown?.ExitCode, Shown?.Folder);
+    /// <summary>The header's caption: how the shown shell ended, else its folder (<see cref="TerminalCaption"/>).</summary>
+    public CaptionLook Caption() =>
+        TerminalCaption.Decide(new CaptionFacts(Shown?.Profile, Shown?.Running ?? false, Shown?.ExitCode, Shown?.StartFolder, Shown?.Folder));
 
     /// <summary>The tabs in one line, the shown one marked (<see cref="TerminalHeader.Describe"/>).</summary>
     public string Describe() =>
@@ -288,6 +291,24 @@ internal sealed class TerminalController
         tab.Mode = mode;
         Diag.Info(Target, "terminal mode changed", new LogField("session_id", tab.SessionId), new LogField("mode", changed.Mode),
             new LogField("pane", TerminalBinding.PaneName(tab.Pane)));
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// A session's shell reported a new folder (<c>terminal_folder_changed</c>): its prompt hook prints it at
+    /// each prompt, after a <c>cd</c> of the user's own and after a linked shell followed its pane. The caption
+    /// shows it.
+    /// </summary>
+    public void OnFolderChanged(TerminalFolderChangedEvent changed)
+    {
+        if (Find(changed.SessionId) is not { } tab || tab.Folder == changed.Folder)
+        {
+            return;
+        }
+        tab.Folder = changed.Folder;
+        Diag.Info(Target, "terminal folder changed", new LogField("session_id", tab.SessionId), new LogField("folder", changed.Folder),
+            new LogField("pane", TerminalBinding.PaneName(tab.Pane)), new LogField("mode", TerminalBinding.ModeName(tab.Mode)),
+            new LogField("shown", tab == Shown));
         Changed?.Invoke();
     }
 

@@ -103,8 +103,12 @@ public sealed partial class ToolDock : UserControl
         StartingText.Visibility = Visibility.Collapsed;
     }
 
-    /// <summary>The caption right of the tabs.</summary>
-    public void SetCaption(string text) => CaptionText.Text = text;
+    /// <summary>The caption right of the tabs, and its tooltip (the whole folder), if any.</summary>
+    public void SetCaption(string text, string? tip)
+    {
+        CaptionText.Text = text;
+        ToolTipService.SetToolTip(CaptionText, tip);
+    }
 
     /// <summary>The menu of the other shells (<c>terminal.profiles</c> without the default).</summary>
     public void SetProfiles(TerminalProfiles profiles)

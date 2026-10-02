@@ -125,6 +125,12 @@ public sealed record TerminalExitedEvent(ulong SessionId, uint ExitCode) : CoreE
 /// <summary>A terminal session's mode changed (<c>terminal_set_mode</c> from any client): <c>locked</c> or <c>linked</c>.</summary>
 public sealed record TerminalModeChangedEvent(ulong SessionId, string Mode) : CoreEvent;
 
+/// <summary>
+/// A terminal session's shell reported a new current folder: its prompt hook prints it at each prompt, and the
+/// core sends this when it changed (a <c>cd</c> of the user's own, or a linked shell following its pane).
+/// </summary>
+public sealed record TerminalFolderChangedEvent(ulong SessionId, string Folder) : CoreEvent;
+
 /// <summary>The theme in effect changed (<c>ui.theme</c>, or its file was saved); it comes whole.</summary>
 public sealed record ThemeChangedEvent(ColorTheme Theme) : CoreEvent;
 

@@ -395,7 +395,8 @@ public sealed partial class MainWindow
     private void UpdateDockHeader()
     {
         Dock.SetTabs(_terminal.Tabs, _terminal.Shown);
-        Dock.SetCaption(_terminal.Caption());
+        var caption = _terminal.Caption();
+        Dock.SetCaption(caption.Text, caption.Tip);
     }
 
     // The snapshot aid's terminal-state:<label> step: the tabs as the header shows them, who has the keyboard.
@@ -403,7 +404,7 @@ public sealed partial class MainWindow
         Diag.Info(TerminalTarget, "terminal state", new LogField("label", label), new LogField("tabs", _terminal.Describe()),
             new LogField("shown", _terminal.Shown?.SessionId), new LogField("dock", _dockVisible),
             new LogField("terminal_keyboard", _dockVisible && Dock.HasTerminalFocus), new LogField("active_pane", TerminalBinding.PaneName(_active)),
-            new LogField("caption", _terminal.Caption()));
+            new LogField("caption", _terminal.Caption().Text), new LogField("folder", _terminal.Shown?.Folder));
 
     // The theme's terminal colours (docs/themes.md, "terminal"); before the core sent a theme,
     // the design's text colour on a clear background with the accent's cursor.

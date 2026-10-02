@@ -129,6 +129,7 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(PluginCrashedEvent))]
 [JsonSerializable(typeof(TerminalExitedEvent))]
 [JsonSerializable(typeof(TerminalModeChangedEvent))]
+[JsonSerializable(typeof(TerminalFolderChangedEvent))]
 [JsonSerializable(typeof(VolumesChangedEvent))]
 [JsonSerializable(typeof(ThemeChangedEvent))]
 [JsonSerializable(typeof(InstallProgressEvent))]

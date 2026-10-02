@@ -209,7 +209,8 @@ public sealed record TerminalSessionInfo(
     bool Attached,
     string Pane = "left",
     string Mode = "locked",
-    bool Linkable = false);
+    bool Linkable = false,
+    string? Folder = null);
 
 /// <summary>Reply to <c>terminal_list</c>, oldest first.</summary>
 public sealed record TerminalSessionsReply(IReadOnlyList<TerminalSessionInfo> Sessions) : CoreReply;

@@ -194,14 +194,33 @@ public class TerminalTests
     }
 
     [Fact]
-    public void The_caption_says_where_the_shell_started_or_how_it_ended()
+    public void The_caption_says_where_the_shell_started_until_its_hook_reports_a_folder()
     {
-        Assert.Equal("started in work", TerminalHeader.Caption("pwsh", running: true, null, @"E:\work\"));
-        Assert.Equal("pwsh exited with code 3", TerminalHeader.Caption("pwsh", running: false, 3, @"E:\work"));
-        Assert.Equal("", TerminalHeader.Caption(null, running: false, null, null));
-        Assert.Equal("", TerminalHeader.Caption("pwsh", running: true, null, null));
+        static CaptionLook Caption(string? profile, bool running, uint? code, string? start, string? folder) =>
+            TerminalCaption.Decide(new CaptionFacts(profile, running, code, start, folder));
+
+        Assert.Equal(new CaptionLook("started in work", @"E:\work\"), Caption("pwsh", true, null, @"E:\work\", null));
+        // The first report replaces it: a linked shell that followed its pane, or a cd of the user's own.
+        Assert.Equal(new CaptionLook("in Звіт 'проєкт'", @"D:\Звіт 'проєкт'"), Caption("pwsh", true, null, @"E:\work", @"D:\Звіт 'проєкт'"));
+        Assert.Equal(new CaptionLook("in C:", @"C:\"), Caption("pwsh", true, null, @"E:\work", @"C:\"));
+        Assert.Equal(new CaptionLook("in me", @"\\wsl.localhost\Ubuntu\home\me"),
+            Caption("wsl", true, null, @"E:\work", @"\\wsl.localhost\Ubuntu\home\me"));
+        // How the shell ended wins over any folder.
+        Assert.Equal(new CaptionLook("pwsh exited with code 3", null), Caption("pwsh", false, 3, @"E:\work", @"D:\x"));
+        Assert.Equal(new CaptionLook("", null), Caption(null, false, null, null, null));
+        Assert.Equal(new CaptionLook("", null), Caption("cmd", true, null, null, null));
+        Assert.Equal(new CaptionLook("started in x", @"C:\x"), Caption("cmd", true, null, @"C:\x", ""));
         // The old folder sync's texts are gone.
-        Assert.DoesNotContain("synced", TerminalHeader.Caption("pwsh", true, null, @"C:\x"), StringComparison.Ordinal);
+        Assert.DoesNotContain("synced", Caption("pwsh", true, null, @"C:\x", null).Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_reported_folder_matches_without_case_and_trailing_backslash()
+    {
+        Assert.True(TerminalCaption.IsFolder(@"E:\Work\Docs", @"e:\work\docs\"));
+        Assert.True(TerminalCaption.IsFolder(@"C:\", @"C:\"));
+        Assert.False(TerminalCaption.IsFolder(@"E:\work", @"E:\work\docs"));
+        Assert.False(TerminalCaption.IsFolder(null, @"E:\work"));
     }
 
     [Fact]
