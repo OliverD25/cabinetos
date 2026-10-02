@@ -85,6 +85,8 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.0] - 2026-09-30
 
+Code signing policy: see the [README](https://github.com/OliverD25/cabinetos#code-signing-policy).
+
 The first version. How it is built, signed and published:
 [docs/release.md](docs/release.md).
 

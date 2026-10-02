@@ -104,6 +104,20 @@ and every switch: [docs/release.md](docs/release.md).
 The release is not code-signed yet, so Windows SmartScreen may ask before
 the first start.
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io),
+certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [OliverD25](https://github.com/OliverD25)
+- Approvers: [OliverD25](https://github.com/OliverD25)
+
+Privacy: this program sends no information about the user or the system
+anywhere. Its one automatic network request is the daily update check,
+which downloads `latest.json` from the marketplace site and carries nothing
+else; `update.check: false` in the settings turns it off, and "Update:
+Check for Updates" in the palette checks on demand.
+
 ## Build from source
 
 With the toolchains of [docs/dev-setup.md](docs/dev-setup.md), in PowerShell:
