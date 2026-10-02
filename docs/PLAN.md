@@ -1450,6 +1450,26 @@ check 231 True, 0 False in 8 min 30 s (`run-unit4-d.txt`; section 21 types
 `cab` into the shell). Open for the
 creator: `opposite_pane` with one pane shown, the default `skip`.
 
+**Status (2026-10-02, 10:21): unit 4 merged into main** (the merge 8b98ceb
+onto the shell v2 main, with one text conflict, the day's log index, where
+both rows are kept; main at 412bd22) after the planning session's own
+checks: the five core checks green (867 passed, 6 ignored), the window
+built with warnings as errors, 1252 fast tests; on this PC the end-to-end
+suite 1307 of 1307 (3 min 51 s) and the live check 251 True, 0 False
+(`run-2026-10-02-0951.txt`, the scroll goal met with no frame over 20 ms);
+on the laptop the end-to-end suite 1305 of 1307 (the two context-menu
+tests of the known flakes, `tests-2026-10-02-1003-rd-omen-laptop.txt`)
+and the live check 259 True, 0 False (`run-2026-10-02-1010-rd-omen-laptop.txt`, judged on the panel: 1 frame of 319 with UI work over 20 ms, none over 33 ms). The creator's
+rule of the morning, that the laptop's numbers are the market's numbers,
+made the laptop runs part of the checks, and they found three faults in
+the laptop scripts, fixed on main the same morning: an empty bundle
+stopped `remote-tests.ps1` when a live check had sent the commits first
+(c80f25c); neither script sent `cabinetos-cli.exe`, which the terminal's
+shell needs next to the core, so section 21 answered False nine times
+(6ec4e7c); and a window left alive by a stopped run held the Release files
+against the next copy (cc99de9). Still open for the creator:
+`opposite_pane` with one pane shown, the default `skip`.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
