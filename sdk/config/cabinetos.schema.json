@@ -196,7 +196,8 @@
             "linkable": false,
             "name": "claude"
           }
-        ]
+        ],
+        "split": false
       }
     },
     "ui": {
@@ -1082,6 +1083,11 @@
           "items": {
             "$ref": "#/$defs/TerminalProfile"
           }
+        },
+        "split": {
+          "description": "Whether the Tool Dock is split under the two panes, the left pane's\nsessions under the left pane and the right pane's under the right\n(`terminal.toggleSplit`, Ctrl+\\ in the terminal). The window writes it\nwhen the user toggles it and follows a change of the file.",
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false

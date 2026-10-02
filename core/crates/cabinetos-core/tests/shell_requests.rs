@@ -322,6 +322,17 @@ async fn set_value_writes_one_setting_and_tells_every_client() {
         read_config(&core)["ui"]["dockSize"],
         json!({"bottom": 320, "right": null})
     );
+    // The terminal's split (unit 3), written by the window when the user toggles it.
+    assert_eq!(
+        get_value(&mut client, "terminal.split").await,
+        Response::Value { value: json!(false) }
+    );
+    assert_eq!(
+        set_value(&mut client, "terminal.split", json!(true)).await,
+        Response::Ok
+    );
+    assert_eq!(config_changed(&mut events).await, ["terminal.split"]);
+    assert_eq!(read_config(&core)["terminal"]["split"], json!(true));
     // The same value again changes nothing and says nothing.
     assert_eq!(
         set_value(&mut client, "ui.dualPane", json!(false)).await,

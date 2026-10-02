@@ -82,7 +82,7 @@ const TERMINAL: Option<&str> = Some("terminalFocus");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 115] = [
+const SEED: [Seed; 116] = [
     seed(
         "palette.show",
         "View",
@@ -405,6 +405,17 @@ const SEED: [Seed; 115] = [
         &[],
         UI,
         None,
+    ),
+    // Terminal unit 3, the split mirror: Ctrl+\ splits the dock under the two
+    // panes only while a terminal has the keyboard. In a pane the same keys
+    // stay `go.root`: the binding with a context is the more specific one.
+    seed(
+        "terminal.toggleSplit",
+        "Terminal",
+        "Split Terminal Under the Panes",
+        &["ctrl+backslash"],
+        UI,
+        TERMINAL,
     ),
     // Sub-phase 11a: Total Commander's keys and small commands
     // (docs/research/total-commander.md, Part 3 (b), N1 to N31).
@@ -1103,9 +1114,29 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_backslash_splits_the_terminal_and_stays_up_to_root_in_a_pane() {
+        let registry = CommandRegistry::core();
+        let split = registry.get("terminal.toggleSplit").unwrap();
+        assert_eq!(
+            (split.category.as_str(), split.title.as_str()),
+            ("Terminal", "Split Terminal Under the Panes")
+        );
+        assert_eq!(split.target, CommandTarget::Ui);
+        assert_eq!(split.when.as_deref(), Some("terminalFocus"));
+        assert!(!split.immutable);
+        assert_eq!(texts(&split.default_keys), ["ctrl+backslash"]);
+        // The same keys are Up to Root everywhere else: two commands share keys
+        // only with different contexts, and the one with a context wins.
+        let root = registry.get("go.root").unwrap();
+        assert_eq!(texts(&root.default_keys), ["ctrl+backslash"]);
+        assert_eq!(root.when, None);
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
+    #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 115);
+        assert_eq!(registry.commands().len(), 116);
         let keys = |id: &str| {
             registry
                 .get(id)

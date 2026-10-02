@@ -393,6 +393,11 @@ pub struct TerminalConfig {
     pub default_profile: String,
     /// The shells a terminal can run.
     pub profiles: Vec<TerminalProfile>,
+    /// Whether the Tool Dock is split under the two panes, the left pane's
+    /// sessions under the left pane and the right pane's under the right
+    /// (`terminal.toggleSplit`, Ctrl+\ in the terminal). The window writes it
+    /// when the user toggles it and follows a change of the file.
+    pub split: bool,
 }
 
 /// The note the `claude` profile adds to Claude Code's system prompt: where
@@ -428,6 +433,7 @@ impl Default for TerminalConfig {
                     false,
                 ),
             ],
+            split: false,
         }
     }
 }
@@ -699,6 +705,8 @@ mod tests {
         assert!(!config.panes.folder_sizes);
         assert_eq!(config.files.editor, None);
         assert_eq!(config.terminal.default_profile, "pwsh");
+        // Article 4: one terminal view until the user splits the dock.
+        assert!(!config.terminal.split);
         let names: Vec<&str> = config
             .terminal
             .profiles
@@ -968,6 +976,12 @@ mod tests {
             }
         );
         assert!(serde_json::from_str::<UiConfig>(r#"{"dockSize": {"left": 1}}"#).is_err());
+        // The split is written with the terminal's other keys, and a file may set it.
+        assert!(text.contains("\"split\":false"), "{text}");
+        let split: TerminalConfig = serde_json::from_str(r#"{"split": true}"#).unwrap();
+        assert!(split.split);
+        assert_eq!(split.default_profile, "pwsh", "the other keys keep their defaults");
+        assert!(serde_json::from_str::<TerminalConfig>(r#"{"split": "yes"}"#).is_err());
         assert!(
             text.contains("\"sidebarAutoReveal\":true,\"columns\":null"),
             "{text}"

@@ -465,7 +465,7 @@ async fn commands_are_listed_searched_and_run() {
     let Response::Commands { commands } = ask(&mut client, Request::ListCommands).await else {
         panic!("expected commands")
     };
-    assert_eq!(commands.len(), 115);
+    assert_eq!(commands.len(), 116);
     let sidebar = commands
         .iter()
         .find(|command| command.id == "view.toggleSidebar")
@@ -534,6 +534,7 @@ async fn commands_are_listed_searched_and_run() {
             assert_eq!(PathBuf::from(path), core.config_path());
             assert_eq!(config["ui"]["layout"], "classic");
             assert_eq!(config["terminal"]["defaultProfile"], "pwsh");
+            assert_eq!(config["terminal"]["split"], false);
         }
         other => panic!("expected config, got {other:?}"),
     }
