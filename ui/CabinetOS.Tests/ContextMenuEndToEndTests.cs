@@ -63,26 +63,31 @@ public class ContextMenuEndToEndTests
                 "shell:background",
                 "cmd:overlay.close",
                 "shellmenu:alpha.txt",
+                "until:windows-menu",
                 "shell:shell-off",
                 "cmd:overlay.close",
-                // The test writes the file now, as an editor would; the window reads it again.
+                // The test writes the file when it sees this state, as an editor would; the window reads it again. The wait starts in
+                // the same turn as the state is logged, so the read it waits for is the one of that write (the test did not wait for
+                // "background": the window read the file while the steps before ran, and until:config then waited for nothing).
+                "shell:edit-now",
                 "until:config",
-                "wait:500",
                 "menu:Alphabet.md",
+                "until:menu",
                 "shell:md",
                 "menu-click:Record Paths",
-                "wait:2000",
+                "until:menu-closed",
                 "menu:alpha.txt",
                 "shell:txt",
                 "cmd:overlay.close",
                 "cmd:program.record",
-                "wait:2000",
                 "cmd:program.nosuch",
                 "shellmenu:alpha.txt",
+                // The core builds Windows' menu through the shell's handlers: 1.6 s for the first one beside two test runs.
+                "until:windows-menu",
                 "shell:windows",
                 "cmd:overlay.close",
                 "shot:done"));
-            await run.WaitForStateAsync("config", "background");
+            await run.WaitForStateAsync("config", "edit-now");
             File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), JsonSerializer.Serialize(new Dictionary<string, object>
             {
                 ["version"] = 1,
@@ -137,8 +142,10 @@ public class ContextMenuEndToEndTests
                 Assert.Equal("", state.GetProperty("context_menu").GetString());
                 Assert.True(state.GetProperty("windows_menu").GetString()!.Split('|').Length > 3, state.GetProperty("windows_menu").GetString());
             });
-            // From the menu the right-clicked file, from the palette the cursor's.
-            Assert.Equal([Path.Combine(data, "Alphabet.md"), Path.Combine(data, "alpha.txt")], await ReadLinesAsync(recorded, 2));
+            // From the menu the right-clicked file, from the palette the cursor's. Two programs started a moment apart finish in the
+            // operating system's order, so the lines are compared as a set.
+            Assert.Equal(new[] { Path.Combine(data, "Alphabet.md"), Path.Combine(data, "alpha.txt") }.Order(StringComparer.Ordinal),
+                (await ReadLinesAsync(recorded, 2)).Order(StringComparer.Ordinal));
             Assert.Contains(logs, l => Message(l) == "command failed" && Field(l, "command").GetString() == "program.nosuch"
                 && Field(l, "code").GetString() == "unknown_program");
             // The ID no command has is logged once, though the file menu opened twice.

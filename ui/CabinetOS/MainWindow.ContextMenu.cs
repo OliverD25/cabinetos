@@ -42,6 +42,13 @@ public sealed partial class MainWindow
     // A Windows menu that answers after a newer gesture is not shown.
     private int _windowsMenuAsked;
 
+    // The questions to the core for Windows' menu (shell_menu) that are out, until the menu is shown: the snapshot aid's
+    // until:windows-menu. The core builds the menu through the shell's handlers; the first took 1.6 s beside two test runs.
+    private int _windowsMenuAsking;
+
+    // The Windows menu shown last has logged where it is ("windows menu placed"); cleared when a menu is shown.
+    private bool _windowsMenuPlaced;
+
     // WinUI has laid the menu asked for last out and the window has logged where it is ("context menu placed"): the
     // snapshot aid's until:menu-placed. That comes some dispatcher turns after the menu is on screen (until:menu).
     private bool _menuPlaced;
@@ -64,7 +71,11 @@ public sealed partial class MainWindow
             Diag.Info(MenuTarget, "context menu placed", PlacedFields(bounds));
         };
         _contextMenu.Run = RunMenuEntry;
-        _windowsMenu.Placed += bounds => Diag.Info(MenuTarget, "windows menu placed", PlacedFields(bounds));
+        _windowsMenu.Placed += bounds =>
+        {
+            _windowsMenuPlaced = true;
+            Diag.Info(MenuTarget, "windows menu placed", PlacedFields(bounds));
+        };
         _windowsMenu.Closed += () =>
         {
             Diag.Info(MenuTarget, "windows menu closed");
@@ -411,6 +422,19 @@ public sealed partial class MainWindow
 
     private async Task ShowWindowsMenuAsync(FilePane view, int index, Point? at, List<string> paths)
     {
+        _windowsMenuAsking++;
+        try
+        {
+            await AskAndShowWindowsMenuAsync(view, index, at, paths);
+        }
+        finally
+        {
+            _windowsMenuAsking--;
+        }
+    }
+
+    private async Task AskAndShowWindowsMenuAsync(FilePane view, int index, Point? at, List<string> paths)
+    {
         var asked = ++_windowsMenuAsked;
         var started = Stopwatch.GetTimestamp();
         var reply = await RequestSafelyAsync(new ShellMenuRequest(paths));
@@ -423,6 +447,7 @@ public sealed partial class MainWindow
             case ShellMenuReply menu:
                 var replied = Stopwatch.GetTimestamp();
                 var position = at ?? view.RowAnchor(index);
+                _windowsMenuPlaced = false;
                 _windowsMenu.Show(view, position, menu);
                 Diag.Info(MenuTarget, "windows menu shown", new LogField("paths", paths.Count), new LogField("items", menu.Items.Count),
                     new LogField("x", Math.Round(position.X, 1)), new LogField("y", Math.Round(position.Y, 1)),

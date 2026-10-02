@@ -877,6 +877,8 @@ public sealed partial class MainWindow : Window
                 "menu-edit" => MenuEditorView.IsOpen,
                 "menu-edit-idle" => MenuEditorView.IsIdle,
                 "menu-edit-closed" => !MenuEditorView.IsOpen,
+                // Windows' menu: the core has answered every question for it, and the menu shown has logged where it is.
+                "windows-menu" => _windowsMenuAsking == 0 && (!_windowsMenu.IsOpen || _windowsMenuPlaced),
                 // What ui.tabs holds in the file is what the window shows: the save after the last change is done.
                 "tabs-saved" => !_tabsSaveTimer.IsRunning && _tabsWritten == CurrentTabs().ToJson().GetRawText(),
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
