@@ -4,8 +4,10 @@
 //! - `--console` runs in the terminal until Ctrl+C (needs an elevated
 //!   terminal).
 //! - `--service` is how the Windows service manager starts it.
-//! - `--install` and `--uninstall` register and remove the service
-//!   `cabinetos-indexer` (manual start; needs an elevated terminal).
+//! - `--install` registers the service `cabinetos-indexer` (automatic start,
+//!   delayed, so it comes up by itself after every restart of Windows) and
+//!   starts it once; `--uninstall` stops and removes it. Both need an
+//!   elevated terminal.
 //!
 //! Serves Constitution Article 1 (real-time NT-level file indexing) and
 //! Article 12 (its log, `indexer.<date>.jsonl`, carries each request's ID).
@@ -43,12 +45,14 @@ struct Args {
     #[arg(long)]
     service: bool,
 
-    /// Register the Windows service `cabinetos-indexer` (manual start), with
-    /// these --volumes and --log-dir. Needs an elevated terminal.
+    /// Register the Windows service `cabinetos-indexer`, with these --volumes
+    /// and --log-dir, and start it. It starts by itself after every restart
+    /// of Windows (automatic start, delayed). Needs an elevated terminal.
     #[arg(long)]
     install: bool,
 
-    /// Stop and remove the Windows service. Needs an elevated terminal.
+    /// Stop and remove the Windows service (the reverse of --install). Needs
+    /// an elevated terminal.
     #[arg(long)]
     uninstall: bool,
 
@@ -142,7 +146,7 @@ fn main() -> ExitCode {
         }
         return report(
             service::install(&args.volumes, args.log_dir.as_deref()),
-            "installed the service cabinetos-indexer (start: manual); start it with: sc start cabinetos-indexer",
+            "installed the service cabinetos-indexer (start: automatic, delayed) and started it; it starts by itself after every restart of Windows",
         );
     }
     if args.uninstall {

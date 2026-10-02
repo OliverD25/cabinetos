@@ -367,7 +367,7 @@ in a PowerShell started with `-ExecutionPolicy Bypass`):
 | `-Destination <folder>` | Another folder: new, empty, or an earlier CabinetOS install; never a drive's root |
 | `-StartMenu` | A Start Menu shortcut: yours, or every user's with `-AllUsers` |
 | `-AddToPath` | The install folder on your PATH (the machine's with `-AllUsers`), for `cabinetos-cli` and `cab`; new terminals see it. Off unless given |
-| `-Indexer` | Also installs and starts the indexer service (`cabinetos-indexer --install`). Needs `-AllUsers` and a folder inside Program Files: the service runs as LocalSystem, so its program must sit where only administrators can change it. The service starts manually: after a restart of Windows, start it with `Start-Service cabinetos-indexer` as administrator |
+| `-Indexer` | Also installs and starts the indexer service (`cabinetos-indexer --install`). Needs `-AllUsers` and a folder inside Program Files: the service runs as LocalSystem, so its program must sit where only administrators can change it. The service has an automatic, delayed start: Windows starts it by itself after every restart ("The indexer service", below) |
 | `-SkipPrerequisiteCheck` | Installs even when a prerequisite looks missing |
 | `-WhatIf` | Shows every step and changes nothing |
 
@@ -559,8 +559,6 @@ them (checked 2026-09-28 with winget 1.29.380).
 - An all-users install does not update itself: it keeps the installer or
   winget (ADR 0014). The in-app update replaces the files, not the indexer
   service, which only an all-users install has.
-- The indexer service starts manually, so it is off after each restart of
-  Windows until started again.
 - x64 only; ARM64 is untested.
 - The setup file installs no prerequisite, by decision (Phase 22, unit 5):
   it names the winget commands and stops. It is per user only (no
