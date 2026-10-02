@@ -16,32 +16,32 @@ workspace architecture of VS Code.
 - **The mouse is optional.** Every action is a named command with a shortcut,
   reachable from a command palette, with chord keybindings.
 
-Status: pre-alpha. Phases 0 to 4 and 6 to 9 of [the plan](docs/PLAN.md) are
-done: the governing documents, and a Rust core that lists and watches
-directories in shared memory, serves its configuration, commands and keymap,
-runs copy, move and delete jobs on per-disk queues, runs sandboxed
-WebAssembly plugins whose crashes it contains, searches whole NTFS volumes
-through an elevated indexer (or walks folders without it), runs shells in
-pseudo-consoles, applies JSON colour themes live, and installs plugins,
-themes and tools from a static marketplace index with each download's
-SHA-256 checked, all over a user-only named pipe, with the indexer behind a
-read-only pipe of its own and each shell's bytes on a pipe of their own
-(`core/`, 722 tests). Phase 5, the WinUI 3 shell, is built (`ui/`, 849
-tests): two panes over the core's shared-memory listings with the shell's
-type names and icons, breadcrumbs, a status bar, the command palette with
-chord keys and inline rebinding, copy, move, delete, rename, new folder and
-open with the transfer flyout and conflict decisions, file search, the
-plugin list and permissions review, the integrated terminal in a Tool Dock,
-Tool Extensions each in a WebView2 process of its own, with Markdown
-Preview as the first (opt-in, in `sdk/tools`), colour themes applied live
-with a theme picker, and the marketplace view, which installs plugins and
-themes from an index through the core; checked with real keys on
-2026-09-28, with five findings queued for the shell. Phase 10's buildable
-parts are done: one command builds a release zip with an installer and
-every third-party license; signing and publishing wait for the creator. 36
-more colour themes, ported under their MIT licenses from 27 of the 30 most
-popular editor themes, wait in `sdk/themes/collection` for the marketplace
-instead of shipping with the core.
+## Status
+
+Early. 0.1.0 is the first release: Windows 11, x64 only. The work follows a
+written [plan](docs/PLAN.md), and [CHANGELOG.md](CHANGELOG.md) lists what each
+version has. What works in 0.1.0:
+
+- Two file panes with tabs, breadcrumbs, a column view, pinned folders and
+  the drives; listings of 100,000 entries in about 50 ms.
+- Copy, move, delete and rename on per-disk queues, with conflict decisions
+  that never stop the rest of a job, and undo.
+- Search by name: whole NTFS volumes through an optional elevated indexer,
+  or a walk of the folders without it.
+- The command palette, rebindable keys, chord keys, and a right-click menu
+  defined in the settings file.
+- An integrated terminal in a dock: PowerShell, Command Prompt or WSL, each
+  linked to a pane.
+- Colour themes in JSON, applied live; one settings file, `cabinetos.json`,
+  that applies live too.
+- Sandboxed WebAssembly plugins and Tool Extensions from a marketplace index,
+  each download checked by its SHA-256. Markdown Preview and an AI agent are
+  opt-in extensions, not part of the core.
+- A setup file, and updates that install themselves for a per-user install.
+
+Not there yet: code signing (Windows SmartScreen asks before the first
+start), a graphical settings view (the plan's Phase 11), ARM64, and a winget
+package.
 
 ## Documents
 
@@ -66,7 +66,7 @@ instead of shipping with the core.
 | [docs/extensions/agent.md](docs/extensions/agent.md) | The Agent extension (a plugin and a chat page): models and keys, the three tiers, previews and undo, the audit log, building and packing it. |
 | [docs/themes.md](docs/themes.md) | Colour themes: the JSON format, the shipped themes, the themes folder, live editing. |
 | [docs/marketplace.md](docs/marketplace.md) | The marketplace: the index format, where installs go, the trust rules, a local index for testing. |
-| [docs/release.md](docs/release.md) | Releases: how the zip is built, installed, removed, signed and published. |
+| [docs/release.md](docs/release.md) | Releases: how the zip and the setup file are built, installed, removed, updated, signed and published. |
 | [CHANGELOG.md](CHANGELOG.md) | What each version adds. |
 | [docs/research/](docs/research/README.md) | Research notes and proposals, not decisions: the Total Commander gap analysis behind the proposed Phase 11. |
 | [docs/log/](docs/log/2026-09-28/README.md) | The build log: one report per phase, with every decision and its undo. |
@@ -77,47 +77,60 @@ instead of shipping with the core.
 |---|---|
 | `core/` | Rust workspace: `cabinetos-core.exe`, `cabinetos-indexer.exe`, `cabinetos-cli.exe` and their libraries |
 | `ui/` | C# WinUI 3 solution: `CabinetOS.exe` |
-| `sdk/` | Plugin interface (WIT), protocol schema, templates, themes |
-| `docs/` | Governing documents, plan, decisions, design |
-| `build/` | Release scripts: `release.ps1`, the installer and uninstaller, the notices generator, the winget manifests |
+| `sdk/` | Plugin interface (WIT), protocol schema, templates, themes, extensions |
+| `docs/` | Governing documents, plan, decisions, design, build log |
+| `build/` | Release scripts: `release.ps1`, the setup file, the installer and uninstaller, the notices generator, the winget manifests |
 
 ## Requirements
 
 - Windows 11 22H2 (build 22621) or newer, x64.
 - To run it: the .NET 10 runtime, the Windows App Runtime 2.5.1 or newer
-  (x64), and the WebView2 Runtime, which every Windows 11 has. The installer
-  checks all three and prints the command that installs a missing one.
+  (x64), and the WebView2 Runtime, which every Windows 11 has. The setup file
+  and the installer check all three and name the command that installs a
+  missing one.
 - To build it: the toolchains in [docs/dev-setup.md](docs/dev-setup.md).
 
 ## Install
 
-No release is published yet; build the zip with `build/release.ps1`
-([docs/release.md](docs/release.md)). With the zip in your Downloads folder,
-in PowerShell:
+Releases are on the [Releases page](https://github.com/OliverD25/cabinetos/releases).
+The simplest install is the setup file,
+`CabinetOS-<version>-win-x64-setup.exe`: a double-click, for you alone, with
+no administrator rights, and later versions install themselves. The zip,
+`CabinetOS-<version>-win-x64.zip`, holds the same programs and an
+`install.ps1`, which can also install for every user and add the indexer
+service. Each file has a `.sha256` beside it. How to install, update and remove it,
+and every switch: [docs/release.md](docs/release.md).
+
+The release is not code-signed yet, so Windows SmartScreen may ask before
+the first start.
+
+## Build from source
+
+With the toolchains of [docs/dev-setup.md](docs/dev-setup.md), in PowerShell:
 
 ```powershell
-Unblock-File "$env:USERPROFILE\Downloads\CabinetOS-0.1.0-win-x64.zip"
-Expand-Archive "$env:USERPROFILE\Downloads\CabinetOS-0.1.0-win-x64.zip" "$env:TEMP\CabinetOS-0.1.0" -Force
-powershell -ExecutionPolicy Bypass -File "$env:TEMP\CabinetOS-0.1.0\install.ps1" -StartMenu -AddToPath
+git clone https://github.com/OliverD25/cabinetos.git; cd cabinetos\core; cargo build --workspace; cd ..\ui; dotnet build CabinetOS.sln
 ```
 
-This installs CabinetOS for you alone, in `%LOCALAPPDATA%\Programs\CabinetOS`,
-with no administrator rights; `-StartMenu` and `-AddToPath` are optional.
-`-AllUsers` installs into Program Files instead (run as administrator), and
-`-AllUsers -Indexer` adds the indexer service for instant search of whole
-volumes. To remove CabinetOS:
+The window started from `ui\` finds the core in `core\target\debug`
+([docs/ui.md](docs/ui.md), "Starting the core"). The checks every change
+passes, the core's five and the window's tests, are in
+[docs/dev-setup.md](docs/dev-setup.md); the release zip and the setup file
+come from `build\release.ps1` ([docs/release.md](docs/release.md)).
 
-```powershell
-powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Programs\CabinetOS\uninstall.ps1"
-```
+## Problems and ideas
 
-Settings, plugins and logs stay unless you add `-RemoveData`. The release is
-not signed yet, so Windows SmartScreen may ask before the first start.
-Details: [docs/release.md](docs/release.md).
+This is the first release. Please report problems and ideas as
+[issues](https://github.com/OliverD25/cabinetos/issues): what you did, what
+happened, and the CabinetOS version (the palette's "Help: About CabinetOS"
+shows it). A crash writes a `crash-*.json` trace into
+`%LOCALAPPDATA%\CabinetOS\logs` ([docs/diagnostics.md](docs/diagnostics.md));
+attaching it helps.
 
 ## License
 
 [MIT](LICENSE). The WinUI 3 frontend builds on Microsoft's Windows App SDK,
 which comes under Microsoft's own license terms
 ([ADR 0010](docs/decisions/0010-windows-app-sdk-license-exception.md)); the
-core, the indexer and the CLI have no such dependency.
+core, the indexer and the CLI have no such dependency. A release carries
+the license of every third-party component in its `THIRD-PARTY-NOTICES.md`.
