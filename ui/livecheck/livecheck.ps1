@@ -2387,7 +2387,8 @@ if (-not $ukrainian) {
 # that writes a file and Ctrl+Shift+C copying a selection, the prompt hook (a linked session follows its pane when
 # Enter draws its next prompt, and a half-typed line runs as typed), Alt+] as a physical key on the Ukrainian
 # layout, and the split mirror (Ctrl+Backslash is Up to Root in a pane and splits the dock under the two panes in the
-# terminal, the halves under their panes as the window's log says).
+# terminal, the halves under their panes as the window's log says), and the save of the sessions in cabinetos.json
+# (terminal.tabs, unit 5; the restoration after a restart is in the end-to-end tests: this run starts one window).
 function TermLines([string]$message) { @(ShellLines $message | Where-Object { $_.target -eq 'cabinetos_ui::terminal' }) }
 function Summoned { TermLines 'terminal summoned' | Select-Object -Last 1 }
 function TermRequests { @(ShellLines 'request sent' | Where-Object { $_.fields.request -like 'terminal_*' -and $_.fields.request -ne 'terminal_resize' }).Count }
@@ -2673,6 +2674,20 @@ for ($k = 0; $k -lt 25 -and -not $cabJob; $k++) {
 "21: the core logged the job it was asked to run (a copy of 3 sources into the right pane's folder): $([bool]$cabJob -and $cabJob.fields.kind -eq 'Copy' -and $cabJob.fields.sources -eq 3)"
 Shot $h "$ShotDir\21-cab-live.png"
 
+Step "21: the terminal's sessions are saved in cabinetos.json (terminal.tabs) once they change"
+# Terminal unit 5: the window writes the layout of its sessions (profile, folder, pane, mode, the tab in front) through the
+# core a second after a change of the tabs, and logs "terminal layout saved". This run never starts a second window, so
+# the restoration itself (the first Ctrl+Backquote after a restart) is checked by the end-to-end tests
+# (TerminalEndToEndTests); here the save is judged by the window's log and by the file.
+[void](WaitShellLines 'terminal layout saved' 0 8)
+Start-Sleep -Milliseconds 1500
+$savedLines = @(TermLines 'terminal layout saved')
+$lastSaved = $savedLines | Select-Object -Last 1
+$savedTabs = (Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json).terminal.tabs
+$savedPanes = @($savedTabs.items | ForEach-Object { $_.pane })
+"21: the window logged 'terminal layout saved' ($($savedLines.Count) times, the last with $($lastSaved.fields.sessions) sessions): $($savedLines.Count -gt 0 -and $lastSaved.fields.sessions -ge 2)"
+"21: cabinetos.json has terminal.tabs with a session for each pane ($($savedPanes -join ', ')), the tab in front ($($savedTabs.front)) and the folders ($(@($savedTabs.items | ForEach-Object { Split-Path -Leaf $_.folder }) -join ', ')): $(($savedPanes -contains 'left') -and ($savedPanes -contains 'right') -and $null -ne $savedTabs.front)"
+
 Step "21: Ctrl+Backslash: Up to Root in a pane, the split dock in the terminal"
 # The split mirror (terminal unit 3): the same keys, by where the keyboard is. In the left pane they are Up to Root
 # (go.root); in the terminal they split the dock under the two panes, the left session under the left pane and the right
@@ -2740,6 +2755,7 @@ foreach ($c in $corePids) { "core $c exited with the window: $(-not [bool](Get-P
 $config = Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json
 "config keybindings:"; $config.keybindings | ConvertTo-Json -Compress
 "config ui.lastPaths: $($config.ui.lastPaths -join ' | '); ui.dualPane: $($config.ui.dualPane)"
+"21: the layout of the terminal's sessions was still in cabinetos.json after the window closed (terminal.tabs holds $(@($config.terminal.tabs.items).Count) sessions): $(@($config.terminal.tabs.items).Count -ge 2)"
 $ui = UiAll
 $job = $ui | Where-Object { $_ -match '"job started"' } | Select-Object -First 1
 if ($job) {
