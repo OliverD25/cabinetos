@@ -398,7 +398,10 @@ impl Session {
                 | Request::TerminalClose { .. }
                 | Request::TerminalTypePaths { .. }
                 | Request::TerminalSetMode { .. }
-                | Request::TerminalList) => self.terminal_request(&id, &span, kind, request),
+                | Request::TerminalList
+                | Request::TerminalPaneFolder { .. }) => {
+                    self.terminal_request(&id, &span, kind, request)
+                }
                 request @ (Request::ListThemes
                 | Request::GetTheme { .. }
                 | Request::ListTools
@@ -1266,9 +1269,9 @@ impl Session {
     }
 
     /// The terminal requests. `terminal_resize`, `terminal_type_paths`,
-    /// `terminal_set_mode` and `terminal_list` answer at once; the others
-    /// run on the blocking pool (starting a shell takes tens of
-    /// milliseconds, closing one up to 2 s).
+    /// `terminal_set_mode`, `terminal_list` and `terminal_pane_folder`
+    /// answer at once; the others run on the blocking pool (starting a
+    /// shell takes tens of milliseconds, closing one up to 2 s).
     fn terminal_request(
         &mut self,
         id: &RequestId,
@@ -1334,6 +1337,17 @@ impl Session {
             Request::TerminalList => Some(Response::TerminalSessions {
                 sessions: terminals.list(),
             }),
+            Request::TerminalPaneFolder { session_id } => {
+                Some(match terminals.binding(session_id) {
+                    Ok((pane, mode)) => Response::TerminalPaneFolder {
+                        session_id,
+                        pane,
+                        mode,
+                        folder: self.services.windows.pane_folder(pane),
+                    },
+                    Err(error) => failure_reply((error.code, error.message)),
+                })
+            }
             _ => None,
         }
     }
@@ -2242,13 +2256,14 @@ fn log_payload(message: &'static str, json: &[u8]) {
 }
 
 /// One line per request, inside its span, so its `request_id` is in the log.
-/// A window may send `window_state` at every change, so its success is a
+/// A window may send `window_state` at every change, and a shell's prompt
+/// hook asks `terminal_pane_folder` at every prompt, so their success is a
 /// debug line only.
 fn log_handled(kind: &'static str, started: Instant, reply: &Response) {
     let elapsed_us = listing::micros(started.elapsed());
     if let Response::Error { code, message } = reply {
         tracing::info!(request = kind, elapsed_us, ?code, error = %message, "request failed");
-    } else if kind == "window_state" {
+    } else if matches!(kind, "window_state" | "terminal_pane_folder") {
         tracing::debug!(request = kind, elapsed_us, "request handled");
     } else {
         tracing::info!(request = kind, elapsed_us, "request handled");

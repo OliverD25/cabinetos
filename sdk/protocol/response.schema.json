@@ -651,6 +651,43 @@
       ]
     },
     {
+      "description": "Reply to `terminal_pane_folder`.",
+      "type": "object",
+      "properties": {
+        "folder": {
+          "description": "The folder the pane shows (its tab in front), as the newest\n`window_state` says; `null` when no window has said what it\nshows, or the tab in front shows a tool.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "description": "How it is bound to that pane: a linked shell follows `folder`.",
+          "$ref": "#/$defs/TerminalMode"
+        },
+        "pane": {
+          "description": "The file pane it belongs to.",
+          "$ref": "#/$defs/Pane"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_pane_folder"
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "pane",
+        "mode"
+      ]
+    },
+    {
       "description": "Reply to `list_themes`: every valid theme, by ID.",
       "type": "object",
       "properties": {
@@ -3459,7 +3496,7 @@
           "const": "locked"
         },
         {
-          "description": "The session is meant to follow its pane through a prompt hook. The\nhook is not built yet, so a linked session behaves as a locked one.",
+          "description": "The session follows its pane: each time the shell draws its prompt,\nits prompt hook asks the core for the pane's folder\n(`terminal_pane_folder`) and changes to it. A running command or a\nhalf-typed line is never touched.",
           "type": "string",
           "const": "linked"
         }
@@ -3483,6 +3520,13 @@
         "cwd": {
           "description": "The folder it started in. The shell may have moved since.",
           "type": "string"
+        },
+        "folder": {
+          "description": "The shell's current folder, as its prompt hook last reported it\n(`terminal_folder_changed`); left out before the first report and\nfor a shell without a hook.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "linkable": {
           "description": "Whether it may be `linked`: `false` for a profile that says\n`\"linkable\": false` (no prompt hook can be added to its program).",

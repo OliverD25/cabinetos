@@ -354,6 +354,31 @@
       ]
     },
     {
+      "description": "A terminal session's shell reported a new current folder: its\nprompt hook prints it (OSC 9;9) each time the shell draws its\nprompt, and the core sends this when it differs from the last one.\nSent to every connection that said `hello`.",
+      "type": "object",
+      "properties": {
+        "folder": {
+          "description": "The shell's folder, as the shell wrote it (a Windows path; a\nWSL shell's Linux folders are `\\\\wsl.localhost\\…` paths).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_folder_changed"
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "folder"
+      ]
+    },
+    {
       "description": "How far a measure has come: the totals so far of the path it counts\nnow. At most 30 per second per measure, and none for a measure that\nends sooner. Sent on the connection that asked.",
       "type": "object",
       "properties": {
@@ -2128,7 +2153,7 @@
           "const": "locked"
         },
         {
-          "description": "The session is meant to follow its pane through a prompt hook. The\nhook is not built yet, so a linked session behaves as a locked one.",
+          "description": "The session follows its pane: each time the shell draws its prompt,\nits prompt hook asks the core for the pane's folder\n(`terminal_pane_folder`) and changes to it. A running command or a\nhalf-typed line is never touched.",
           "type": "string",
           "const": "linked"
         }

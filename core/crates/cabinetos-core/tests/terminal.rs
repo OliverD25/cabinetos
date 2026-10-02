@@ -1,6 +1,7 @@
 //! Terminal sessions end to end with the real `cabinetos-core.exe`: the
 //! requests, the byte pipe, `terminal_exited`, the panes and modes with
-//! `terminal_mode_changed`, a session that outlives its connection, and the
+//! `terminal_mode_changed`, the pane's folder a prompt hook asks for
+//! (`terminal_pane_folder`), a session that outlives its connection, and the
 //! shells ending with the core. The shells run only `echo`, `cd` and
 //! `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which the tests
 //! remove.
@@ -11,7 +12,8 @@ use std::time::{Duration, Instant};
 
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
-    Envelope, ErrorCode, Event, Pane, Request, Response, TerminalMode, TerminalState,
+    Envelope, ErrorCode, Event, Pane, PaneState, Request, Response, TerminalMode, TerminalState,
+    WindowPanes, WindowState, WindowTab,
 };
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -501,4 +503,109 @@ async fn sessions_have_a_pane_and_a_mode_and_every_client_hears_a_change() {
             Response::Ok
         );
     }
+}
+
+/// A `window_state` whose panes show `left` and `right` (each the tab in
+/// front of two).
+fn window_showing(left: &str, right: &str) -> Request {
+    let pane = |front: &str| PaneState {
+        tabs: vec![
+            WindowTab {
+                path: r"C:\Windows".to_owned(),
+                ..WindowTab::default()
+            },
+            WindowTab {
+                path: front.to_owned(),
+                ..WindowTab::default()
+            },
+        ],
+        active: 1,
+        ..PaneState::default()
+    };
+    Request::WindowState(WindowState {
+        active_pane: Pane::Left,
+        panes: WindowPanes {
+            left: pane(left),
+            right: pane(right),
+        },
+    })
+}
+
+/// `terminal_pane_folder`, as a prompt hook's `cab term cwd` asks it: on a
+/// connection without `hello`, the session's pane and mode and the folder
+/// its pane shows in the newest `window_state`. No window yet, or the
+/// window gone: no folder. A locked session gets the folder too, with its
+/// mode; the command line prints it only for a linked one.
+#[tokio::test]
+async fn the_pane_folder_comes_from_the_newest_window_state() {
+    let dir = scratch("core-pane-folder");
+    let core = start_core(dir.path());
+    let (mut window, _events) = connect_with_events(&core.pipe).await;
+    let reply = ask(
+        &mut window,
+        Request::TerminalOpen {
+            profile: Some("hooked".to_owned()),
+            cwd: Some(shown(dir.path())),
+            cols: 80,
+            rows: 25,
+            pane: Pane::Right,
+            mode: Some(TerminalMode::Linked),
+        },
+    )
+    .await;
+    let Response::TerminalOpened { session_id, .. } = reply else {
+        panic!("expected terminal_opened, got {reply:?}");
+    };
+    let mut hook = connect(&core.pipe).await;
+    let folder_of = |mode: TerminalMode, folder: Option<&str>| Response::TerminalPaneFolder {
+        session_id,
+        pane: Pane::Right,
+        mode,
+        folder: folder.map(str::to_owned),
+    };
+    let ask_folder = Request::TerminalPaneFolder { session_id };
+    assert_eq!(
+        ask(&mut hook, ask_folder.clone()).await,
+        folder_of(TerminalMode::Linked, None),
+        "no window has said what it shows"
+    );
+
+    let right = r"D:\Звіт 'проєкт' $HOME";
+    assert_eq!(
+        ask(&mut window, window_showing(r"E:\left", right)).await,
+        Response::Ok
+    );
+    assert_eq!(
+        ask(&mut hook, ask_folder.clone()).await,
+        folder_of(TerminalMode::Linked, Some(right))
+    );
+    let locked = Request::TerminalSetMode {
+        session_id,
+        mode: TerminalMode::Locked,
+    };
+    assert_eq!(ask(&mut window, locked).await, Response::Ok);
+    assert_eq!(
+        ask(&mut hook, ask_folder.clone()).await,
+        folder_of(TerminalMode::Locked, Some(right))
+    );
+    let unknown = ask(
+        &mut hook,
+        Request::TerminalPaneFolder {
+            session_id: session_id + 100,
+        },
+    )
+    .await;
+    assert_eq!(error_code(&unknown), ErrorCode::NoSuchSession);
+
+    // The window leaves: the core forgets what it showed.
+    drop(window);
+    let deadline = Instant::now() + DEADLINE;
+    while ask(&mut hook, ask_folder.clone()).await != folder_of(TerminalMode::Locked, None) {
+        assert!(Instant::now() < deadline, "the window's state stayed");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        ask(&mut hook, Request::TerminalClose { session_id }).await,
+        Response::Ok
+    );
 }

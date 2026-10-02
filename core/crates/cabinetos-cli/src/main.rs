@@ -6,7 +6,8 @@
 //! configuration (`config`), the command registry (`commands`), the keymap
 //! (`keys`), jobs (`copy`, `move`, `delete`, `jobs`, `job`), the Core
 //! Plugins (`plugins`), the events the core sends (`events watch`), file
-//! search (`search`, `index status`), the terminal sessions (`term`), the
+//! search (`search`, `index status`), the terminal sessions (`term`; `term
+//! cwd` is what a shell's prompt hook runs at each prompt), the
 //! colour themes (`themes`), the marketplace (`market`), what the window
 //! shows (`state`), secrets in the Credential Manager (`secret`), in-app
 //! updates (`update`), and the log folder (`log trace`, `log tail`: these read
@@ -46,8 +47,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, anyhow, bail};
 use cabinetos_cli_args::{
     Cli, Command, CommandsAction, ConfigAction, EventsAction, IndexAction, JobCommand, KeysAction,
-    KindArg, LogAction, MarketAction, OnConflictArg, PluginsAction, ResolutionArg, ResolveArg,
-    SecretAction, SortArg, TermAction, TermArgs, ThemesAction, TransferArgs,
+    KindArg, LogAction, MarketAction, OnConflictArg, PIPE_ENV, PluginsAction, ResolutionArg,
+    ResolveArg, SecretAction, SortArg, TermAction, TermArgs, ThemesAction, TransferArgs,
 };
 use cabinetos_diag::{Boundary, DiagConfig, span_for_action};
 use cabinetos_ipc::{PipeClient, PipeName};
@@ -60,6 +61,9 @@ use tracing::Instrument;
 
 /// How long to wait for a busy pipe.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long `term cwd` waits for the pipe and then for the reply: a
+/// shell's prompt waits for it.
+const HOOK_TIMEOUT: Duration = Duration::from_secs(1);
 /// How long to wait for one reply. Listing a huge directory on a slow network
 /// share may take a while.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
@@ -192,19 +196,31 @@ fn without_core(command: &Command) -> Option<anyhow::Result<()>> {
     }
 }
 
+/// The session `term cwd` asks about, found before connecting: without
+/// one there is nothing to ask. `None` for every other command.
+fn hook_session(command: &Command) -> anyhow::Result<Option<u64>> {
+    match command {
+        Command::Term(TermArgs {
+            action: Some(TermAction::Cwd { session }),
+            ..
+        }) => term::session_or_env(*session).map(Some),
+        _ => Ok(None),
+    }
+}
+
 async fn execute(cli: &Cli) -> anyhow::Result<()> {
     if let Some(result) = without_core(&cli.command) {
         return result;
     }
-    let pipe = PipeName::new(&cli.pipe);
-    let mut client = PipeClient::connect(&pipe, CONNECT_TIMEOUT)
-        .await
-        .with_context(|| {
-            format!(
-                "cannot connect to {pipe}; is cabinetos-core running with --pipe {}?",
-                pipe.token()
-            )
-        })?;
+    let hook_session = hook_session(&cli.command)?;
+    let pipe = PipeName::new(&cli.pipe_token(std::env::var(PIPE_ENV).ok()));
+    let wait = hook_session.map_or(CONNECT_TIMEOUT, |_| HOOK_TIMEOUT);
+    let mut client = PipeClient::connect(&pipe, wait).await.with_context(|| {
+        format!(
+            "cannot connect to {pipe}; is cabinetos-core running with --pipe {}?",
+            pipe.token()
+        )
+    })?;
     // One trace per run: every request of this run is one action.
     client.set_trace(Some(RequestId::new()));
 
@@ -275,6 +291,9 @@ async fn execute(cli: &Cli) -> anyhow::Result<()> {
         Command::Index {
             action: IndexAction::Status,
         } => search::status(&mut client).await?,
+        Command::Term(_) if let Some(session_id) = hook_session => {
+            term::cwd(&mut client, session_id, HOOK_TIMEOUT).await?;
+        }
         Command::Term(arguments) => term_command(&mut client, arguments).await?,
         Command::Themes { .. } | Command::Market { .. } => {
             extension_command(&mut client, &cli.command).await?;
@@ -469,7 +488,8 @@ async fn props(client: &mut PipeClient, paths: &[String]) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// The terminal commands: `term`, `term list|close|type|mode`.
+/// The terminal commands: `term`, `term list|close|type|mode` (`term cwd`
+/// is answered before, with its short timeouts).
 async fn term_command(client: &mut PipeClient, arguments: &TermArgs) -> anyhow::Result<()> {
     match &arguments.action {
         None => {
@@ -508,6 +528,7 @@ async fn term_command(client: &mut PipeClient, arguments: &TermArgs) -> anyhow::
             )
             .await
         }
+        Some(TermAction::Cwd { .. }) => unreachable!("term cwd is answered in execute"),
     }
 }
 

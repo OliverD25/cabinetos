@@ -1,12 +1,12 @@
 //! `cabinetos-cli term`: a shell run by the core, in this console window;
-//! and `term list`, `term close`, `term type`, `term mode`
-//! (`docs/terminal.md`).
+//! and `term list`, `term close`, `term type`, `term mode`, and `term cwd`,
+//! which a shell's prompt hook runs (`docs/terminal.md`).
 
 use std::io::{Read, Write};
 use std::time::Duration;
 
 use anyhow::Context;
-use cabinetos_cli_args::{ModeArg, PaneArg};
+use cabinetos_cli_args::{ModeArg, PaneArg, SESSION_ENV};
 use cabinetos_ipc::PipeClient;
 use cabinetos_protocol::{
     Envelope, Event, Pane, Request, Response, TerminalMode, TerminalSession, TerminalState,
@@ -16,7 +16,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-use crate::{expect_welcome, failure, say, send};
+use crate::{expect_welcome, failure, say, send, send_waiting};
 
 /// `Ctrl+]` in raw mode: detaches from the session.
 const DETACH: u8 = 0x1d;
@@ -126,6 +126,45 @@ pub(crate) async fn run(
         )),
     }
     Ok(())
+}
+
+/// The session `term cwd` asks about: `--session`, else `CABINETOS_SESSION`,
+/// which the core gives every shell it starts.
+pub(crate) fn session_or_env(session: Option<u64>) -> anyhow::Result<u64> {
+    if let Some(session) = session {
+        return Ok(session);
+    }
+    let text = std::env::var(SESSION_ENV).map_err(|_| {
+        anyhow::anyhow!(
+            "no session: {SESSION_ENV} is not set (it is in a CabinetOS terminal); give --session <ID>"
+        )
+    })?;
+    text.trim()
+        .parse()
+        .with_context(|| format!("{SESSION_ENV} is `{text}`, not a session ID"))
+}
+
+/// `term cwd`: prints the folder the session follows, one line, when it is
+/// linked and a window says what its pane shows; prints nothing otherwise.
+/// The prompt hook changes to that folder when the shell is elsewhere.
+pub(crate) async fn cwd(
+    client: &mut PipeClient,
+    session_id: u64,
+    timeout: Duration,
+) -> anyhow::Result<()> {
+    let reply = send_waiting(client, Request::TerminalPaneFolder { session_id }, timeout).await?;
+    match reply.body {
+        Response::TerminalPaneFolder {
+            mode: TerminalMode::Linked,
+            folder: Some(folder),
+            ..
+        } => {
+            say(format_args!("{folder}"));
+            Ok(())
+        }
+        Response::TerminalPaneFolder { .. } => Ok(()),
+        other => Err(failure(&format!("session {session_id}"), &other)),
+    }
 }
 
 /// Opens the session's byte pipe; waits while another client has it.
@@ -444,6 +483,7 @@ mod tests {
             pane: Pane::Left,
             mode: TerminalMode::Locked,
             linkable: true,
+            folder: Some(r"E:\work\later".to_owned()),
         };
         assert_eq!(
             session_line(&session),

@@ -20,13 +20,40 @@ use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 /// The name the model's reference gives the program.
 pub const PROGRAM: &str = "cab";
 
+/// The variable that names the pipe token when `--pipe` does not: the core
+/// gives it to every shell of its terminal sessions.
+pub const PIPE_ENV: &str = "CABINETOS_PIPE";
+
+/// The variable that names a terminal session to `term cwd`: the core
+/// gives every shell its session's ID.
+pub const SESSION_ENV: &str = "CABINETOS_SESSION";
+
+/// The pipe token without `--pipe` and without `CABINETOS_PIPE`.
+pub const DEFAULT_PIPE: &str = "dev";
+
+impl Cli {
+    /// The pipe token: `--pipe`, else `from_env` (the value of
+    /// `CABINETOS_PIPE`) when it is not empty, else `dev`.
+    #[must_use]
+    pub fn pipe_token(&self, from_env: Option<String>) -> String {
+        self.pipe
+            .clone()
+            .or_else(|| from_env.filter(|token| !token.trim().is_empty()))
+            .unwrap_or_else(|| DEFAULT_PIPE.to_owned())
+    }
+}
+
 /// Talks to a running cabinetos-core over its named pipe.
 #[derive(Debug, Parser)]
 #[command(name = "cabinetos-cli", version)]
 pub struct Cli {
-    /// Pipe token of the core: \\.\pipe\cabinetos-core-<TOKEN>.
-    #[arg(long, global = true, value_name = "TOKEN", default_value = "dev")]
-    pub pipe: String,
+    /// Pipe token of the core; else `CABINETOS_PIPE`, else `dev`.
+    ///
+    /// The core listens on \\.\pipe\cabinetos-core-<TOKEN>. A CabinetOS
+    /// terminal's shells have `CABINETOS_PIPE`, so the command line reaches
+    /// the core of the window it runs in; `dev` is the core run by hand.
+    #[arg(long, global = true, value_name = "TOKEN")]
+    pub pipe: Option<String>,
 
     /// Also write this client's log (cli.<date>.jsonl) into PATH.
     #[arg(long, global = true, value_name = "PATH")]
@@ -436,6 +463,14 @@ pub enum TermAction {
         #[arg(value_enum)]
         mode: ModeArg,
     },
+    /// Print the folder a linked session follows: its pane's folder, or
+    /// nothing for a locked session or when no window says what its panes
+    /// show. A shell's prompt hook runs it at each prompt.
+    Cwd {
+        /// The session's ID; without it, `CABINETOS_SESSION`.
+        #[arg(long, value_name = "ID")]
+        session: Option<u64>,
+    },
 }
 
 /// A file pane on the command line.
@@ -794,16 +829,27 @@ mod tests {
     #[test]
     fn ping_defaults_to_one_ping_on_the_dev_pipe() {
         let cli = Cli::try_parse_from(["cabinetos-cli", "ping"]).unwrap();
-        assert_eq!(cli.pipe, "dev");
+        assert_eq!(cli.pipe, None);
+        assert_eq!(cli.pipe_token(None), "dev");
         assert_eq!(cli.log_dir, None);
         assert_eq!(cli.command, Command::Ping { count: 1 });
+    }
+
+    #[test]
+    fn the_pipe_comes_from_the_option_then_the_terminal_s_variable_then_dev() {
+        let given = Cli::try_parse_from(["cabinetos-cli", "--pipe", "demo", "ping"]).unwrap();
+        assert_eq!(given.pipe_token(Some("abc".to_owned())), "demo");
+        let plain = Cli::try_parse_from(["cabinetos-cli", "ping"]).unwrap();
+        assert_eq!(plain.pipe_token(Some("abc".to_owned())), "abc");
+        assert_eq!(plain.pipe_token(Some(" ".to_owned())), "dev");
+        assert_eq!(plain.pipe_token(None), "dev");
     }
 
     #[test]
     fn parses_pipe_and_count() {
         let cli = Cli::try_parse_from(["cabinetos-cli", "--pipe", "demo", "ping", "--count", "3"])
             .unwrap();
-        assert_eq!(cli.pipe, "demo");
+        assert_eq!(cli.pipe.as_deref(), Some("demo"));
         assert_eq!(cli.command, Command::Ping { count: 3 });
     }
 
@@ -818,7 +864,7 @@ mod tests {
             r"C:\logs",
         ])
         .unwrap();
-        assert_eq!(cli.pipe, "demo");
+        assert_eq!(cli.pipe.as_deref(), Some("demo"));
         assert_eq!(cli.log_dir, Some(PathBuf::from(r"C:\logs")));
         assert_eq!(cli.command, Command::Shutdown);
     }
@@ -1326,6 +1372,15 @@ mod tests {
         assert!(parse(&["term", "close"]).is_err(), "an ID is required");
         assert!(parse(&["term", "mode", "3"]).is_err(), "a mode is required");
         assert!(parse(&["term", "mode", "3", "follow"]).is_err());
+        assert_eq!(
+            parse(&["term", "cwd"]).unwrap(),
+            term(Some(TermAction::Cwd { session: None }), None, None)
+        );
+        assert_eq!(
+            parse(&["term", "cwd", "--session", "7"]).unwrap(),
+            term(Some(TermAction::Cwd { session: Some(7) }), None, None)
+        );
+        assert!(parse(&["term", "cwd", "7"]).is_err(), "the ID is an option");
         assert!(
             parse(&["term", "cd", "3", r"D:\docs"]).is_err(),
             "the folder sync is gone"

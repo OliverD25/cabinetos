@@ -330,6 +330,13 @@ impl Terminals {
         Ok(())
     }
 
+    /// A session's pane and its mode now: what its prompt hook needs to
+    /// know whether to follow the pane. Fails with `no_such_session` for an
+    /// unknown session; an exited one still answers.
+    pub fn binding(&self, session_id: u64) -> Result<(Pane, TerminalMode), TerminalError> {
+        Ok(self.session(session_id)?.binding())
+    }
+
     /// Changes a running session's size.
     pub fn resize(&self, session_id: u64, cols: u16, rows: u16) -> Result<(), TerminalError> {
         self.session(session_id)?.resize(cells(cols), cells(rows))

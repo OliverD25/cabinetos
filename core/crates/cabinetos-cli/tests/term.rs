@@ -1,7 +1,9 @@
 //! `cabinetos-cli term` against a real core: a shell fed from a pipe;
 //! `term list`, `term mode`, `term type` and `term close` from a second CLI
-//! while the first is attached; and `term` in a console window, which here
-//! is a pseudo-console of this test's own, so the test types the keys. The
+//! while the first is attached; `term cwd`, which a prompt hook runs, with
+//! this test as the window that says what its panes show; and `term` in a
+//! console window, which here is a pseudo-console of this test's own, so
+//! the test types the keys. The
 //! shells run only `echo`, `cd`, `mode con` (which prints the console's
 //! size) and `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which
 //! the tests remove; typed paths are never run.
@@ -15,8 +17,10 @@ use std::process::{Child, Command, Output, Stdio};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use cabinetos_ipc::PipeName;
-use cabinetos_protocol::Event;
+use cabinetos_ipc::{PipeClient, PipeName};
+use cabinetos_protocol::{
+    Event, Pane, PaneState, Request, Response, TerminalMode, WindowPanes, WindowState, WindowTab,
+};
 use cabinetos_terminal::{Binding, EventSink, Opened, Profile, Terminals};
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -343,6 +347,139 @@ fn type_puts_quoted_paths_at_the_prompt_without_enter() {
     let closed = cli(&core, &["term", "close", &id]);
     assert!(closed.status.success(), "{}", text(&closed.stderr));
     term.finish();
+}
+
+/// The window this test plays: it says `hello` and what its panes show.
+struct Window {
+    client: PipeClient,
+    runtime: tokio::runtime::Runtime,
+}
+
+impl Window {
+    fn connect(core: &Core) -> Self {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let client = runtime.block_on(async {
+            let mut client = PipeClient::connect(&core.pipe, DEADLINE).await.unwrap();
+            client.hello("term-cwd-test").await.unwrap();
+            client
+        });
+        Self { client, runtime }
+    }
+
+    fn ask(&mut self, request: Request) -> Response {
+        let Self { client, runtime } = self;
+        runtime.block_on(client.request(request)).unwrap().body
+    }
+
+    /// The left pane shows `left`, the right pane `right`.
+    fn show(&mut self, left: &str, right: &str) {
+        let pane = |path: &str| PaneState {
+            tabs: vec![WindowTab {
+                path: path.to_owned(),
+                ..WindowTab::default()
+            }],
+            ..PaneState::default()
+        };
+        let state = WindowState {
+            active_pane: Pane::Left,
+            panes: WindowPanes {
+                left: pane(left),
+                right: pane(right),
+            },
+        };
+        assert_eq!(self.ask(Request::WindowState(state)), Response::Ok);
+    }
+
+    fn open(&mut self, cwd: &str, pane: Pane, mode: TerminalMode) -> u64 {
+        let reply = self.ask(Request::TerminalOpen {
+            profile: Some("hooked".to_owned()),
+            cwd: Some(cwd.to_owned()),
+            cols: 80,
+            rows: 25,
+            pane,
+            mode: Some(mode),
+        });
+        let Response::TerminalOpened { session_id, .. } = reply else {
+            panic!("expected terminal_opened, got {reply:?}");
+        };
+        session_id
+    }
+}
+
+/// `term cwd` prints the folder of a linked session's pane, one line, and
+/// nothing for a locked session or before a window said what it shows. It
+/// takes the session and the pipe from `CABINETOS_SESSION` and
+/// `CABINETOS_PIPE`, as in a CabinetOS terminal, or from `--session` and
+/// `--pipe`.
+#[test]
+fn term_cwd_prints_the_folder_a_linked_session_follows() {
+    let dir = scratch("cli-cwd");
+    std::fs::write(
+        dir.path().join("cabinetos.json"),
+        r#"{"terminal": {"defaultProfile": "hooked", "profiles": [
+            {"name": "hooked", "command": "cmd.exe", "linkable": true}
+        ]}}"#,
+    )
+    .unwrap();
+    let core = start_core(dir.path());
+    let cwd = shown(dir.path());
+    let mut window = Window::connect(&core);
+    let linked = window.open(&cwd, Pane::Right, TerminalMode::Linked);
+    let locked = window.open(&cwd, Pane::Left, TerminalMode::Locked);
+    let ask = |session: u64| cli(&core, &["term", "cwd", "--session", &session.to_string()]);
+    let printed = |output: &Output| {
+        assert!(output.status.success(), "{}", text(&output.stderr));
+        text(&output.stdout)
+    };
+    assert_eq!(printed(&ask(linked)), "", "no window state yet");
+
+    let right = shown(&dir.path().join("Звіт 'проєкт' $HOME"));
+    window.show(r"E:\left", &right);
+    assert_eq!(printed(&ask(linked)), format!("{right}\n"));
+    assert_eq!(
+        printed(&ask(locked)),
+        "",
+        "a locked session follows nothing"
+    );
+
+    // In a CabinetOS terminal: no options, the variables the core set.
+    let from_env = Command::new(CLI_EXE)
+        .args(["term", "cwd"])
+        .env("CABINETOS_SESSION", linked.to_string())
+        .env("CABINETOS_PIPE", core.pipe.token())
+        .env_remove("CABINETOS_LOG")
+        .output()
+        .unwrap();
+    assert_eq!(printed(&from_env), format!("{right}\n"));
+
+    let unknown = ask(linked + locked + 100);
+    assert!(!unknown.status.success());
+    assert!(
+        text(&unknown.stderr).contains("no_such_session"),
+        "{}",
+        text(&unknown.stderr)
+    );
+    let nowhere = Command::new(CLI_EXE)
+        .args(["--pipe", core.pipe.token(), "term", "cwd"])
+        .env_remove("CABINETOS_SESSION")
+        .env_remove("CABINETOS_LOG")
+        .output()
+        .unwrap();
+    assert!(!nowhere.status.success());
+    assert!(
+        text(&nowhere.stderr).contains("CABINETOS_SESSION is not set"),
+        "{}",
+        text(&nowhere.stderr)
+    );
+    for session_id in [linked, locked] {
+        assert_eq!(
+            window.ask(Request::TerminalClose { session_id }),
+            Response::Ok
+        );
+    }
 }
 
 /// The output as text, without VT sequences and control characters; a

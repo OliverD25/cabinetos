@@ -122,5 +122,8 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// `pane` and the optional `mode`, `terminal_opened` and `terminal_list`
 /// report the mode and whether the session is `linkable`,
 /// `terminal_set_mode`, the event `terminal_mode_changed`, the error code
-/// `not_linkable`; and `terminal_sync_cwd` is gone.
-pub const PROTOCOL_VERSION: u32 = 16;
+/// `not_linkable`; and `terminal_sync_cwd` is gone; version 17 the prompt
+/// hook (unit 2 of the terminal sprint): `terminal_pane_folder` with the
+/// reply `terminal_pane_folder`, the event `terminal_folder_changed`, and
+/// the shell's reported `folder` in `terminal_list`.
+pub const PROTOCOL_VERSION: u32 = 17;

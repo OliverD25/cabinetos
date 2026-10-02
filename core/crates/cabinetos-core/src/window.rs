@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cabinetos_protocol::{ErrorCode, Response, WindowState};
+use cabinetos_protocol::{ErrorCode, Pane, Response, WindowState};
 
 /// The last state each client sent.
 #[derive(Default)]
@@ -69,6 +69,22 @@ impl WindowStates {
         }
     }
 
+    /// The folder `pane` shows in the newest state: its tab in front, when
+    /// that tab shows a folder (not a tool) by an absolute path. What a
+    /// linked terminal session follows (`terminal_pane_folder`). From the
+    /// state in memory only: no file is read.
+    pub(crate) fn pane_folder(&self, pane: Pane) -> Option<String> {
+        let states = self.lock();
+        let newest = states.values().max_by_key(|stored| stored.sequence)?;
+        let shown = match pane {
+            Pane::Left => &newest.state.panes.left,
+            Pane::Right => &newest.state.panes.right,
+        };
+        let tab = shown.tabs.get(usize::try_from(shown.active).ok()?)?;
+        (tab.tool.is_none() && std::path::Path::new(&tab.path).is_absolute())
+            .then(|| tab.path.clone())
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, Stored>> {
         self.states
             .lock()
@@ -87,7 +103,7 @@ pub(crate) fn now_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use cabinetos_protocol::Pane;
+    use cabinetos_protocol::{PaneState, WindowTab};
 
     use super::*;
 
@@ -136,5 +152,65 @@ mod tests {
         };
         assert_eq!(code, ErrorCode::NoWindow);
         assert!(message.contains("CabinetOS#2"), "{message}");
+    }
+
+    fn tab(path: &str, tool: Option<&str>) -> WindowTab {
+        WindowTab {
+            path: path.to_owned(),
+            locked: false,
+            tool: tool.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn a_pane_s_folder_is_its_tab_in_front_in_the_newest_state() {
+        let states = WindowStates::default();
+        assert_eq!(states.pane_folder(Pane::Left), None, "no window yet");
+        let mut first = state(Pane::Left);
+        first.panes.left = PaneState {
+            tabs: vec![tab(r"C:\a", None), tab(r"D:\Звіт 'b c'", None)],
+            active: 1,
+            ..PaneState::default()
+        };
+        first.panes.right = PaneState {
+            tabs: vec![tab(r"E:\notes\x.md", Some("markdown-preview"))],
+            ..PaneState::default()
+        };
+        states.store("CabinetOS#1", first);
+        assert_eq!(
+            states.pane_folder(Pane::Left).as_deref(),
+            Some(r"D:\Звіт 'b c'")
+        );
+        assert_eq!(
+            states.pane_folder(Pane::Right),
+            None,
+            "a tool, not a folder"
+        );
+
+        let mut second = state(Pane::Right);
+        second.panes.left = PaneState {
+            tabs: vec![tab(r"\\server\share\x", None)],
+            ..PaneState::default()
+        };
+        second.panes.right = PaneState {
+            tabs: vec![tab("relative", None)],
+            ..PaneState::default()
+        };
+        states.store("CabinetOS#2", second);
+        assert_eq!(
+            states.pane_folder(Pane::Left).as_deref(),
+            Some(r"\\server\share\x"),
+            "the newest window wins"
+        );
+        assert_eq!(states.pane_folder(Pane::Right), None, "not absolute");
+        states.remove("CabinetOS#2");
+        let mut past_end = state(Pane::Left);
+        past_end.panes.left = PaneState {
+            tabs: vec![tab(r"C:\a", None)],
+            active: 3,
+            ..PaneState::default()
+        };
+        states.store("CabinetOS#1", past_end);
+        assert_eq!(states.pane_folder(Pane::Left), None, "no tab at that index");
     }
 }

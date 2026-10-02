@@ -270,6 +270,8 @@ struct Info {
     state: TerminalState,
     attached: bool,
     mode: TerminalMode,
+    /// The shell's folder, as its prompt hook last reported it.
+    folder: Option<String>,
 }
 
 /// What a new session needs.
@@ -398,6 +400,7 @@ pub(crate) fn start(
             state: TerminalState::Running,
             attached: false,
             mode: binding.mode,
+            folder: None,
         }),
         stop: CancellationToken::new(),
         span: span.clone(),
@@ -561,6 +564,11 @@ impl Session {
         &self.profile
     }
 
+    /// Its pane and its mode now.
+    pub(crate) fn binding(&self) -> (Pane, TerminalMode) {
+        (self.pane, self.info().mode)
+    }
+
     /// Sets the mode; whether it changed.
     pub(crate) fn set_mode(&self, mode: TerminalMode) -> bool {
         let mut info = self.info();
@@ -609,6 +617,7 @@ impl Session {
             pane: self.pane,
             mode: info.mode,
             linkable: self.linkable,
+            folder: info.folder.clone(),
         }
     }
 

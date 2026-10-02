@@ -401,6 +401,14 @@ pub enum Request {
     },
     /// Asks for every session. The core answers `terminal_sessions`.
     TerminalList,
+    /// Asks for a session's mode and its pane's current folder, as the
+    /// window last said (`window_state`). A linked shell's prompt hook asks
+    /// this through `cab term cwd` each time the shell draws its prompt.
+    /// The core answers `terminal_pane_folder`; it needs no `hello`.
+    TerminalPaneFolder {
+        /// The session.
+        session_id: u64,
+    },
     /// Asks for every valid theme in the themes folder. The core answers
     /// `themes`.
     ListThemes,
@@ -645,6 +653,7 @@ impl Request {
         "terminal_type_paths",
         "terminal_set_mode",
         "terminal_list",
+        "terminal_pane_folder",
         "list_themes",
         "get_theme",
         "list_tools",
@@ -722,6 +731,7 @@ impl Request {
             Self::TerminalTypePaths { .. } => "terminal_type_paths",
             Self::TerminalSetMode { .. } => "terminal_set_mode",
             Self::TerminalList => "terminal_list",
+            Self::TerminalPaneFolder { .. } => "terminal_pane_folder",
             Self::ListThemes => "list_themes",
             Self::GetTheme { .. } => "get_theme",
             Self::ListTools => "list_tools",
@@ -969,6 +979,19 @@ pub enum Response {
         /// The sessions.
         sessions: Vec<TerminalSession>,
     },
+    /// Reply to `terminal_pane_folder`.
+    TerminalPaneFolder {
+        /// The session.
+        session_id: u64,
+        /// The file pane it belongs to.
+        pane: Pane,
+        /// How it is bound to that pane: a linked shell follows `folder`.
+        mode: TerminalMode,
+        /// The folder the pane shows (its tab in front), as the newest
+        /// `window_state` says; `null` when no window has said what it
+        /// shows, or the tab in front shows a tool.
+        folder: Option<String>,
+    },
     /// Reply to `list_themes`: every valid theme, by ID.
     Themes {
         /// The themes.
@@ -1119,6 +1142,7 @@ impl Response {
         "index_status",
         "terminal_opened",
         "terminal_sessions",
+        "terminal_pane_folder",
         "themes",
         "theme",
         "tools",
@@ -1164,6 +1188,7 @@ impl Response {
             Self::IndexStatus { .. } => "index_status",
             Self::TerminalOpened { .. } => "terminal_opened",
             Self::TerminalSessions { .. } => "terminal_sessions",
+            Self::TerminalPaneFolder { .. } => "terminal_pane_folder",
             Self::Themes { .. } => "themes",
             Self::Theme { .. } => "theme",
             Self::Tools { .. } => "tools",
@@ -1482,6 +1507,17 @@ pub enum Event {
         /// Its new mode.
         mode: TerminalMode,
     },
+    /// A terminal session's shell reported a new current folder: its
+    /// prompt hook prints it (OSC 9;9) each time the shell draws its
+    /// prompt, and the core sends this when it differs from the last one.
+    /// Sent to every connection that said `hello`.
+    TerminalFolderChanged {
+        /// The session.
+        session_id: u64,
+        /// The shell's folder, as the shell wrote it (a Windows path; a
+        /// WSL shell's Linux folders are `\\wsl.localhost\…` paths).
+        folder: String,
+    },
     /// How far a measure has come: the totals so far of the path it counts
     /// now. At most 30 per second per measure, and none for a measure that
     /// ends sooner. Sent on the connection that asked.
@@ -1603,6 +1639,7 @@ impl Event {
         "plugin_event",
         "terminal_exited",
         "terminal_mode_changed",
+        "terminal_folder_changed",
         "measure_progress",
         "measure_finished",
         "volumes_changed",
@@ -1633,6 +1670,7 @@ impl Event {
             Self::PluginEvent { .. } => "plugin_event",
             Self::TerminalExited { .. } => "terminal_exited",
             Self::TerminalModeChanged { .. } => "terminal_mode_changed",
+            Self::TerminalFolderChanged { .. } => "terminal_folder_changed",
             Self::MeasureProgress { .. } => "measure_progress",
             Self::MeasureFinished { .. } => "measure_finished",
             Self::VolumesChanged { .. } => "volumes_changed",
@@ -2077,6 +2115,7 @@ mod tests {
                 mode: TerminalMode::Linked,
             },
             Request::TerminalList,
+            Request::TerminalPaneFolder { session_id: 3 },
             Request::ListThemes,
             Request::GetTheme {
                 theme_id: Some("nord".to_owned()),
@@ -2432,7 +2471,14 @@ mod tests {
                     pane: Pane::Left,
                     mode: TerminalMode::Locked,
                     linkable: false,
+                    folder: Some(r"C:\Users\me\docs".to_owned()),
                 }],
+            },
+            Response::TerminalPaneFolder {
+                session_id: 3,
+                pane: Pane::Right,
+                mode: TerminalMode::Linked,
+                folder: Some(r"D:\work".to_owned()),
             },
             Response::Themes {
                 themes: vec![ThemeInfo::from(&theme())],
@@ -2604,6 +2650,10 @@ mod tests {
                 session_id: 3,
                 mode: TerminalMode::Linked,
             },
+            Event::TerminalFolderChanged {
+                session_id: 3,
+                folder: r"D:\Звіт 'a b'".to_owned(),
+            },
             Event::MeasureProgress {
                 measure_id: 4,
                 path: r"C:\Users\me\photos".to_owned(),
@@ -2760,6 +2810,42 @@ mod tests {
         let sync = json!({"id": ID, "type": "terminal_sync_cwd", "session_id": 3, "path": "C:\\"});
         assert!(serde_json::from_value::<Envelope<Request>>(sync).is_err());
         assert!(!Request::TYPES.contains(&"terminal_sync_cwd"));
+    }
+
+    #[test]
+    fn the_prompt_hook_s_messages_have_the_documented_wire_form() {
+        let ask = json!({"id": ID, "type": "terminal_pane_folder", "session_id": 3});
+        let envelope: Envelope<Request> = serde_json::from_value(ask).unwrap();
+        assert_eq!(envelope.body, Request::TerminalPaneFolder { session_id: 3 });
+        let answer = serde_json::to_value(Response::TerminalPaneFolder {
+            session_id: 3,
+            pane: Pane::Left,
+            mode: TerminalMode::Linked,
+            folder: Some(r"E:\work".to_owned()),
+        })
+        .unwrap();
+        assert_eq!(
+            answer,
+            json!({"type": "terminal_pane_folder", "session_id": 3, "pane": "left", "mode": "linked", "folder": "E:\\work"})
+        );
+        // No window: the folder is null, not left out.
+        let none = serde_json::to_value(Response::TerminalPaneFolder {
+            session_id: 3,
+            pane: Pane::Right,
+            mode: TerminalMode::Locked,
+            folder: None,
+        })
+        .unwrap();
+        assert_eq!(none["folder"], Value::Null);
+        let changed = serde_json::to_value(Event::TerminalFolderChanged {
+            session_id: 3,
+            folder: r"E:\a b".to_owned(),
+        })
+        .unwrap();
+        assert_eq!(
+            changed,
+            json!({"type": "terminal_folder_changed", "session_id": 3, "folder": "E:\\a b"})
+        );
     }
 
     #[test]

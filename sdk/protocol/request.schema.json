@@ -982,6 +982,26 @@
       ]
     },
     {
+      "description": "Asks for a session's mode and its pane's current folder, as the\nwindow last said (`window_state`). A linked shell's prompt hook asks\nthis through `cab term cwd` each time the shell draws its prompt.\nThe core answers `terminal_pane_folder`; it needs no `hello`.",
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "description": "The session.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "terminal_pane_folder"
+        }
+      },
+      "required": [
+        "type",
+        "session_id"
+      ]
+    },
+    {
       "description": "Asks for every valid theme in the themes folder. The core answers\n`themes`.",
       "type": "object",
       "properties": {
@@ -2075,7 +2095,7 @@
           "const": "locked"
         },
         {
-          "description": "The session is meant to follow its pane through a prompt hook. The\nhook is not built yet, so a linked session behaves as a locked one.",
+          "description": "The session follows its pane: each time the shell draws its prompt,\nits prompt hook asks the core for the pane's folder\n(`terminal_pane_folder`) and changes to it. A running command or a\nhalf-typed line is never touched.",
           "type": "string",
           "const": "linked"
         }

@@ -31,8 +31,10 @@ pub enum TerminalMode {
     /// reaches it.
     #[default]
     Locked,
-    /// The session is meant to follow its pane through a prompt hook. The
-    /// hook is not built yet, so a linked session behaves as a locked one.
+    /// The session follows its pane: each time the shell draws its prompt,
+    /// its prompt hook asks the core for the pane's folder
+    /// (`terminal_pane_folder`) and changes to it. A running command or a
+    /// half-typed line is never touched.
     Linked,
 }
 
@@ -65,6 +67,11 @@ pub struct TerminalSession {
     /// Whether it may be `linked`: `false` for a profile that says
     /// `"linkable": false` (no prompt hook can be added to its program).
     pub linkable: bool,
+    /// The shell's current folder, as its prompt hook last reported it
+    /// (`terminal_folder_changed`); left out before the first report and
+    /// for a shell without a hook.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 #[cfg(test)]
@@ -88,6 +95,7 @@ mod tests {
             pane: Pane::Right,
             mode: TerminalMode::Linked,
             linkable: true,
+            folder: None,
         };
         assert_eq!(
             serde_json::to_value(&session).unwrap(),
