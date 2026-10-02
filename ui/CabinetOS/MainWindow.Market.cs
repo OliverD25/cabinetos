@@ -75,15 +75,25 @@ public sealed partial class MainWindow
         }
     }
 
+    // What edits the panes ends before a view takes their place.
+    private void PrepareToCoverPanes()
+    {
+        EndAddressEdit();
+        foreach (var pane in _paneViews.Where(v => v.IsRenaming))
+        {
+            pane.CancelRename();
+        }
+    }
+
     private void OpenMarket()
     {
         // The marketplace takes the main column's place: what floats over the panes or edits them ends first.
         FileMenu.Close();
         CloseOtherOverlays(opening: null);
-        EndAddressEdit();
-        foreach (var pane in _paneViews.Where(v => v.IsRenaming))
+        PrepareToCoverPanes();
+        if (GalleryView.IsOpen)
         {
-            pane.CancelRename();
+            CloseGallery(restore: true, focusPane: false);
         }
         // The search field takes the keyboard before the panes collapse (see the palette).
         MarketView.Open();
@@ -226,17 +236,7 @@ public sealed partial class MainWindow
         {
             return;
         }
-        var dialog = new ContentDialog
-        {
-            XamlRoot = RootGrid.XamlRoot,
-            RequestedTheme = RootGrid.ActualTheme,
-            Title = $"Uninstall {item.Name}?",
-            Content = new TextBlock { Text = UninstallText(item), TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = "Uninstall",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close,
-        };
-        if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary)
+        if (!await ConfirmUninstallAsync(item))
         {
             return;
         }
@@ -247,6 +247,22 @@ public sealed partial class MainWindow
             // A plugin leaves list_plugins without an event (docs/ipc.md, "The marketplace").
             await RefreshPluginsAsync();
         }
+    }
+
+    // The question before anything is removed, for the Extensions page and the gallery's Remove.
+    private async Task<bool> ConfirmUninstallAsync(MarketItem item)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = RootGrid.XamlRoot,
+            RequestedTheme = RootGrid.ActualTheme,
+            Title = $"Uninstall {item.Name}?",
+            Content = new TextBlock { Text = UninstallText(item), TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = "Uninstall",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        return await ShowDialogAsync(dialog) == ContentDialogResult.Primary;
     }
 
     private static string UninstallText(MarketItem item) => item.Kind switch

@@ -296,6 +296,16 @@ public sealed class ThemeGalleryModel
         Market.OnEvent(coreEvent);
     }
 
+    /// <summary>
+    /// Windows' mode or accent changed, or the window painted another theme: the tiles of <c>system</c> themes take
+    /// the colours of the moment again.
+    /// </summary>
+    public void Refresh()
+    {
+        Rebuild();
+        Changed?.Invoke();
+    }
+
     /// <summary>The core started again: what was on its way ended with it.</summary>
     public void Reset()
     {

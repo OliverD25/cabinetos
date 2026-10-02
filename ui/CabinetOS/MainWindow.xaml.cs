@@ -11,6 +11,7 @@ using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Jobs;
 using CabinetOS.Core.Keys;
 using CabinetOS.Core.Listing;
+using CabinetOS.Core.Market;
 using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
@@ -162,6 +163,7 @@ public sealed partial class MainWindow : Window
         SetUpQuickOpen();
         SetUpPreview();
         SetUpMarket();
+        SetUpGallery();
         SetUpRail();
         SetUpColumns();
         SetUpCompact();
@@ -582,6 +584,9 @@ public sealed partial class MainWindow : Window
                 case "market":
                     MarketView.LogCardsForSnapshot(step.Argument);
                     break;
+                case "gallery":
+                    await RunGalleryStepAsync(step.Argument);
+                    break;
                 case "preview" or "preview-key" or "plugin-event" or "drop" or "fake-command":
                     await RunPreviewStepAsync(step.Kind, step.Argument);
                     break;
@@ -940,6 +945,11 @@ public sealed partial class MainWindow : Window
                 // that), and: every card of its set is made and "marketplace cards complete" is logged.
                 "market-prepared" => MarketView.WasPreparedAhead,
                 "market-complete" => MarketView.CardsComplete,
+                // The gallery is shown, its catalogue is read (or could not be) and every tile is made; gallery-preview: a tile's theme is
+                // painted on the window as a preview (the status bar says so).
+                "gallery-ready" => GalleryView.IsOpen && _gallery.Market.Status is not (MarketStatus.Idle or MarketStatus.Loading) && GalleryView.TilesComplete,
+                "gallery-preview" => _gallery.IsPreviewShown,
+                _ when condition.StartsWith("gallery-applied:", StringComparison.Ordinal) => _gallery.CurrentThemeId == condition["gallery-applied:".Length..],
                 _ => true,
             };
             if (met)
@@ -1231,6 +1241,7 @@ public sealed partial class MainWindow : Window
                 if (changed.Changed.Any(key => key.StartsWith("marketplace", StringComparison.Ordinal)))
                 {
                     OnMarketIndexChanged();
+                    OnThemesCatalogueChanged();
                 }
                 _ = ReadConfigSafelyAsync();
                 break;
@@ -1248,6 +1259,7 @@ public sealed partial class MainWindow : Window
                 {
                     _picker.MarkCurrent(changed.Theme.Id);
                 }
+                _gallery.OnEvent(coreEvent);
                 return;
             case VolumesChangedEvent volumes:
                 // A USB stick or a mapped share came or went: the Drives section follows.
@@ -1274,6 +1286,7 @@ public sealed partial class MainWindow : Window
                 return;
             case InstallProgressEvent or InstallFinishedEvent:
                 _market.OnEvent(coreEvent);
+                _gallery.OnEvent(coreEvent);
                 return;
             case ToolsChangedEvent:
                 _market.OnEvent(coreEvent);
@@ -1353,7 +1366,10 @@ public sealed partial class MainWindow : Window
         _pluginsUnavailable = false;
         ReviewView.Close();
         PluginsView.Close();
-        // Its downloads ended with it; a shown marketplace reads the index again once it runs.
+        // Its downloads ended with it; a shown marketplace reads the index again once it runs. The gallery closes: a theme
+        // it previewed is painted back, and its next opening reads the catalogue again.
+        CloseGallery(restore: true, focusPane: false);
+        _gallery.Reset();
         _market.Reset();
         _marketRead = false;
         if (_restarts.Count >= 3)
@@ -1616,6 +1632,7 @@ public sealed partial class MainWindow : Window
         RegisterPluginCommands();
         RegisterToolCommands();
         RegisterThemeCommands();
+        RegisterGalleryCommands();
         RegisterMarketCommands();
         RegisterRailCommands();
         RegisterColumnCommands();
@@ -1826,6 +1843,11 @@ public sealed partial class MainWindow : Window
         else if (PluginsView.IsOpen)
         {
             ClosePlugins();
+        }
+        else if (GalleryView.IsOpen)
+        {
+            // A theme that is previewed is painted back by the close.
+            CloseGallery(restore: true, focusPane: true);
         }
         else if (MarketView.IsOpen)
         {
@@ -2651,6 +2673,11 @@ public sealed partial class MainWindow : Window
         }
         switch (_keys.OnKey(combo, CurrentContexts(), e.KeyStatus.WasKeyDown))
         {
+            case KeyOutcome.Run { Command: "search.focus" } when GalleryView.IsOpen:
+                // The key that searches (Ctrl+F) goes to the gallery's search field, not to the Search view behind it.
+                e.Handled = true;
+                GalleryView.FocusSearch();
+                break;
             case KeyOutcome.Run run:
                 e.Handled = true;
                 _ = _router.ExecuteAsync(run.Command, KeyArguments(run.Command, run.Keys), "key", TakeKeyTrace());

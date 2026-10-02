@@ -405,6 +405,9 @@
 
                 <!-- The marketplace (design view C) takes the main column's place; the sidebar and the status bar stay. -->
                 <views:MarketplaceView x:Name="MarketView" Grid.Column="2" />
+
+                <!-- The theme gallery (docs/ui.md, "The theme gallery") takes the same place; the sidebar and the status bar stay. -->
+                <views:ThemeGalleryView x:Name="GalleryView" Grid.Column="2" />
             </Grid>
 
             <!-- The function-key bar (chrome fkeyBar): collapsed, and its row with it, unless the theme shows it. -->
@@ -454,6 +457,13 @@
                         Grid.Column="3"
                         Orientation="Horizontal"
                         Spacing="16">
+                        <!-- A theme of the gallery is previewed on the whole window: this says so and how to get the theme in effect back. -->
+                        <TextBlock
+                            x:Name="PreviewStatusText"
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Foreground="{ThemeResource CbAccentBrush}"
+                            Visibility="Collapsed" />
                         <TextBlock
                             x:Name="ChordText"
                             VerticalAlignment="Center"

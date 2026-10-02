@@ -373,6 +373,11 @@ public sealed partial class MainWindow
             MarketView.FocusSearch();
             return;
         }
+        if (GalleryView.IsOpen)
+        {
+            GalleryView.FocusGrid();
+            return;
+        }
         FocusPaneOrEditor();
     }
 
