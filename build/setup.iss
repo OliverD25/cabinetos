@@ -110,8 +110,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; The release as the in-app update's swap installs it: every file but install.ps1, which runs from the unpacked zip
-; only (cabinetos-update, swap.rs, NOT_INSTALLED).
-Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Excludes: "install.ps1"; Flags: ignoreversion recursesubdirs createallsubdirs
+; only (cabinetos-update, swap.rs, NOT_INSTALLED). Never the .pdb symbols: release.ps1 moves them into the symbols zip
+; (docs\release.md, "The symbols"), and the exclude keeps them out of a setup made from a folder that still holds some.
+Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Excludes: "install.ps1,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\CabinetOS"; Filename: "{app}\CabinetOS.exe"; WorkingDir: "{app}"; IconFilename: "{app}\CabinetOS.ico"; Comment: "CabinetOS file manager"

@@ -1706,6 +1706,44 @@ anonymous request for the repository and its README gets HTTP 200. From
 here the SignPath card and CI can start, and the release steps (b) to (e)
 wait for units 1 to 3.
 
+**Status (2026-10-02, 21:44): unit 1 done, and it was in place already.** The
+window's project has referenced only the Windows App SDK components it uses
+(WinUI, Foundation, InteractiveExperiences and Runtime, at the 2.5.1
+package's versions) since 2026-09-29 (6fdc435), so the unit's premise, the
+whole `Microsoft.WindowsAppSDK` package, was out of date: the release folder
+of 2026-10-02 held no `onnxruntime.dll`, `DirectML.dll` or AI or
+machine-learning library, and the three attempts the handout allows for the
+per-component route were not needed. What the unit added: `release.ps1`
+stops before it zips when its folder holds one (tested with fake files), the
+docs say which components and why ([dev-setup.md](dev-setup.md),
+[release.md](release.md), "Sizes"), and the cost is measured, in a scratch
+copy of the project: the window's publish with the whole package is 60
+files, 100.3 MB, 34.7 MB zipped; with the components 45 files, 57.8 MB,
+17.3 MB zipped (15 files, 42.5 MB and 17.4 MB less).
+
+**Status (2026-10-02, 21:44): unit 2 done.** `release.ps1` moves every
+`.pdb` file out of the release folder into
+`CabinetOS-<version>-win-x64-symbols.zip` (43.6 MB, with its `.sha256`);
+`setup.iss` excludes `*.pdb` besides; the updater's swap needed no change
+([ADR 0019](decisions/0019-symbols-in-their-own-zip.md)). Release folder
+71 files and 251.7 MB before, 66 and 100.5 MB now; zip 75.7 MB before, 32.1
+MB now; setup file 42.5 MB before, 20.0 MB now: the goal (a zip under 60 MB
+and a setup file under 35 MB, no machine-learning library inside) is met.
+A crash trace, measured on a copy of the release folder: with the symbols
+unpacked next to the programs every frame names function, file and line; without
+them the Rust programs' `backtrace` is a list of `<unknown>` frames (the
+panic's `location` and the log lines stay), and the window's names its methods
+with no file and line. So a trace without symbols still names functions for
+the window only, not for the Rust programs ([release.md](release.md), "The
+symbols").
+
+**Status (2026-10-02, 21:46): unit 5 done.** Recorded where the decision
+lives: [release.md](release.md), "The setup file" (and its known gaps), and
+the header comment of `build/setup.iss`. The setup file downloads no
+prerequisite; it keeps stopping with the winget command (and, for the
+Windows App Runtime, Microsoft's installer address), as `install.ps1` does.
+Nothing else changed.
+
 **Status (2026-10-02, 22:13): the public repository's description, topics and
 private vulnerability reporting are set** (the optional block after step (a)
 of the publish sheet, run by the planning session on the creator's word at
@@ -1719,6 +1757,31 @@ release must exist first, verifiable reputation, two-factor authentication,
 a "Code signing policy" section, version resources for the four Rust
 programs), and the order: the 0.1.0 release, then the README section, then
 the form.
+
+**Status (2026-10-02, 23:25): unit 3 built; its real check in the VM waits for
+one manual step.** `cabinetos-indexer --install` registers the service as
+automatic with a delayed start and starts it once (waiting up to 20 s for
+Running; otherwise it exits with an error naming the state and the log
+folder); `--uninstall` stays the reverse; `install.ps1 -Indexer` no longer
+calls `Start-Service`. Made with `windows-service`'s
+`set_delayed_auto_start` (`ChangeServiceConfig2W`, no `unsafe`), not the
+`windows` crate the handout named. A unit test reads the registration, and
+[ADR 0020](decisions/0020-indexer-service-starts-by-itself.md) records the
+decision (it amends ADR 0009's manual start). In the VM: guest control gives
+the VM user's token with UAC applied (medium integrity), `Register-ScheduledTask`
+with the highest run level answers "Access is denied", and no UAC prompt can
+be answered from outside, so the service could not be installed there by
+script and nothing in the VM's security settings was changed to get round
+it. `ui/livecheck/vm-indexer-check.ps1` and `vm-indexer-guest.ps1` do the
+rest: run 1 stops with exit code 2 and the manual step; after one elevated
+`-Phase install` in the VM, `-AfterInstall` restarts Windows there, waits,
+and records when the service came up by itself. Tried with no service
+installed: the restart (`shutdown /r`, or `controlvm reset` when guest control
+is stuck), the settle wait and the read-only check phase all ran; the trial
+found and fixed a hang (the guest helper `Sc` was shadowed by `sc`, the alias of
+`Set-Content`). Not shown yet: the service `RUNNING` after a restart
+([release.md](release.md), "The indexer service").
+
 
 **Status (2026-10-02, 23:28): 0.1.0 is published, and the release-notes-page skill
 is on main.** The creator ran the publish sheet's steps (b), (c) and (d)
@@ -1746,7 +1809,7 @@ leaves out.
 1. **Terminal rendering control (Phase 8).** Settled 2026-09-28: xterm.js 6.0 in WebView2 (Phase 5c), with the DOM renderer and a browser process of its own; a native renderer stays possible later.
 2. **First-run layout (Phase 5).** Settled 2026-09-28 by the creator: dual pane on first start; see conflict B.
 3. **Config comments (Phase 3).** Settled 2026-09-28: strict JSON for version 1 ([config.md](config.md)); every JSON tool can read it and there is one parser. JSONC stays possible later by stripping comments before parsing.
-4. **Indexer install (Phase 6).** Settled 2026-09-28 by what was built: both exist. `cabinetos-indexer --install` registers the service (manual start, one UAC prompt), `--console` runs it elevated for one session, and the installer's `-Indexer` switch registers the service ([ADR 0009](decisions/0009-packaging.md)).
+4. **Indexer install (Phase 6).** Settled 2026-09-28 by what was built: both exist. `cabinetos-indexer --install` registers the service (one UAC prompt; the start type was manual, and is automatic with a delayed start since 2026-10-02, [ADR 0020](decisions/0020-indexer-service-starts-by-itself.md)) and starts it once, `--console` runs it elevated for one session, and the installer's `-Indexer` switch registers the service ([ADR 0009](decisions/0009-packaging.md)).
 5. **IoRing vs CopyFileExW (Phase 4).** Measure before adopting. IoRing's API surface in `windows-rs` must be checked.
 6. **Packaging (Phase 10).** Settled 2026-09-28: version 1 ships unpackaged, as a zip with an install script ([ADR 0009](decisions/0009-packaging.md)); MSIX is reconsidered when the indexer can ship as an optional component.
 7. **ARM64 test hardware.** CI can build ARM64 but not run it. A test device or a cloud ARM VM is needed before claiming support.

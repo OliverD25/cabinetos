@@ -154,6 +154,9 @@ if ($installed -ne $a.version) { $ok = $false }
 $details += "release.json in $install names $installed"
 $files = @(Get-ChildItem -LiteralPath $install -Recurse -File -Force -ErrorAction SilentlyContinue)
 $details += "{0} files, {1:N1} MB" -f $files.Count, (($files | Measure-Object Length -Sum).Sum / 1MB)
+# The symbols are a download of their own (ADR 0019): the setup must not install a .pdb file.
+$symbols = @($files | Where-Object { $_.Extension -eq '.pdb' })
+if ($symbols.Count -gt 0) { $ok = $false; $details += "the setup installed $($symbols.Count) .pdb file(s): $(($symbols | ForEach-Object { $_.Name }) -join ', ')" } else { $details += 'no .pdb file in the install folder' }
 if (Test-Path -LiteralPath $shortcut) { $details += "Start Menu shortcut: $shortcut" } else { $ok = $false; $details += "no Start Menu shortcut at $shortcut" }
 $desktop = Join-Path ([Environment]::GetFolderPath('Desktop')) 'CabinetOS.lnk'
 $details += "desktop shortcut (unchecked by default): $(Test-Path -LiteralPath $desktop)"

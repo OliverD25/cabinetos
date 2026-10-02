@@ -4,7 +4,9 @@
   Settings > Apps" are replaced by [ADR 0014](0014-in-app-updates.md), and
   the winget package as the zip ("winget can carry the zip as a portable
   package") by [ADR 0019](0019-setup-installs-prerequisites-and-is-the-winget-package.md),
-  which makes the setup file the package
+  which makes the setup file the package, and
+  the indexer service's manual start by the automatic, delayed start of
+  [ADR 0020](0020-indexer-service-starts-by-itself.md)
 - Date: 2026-09-28
 - Decided by: the architect, as a default (the creator was asleep; the
   coordinating session recommended it). It settles open question 6 of

@@ -17,7 +17,7 @@ The Constitution outranks every record here. A record may refine the brief
 | [0006](0006-control-channel-json.md) | The control channel carries JSON | 2026-09-28 | accepted |
 | [0007](0007-monorepo.md) | One repository holds core, UI, SDK and docs | 2026-09-28 | accepted |
 | [0008](0008-brief-and-design-committed.md) | The brief and the design handout live in the repo; the brief is a living document | 2026-09-28 | accepted |
-| [0009](0009-packaging.md) | Version 1 ships unpackaged, as a zip with an install script | 2026-09-28 | accepted |
+| [0009](0009-packaging.md) | Version 1 ships unpackaged, as a zip with an install script | 2026-09-28 | accepted; amended by 0014 and 0020 |
 | [0010](0010-windows-app-sdk-license-exception.md) | The UI layer depends on Microsoft's Windows App SDK and WebView2 under their own license terms; a recorded exception | 2026-09-28 | accepted |
 | [0011](0011-search-without-per-user-filtering.md) | Version 1 answers file names to any logged-on user, regardless of folder rights | 2026-09-28 | accepted |
 | [0012](0012-marketplace-index-on-github-pages.md) | The marketplace index is served from GitHub Pages of a separate public repository | 2026-09-28 | accepted |
@@ -28,6 +28,8 @@ The Constitution outranks every record here. A record may refine the brief
 | [0017](0017-file-tags.md) | File tags in the file's NTFS stream and in a catalog, a Tags section in the sidebar; written for the creator's decision, not built | 2026-10-01 | proposed |
 | [0018](0018-setup-file-and-silent-updates.md) | A setup file (Inno Setup, per user) for the first install; a checked download installs itself and the app only asks for a restart | 2026-10-02 | accepted; decision 2 replaced by 0019 |
 | [0019](0019-setup-installs-prerequisites-and-is-the-winget-package.md) | The setup file downloads and installs a missing prerequisite itself, and the winget package is the setup file | 2026-10-02 | accepted |
+| [0019](0019-symbols-in-their-own-zip.md) | The symbols (`.pdb` files) ship in a zip of their own, not in the release zip or the setup file | 2026-10-02 | accepted |
+| [0020](0020-indexer-service-starts-by-itself.md) | The indexer service starts by itself after Windows restarts (automatic start, delayed) | 2026-10-02 | accepted |
 
 ## Template
 

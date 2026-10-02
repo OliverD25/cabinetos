@@ -5,6 +5,8 @@
 #   dist\CabinetOS-<version>-win-x64\            the folder a user installs
 #   dist\CabinetOS-<version>-win-x64.zip         that folder's contents, zipped
 #   dist\CabinetOS-<version>-win-x64.zip.sha256  the zip's SHA-256
+#   dist\CabinetOS-<version>-win-x64-symbols.zip the .pdb files, and its .sha256: crash traces name file and line with
+#                                                them unpacked next to the programs (docs\release.md, "The symbols")
 #   dist\update\<channel>\latest.json            what the in-app updater reads
 #   dist\update\<channel>\notes-<version>.md     the release notes it shows
 #   dist\CabinetOS-<version>-win-x64-setup.exe   the setup file for a first install, and its .sha256
@@ -25,9 +27,9 @@
 #     keeps the Windows App SDK's MSIX tooling on, which writes CabinetOS.pri,
 #     the compiled XAML, into the publish; the app stays unpackaged.
 #  3. The three programs and their .pdb files next to CabinetOS.exe, where
-#     the window's launcher looks first; crash traces read the .pdb files
-#     for file and line. cabinetos-cli.exe once more as cab.exe, the short
-#     name to type (the same program; its .pdb serves both).
+#     the window's launcher looks first (step 5b takes every .pdb out of the
+#     folder again). cabinetos-cli.exe once more as cab.exe, the short name
+#     to type (the same program; its .pdb serves both).
 #  4. extras\: copies of the four built-in themes with their schema, and
 #     the Markdown Preview tool, which is opt-in (Constitution Article 10).
 #  5. LICENSE, THIRD-PARTY-NOTICES.md (build\notices.ps1), install.ps1,
@@ -37,6 +39,13 @@
 #     build embeds it, and build\make-icon.ps1 remakes it from the design's
 #     size cuts in docs\design\icons), for the setup, its shortcuts and its
 #     Settings > Apps entry.
+# 5b. The symbols, and what the folder must not hold. Every .pdb file moves
+#     out of the release folder into the symbols zip, so the zip and the
+#     setup file do not carry 43 MB of symbols that only a crash trace needs.
+#     Then the folder is checked: the script stops when it holds a library of
+#     the Windows App SDK's AI or machine-learning components (onnxruntime,
+#     DirectML, Microsoft.Windows.AI.*, Microsoft.Windows.MachineLearning.*),
+#     which CabinetOS never uses (Constitution Article 10).
 #  6. The zip and its SHA-256.
 #  7. The in-app update's files for -Channel (stable unless it says
 #     preview): latest.json with the zip's address on the GitHub Release,
@@ -56,7 +65,9 @@
 #
 # -PackageOnly skips steps 1-5 and zips the existing folder again, for
 # example after signing its programs (docs\release.md); the setup file is
-# made again too.
+# made again too. Step 5b still runs on the folder: a .pdb file or a
+# machine-learning library in it is moved or stops the script as always, and
+# the symbols zip of the build before stays as it is.
 #
 # -WingetOnly does step 9 alone, from the files already in dist\: the
 # release folder's release.json (the version and the date) and the setup
@@ -183,6 +194,7 @@ $name = "CabinetOS-$version-win-x64"
 $dist = Join-Path $repo 'dist'
 $folder = Join-Path $dist $name
 $zip = "$folder.zip"
+$symbolsZip = "$folder-symbols.zip"
 $setupName = "$name-setup"
 $setup = Join-Path $dist "$setupName.exe"
 $wingetOut = Join-Path $dist "winget\$version"
@@ -203,7 +215,7 @@ if (-not $PackageOnly) {
         $dirty = [bool](git -C $repo status --porcelain -- core ui sdk build LICENSE)
         if ($dirty) { Write-Warning 'The working tree has uncommitted changes, and this build includes them.' }
     }
-    foreach ($old in $folder, $zip, "$zip.sha256", $wingetOut, $setup, "$setup.sha256") {
+    foreach ($old in $folder, $zip, "$zip.sha256", $symbolsZip, "$symbolsZip.sha256", $wingetOut, $setup, "$setup.sha256") {
         if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force }
     }
 
@@ -273,6 +285,53 @@ if (-not $PackageOnly) {
 }
 elseif (-not (Test-Path -LiteralPath $folder)) {
     throw "$folder does not exist; build it first (without -PackageOnly)"
+}
+
+# --- 5b. The symbols, and what the folder must not hold ---------------
+
+# Every .pdb file moves into the symbols zip (at its root, so unpacking it into the install folder puts each file next
+# to its program). After a normal build the folder holds the Rust programs' and the window's symbols; after
+# -PackageOnly it holds none, and the symbols zip of the build before stays.
+Add-Type -AssemblyName System.IO.Compression.ZipFile
+$symbols = @(Get-ChildItem -LiteralPath $folder -Recurse -File -Filter '*.pdb')
+$symbolsLine = 'none (the release folder had no .pdb files and there is no symbols zip from an earlier build)'
+if ($symbols.Count -gt 0) {
+    foreach ($old in $symbolsZip, "$symbolsZip.sha256") {
+        if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force }
+    }
+    $archive = [System.IO.Compression.ZipFile]::Open($symbolsZip, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($symbol in $symbols) {
+            $entry = $symbol.FullName.Substring($folder.Length + 1).Replace('\', '/')
+            [void] [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $symbol.FullName, $entry, [System.IO.Compression.CompressionLevel]::Optimal)
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+    $symbols | Remove-Item -Force
+}
+if (Test-Path -LiteralPath $symbolsZip) {
+    $symbolsHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $symbolsZip).Hash.ToLowerInvariant()
+    [System.IO.File]::WriteAllText("$symbolsZip.sha256", "$symbolsHash  $name-symbols.zip`n", $utf8)
+    $symbolsLine = "{0} ({1:N1} MB)" -f $symbolsZip, ((Get-Item -LiteralPath $symbolsZip).Length / 1MB)
+}
+else {
+    Write-Warning "There is no symbols zip: the release folder had no .pdb files. Crash traces of this release will not name files and lines."
+}
+
+# Libraries of the Windows App SDK's AI and machine-learning components: about 40 MB that CabinetOS never uses. They
+# came in once through the Microsoft.WindowsAppSDK metapackage; the window's project now references only the
+# components it needs, and this check keeps it so.
+$unused = @(Get-ChildItem -LiteralPath $folder -Recurse -File | Where-Object {
+        $_.Name -like '*onnxruntime*' -or $_.Name -like 'DirectML*' -or $_.Name -like '*.AI.*' -or $_.Name -like '*.MachineLearning.*'
+    } | ForEach-Object { $_.FullName.Substring($folder.Length + 1) })
+if ($unused.Count -gt 0) {
+    $list = $unused -join ', '
+    throw ("The release folder holds machine-learning libraries that CabinetOS never uses (Constitution Article 10): $list. " +
+        "They add about 40 MB. A package brought them in: ui\CabinetOS\CabinetOS.csproj may reference only the Windows App SDK components the window needs " +
+        "(WinUI, Foundation, InteractiveExperiences and Runtime; docs\dev-setup.md), never the Microsoft.WindowsAppSDK package as a whole or an AI or machine-learning component. " +
+        "Nothing was zipped.")
 }
 
 # --- 6. The zip and its hash ------------------------------------------
@@ -414,6 +473,7 @@ Write-Host ''
 Write-Host ("Release folder: {0} ({1} files, {2:N1} MB)" -f $folder, $files.Count, (($files | Measure-Object Length -Sum).Sum / 1MB))
 Write-Host ("Zip:            {0} ({1:N1} MB)" -f $zip, ((Get-Item -LiteralPath $zip).Length / 1MB))
 Write-Host "SHA-256:        $($hash.ToLowerInvariant())"
+Write-Host "Symbols:        $symbolsLine"
 Write-Host "Update ($Channel): $latestPath and $notesName"
 Write-Host "Setup:          $setupLine"
 Write-Host "winget:         $wingetLine"

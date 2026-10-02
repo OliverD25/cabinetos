@@ -1,7 +1,8 @@
 //! The indexer as a Windows service: installing, removing, and the service
 //! body. The service runs as `LocalSystem` (which may read the MFT), starts
-//! only when asked (start type manual), and does exactly what `--console`
-//! does until the service manager says stop.
+//! by itself after every restart of Windows (start type automatic, delayed),
+//! and does exactly what `--console` does until the service manager says
+//! stop.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,10 @@ const DESCRIPTION: &str = "Keeps an index of the files on NTFS volumes for Cabin
 /// How long `--uninstall` waits for a running service to stop.
 const STOP_WAIT: Duration = Duration::from_secs(30);
 
+/// How long `--install` waits for the service it has just started to report
+/// that it runs.
+const START_WAIT: Duration = Duration::from_secs(20);
+
 /// Why a service operation failed.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ServiceError {
@@ -48,6 +53,11 @@ pub(crate) enum ServiceError {
     /// A running service did not stop in time.
     #[error("the service did not stop within {} s", STOP_WAIT.as_secs())]
     StopTimeout,
+    /// The service was registered, but it does not run after its first start.
+    #[error(
+        "the service is installed, but it is {0:?} and not Running after its first start; its log in %ProgramData%\\CabinetOS\\logs says why (try again: sc start cabinetos-indexer)"
+    )]
+    NotRunning(ServiceState),
 }
 
 fn failed(what: &'static str) -> impl FnOnce(windows_service::Error) -> ServiceError {
@@ -170,8 +180,39 @@ fn service_arguments(volumes: &[char], log_dir: &Path) -> Vec<OsString> {
     arguments
 }
 
-/// Registers the service: this program, `--service`, start type manual,
-/// account `LocalSystem`.
+/// What `--install` asks the service manager for.
+struct Registration {
+    info: ServiceInfo,
+    /// With the automatic start type: start a little after Windows' other
+    /// automatic services, so building the index does not slow down the
+    /// start of Windows itself.
+    delayed_auto_start: bool,
+}
+
+/// This program as the service: `--service`, start type automatic with a
+/// delayed start, account `LocalSystem` (no account name asks for it). It
+/// only describes the request, so a test can read it without the service
+/// manager.
+fn registration(executable: PathBuf, volumes: &[char], log_dir: &Path) -> Registration {
+    Registration {
+        info: ServiceInfo {
+            name: OsString::from(SERVICE_NAME),
+            display_name: OsString::from(DISPLAY_NAME),
+            service_type: ServiceType::OWN_PROCESS,
+            start_type: ServiceStartType::AutoStart,
+            error_control: ServiceErrorControl::Normal,
+            executable_path: executable,
+            launch_arguments: service_arguments(volumes, log_dir),
+            dependencies: Vec::new(),
+            account_name: None,
+            account_password: None,
+        },
+        delayed_auto_start: true,
+    }
+}
+
+/// Registers the service as [`registration`] describes it, then starts it
+/// once, so it runs now and not only after the next restart of Windows.
 pub(crate) fn install(volumes: &[char], log_dir: Option<&Path>) -> Result<(), ServiceError> {
     let manager = ServiceManager::local_computer(
         None::<&str>,
@@ -180,25 +221,40 @@ pub(crate) fn install(volumes: &[char], log_dir: Option<&Path>) -> Result<(), Se
     .map_err(failed("cannot open the service manager"))?;
     let executable = std::env::current_exe().map_err(ServiceError::Path)?;
     let log_dir = log_dir.map_or_else(service_log_dir, Path::to_path_buf);
-    let info = ServiceInfo {
-        name: OsString::from(SERVICE_NAME),
-        display_name: OsString::from(DISPLAY_NAME),
-        service_type: ServiceType::OWN_PROCESS,
-        start_type: ServiceStartType::OnDemand,
-        error_control: ServiceErrorControl::Normal,
-        executable_path: executable,
-        launch_arguments: service_arguments(volumes, &log_dir),
-        dependencies: Vec::new(),
-        account_name: None,
-        account_password: None,
-    };
+    let registration = registration(executable, volumes, &log_dir);
     let service = manager
-        .create_service(&info, ServiceAccess::CHANGE_CONFIG)
+        .create_service(
+            &registration.info,
+            ServiceAccess::CHANGE_CONFIG | ServiceAccess::START | ServiceAccess::QUERY_STATUS,
+        )
         .map_err(failed("cannot create the service"))?;
     service
         .set_description(DESCRIPTION)
         .map_err(failed("cannot describe the service"))?;
-    Ok(())
+    // `windows-service` wraps `ChangeServiceConfig2W` with
+    // `SERVICE_CONFIG_DELAYED_AUTO_START_INFO`, so no `unsafe` is needed here.
+    service
+        .set_delayed_auto_start(registration.delayed_auto_start)
+        .map_err(failed("cannot set the delayed start"))?;
+    service
+        .start::<&str>(&[])
+        .map_err(failed("the service is installed, but cannot be started"))?;
+    let deadline = Instant::now() + START_WAIT;
+    loop {
+        let state = service
+            .query_status()
+            .map_err(failed("cannot query the service"))?
+            .current_state;
+        if state == ServiceState::Running {
+            return Ok(());
+        }
+        // Any state but StartPending after a started service means it has
+        // stopped again: its body failed, and its log says why.
+        if state != ServiceState::StartPending || Instant::now() >= deadline {
+            return Err(ServiceError::NotRunning(state));
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
 }
 
 /// Stops the service if it runs, then removes it.
@@ -255,5 +311,27 @@ mod tests {
             ["--service", "--log-dir", r"D:\logs"]
         );
         assert!(service_log_dir().ends_with(r"CabinetOS\logs"));
+    }
+
+    #[test]
+    fn the_registration_asks_for_an_automatic_start_with_a_delay() {
+        let program = PathBuf::from(r"C:\Program Files\CabinetOS\cabinetos-indexer.exe");
+        let registration = registration(program.clone(), &['C'], Path::new(r"D:\logs"));
+        // Start type automatic and the delayed flag are the two things the
+        // manager is asked for: without the flag the index would be built
+        // while Windows is still starting.
+        assert_eq!(registration.info.start_type, ServiceStartType::AutoStart);
+        assert!(registration.delayed_auto_start);
+        assert_eq!(registration.info.name, SERVICE_NAME);
+        assert_eq!(registration.info.service_type, ServiceType::OWN_PROCESS);
+        assert_eq!(registration.info.executable_path, program);
+        assert_eq!(
+            registration.info.launch_arguments,
+            ["--service", "--log-dir", r"D:\logs", "--volumes", "C"]
+        );
+        assert!(
+            registration.info.account_name.is_none(),
+            "no account name is LocalSystem"
+        );
     }
 }

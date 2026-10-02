@@ -39,7 +39,9 @@ new terminal. Off unless given.
 Also install and start the indexer service, for instant search of whole
 NTFS volumes. Needs -AllUsers and a folder inside Program Files: the
 service runs as LocalSystem, so its program must sit where only
-administrators can change it.
+administrators can change it. The service is registered with an automatic,
+delayed start and started once, so it comes up by itself after every
+restart of Windows.
 
 .PARAMETER SkipPrerequisiteCheck
 Install even when a prerequisite looks missing.
@@ -381,9 +383,9 @@ if ($Indexer) {
         Write-Host "The $serviceName service is already installed from this folder."
     }
     elseif ($PSCmdlet.ShouldProcess($serviceName, 'Install and start the Windows service')) {
+        # --install registers the service (automatic, delayed start) and starts it once.
         & (Join-Path $target 'cabinetos-indexer.exe') --install
         if ($LASTEXITCODE -ne 0) { Stop-Install "cabinetos-indexer --install failed with exit code $LASTEXITCODE." }
-        Start-Service -Name $serviceName
     }
     $withIndexer = $true
 }
@@ -426,7 +428,7 @@ $who = if ($AllUsers) { 'every user of this PC' } else { $env:USERNAME }
 Write-Host "CabinetOS $($release.version) is installed for $who in $target"
 Write-Host "  Start it:  & '$(Join-Path $target 'CabinetOS.exe')'$(if ($shortcut) { ', or from the Start Menu' })"
 if ($pathEntry) { Write-Host '  cabinetos-cli, and cab for short, are on the PATH of terminals opened from now on.' }
-if ($Indexer) { Write-Host "  The indexer service runs now. It starts manually: after a restart of Windows, run Start-Service $serviceName as administrator." }
+if ($Indexer) { Write-Host "  The indexer service runs now, and starts by itself after every restart of Windows (automatic, delayed start)." }
 Write-Host "  Remove it: Settings > Apps, or powershell -ExecutionPolicy Bypass -File '$(Join-Path $target 'uninstall.ps1')'"
 if (Get-Item -LiteralPath (Join-Path $source 'CabinetOS.exe') -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue) {
     Write-Host ''

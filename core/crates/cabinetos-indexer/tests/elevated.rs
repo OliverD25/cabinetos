@@ -268,15 +268,20 @@ async fn the_service_installs_starts_answers_and_uninstalls() {
         String::from_utf8_lossy(&installed.stderr)
     );
     let _installed = Installed;
-    let started = Command::new("sc.exe")
-        .args(["start", "cabinetos-indexer"])
+    // `--install` starts the service itself, and registers it to start by
+    // itself after every restart of Windows (automatic, delayed).
+    let config = Command::new("sc.exe")
+        .args(["qc", "cabinetos-indexer"])
         .output()
         .unwrap();
-    assert!(
-        started.status.success(),
-        "{}",
-        String::from_utf8_lossy(&started.stdout)
-    );
+    let config = String::from_utf8_lossy(&config.stdout);
+    assert!(config.contains("AUTO_START  (DELAYED)"), "{config}");
+    let status = Command::new("sc.exe")
+        .args(["query", "cabinetos-indexer"])
+        .output()
+        .unwrap();
+    let status = String::from_utf8_lossy(&status.stdout);
+    assert!(status.contains("RUNNING"), "{status}");
 
     let pipe = PipeName::from_full(PIPE_NAME);
     wait_ready(&pipe).await;
