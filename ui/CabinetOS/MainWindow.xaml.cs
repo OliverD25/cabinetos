@@ -194,6 +194,7 @@ public sealed partial class MainWindow : Window
         SetUpUpdates();
         _keys.PendingChanged += UpdateChordIndicator;
         RootGrid.PreviewKeyDown += OnPreviewKeyDown;
+        FocusManager.GettingFocus += OnGettingFocus;
         RootGrid.SizeChanged += (_, e) => UpdateWidths(e.NewSize.Width);
         RootGrid.ActualThemeChanged += (_, _) => UpdateCaptionColors();
         _session.EventReceived += OnCoreEvent;

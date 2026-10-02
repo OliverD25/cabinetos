@@ -9,6 +9,7 @@ using CabinetOS.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 
 namespace CabinetOS;
@@ -106,6 +107,52 @@ public sealed partial class MainWindow
         {
             afterFocus?.Invoke();
         }
+    }
+
+    // A click from a page (the terminal, a tool) into a control of the window: the page's browser had Windows' focus, the
+    // click gives it to WinUI's input window, and WinUI then moves XAML's focus a second time, by the pointer, to the
+    // window's root, so the clicked pane loses the keyboard and the keys after the click act on nothing (ClickFocus). That
+    // move is refused here. No Win32 focus call is needed: Windows' focus is in WinUI's input window by then.
+    private void OnGettingFocus(object? sender, GettingFocusEventArgs e)
+    {
+        if (e.FocusState != FocusState.Pointer || RootGrid.XamlRoot is not { } root
+            || e.NewFocusedElement is not UIElement { XamlRoot: var nextRoot } next || nextRoot != root)
+        {
+            return;
+        }
+        if (e.OldFocusedElement is not { } old
+            || !ClickFocus.RefuseMove(byPointer: true, IsAroundContent(next), IsWithinContent(old), old is WebView2))
+        {
+            return;
+        }
+        var refused = e.TryCancel() || e.TrySetNewFocusedElement(old);
+        Diag.Info(Target, "a click's focus move to the window's root refused", new LogField("kept_on", DescribeElement(old)),
+            new LogField("view", DescribeElement(ViewAround(old))), new LogField("refused", refused));
+    }
+
+    // RootGrid or an element around it: the window's root, which holds none of the window's controls.
+    private bool IsAroundContent(DependencyObject element)
+    {
+        for (DependencyObject? at = RootGrid; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at == element)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool IsWithinContent(DependencyObject element)
+    {
+        for (var at = element; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at == RootGrid)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // A key reached the window while XAML's focus is on a page. Normally the page has the keys and
