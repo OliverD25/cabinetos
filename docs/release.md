@@ -411,9 +411,9 @@ says.
 
 The scan of the whole history found no secret ([report](log/2026-10-02/public-repository-preparation.md)).
 One private thing becomes public with the history: every commit (759 on
-`main` on 2026-10-02) carries the author's e-mail address, `muzexp@gmail.com`.
-Anyone who clones the repository, or opens a commit's `.patch` page on
-GitHub, sees it.
+`main` on 2026-10-02) carries the author's personal e-mail address, the
+one the git settings on this PC and in WSL give. Anyone who clones the
+repository, or opens a commit's `.patch` page on GitHub, sees it.
 Only a rewrite of the whole history removes it, and that would change every
 commit id the plan and the build log cite. The report recommends keeping the
 history and giving new commits GitHub's private address:
