@@ -420,6 +420,8 @@ fn serde_error(text: &str, error: &serde_json::Error) -> ConfigError {
 
 #[cfg(test)]
 mod tests {
+    use cabinetos_protocol::TerminalMode;
+
     use super::*;
     use crate::Layout;
 
@@ -578,6 +580,25 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.terminal.profiles[0].follows_pane, Some(false));
+    }
+
+    #[test]
+    fn the_terminal_restores_and_starts_in_the_mode_the_file_says() {
+        let config = parse(r#"{"terminal": {"restore": false, "defaultMode": "linked"}}"#).unwrap();
+        assert!(!config.terminal.restore);
+        assert_eq!(config.terminal.default_mode, TerminalMode::Linked);
+        let config = parse("{}").unwrap();
+        assert!(config.terminal.restore);
+        assert_eq!(config.terminal.default_mode, TerminalMode::Locked);
+        // A word that is not a mode names the line and the words that are.
+        let error = parse("{\n\"terminal\": {\"defaultMode\": \"following\"}\n}").unwrap_err();
+        assert!(
+            error.message.contains("following") && error.message.contains("linked"),
+            "{error}"
+        );
+        assert_eq!(error.line, Some(2), "{error}");
+        let error = parse(r#"{"terminal": {"restore": "yes"}}"#).unwrap_err();
+        assert!(error.message.contains("invalid type: string"), "{error}");
     }
 
     #[test]

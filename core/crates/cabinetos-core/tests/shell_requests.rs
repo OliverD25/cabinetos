@@ -335,6 +335,40 @@ async fn set_value_writes_one_setting_and_tells_every_client() {
     );
     assert_eq!(config_changed(&mut events).await, ["terminal.split"]);
     assert_eq!(read_config(&core)["terminal"]["split"], json!(true));
+    // The terminal's restoration and the mode of a new session (unit 5), set from anywhere, checked as the file is.
+    assert_eq!(
+        get_value(&mut client, "terminal.restore").await,
+        Response::Value { value: json!(true) }
+    );
+    assert_eq!(
+        get_value(&mut client, "terminal.defaultMode").await,
+        Response::Value {
+            value: json!("locked")
+        }
+    );
+    assert_eq!(
+        set_value(&mut client, "terminal.restore", json!(false)).await,
+        Response::Ok
+    );
+    assert_eq!(config_changed(&mut events).await, ["terminal.restore"]);
+    assert_eq!(
+        set_value(&mut client, "terminal.defaultMode", json!("linked")).await,
+        Response::Ok
+    );
+    assert_eq!(config_changed(&mut events).await, ["terminal.defaultMode"]);
+    let written = read_config(&core);
+    assert_eq!(written["terminal"]["restore"], json!(false));
+    assert_eq!(written["terminal"]["defaultMode"], json!("linked"));
+    // A mode that is neither word is refused and changes nothing.
+    let refused = set_value(&mut client, "terminal.defaultMode", json!("following")).await;
+    assert!(
+        matches!(refused, Response::Error { .. }),
+        "an unknown mode: {refused:?}"
+    );
+    assert_eq!(
+        read_config(&core)["terminal"]["defaultMode"],
+        json!("linked")
+    );
     // The same value again changes nothing and says nothing.
     assert_eq!(
         set_value(&mut client, "ui.dualPane", json!(false)).await,

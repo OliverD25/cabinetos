@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use cabinetos_config::{ProfileHook, TerminalConfig};
-use cabinetos_protocol::ErrorCode;
+use cabinetos_protocol::{ErrorCode, TerminalMode};
 use cabinetos_terminal::{Hook, HookHost, Profile, Terminals, linkable_by_default};
 
 use crate::events::EventHub;
@@ -89,9 +89,48 @@ pub(crate) fn profile(config: &TerminalConfig, name: Option<&str>) -> Result<Pro
         })
 }
 
+/// The mode a session starts in when its client names none:
+/// `terminal.defaultMode`, but `locked` for a profile that cannot be linked,
+/// since `linked` there would be `not_linkable` and start no shell.
+pub(crate) fn default_mode(config: &TerminalConfig, profile: &Profile) -> TerminalMode {
+    if profile.linkable {
+        config.default_mode
+    } else {
+        TerminalMode::Locked
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_session_takes_the_default_mode_unless_its_profile_cannot_be_linked() {
+        let config: TerminalConfig = serde_json::from_str(
+            r#"{"defaultProfile": "ps", "defaultMode": "linked", "profiles": [
+                {"name": "ps", "command": "pwsh.exe"},
+                {"name": "cmd", "command": "cmd.exe"},
+                {"name": "hooked-cmd", "command": "cmd.exe", "linkable": true},
+                {"name": "plain-pwsh", "command": "pwsh.exe", "linkable": false}
+            ]}"#,
+        )
+        .unwrap();
+        let mode = |name: &str| default_mode(&config, &profile(&config, Some(name)).unwrap());
+        assert_eq!(mode("ps"), TerminalMode::Linked);
+        assert_eq!(mode("hooked-cmd"), TerminalMode::Linked);
+        assert_eq!(mode("cmd"), TerminalMode::Locked, "no hook can follow");
+        assert_eq!(
+            mode("plain-pwsh"),
+            TerminalMode::Locked,
+            "the profile says no"
+        );
+        // Locked is the default, and says locked for every profile.
+        let plain = TerminalConfig::default();
+        assert_eq!(
+            default_mode(&plain, &profile(&plain, None).unwrap()),
+            TerminalMode::Locked
+        );
+    }
 
     #[test]
     fn a_missing_name_means_the_default_profile() {

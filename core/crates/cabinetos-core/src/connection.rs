@@ -1304,7 +1304,9 @@ impl Session {
                 };
                 let binding = cabinetos_terminal::Binding {
                     pane,
-                    mode: mode.unwrap_or_default(),
+                    mode: mode.unwrap_or_else(|| {
+                        terminal::default_mode(&settings.config.terminal, &profile)
+                    }),
                 };
                 self.spawn_reply(id, span, kind, move || {
                     match terminals.open(&profile, cwd.as_deref(), cols, rows, binding) {

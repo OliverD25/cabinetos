@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use cabinetos_commands::{KeySequence, Override};
-use cabinetos_protocol::{DEFAULT_UPDATE_SOURCE, SortKey, SortSpec, UpdateChannel};
+use cabinetos_protocol::{DEFAULT_UPDATE_SOURCE, SortKey, SortSpec, TerminalMode, UpdateChannel};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::menu::{ContextMenuConfig, ProgramEntry};
@@ -389,15 +389,28 @@ impl From<SortConfig> for SortSpec {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields, default, rename_all = "camelCase")]
 pub struct TerminalConfig {
-    /// The `name` of the profile a new terminal starts with.
+    /// The `name` of the profile a new terminal starts with when its client
+    /// names none; it must name one of `profiles`. A change applies to the
+    /// next session.
     pub default_profile: String,
-    /// The shells a terminal can run.
+    /// The shells a terminal can run. Names must be unique. An edited
+    /// profile applies to the next session; a running shell keeps what it
+    /// started with.
     pub profiles: Vec<TerminalProfile>,
     /// Whether the Tool Dock is split under the two panes, the left pane's
     /// sessions under the left pane and the right pane's under the right
     /// (`terminal.toggleSplit`, Ctrl+\ in the terminal). The window writes it
     /// when the user toggles it and follows a change of the file.
     pub split: bool,
+    /// Whether the terminal tabs come back after a restart: the first time
+    /// the dock is shown after the window starts, the sessions it last had
+    /// are started again as fresh shells, each with its profile, folder, pane
+    /// and mode. The window owns the saved sessions; the core only stores them.
+    pub restore: bool,
+    /// The mode a new session starts in when its client names none:
+    /// `locked`, or `linked` (the shell follows its pane). A profile that is
+    /// not linkable stays `locked` whatever this says.
+    pub default_mode: TerminalMode,
 }
 
 /// The note the `claude` profile adds to Claude Code's system prompt: where
@@ -434,6 +447,8 @@ impl Default for TerminalConfig {
                 ),
             ],
             split: false,
+            restore: true,
+            default_mode: TerminalMode::Locked,
         }
     }
 }
@@ -707,6 +722,12 @@ mod tests {
         assert_eq!(config.terminal.default_profile, "pwsh");
         // Article 4: one terminal view until the user splits the dock.
         assert!(!config.terminal.split);
+        assert!(config.terminal.restore, "the tabs come back by default");
+        assert_eq!(
+            config.terminal.default_mode,
+            TerminalMode::Locked,
+            "Article 4: a new session is locked until the user links it"
+        );
         let names: Vec<&str> = config
             .terminal
             .profiles
@@ -985,6 +1006,27 @@ mod tests {
             "the other keys keep their defaults"
         );
         assert!(serde_json::from_str::<TerminalConfig>(r#"{"split": "yes"}"#).is_err());
+        // The restoration and the new session's mode are written with the terminal's other keys.
+        assert!(
+            text.contains("\"restore\":true,\"defaultMode\":\"locked\""),
+            "{text}"
+        );
+        let kept: TerminalConfig =
+            serde_json::from_str(r#"{"restore": false, "defaultMode": "linked"}"#).unwrap();
+        assert!(!kept.restore);
+        assert_eq!(kept.default_mode, TerminalMode::Linked);
+        assert_eq!(kept.default_profile, "pwsh", "the other keys keep theirs");
+        for bad in [
+            r#"{"restore": "no"}"#,
+            r#"{"defaultMode": "following"}"#,
+            r#"{"defaultMode": "Linked"}"#,
+            r#"{"defaultMode": true}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<TerminalConfig>(bad).is_err(),
+                "{bad}"
+            );
+        }
         assert!(
             text.contains("\"sidebarAutoReveal\":true,\"columns\":null"),
             "{text}"

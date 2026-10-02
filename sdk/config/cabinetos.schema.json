@@ -165,6 +165,7 @@
       "description": "The integrated terminal.",
       "$ref": "#/$defs/TerminalConfig",
       "default": {
+        "defaultMode": "locked",
         "defaultProfile": "pwsh",
         "profiles": [
           {
@@ -197,6 +198,7 @@
             "name": "claude"
           }
         ],
+        "restore": true,
         "split": false
       }
     },
@@ -1041,13 +1043,18 @@
       "description": "The integrated terminal (Phase 8).",
       "type": "object",
       "properties": {
+        "defaultMode": {
+          "description": "The mode a new session starts in when its client names none:\n`locked`, or `linked` (the shell follows its pane). A profile that is\nnot linkable stays `locked` whatever this says.",
+          "$ref": "#/$defs/TerminalMode",
+          "default": "locked"
+        },
         "defaultProfile": {
-          "description": "The `name` of the profile a new terminal starts with.",
+          "description": "The `name` of the profile a new terminal starts with when its client\nnames none; it must name one of `profiles`. A change applies to the\nnext session.",
           "type": "string",
           "default": "pwsh"
         },
         "profiles": {
-          "description": "The shells a terminal can run.",
+          "description": "The shells a terminal can run. Names must be unique. An edited\nprofile applies to the next session; a running shell keeps what it\nstarted with.",
           "type": "array",
           "default": [
             {
@@ -1084,6 +1091,11 @@
             "$ref": "#/$defs/TerminalProfile"
           }
         },
+        "restore": {
+          "description": "Whether the terminal tabs come back after a restart: the first time\nthe dock is shown after the window starts, the sessions it last had\nare started again as fresh shells, each with its profile, folder, pane\nand mode. The window owns the saved sessions; the core only stores them.",
+          "type": "boolean",
+          "default": true
+        },
         "split": {
           "description": "Whether the Tool Dock is split under the two panes, the left pane's\nsessions under the left pane and the right pane's under the right\n(`terminal.toggleSplit`, Ctrl+\\ in the terminal). The window writes it\nwhen the user toggles it and follows a change of the file.",
           "type": "boolean",
@@ -1091,6 +1103,21 @@
         }
       },
       "additionalProperties": false
+    },
+    "TerminalMode": {
+      "description": "How a session is bound to its pane (`docs/terminal.md`, \"Panes and\nmodes\").",
+      "oneOf": [
+        {
+          "description": "The session stays where the user takes it: nothing the pane does\nreaches it.",
+          "type": "string",
+          "const": "locked"
+        },
+        {
+          "description": "The session follows its pane: each time the shell draws its prompt,\nits prompt hook asks the core for the pane's folder\n(`terminal_pane_folder`) and changes to it. A running command or a\nhalf-typed line is never touched.",
+          "type": "string",
+          "const": "linked"
+        }
+      ]
     },
     "TerminalProfile": {
       "description": "One shell a terminal can run.",
