@@ -1426,6 +1426,29 @@ main's (`cabinetos-terminal` `report.rs`, four `match_same_arms`;
 end-to-end tests, two of them new); the live check on a fresh Release build
 224 True, 0 False (`run-unit3-b.txt`, 8 min 8 s; its first run, 223 True and
 one False, was the paste check meeting a clipboard another program held).
+**Status (2026-10-02, 09:25): unit 4 built, on its branch, not merged.** The
+GUI context for `cab`, by a coder on Sonnet, e867060..a45cc75, the live check's typing fix and the docs on
+the branch `worktree-agent-a391e4e33aea0d55d`
+([log/2026-10-02/terminal-unit4-report.md](log/2026-10-02/terminal-unit4-report.md)):
+protocol 18 (`gui_context`, answered from the newest `window_state` in
+memory: the folders of both panes, the active pane's selection, the marked
+rows or else the cursor row, and the cursor; `marked_total`, which the
+window adds to a pane of `window_state` when it lists only its first 1,000
+marked rows); in the shell `cab pane [--left|--right|--json]`, `cab
+selection [--json]` and `cab copy|move --selection --dest
+opposite_pane|<path>`, which runs the core's own job on the selection and
+follows it as `cab copy` does (conflict policy `skip` unless asked), with
+exit code 0 for success, 1 for a failure (also a selection the window cut,
+which is refused, not copied in part) and 2 for no window or nothing
+selected. No `CABINET_*` variables: each command asks the window's core.
+Checks: core 867 passed, 6 ignored, clippy, fmt and deny clean; window 1287
+tests; the full window suite with the end-to-end tests 1287 of 1287 in the
+second run (the first had 1286: the Quick Open test hit a palette list race
+unrelated to this unit; 3 of 3 alone), with two new end-to-end tests that
+run the real `cabinetos-cli` in a real PowerShell of the window; the live
+check 231 True, 0 False in 8 min 30 s (`run-unit4-d.txt`; section 21 types
+`cab` into the shell). Open for the
+creator: `opposite_pane` with one pane shown, the default `skip`.
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 

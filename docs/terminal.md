@@ -426,6 +426,74 @@ cabinetos-cli term close 3
 session 3 closed
 ```
 
+### The GUI context
+
+From a shell in a CabinetOS terminal, `cab` (in a release; the same program
+as `cabinetos-cli`, the only name a development build has) gives the live
+context of the window: the folders of the active, the left and the right
+pane, and the active pane's selection. Terminal unit 4 of the sprint;
+[ipc.md](ipc.md), "The GUI context" has the request. There are no
+`CABINET_*` environment variables: a running process's environment cannot
+be changed from outside, and a value that was right when the shell started
+is a trap as soon as the user moves. Each command asks the core of its
+window (`CABINETOS_PIPE`, set in every CabinetOS terminal), which answers
+from the newest `window_state` in memory; nothing is read from a disk and
+no window is started.
+
+```text
+cab pane
+E:\work
+cab pane --right
+D:\backup
+cab pane --json
+cab selection
+E:\work\a.txt
+E:\work\b.txt
+cab copy --selection --dest opposite_pane
+copying 2 selected items of the left pane to D:\backup
+job 7 started
+...
+cab move --selection --dest D:\archive
+```
+
+- `cab pane` prints the folder of the active pane, the one that has the
+  keyboard; `--left` and `--right` print a pane's. `--json` prints the
+  whole context: `active`, `left`, `right`, `selection`, `selection_total`
+  and `cursor` (a pane that shows no folder is `null`).
+- `cab selection` prints what the window's own file commands act on in the
+  active pane, one full path to a line (`--json`: a list): the marked rows,
+  or the row the cursor is on when none is marked.
+- `cab copy|move --selection --dest opposite_pane|<path>` starts the
+  core's copy or move job on that selection and follows it as `cab copy`
+  does (one progress line, conflicts, a summary). `opposite_pane` is the
+  folder the other pane shows. A path is read as the other commands read
+  one, against the folder the shell is in (a folder that is called
+  `opposite_pane` is `.\opposite_pane`). The first line says what is going
+  where, so a copy into a pane the user cannot see (one pane shown) is not
+  silent.
+- Conflicts: the default is `--on-conflict skip`, since a job started from
+  a shell must not wait for an answer a shell cannot give; what exists at
+  the destination stays, and the summary counts it as skipped. `--on-conflict
+  overwrite|rename|newer|ask`, `--resolve`, `--verify` and `--stats` work
+  as with paths. With `ask` a conflict waits, and the window's transfer
+  flyout shows it as for any job.
+- The exit code: 0 when it answered or the job completed; 1 for a failure
+  (no core within 1 s, a job that did not complete or that the core
+  refused, an opposite pane that shows no folder, a selection the window
+  cut: see below); 2 when there is nothing to act on (no window has said
+  what it shows, nothing is selected, the pane shows no folder). `cab
+  selection` with nothing selected prints nothing (`[]` with `--json`) and
+  exits 2. The usage errors of the command line itself also exit 2, with
+  their own message.
+- The window tells the core about the first 1,000 marked rows, and how many
+  there are. `cab selection` and a job refuse a selection that is more
+  (exit 1, nothing printed, nothing started), since a copy that reports
+  success on part of the selection would be worse than no copy.
+- The log: the core logs the request at debug level, as it does
+  `terminal_pane_folder`, and a job `cab` starts as any other (`job queued`
+  at info level, with its kind, the number of sources and the destination).
+  With `--log-dir`, `cab` writes "starting a job from the selection".
+
 ## Threads and logs
 
 Each session has three threads in the core: `term-<id>-out` reads the
@@ -458,7 +526,16 @@ core, `cab` and shell with the test as the window (the CLI's tests: a
 linked pwsh, Windows PowerShell and WSL bash follow their pane at the next
 prompt, a half-typed line runs as typed where its prompt was drawn, a
 `cd` of the user's own stays, a locked session stays, keys typed while
-the hook runs arrive whole, and each change of folder is reported once). To test `term` in a
+the hook runs arrive whole, and each change of folder is reported once).
+The GUI context is tested at four levels: the core's rules (the marked
+rows, the cursor, an empty folder, a tool tab, a selection the window cut,
+no window; `cabinetos-core`'s `window.rs` and `tests/gui_context.rs`, which
+also starts a job from the answer), the real `cab` against a real core with
+a played window (the CLI's `tests/gui_context.rs`: the output, the exit
+codes, the files that appear, a relative `--dest`, no core), the whole path
+with a real window and shell (the window's `TerminalEndToEndTests`: the
+shell's `cab` copies and moves the window's selection), and the live
+check's section 21. To test `term` in a
 real console, a CLI test runs `cabinetos-cli term` as the program of a
 session of its own and types into that pseudo-console, `Ctrl+]` included.
 

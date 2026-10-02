@@ -185,7 +185,16 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   run yet; Enter: the line must have run in the folder its prompt was
   drawn in, the prompt after it must be in the subfolder as the window's
   log says, and the caption must say "in inner"; then the toggle locks it
-  again), Alt+] as a physical key on the Ukrainian layout, the split mirror
+  again), Alt+] as a physical key on the Ukrainian layout, `cab` in the
+  shell (the left pane's three files marked with Ctrl+A, the right pane an
+  empty folder, a click into the shell's text, and these lines typed one at
+  a time (typed once more when the answers are not all there):
+  `cabinetos-cli pane`, `pane --right`, `pane --json`, `selection` and
+  `copy --selection --dest opposite_pane`, each answer written to a file;
+  the answers must be the two folders, the JSON context and the three
+  paths, the copy must exit 0 and leave the three files in the right
+  pane's folder, and the core's log must say it queued a copy of three
+  sources there; the run keeps `21-cab-live.png`), the split mirror
   (Ctrl+\ in the left pane must run `go.root` and no split; after a click on
   the left tab, Ctrl+\ in the terminal must split the dock, and the window's
   "terminal split" line must put each half under its pane within 2 px, with
@@ -2444,9 +2453,13 @@ windows open, the last write wins, as for `ui.lastPaths`.
 on every change of the tabs, the active pane, the cursor or the marks,
 joined into one message every 50 ms. It has `active_pane` and for each
 pane `tabs` (`path`, `locked`, `tool`), `active`, `cursor` and `marked`
-(at most 1,000 paths). The core only stores it (`get_window_state`); nothing
-in the window depends on the reply. A core that answers `unknown_request`
-makes the window stop sending, with one log line.
+(at most 1,000 paths; with more rows marked, the pane also has
+`marked_total`, the true count, which the window counts only then:
+protocol 18). The core only stores it (`get_window_state`); nothing in the
+window depends on the reply. It is also what `cab` reads from a shell:
+`gui_context` answers the folders and the selection from it
+([terminal.md](terminal.md), "The GUI context"). A core that answers
+`unknown_request` makes the window stop sending, with one log line.
 
 **Cost of scrolling.** Checked on 2026-09-30 with
 `ui/livecheck/scroll-bench.ps1` on the 100,000-entry folder (release

@@ -132,6 +132,7 @@ fn window(active_pane: Pane, folder: &str) -> WindowState {
                 active: 0,
                 cursor: Some(format!(r"{folder}\a.txt")),
                 marked: vec![format!(r"{folder}\a.txt"), format!(r"{folder}\b.txt")],
+                marked_total: None,
             },
             right: PaneState::default(),
         },

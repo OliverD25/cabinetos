@@ -811,6 +811,60 @@
       ]
     },
     {
+      "description": "Reply to `gui_context`: what the newest window shows, worked out\nfrom its `window_state`.",
+      "type": "object",
+      "properties": {
+        "active": {
+          "description": "The pane that has the keyboard.",
+          "$ref": "#/$defs/Pane"
+        },
+        "cursor": {
+          "description": "The full path of the row the cursor is on in the active pane;\n`null` in an empty folder or in a tab that shows a tool.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "left": {
+          "description": "The folder the left pane shows (its tab in front); `null` when\nthat tab shows a tool, or the folder is not an absolute path.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "right": {
+          "description": "The folder the right pane shows, as `left`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection": {
+          "description": "What a command acts on in the active pane, by full path: its\nmarked rows, or, when none is marked, the row the cursor is on;\nempty in an empty folder or in a tab that shows a tool.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "selection_total": {
+          "description": "How many rows the selection has. More than `selection` lists\nwhen the window sent only the first 1,000 marked rows: a\nprogram that acts on the selection must then refuse.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "gui_context"
+        }
+      },
+      "required": [
+        "type",
+        "active",
+        "selection",
+        "selection_total"
+      ]
+    },
+    {
       "description": "Reply to `preview_listing` and `open_preview`: the preview is\ncomplete in shared memory.",
       "type": "object",
       "properties": {
@@ -3215,12 +3269,21 @@
           "default": null
         },
         "marked": {
-          "description": "The full paths of the marked rows, in the pane's order.",
+          "description": "The full paths of the marked rows, in the pane's order. A window\nsends at most 1,000 of them (`marked_total` says when there are\nmore).",
           "type": "array",
           "default": [],
           "items": {
             "type": "string"
           }
+        },
+        "marked_total": {
+          "description": "How many rows are marked in all, when that is more than `marked`\nlists (protocol version 18); left out when `marked` is complete.\nA program that acts on the marks must not take the list for all of\nthem when this is present.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
         },
         "tabs": {
           "description": "The pane's tabs, left to right.",

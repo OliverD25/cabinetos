@@ -577,8 +577,11 @@ public sealed class UninstallExtensionRequest(string extensionId) : CoreRequest(
 /// <summary>One tab of a pane in <c>window_state</c>: the folder, or the file a tool shows.</summary>
 public sealed record WindowTabState(string Path, bool Locked, string? Tool);
 
-/// <summary>One pane in <c>window_state</c>: its tabs, the tab in front, the cursor row and the marked rows (full paths).</summary>
-public sealed record WindowPaneState(IReadOnlyList<WindowTabState> Tabs, uint Active, string? Cursor, IReadOnlyList<string> Marked);
+/// <summary>
+/// One pane in <c>window_state</c>: its tabs, the tab in front, the cursor row and the marked rows (full paths).
+/// <paramref name="MarkedTotal"/> is how many rows are marked in all, written only when <paramref name="Marked"/> lists fewer (protocol 18).
+/// </summary>
+public sealed record WindowPaneState(IReadOnlyList<WindowTabState> Tabs, uint Active, string? Cursor, IReadOnlyList<string> Marked, uint? MarkedTotal = null);
 
 /// <summary>Both panes in <c>window_state</c>.</summary>
 public sealed record WindowPanesState(WindowPaneState Left, WindowPaneState Right);

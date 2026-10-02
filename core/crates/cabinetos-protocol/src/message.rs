@@ -471,6 +471,12 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         client: Option<String>,
     },
+    /// Asks what the window the user works in shows, as a shell's `cab`
+    /// needs it: the folder each pane shows and the active pane's
+    /// selection. Answered from the newest `window_state` in memory; no
+    /// file is read. The core answers `gui_context`, or `no_window` when
+    /// no window has said what it shows. Needs no `hello`.
+    GuiContext,
     /// Proposes changes without making them: the core checks the rows and
     /// writes them into shared memory as a listing, which a pane shows
     /// like a folder. Needs `hello`. The core answers `preview_opened`.
@@ -663,6 +669,7 @@ impl Request {
         "uninstall_extension",
         "window_state",
         "get_window_state",
+        "gui_context",
         "preview_listing",
         "open_preview",
         "preview_apply",
@@ -741,6 +748,7 @@ impl Request {
             Self::UninstallExtension { .. } => "uninstall_extension",
             Self::WindowState(_) => "window_state",
             Self::GetWindowState { .. } => "get_window_state",
+            Self::GuiContext => "gui_context",
             Self::PreviewListing { .. } => "preview_listing",
             Self::OpenPreview { .. } => "open_preview",
             Self::PreviewApply { .. } => "preview_apply",
@@ -1029,6 +1037,28 @@ pub enum Response {
         /// The state, as the client sent it.
         state: WindowState,
     },
+    /// Reply to `gui_context`: what the newest window shows, worked out
+    /// from its `window_state`.
+    GuiContext {
+        /// The pane that has the keyboard.
+        active: Pane,
+        /// The folder the left pane shows (its tab in front); `null` when
+        /// that tab shows a tool, or the folder is not an absolute path.
+        left: Option<String>,
+        /// The folder the right pane shows, as `left`.
+        right: Option<String>,
+        /// What a command acts on in the active pane, by full path: its
+        /// marked rows, or, when none is marked, the row the cursor is on;
+        /// empty in an empty folder or in a tab that shows a tool.
+        selection: Vec<String>,
+        /// How many rows the selection has. More than `selection` lists
+        /// when the window sent only the first 1,000 marked rows: a
+        /// program that acts on the selection must then refuse.
+        selection_total: u32,
+        /// The full path of the row the cursor is on in the active pane;
+        /// `null` in an empty folder or in a tab that shows a tool.
+        cursor: Option<String>,
+    },
     /// Reply to `preview_listing` and `open_preview`: the preview is
     /// complete in shared memory.
     PreviewOpened {
@@ -1148,6 +1178,7 @@ impl Response {
         "tools",
         "marketplace_index",
         "window_state",
+        "gui_context",
         "preview_opened",
         "jobs_started",
         "secret",
@@ -1194,6 +1225,7 @@ impl Response {
             Self::Tools { .. } => "tools",
             Self::MarketplaceIndex { .. } => "marketplace_index",
             Self::WindowState { .. } => "window_state",
+            Self::GuiContext { .. } => "gui_context",
             Self::PreviewOpened { .. } => "preview_opened",
             Self::JobsStarted { .. } => "jobs_started",
             Self::Secret { .. } => "secret",
@@ -2137,6 +2169,7 @@ mod tests {
             Request::GetWindowState {
                 client: Some("CabinetOS#2".to_owned()),
             },
+            Request::GuiContext,
             Request::PreviewListing {
                 title: "Rename 2 photos".to_owned(),
                 rows: vec![
@@ -2242,6 +2275,7 @@ mod tests {
                     active: 0,
                     cursor: Some(r"C:\Users\me\notes.txt".to_owned()),
                     marked: Vec::new(),
+                    marked_total: None,
                 },
                 right: PaneState {
                     tabs: vec![
@@ -2259,6 +2293,7 @@ mod tests {
                     active: 1,
                     cursor: None,
                     marked: vec![r"D:\work\a.txt".to_owned()],
+                    marked_total: Some(1500),
                 },
             },
         }
@@ -2498,6 +2533,14 @@ mod tests {
                 client: "CabinetOS#2".to_owned(),
                 sent_at_ms: 1_790_000_000_000,
                 state: window_state(),
+            },
+            Response::GuiContext {
+                active: Pane::Right,
+                left: Some(r"C:\Users\me".to_owned()),
+                right: None,
+                selection: vec![r"D:\work\a.txt".to_owned()],
+                selection_total: 1500,
+                cursor: None,
             },
             Response::PreviewOpened {
                 preview: "preview-3".to_owned(),
@@ -2810,6 +2853,42 @@ mod tests {
         let sync = json!({"id": ID, "type": "terminal_sync_cwd", "session_id": 3, "path": "C:\\"});
         assert!(serde_json::from_value::<Envelope<Request>>(sync).is_err());
         assert!(!Request::TYPES.contains(&"terminal_sync_cwd"));
+    }
+
+    #[test]
+    fn the_gui_context_has_the_documented_wire_form() {
+        let ask = json!({"id": ID, "type": "gui_context"});
+        let envelope: Envelope<Request> = serde_json::from_value(ask).unwrap();
+        assert_eq!(envelope.body, Request::GuiContext);
+        let answer = serde_json::to_value(Response::GuiContext {
+            active: Pane::Left,
+            left: Some(r"E:\work".to_owned()),
+            right: None,
+            selection: vec![r"E:\work\a.txt".to_owned(), r"E:\work\b.txt".to_owned()],
+            selection_total: 2,
+            cursor: Some(r"E:\work\b.txt".to_owned()),
+        })
+        .unwrap();
+        // A pane that shows no folder is null, not left out.
+        assert_eq!(
+            answer,
+            json!({
+                "type": "gui_context", "active": "left", "left": "E:\\work", "right": null,
+                "selection": ["E:\\work\\a.txt", "E:\\work\\b.txt"], "selection_total": 2,
+                "cursor": "E:\\work\\b.txt"
+            })
+        );
+        let bare = serde_json::to_value(Response::GuiContext {
+            active: Pane::Right,
+            left: None,
+            right: None,
+            selection: Vec::new(),
+            selection_total: 0,
+            cursor: None,
+        })
+        .unwrap();
+        assert_eq!(bare["cursor"], Value::Null);
+        assert_eq!(bare["selection"], json!([]));
     }
 
     #[test]

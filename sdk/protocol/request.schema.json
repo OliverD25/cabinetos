@@ -1167,6 +1167,19 @@
       ]
     },
     {
+      "description": "Asks what the window the user works in shows, as a shell's `cab`\nneeds it: the folder each pane shows and the active pane's\nselection. Answered from the newest `window_state` in memory; no\nfile is read. The core answers `gui_context`, or `no_window` when\nno window has said what it shows. Needs no `hello`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "gui_context"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
       "description": "Proposes changes without making them: the core checks the rows and\nwrites them into shared memory as a listing, which a pane shows\nlike a folder. Needs `hello`. The core answers `preview_opened`.",
       "type": "object",
       "properties": {
@@ -1898,12 +1911,21 @@
           "default": null
         },
         "marked": {
-          "description": "The full paths of the marked rows, in the pane's order.",
+          "description": "The full paths of the marked rows, in the pane's order. A window\nsends at most 1,000 of them (`marked_total` says when there are\nmore).",
           "type": "array",
           "default": [],
           "items": {
             "type": "string"
           }
+        },
+        "marked_total": {
+          "description": "How many rows are marked in all, when that is more than `marked`\nlists (protocol version 18); left out when `marked` is complete.\nA program that acts on the marks must not take the list for all of\nthem when this is present.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
         },
         "tabs": {
           "description": "The pane's tabs, left to right.",

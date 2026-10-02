@@ -316,6 +316,7 @@ public class TabTests
 
         Assert.Equal(WindowStateBuilder.MaxMarked, request.Panes.Left.Marked.Count);
         Assert.Equal(marked[0], request.Panes.Left.Marked[0]);
+        Assert.Equal(5000u, request.Panes.Left.MarkedTotal);
         AssertValid(Encode(request));
     }
 
@@ -362,6 +363,29 @@ public class TabTests
         Assert.Equal(TabGlyph.Lock, TabLook.Glyph(new PaneTab(@"C:\work", locked: true)));
         Assert.Equal(TabGlyph.Folder, TabLook.Glyph(new PaneTab(@"C:\work", mode: TabMode.Columns)));
         Assert.Equal(TabGlyph.Tool, TabLook.Glyph(PaneTab.ForTool(@"C:\work\README.md", "markdown-preview", "Markdown Preview")));
+    }
+
+    [Fact]
+    public void A_cut_list_of_marks_says_how_many_rows_are_marked_and_a_whole_one_says_nothing()
+    {
+        var strip = Strip(@"C:\big");
+        var thousand = Enumerable.Range(0, WindowStateBuilder.MaxMarked).Select(i => $@"C:\big\file{i:D4}.txt").ToList();
+        PaneSnapshot Left(IReadOnlyList<string> marked, int? total) => new(strip.Tabs, 0, marked[0], marked, null, total);
+        var right = new PaneSnapshot(strip.Tabs, 0, null, []);
+
+        // The window read the first thousand of 5,000 marked rows: the total goes with them, on the wire too.
+        var cut = WindowStateBuilder.Build(0, Left(thousand, 5000), right);
+        Assert.Equal(5000u, cut.Panes.Left.MarkedTotal);
+        var json = Encode(cut);
+        Assert.Contains("\"marked_total\":5000", json);
+        AssertValid(json);
+
+        // A list that is all of the marks, even one of exactly a thousand, carries no total (older cores and messages stay as they were).
+        Assert.Null(WindowStateBuilder.Build(0, Left(thousand, 1000), right).Panes.Left.MarkedTotal);
+        Assert.Null(WindowStateBuilder.Build(0, Left(thousand, null), right).Panes.Left.MarkedTotal);
+        Assert.Null(WindowStateBuilder.Build(0, Left(["x"], 1), right).Panes.Left.MarkedTotal);
+        Assert.DoesNotContain("marked_total", Encode(WindowStateBuilder.Build(0, Left(thousand, 1000), right)));
+        Assert.Null(cut.Panes.Right.MarkedTotal);
     }
 
     [Fact]

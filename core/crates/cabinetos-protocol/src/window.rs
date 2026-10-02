@@ -54,9 +54,17 @@ pub struct PaneState {
     /// folder or a tab that shows a tool.
     #[serde(default)]
     pub cursor: Option<String>,
-    /// The full paths of the marked rows, in the pane's order.
+    /// The full paths of the marked rows, in the pane's order. A window
+    /// sends at most 1,000 of them (`marked_total` says when there are
+    /// more).
     #[serde(default)]
     pub marked: Vec<String>,
+    /// How many rows are marked in all, when that is more than `marked`
+    /// lists (protocol version 18); left out when `marked` is complete.
+    /// A program that acts on the marks must not take the list for all of
+    /// them when this is present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub marked_total: Option<u32>,
 }
 
 /// One tab of a pane.
@@ -115,5 +123,21 @@ mod tests {
         let bare: PaneState = serde_json::from_value(json!({})).unwrap();
         assert_eq!(bare, PaneState::default());
         assert!(serde_json::from_value::<Pane>(json!("middle")).is_err());
+    }
+
+    #[test]
+    fn the_marked_total_is_left_out_unless_the_list_is_short() {
+        let complete: PaneState = serde_json::from_value(json!({"marked": ["C:\\a"]})).unwrap();
+        assert_eq!(complete.marked_total, None, "an older window sends none");
+        assert!(
+            serde_json::to_value(&complete)
+                .unwrap()
+                .get("marked_total")
+                .is_none()
+        );
+        let cut: PaneState =
+            serde_json::from_value(json!({"marked": ["C:\\a"], "marked_total": 5000})).unwrap();
+        assert_eq!(cut.marked_total, Some(5000));
+        assert_eq!(serde_json::to_value(&cut).unwrap()["marked_total"], 5000);
     }
 }
