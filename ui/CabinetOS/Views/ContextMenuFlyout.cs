@@ -44,6 +44,9 @@ internal sealed class ContextMenuFlyout
 
     // The flyout WinUI says is open (its Opened came, its Closed not yet): a ShowAt WinUI dropped never gets here.
     private CommandBarFlyout? _onScreen;
+
+    // Counts the openings, so that the retries of a report that was waiting for an opening that is over do not report the next one twice.
+    private int _showing;
     private ContextMenuView? _view;
     private ContextMenuEntry? _chosen;
 
@@ -174,17 +177,37 @@ internal sealed class ContextMenuFlyout
     }
 
     // The icon row's popup and the list's popup are laid out a turn or two after Opened: the report waits until every
-    // button has a size (at most ten turns), and keeps the size for the next showing of this shape.
-    private void ReportPlaced(CommandBarFlyout flyout, int attempt)
+    // button is inside a popup WinUI has drawn, and keeps the size for the next showing of this shape. The first ten tries
+    // are the next dispatcher turns; they run one after the other when nothing else waits, and a busy machine draws the
+    // list's popup frames later (a menu was reported with its icon row alone, 60 high, and kept at that height: the next
+    // menu of the shape did not flip before the window's bottom edge). So the later tries come every 50 ms, up to 5 s.
+    private const int QuickReportTries = 10;
+    private const int LateReportTries = 100;
+
+    // A task's timer, not a DispatcherQueueTimer that nothing refers to: such a timer may be collected before it ticks.
+    private async void ReportPlacedLater(CommandBarFlyout flyout, int showing, int attempt)
     {
-        if (!ReferenceEquals(flyout, _onScreen) || _front is not { } built || !ReferenceEquals(built.Flyout, flyout))
+        await Task.Delay(50);
+        ReportPlaced(flyout, showing, attempt);
+    }
+
+    private void ReportPlaced(CommandBarFlyout flyout, int showing, int attempt)
+    {
+        if (showing != _showing || !ReferenceEquals(flyout, _onScreen) || _front is not { } built || !ReferenceEquals(built.Flyout, flyout))
         {
             return;
         }
         var bounds = PopupBounds(built, out var complete);
-        if (!complete && attempt < 10)
+        if (!complete && attempt < QuickReportTries + LateReportTries)
         {
-            flyout.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ReportPlaced(flyout, attempt + 1));
+            if (attempt < QuickReportTries)
+            {
+                flyout.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ReportPlaced(flyout, showing, attempt + 1));
+            }
+            else
+            {
+                ReportPlacedLater(flyout, showing, attempt + 1);
+            }
             return;
         }
         if (bounds is { } placed)
@@ -199,6 +222,8 @@ internal sealed class ContextMenuFlyout
     }
 
     // The menu's box: the popups that hold its buttons, joined. The icon row and the list are two popups of WinUI's.
+    // Complete when every button is inside that box: a button keeps the width of its last showing, so "has a width" said
+    // nothing about a list popup that WinUI had not opened yet.
     private static Rect? PopupBounds(Built built, out bool complete)
     {
         complete = false;
@@ -206,7 +231,6 @@ internal sealed class ContextMenuFlyout
         {
             return null;
         }
-        complete = built.Buttons.All(b => b.Button.ActualWidth > 0);
         Rect? union = null;
         foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
         {
@@ -219,8 +243,26 @@ internal sealed class ContextMenuFlyout
                 new Point(Math.Min(known.Left, bounds.Left), Math.Min(known.Top, bounds.Top)),
                 new Point(Math.Max(known.Right, bounds.Right), Math.Max(known.Bottom, bounds.Bottom)));
         }
-        complete &= union is not null;
+        complete = union is { } box && built.Buttons.All(b => IsInsideBox(b.Button, box));
         return union;
+    }
+
+    private static bool IsInsideBox(FrameworkElement button, Rect box)
+    {
+        if (button.ActualWidth <= 0 || button.ActualHeight <= 0)
+        {
+            return false;
+        }
+        try
+        {
+            var bounds = button.TransformToVisual(null).TransformBounds(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
+            return bounds.Left >= box.Left - 1 && bounds.Top >= box.Top - 1 && bounds.Right <= box.Right + 1 && bounds.Bottom <= box.Bottom + 1;
+        }
+        catch (ArgumentException)
+        {
+            // Not in the tree now: its popup is not open.
+            return false;
+        }
     }
 
     private static bool IsInside(DependencyObject element, DependencyObject ancestor)
@@ -267,8 +309,9 @@ internal sealed class ContextMenuFlyout
             if (ReferenceEquals(flyout, _shown))
             {
                 _onScreen = flyout;
+                _showing++;
                 Opened?.Invoke();
-                ReportPlaced(flyout, 0);
+                ReportPlaced(flyout, _showing, 0);
             }
         };
         flyout.Closed += (_, _) => OnClosed(flyout);
