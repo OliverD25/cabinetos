@@ -443,16 +443,15 @@ public sealed partial class MainWindow : Window
                     OnContextMenuRequested(_paneViews[_active], MenuRowForStep(menuRow), menuPoint);
                     break;
                 case "shellmenu":
-                    // Shift+right-click on the same rows; Windows' menu comes when the core answers.
-                    OnShellMenuRequested(_paneViews[_active], MenuRowForStep(step.Argument), null);
-                    // Until the core has answered and the menu is placed, not a fixed 1.5 s: the core's first answer took 1.6 s and over
-                    // 3 s beside test runs, and a plain menu that this step opened (the setting is off) stood open for the whole time,
-                    // where a window that another test's window had taken the keyboard from closes it.
-                    await WaitUntilAsync("windows-menu");
+                    // Shift+right-click on the same rows; Windows' menu comes when the core answers. Until the core has answered and the
+                    // menu is placed, not a fixed 1.5 s: the core's first answer took 1.6 s and over 3 s beside test runs, and a plain
+                    // menu that this step opened (the setting is off) stood open for the whole time, where a window that another
+                    // test's window had taken the keyboard from closes it. An answer of "took longer than 3 s" is asked for again.
+                    var shellName = step.Argument;
+                    await AskForWindowsMenuForSnapshotAsync(() => OnShellMenuRequested(_paneViews[_active], MenuRowForStep(shellName), null));
                     break;
                 case "shellmenu-at" when TryParseMenuAt(step.Argument, out var shellRow, out var shellPoint):
-                    OnShellMenuRequested(_paneViews[_active], MenuRowForStep(shellRow), shellPoint);
-                    await WaitUntilAsync("windows-menu");
+                    await AskForWindowsMenuForSnapshotAsync(() => OnShellMenuRequested(_paneViews[_active], MenuRowForStep(shellRow), shellPoint));
                     break;
                 case "menu-edit-drag":
                     // A row dragged onto another in the menu's edit mode, by their titles: "menu-edit-drag:Open|Copy to other pane".
