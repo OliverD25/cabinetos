@@ -360,15 +360,21 @@ public class RailEndToEndTests
                 "rail-state:start",
                 // A click waits for its button to be drawn, and each pick for the pane to show the folder it took it to: the sidebar's
                 // rows and the keys are handled on XAML's next frames, and a "rail state" line read 300 ms after the pick came first.
+                // "listing shown" is logged at the first frame after a listing is bound, and a pick that comes before that frame
+                // replaces the pending line: the drive's listing was never logged beside three test runs (a frame took 4.6 s), and the
+                // test judges the pane's folders by those lines. So each pick waits until its listing is drawn.
                 $"click:{driveName}",
                 $"until:pane-at:{driveRoot}",
+                "until:listing-drawn",
                 "rail-state:drive",
                 "click:pinned-folder",
                 $"until:pane-at:{pinned}",
+                "until:listing-drawn",
                 "rail-state:pinned",
                 $"tree:{Path.Combine(data, "a")}",
                 "click:click-target",
                 $"until:pane-at:{clickTarget}",
+                "until:listing-drawn",
                 "until:tree",
                 "rail-state:tree-click",
                 "cmd:view.showExplorer",
@@ -400,7 +406,9 @@ public class RailEndToEndTests
         }
         catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
         {
-            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(seen, 120)}");
+            // The picks and the listings of the whole run, then the last lines of all kinds: the pick that failed is rarely among the last.
+            var steps = WindowLog.Last(seen, 80, l => Message(l) is "command executed" or "listing shown" or "rail state" or "snapshot click: no shown button has that name");
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's picks, listings and rail states (times in UTC):\n{steps}\nthe window's last log lines:\n{WindowLog.Last(seen, 60)}");
         }
         finally
         {
