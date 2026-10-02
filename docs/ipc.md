@@ -161,7 +161,10 @@ event `terminal_mode_changed` and the error code `not_linkable`
 terminal sprint, 2026-10-02) added the prompt hook's messages:
 `terminal_pane_folder` with its reply `terminal_pane_folder`, the event
 `terminal_folder_changed`, and the shell's reported `folder` in
-`terminal_list` ("Terminal sessions").
+`terminal_list` ("Terminal sessions"). Version 18 (unit 4 of the terminal
+sprint, 2026-10-02) added the GUI context for `cab`: `gui_context` with
+its reply `gui_context` ("The GUI context"), and `marked_total`, an
+optional field of a pane in `window_state`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -227,6 +230,7 @@ as absent from an older core.
 | `uninstall_extension` | `extension_id` | `ok` |
 | `window_state` | `active_pane`, `panes` (after `hello`) | `ok` |
 | `get_window_state` | `client` (without it: the client that spoke last) | `window_state` (`client`, `sent_at_ms`, `state`) |
+| `gui_context` | — | `gui_context` (`active`, `left`, `right`, `selection`, `selection_total`, `cursor`) |
 | `preview_listing` | `title`, `rows` (after `hello`) | `preview_opened` (`preview`, `title`, `listing`) |
 | `open_preview` | `preview` (after `hello`) | `preview_opened` |
 | `preview_apply` | `preview` | `jobs_started` (`jobs`) |
@@ -1752,6 +1756,11 @@ at. The core only stores it.
   row (`cursor`, `null` when there is none) and the full paths of the
   marked rows (`marked`, in the pane's order). `locked`, `tool`, `cursor`
   and `marked` may be left out.
+- The window lists at most 1,000 marked paths. When more rows are
+  marked, the pane also has `marked_total`, how many there are in all
+  (protocol 18); a pane whose `marked` is complete has no `marked_total`.
+  A program that acts on the marks must not take a cut list for all of
+  them.
 - A tab in front that shows its folder as columns ([ui.md](ui.md), "The
   column view") reports the folder of the column with the keyboard as its
   `path`: the cursor and the marks are that column's rows. The saved tab
@@ -1778,6 +1787,42 @@ It needs no `hello`.
 pane with its tabs, the tab in front marked `*`, the cursor and the number
 of marked rows); `--json` prints the state as it was received, and
 `--client <id>` asks for another window than the newest.
+
+### The GUI context
+
+A program in a shell (`cab`; [terminal.md](terminal.md), "The CLI") needs
+the live context of the window it runs in: the folders the panes show and
+what the active pane's commands would act on. An environment variable
+cannot give it: a running process's environment cannot be changed from
+outside, and a value that was right when the shell started is wrong as
+soon as the user moves. So the core answers from the newest
+`window_state` it holds, in memory, reading no file:
+
+```json
+{"id":"01Q…","type":"gui_context"}
+{"id":"01Q…","type":"gui_context","active":"left","left":"E:\\work","right":"D:\\backup",
+ "selection":["E:\\work\\a.txt","E:\\work\\b.txt"],"selection_total":2,"cursor":"E:\\work\\b.txt"}
+```
+
+- `active` is the pane that has the keyboard. `left` and `right` are the
+  folders the panes show (the tab in front, as a full path); `null` for a
+  pane whose tab in front shows a tool, and in the column view the folder
+  of the column with the keyboard. They are never left out.
+- `selection` is what the window's own file commands act on in the active
+  pane, by full path: its marked rows, or, when none is marked, the row
+  the cursor is on; empty in an empty folder and in a tab that shows a
+  tool. `cursor` is the cursor row's full path, or `null`.
+- `selection_total` is how many rows the selection has. It is more than
+  the length of `selection` when the window listed only the first 1,000
+  marked rows (`marked_total`); a program that acts on the selection must
+  then refuse, as `cab` does.
+- The newest state of any window decides, as for `terminal_pane_folder`.
+  With no window, or after the last one has gone, the answer is
+  `no_window`. It needs no `hello`.
+- The request is a debug line in the core's log (`request handled`, and
+  `gui context answered` with the folders and the counts), not an info
+  line: a script may ask as often as it likes. A job that `cab` then
+  starts is an ordinary `start_job` ("Jobs"), logged as any job is.
 
 ### The workspace of a folder
 

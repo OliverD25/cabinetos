@@ -211,6 +211,9 @@ cargo run -p cabinetos-cli -- --pipe demo term list
 cargo run -p cabinetos-cli -- --pipe demo term mode 1 linked
 cargo run -p cabinetos-cli -- --pipe demo term cwd --session 1
 cargo run -p cabinetos-cli -- --pipe demo term close 1
+cargo run -p cabinetos-cli -- --pipe demo pane --json
+cargo run -p cabinetos-cli -- --pipe demo selection
+cargo run -p cabinetos-cli -- --pipe demo copy --selection --dest opposite_pane
 cargo run -p cabinetos-cli -- --pipe demo themes list
 cargo run -p cabinetos-cli -- --pipe demo themes show nord
 cargo run -p cabinetos-cli -- --pipe demo config set ui.theme nord
@@ -283,6 +286,19 @@ cargo run --release -p cabinetos-indexer -- --console --volumes C
   for the shell to exit. `term list` prints every session with its pane
   and mode, `term mode <id> locked|linked` locks a session or links it to
   its pane, and `term close <id>` ends a session.
+- `pane [--left|--right|--json]` prints the folder of the active pane (or
+  of the left or right one) as the window last said it, and `--json` the
+  whole context (the active pane, both folders, the selection and the
+  cursor); `selection [--json]` prints the active pane's selected paths,
+  one per line: its marked rows, or the cursor row when none is marked.
+  `copy` and `move` with `--selection --dest opposite_pane|<path>` run the
+  core's job on that selection (`opposite_pane` is the other pane's folder;
+  the conflict policy defaults to skip) and follow it as with paths. They
+  ask the core's newest `window_state` (`gui_context`), wait 1 s for the
+  pipe, and exit 0 on success, 1 on a failure, 2 when there is no window
+  or nothing is selected. In a CabinetOS terminal they need no `--pipe`:
+  `CABINETOS_PIPE` names the core of the window ([../docs/terminal.md](../docs/terminal.md),
+  "The GUI context").
 - `themes list` prints every valid theme, `*` marking the one in effect;
   `themes show [<id>]` prints a whole theme as JSON (without an ID, the
   one in effect). `config set ui.theme <id>` changes the theme, and

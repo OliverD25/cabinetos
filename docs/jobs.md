@@ -474,6 +474,15 @@ Conflicts appear on their own lines, with the command that answers them;
 `--resolve overwrite|skip|rename` answers them all automatically. Ctrl+C
 stops following, not the job.
 
+From a shell in a CabinetOS terminal, `copy` and `move` can take the
+window's active pane's selection instead of paths: `cab copy --selection
+--dest opposite_pane` (or `--dest <path>`). The CLI asks the core for the
+selection (`gui_context`) and starts the same job; the conflict policy
+defaults to `skip` there, so that nothing waits for an answer from a
+shell. The exit code is 0 for a completed job, 1 for a failure, and 2
+when there is no window or nothing is selected ([terminal.md](terminal.md),
+"The GUI context").
+
 `undo <job>` and `undo --last` ask for the undo, print `job 14 undoes job
 3` and a `stays:` line for each thing it cannot bring back, and wait for
 the undo job to end. A job that cannot be undone fails with the reason
