@@ -335,7 +335,25 @@ async fn set_value_writes_one_setting_and_tells_every_client() {
     );
     assert_eq!(config_changed(&mut events).await, ["terminal.split"]);
     assert_eq!(read_config(&core)["terminal"]["split"], json!(true));
-    // The terminal's restoration and the mode of a new session (unit 5), set from anywhere, checked as the file is.
+    // The same value again changes nothing and says nothing.
+    assert_eq!(
+        set_value(&mut client, "ui.dualPane", json!(false)).await,
+        Response::Ok
+    );
+    // The watcher sees the core's own writes and must not report them.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    assert!(
+        events.try_recv().is_err(),
+        "the core's own write came back as an event"
+    );
+}
+
+/// The terminal's restoration and the mode of a new session (unit 5), and the sessions the window saves for the restoration:
+/// set from anywhere, checked as the file is, and every client hears the change.
+#[tokio::test]
+async fn set_value_writes_the_terminal_s_restore_default_mode_and_saved_tabs() {
+    let core = start_core();
+    let (mut client, mut events) = greeted(&core).await;
     assert_eq!(
         get_value(&mut client, "terminal.restore").await,
         Response::Value { value: json!(true) }
@@ -369,17 +387,43 @@ async fn set_value_writes_one_setting_and_tells_every_client() {
         read_config(&core)["terminal"]["defaultMode"],
         json!("linked")
     );
-    // The same value again changes nothing and says nothing.
+
+    // The window saves its sessions whole, in one write; no session is saved by default.
     assert_eq!(
-        set_value(&mut client, "ui.dualPane", json!(false)).await,
+        get_value(&mut client, "terminal.tabs").await,
+        Response::Value {
+            value: json!({"items": [], "shown": {}})
+        }
+    );
+    let tabs = json!({
+        "items": [
+            {"profile": "pwsh", "folder": r"E:\Звіт 'проєкт'", "pane": "left", "mode": "linked"},
+            {"profile": "cmd", "pane": "right", "mode": "locked"}
+        ],
+        "front": 1,
+        "shown": {"left": 0, "right": 1}
+    });
+    assert_eq!(
+        set_value(&mut client, "terminal.tabs", tabs.clone()).await,
         Response::Ok
     );
-    // The watcher sees the core's own writes and must not report them.
-    tokio::time::sleep(Duration::from_millis(600)).await;
+    let changed = config_changed(&mut events).await;
     assert!(
-        events.try_recv().is_err(),
-        "the core's own write came back as an event"
+        changed.iter().all(|key| key.starts_with("terminal.tabs")),
+        "{changed:?}"
     );
+    assert_eq!(read_config(&core)["terminal"]["tabs"], tabs);
+    assert_eq!(
+        get_value(&mut client, "terminal.tabs").await,
+        Response::Value { value: tabs }
+    );
+    // A front tab that is none of the saved sessions is refused, and the file keeps what it had.
+    let refused = set_value(&mut client, "terminal.tabs.front", json!(5)).await;
+    assert!(
+        matches!(&refused, Response::Error { message, .. } if message.contains("terminal.tabs.front is 5")),
+        "{refused:?}"
+    );
+    assert_eq!(read_config(&core)["terminal"]["tabs"]["front"], json!(1));
 }
 
 #[tokio::test]

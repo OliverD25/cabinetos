@@ -1052,6 +1052,64 @@ mod tests {
     }
 
     #[test]
+    fn the_terminal_s_saved_sessions_round_trip_through_the_file() {
+        let (_dir, path) = temp_config();
+        let (mut store, _) = ConfigStore::open(path.clone(), accept);
+        assert!(store.config().terminal.tabs.items.is_empty());
+        let paths = paths_beyond_ascii();
+        let tabs = serde_json::json!({
+            "items": [
+                {"profile": "pwsh", "folder": paths[0], "pane": "left", "mode": "linked"},
+                {"profile": "cmd", "pane": "right", "mode": "locked"},
+            ],
+            "front": 1,
+            "shown": {"left": 0, "right": 1}
+        });
+        let changed = store
+            .set_value("terminal.tabs", tabs.clone(), accept)
+            .unwrap();
+        assert!(
+            changed.iter().all(|key| key.starts_with("terminal.tabs")),
+            "{changed:?}"
+        );
+        let file: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(file["terminal"]["tabs"], tabs);
+        let (reopened, opened) = ConfigStore::open(path.clone(), accept);
+        assert_eq!(opened, Opened::Loaded);
+        assert_eq!(
+            reopened.config().terminal.tabs,
+            store.config().terminal.tabs
+        );
+        assert_eq!(
+            reopened.config().terminal.tabs.items[0].folder.as_deref(),
+            Some(paths[0].as_str()),
+            "a folder beyond ASCII comes back whole"
+        );
+        // An index past the end is refused, and the file stays as it was.
+        let before = std::fs::read_to_string(&path).unwrap();
+        let result = store.set_value("terminal.tabs.front", Value::from(2), accept);
+        let Err(UpdateError::Rejected(rejection)) = result else {
+            panic!("{result:?}")
+        };
+        assert!(
+            rejection.message.contains("terminal.tabs.front is 2"),
+            "{}",
+            rejection.message
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        // Emptying the list (every tab closed) is a save too; the indexes go with it.
+        store
+            .set_value(
+                "terminal.tabs",
+                serde_json::json!({"items": [], "shown": {}}),
+                accept,
+            )
+            .unwrap();
+        assert!(store.config().terminal.tabs.items.is_empty());
+        assert_eq!(store.config().terminal.tabs.front, None);
+    }
+
+    #[test]
     fn the_rail_and_the_sidebar_round_trip_through_the_file() {
         let (_dir, path) = temp_config();
         let (mut store, _) = ConfigStore::open(path.clone(), accept);

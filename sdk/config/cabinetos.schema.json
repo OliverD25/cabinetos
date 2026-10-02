@@ -199,7 +199,11 @@
           }
         ],
         "restore": true,
-        "split": false
+        "split": false,
+        "tabs": {
+          "items": [],
+          "shown": {}
+        }
       }
     },
     "ui": {
@@ -792,6 +796,21 @@
       },
       "additionalProperties": false
     },
+    "Pane": {
+      "description": "A file pane of the window.",
+      "oneOf": [
+        {
+          "description": "The left pane (the only one in single-pane mode).",
+          "type": "string",
+          "const": "left"
+        },
+        {
+          "description": "The right pane.",
+          "type": "string",
+          "const": "right"
+        }
+      ]
+    },
     "PaneTabs": {
       "description": "One pane's tabs, left to right, and which one is in front.",
       "type": "object",
@@ -916,6 +935,37 @@
         "command"
       ]
     },
+    "SavedTerminal": {
+      "description": "One saved terminal session: what is needed to start the same kind of\nshell again. Its output and its history are not saved.",
+      "type": "object",
+      "properties": {
+        "folder": {
+          "description": "The shell's folder: the one its prompt hook reported last, else the\none it started in. Left out: the user's profile folder. A folder that\nis gone falls back to the user's profile folder.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "description": "How the session is bound to its pane. Left out: `locked`.",
+          "$ref": "#/$defs/TerminalMode",
+          "default": "locked"
+        },
+        "pane": {
+          "description": "The file pane the session belongs to. Left out: `left`.",
+          "$ref": "#/$defs/Pane",
+          "default": "left"
+        },
+        "profile": {
+          "description": "The profile's `name`. A profile that is gone falls back to\n`terminal.defaultProfile` when the session comes back.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "profile"
+      ]
+    },
     "SelectionMode": {
       "description": "How the keyboard marks rows in a file pane (`docs/config.md`).",
       "oneOf": [
@@ -930,6 +980,31 @@
           "const": "commander"
         }
       ]
+    },
+    "ShownTerminals": {
+      "description": "Each pane's front tab, as an index in `terminal.tabs.items`.",
+      "type": "object",
+      "properties": {
+        "left": {
+          "description": "The left pane's front tab. Left out: none.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "right": {
+          "description": "The right pane's front tab. Left out: none.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
     },
     "SortConfig": {
       "description": "The order of a listing.",
@@ -1100,6 +1175,14 @@
           "description": "Whether the Tool Dock is split under the two panes, the left pane's\nsessions under the left pane and the right pane's under the right\n(`terminal.toggleSplit`, Ctrl+\\ in the terminal). The window writes it\nwhen the user toggles it and follows a change of the file.",
           "type": "boolean",
           "default": false
+        },
+        "tabs": {
+          "description": "The terminal sessions as the window last saved them, so the first\ntime the dock is shown after a restart they come back (`restore`).\nThe window owns them; the core only checks and stores them.",
+          "$ref": "#/$defs/TerminalTabs",
+          "default": {
+            "items": [],
+            "shown": {}
+          }
         }
       },
       "additionalProperties": false
@@ -1171,6 +1254,35 @@
         "name",
         "command"
       ]
+    },
+    "TerminalTabs": {
+      "description": "The terminal sessions of a window, in the order of its tabs, and which\ntabs were in front.",
+      "type": "object",
+      "properties": {
+        "front": {
+          "description": "The index in `items` of the tab in front, from 0; it must name one of\n`items`. Left out: none was in front.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "items": {
+          "description": "The sessions, in the order of the tabs. Empty: nothing to restore.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SavedTerminal"
+          }
+        },
+        "shown": {
+          "description": "Each pane's own front tab, which the split dock shows in that pane's\nhalf.",
+          "$ref": "#/$defs/ShownTerminals",
+          "default": {}
+        }
+      },
+      "additionalProperties": false
     },
     "UiConfig": {
       "description": "The window.",

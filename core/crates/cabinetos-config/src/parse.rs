@@ -205,6 +205,7 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
     }
     check_columns(text, config)?;
     check_compact_overlay(text, config)?;
+    check_terminal_tabs(text, config)?;
     check_programs(text, config)?;
     check_menu_extensions(text, config)?;
     let profiles = &config.terminal.profiles;
@@ -237,6 +238,38 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
                 config.terminal.default_profile
             ),
         ));
+    }
+    Ok(())
+}
+
+/// `terminal.tabs`: the tab in front, and each pane's, must name one of the
+/// saved sessions, as `ui.tabs.<pane>.active` must name one of its tabs.
+fn check_terminal_tabs(text: &str, config: &Config) -> Result<(), ConfigError> {
+    let tabs = &config.terminal.tabs;
+    let count = tabs.items.len();
+    let named: [(&[&str], Option<u32>); 3] = [
+        (&["front"], tabs.front),
+        (&["shown", "left"], tabs.shown.left),
+        (&["shown", "right"], tabs.shown.right),
+    ];
+    for (keys, index) in named {
+        let Some(index) = index else {
+            continue;
+        };
+        if usize::try_from(index).map_or(true, |index| index >= count) {
+            let mut path = vec![Segment::Key("terminal"), Segment::Key("tabs")];
+            path.extend(keys.iter().map(|key| Segment::Key(key)));
+            return Err(ConfigError::at(
+                text,
+                &path,
+                format!(
+                    "terminal.tabs.{} is {index}, but {count} terminal tab{} {} saved; it counts from 0",
+                    keys.join("."),
+                    if count == 1 { "" } else { "s" },
+                    if count == 1 { "is" } else { "are" }
+                ),
+            ));
+        }
     }
     Ok(())
 }
@@ -599,6 +632,32 @@ mod tests {
         assert_eq!(error.line, Some(2), "{error}");
         let error = parse(r#"{"terminal": {"restore": "yes"}}"#).unwrap_err();
         assert!(error.message.contains("invalid type: string"), "{error}");
+    }
+
+    #[test]
+    fn a_saved_terminal_tab_past_the_end_names_the_key() {
+        let text = "{\n  \"terminal\": {\n    \"tabs\": {\n      \"items\": [{\"profile\": \"cmd\"}],\n      \"shown\": {\"left\": 0, \"right\": 1}\n    }\n  }\n}";
+        let error = parse(text).unwrap_err();
+        assert!(
+            error.message.contains("terminal.tabs.shown.right is 1")
+                && error.message.contains("1 terminal tab is saved"),
+            "{error}"
+        );
+        assert_eq!(error.line, Some(5), "{error}");
+        let error = parse(r#"{"terminal": {"tabs": {"front": 0}}}"#).unwrap_err();
+        assert!(
+            error.message.contains("terminal.tabs.front is 0")
+                && error.message.contains("0 terminal tabs are saved"),
+            "{error}"
+        );
+        // Nothing saved is the default; a tab in front of two is fine.
+        assert!(parse(r#"{"terminal": {"tabs": {"items": []}}}"#).is_ok());
+        assert!(
+            parse(
+                r#"{"terminal": {"tabs": {"items": [{"profile": "cmd"}, {"profile": "cmd"}], "front": 1, "shown": {"left": 0, "right": 1}}}}"#
+            )
+            .is_ok()
+        );
     }
 
     #[test]
