@@ -467,6 +467,66 @@ public class TerminalEndToEndTests
     }
 
     /// <summary>
+    /// The window tells the core about the first 1,000 marked rows only, and how many there are (<c>marked_total</c>).
+    /// With 1,100 rows marked, <c>cab selection</c> and <c>cab copy --selection</c> in the shell refuse, with exit
+    /// code 1 and the numbers, and copy nothing: a copy that reported success on 1,000 of 1,100 files would be worse
+    /// than none.
+    /// </summary>
+    [Fact]
+    public async Task Cab_refuses_a_selection_the_window_cut_at_a_thousand_rows()
+    {
+        var (run, root, _) = Prepare("terminal-cab-cut");
+        try
+        {
+            var (big, right, marker) = (Path.Combine(root, "big"), Path.Combine(root, "right"), Path.Combine(root, "marker"));
+            foreach (var folder in new[] { big, right, marker })
+            {
+                Directory.CreateDirectory(folder);
+            }
+            for (var i = 0; i < 1100; i++)
+            {
+                File.WriteAllText(Path.Combine(big, $"file{i:D4}.txt"), "x");
+            }
+            var (selectionOutput, copyOutput, codes) = (Path.Combine(root, "selection.txt"), Path.Combine(root, "copy.txt"), Path.Combine(root, "codes.txt"));
+            var process = run.Start("cab-cut", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{right}",
+                "pane:0",
+                $"path:{big}",
+                "wait:500",
+                "cmd:terminal.new {\"profile\":\"ps\"}",
+                "until:terminals:1",
+                $"until:terminal-folder:{big}",
+                "selectall",
+                // The shell goes on when cab has the count: the refusal names all 1,100 rows.
+                "terminal:while ((cabinetos-cli selection 2>&1 | Out-String) -notmatch '1100 rows') { Start-Sleep -Milliseconds 50 }{enter}",
+                $"terminal:cabinetos-cli selection 2>&1 | Out-File -Encoding utf8 -LiteralPath '{selectionOutput}'{{enter}}",
+                $"terminal:Add-Content -LiteralPath '{codes}' \"selection=$LASTEXITCODE\"{{enter}}",
+                $"terminal:cabinetos-cli copy --selection --dest opposite_pane 2>&1 | Out-File -Encoding utf8 -LiteralPath '{copyOutput}'{{enter}}",
+                $"terminal:Add-Content -LiteralPath '{codes}' \"copy=$LASTEXITCODE\"{{enter}}",
+                $"terminal:Set-Location -LiteralPath '{marker}'{{enter}}",
+                $"until:terminal-folder:{marker}",
+                "shot:done"));
+            var logs = await run.FinishAsync("cab-cut", process, "done");
+
+            string Text(string file) => File.Exists(file) ? string.Join(' ', File.ReadAllLines(file).Select(l => l.Trim()).Where(l => l.Length > 0)) : $"(no file {Path.GetFileName(file)})";
+            Assert.True(Text(codes) == "selection=1 copy=1", $"the exit codes were '{Text(codes)}'" + Evidence(logs));
+            Assert.Contains("1100 rows are selected", Text(selectionOutput));
+            Assert.Contains("only 1000", Text(selectionOutput));
+            Assert.Contains("1100 rows are selected", Text(copyOutput));
+            Assert.Empty(Directory.GetFileSystemEntries(right));
+            Assert.Equal(1100, Directory.GetFiles(big).Length);
+            Assert.DoesNotContain(LogFiles.Core(Path.Combine(root, "logs-cab-cut")), l => Message(l) == "job queued");
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
     /// The split mirror (unit 3): Ctrl+\ in the terminal splits the dock under the two panes, the left session under
     /// the left pane and the right under the right, with the badges in the panes' colours; in a pane the same keys
     /// still go to Up to Root. Ctrl+Shift+W in a half with one tab leaves the hint there and the other half alone.
