@@ -75,6 +75,10 @@ if ($theirs -ne $ours) {
 if (-not $SkipBuilds) {
   foreach ($needed in $window, $core) { if (-not (Test-Path -LiteralPath $needed)) { throw "$needed is missing: build it first" } }
   $remoteWindow = "$remoteRepoFwd/ui/CabinetOS/bin/x64/Release/net10.0-windows10.0.22621.0"
+  # A run that stopped early can leave its window alive there, holding the Release files against the copy
+  # (2026-10-02 10:04); the windows of the end-to-end suite run from the Debug folder and are left alone.
+  $left = (Remote "(Get-Process CabinetOS -ErrorAction SilentlyContinue | Where-Object -Property Path -Like '$RemoteRepo\ui\CabinetOS\bin\x64\Release\*' | Stop-Process -Force -PassThru | Select-Object -ExpandProperty Id) -join ','") | Select-Object -Last 1
+  if ($left) { "ended the Release window(s) left running there: $left" }
   Remote "New-Item -ItemType Directory -Force '$RemoteRepo\ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0', '$RemoteRepo\core\target\release' | Out-Null" | Out-Null
   Send $window "$remoteWindow/"
   Send $core "$remoteRepoFwd/core/target/release/cabinetos-core.exe"
