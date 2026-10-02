@@ -151,6 +151,7 @@ fn window(folder: &Path, cursor: Option<&Path>, marked: &[&Path]) -> Request {
                 active: 0,
                 cursor: cursor.map(text),
                 marked: marked.iter().map(|path| text(path)).collect(),
+                marked_total: None,
             },
         },
     })

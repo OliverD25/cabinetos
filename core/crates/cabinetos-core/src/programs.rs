@@ -190,6 +190,7 @@ mod tests {
             active: 1,
             cursor: cursor.map(str::to_owned),
             marked: marked.iter().map(|path| (*path).to_owned()).collect(),
+            marked_total: None,
         };
         WindowState {
             active_pane: Pane::Right,

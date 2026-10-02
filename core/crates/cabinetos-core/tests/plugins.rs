@@ -879,6 +879,7 @@ async fn a_plugin_proposes_a_preview_and_undoes_it_through_core_requests() {
                 active: 0,
                 cursor: None,
                 marked: Vec::new(),
+                marked_total: None,
             },
             right: cabinetos_protocol::PaneState::default(),
         },

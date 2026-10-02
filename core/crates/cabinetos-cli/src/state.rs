@@ -136,6 +136,7 @@ mod tests {
                     active: 1,
                     cursor: Some(r"D:\work\a.txt".to_owned()),
                     marked: vec![r"D:\work\a.txt".to_owned(), r"D:\work\b.txt".to_owned()],
+                    marked_total: None,
                 },
             },
         };

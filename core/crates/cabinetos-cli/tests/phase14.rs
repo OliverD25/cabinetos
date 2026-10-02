@@ -147,6 +147,7 @@ fn state_prints_what_the_window_said() {
                 active: 1,
                 cursor: Some(r"E:\Звіт 2026\a.txt".to_owned()),
                 marked: vec![r"E:\Звіт 2026\a.txt".to_owned()],
+                marked_total: None,
             },
             right: PaneState::default(),
         },

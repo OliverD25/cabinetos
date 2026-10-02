@@ -444,6 +444,7 @@ impl Session {
                 Request::GetWindowState { client } => {
                     Some(self.services.windows.get(client.as_deref()))
                 }
+                Request::GuiContext => Some(self.services.windows.gui_context()),
                 Request::UpdateStatus => Some(Response::UpdateState(Box::new(
                     self.services.updates.status(),
                 ))),
@@ -2265,14 +2266,18 @@ fn log_payload(message: &'static str, json: &[u8]) {
 }
 
 /// One line per request, inside its span, so its `request_id` is in the log.
-/// A window may send `window_state` at every change, and a shell's prompt
-/// hook asks `terminal_pane_folder` at every prompt, so their success is a
-/// debug line only.
+/// A window may send `window_state` at every change, a shell's prompt
+/// hook asks `terminal_pane_folder` at every prompt, and a script may ask
+/// `gui_context` as often as it likes, so their success is a debug line
+/// only.
 fn log_handled(kind: &'static str, started: Instant, reply: &Response) {
     let elapsed_us = listing::micros(started.elapsed());
     if let Response::Error { code, message } = reply {
         tracing::info!(request = kind, elapsed_us, ?code, error = %message, "request failed");
-    } else if matches!(kind, "window_state" | "terminal_pane_folder") {
+    } else if matches!(
+        kind,
+        "window_state" | "terminal_pane_folder" | "gui_context"
+    ) {
         tracing::debug!(request = kind, elapsed_us, "request handled");
     } else {
         tracing::info!(request = kind, elapsed_us, "request handled");
