@@ -246,18 +246,30 @@ cabinetos-indexer --console
 cabinetos-indexer --console --volumes C,D
 ```
 
-As a Windows service (start type manual, account LocalSystem):
+As a Windows service (start type automatic with a delayed start, account
+LocalSystem):
 
 ```text
 cabinetos-indexer --install
-sc start cabinetos-indexer
+sc qc cabinetos-indexer
 sc stop cabinetos-indexer
+sc start cabinetos-indexer
 cabinetos-indexer --uninstall
 ```
 
-`--install` records this program's current path and the `--volumes` and
-`--log-dir` given, so reinstall after moving the program. `--uninstall`
-stops the service first.
+`--install` registers the service and starts it once, so it runs at once
+and after every restart of Windows by itself ([ADR 0020](decisions/0020-indexer-service-starts-by-itself.md)).
+The delayed start makes Windows start it a little after its other automatic
+services (about two minutes after the boot), so reading the MFT does not
+slow down the start of Windows. `sc qc cabinetos-indexer` says
+`START_TYPE : 2 AUTO_START (DELAYED)`. It records this program's current
+path and the `--volumes` and `--log-dir` given, so reinstall after moving
+the program: `--uninstall`, then `--install`. It does not change a service
+that exists already, so a service registered with a manual start by an
+earlier build is replaced the same way. If the service is registered but is
+not Running 20 s after its first start, `--install` says so with the state
+it found and exits with an error; its log tells why. `--uninstall` is the
+reverse: it stops the service, waits up to 30 s for it, and deletes it.
 
 A release installs and starts the service with `install.ps1 -AllUsers
 -Indexer`, only into Program Files: a LocalSystem service must run a

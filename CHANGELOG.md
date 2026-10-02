@@ -6,6 +6,11 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The release zip and the setup file no longer hold the `.pdb` symbol files: they are a download of their own, `CabinetOS-<version>-win-x64-symbols.zip`. The release zip is 32 MB instead of 76 MB and the setup file 20 MB instead of 43 MB. A crash trace from an install names function, file and line once you unpack the symbols of the same version next to the programs; without them the Rust programs' trace shows `<unknown>` frames, though its `location` still names the line of the panic.
+- `cabinetos-indexer --install` registers the service with an automatic, delayed start and starts it once, so the index is there after every restart of Windows with nobody starting the service (it was a manual start, off after each restart). `install.ps1 -AllUsers -Indexer` does the same. If you registered the service by hand before, run `cabinetos-indexer --uninstall` and then `--install` again.
+
 ## [0.1.0] - 2026-10-02
 
 Code signing policy: see the [README](https://github.com/OliverD25/cabinetos#code-signing-policy).

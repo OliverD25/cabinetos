@@ -280,7 +280,7 @@ names where the output lands.
 
 The scripts that write into the exchange folder `_io` (`run-livecheck.ps1`,
 `remote-livecheck.ps1`, `remote-tests.ps1`, `remote-script.ps1`,
-`vm-livecheck.ps1`, `vm-install-check.ps1`, `claude-terminal.ps1` and
+`vm-livecheck.ps1`, `vm-install-check.ps1`, `vm-indexer-check.ps1`, `claude-terminal.ps1` and
 `click-focus-probe.ps1`) find the main checkout's `_io` also when they run
 from a git worktree. A worktree lives at
 `<main checkout>\.claude\worktrees\<name>`, so the folder next to it is not
@@ -475,8 +475,9 @@ PowerShell 7 and Inno Setup 6.7). Its five steps:
    `_io\install-check` with its arguments, so the guest command stays
    short) removes an earlier run's install, runs the setup with
    `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=X:\_io\vm\setup-<time>.log`,
-   and checks the install folder, the Start Menu shortcut and the
-   `CabinetOS_is1` entry with its values.
+   and checks the install folder (it must hold no `.pdb` file: the
+   symbols are a download of their own, [ADR 0019](decisions/0019-symbols-in-their-own-zip.md)),
+   the Start Menu shortcut and the `CabinetOS_is1` entry with its values.
 3. `livecheck.ps1 -Exe <the installed CabinetOS.exe> -Core <its core>
    -Strict -Virtual`, from a copy of the repository's tree on the VM's
    disk (`C:\cabinetos\install-tree`), output in
@@ -517,6 +518,26 @@ uninstall took 22 minutes and a window took 11 minutes to show. Every
 program the guest waits for (the uninstaller, the press on Restart now,
 `cabinetos-cli`) has a time limit, so one that hangs costs its step, not
 the run.
+
+**The indexer service check** (Phase 22, unit 3;
+[ADR 0020](decisions/0020-indexer-service-starts-by-itself.md)) shows in the
+same VM that `cabinetos-indexer --install` leaves a service that comes up
+by itself after Windows restarts: `vm-indexer-check.ps1`, with its guest half
+`vm-indexer-guest.ps1` (Windows PowerShell 5.1 or 7). It needs the release
+folder `build\release.ps1` makes. Installing a service needs an elevated
+process, and guest control gives the VM user's token with UAC applied
+(medium integrity; `Register-ScheduledTask` with the highest run level
+answers "Access is denied", and a UAC prompt cannot be answered from
+outside), so the install is one manual step in an elevated PowerShell in
+the VM, and everything else runs by script: the restart (`shutdown /r`
+inside the VM, not a power-off), the wait for the desktop and for the VM to
+settle, and the read-only phase that records when the service was first
+`RUNNING` and that its process is younger than the boot. The guest script
+reaches the project's root folder as `\\VBoxSvr\cabinetos`, not as `X:`:
+a drive letter is mapped for the user's own session, and an elevated
+process does not see it. [release.md](release.md), "The indexer service",
+has the steps. The output is `_io\live-check\DONE-indexer.md` and
+`vm-indexer-progress.txt`.
 
 On this PC a window run (the end-to-end suite, the live check, the speed
 runner, a manual start) also needs the creator's consent, their rule of

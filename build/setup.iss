@@ -10,7 +10,9 @@
 ; settings, logs and update state under %APPDATA%\CabinetOS and %LOCALAPPDATA%\CabinetOS stay.
 ;
 ; The prerequisites are checked as install.ps1 checks them; a missing one stops the setup with the winget command
-; that installs it. The setup downloads nothing.
+; that installs it (for the Windows App Runtime, Microsoft's installer address as well). The setup downloads nothing,
+; and that is decided: Phase 22, unit 5, 2026-10-02, on the planning session's recommendation. It keeps stopping with
+; the winget command; nobody should add a download here without a new decision (docs\release.md, "The setup file").
 ;
 ; Silent: CabinetOS-<version>-win-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=<file>
 ; /SKIPPREREQUISITECHECK installs even when a prerequisite looks missing.
@@ -98,8 +100,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; The release as the in-app update's swap installs it: every file but install.ps1, which runs from the unpacked zip
-; only (cabinetos-update, swap.rs, NOT_INSTALLED).
-Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Excludes: "install.ps1"; Flags: ignoreversion recursesubdirs createallsubdirs
+; only (cabinetos-update, swap.rs, NOT_INSTALLED). Never the .pdb symbols: release.ps1 moves them into the symbols zip
+; (docs\release.md, "The symbols"), and the exclude keeps them out of a setup made from a folder that still holds some.
+Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Excludes: "install.ps1,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\CabinetOS"; Filename: "{app}\CabinetOS.exe"; WorkingDir: "{app}"; IconFilename: "{app}\CabinetOS.ico"; Comment: "CabinetOS file manager"

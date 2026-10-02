@@ -1,7 +1,9 @@
 # ADR 0009: Version 1 ships unpackaged, as a zip with an install script
 
 - Status: accepted; its consequences "no automatic updates" and "not in
-  Settings > Apps" are replaced by [ADR 0014](0014-in-app-updates.md)
+  Settings > Apps" are replaced by [ADR 0014](0014-in-app-updates.md), and
+  the indexer service's manual start by the automatic, delayed start of
+  [ADR 0020](0020-indexer-service-starts-by-itself.md)
 - Date: 2026-09-28
 - Decided by: the architect, as a default (the creator was asleep; the
   coordinating session recommended it). It settles open question 6 of

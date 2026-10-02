@@ -91,6 +91,26 @@ Studio still has only the C++ workload, which command-line builds do not need.
   Windows App SDK NuGet packages (the WinUI, Foundation, InteractiveExperiences
   and Runtime components) during restore; nothing to install for building. Running the window needs the Windows App Runtime (see
   "Phase 5" below).
+  The project names these components, not the `Microsoft.WindowsAppSDK`
+  package as a whole, which also brings the AI, machine-learning, Search and
+  Widgets components that CabinetOS never uses (42.5 MB unpacked and 17.4 MB
+  zipped in a release; [release.md](release.md), "Sizes"; Constitution
+  Article 10). What each one is for: WinUI is the window and, through it,
+  the WebView2 host of the terminal; InteractiveExperiences is windowing,
+  input, composition and Mica; Foundation is the bootstrapper of an
+  unpackaged app and the MRT resources (`CabinetOS.pri`); Runtime is the
+  Windows App Runtime version the bootstrapper asks for. WinUI pulls in
+  Foundation, InteractiveExperiences and Base by itself, but one version
+  lower for InteractiveExperiences (2.1.8) than the metapackage names, so
+  `ui/Directory.Packages.props` pins all four at the versions the Windows App
+  SDK 2.5.1 package names (WinUI 2.3.9, Foundation 2.3.12,
+  InteractiveExperiences 2.1.9, Runtime 2.5.1); the Runtime package's build
+  checks that they match. To move to another Windows App SDK release, read
+  the `.nuspec` of its `microsoft.windowsappsdk` package in
+  `%USERPROFILE%\.nuget\packages`, copy those four versions, and build a
+  release: `build/release.ps1` stops when a machine-learning library
+  (`onnxruntime`, `DirectML`, `*.AI.*`, `*.MachineLearning.*`) turns up in
+  the release folder.
   The Visual Studio workload is only needed for the XAML designer and the
   project templates inside Visual Studio. To add it, in the Visual Studio
   Installer choose "WinUI application development", or from PowerShell:
@@ -183,6 +203,9 @@ Checked on 2026-09-28 on the main PC (Windows 11 25H2, build 26200).
 - Everything else is what the core and the window already need. The Rust
   programs link the C runtime statically (`core/.cargo/config.toml`), so a
   full rebuild follows the first build after that file arrived.
+- `build/release.ps1` also writes the symbols zip (the `.pdb` files) and
+  stops when the release folder holds a machine-learning library of the
+  Windows App SDK ([release.md](release.md), "The symbols" and "Sizes").
 - How to build, install, sign and publish: [release.md](release.md).
 
 ## Logs and config while developing

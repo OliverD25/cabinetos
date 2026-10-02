@@ -273,7 +273,7 @@ Crash file format:
 | `message` | string | The panic message |
 | `location` | object | `file`, `line` and `column` of the panic |
 | `thread` | string | The thread that panicked |
-| `backtrace` | string | The full backtrace, captured whatever `RUST_BACKTRACE` says. Release builds carry line tables, so frames name file and line as long as the `.pdb` file sits next to the `.exe` |
+| `backtrace` | string | The full backtrace, captured whatever `RUST_BACKTRACE` says. Release builds carry line tables in a `.pdb` file, so frames name function, file and line as long as that file sits next to the `.exe`. A release zip or a setup install has no `.pdb` files (they are in the symbols zip, [release.md](release.md), "The symbols"), and its frames read `<unknown>`; `location` above still names the panic's file and line |
 | `recent_events` | array | The last log lines (at most 256), oldest first, each as a JSON object in the log line format above |
 
 To see one without a real bug:
