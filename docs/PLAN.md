@@ -1526,6 +1526,45 @@ reads the clipboard after a fixed 500 ms (the flake's cause); the rail
 test `Every_way_of_picking_a_folder_in_the_sidebar_runs_go_toPath_once`
 failed once under suite load here and is not in the flakes report yet.
 
+**Status (2026-10-02, 14:55): unit 6 built, on its branch, not merged.**
+The setup file and the updates that install themselves, by a coder on
+Opus, 914c385..de733cb and the report on the branch
+`worktree-agent-ad007f05e563d93ab`, with main (unit 5) merged in as
+c185a7a ([log/2026-10-02/terminal-unit6-report.md](log/2026-10-02/terminal-unit6-report.md),
+[ADR 0018](decisions/0018-setup-file-and-silent-updates.md)).
+`build/setup.iss` (Inno Setup 6.7), compiled by the new step 8 of
+`release.ps1` into `CabinetOS-<version>-win-x64-setup.exe`: per user with
+no elevation into `%LOCALAPPDATA%\Programs\CabinetOS`, the .NET 10,
+Windows App Runtime and WebView2 checks before the first page (a missing
+one stops it with its winget command), silent with `/VERYSILENT`, and
+Inno's own uninstaller, which removes the whole folder with what the
+updater added and never the user's data. The updater keeps the setup's
+Apps entry `CabinetOS_is1` current and its uninstaller in place.
+`update.autoInstall` (on by default): a download whose SHA-256 is right is
+swapped in at once, and the status bar says "CabinetOS <version> is
+installed; restart to use it" with Restart now and Later; off brings back
+ADR 0014's dialog. No protocol change. `ui/livecheck/vm-install-check.ps1`
+proves the chain in the VM: all five steps passed in one run
+(`DONE-install-2026-10-02-1425.md`: the setup in 8 s, the live check
+against the installed program 256 True and 0 False, the update by itself
+and the notice's Restart now into 0.1.1, the uninstall in 3 s); the seven
+runs before it found three faults of the uninstaller (an empty folder left
+behind twice, a running-program check through WMI that waited 22 minutes
+after a VM restart), fixed, and taught the check to let a restarted VM
+settle and to rebuild each version's programs. Checks after the merge: the
+five core checks green (886 passed, 6 ignored), the window built with
+warnings as errors, 1339 tests (1279 fast, 60 end-to-end skipped), the
+full suite with the end-to-end tests 1339 of 1339 in its second run (the
+first had one known context-menu timing test, 8 of 8 alone), the live
+check on this PC 248 True, 0 False (`run-unit6-d.txt`, 8 min 42 s, no
+frame over 20 ms). Found and left: section 18's clipboard line answered
+False on this PC whenever the VM ran (also in unit 5's `run-unit5-a.txt`),
+True with the VM's state saved; the core compares a plugin's paths with
+its roots as text, so a short 8.3 path (`C:\Users\CABINE~1\...`) is outside
+`%USERPROFILE%` for the Agent extension. Open for the creator: publishing
+the setup file with the zip and `latest.json`, signing, and whether the
+setup should download missing prerequisites.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
