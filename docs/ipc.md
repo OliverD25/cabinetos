@@ -176,7 +176,9 @@ settings `terminal.restore`, `terminal.defaultMode` and `terminal.tabs`
 the marketplace into two catalogues: `marketplace_refresh` and
 `marketplace_search` take an optional `catalogue`, `extensions` (the
 default) or `themes`, and a theme's item carries `appearance`, `density`
-and `tile`. The version rises, although the field is optional, because the
+and `tile`. The same version adds the request `preview_theme`, which reads
+a theme of the themes catalogue for the gallery's live preview without
+installing it. The version rises, although the field is optional, because the
 meaning of a request without it changed: it used to list every kind of
 item, and now lists the extensions (plugins and tools) only. A client built
 for 19 that sends `marketplace_search` with `kind: "theme"` and no
@@ -240,6 +242,7 @@ as absent from an older core.
 | `terminal_pane_folder` | `session_id` | `terminal_pane_folder` (`session_id`, `pane`, `mode`, `folder`: a path or `null`) |
 | `list_themes` | — | `themes` (`themes`) |
 | `get_theme` | `theme_id` (without it: the theme in effect) | `theme` (`theme`) |
+| `preview_theme` | `extension_id` (a theme of the themes catalogue) | `theme` (`theme`), nothing installed |
 | `list_tools` | — | `tools` (`tools`) |
 | `marketplace_refresh` | `catalogue` (`extensions`, the default, or `themes`) | `marketplace_index` (`items`, `source`, `fetched_at_ms`) |
 | `marketplace_search` | `query`; `kind` (`plugin`, `theme` or `tool`); `catalogue` (`extensions`, the default, or `themes`) | `marketplace_index` |
@@ -1433,6 +1436,21 @@ configuration names the theme in effect.
   are left out when it has none ([themes.md](themes.md), "Metrics and
   chrome"). Both, and `has_metrics`, are optional, so protocol version 11
   stays ("What changes the version", above).
+
+- `preview_theme` (protocol 20, for the theme gallery) answers `theme`
+  with the whole theme of a catalogue item that is not installed, so a
+  client can show it before the user installs it. The field is
+  `extension_id`, as for `install_extension`. The core reads the themes
+  catalogue (as `marketplace_refresh` with `catalogue: "themes"` does),
+  downloads the item's file to a temporary file in the marketplace's own
+  folder, checks its SHA-256 and that it is a valid theme of the item's
+  version, deletes the file and answers; nothing reaches the themes folder,
+  the record of installs or `cabinetos.json`. It keeps the last 64 themes it
+  answered, so asking again for a tile is not a second download. An ID
+  the catalogue does not list is `no_such_extension`; an item that is not a
+  theme, a download that fails and a file that is no valid theme are
+  `marketplace_error` (`hash_mismatch` for a wrong SHA-256), as for an
+  install. An installed theme is read with `get_theme`.
 
 A client changes the theme with `set_value` on `ui.theme`:
 

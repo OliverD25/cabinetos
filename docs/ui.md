@@ -205,8 +205,30 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   "terminal split" line must put each half under its pane within 2 px, with
   the left and right sessions in their halves, a header for each half in UI
   Automation and `terminal.split` written to the file; Ctrl+\ again joins
-  them and writes false), and last the two Ctrl+` that give the keyboard
-  back and hide the dock.
+  them and writes false), and the two Ctrl+` that give the keyboard
+  back and hide the dock. Then section 22, the theme gallery ("The theme
+  gallery"; the run builds both catalogues with `-Collection`, so the
+  gallery has the collection's tiles, and points `marketplace.themes` at
+  them): Ctrl+K Ctrl+T, End and Enter on the picker's last row, "Browse more
+  themes…", open the gallery; Home, Right and Down preview the tiles they land
+  on (each a "gallery theme previewed" line, the status bar text "Previewing
+  … Esc restores", `ui.theme` and the themes folder unchanged); Esc closes it
+  and the window paints the theme in effect back; the palette's "Themes:
+  Browse" opens it again, "dracula" is typed in the search, Down and Enter
+  install it and apply it (`dracula.json` in the themes folder, `ui.theme` in
+  the file, "theme applied" in the log); the search is cleared and the tile
+  must be named "applied" through UI Automation (`gallery-applied-live.png`);
+  "nord" is typed and a real double-click on the Nord tile, found by its
+  accessible name, applies it; Esc closes the gallery. Section 23, the layout
+  by three ways ("Settings reachable three ways"): the palette's "View:
+  Activity Rail" must write `ui.layout: rail` and show the rail; the top
+  row's menu, its "Layout" row and "Classic Layout" (the "Activity Rail" row
+  must be checked) must write `classic` and take the rail away; Ctrl+K
+  Ctrl+L three times must write `right`, `rail` and `classic`. Both sections
+  must leave no warning or error line in the window's log. The run keeps
+  `gallery-preview-live.png`, `gallery-search-live.png`,
+  `gallery-applied-live.png`, `layout-rail-live.png`, `layout-menu-live.png`
+  and, from section 13, `rail13-extensions-live.png` (the Extensions page).
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
@@ -3496,7 +3518,7 @@ the run's own tools folder. Real keys and the mouse then check:
 - the mouse on the Quick Notes button starts the tool's page once and shows
   it; Ctrl+Shift+F, Esc and Ctrl+Shift+E from the page reach the window, and
   the toggle key closes the sidebar and gives the keyboard to the pane;
-- the mouse on the Marketplace button opens it, and a second click closes it;
+- the mouse on the Extensions button opens the Extensions page, and a second click closes it;
   the mouse on the active Explorer button closes the sidebar;
 - Shift+Down on the Explorer button, focused through UI Automation as
   assistive technology does (a click leaves the keyboard in the pane), moves
@@ -4145,9 +4167,10 @@ you have; the gallery is where you look for more
   terminal. 80 ms after the selection rests on a tile, the gallery fetches
   its theme: `get_theme` for an installed one, and for one that is not
   installed `preview_theme` (protocol 20), which has the core download the
-  theme into memory, check its SHA-256 and that it is a theme, and send it
-  back; nothing is written, so the themes folder and `cabinetos.json` are as
-  they were. The core keeps the last 64 it sent. A reply for a tile the
+  theme to a temporary file in the marketplace's own folder, check its
+  SHA-256 and that it is a theme, delete the file and send the theme back;
+  nothing reaches the themes folder or `cabinetos.json`, so both are as they
+  were. The core keeps the last 64 it sent. A reply for a tile the
   selection has left is dropped. The status bar says "Previewing Nord · Esc
   restores". The tile of the theme in effect paints it back with no request.
   A preview that fails shows its reason in the line under the toolbar and

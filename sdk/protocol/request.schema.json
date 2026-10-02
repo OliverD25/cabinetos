@@ -1112,7 +1112,7 @@
       ]
     },
     {
-      "description": "Reads a theme of the themes catalogue without installing it, so the\ngallery can preview it on the whole window before the user installs\nit: the core downloads the theme file (into memory, nothing is put\nin the themes folder), checks its SHA-256 and the theme, and answers\n`theme` with the whole theme. An installed theme is read with\n`get_theme`.",
+      "description": "Reads a theme of the themes catalogue without installing it, so the\ngallery can preview it on the whole window before the user installs\nit: the core downloads the theme file to a temporary file of the\nmarketplace's own folder (nothing is put in the themes folder),\nchecks its SHA-256 and the theme, deletes the file, and answers\n`theme` with the whole theme. An installed theme is read with\n`get_theme`.",
       "type": "object",
       "properties": {
         "extension_id": {

@@ -451,8 +451,9 @@ pub enum Request {
     },
     /// Reads a theme of the themes catalogue without installing it, so the
     /// gallery can preview it on the whole window before the user installs
-    /// it: the core downloads the theme file (into memory, nothing is put
-    /// in the themes folder), checks its SHA-256 and the theme, and answers
+    /// it: the core downloads the theme file to a temporary file of the
+    /// marketplace's own folder (nothing is put in the themes folder),
+    /// checks its SHA-256 and the theme, deletes the file, and answers
     /// `theme` with the whole theme. An installed theme is read with
     /// `get_theme`.
     PreviewTheme {

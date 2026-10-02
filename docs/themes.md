@@ -490,7 +490,8 @@ cabinetos-cli market refresh --themes
 Without `-Collection` the script's `themes.json` holds the five shipped
 themes. With it, each collection theme becomes one more item, in the order
 of `marketplace.csv`, whose row gives the item's description, license and
-source link (the gallery's Source button opens it). Copying a file by hand
+source link (the item keeps them; the gallery's tile does not show them).
+Copying a file by hand
 into the themes folder works too; the marketplace then leaves that theme
 alone, as it does a shipped one ([marketplace.md](marketplace.md), trust
 rule 7).
