@@ -6,6 +6,9 @@
     <RootNamespace>CabinetOS</RootNamespace>
     <AssemblyName>CabinetOS</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The icon of CabinetOS.exe itself (taskbar, Explorer, Alt+Tab). Made by
+         build\make-icon.ps1 from the design's size cuts, committed. -->
+    <ApplicationIcon>Assets\CabinetOS.ico</ApplicationIcon>
     <UseWinUI>true</UseWinUI>
     <!-- Unpackaged, so dotnet run works without MSIX; the Windows App Runtime
          2.5 is used from the machine (docs/dev-setup.md, "Phase 5"). The MSIX

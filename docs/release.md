@@ -25,7 +25,7 @@ folder wrapped in a setup file, `CabinetOS-<version>-win-x64-setup.exe`
 | `extras\themes\` | Copies of the four built-in themes and their schema, as a start for your own. The core also writes them into `%LOCALAPPDATA%\CabinetOS\themes` |
 | `extras\tools\markdown-preview\` | The Markdown Preview tool. Opt-in (Constitution Article 10): the window does not load it from here |
 | `install.ps1`, `uninstall.ps1` | The installer and its undo |
-| `CabinetOS.ico` | The app's icon, made by the release script from the design's size cuts (`docs/design/icons`, 16 to 256 px): the setup file's icon, its shortcuts' and its Settings > Apps entry's |
+| `CabinetOS.ico` | The app's icon, a copy of the committed `ui/CabinetOS/Assets/CabinetOS.ico` (see "The icon" below): the setup file's icon, its shortcuts' and its Settings > Apps entry's. `CabinetOS.exe` carries the same icon inside it |
 | `release.json` | The version, the commit, and the runtime versions `install.ps1` checks |
 | `LICENSE`, `THIRD-PARTY-NOTICES.md` | The MIT license, and the license text of every third-party component |
 
@@ -83,8 +83,8 @@ What it runs, in order:
    if the `.pri` file is missing.
 3. Copies the three programs and their `.pdb` files, `cabinetos-cli.exe`
    once more as `cab.exe`, the themes, Markdown Preview, `LICENSE` and the
-   two install scripts; makes `CabinetOS.ico` from the design's PNG size
-   cuts (each image kept as the PNG it is); writes `release.json`
+   two install scripts; copies the committed `CabinetOS.ico` (made from the
+   design's PNG size cuts; see "The icon"); writes `release.json`
    from the publish output and the Windows App SDK package (the minimum
    Windows App Runtime is the one the SDK's bootstrapper asks for).
 4. `build\notices.ps1` writes `THIRD-PARTY-NOTICES.md`: every Rust crate the
@@ -132,6 +132,24 @@ Switches:
 The build warns when `core`, `ui`, `sdk` or `build` hold uncommitted
 changes or new files, and `release.json` records the commit and whether
 they were clean.
+
+### The icon
+
+`ui/CabinetOS/Assets/CabinetOS.ico` is the app's icon, and it is committed.
+`CabinetOS.csproj` embeds it in `CabinetOS.exe` (`<ApplicationIcon>`), so the
+taskbar, Explorer and the Alt+Tab list show it, and step 3 copies the same
+file into the release folder as `CabinetOS.ico`, for the setup file and its
+shortcuts. `build\make-icon.ps1` makes the file from the design's PNG size
+cuts in `docs/design/icons` (16, 24, 32, 48 and 256 px, each kept as the PNG
+it is, never a scaled master; [ICON_HANDOFF.md](design/ICON_HANDOFF.md)).
+When those icons change, run it again and commit the result:
+
+```powershell
+pwsh -NoProfile -File <repo>\build\make-icon.ps1
+```
+
+The same cuts always give the same bytes. `release.ps1` makes the file
+itself, with a warning, only when it is missing.
 
 ### In GitHub Actions
 
@@ -454,5 +472,3 @@ them (checked 2026-09-28 with winget 1.29.380).
 - The setup does not remove files an earlier version had and the new one
   lacks when it installs over an earlier setup install; the in-app update,
   which replaces the whole folder, does.
-- `CabinetOS.exe` itself has no icon yet: the taskbar shows the default
-  one. The shortcuts and the Apps entry use `CabinetOS.ico`.

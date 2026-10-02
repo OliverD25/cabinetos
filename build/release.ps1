@@ -33,8 +33,10 @@
 #  5. LICENSE, THIRD-PARTY-NOTICES.md (build\notices.ps1), install.ps1,
 #     uninstall.ps1, and release.json: the version, the commit, and the
 #     runtimes the build needs, which install.ps1 checks. CabinetOS.ico, the
-#     app's icon from the design's size cuts (docs\design\icons), for the
-#     setup, its shortcuts and its Settings > Apps entry.
+#     app's icon (ui\CabinetOS\Assets\CabinetOS.ico, committed; the window's
+#     build embeds it, and build\make-icon.ps1 remakes it from the design's
+#     size cuts in docs\design\icons), for the setup, its shortcuts and its
+#     Settings > Apps entry.
 #  6. The zip, its SHA-256, and the winget manifests of build\winget with
 #     this version, URL and hash.
 #  7. The in-app update's files for -Channel (stable unless it says
@@ -93,35 +95,6 @@ function Get-WorkspaceValue([string] $Key) {
     $value.Groups[1].Value
 }
 
-# The design's size cuts (docs\design\icons; ICON_HANDOFF.md: never a scaled
-# master) in one .ico, each image stored as the PNG it is, which Windows reads
-# at every size.
-function Write-IconFile([string] $Path) {
-    $sizes = 16, 24, 32, 48, 256
-    $images = [System.Collections.Generic.List[byte[]]]::new()
-    foreach ($size in $sizes) { $images.Add([System.IO.File]::ReadAllBytes((Join-Path $repo "docs\design\icons\cabinetos-$size.png"))) }
-    $stream = [System.IO.MemoryStream]::new()
-    $writer = [System.IO.BinaryWriter]::new($stream)
-    $writer.Write([uint16] 0)
-    $writer.Write([uint16] 1)
-    $writer.Write([uint16] $sizes.Count)
-    $offset = 6 + 16 * $sizes.Count
-    for ($i = 0; $i -lt $sizes.Count; $i++) {
-        $side = if ($sizes[$i] -ge 256) { 0 } else { $sizes[$i] }
-        $writer.Write([byte] $side)
-        $writer.Write([byte] $side)
-        $writer.Write([uint16] 0)
-        $writer.Write([uint16] 1)
-        $writer.Write([uint16] 32)
-        $writer.Write([uint32] $images[$i].Length)
-        $writer.Write([uint32] $offset)
-        $offset += $images[$i].Length
-    }
-    foreach ($image in $images) { $writer.Write($image) }
-    $writer.Flush()
-    [System.IO.File]::WriteAllBytes($Path, $stream.ToArray())
-}
-
 # Inno Setup's compiler: on the PATH, or where its installer puts it, per
 # user or for every user.
 function Find-InnoCompiler {
@@ -177,6 +150,14 @@ if (-not $PackageOnly) {
         if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force }
     }
 
+    # The window's build embeds this file (<ApplicationIcon> in CabinetOS.csproj) and step 5 ships it.
+    # It is committed; made here only when it is missing (build\make-icon.ps1).
+    $icon = Join-Path $repo 'ui\CabinetOS\Assets\CabinetOS.ico'
+    if (-not (Test-Path -LiteralPath $icon)) {
+        Write-Warning 'ui\CabinetOS\Assets\CabinetOS.ico is missing; making it from docs\design\icons. Commit it.'
+        & (Join-Path $PSScriptRoot 'make-icon.ps1') -Path $icon
+    }
+
     # 1-2. Build.
     Invoke-Native 'cargo' @('build', '--release', '--locked', '-p', 'cabinetos-core', '-p', 'cabinetos-indexer', '-p', 'cabinetos-cli') (Join-Path $repo 'core')
     Invoke-Native 'dotnet' @('publish', 'CabinetOS\CabinetOS.csproj', '-c', 'Release', '-r', 'win-x64', '--self-contained', 'false', '-p:PublishReadyToRun=true', '-o', $folder) (Join-Path $repo 'ui')
@@ -202,7 +183,7 @@ if (-not $PackageOnly) {
     Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $folder
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Destination $folder
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $folder
-    Write-IconFile (Join-Path $folder 'CabinetOS.ico')
+    Copy-Item -LiteralPath $icon -Destination (Join-Path $folder 'CabinetOS.ico')
 
     $options = (Get-Content -Raw -LiteralPath (Join-Path $folder 'CabinetOS.runtimeconfig.json') | ConvertFrom-Json).runtimeOptions
     $frameworks = if ($options.PSObject.Properties['frameworks']) { @($options.frameworks) } else { @($options.framework) }
