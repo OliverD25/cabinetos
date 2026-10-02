@@ -980,7 +980,10 @@ mod tests {
         assert!(text.contains("\"split\":false"), "{text}");
         let split: TerminalConfig = serde_json::from_str(r#"{"split": true}"#).unwrap();
         assert!(split.split);
-        assert_eq!(split.default_profile, "pwsh", "the other keys keep their defaults");
+        assert_eq!(
+            split.default_profile, "pwsh",
+            "the other keys keep their defaults"
+        );
         assert!(serde_json::from_str::<TerminalConfig>(r#"{"split": "yes"}"#).is_err());
         assert!(
             text.contains("\"sidebarAutoReveal\":true,\"columns\":null"),

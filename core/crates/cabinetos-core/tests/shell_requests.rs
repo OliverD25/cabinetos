@@ -325,7 +325,9 @@ async fn set_value_writes_one_setting_and_tells_every_client() {
     // The terminal's split (unit 3), written by the window when the user toggles it.
     assert_eq!(
         get_value(&mut client, "terminal.split").await,
-        Response::Value { value: json!(false) }
+        Response::Value {
+            value: json!(false)
+        }
     );
     assert_eq!(
         set_value(&mut client, "terminal.split", json!(true)).await,

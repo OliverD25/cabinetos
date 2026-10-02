@@ -658,7 +658,7 @@ mod tests {
                 .palette
                 .terminal_left_badge
                 .as_ref()
-                .map(|colour| colour.as_str()),
+                .map(cabinetos_protocol::Color::as_str),
             Some("#60CDFF")
         );
         assert_eq!(
@@ -666,7 +666,7 @@ mod tests {
                 .palette
                 .terminal_right_badge
                 .as_ref()
-                .map(|colour| colour.as_str()),
+                .map(cabinetos_protocol::Color::as_str),
             Some("#F27A6CCC")
         );
         let wire = serde_json::to_value(&theme).unwrap();
