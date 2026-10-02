@@ -86,8 +86,9 @@ package.
 - Windows 11 22H2 (build 22621) or newer, x64.
 - To run it: the .NET 10 runtime, the Windows App Runtime 2.5.1 or newer
   (x64), and the WebView2 Runtime, which every Windows 11 has. The setup file
-  and the installer check all three and name the command that installs a
-  missing one.
+  downloads and installs a missing one from Microsoft (for the .NET runtime
+  Windows asks for administrator rights). The zip's installer script checks
+  all three and names the command that installs a missing one.
 - To build it: the toolchains in [docs/dev-setup.md](docs/dev-setup.md).
 
 ## Install

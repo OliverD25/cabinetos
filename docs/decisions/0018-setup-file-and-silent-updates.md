@@ -1,6 +1,8 @@
 # ADR 0018: A setup file for the first install, and updates that install themselves and only ask for a restart
 
-- Status: accepted
+- Status: accepted; its decision 2 ("The setup downloads nothing") and its
+  consequence "The setup does not install the prerequisites" are replaced
+  by [ADR 0019](0019-setup-installs-prerequisites-and-is-the-winget-package.md)
 - Date: 2026-10-02
 - Decided by: the creator, on the desk card "Integrated Terminal Subsystem
   Sprint" (Phase 21, unit 6: "an installation file (a setup .exe for the
