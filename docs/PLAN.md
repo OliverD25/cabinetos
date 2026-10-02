@@ -1648,6 +1648,14 @@ harmless ([report](log/2026-10-02/public-repository-preparation.md)). The
 README is rewritten for a first visitor, and the publish commands, from the
 flip to winget, are in [release.md](release.md), "Publish".
 
+**Status (2026-10-02, 21:36): the repository is public.** The creator ran
+the sheet's first two blocks: new commits from this PC carry GitHub's
+private e-mail address, and `gh repo edit --visibility public` (in its
+old form; Ubuntu's gh 2.45 refuses the new flag) answered PUBLIC; an
+anonymous request for the repository and its README gets HTTP 200. From
+here the SignPath card and CI can start, and the release steps (b) to (e)
+wait for units 1 to 3.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
