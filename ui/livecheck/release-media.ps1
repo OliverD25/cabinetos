@@ -41,9 +41,10 @@
 #                          id (catppuccin-mocha, commander-compact, default, nord, rose-pine-moon)
 #
 # A recording needs ffmpeg: -Ffmpeg, else C:\ffmpeg\bin\ffmpeg.exe, else C:\Dev\tools\ffmpeg\ffmpeg.exe (the laptop's).
-# -Capture screen (default) records the window's frame from the screen; -Capture title records by the window's title
-# (the title changes with the folder, so it is read from the process just before the recording starts). The title mode
-# gives a black picture for a window drawn by the GPU, which WinUI is, on some machines: look at a frame.
+# -Capture screen (default) records the rectangle of the window's frame from the screen. -Capture title records by the
+# window's title, read from the process just before the recording starts. The title mode records only black for the
+# CabinetOS window (measured on the Omen laptop, 2026-10-02: 5.9 of 6 s black), because WinUI draws on the GPU; it stays
+# only for another machine or a later window that may behave differently. Always look at a frame of a recording.
 # Windows PowerShell 5.1 and PowerShell 7.
 #
 #   remote-script.ps1 -Script ui\livecheck\release-media.ps1 -Args "-OutDir C:\Dev\cabinetos\_io\script-runs\release-media" -Branch <branch>
@@ -455,7 +456,7 @@ function Invoke-MediaItem($item) {
       if ($took -gt ($seconds - 0.7)) { "WARN: the steps took $([math]::Round($took, 1)) s, longer than the $($seconds - 0.7) s the recording leaves for them: the end is cut" }
       if (-not $ff.WaitForExit(($seconds + 20) * 1000)) { $ff.Kill(); throw "ffmpeg did not stop within $($seconds + 20) s" }
       if (-not (Test-Path -LiteralPath $raw) -or (Get-Item -LiteralPath $raw).Length -lt 10000) {
-        throw "the recording is missing or empty: $(Get-Content -LiteralPath $log -Tail 3 -ErrorAction SilentlyContinue)"
+        throw "the recording is missing or almost empty (a black picture is this small; -Capture title records black for this window, use -Capture screen): $(Get-Content -LiteralPath $log -Tail 3 -ErrorAction SilentlyContinue)"
       }
       $produced.Add($raw)
     }

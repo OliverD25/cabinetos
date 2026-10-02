@@ -102,7 +102,11 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
   to read the chain of one action; read it before chasing such a fault.
   `design-handouts` says how the design session's documents come into
   `docs/design/` (the creator's sync rule of 2026-10-01) and onto the
-  desk, read-only towards the session.
+  desk, read-only towards the session. `release-notes-page` says how the
+  public "What's new" page of a release is made for the Luminart site: the
+  changelog becomes `notes.md`, `ui/livecheck/release-media.ps1` takes clean
+  screenshots and recordings on the laptop over a demo folder, and nothing
+  is deployed without the creator's word in the chat.
 - Implementation goes to the `coder` agent once the plan is concrete; small
   fixes are done directly.
 
