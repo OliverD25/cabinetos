@@ -1,4 +1,4 @@
-# ADR 0019: The symbols ship in a zip of their own, not in the release zip or the setup file
+# ADR 0021: The symbols ship in a zip of their own, not in the release zip or the setup file
 
 - Status: accepted
 - Date: 2026-10-02

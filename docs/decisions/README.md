@@ -28,8 +28,8 @@ The Constitution outranks every record here. A record may refine the brief
 | [0017](0017-file-tags.md) | File tags in the file's NTFS stream and in a catalog, a Tags section in the sidebar; written for the creator's decision, not built | 2026-10-01 | proposed |
 | [0018](0018-setup-file-and-silent-updates.md) | A setup file (Inno Setup, per user) for the first install; a checked download installs itself and the app only asks for a restart | 2026-10-02 | accepted; decision 2 replaced by 0019 |
 | [0019](0019-setup-installs-prerequisites-and-is-the-winget-package.md) | The setup file downloads and installs a missing prerequisite itself, and the winget package is the setup file | 2026-10-02 | accepted |
-| [0019](0019-symbols-in-their-own-zip.md) | The symbols (`.pdb` files) ship in a zip of their own, not in the release zip or the setup file | 2026-10-02 | accepted |
 | [0020](0020-indexer-service-starts-by-itself.md) | The indexer service starts by itself after Windows restarts (automatic start, delayed) | 2026-10-02 | accepted |
+| [0021](0021-symbols-in-their-own-zip.md) | The symbols (`.pdb` files) ship in a zip of their own, not in the release zip or the setup file | 2026-10-02 | accepted |
 
 ## Template
 

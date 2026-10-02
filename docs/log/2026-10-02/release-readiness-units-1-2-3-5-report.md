@@ -3,7 +3,7 @@
 Context: Phase 22 in [PLAN.md](../../PLAN.md), "Release readiness", units 1, 2, 3
 and 5, by a coder on Sonnet in the worktree branch
 `worktree-agent-a939b8f590d28b771`, while the creator was at this PC but not
-answering. Decisions: [ADR 0019](../../decisions/0019-symbols-in-their-own-zip.md)
+answering. Decisions: [ADR 0021](../../decisions/0021-symbols-in-their-own-zip.md)
 (the symbols zip) and [ADR 0020](../../decisions/0020-indexer-service-starts-by-itself.md)
 (the indexer service starts by itself). Nothing was pushed, merged, published
 or signed.

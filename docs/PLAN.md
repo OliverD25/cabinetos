@@ -1725,7 +1725,7 @@ files, 100.3 MB, 34.7 MB zipped; with the components 45 files, 57.8 MB,
 `.pdb` file out of the release folder into
 `CabinetOS-<version>-win-x64-symbols.zip` (43.6 MB, with its `.sha256`);
 `setup.iss` excludes `*.pdb` besides; the updater's swap needed no change
-([ADR 0019](decisions/0019-symbols-in-their-own-zip.md)). Release folder
+([ADR 0021](decisions/0021-symbols-in-their-own-zip.md)). Release folder
 71 files and 251.7 MB before, 66 and 100.5 MB now; zip 75.7 MB before, 32.1
 MB now; setup file 42.5 MB before, 20.0 MB now: the goal (a zip under 60 MB
 and a setup file under 35 MB, no machine-learning library inside) is met.

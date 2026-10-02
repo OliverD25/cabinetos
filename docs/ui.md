@@ -476,7 +476,7 @@ PowerShell 7 and Inno Setup 6.7). Its five steps:
    short) removes an earlier run's install, runs the setup with
    `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=X:\_io\vm\setup-<time>.log`,
    and checks the install folder (it must hold no `.pdb` file: the
-   symbols are a download of their own, [ADR 0019](decisions/0019-symbols-in-their-own-zip.md)),
+   symbols are a download of their own, [ADR 0021](decisions/0021-symbols-in-their-own-zip.md)),
    the Start Menu shortcut and the `CabinetOS_is1` entry with its values.
 3. `livecheck.ps1 -Exe <the installed CabinetOS.exe> -Core <its core>
    -Strict -Virtual`, from a copy of the repository's tree on the VM's

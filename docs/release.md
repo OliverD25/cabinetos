@@ -98,13 +98,8 @@ It writes, into `dist\` (ignored by git):
 
 - `dist\CabinetOS-<version>-win-x64\`, the release folder;
 - `dist\CabinetOS-<version>-win-x64.zip` and its `.zip.sha256`;
-<<<<<<< HEAD
-=======
 - `dist\CabinetOS-<version>-win-x64-symbols.zip` and its `.sha256`, the
   `.pdb` files ("The symbols", below);
-- `dist\winget\<version>\`, the winget manifests with this version and the
-  zip's SHA-256, checked with `winget validate` when winget is installed;
->>>>>>> phase22-merge
 - `dist\update\<channel>\latest.json` and `notes-<version>.md`, what the
   in-app updater reads ("Updates", below);
 - `dist\CabinetOS-<version>-win-x64-setup.exe` and its `.sha256`, the
@@ -140,18 +135,13 @@ What it runs, in order:
    package in the published `CabinetOS.deps.json`, the .NET application host
    and the bundled JavaScript, with their license files. It stops when a
    component has no license text.
-<<<<<<< HEAD
-5. Zips the folder and writes the hash.
-6. Writes the in-app update's two files for the channel (`-Channel`,
-=======
 5. Moves every `.pdb` file out of the release folder into the symbols
    zip and writes its hash ("The symbols"), then checks the folder: the
    script stops when it holds `onnxruntime`, `DirectML` or an AI or
    machine-learning library of the Windows App SDK ("Sizes"). Nothing is
    zipped before this check.
-6. Zips the folder, writes the hash, fills the winget manifests.
+6. Zips the folder and writes the hash.
 7. Writes the in-app update's two files for the channel (`-Channel`,
->>>>>>> phase22-merge
    `stable` unless it says `preview`): `latest.json`, with the zip's
    address on the GitHub Release
    (`https://github.com/OliverD25/cabinetos/releases/download/v<version>/CabinetOS-<version>-win-x64.zip`),
@@ -173,7 +163,7 @@ What it runs, in order:
    names the command that installs it, and the rest of the release is
    complete but for the winget manifests:
    `winget install --id JRSoftware.InnoSetup --exact --scope user`.
-8. Fills the winget manifests of `build\winget` with the version, the
+9. Fills the winget manifests of `build\winget` with the version, the
    setup file's address on the GitHub Release and its SHA-256, and the
    build's date, and checks them with `winget validate` when winget is
    installed. Without a setup file there are none, with a warning.
@@ -185,22 +175,17 @@ Switches:
   writes the Cargo version there first (commit that change).
 - `-PackageOnly`: builds nothing; zips the existing release folder again and
   writes a new hash, new manifests, new update files and a new setup file.
-<<<<<<< HEAD
-  For after signing (below).
-- `-NoSetup`: no setup file (step 7), and so no winget manifests.
-- `-WingetOnly`: builds nothing; only step 8, from the files already in
+  For after signing (below). Step 5 still checks the folder, and the
+  symbols zip of the build before stays as it is (signing does not change a
+  `.pdb` file).
+- `-NoSetup`: no setup file (step 8), and so no winget manifests.
+- `-WingetOnly`: builds nothing; only step 9, from the files already in
   `dist\`: the release folder's `release.json` (the version, and the date
   of `builtUtc`) and the setup file's `.sha256` (the hash, written in
   capitals as winget wants it). It stops with a message when one of them,
   or the setup file, is missing, or when the `.sha256` does not match the
   setup file. For a setup file that was signed after the build ("Sign",
   below).
-=======
-  For after signing (below). Step 5 still checks the folder, and the
-  symbols zip of the build before stays as it is (signing does not change a
-  `.pdb` file).
-- `-NoSetup`: no setup file (step 8).
->>>>>>> phase22-merge
 - `-Channel stable|preview`: which channel's `latest.json` to write;
   `stable` by default. A version such as `0.2.0-preview.1` needs
   `preview`.
@@ -267,7 +252,6 @@ winget package", below).
   shortcut is always made. The wizard follows Windows' light or dark mode.
 - **The prerequisites** (Windows 11 22H2 or newer, x64; the .NET 10
   runtime; the Windows App Runtime 2.5.1 or newer; WebView2) are checked
-<<<<<<< HEAD
   before the wizard, as `install.ps1` checks them. When one of the last
   three is missing, an interactive setup first says which ones, that it now
   downloads and installs them from Microsoft (a few minutes: the Windows
@@ -299,18 +283,6 @@ winget package", below).
   running dotnet-runtime-setup.exe /install /quiet /norestart
   Microsoft's installer ended with exit code 0
   ```
-=======
-  before the wizard, as `install.ps1` checks them. A missing one stops the
-  setup with a message that names the winget command (and, for the Windows
-  App Runtime, Microsoft's installer). The setup downloads nothing, and
-  that is decided (Phase 22, unit 5, 2026-10-02, on the planning session's
-  recommendation): it keeps stopping with the winget command, as
-  `install.ps1` does, and nobody should add a download without a new
-  decision.
-- **No symbols.** The setup holds no `.pdb` file: `release.ps1` takes them
-  out of the folder first, and `setup.iss` excludes `*.pdb` besides ("The
-  symbols"). It is 20.0 MB.
->>>>>>> phase22-merge
 - **Over an install.ps1 install** in the same folder the setup stops and
   names that install's `uninstall.ps1`: the two keep separate records and
   Apps entries and must not mix. `install.ps1` likewise refuses the setup's
@@ -372,7 +344,7 @@ winget package", below).
 `CabinetOS.pdb` and `CabinetOS.Core.pdb` (the window's; 0.4 and 0.7 MB). It is
 43.6 MB zipped, and neither the release zip nor the setup file carries it:
 nobody needs symbols to run CabinetOS, and they were more than half of the
-zip ([ADR 0019](decisions/0019-symbols-in-their-own-zip.md)). `release.ps1`
+zip ([ADR 0021](decisions/0021-symbols-in-their-own-zip.md)). `release.ps1`
 makes it and puts the files at its root.
 
 **What they are for.** When a program crashes, it writes a crash trace
@@ -1143,21 +1115,11 @@ that it does not check the two dependencies).
   winget (ADR 0014). The in-app update replaces the files, not the indexer
   service, which only an all-users install has.
 - x64 only; ARM64 is untested.
-<<<<<<< HEAD
-- The window's project references the whole Windows App SDK, so the
-  release carries its AI and machine-learning libraries (about 40 MB
-  unpacked) that CabinetOS does not use.
 - The setup file needs the internet when a prerequisite is missing (up to
   about 150 MB from Microsoft), and a silent setup without administrator
   rights cannot install the .NET runtime: it stops and names the winget
   command. It is per user only (no all-users install, no indexer service,
   no PATH entry: `install.ps1` does those), and unsigned like the rest.
-=======
-- The setup file installs no prerequisite, by decision (Phase 22, unit 5):
-  it names the winget commands and stops. It is per user only (no
-  all-users install, no indexer service, no PATH entry: `install.ps1` does
-  those), and unsigned like the rest.
->>>>>>> phase22-merge
 - The setup does not remove files an earlier version had and the new one
   lacks when it installs over an earlier setup install; the in-app update,
   which replaces the whole folder, does.
