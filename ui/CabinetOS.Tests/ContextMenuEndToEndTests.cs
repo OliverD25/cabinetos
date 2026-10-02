@@ -42,12 +42,21 @@ public class ContextMenuEndToEndTests
         {
             var stub = Path.Combine(root, "record paths.js");
             var recorded = Path.Combine(root, "record paths.js.log");
-            // A stand-in program with no window, as the live check's editor: each start adds its argument as a line.
+            // A stand-in program with no window, as the live check's editor: each start adds its argument as a line. Two starts a
+            // moment apart (a busy machine starts a program late) may meet at the file, and the one that finds it open tries again.
             File.WriteAllText(stub, """
                 var fso = new ActiveXObject("Scripting.FileSystemObject");
-                var log = fso.OpenTextFile(WScript.ScriptFullName + ".log", 8, true, -1);
-                log.WriteLine(WScript.Arguments.length > 0 ? WScript.Arguments(0) : "(nothing)");
-                log.Close();
+                var line = WScript.Arguments.length > 0 ? WScript.Arguments(0) : "(nothing)";
+                for (var attempt = 0; attempt < 200; attempt++) {
+                    try {
+                        var log = fso.OpenTextFile(WScript.ScriptFullName + ".log", 8, true, -1);
+                        log.WriteLine(line);
+                        log.Close();
+                        break;
+                    } catch (error) {
+                        WScript.Sleep(50);
+                    }
+                }
                 """);
             var process = run.Start("config", string.Join(';',
                 "size:1200x700",
@@ -771,19 +780,28 @@ public class ContextMenuEndToEndTests
 
     private static async Task<List<string>> ReadLinesAsync(string path, int count)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+        var found = "no file";
         while (true)
         {
             if (File.Exists(path))
             {
-                // wscript writes UTF-16 (the last argument of OpenTextFile).
-                var lines = File.ReadAllLines(path, System.Text.Encoding.Unicode).Where(l => l.Length > 0).ToList();
-                if (lines.Count >= count)
+                try
+                {
+                    // wscript writes UTF-16 (the last argument of OpenTextFile).
+                    var lines = File.ReadAllLines(path, System.Text.Encoding.Unicode).Where(l => l.Length > 0).ToList();
+                    found = $"{lines.Count} line(s): {string.Join(" | ", lines)}";
+                    if (lines.Count >= count)
+                    {
+                        return lines;
+                    }
+                }
+                catch (IOException)
                 {
                     return lines;
                 }
             }
-            Assert.True(DateTime.UtcNow < deadline, $"{path} did not get {count} lines");
+            Assert.True(DateTime.UtcNow < deadline, $"{path} did not get {count} lines in 60 s; it has {found}");
             await Task.Delay(200);
         }
     }
