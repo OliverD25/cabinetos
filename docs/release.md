@@ -432,8 +432,12 @@ same folder.
 ### (a) Make the repository public
 
 ```bash
-gh repo edit OliverD25/cabinetos --visibility public --accept-visibility-change-consequences && gh repo view OliverD25/cabinetos --json visibility --jq .visibility && curl -s -o /dev/null -w 'without login: HTTP %{http_code}\n' https://github.com/OliverD25/cabinetos
+(gh repo edit OliverD25/cabinetos --visibility public --accept-visibility-change-consequences 2>/dev/null || gh repo edit OliverD25/cabinetos --visibility public) && gh repo view OliverD25/cabinetos --json visibility --jq .visibility && curl -s -o /dev/null -w 'without login: HTTP %{http_code}\n' https://github.com/OliverD25/cabinetos
 ```
+
+The first form is for `gh` 2.48 and newer, which refuse to change the
+visibility without that flag; an older `gh` (Ubuntu's 2.45 in WSL on
+2026-10-02) refuses the flag instead, so the second form runs then.
 
 What it changes: anyone can read the repository: the code, the whole
 history of `main` (the only branch on GitHub), and the Actions runs with
