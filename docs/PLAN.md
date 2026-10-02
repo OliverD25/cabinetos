@@ -1301,7 +1301,7 @@ passed, 51 end-to-end skipped); the full window suite with the end-to-end tests 
 (`run-unit2-0359.txt`). Seen on the way: in section 21's unit 1 step, the
 keys after a click from the terminal into a pane open nothing, and its
 check does not test the folder change (the report's "Seen on the way").
-**Status (2026-10-02, 06:00): unit 3 built, not merged yet.** The split
+**Status (2026-10-02, 06:20): unit 3 done and merged** (on main as ..6af9fb6 after two rebases; the planning session's checks on the rebased branch: the five core checks green with 843 tests, clippy, fmt and deny clean, 1284 window tests with the end-to-end suite 1284 of 1284 in 3 min 29 s, the live check 231 True, 0 False in 8 min 0 s, `run-2026-10-02-0609.txt`; a clippy failure in unit 2's folder report that the planning session's check of unit 2 had missed was fixed on main first, d767ab9). The coder's own status follows. The split
 mirror, by a coder on Sonnet, 4a9ee15..f72829d and the docs on the branch
 `worktree-agent-ab43609202ad0fd61`
 ([log/2026-10-02/terminal-unit3-report.md](log/2026-10-02/terminal-unit3-report.md)):
