@@ -224,6 +224,17 @@ function ClickLeftPane {
   Start-Sleep -Milliseconds 400
 }
 
+# The pointer to a quiet place in the window (the status bar's left end) by a real mouse move, before a list opens under
+# it: a pointer resting where a row appears pulls the highlight to that row (the rows follow PointerMoved). The theme
+# picker's last row, "Browse more themes", is under the point ClickLeftPane clicked, so a picker opened after such a click
+# started on it and Enter opened the gallery (the laptop's run of 2026-10-03). SetCursorPos(2, 2) moved the cursor out of
+# the window without a pointer event the window could see, so the window still took the pointer to be where it was.
+function ParkMouse {
+  $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$rect, 16)
+  [Live]::MoveTo([int]($rect.Left + 12), [int]($rect.Bottom - 10))
+  Start-Sleep -Milliseconds 250
+}
+
 function SelectionText {
   $line = UiLast '"selection shown"'
   if (-not $line) { return "(the window has not reported a selection yet)" }
@@ -922,7 +933,7 @@ GoPath "$cc\dst" 1000
 function ThemeLog { UiObjects '"target":"cabinetos_ui::theme"' }
 Step "theme preview: Ctrl+K Ctrl+T, Down previews the next theme, Esc paints the theme in effect back"
 $themeBefore = (ThemeLog | Where-Object { $_.message -eq 'theme applied' -or $_.message -eq 'theme restored' } | Select-Object -Last 1).fields.theme
-[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
+ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 1500 -what 'the theme picker'
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 500
@@ -938,7 +949,7 @@ $restored = if ($lastPreview -ge 0) { $themeLines | Select-Object -Skip ($lastPr
 
 Step "compact: Ctrl+K Ctrl+T, the theme picker; Home, Down to Commander Compact, Enter"
 # The mouse goes to the corner first: a pointer left over the list would pull the highlight to its row.
-[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
+ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 2000 -what 'the theme picker'
 Shot $h "$ShotDir\compact-picker-live.png"
@@ -1055,7 +1066,7 @@ if ($bigList) {
 } else { "compact: no scrollable list found in the automation tree: False" }
 
 Step "compact: Ctrl+K Ctrl+T, Home, Down, Down to Default, Enter"
-[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
+ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 2000 -what 'the theme picker'
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
@@ -2286,6 +2297,7 @@ OpenPalette 500
 ClickLeftPane
 
 Step "keys: Ctrl+K Ctrl+T, Tab, Enter: Tab stays in the theme picker, and Enter applies the highlighted theme"
+ParkMouse
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
 $applied = CommandCount 'theme.apply'
 $opens = CommandCount 'pane.openSelected'
@@ -2773,7 +2785,7 @@ Step "22: Ctrl+K Ctrl+T, End, Enter: the picker's last row, Browse more themes, 
 ClickLeftPane
 $inEffect = ThemeInConfig
 $shown = @(ShellLines 'gallery shown').Count
-[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
+ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 1500 -what 'the theme picker'
 [Live]::Press($VK.End); Start-Sleep -Milliseconds 400
@@ -2782,7 +2794,7 @@ PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list
 Start-Sleep -Milliseconds 3000
 
 Step "22: Home, Right, Down: each key previews the tile it lands on, and the status bar says so"
-[void][Live]::SetCursorPos(2, 2)
+ParkMouse
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 800
 $previews = @(ShellLines 'gallery theme previewed').Count
 [Live]::Press($VK.Right); Start-Sleep -Milliseconds 1000
@@ -2852,7 +2864,8 @@ Step "22: Esc closes the gallery; the keyboard is in the pane again"
 $closed = @(ShellLines 'gallery closed').Count
 [Live]::Press($VK.Esc); Start-Sleep -Milliseconds 1000
 $gc = WaitShellLines 'gallery closed' $closed 3
-"22: Esc closed the gallery with a theme applied, so nothing was painted back: $([bool]($gc -and $gc.fields.restored -eq $false))"
+$statusLine = ShellLines 'preview status shown' | Select-Object -Last 1
+"22: Esc closed the gallery, with no preview left on the status bar and nord in effect: $([bool]($gc -and $statusLine.fields.text -eq '' -and (ThemeInConfig) -eq 'nord'))"
 "22: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warn22)"
 
 # ----- 23: the layout from the palette, the menu and the chord (docs/ui.md, "Settings reachable three ways"; Phase 23) -----
