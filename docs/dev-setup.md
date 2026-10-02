@@ -47,7 +47,9 @@ cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabineto
   is missing.
 - **Visual Studio 2022 Build Tools** with the "Desktop development with C++"
   workload: the `x86_64-pc-windows-msvc` target needs the MSVC linker and the
-  Windows SDK. Visual Studio Community 2022 with that workload also works.
+  Windows SDK, whose `rc.exe` the build also needs to embed the version
+  resource of the three programs. Visual Studio Community 2022 with that
+  workload also works.
 - **cargo-deny** for the license and advisory check that CI runs:
 
   ```bash

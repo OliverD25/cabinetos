@@ -138,8 +138,12 @@ What it runs, in order:
 5. Moves every `.pdb` file out of the release folder into the symbols
    zip and writes its hash ("The symbols"), then checks the folder: the
    script stops when it holds `onnxruntime`, `DirectML` or an AI or
-   machine-learning library of the Windows App SDK ("Sizes"). Nothing is
-   zipped before this check.
+   machine-learning library of the Windows App SDK ("Sizes"). It also stops
+   when `cabinetos-core.exe`, `cabinetos-indexer.exe`, `cabinetos-cli.exe` or
+   `cab.exe` has no Windows version resource of this version with the
+   copyright line (the `build.rs` of each crate embeds it): SignPath requires
+   that metadata before it signs a program, and Explorer's Details page shows
+   it. Nothing is zipped before this check.
 6. Zips the folder and writes the hash.
 7. Writes the in-app update's two files for the channel (`-Channel`,
    `stable` unless it says `preview`): `latest.json`, with the zip's
@@ -725,9 +729,9 @@ means that SignPath Foundation is the publisher of the OSS project."
   the product name "CabinetOS" and one version in every signed file.
   `CabinetOS.exe` and its libraries have them (`ui/Directory.Build.props`);
   the four Rust programs (`cabinetos-core.exe`, `cabinetos-indexer.exe`,
-  `cabinetos-cli.exe`, `cab.exe`) carry no version resource yet. A session
-  adds one per program (a `build.rs` with a version resource) before the
-  first signing request.
+  `cabinetos-cli.exe`, `cab.exe`) have them too: the `build.rs` of each
+  crate embeds a version resource, and step 5 of the release script checks
+  it.
 - The rest holds already: MIT without dual licensing; no proprietary
   component (the Microsoft libraries in the zip are signed upstream
   binaries, which the terms allow in signed packages); an uninstaller; the
@@ -836,8 +840,7 @@ CabinetOS, one version); a release-signing policy with manual approval and
 a test-signing policy; an API token stored as the repository secret
 `SIGNPATH_API_TOKEN`; the release job in `release.yml` with
 `actions/upload-artifact` and `signpath/github-action-submit-signing-request`;
-the version resources of the four Rust programs; and the updater's
-Authenticode check (ADR 0014). Every release signing needs the creator's
+and the updater's Authenticode check (ADR 0014). Every release signing needs the creator's
 approval in SignPath's web UI: "Every release needs manual approval for
 signing."
 

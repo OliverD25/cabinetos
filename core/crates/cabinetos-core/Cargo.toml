@@ -32,6 +32,9 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "
 tokio-util.workspace = true
 tracing.workspace = true
 
+[build-dependencies]
+winresource.workspace = true
+
 [dev-dependencies]
 cabinetos-indexer.workspace = true
 png.workspace = true

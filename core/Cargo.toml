@@ -62,6 +62,9 @@ wasmtime = { version = "49.0.2", default-features = false }
 wasmtime-wasi = { version = "49.0.2", default-features = false }
 windows = "0.62"
 windows-service = "0.8.1"
+# Build scripts only: embeds the version resource. Without its `toml` feature,
+# which would read the strings from Cargo.toml: the build scripts set them.
+winresource = { version = "0.1.31", default-features = false }
 zip = { version = "8.6", default-features = false }
 
 [profile.release]
