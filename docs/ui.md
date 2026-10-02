@@ -171,8 +171,10 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   ("The terminal"): Ctrl+` in the left pane (its session, with the
   keyboard), Ctrl+` back, Tab and Ctrl+` in the right pane (a session of
   its own; the dock must not hide), the header's badges and mode read
-  through UI Automation, a real click and a folder change in the left pane
-  (no other tab shown, no terminal request sent), Ctrl+` there (the left
+  through UI Automation, a real click from the terminal into the left pane
+  and Home, Enter and Backspace right after it (Enter must open the
+  subfolder and Backspace come back, so the keys acted on the pane; no
+  other tab shown, no terminal request sent), Ctrl+` there (the left
   session comes back), Alt+] and Alt+[, Ctrl+Shift+T and Ctrl+Shift+W,
   Ctrl+Shift+V pasting a command that writes a file (the file must
   exist), a drag over the shell's text and Ctrl+Shift+C (the clipboard
@@ -2634,7 +2636,21 @@ first Ctrl+` has a running pwsh 0.48–0.54 s after the key, of which
   click, a key, a switch of pane and a folder change never change the
   shown tab and never type into a shell, and the window never moves the
   keyboard away from a terminal that has it. A click into a pane does
-  move the keyboard there, as any click does. Only the user's own request
+  move the keyboard there, as any click does, and the keys pressed right
+  after act on the pane; a click into the terminal's text gives the page
+  the keyboard again. Until 2026-10-02 the keys after such a click reached
+  nothing: the pane took XAML's focus and Windows' focus came to WinUI's
+  input window, but WinUI then moved XAML's focus a second time, by the
+  pointer, to the ScrollViewer around the window's content, where no pane
+  and no binding context (`filesView`) is. The live check's section 21
+  saw it with the real mouse; the end-to-end tests, which never click,
+  could not. The window now refuses a pointer's focus move to its own root
+  while one of its controls (not a page) has XAML's focus (`ClickFocus`,
+  tested), and logs "a click's focus move to the window's root refused".
+  Nothing else moves the keyboard: the clicked control keeps it. No Win32
+  focus call is made, since the click already gave Windows' focus to the
+  window's input window ([the report](log/2026-10-02/terminal-click-focus-report.md)).
+  Only the user's own request
   types into a shell: Ctrl+Alt+P and Ctrl+Shift+Enter ("Total Commander's
   keys"), which show the active pane's session first. Until 2026-10-01 the
   shown shell followed the active pane's folder: the window asked the core
@@ -2796,7 +2812,9 @@ How it is built:
   and after it types the paths, so the first hand-over's check ends this
   way when the core answers within 150 ms), "a page's hand-over ended: the keyboard is
   wanted elsewhere" (the page hid, or XAML's focus is no longer on it, with
-  both facts), "a key the page did not get" with
+  both facts), "a click's focus move to the window's root refused" (the
+  control that kept the keyboard, its view, and whether WinUI accepted the
+  refusal), "a key the page did not get" with
   the key and the command it ran, and "keyboard owner" (XAML's focused
   element and the page or window that gets the keys) 300 ms after the
   terminal hides and at the snapshot aid's `focus:` step.

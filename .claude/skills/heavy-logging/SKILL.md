@@ -144,7 +144,8 @@ with the elapsed time.
 |---|---|---|
 | `key pressed`, `text input` | `heavy::keys` | the key's name and modifiers, what had the keyboard, whether it was a held key; a key typed into a text box has no name and no text, ever |
 | `command run`, `command done` | `heavy::commands` | the command, where it came from, its trigger and arguments; then its outcome and elapsed time |
-| `focus changed` | `heavy::focus` | which element had the keyboard before and after, and where Windows sends the keys (window, terminal, a tool page) |
+| `focus changed` | `heavy::focus` | which element had the keyboard before and after, the window's view around it (`within`; `none` is outside every view), and where Windows sends the keys (window, terminal, a tool page) |
+| `focus moving` | `heavy::focus` | a focus move as it starts: from, to, and what started it (`state`: the pointer, a key or the program; `device`). Use it when the keyboard ends somewhere nobody sent it |
 | `request payload`, `reply payload` | `heavy::pipe` (window), `heavy::core` (core) | the message as sent or received, secrets masked, at most 64 KB (`truncated: true` when cut) |
 | `entry done` | `heavy::jobs` | one piece of a job: kind, from, to, bytes, milliseconds, outcome |
 | `host call` | `heavy::plugins` | a plugin's call into the core: the function, the arguments (4 KB), the time |
