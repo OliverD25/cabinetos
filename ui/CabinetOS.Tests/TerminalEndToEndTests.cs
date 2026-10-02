@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using CabinetOS.Core.Ipc;
+using CabinetOS.Core.Terminal;
 using CabinetOS.Tests.Support;
 
 namespace CabinetOS.Tests;
@@ -13,8 +14,10 @@ namespace CabinetOS.Tests;
 /// through DevTools into the terminal's page when the page has the keyboard, so the page's own key path runs.
 /// <c>terminal-state:</c> logs the header's tabs ("*1 cmd [Left] Locked", the shown one marked) and who has the
 /// keyboard. The shells are cmd (always on Windows), a cmd profile that says it is linkable, and Windows PowerShell
-/// (always on Windows too), which gets the prompt hook. Opt-in with <c>CABINETOS_UI_E2E=1</c>, like the other
-/// end-to-end tests.
+/// (always on Windows too), which gets the prompt hook. Unit 5 adds the tabs across a restart: one window saves them, the
+/// next starts with the same file and its first Ctrl+` brings them back; with <c>terminal.restore</c> off nothing comes
+/// back; what cannot come back as it was falls back. A window that closes ends its core, so the second window's core is a
+/// new one, as after any restart. Opt-in with <c>CABINETOS_UI_E2E=1</c>, like the other end-to-end tests.
 /// </summary>
 public class TerminalEndToEndTests
 {
@@ -755,6 +758,231 @@ public class TerminalEndToEndTests
         }
     }
 
+    /// <summary>
+    /// The tabs across a restart (unit 5), whole: a first window opens a Linked PowerShell in the left pane, a locked one in
+    /// the right pane that goes to a folder of its own, and a cmd in the right pane, and shows the right pane's PowerShell.
+    /// The layout is written to <c>terminal.tabs</c>. The window and its core close. A second window starts with the same
+    /// file, and its first Ctrl+` starts the three again as fresh shells, with their profile, folder, pane and mode, in the
+    /// same order, with the same tab in front; the log says "terminal session restored" for each and "terminal restored" once.
+    /// </summary>
+    [Fact]
+    public async Task After_a_restart_the_first_Ctrl_backquote_brings_the_tabs_back_as_they_were()
+    {
+        var (run, root, left) = Prepare("terminal-restore");
+        try
+        {
+            var (right, own) = (Path.Combine(root, "right"), Path.Combine(root, "own"));
+            Directory.CreateDirectory(right);
+            Directory.CreateDirectory(own);
+            var first = run.Start("first", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{right}",
+                "pane:0",
+                $"path:{left}",
+                "wait:500",
+                "cmd:terminal.new {\"profile\":\"ps\",\"pane\":0}",
+                "until:terminals:1",
+                $"until:terminal-folder:{left}",
+                "cmd:terminal.setMode {\"mode\":\"linked\"}",
+                "wait:1200",
+                "cmd:terminal.new {\"profile\":\"ps\",\"pane\":1}",
+                "until:terminals:2",
+                $"until:terminal-folder:{right}",
+                // The right session goes to a folder of its own: the saved folder is where its shell is now, not where it started.
+                $"terminal:Set-Location -LiteralPath '{own}'{{enter}}",
+                $"until:terminal-folder:{own}",
+                "cmd:terminal.new {\"profile\":\"cmd\",\"pane\":1}",
+                "until:terminals:3",
+                "wait:800",
+                // The right pane's own front tab is the PowerShell, the one the tab row shows.
+                "cmd:terminal.previousTab",
+                "wait:1500",
+                "terminal-state:saved",
+                "shot:done"));
+            var firstLogs = await run.FinishAsync("first", first, "done");
+            var before = States(firstLogs)["saved"];
+            var ids = firstLogs.Where(l => Message(l) == "terminal session opened").Select(l => Field(l, "session_id").GetUInt64()).ToList();
+            Assert.True(ids.Count == 3, "three sessions" + Evidence(firstLogs));
+            Assert.Equal($"{ids[0]} ps [Left] Linked | *{ids[1]} ps [Right] Locked | {ids[2]} cmd [Right] Locked", Field(before, "tabs").GetString());
+            Assert.Contains(firstLogs, l => Message(l) == "terminal layout saved");
+
+            // The file has the layout, in the order of the tabs.
+            var saved = ReadSavedTabs(root);
+            Assert.Equal(
+                [("ps", left, "left", "linked"), ("ps", own, "right", "locked"), ("cmd", right, "right", "locked")],
+                saved.Items.Select(i => (i.Profile, i.Folder, TerminalBinding.PaneName(i.Pane), TerminalBinding.ModeName(i.Mode))));
+            Assert.Equal((1, 0, 1), (saved.Front, saved.ShownLeft, saved.ShownRight));
+
+            var second = run.Start("second", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{right}",
+                "pane:0",
+                $"path:{left}",
+                "wait:500",
+                "terminal-state:before",
+                "key:ctrl+backquote",
+                "until:terminal-restored",
+                "until:terminals:3",
+                $"until:terminal-folder:{own}",
+                "wait:1500",
+                "terminal-state:restored",
+                "shot:done"));
+            var logs = await run.FinishAsync("second", second, "done");
+            var state = States(logs);
+
+            Assert.True(Flag(state["before"], "restore_pending") && Field(state["before"], "tabs").GetString() == "", "nothing runs before the dock is shown");
+            Assert.False(Flag(state["restored"], "restore_pending"));
+            var decision = Assert.Single(logs, l => Message(l) == "terminal restore");
+            Assert.Equal(("Restore", 3), (Field(decision, "action").GetString(), Field(decision, "saved").GetInt32()));
+
+            var restored = logs.Where(l => Message(l) == "terminal session restored").ToList();
+            Assert.Equal(
+                [("ps", left, "left", "linked"), ("ps", own, "right", "locked"), ("cmd", right, "right", "locked")],
+                restored.Select(l => (Field(l, "profile").GetString(), Field(l, "folder").GetString(), Field(l, "pane").GetString(), Field(l, "mode").GetString())));
+            Assert.All(restored, l => Assert.Equal(0, Field(l, "fallbacks").GetInt32()));
+            var summary = Assert.Single(logs, l => Message(l) == "terminal restored");
+            Assert.Equal((3, 3, 0), (Field(summary, "count").GetInt32(), Field(summary, "saved").GetInt32(), Field(summary, "skipped").GetInt32()));
+            // The sessions are fresh shells of the new core, started in the saved order; the same tab is in front.
+            var now = restored.Select(l => Field(l, "session_id").GetUInt64()).ToList();
+            Assert.Equal($"{now[0]} ps [Left] Linked | *{now[1]} ps [Right] Locked | {now[2]} cmd [Right] Locked", Field(state["restored"], "tabs").GetString());
+            Assert.True(Field(state["restored"], "folder").GetString() == own, "the shell of the front tab started in the folder it was left in" + Evidence(logs));
+            Assert.Equal(3, logs.Count(l => Message(l) == "terminal session opened"));
+            Assert.True(Flag(state["restored"], "dock") && Flag(state["restored"], "terminal_keyboard"), "the first Ctrl+` showed the dock with the keyboard in the terminal" + Evidence(logs));
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
+    /// <c>terminal.restore</c> false: the saved sessions stay where they are, and the first Ctrl+` starts one session as it
+    /// always did, in the mode <c>terminal.defaultMode</c> says (here the default profile is a linkable one, and the mode linked).
+    /// </summary>
+    [Fact]
+    public async Task With_terminal_restore_off_nothing_comes_back_and_a_new_session_starts_in_the_default_mode()
+    {
+        const string tabs = """, "tabs": { "items": [ { "profile": "cmd", "pane": "left" }, { "profile": "ps", "pane": "right", "mode": "linked" } ], "front": 0, "shown": { "left": 0, "right": 1 } }""";
+        var (run, root, data) = Prepare("terminal-no-restore", defaultProfile: "hooked", terminal: """, "restore": false, "defaultMode": "linked" """ + tabs);
+        try
+        {
+            var process = run.Start("off", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "key:ctrl+backquote",
+                "until:terminal-restored",
+                "until:terminals:1",
+                "wait:1200",
+                "terminal-state:after",
+                "shot:done"));
+            var logs = await run.FinishAsync("off", process, "done");
+            var state = States(logs);
+
+            var decision = Assert.Single(logs, l => Message(l) == "terminal restore");
+            Assert.Equal("Nothing", Field(decision, "action").GetString());
+            Assert.Contains("terminal.restore is false", Field(decision, "reason").GetString());
+            Assert.DoesNotContain(logs, l => Message(l) is "terminal session restored" or "terminal restored");
+            var opened = Assert.Single(logs, l => Message(l) == "terminal session opened");
+            var id = Field(opened, "session_id").GetUInt64();
+            // The one session is the summoned one: the default profile, the left pane's, in the default mode.
+            Assert.Equal($"*{id} hooked [Left] Linked", Field(state["after"], "tabs").GetString());
+            Assert.Equal("linked", Field(opened, "mode").GetString());
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
+    /// What cannot come back as it was falls back, with a log line each: a profile that no longer exists becomes the default
+    /// one, a folder that no longer exists the user's home folder, a link the profile can no longer take a locked session; a
+    /// session whose program is not there is skipped, and the rest still come back.
+    /// </summary>
+    [Fact]
+    public async Task A_profile_a_folder_or_a_link_that_is_gone_falls_back_and_a_session_that_cannot_start_is_skipped()
+    {
+        var gone = Path.Combine(Path.GetTempPath(), "cabinetos-restore-vanished-" + Guid.NewGuid().ToString("N"));
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var (run, root, data) = Prepare("terminal-fallbacks");
+        try
+        {
+            // Five saved sessions: a profile that is gone; a folder that is gone; a cmd saved linked (cmd cannot be); one that is
+            // as it was; one whose program is not there. The file is written over the one Prepare made.
+            var config = $$"""
+                { "version": 1, "ui": { "dualPane": true },
+                  "terminal": { "defaultProfile": "cmd", "profiles": [
+                    { "name": "cmd", "command": "cmd.exe" },
+                    { "name": "hooked", "command": "cmd.exe", "linkable": true },
+                    { "name": "missing", "command": "cabinetos-no-such-program.exe" } ],
+                    "tabs": { "items": [
+                      { "profile": "fish", "folder": {{Json(data)}}, "pane": "left" },
+                      { "profile": "cmd", "folder": {{Json(gone)}}, "pane": "right" },
+                      { "profile": "cmd", "folder": {{Json(data)}}, "pane": "right", "mode": "linked" },
+                      { "profile": "hooked", "folder": {{Json(data)}}, "pane": "left", "mode": "linked" },
+                      { "profile": "missing", "folder": {{Json(data)}}, "pane": "left" } ],
+                      "front": 1, "shown": { "left": 0, "right": 1 } } } }
+                """;
+            File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), config);
+            var process = run.Start("fallbacks", string.Join(';',
+                "size:1200x700",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "key:ctrl+backquote",
+                "until:terminal-restored",
+                "until:terminals:4",
+                "wait:1200",
+                "terminal-state:restored",
+                "shot:done"));
+            var logs = await run.FinishAsync("fallbacks", process, "done");
+            var state = States(logs);
+
+            var restored = logs.Where(l => Message(l) == "terminal session restored").ToList();
+            Assert.Equal(
+                [("cmd", data, "left", "locked"), ("cmd", home, "right", "locked"), ("cmd", data, "right", "locked"), ("hooked", data, "left", "linked")],
+                restored.Select(l => (Field(l, "profile").GetString(), Field(l, "folder").GetString(), Field(l, "pane").GetString(), Field(l, "mode").GetString())));
+            var fallbacks = logs.Where(l => Message(l) == "terminal restore fell back")
+                .Select(l => (Field(l, "index").GetInt32(), Field(l, "what").GetString(), Field(l, "saved").GetString(), Field(l, "used").GetString())).ToList();
+            Assert.Equal(
+                [(0, "profile", "fish", "cmd"), (1, "folder", gone, home), (2, "mode", "linked", "locked")],
+                fallbacks.OrderBy(f => f.Item1));
+            // The one whose program is not there was asked for twice (its folder, then home), and skipped with a warning.
+            var skipped = Assert.Single(logs, l => Message(l) == "terminal session not restored");
+            Assert.Equal(("missing", 4, "spawn_failed"), (Field(skipped, "profile").GetString(), Field(skipped, "index").GetInt32(), Field(skipped, "code").GetString()));
+            var summary = Assert.Single(logs, l => Message(l) == "terminal restored");
+            Assert.Equal((4, 5, 1), (Field(summary, "count").GetInt32(), Field(summary, "saved").GetInt32(), Field(summary, "skipped").GetInt32()));
+            // The tab in front is the saved one (the second), though the fifth session never started.
+            var ids = restored.Select(l => Field(l, "session_id").GetUInt64()).ToList();
+            Assert.Equal($"{ids[0]} cmd [Left] Locked | *{ids[1]} cmd [Right] Locked | {ids[2]} cmd [Right] Locked | {ids[3]} hooked [Left] Linked", Field(state["restored"], "tabs").GetString());
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    // A path as the JSON of a configuration file writes it.
+    private static string Json(string text) => JsonSerializer.Serialize(text);
+
+    // terminal.tabs as the window wrote it into the file.
+    private static TerminalLayout ReadSavedTabs(string root)
+    {
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "cabinetos.json")));
+        return TerminalLayout.FromConfig(config.RootElement);
+    }
+
     // The halves lie under the panes: each half's edges are its pane's, within 2 px.
     private static void AssertHalvesUnderPanes(string state, List<string> logs, params string[] sides)
     {
@@ -800,7 +1028,8 @@ public class TerminalEndToEndTests
         .Where(l => Message(l) is "key sent" or "key sent to a page" or "command executed" or "a key the page did not get" or "keyboard owner"
             or "terminal summoned" or "terminal state" or "terminal tab shown" or "terminal session opened" or "a page has the keyboard"
             or "terminal mode changed" or "terminal folder changed" or "notice shown" or "terminal split" or "terminal half focused"
-            or "terminal tab closed")
+            or "terminal tab closed" or "terminal restore" or "terminal session restored" or "terminal restored" or "terminal restore fell back"
+            or "terminal restore tries again" or "terminal session not restored" or "terminal layout saved")
         .Select(l => l.Length > 360 ? l[..360] : l));
 
     private static Dictionary<string, string> States(List<string> logs) =>
@@ -874,8 +1103,9 @@ public class TerminalEndToEndTests
 
     // A window's setting up: dual panes on a data folder, and three terminal profiles: cmd, which is not linkable, a
     // cmd that says it is (cmd gets no prompt hook, so its mode changes nothing in the shell), and Windows PowerShell,
-    // which gets the prompt hook.
-    private static (Run Run, string Root, string Data) Prepare(string purpose, string defaultProfile = "cmd", bool split = false)
+    // which gets the prompt hook. `terminal` is more members of the terminal section (JSON, each after a comma, such as
+    // `"restore": false`).
+    private static (Run Run, string Root, string Data) Prepare(string purpose, string defaultProfile = "cmd", bool split = false, string terminal = "")
     {
         if (Environment.GetEnvironmentVariable(OptIn) != "1")
         {
@@ -897,7 +1127,7 @@ public class TerminalEndToEndTests
         Directory.CreateDirectory(Path.Combine(root, "config"));
         File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"), $$"""
             { "version": 1, "ui": { "dualPane": true },
-              "terminal": { "defaultProfile": "{{defaultProfile}}", "split": {{(split ? "true" : "false")}}, "profiles": [
+              "terminal": { "defaultProfile": "{{defaultProfile}}", "split": {{(split ? "true" : "false")}}{{terminal}}, "profiles": [
                 { "name": "cmd", "command": "cmd.exe" },
                 { "name": "hooked", "command": "cmd.exe", "linkable": true },
                 { "name": "ps", "command": "powershell.exe", "args": ["-NoLogo", "-NoProfile"] } ] } }

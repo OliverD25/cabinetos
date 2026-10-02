@@ -380,7 +380,10 @@ public sealed class TerminalOpenRequest(ushort cols, ushort rows, string pane) :
     /// <summary>The pane the session belongs to: <c>left</c> or <c>right</c>.</summary>
     public string Pane { get; } = pane;
 
-    /// <summary><c>locked</c> or <c>linked</c>; absent: <c>locked</c>.</summary>
+    /// <summary>
+    /// <c>locked</c> or <c>linked</c>; absent: the core's <c>terminal.defaultMode</c>, which is <c>locked</c> for a
+    /// profile that cannot be linked.
+    /// </summary>
     public string? Mode { get; init; }
 
     /// <summary>A profile of <c>terminal.profiles</c>; absent: <c>terminal.defaultProfile</c>.</summary>

@@ -165,6 +165,20 @@ internal sealed class TerminalController
     public string Describe() =>
         TerminalHeader.Describe(_tabs.Select(t => (t.SessionId, t.Profile, t.Pane, t.Mode, t == Shown)));
 
+    /// <summary>
+    /// The sessions as the window saves them (<see cref="TerminalLayout"/>): the running ones in the order of the tabs, each
+    /// with the folder its shell reported last (else the one it started in), and which tabs are in front. A session whose shell
+    /// ended is not saved: it comes back as nothing.
+    /// </summary>
+    public TerminalLayout Layout()
+    {
+        var running = _tabs.Where(t => t.Running).ToList();
+        int? IndexOf(TerminalTab? tab) => tab is not null && running.IndexOf(tab) is >= 0 and var index ? index : null;
+        return new TerminalLayout(
+            [.. running.Select(t => new SavedSession(t.Profile, t.Folder ?? t.StartFolder, t.Pane, t.Mode))],
+            IndexOf(Shown), IndexOf(ShownIn(0)), IndexOf(ShownIn(1)));
+    }
+
     /// <summary>The pane's most recent running session, or null (<see cref="TerminalTabs.MostRecent"/>).</summary>
     public TerminalTab? MostRecentFor(int pane) =>
         TerminalTabs.MostRecent(_tabs.Select(t => t.Facts), pane) is { } session ? Find(session) : null;
@@ -285,6 +299,112 @@ internal sealed class TerminalController
             default:
                 return null;
         }
+    }
+
+    /// <summary>
+    /// Starts the sessions of a saved layout again as fresh shells (docs/terminal.md, "Restoring the tabs"), in the saved order,
+    /// each as <see cref="TerminalRestore"/> plans it: a gone profile becomes the default one, and when the core refuses one the
+    /// rules say what to try next (a gone folder: the home folder; a profile that cannot be linked now: locked). A session that
+    /// cannot start is skipped with a log line and the rest still come back. Each logs "terminal session restored", and the whole
+    /// ends with one "terminal restored" line with the count. Then each pane's own front tab and the tab in front come to the front.
+    /// </summary>
+    /// <returns>How many sessions came back.</returns>
+    public async Task<int> RestoreAsync(TerminalLayout saved, IReadOnlyCollection<string> profiles, string defaultProfile, string home)
+    {
+        var started = new List<(int Index, int Pane)>();
+        var sessions = new Dictionary<int, ulong>();
+        var steps = TerminalRestore.Plan(saved, profiles, defaultProfile, home);
+        foreach (var planned in steps)
+        {
+            var step = planned;
+            while (true)
+            {
+                var (tab, code, error) = await OpenQuietlyAsync(step.Profile, step.Folder, step.Pane, step.Mode);
+                if (tab is not null)
+                {
+                    foreach (var fallback in step.Fallbacks)
+                    {
+                        Diag.Info(Target, "terminal restore fell back", new LogField("index", step.Index), new LogField("what", fallback.What),
+                            new LogField("saved", fallback.From), new LogField("used", fallback.To));
+                    }
+                    Diag.Info(Target, "terminal session restored", new LogField("session_id", tab.SessionId), new LogField("index", step.Index),
+                        new LogField("profile", tab.Profile), new LogField("folder", step.Folder), new LogField("pane", TerminalBinding.PaneName(tab.Pane)),
+                        new LogField("mode", TerminalBinding.ModeName(tab.Mode)), new LogField("fallbacks", step.Fallbacks.Count));
+                    started.Add((step.Index, step.Pane));
+                    sessions[step.Index] = tab.SessionId;
+                    break;
+                }
+                if (TerminalRestore.Retry(step, code, home) is { } next)
+                {
+                    Diag.Info(Target, "terminal restore tries again", new LogField("index", step.Index), new LogField("profile", step.Profile),
+                        new LogField("folder", step.Folder), new LogField("code", code), new LogField("error", error),
+                        new LogField("changed", next.Fallbacks[^1].What));
+                    step = next;
+                    continue;
+                }
+                Diag.Warn(Target, "terminal session not restored", new LogField("index", step.Index), new LogField("profile", step.Profile),
+                    new LogField("folder", step.Folder), new LogField("pane", TerminalBinding.PaneName(step.Pane)),
+                    new LogField("mode", TerminalBinding.ModeName(step.Mode)), new LogField("code", code), new LogField("error", error));
+                break;
+            }
+        }
+        foreach (var index in TerminalRestore.ShowOrder(saved, started))
+        {
+            Show(sessions[index]);
+        }
+        Diag.Info(Target, "terminal restored", new LogField("count", started.Count), new LogField("saved", saved.Items.Count),
+            new LogField("skipped", saved.Items.Count - started.Count), new LogField("tabs", Describe()));
+        return started.Count;
+    }
+
+    /// <summary>The sessions the core runs that this window does not show (<c>terminal_list</c>); none when the core cannot say.</summary>
+    public async Task<IReadOnlyList<TerminalSessionInfo>> CoreSessionsAsync()
+    {
+        try
+        {
+            return await _core.RequestAsync(new TerminalListRequest()) is TerminalSessionsReply listed
+                ? [.. listed.Sessions.Where(s => s.State.Type == TerminalState.Running && Find(s.SessionId) is null)]
+                : [];
+        }
+        catch (IOException error)
+        {
+            Diag.Debug(Target, "cannot list the core's sessions", new LogField("error", error.Message));
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Shows sessions the core already runs (a core that stayed while its window restarted): a tab for each, attached to its
+    /// byte pipe, which gives only what waited in its buffer, so the screen is painted again by a resize round. A session whose
+    /// pipe another client holds is skipped with a notice.
+    /// </summary>
+    /// <returns>How many tabs it made.</returns>
+    public async Task<int> AdoptAsync(IReadOnlyList<TerminalSessionInfo> sessions)
+    {
+        if (sessions.Count > 0 && !await EnsurePageAsync())
+        {
+            Notice?.Invoke("The terminal could not start: WebView2 did not load its page.", true);
+            return 0;
+        }
+        var adopted = 0;
+        foreach (var listed in sessions)
+        {
+            var opened = new TerminalOpenedReply(listed.SessionId, listed.Pipe, listed.Pid, listed.Mode, listed.Linkable);
+            var pane = TerminalBinding.PaneIndex(listed.Pane);
+            if (await AttachAsync(opened, listed.Profile, pane, listed.Cwd, listed.Cols, listed.Rows) is not { } tab)
+            {
+                continue;
+            }
+            tab.Folder = listed.Folder;
+            adopted++;
+            Diag.Info(Target, "terminal session adopted", new LogField("session_id", tab.SessionId), new LogField("profile", tab.Profile),
+                new LogField("folder", listed.Folder ?? listed.Cwd), new LogField("pane", listed.Pane), new LogField("mode", listed.Mode));
+            if (listed.Cols > 1)
+            {
+                _ = RepaintAsync(tab, listed.Cols, listed.Rows);
+            }
+        }
+        return adopted;
     }
 
     /// <summary>Shows another tab.</summary>
@@ -549,6 +669,39 @@ internal sealed class TerminalController
 
     private static Uri PageUri() =>
         new($"https://{PageHost}/terminal.html?build={Environment.OSVersion.Version.Build}");
+
+    // One session of a restored layout: the same request as OpenAsync, but a refusal comes back as its code and message for
+    // the rules to read (TerminalRestore.Retry) instead of a notice in the status bar.
+    private async Task<(TerminalTab? Tab, string Code, string Message)> OpenQuietlyAsync(string profile, string folder, int pane, TerminalMode mode)
+    {
+        if (!await EnsurePageAsync())
+        {
+            return (null, "page", "WebView2 did not load its page");
+        }
+        var (cols, rows) = EstimateSize(pane);
+        CoreReply reply;
+        try
+        {
+            reply = await _core.RequestAsync(new TerminalOpenRequest(cols, rows, TerminalBinding.PaneName(pane))
+            {
+                Profile = profile,
+                Cwd = folder,
+                Mode = TerminalBinding.ModeName(mode),
+            });
+        }
+        catch (IOException error)
+        {
+            return (null, "io", error.Message);
+        }
+        return reply switch
+        {
+            TerminalOpenedReply opened => await AttachAsync(opened, profile, pane, folder, cols, rows) is { } tab
+                ? (tab, "", "")
+                : (null, "attach", "the shell's byte pipe could not be connected"),
+            ErrorReply error => (null, error.Code, error.Message),
+            _ => (null, "reply", $"the core answered {reply.GetType().Name}"),
+        };
+    }
 
     private async Task<TerminalTab?> AttachAsync(TerminalOpenedReply opened, string profile, int pane, string? folder, ushort cols, ushort rows)
     {

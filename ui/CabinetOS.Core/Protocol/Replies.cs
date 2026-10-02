@@ -343,6 +343,7 @@ public static class ErrorCodes
     public const string NoSuchSession = "no_such_session";
     public const string UnknownProfile = "unknown_profile";
     public const string SpawnFailed = "spawn_failed";
+    public const string NotLinkable = "not_linkable";
     public const string UnknownCommand = "unknown_command";
     public const string NotImplemented = "not_implemented";
     public const string InvalidKeys = "invalid_keys";
