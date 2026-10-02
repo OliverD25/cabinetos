@@ -36,7 +36,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$root = Split-Path $repo -Parent
+. "$PSScriptRoot\paths.ps1"
+# The project's root: the main checkout's parent, also from a git worktree (whose own parent holds no _io).
+$root = Split-Path (Get-MainCheckout) -Parent
 $io = if ($Io) { $Io } else { Join-Path $root '_io\live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $window = Join-Path $repo 'ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64\CabinetOS.exe'

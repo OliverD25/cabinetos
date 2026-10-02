@@ -9,7 +9,7 @@
 #
 # It takes the keyboard and the mouse for about two minutes: run it on an unlocked, awake screen that
 # nobody uses. It stops when another window comes in front. Each check prints "text: True/False";
-# screenshots go to -ShotDir, and a DONE file into -Io (default: _io\live-check next to the repository)
+# screenshots go to -ShotDir, and a DONE file into -Io (default: _io\live-check next to the main checkout)
 # opens in Notepad at the end, the sign that the keyboard is free again. Exit code 0 when every check is
 # True, 2 otherwise, 1 when it could not run.
 #
@@ -109,8 +109,8 @@ function WaitLog([scriptblock]$lines, [int]$before, [int]$seconds) {
   while ((Get-Date) -lt $deadline) { if ((& $lines).Count -gt $before) { return $true }; Start-Sleep -Milliseconds 300 }
   return $false
 }
-$repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
+. "$PSScriptRoot\paths.ps1"
+$io = if ($Io) { $Io } else { Join-Path (Get-IoFolder) 'live-check' }
 function Finish([int]$code) {
   New-Item -ItemType Directory -Force $io | Out-Null
   $done = @(

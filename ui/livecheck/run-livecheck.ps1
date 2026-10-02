@@ -1,7 +1,7 @@
 # Runs the live check and, when it ends, writes a DONE file and opens it in Notepad, so whoever
 # waits at the PC sees on screen that the keyboard and mouse are free again (docs/ui.md, "The live
-# check"). The output goes to _io\live-check next to the repository, never into the repository.
-# -Io names that folder when the repository is a git worktree somewhere else.
+# check"). The output goes to _io\live-check next to the main checkout (also when the repository is a git
+# worktree, paths.ps1), never into the repository. -Io names another folder.
 # It first shows the countdown window (countdown.ps1) for 5 s, so whoever sits at the PC lets go of the
 # keyboard and mouse in time; -NoCountdown skips it for a run that starts while nobody is there.
 # -MinimizeOthers first minimizes every other window, for a machine that runs the check on its own (the
@@ -11,8 +11,8 @@
 # sleeps between pages: the scroll goal is judged by the frames' UI work (the "panel goal" line) and the gap goal answers
 # "not judged on a panel", which DONE.md counts apart too. -Virtual wins over -Panel.
 param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown, [switch]$MinimizeOthers, [switch]$Virtual, [switch]$Panel)
-$repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
+. "$PSScriptRoot\paths.ps1"
+$io = if ($Io) { $Io } else { Join-Path (Get-IoFolder) 'live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $out = "$io\run-$Tag.txt"
 if (-not $NoCountdown) {

@@ -23,8 +23,8 @@ $ErrorActionPreference = 'Stop'
 $Exe = [System.IO.Path]::GetFullPath($Exe)
 $Core = [System.IO.Path]::GetFullPath($Core)
 foreach ($needed in $Exe, $Core) { if (-not (Test-Path -LiteralPath $needed)) { "STOP: $needed is missing: build it first"; exit 1 } }
-$repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
+. "$PSScriptRoot\paths.ps1"
+$io = if ($Io) { $Io } else { Join-Path (Get-IoFolder) 'live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $out = "$io\probe-click-$Tag.txt"
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes

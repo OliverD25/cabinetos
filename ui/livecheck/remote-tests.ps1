@@ -8,7 +8,8 @@
 # there; copies this PC's release core into the clone when the machine has none (it builds no Rust); writes the
 # request (the filter, whether the end-to-end tests run, the build configuration) into the machine's inbox; starts
 # the task, which builds with warnings as errors and runs `dotnet test`; waits for the run's DONE-tests.md; copies
-# the full output into _io\test-runs here. Runs in Windows PowerShell 5.1 and PowerShell 7.
+# the full output into the main checkout's _io\test-runs, also from a git worktree (paths.ps1). Runs in Windows
+# PowerShell 5.1 and PowerShell 7.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-tests.ps1 -EndToEnd
 #   remote-tests.ps1 -Filter "FullyQualifiedName~KeysEndToEnd" -EndToEnd
@@ -29,7 +30,8 @@ $ErrorActionPreference = 'Stop'
 $env:HOME = $env:USERPROFILE
 $sshConfig = Join-Path $env:USERPROFILE '.ssh\config'
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\test-runs' }
+. "$PSScriptRoot\paths.ps1"
+$io = if ($Io) { $Io } else { Join-Path (Get-IoFolder) 'test-runs' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
 $remoteRepoFwd = $RemoteRepo -replace '\\', '/'

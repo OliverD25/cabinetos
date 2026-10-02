@@ -43,11 +43,12 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-# The project's root, the VM's shared folder X:: the first folder above the repository whose _io holds the VM's
-# user file, also for a git worktree under .claude\worktrees (where other scripts have made an _io of their own).
-$root = Split-Path $repo -Parent
+. "$PSScriptRoot\paths.ps1"
+# The project's root, the VM's shared folder X:: the first folder from the main checkout's parent upwards whose _io
+# holds the VM's user file. The main checkout, not the repository: a git worktree lies under .claude\worktrees there.
+$root = Split-Path (Get-MainCheckout) -Parent
 while ($root -and -not (Test-Path -LiteralPath (Join-Path $root '_io\vm\vm-user.txt'))) { $root = Split-Path $root -Parent }
-if (-not $root) { throw "no folder above $repo holds _io\vm\vm-user.txt, the VM user's file in the project's exchange folder (the VM's X:)" }
+if (-not $root) { throw "no folder above the main checkout of $repo holds _io\vm\vm-user.txt, the VM user's file in the project's exchange folder (the VM's X:)" }
 $io = if ($Io) { $Io } else { Join-Path $root '_io\live-check' }
 $vmIo = Join-Path $root '_io\vm'
 $exchange = Join-Path $root '_io\install-check'

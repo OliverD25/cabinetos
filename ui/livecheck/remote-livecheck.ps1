@@ -14,12 +14,13 @@
 # check"). Runs in Windows PowerShell 5.1 and PowerShell 7.
 #
 # -Branch names the branch to send (main when left out): a git worktree sends its own branch, which must be a
-# fast-forward of what the machine's clone has. -Io names the folder for the output, for a worktree elsewhere.
+# fast-forward of what the machine's clone has. The output goes to the main checkout's _io\live-check, also from
+# a git worktree (paths.ps1); -Io names another folder.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-livecheck.ps1
 #   remote-livecheck.ps1 -SkipBuilds      # the machine already has the current builds
 #   remote-livecheck.ps1 -Machine omen -RemoteRepo C:\Dev\cabinetos\cabinetos
-#   remote-livecheck.ps1 -Branch my-branch -Io E:\path\to\_io\live-check
+#   remote-livecheck.ps1 -Branch my-branch      # from a git worktree too; -Io <folder> names another output folder
 param(
   [string]$Machine = 'omen',
   [string]$RemoteRepo = 'C:\Dev\cabinetos\cabinetos',
@@ -33,7 +34,8 @@ $ErrorActionPreference = 'Stop'
 # Git's own ssh reads HOME for ~/.ssh, and a Git Bash points HOME elsewhere; the Windows user's folder is the one.
 $env:HOME = $env:USERPROFILE
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\live-check' }
+. "$PSScriptRoot\paths.ps1"
+$io = if ($Io) { $Io } else { Join-Path (Get-IoFolder) 'live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $window = Join-Path $repo 'ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64'
 $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'

@@ -9,8 +9,8 @@
 # there; with -CopyBuilds, copies this PC's Release window and release core into the clone's build paths (the
 # machine builds nothing); writes the request (the script's path in the repository and its arguments) into the
 # machine's inbox; starts the task, which runs the script with Windows PowerShell and keeps its output; waits for
-# the run's DONE-script.md; copies the output into _io\script-runs here as script-<time>-<machine>.txt and prints
-# its tail. Runs in Windows PowerShell 5.1 and PowerShell 7.
+# the run's DONE-script.md; copies the output into the main checkout's _io\script-runs (also from a git worktree,
+# paths.ps1) as script-<time>-<machine>.txt and prints its tail. Runs in Windows PowerShell 5.1 and PowerShell 7.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-script.ps1 -Script ui\livecheck\scroll-keys.ps1 -Args "-Label laptop -Fine"
 #   remote-script.ps1 -Script ui\livecheck\scroll-keys.ps1 -Args "-Theme commander-compact -Fine" -NoSync
@@ -35,7 +35,8 @@ $ErrorActionPreference = 'Stop'
 $env:HOME = $env:USERPROFILE
 $sshConfig = Join-Path $env:USERPROFILE '.ssh\config'
 $repo = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$io = if ($Io) { $Io } else { Join-Path (Split-Path $repo -Parent) '_io\script-runs' }
+. "$PSScriptRoot\paths.ps1"
+$io = if ($Io) { $Io } else { Join-Path (Get-IoFolder) 'script-runs' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $window = Join-Path $repo 'ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64'
 $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
