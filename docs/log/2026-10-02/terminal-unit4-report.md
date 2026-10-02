@@ -48,8 +48,8 @@ VM were not used.
 | aace507 | window: the count behind a cut list of marks is read, not walked |
 | 9a5a290 | tests: end-to-end, cab refuses a selection the window cut at a thousand rows |
 | a45cc75 | live check: section 21 no longer asks the log whether a click gave the terminal the keyboard |
-| (the live check commit after it) | live check: section 21 types its commands one short line at a time, once more when they are not all answered |
-| (the docs commit) | docs: the GUI context for cab, protocol 18, and the report of unit 4 |
+| 5786b07 | live check: section 21 types its commands one short line at a time, once more when they are not all answered |
+| 502be52 | docs: the GUI context for cab, protocol 18, and the report of unit 4 |
 
 The handout listed the CLI commands and the job from the CLI as two pieces.
 They share the argument definitions and `gui.rs`, and the repository has no
