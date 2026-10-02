@@ -39,6 +39,7 @@ public sealed partial class ContextMenuEditor : UserControl
     private ContextMenuEditModel? _model;
     private Drag? _drag;
     private bool _saving;
+    private bool _adding;
 
     /// <summary>A row being dragged: where it started, where the pointer went down, and whether it moved yet.</summary>
     private sealed class Drag(int from, double startY)
@@ -86,6 +87,9 @@ public sealed partial class ContextMenuEditor : UserControl
 
     /// <summary>Whether the edit mode is on screen.</summary>
     public bool IsOpen => _model is not null;
+
+    /// <summary>Whether nothing of the edit mode is in flight: no "Add Command…" prompt is open for it and no save is out (the snapshot aid's <c>until:menu-edit-idle</c>).</summary>
+    public bool IsIdle => !_adding && !_saving;
 
     /// <summary>The list being edited, while open.</summary>
     public ContextMenuEditModel? Model => _model;
@@ -184,6 +188,9 @@ public sealed partial class ContextMenuEditor : UserControl
         {
             return false;
         }
+        // The rows were built by the last change and are measured at the next frame, which a busy machine draws late: a row with no
+        // height yet makes the drag move nothing.
+        Rows.UpdateLayout();
         var titles = model.Rows.Select(r => r.Title).ToList();
         var (start, end) = (titles.IndexOf(from), titles.IndexOf(onto));
         if (start < 0 || end < 0)
@@ -259,7 +266,16 @@ public sealed partial class ContextMenuEditor : UserControl
         {
             return;
         }
-        var id = await PickCommand(model);
+        string? id;
+        _adding = true;
+        try
+        {
+            id = await PickCommand(model);
+        }
+        finally
+        {
+            _adding = false;
+        }
         if (!ReferenceEquals(_model, model))
         {
             return;

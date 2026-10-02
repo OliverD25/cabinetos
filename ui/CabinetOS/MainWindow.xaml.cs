@@ -487,6 +487,9 @@ public sealed partial class MainWindow : Window
                     if (PromptView.IsOpen)
                     {
                         PromptView.Type(step.Argument);
+                        // The prompt's rows follow the text when XAML raises the box's text change, on its next frame, which a busy
+                        // machine draws late; an accept before then takes the highlighted row of the old text.
+                        await WaitForConditionAsync(() => !PromptView.IsOpen || PromptView.ListFollows(step.Argument));
                     }
                     else
                     {
@@ -870,6 +873,10 @@ public sealed partial class MainWindow : Window
                 // Its place has been measured and logged too ("context menu placed"): a few dispatcher turns after "menu".
                 "menu-placed" => _contextMenu.IsSettled && _menuPlaced,
                 "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,
+                // The menu's edit mode is on screen, has nothing in flight (no "Add Command…" prompt open for it, no save out), or is gone.
+                "menu-edit" => MenuEditorView.IsOpen,
+                "menu-edit-idle" => MenuEditorView.IsIdle,
+                "menu-edit-closed" => !MenuEditorView.IsOpen,
                 // What ui.tabs holds in the file is what the window shows: the save after the last change is done.
                 "tabs-saved" => !_tabsSaveTimer.IsRunning && _tabsWritten == CurrentTabs().ToJson().GetRawText(),
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
