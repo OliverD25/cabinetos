@@ -407,7 +407,7 @@ public class ShellEndToEndTests
 
             // The registry's titles, as the palette shows them: a rename there shows here too.
             State(logs, "menu", state => Assert.Equal(
-                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Browse Plugins and Themes|Open Keyboard Shortcuts|Check for Updates",
+                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Browse Extensions|Open Keyboard Shortcuts|Check for Updates",
                 state.GetProperty("menu").GetString()));
             State(logs, "menu-closed", state => Assert.Equal("", state.GetProperty("menu").GetString()));
             State(logs, "workspace", state => Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString()));

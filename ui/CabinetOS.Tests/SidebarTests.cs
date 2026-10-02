@@ -21,7 +21,7 @@ public class RailTests
 
         Assert.Equal(["explorer", "search", "marketplace", "terminal", "notes", "bookmarks"], rail.Order);
         Assert.True(rail.IsDefaultOrder);
-        Assert.Equal(["Explorer", "Search", "Marketplace", "Terminal", "Quick Notes", "Bookmarks"], rail.Buttons.Select(b => b.Title));
+        Assert.Equal(["Explorer", "Search", "Extensions", "Terminal", "Quick Notes", "Bookmarks"], rail.Buttons.Select(b => b.Title));
         Assert.Equal([RailKind.Explorer, RailKind.Search, RailKind.Marketplace, RailKind.Terminal, RailKind.Tool, RailKind.Tool], rail.Buttons.Select(b => b.Kind));
         Assert.Equal(["\uE8B7", "\uE721", "\uE719", "\uE756", "", ""], rail.Buttons.Select(b => b.Glyph));
         Assert.Equal("QN", rail.Find("notes")!.Initials);

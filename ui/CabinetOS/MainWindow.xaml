@@ -154,10 +154,10 @@
                             Width="36"
                             Height="36"
                             AllowFocusOnInteraction="False"
-                            AutomationProperties.Name="Marketplace"
+                            AutomationProperties.Name="Extensions"
                             IsTabStop="False"
                             Style="{StaticResource CbSubtleButtonStyle}"
-                            ToolTipService.ToolTip="Marketplace (Ctrl+Shift+X)">
+                            ToolTipService.ToolTip="Extensions (Ctrl+Shift+X)">
                             <FontIcon
                                 x:Name="MarketplaceIcon"
                                 FontSize="14"

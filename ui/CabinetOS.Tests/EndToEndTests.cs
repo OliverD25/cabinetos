@@ -61,8 +61,8 @@ public class EndToEndTests
             var client = core.Client;
 
             var welcome = await client.HelloAsync();
-            // Version 17: the terminal's prompt hook (terminal unit 2), after 16's sessions bound to a pane.
-            Assert.Equal(19u, welcome.ProtocolVersion);
+            // Version 20: the marketplace's two catalogues (Phase 23), after 19's `dual` in the window's state.
+            Assert.Equal(20u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);
@@ -358,8 +358,9 @@ public class EndToEndTests
             var index = Path.Combine(root, "index");
             BuildLocalIndex(index);
             Directory.CreateDirectory(Path.Combine(root, "config"));
+            // The themes catalogue is the same folder: marketplace.themes is the public address until it is set.
             File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"),
-                new JsonObject { ["marketplace"] = new JsonObject { ["index"] = index } }.ToJsonString());
+                new JsonObject { ["marketplace"] = new JsonObject { ["index"] = index, ["themes"] = index } }.ToJsonString());
 
             await using var core = await StartCoreAsync(coreExe, root);
             await core.Client.HelloAsync();
@@ -377,15 +378,10 @@ public class EndToEndTests
 
                 Assert.True(await market.RefreshAsync(), market.Notice?.Detail);
                 Assert.StartsWith(index, market.Source, StringComparison.OrdinalIgnoreCase);
-                // build-index.ps1 packs every shipped theme of sdk/themes (five since 9e4ce98).
-                Assert.Equal(ShippedThemeFiles(Path.Combine(Repo.Root, "sdk", "themes")).Count, market.CountOf(MarketTabs.Themes));
-                // The shipped themes are in the themes folder already, but not from the marketplace:
-                // shown as there, never replaced (trust rule 7), and not on the Installed tab.
-                Assert.All(market.All.Where(i => i.Kind == ExtensionKinds.Theme), theme =>
-                {
-                    Assert.True(market.IsPresent(theme), theme.Id);
-                    Assert.Null(theme.InstalledVersion);
-                });
+                // build-index.ps1 writes the themes to themes.json: the Extensions page has none of them.
+                Assert.DoesNotContain(market.All, item => item.Kind == ExtensionKinds.Theme);
+                Assert.Contains(market.All, item => item.Kind == ExtensionKinds.Plugin);
+                Assert.EndsWith("index.json", market.Source);
                 Assert.Equal(0, market.CountOf(MarketTabs.Installed));
                 var hello = market.Find("hello")!;
                 Assert.Equal(MarketAction.Install, market.ActionFor(hello));
@@ -602,10 +598,15 @@ public class EndToEndTests
             .Order(StringComparer.Ordinal),
     ];
 
-    private static void BuildLocalIndex(string folder)
+    private static void BuildLocalIndex(string folder, bool collection = false)
     {
         var script = Path.Combine(Repo.Root, "sdk", "marketplace", "build-index.ps1");
-        var start = new ProcessStartInfo("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-OutDir", folder])
+        var arguments = new List<string> { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-OutDir", folder };
+        if (collection)
+        {
+            arguments.Add("-Collection");
+        }
+        var start = new ProcessStartInfo("powershell.exe", arguments)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -619,7 +620,7 @@ public class EndToEndTests
         var errors = process.StandardError.ReadToEndAsync();
         var output = process.StandardOutput.ReadToEnd();
         Assert.True(process.WaitForExit(120_000), "build-index.ps1 did not finish within 2 minutes");
-        Assert.True(process.ExitCode == 0 && File.Exists(Path.Combine(folder, "index.json")), output + errors.Result);
+        Assert.True(process.ExitCode == 0 && File.Exists(Path.Combine(folder, "index.json")) && File.Exists(Path.Combine(folder, "themes.json")), output + errors.Result);
     }
 
     // The window's event pump, for the marketplace: every core event goes to the model on the UI thread.

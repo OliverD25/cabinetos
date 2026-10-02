@@ -207,7 +207,7 @@ public sealed partial class ActivityRail : UserControl
     {
         RailModel.Explorer => "Explorer (Ctrl+Shift+E)",
         RailModel.Search => "Search (Ctrl+Shift+F)",
-        RailModel.Marketplace => "Marketplace (Ctrl+Shift+X)",
+        RailModel.Marketplace => "Extensions (Ctrl+Shift+X)",
         RailModel.Terminal => "Terminal (Ctrl+`)",
         _ => rail.Title,
     };

@@ -71,6 +71,7 @@ namespace CabinetOS.Core.Protocol;
 [JsonSerializable(typeof(ListToolsRequest))]
 [JsonSerializable(typeof(MarketplaceRefreshRequest))]
 [JsonSerializable(typeof(MarketplaceSearchRequest))]
+[JsonSerializable(typeof(PreviewThemeRequest))]
 [JsonSerializable(typeof(InstallExtensionRequest))]
 [JsonSerializable(typeof(UninstallExtensionRequest))]
 [JsonSerializable(typeof(SaveLogBundleRequest))]

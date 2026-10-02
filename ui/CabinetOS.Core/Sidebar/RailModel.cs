@@ -244,7 +244,7 @@ public sealed class RailModel
         _buttons.Clear();
         _buttons[Explorer] = new RailButton(Explorer, RailKind.Explorer, "Explorer", "\uE8B7", "EX");
         _buttons[Search] = new RailButton(Search, RailKind.Search, "Search", "\uE721", "SE");
-        _buttons[Marketplace] = new RailButton(Marketplace, RailKind.Marketplace, "Marketplace", "\uE719", "MK");
+        _buttons[Marketplace] = new RailButton(Marketplace, RailKind.Marketplace, "Extensions", "\uE719", "MK");
         _buttons[Terminal] = new RailButton(Terminal, RailKind.Terminal, "Terminal", "\uE756", ">_");
         _defaults = [.. BuiltIn];
         foreach (var tool in tools)
