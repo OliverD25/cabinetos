@@ -659,6 +659,15 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // Waits until the condition holds, at most 20 s: a window that never gets there fails the check that follows, which says what it saw.
+    private static async Task WaitForConditionAsync(Func<bool> met, int limitMilliseconds = 20_000)
+    {
+        for (var waited = 0; waited < limitMilliseconds && !met(); waited += 20)
+        {
+            await Task.Delay(20);
+        }
+    }
+
     // The snapshot aid's scroll:<pages> step: PageDown in the active pane, 30 times a second as a
     // held key repeats. A press that falls due during a slow frame is made at the next frame,
     // as queued key messages are. scroll:<pages>/<n> presses once every n frames instead: with the
@@ -861,6 +870,8 @@ public sealed partial class MainWindow : Window
                 // Its place has been measured and logged too ("context menu placed"): a few dispatcher turns after "menu".
                 "menu-placed" => _contextMenu.IsSettled && _menuPlaced,
                 "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,
+                // What ui.tabs holds in the file is what the window shows: the save after the last change is done.
+                "tabs-saved" => !_tabsSaveTimer.IsRunning && _tabsWritten == CurrentTabs().ToJson().GetRawText(),
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,
                 // The core has answered every question about the active folder's workspace (the workspace row's branch, Quick Open's root).

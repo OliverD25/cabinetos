@@ -104,7 +104,7 @@ public class ColumnViewEndToEndTests
                 "shell:back",
                 "cmd:view.toggleColumns",
                 "column-view:again",
-                "wait:1500",
+                "until:tabs-saved",
                 "tabs:saved",
                 "shot:done"));
             await WaitForAsync(() => File.Exists(Shot("first", "done")), "the first window's last snapshot", TimeSpan.FromSeconds(90));
