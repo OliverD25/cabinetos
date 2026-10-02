@@ -1640,6 +1640,14 @@ Articles: 2, 3, 10, 12.
 on Sonnet; unit 4's design note goes to a coder on Opus after them; unit 6
 waits for the creator's word on the public repository.
 
+**Status (2026-10-02, evening): unit 6: prepared, waiting for the flip.**
+The creator gave the word for the public repository. The scan of the whole
+history found no secret; the one decision before the flip is the creator's
+e-mail address in every commit's metadata, and the rest is private but
+harmless ([report](log/2026-10-02/public-repository-preparation.md)). The
+README is rewritten for a first visitor, and the publish commands, from the
+flip to winget, are in [release.md](release.md), "Publish".
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
