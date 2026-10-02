@@ -393,52 +393,237 @@ setup file change with it (sign the new setup file with the same
 cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && pwsh.exe -NoProfile -File build/release.ps1 -PackageOnly
 ```
 
-## Publish (not done yet)
+## Publish
 
-Written down, not run. Each step is outward-facing, so it is the
-creator's.
+The steps that put 0.1.0 in front of people, in order. Each one is
+outward-facing, so they are the creator's: no session runs them. Prepared on
+2026-10-02 in Phase 22, unit 6
+([report](log/2026-10-02/public-repository-preparation.md)); none of them
+has run yet. Paste each block whole into the WSL terminal. A block stops at
+its first failing command.
 
-1. **Choose the version.** Set `version` in `core/Cargo.toml`, run
-   `pwsh.exe -NoProfile -File build/release.ps1 -SyncVersion`, rename
-   `## [Unreleased]` in `CHANGELOG.md` to `## [0.1.0] - <date>`, and commit.
-   Done for 0.1.0 on 2026-09-30: both versions were 0.1.0 already, and the
-   section is `## [0.1.0] - 2026-09-30`, with an empty `## [Unreleased]`
-   above it for what comes next.
-2. **Build and sign** as above.
-3. **Make the repository public.** The release asset's address must work
-   for strangers and for winget.
-4. **Tag and publish the release** with the zip, the setup file and their
-   hashes. The notes are the version's section of `CHANGELOG.md`, which
-   the build wrote as `dist/update/stable/notes-0.1.0.md`:
+Signing is not a step for 0.1.0: no certificate exists, and code signing
+(the SignPath card on the desk) comes after the repository is public. If a
+certificate exists by then, sign between steps (b) and (c) as "Sign" above
+says.
 
-   ```bash
-   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git tag v0.1.0 && git push origin v0.1.0 && gh release create v0.1.0 dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 dist/CabinetOS-0.1.0-win-x64-setup.exe dist/CabinetOS-0.1.0-win-x64-setup.exe.sha256 --verify-tag --title "CabinetOS 0.1.0" --notes-file dist/update/stable/notes-0.1.0.md
-   ```
+### Before the flip: the e-mail address in every commit
 
-   For a preview (a version such as `0.2.0-preview.1`, built with
-   `-Channel preview`), add `--prerelease` and use `dist/update/preview/`.
-5. **Tell the installed copies.** Copy `latest.json` and the notes into a
-   checkout of the marketplace repository under `update/<channel>/`, and
-   push; GitHub Pages serves them within a minute or two, and every
-   per-user install finds the version at its next daily check. Publish the
-   GitHub Release first: `latest.json` points at its zip.
+The scan of the whole history found no secret ([report](log/2026-10-02/public-repository-preparation.md)).
+One private thing becomes public with the history: every commit (759 on
+`main` on 2026-10-02) carries the author's e-mail address, `muzexp@gmail.com`.
+Anyone who clones the repository, or opens a commit's `.patch` page on
+GitHub, sees it.
+Only a rewrite of the whole history removes it, and that would change every
+commit id the plan and the build log cite. The report recommends keeping the
+history and giving new commits GitHub's private address:
 
-   ```bash
-   cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager && test -d cabinetos-marketplace/.git && mkdir -p cabinetos-marketplace/update/stable && cp cabinetos/dist/update/stable/latest.json cabinetos/dist/update/stable/notes-0.1.0.md cabinetos-marketplace/update/stable/ && cd cabinetos-marketplace && git add update/stable && git commit -m "update: CabinetOS 0.1.0 on the stable channel" && git push
-   ```
+```bash
+cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git config user.email 197441449+OliverD25@users.noreply.github.com && git config user.email
+```
 
-   The first command stops the block when the marketplace checkout is not
-   there (`gh repo clone OliverD25/cabinetos-marketplace` makes it). A
-   wrong `latest.json` is taken back by pushing the previous one: installs
-   that already downloaded the bad version keep it until they roll back.
-6. **Submit to winget.** The manifests in `dist\winget\0.1.0\` carry the
-   zip's address and hash. They go to the community repository
-   `microsoft/winget-pkgs` as a pull request, under
-   `manifests/o/OliverD25/CabinetOS/0.1.0/`, for example with
-   `wingetcreate submit` (`winget install --id Microsoft.WingetCreate --exact`).
-   Blocked today: the manifest depends on `Microsoft.WindowsAppRuntime.2`
-   2.5.1 or newer, and winget carries 2.3.1, so the repository's checks
-   would fail until Microsoft publishes 2.5 there.
+What it changes: the repository's own git settings (`.git/config`, which the
+Windows git, the WSL git and every worktree on this PC share), so new
+commits made here carry the private address. Old commits keep theirs. The
+laptop's and the homelab's clones have settings of their own. Check: the
+block prints the new address. Undo: `git config --unset user.email` in the
+same folder.
+
+### (a) Make the repository public
+
+```bash
+gh repo edit OliverD25/cabinetos --visibility public --accept-visibility-change-consequences && gh repo view OliverD25/cabinetos --json visibility --jq .visibility && curl -s -o /dev/null -w 'without login: HTTP %{http_code}\n' https://github.com/OliverD25/cabinetos
+```
+
+What it changes: anyone can read the repository: the code, the whole
+history of `main` (the only branch on GitHub), and the Actions runs with
+their logs. Anyone can fork it, open issues and propose pull requests.
+GitHub Actions on GitHub's own runners costs no minutes for a public
+repository, so CI can run again for free. Nothing starts by itself: `ci.yml`
+runs only on a pull request into `main` that touches code, or by hand;
+`release.yml` only by hand; no workflow runs on a push or on a schedule.
+Undo: the same command with `--visibility private`; copies made in between
+stay with whoever made them.
+
+Check: the block prints `PUBLIC` and `without login: HTTP 200`. In a private
+browser window, https://github.com/OliverD25/cabinetos shows the README and
+"MIT license".
+
+Optional, any time after (a): the line under the repository's name, the
+topics GitHub's search uses, and a "Report a vulnerability" button in the
+Security tab, so security problems reach you privately instead of in a
+public issue:
+
+```bash
+gh repo edit OliverD25/cabinetos --description "Modern System Commander: a fast dual-pane file manager for Windows 11, with a Rust core, a WinUI 3 window, WebAssembly plugins and a command palette." --add-topic file-manager,dual-pane,orthodox-file-manager,total-commander,windows,windows-11,winui3,fluent-design,rust,csharp,dotnet,webassembly,wasmtime,plugins,command-palette,keyboard-driven && gh api -X PUT repos/OliverD25/cabinetos/private-vulnerability-reporting && gh repo view OliverD25/cabinetos --json description,repositoryTopics
+```
+
+Undo: `--remove-topic <topic>`, and
+`gh api -X DELETE repos/OliverD25/cabinetos/private-vulnerability-reporting`.
+
+### (b) After Phase 22's other units: the release notes and the build
+
+Wait until units 1 to 5 of Phase 22 are on `main` (the plan's Phase 22
+status says so). 0.1.0 was never published, so everything under
+`## [Unreleased]` in `CHANGELOG.md` belongs to it. The first block moves
+those lines into the `## [0.1.0]` section, under its `### Added`,
+`### Changed`, `### Removed` and `### Fixed` headings, dates the section
+today, and leaves an empty `## [Unreleased]` above it. It changes only
+`CHANGELOG.md` on this PC, and stops without a change when the working tree
+is not clean (it lists what is not) or Unreleased is empty.
+
+```bash
+cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git switch main && git pull --ff-only && { test -z "$(git status --porcelain)" || { git status --short; false; }; } && RELEASE_DATE=$(date +%F) python3 - <<'EOF' && git --no-pager diff --stat && git --no-pager diff CHANGELOG.md | head -60
+import os, pathlib, re
+p = pathlib.Path("CHANGELOG.md"); t = p.read_text(encoding="utf-8")
+m = re.search(r"^## \[Unreleased\][^\n]*\n(.*?)^## \[0\.1\.0\][^\n]*\n(.*?)(?=^## \[|^\[Unreleased\]: |\Z)", t, re.M | re.S)
+if not m: raise SystemExit("CHANGELOG.md: no ## [Unreleased] above ## [0.1.0]; nothing changed")
+def parts(body):
+    intro, *rest = re.split(r"^### ", body, flags=re.M); secs = {}
+    for r in rest:
+        head, _, text = r.partition("\n"); secs.setdefault(head.strip(), []).append(text.strip())
+    return intro.strip(), secs
+ui, us = parts(m.group(1)); vi, vs = parts(m.group(2))
+if not us: raise SystemExit("CHANGELOG.md: ## [Unreleased] is empty; nothing changed")
+order = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"]
+heads = [h for h in order if h in vs or h in us] + [h for h in [*vs, *us] if h not in order]
+out = ["## [Unreleased]", "", "## [0.1.0] - " + os.environ["RELEASE_DATE"], ""]
+for x in (vi, ui):
+    if x: out += [x, ""]
+for h in dict.fromkeys(heads):
+    out += ["### " + h, ""] + [y for x in vs.get(h, []) + us.get(h, []) if x for y in (x, "")]
+p.write_text(t[:m.start()] + "\n".join(out) + "\n" + t[m.end():], encoding="utf-8", newline="\n")
+print("CHANGELOG.md: Unreleased moved into ## [0.1.0] - " + os.environ["RELEASE_DATE"])
+EOF
+```
+
+Read the diff. The `### Changed` and `### Fixed` items describe changes
+made since 2026-09-30, before anyone had the program; delete the ones that
+mean nothing to a first user, if you like, before the next block. Undo
+before the commit: `git restore CHANGELOG.md`.
+
+The second block commits and pushes the CHANGELOG and builds the release
+from that commit:
+
+```bash
+cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && git add CHANGELOG.md && git commit -m "CHANGELOG: everything since 2026-09-30 is part of 0.1.0, the first version that is published" && git push origin main && pwsh.exe -NoProfile -File build/release.ps1 && grep -E '"(version|commit|uncommittedChanges)"' dist/CabinetOS-0.1.0-win-x64/release.json && git rev-parse HEAD && ls -l dist/*.zip dist/*.exe dist/*.sha256 && head -8 dist/update/stable/notes-0.1.0.md
+```
+
+What it changes: one commit on GitHub's `main`, and the release files in
+`dist\` (ignored by git). Check: `release.json` names the commit the block
+printed last and `"uncommittedChanges": false`; the build printed no warning
+that the notes are the Unreleased section; `dist\` holds the zip, the setup
+file and the symbols zip, each with its `.sha256` (Phase 22's goals: the zip
+under 60 MB, the setup file under 35 MB); the notes start with "The first
+version." Undo: `git revert HEAD && git push origin main` for the commit;
+`dist\` is only local.
+
+### (c) Tag and publish the GitHub Release
+
+```bash
+cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && ls dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 dist/CabinetOS-0.1.0-win-x64-setup.exe dist/CabinetOS-0.1.0-win-x64-setup.exe.sha256 dist/CabinetOS-0.1.0-win-x64-symbols.zip dist/CabinetOS-0.1.0-win-x64-symbols.zip.sha256 && grep -q "$(git rev-parse HEAD)" dist/CabinetOS-0.1.0-win-x64/release.json && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" && git tag -a v0.1.0 -m "CabinetOS 0.1.0" && git push origin v0.1.0 && gh release create v0.1.0 dist/CabinetOS-0.1.0-win-x64.zip dist/CabinetOS-0.1.0-win-x64.zip.sha256 dist/CabinetOS-0.1.0-win-x64-setup.exe dist/CabinetOS-0.1.0-win-x64-setup.exe.sha256 dist/CabinetOS-0.1.0-win-x64-symbols.zip dist/CabinetOS-0.1.0-win-x64-symbols.zip.sha256 --repo OliverD25/cabinetos --verify-tag --title "CabinetOS 0.1.0" --notes-file dist/update/stable/notes-0.1.0.md
+```
+
+The first three commands stop the block when a file is missing, when the
+build is not of the current commit, or when that commit is not on GitHub's
+`main`. The symbols zip's name is the one Phase 22's unit 2 plans; when
+`ls` says it is missing, compare with `ls dist/` and fix the two names.
+
+What it changes: the tag `v0.1.0` on GitHub, and the release page
+https://github.com/OliverD25/cabinetos/releases/tag/v0.1.0 with the notes
+and the six files, marked Latest: the first thing anyone can download.
+Undo: `gh release delete v0.1.0 --repo OliverD25/cabinetos --cleanup-tag --yes && git tag -d v0.1.0`.
+Downloads made in between stay out there, so a fixed build gets a new
+version (0.1.1), never the same name with other bytes: installs check the
+hash.
+
+Check that the address `latest.json` will point at serves the zip that was
+built (the two hashes must be the same):
+
+```bash
+cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && gh release view v0.1.0 --repo OliverD25/cabinetos --json assets --jq '.assets[].name' && curl -sL https://github.com/OliverD25/cabinetos/releases/download/v0.1.0/CabinetOS-0.1.0-win-x64.zip | sha256sum && cat dist/CabinetOS-0.1.0-win-x64.zip.sha256
+```
+
+### (d) Tell the installed copies: the marketplace site
+
+The update file lives on the marketplace site: the public repository
+`OliverD25/cabinetos-marketplace`, which GitHub Pages serves from the root
+of its `main` branch at https://oliverd25.github.io/cabinetos-marketplace/
+(checked 2026-10-02; `update/stable/latest.json` answered 404 there). It is
+not cloned on this PC (checked 2026-10-02 under `E:\codespace`). The block
+clones it, when it is missing, into a product folder of its own,
+`E:\codespace\_claude_code\_rde\cabinetos-marketplace\cabinetos-marketplace`
+(the standard layout, with `_io` beside it). Run (c) first: `latest.json`
+points at the release's zip.
+
+```bash
+mkdir -p /mnt/e/codespace/_claude_code/_rde/cabinetos-marketplace/_io && cd /mnt/e/codespace/_claude_code/_rde/cabinetos-marketplace && { test -d cabinetos-marketplace/.git || gh repo clone OliverD25/cabinetos-marketplace; } && cd cabinetos-marketplace && git switch main && git pull --ff-only && mkdir -p update/stable && cp /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos/dist/update/stable/latest.json /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos/dist/update/stable/notes-0.1.0.md update/stable/ && git add update/stable && git commit -m "update: CabinetOS 0.1.0 on the stable channel, so installed copies find it" && git push
+```
+
+What it changes: one commit on the marketplace repository. GitHub Pages
+publishes it within a minute or two, and from then on every per-user
+install finds 0.1.0 at its next daily check. Undo: `git revert HEAD && git push`
+in that folder. A wrong `latest.json` is taken back by pushing the previous
+one; installs that already downloaded the bad version keep it until they
+roll back.
+
+Check (it waits up to 5 minutes for Pages): the version, the zip's hash,
+which must match the `.sha256` printed after it, the zip's address, and
+`notes: HTTP 200`:
+
+```bash
+for i in $(seq 30); do curl -sf -o /dev/null https://oliverd25.github.io/cabinetos-marketplace/update/stable/latest.json && break; sleep 10; done; curl -s https://oliverd25.github.io/cabinetos-marketplace/update/stable/latest.json | python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["version"], d["zip"]["sha256"], d["zip"]["url"])' && cat /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos/dist/CabinetOS-0.1.0-win-x64.zip.sha256 && curl -s -o /dev/null -w 'notes: HTTP %{http_code}\n' https://oliverd25.github.io/cabinetos-marketplace/update/stable/notes-0.1.0.md
+```
+
+Then the updater's own view, on a machine that does not run this PC's
+development build (the VM, or any other Windows 11 PC): download the setup
+file from the release page, install it, start CabinetOS, open its terminal
+with Ctrl+`, and run:
+
+```powershell
+# PowerShell - in CabinetOS's own terminal, where cab reaches the window's core
+cab update check
+```
+
+It prints "CabinetOS 0.1.0, stable channel: up to date" and a "last check"
+line with the current time: the updater read the published `latest.json`.
+"the last step failed: ..." says what went wrong instead.
+
+### (e) Optional, last: winget
+
+The manifests in `dist\winget\0.1.0\` carry the zip's address and hash.
+They go to the community repository `microsoft/winget-pkgs` as a pull
+request under `manifests/o/OliverD25/CabinetOS/0.1.0/`. First check that
+winget has the Windows App Runtime 2.5: the manifest depends on 2.5.1 or
+newer, and winget-pkgs' checks fail without it (only 2.3.1 on 2026-09-28).
+
+```bash
+winget.exe show --id Microsoft.WindowsAppRuntime.2 --versions | head -8
+```
+
+Only when a 2.5 version is listed:
+
+```bash
+cd /mnt/e/codespace/_claude_code/_rde/_cabinetos_windows_system_manager/cabinetos && winget.exe install --id Microsoft.WingetCreate --exact && wingetcreate.exe submit "$(wslpath -w dist/winget/0.1.0)"
+```
+
+What it changes: a pull request in your name at `microsoft/winget-pkgs`
+(`wingetcreate` asks you to sign in to GitHub the first time). After
+Microsoft's checks and a review, `winget install OliverD25.CabinetOS` works.
+Check: the pull request's page, which `wingetcreate` prints. Undo: close the
+pull request before it is merged.
+
+### A later version
+
+The same steps with the new number, and three differences. Set `version` in
+`core/Cargo.toml`, run `pwsh.exe -NoProfile -File build/release.ps1 -SyncVersion`
+and commit `ui/Directory.Build.props` with it. In (b), rename
+`## [Unreleased]` to `## [<version>] - <date>` by hand instead of the
+merge, put a new empty `## [Unreleased]` above it, and add the version's
+link line at the end of the file (`[Unreleased]` then compares with the new
+tag). A preview (a version such as `0.2.0-preview.1`) builds with
+`-Channel preview`, gets `--prerelease` in (c), and uses
+`dist/update/preview/` and `update/preview/` in (d).
 
 ### The winget package
 
