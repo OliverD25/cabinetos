@@ -2551,18 +2551,30 @@ if ($tab -and -not $tab.Current.BoundingRectangle.IsEmpty) {
   [Live]::Click([int]($r.Left + 200 * $scale), [int]($r.Bottom + 90 * $scale))
 }
 Start-Sleep -Milliseconds 800
-$cabCommand ="cabinetos-cli pane | Set-Content -LiteralPath '$cabOut\pane.txt'; " +
-  "cabinetos-cli pane --right | Set-Content -LiteralPath '$cabOut\right.txt'; " +
-  "cabinetos-cli pane --json | Set-Content -LiteralPath '$cabOut\json.txt'; " +
-  "cabinetos-cli selection | Set-Content -LiteralPath '$cabOut\selection.txt'; " +
-  "cabinetos-cli copy --selection --dest opposite_pane | Set-Content -LiteralPath '$cabOut\copy.txt'; " +
-  "`$LASTEXITCODE | Set-Content -LiteralPath '$cabOut\code.txt'"
-# Ctrl+C drops a half-typed line, if an earlier step left one.
-[Live]::Press($VK.Ctrl, $VK.C); Start-Sleep -Milliseconds 500
-[Live]::Type($cabCommand); [Live]::Press($VK.Enter)
-$cabDeadline = (Get-Date).AddSeconds(20)
-while (-not (Test-Path -LiteralPath "$cabOut\code.txt") -and (Get-Date) -lt $cabDeadline) { Start-Sleep -Milliseconds 200 }
+# Short lines, one at a time: a character lost from one very long line (the third run of 2026-10-02) left the whole line
+# unfinished at a ">>" prompt and none of the answers came. The answers are complete when the copy's text and the exit code
+# are there; when they are not, Ctrl+C drops what is left and the lines are typed once more (a copy that skips what the
+# first try copied still completes).
+$cabLines = @(
+  "`$o = '$cabOut'",
+  'cabinetos-cli pane | Set-Content "$o\pane.txt"',
+  'cabinetos-cli pane --right | Set-Content "$o\right.txt"',
+  'cabinetos-cli pane --json | Set-Content "$o\json.txt"',
+  'cabinetos-cli selection | Set-Content "$o\selection.txt"',
+  'cabinetos-cli copy --selection --dest opposite_pane | Set-Content "$o\copy.txt"',
+  '$LASTEXITCODE | Set-Content "$o\code.txt"'
+)
+$cabTries = 0
+while (-not ((Test-Path -LiteralPath "$cabOut\copy.txt") -and (Test-Path -LiteralPath "$cabOut\code.txt")) -and $cabTries -lt 2) {
+  $cabTries++
+  # Ctrl+C drops a half-typed line, if an earlier step (or the first try) left one.
+  [Live]::Press($VK.Ctrl, $VK.C); Start-Sleep -Milliseconds 500
+  foreach ($cabLine in $cabLines) { [Live]::Type($cabLine); [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 300 }
+  $cabDeadline = (Get-Date).AddSeconds(15)
+  while (-not ((Test-Path -LiteralPath "$cabOut\copy.txt") -and (Test-Path -LiteralPath "$cabOut\code.txt")) -and (Get-Date) -lt $cabDeadline) { Start-Sleep -Milliseconds 200 }
+}
 Start-Sleep -Milliseconds 300
+"21: the lines were typed into the shell $cabTries $(if ($cabTries -eq 1) { 'time' } else { 'times' }) (information, not a check)"
 function CabAnswer([string]$file) { if (Test-Path -LiteralPath "$cabOut\$file") { @(Get-Content -LiteralPath "$cabOut\$file" | Where-Object { $_ -and $_.Trim() }) } else { @() } }
 $cabJson = if (Test-Path -LiteralPath "$cabOut\json.txt") { Get-Content -LiteralPath "$cabOut\json.txt" -Raw | ConvertFrom-Json } else { $null }
 "21: cab pane printed the left pane's folder ('$((CabAnswer 'pane.txt') -join '|')'), cab pane --right the right pane's ('$((CabAnswer 'right.txt') -join '|')'): $(@(CabAnswer 'pane.txt') -eq $cabLeft -and @(CabAnswer 'right.txt') -eq $cabRight)"
