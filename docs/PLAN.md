@@ -1290,6 +1290,26 @@ the folder glyph (v2 is newer than the call of 2026-09-30), and the old
 metrics of the pill, the command center and the breadcrumb row are still
 accepted and size nothing.
 
+**Status (2026-10-02, 08:45): merged into main on 2026-10-02** after a
+merge of `shell-v2` (never rebased, since it is pushed) into the main of
+15ac6e1, on the branch `shell-v2-merge` by a coder on Opus (68b2b05, the
+fix-ups 3248e57 and 02a25ea, and the report:
+[log/2026-10-02/shell-v2-merge-report.md](log/2026-10-02/shell-v2-merge-report.md)).
+Two text conflicts, `docs/ui.md`'s snapshot steps and the Quick Open
+end-to-end test, kept both sides (main's waits, the branch's v2 steps);
+main's text that still named the pill names the sidebar's workspace row.
+The checks on this PC: the five core checks green (843 passed, 6 ignored)
+and the release build; the window with warnings as errors, Debug and
+Release, 0 warnings; 1304 window tests, 1251 passed and 53 end-to-end
+tests skipped in the fast run, and 1304 of 1304 with the end-to-end tests
+(3 min 31 s); both script parsers clean; the live check on a fresh
+Release build, 245 True, 0 False with the scroll goal met
+(`run-2026-10-02-0817-shell-v2-merge.txt`, the Agent extension not built
+there), and again with the extension, 253 True, 0 False
+(`run-2026-10-02-0828-shell-v2-merge-agent.txt`: main's 239 checks and
+section 16's 14 new clicks; its scroll goal missed under 88 % machine CPU
+from another build). Sections 16 and 21 all True in both runs.
+
 ### Phase 21 — Integrated Terminal Subsystem Sprint (the creator's card of 2026-10-01 20:34; started the same evening)
 
 The creator's technical design brief for the terminal: shells in their own
