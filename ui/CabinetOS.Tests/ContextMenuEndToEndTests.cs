@@ -82,6 +82,12 @@ public class ContextMenuEndToEndTests
                 "shell:edit-now",
                 "until:shell-menu",
                 "until:command:program.record",
+                // The core builds Windows' menu through the shell's handlers, which the first call loads: it gave up after its 3 s
+                // ("Windows took longer than 3 s") beside two test runs, once in 5 runs. A user asks again; so does the test, once,
+                // and the second answer is quick since the handlers are loaded.
+                "shellmenu:alpha.txt",
+                "until:windows-menu",
+                "cmd:overlay.close",
                 "menu:Alphabet.md",
                 "until:menu",
                 "shell:md",
@@ -161,10 +167,11 @@ public class ContextMenuEndToEndTests
                 && Field(l, "code").GetString() == "unknown_program");
             // The ID no command has is logged once, though the file menu opened twice.
             Assert.Single(logs, l => Message(l) == "context menu entry left out: no command has this ID" && Field(l, "command").GetString() == "hex.view");
-            var windowsShown = Assert.Single(logs, l => Message(l) == "windows menu shown");
+            // The last of Windows' menus: the first of two is the one asked for to load the shell's handlers.
+            var windowsShown = logs.Last(l => Message(l) == "windows menu shown");
             // Windows' menu hangs from the focused row as well: its corner is where it was asked for. WinUI moves a menu this
             // long up only when the screen is too low for it, so the top may also lie above the point, never below it.
-            var windowsPlaced = Assert.Single(logs, l => Message(l) == "windows menu placed");
+            var windowsPlaced = logs.Last(l => Message(l) == "windows menu placed");
             var (askedX, askedY) = (Field(windowsShown, "x").GetDouble(), Field(windowsShown, "y").GetDouble());
             Assert.InRange(Field(windowsPlaced, "left").GetDouble(), askedX - 2, askedX + 2);
             Assert.InRange(Field(windowsPlaced, "top").GetDouble(), double.MinValue, askedY + 2);
