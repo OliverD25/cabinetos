@@ -6,7 +6,7 @@
       "name": "hero",
       "kind": "image",
       "steps": [
-        { "do": "down", "count": 3 },
+        { "do": "down", "count": 5 },
         { "do": "tab" },
         { "do": "down", "count": 1 },
         { "do": "tab" }
@@ -25,9 +25,10 @@
       "seconds": 6,
       "steps": [
         { "do": "palette" },
-        { "do": "type", "text": "copy", "delayMs": 350 },
-        { "do": "wait", "ms": 1200 },
-        { "do": "esc" }
+        { "do": "type", "text": "copy", "delayMs": 400 },
+        { "do": "wait", "ms": 1000 },
+        { "do": "down", "count": 2 },
+        { "do": "wait", "ms": 800 }
       ]
     },
     {

@@ -22,7 +22,7 @@
 #     "items": [ { "name": "hero", "kind": "image", "steps": [ { "do": "down", "count": 3 } ] },
 #                { "name": "command-palette", "kind": "video", "seconds": 6, "steps": [ ... ] } ] }
 # An image item saves <name>.png (the window's own frame). A video item saves <name>.raw.mp4 (15 frames a second, no
-# sound) and "seconds" (5 to 12) is its length; the steps start about 1.5 s after the recording starts. Names are
+# sound) and "seconds" (5 to 12) is its length; the steps start about 0.7 s after the recording starts. Names are
 # lower case letters, digits and "-". Optional on an item: "settleMs" (the wait before an image, default 1500).
 # The steps, in the order they run:
 #   go (path)              Ctrl+L, the path, Enter, in the pane that has the keys
@@ -155,11 +155,17 @@ if (Get-Process LogonUI -ErrorAction SilentlyContinue) { "STOP: the screen is lo
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
 # ----- The demo folder: only what is missing is made, nothing that exists is changed -----
+$script:newFolders = New-Object System.Collections.Generic.List[string]
+function New-DemoDirectory([string]$folder) {
+  if (Test-Path -LiteralPath $folder) { return }
+  New-DemoDirectory (Split-Path $folder -Parent)
+  New-Item -ItemType Directory -Force $folder | Out-Null
+  $script:newFolders.Add($folder)
+}
 function New-DemoFile([string]$relative, [int]$bytes, [int]$daysOld) {
   $path = Join-Path $Demo $relative
   if (Test-Path -LiteralPath $path) { return }
-  $folder = Split-Path $path -Parent
-  if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Force $folder | Out-Null }
+  New-DemoDirectory (Split-Path $path -Parent)
   if ([System.IO.Path]::GetExtension($path) -in '.txt', '.md', '.csv', '.html', '.css', '.py') {
     $line = "Sample text for the CabinetOS release screenshots.`r`n"
     $text = New-Object System.Text.StringBuilder
@@ -179,17 +185,26 @@ function Invoke-Git([string]$folder, [string[]]$arguments) {
   } finally { $ErrorActionPreference = $previous }
 }
 function New-DemoFolder {
-  $fresh = -not (Test-Path -LiteralPath $Demo)
+  # name|bytes|days old. Enough rows to fill a good part of the two panes in the shots.
   $spec = @(
-    'welcome.txt|612|20', 'Holiday plan.docx|48210|9', 'Budget 2026.xlsx|23552|4',
+    'welcome.txt|612|20', 'Holiday plan.docx|48210|9', 'Budget 2026.xlsx|23552|4', 'Family recipes.pdf|318464|26',
+    'Meeting agenda.docx|31744|2', 'Photo list.csv|9216|12', 'Receipts 2026.zip|884736|17', 'Slides.pptx|1048576|6',
+    'Travel notes.md|3584|10', 'shopping-list.txt|420|1', 'Reading list.md|1740|23',
     'Documents\notes.txt|3120|2', 'Documents\budget.csv|14336|6', 'Documents\readme.md|2048|15', 'Documents\report.pdf|184320|7',
     'Documents\meeting-notes.md|5120|1', 'Documents\invoice-march.pdf|96256|31', 'Documents\todo.txt|940|0',
     'Downloads\archive.zip|1258291|3', 'Downloads\setup-guide.pdf|410624|11', 'Downloads\installer-notes.txt|1830|11',
     'Music\track-01.mp3|712704|40', 'Music\track-02.mp3|688128|40', 'Music\track-03.mp3|745472|37', 'Music\track-04.mp3|702464|33', 'Music\track-05.mp3|731136|33',
     'Photos\IMG_0001.jpg|524288|30', 'Photos\IMG_0002.jpg|610304|30', 'Photos\IMG_0003.jpg|398336|29', 'Photos\IMG_0004.jpg|873472|29',
     'Photos\IMG_0005.jpg|451584|21', 'Photos\IMG_0006.jpg|702464|21', 'Photos\IMG_0007.jpg|337920|8', 'Photos\IMG_0008.jpg|916480|5',
+    'Archive\taxes-2025.pdf|254976|190', 'Archive\old-photos.zip|1572864|240',
+    'Backups\backup-2026-08.zip|2097152|45', 'Backups\backup-2026-09.zip|2150400|14',
+    'Travel\itinerary.pdf|143360|13', 'Travel\tickets.pdf|88064|13', 'Travel\packing-list.txt|860|12',
+    'Work\Q3 summary.xlsx|40960|5', 'Work\project plan.docx|57344|9', 'Work\team notes.md|4096|3',
     'Projects\website\index.html|4096|3', 'Projects\website\style.css|2560|3', 'Projects\notes-app\main.py|1536|8',
-    'Projects\notes-app\requirements.txt|64|8', 'Projects\todo.md|730|2', 'Projects\ideas.txt|1980|14', 'Projects\timeline.csv|6144|5'
+    'Projects\notes-app\requirements.txt|64|8', 'Projects\blog\first-post.md|3300|19', 'Projects\blog\config.txt|512|19',
+    'Projects\recipes-app\app.py|2750|27', 'Projects\game-jam\ideas.md|1900|34',
+    'Projects\todo.md|730|2', 'Projects\ideas.txt|1980|14', 'Projects\timeline.csv|6144|5', 'Projects\release-checklist.md|2300|1',
+    'Projects\roadmap.csv|5120|22'
   )
   foreach ($entry in $spec) { $part = $entry.Split('|'); New-DemoFile $part[0] ([int]$part[1]) ([int]$part[2]) }
   # A tiny git repository with three commits, so the terminal shot has a log to show.
@@ -199,7 +214,7 @@ function New-DemoFolder {
     if (-not $git) { "WARN: git is not installed here: the sample repository is not made, and the terminal shot has no log" }
     else {
       $script:gitExe = $git.Source
-      New-Item -ItemType Directory -Force $repo | Out-Null
+      New-DemoDirectory $repo
       Invoke-Git $repo @('init', '-q')
       Invoke-Git $repo @('symbolic-ref', 'HEAD', 'refs/heads/main')
       $commits = @(@('README.md', 1024, 'Add the README'), @('todo.md', 512, 'Add a to-do list'), @('notes.txt', 2048, 'Add the first notes'))
@@ -210,14 +225,12 @@ function New-DemoFolder {
       }
     }
   }
-  if ($fresh) {
-    # Folders made by this run only: older dates, so the listings do not all say "Today".
-    foreach ($folder in @(@('Documents', 3), @('Downloads', 1), @('Music', 12), @('Photos', 5), @('Projects\website', 3), @('Projects\notes-app', 8), @('Projects\cabinetos-sample', 0), @('Projects', 0), @('', 0))) {
-      $path = (Join-Path $Demo $folder[0]).TrimEnd('\')
-      if (Test-Path -LiteralPath $path) { (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddDays(-$folder[1]).AddHours(-2) }
-    }
+  # The folders made by this run get older dates, so the listings do not all say "Today". The deepest go first.
+  foreach ($folder in ($script:newFolders | Sort-Object -Property Length -Descending)) {
+    $days = ($folder.ToCharArray() | ForEach-Object { [int]$_ } | Measure-Object -Sum).Sum % 28
+    (Get-Item -LiteralPath $folder).LastWriteTime = (Get-Date).AddDays(-$days).AddHours(-2)
   }
-  "demo folder ready: $Demo"
+  "demo folder ready: $Demo ($($script:newFolders.Count) folder(s) made in this run)"
 }
 New-DemoFolder
 
@@ -434,12 +447,12 @@ function Invoke-MediaItem($item) {
       $log = Join-Path $OutDir "$name.ffmpeg.log"
       if (Test-Path -LiteralPath $raw) { Remove-Item -LiteralPath $raw -Force }
       $ff = Start-Recording $raw $seconds $log
-      Start-Sleep -Milliseconds 1500
+      Start-Sleep -Milliseconds 700
       if ($ff.HasExited) { throw "ffmpeg ended at once (exit $($ff.ExitCode)): $(Get-Content -LiteralPath $log -Tail 3 -ErrorAction SilentlyContinue)" }
       $start = Get-Date
       foreach ($s in @(Opt $item 'steps' @())) { Invoke-Action $s }
       $took = ((Get-Date) - $start).TotalSeconds
-      if ($took -gt ($seconds - 1.5)) { "WARN: the steps took $([math]::Round($took, 1)) s, longer than the $($seconds - 1.5) s the recording leaves for them: the end is cut" }
+      if ($took -gt ($seconds - 0.7)) { "WARN: the steps took $([math]::Round($took, 1)) s, longer than the $($seconds - 0.7) s the recording leaves for them: the end is cut" }
       if (-not $ff.WaitForExit(($seconds + 20) * 1000)) { $ff.Kill(); throw "ffmpeg did not stop within $($seconds + 20) s" }
       if (-not (Test-Path -LiteralPath $raw) -or (Get-Item -LiteralPath $raw).Length -lt 10000) {
         throw "the recording is missing or empty: $(Get-Content -LiteralPath $log -Tail 3 -ErrorAction SilentlyContinue)"
