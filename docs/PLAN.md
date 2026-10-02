@@ -458,6 +458,56 @@ one server cannot reach another address.
 
 Articles: 1, 8, 10, 11.
 
+#### 11g — The extension workbench (medium to large; proposed 2026-10-02)
+
+Covers the desk card "Product & Experience Brief: The Agent-Driven Extension
+Workbench": a user with an AI assistant builds an extension from a sentence,
+tests it live in the running app, and shares it through the marketplace.
+Decided with the creator on 2026-10-02 in three question rounds: for any
+user, not only developers; all three kinds (Tool Extensions, themes, Core
+Plugins); Claude Code in the integrated terminal is the assistant, and any
+agent with a terminal works the same way; Core Plugins for non-developers
+run as JavaScript in a script-host plugin inside the sandbox, and Rust stays
+for developers; the marketplace ships only what it built from source, and
+the index carries the commit, the hash and the publisher; publishing is a
+pull request on the marketplace repository that the creator approves; the
+publisher is the GitHub login that opened it, and `verified` is the
+creator's badge (this closes Phase 22's unit 4); capabilities are granted
+in the review dialog once per extension, and again only when the manifest
+asks for more; Revert is a git snapshot per clean mount in the extension's
+own folder; the first version is CLI only, and an opt-in Workbench page
+comes later from the marketplace (Article 10).
+
+Produces, in two milestones. Milestone 1, Tool Extensions and themes:
+`cab ext new <kind> <name>` writes the folder (a git repository with a
+`CLAUDE.md` generated from the SDK docs, so it never drifts from the real
+API); `cab ext mount <folder>` loads it into the running app with a
+"development" badge in the Installed list and reloads it on every file
+change, at most once a second; `cab ext revert` returns to the last
+snapshot; `cab ext pack` validates (manifest, declared capabilities, one
+start in the sandbox) and opens the pull request page in the browser, where
+the user clicks (an agent cannot); typed one-line errors from every
+command; and in the marketplace repository one workflow that checks a pull
+request and builds the index with the publisher's login. Milestone 2, Core
+Plugins for everyone: the script-host plugin (JavaScript in the sandbox,
+with the same capabilities, limits and review dialog), the scaffold for a
+script plugin, and the build server for Rust plugins (the marketplace builds
+them from source on the pull request).
+
+Done when: the creator makes one page and one theme from one sentence each,
+without typing code, and both reach the marketplace through a pull request
+(milestone 1); a script plugin with a command and a file hook does the
+same, and a Rust plugin's binary in the index is the one the marketplace
+built (milestone 2); a crashing or looping mounted extension leaves the core
+and the window as they are, and after three crashes in a row it stays off
+until the user reloads it.
+
+Needs: 11d first (the plugin interface 0.2 with per-request grants and
+plugin jobs), and a workflow in the public marketplace repository (free
+minutes on a public repository).
+
+Articles: 8, 9, 10, 11, 12.
+
 Not in Phase 11: the Android app (feature 20; Articles 1 and 3), and Total
 Commander's own plugin DLLs, which are native code that cannot be sandboxed
 (Article 8).
