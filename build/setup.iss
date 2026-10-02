@@ -9,11 +9,17 @@
 ; folder, with what the updater added later (previous\, previous-old\, a later version's new files); the user's
 ; settings, logs and update state under %APPDATA%\CabinetOS and %LOCALAPPDATA%\CabinetOS stay.
 ;
-; The prerequisites are checked as install.ps1 checks them; a missing one stops the setup with the winget command
-; that installs it. The setup downloads nothing.
+; The prerequisites are checked as install.ps1 checks them, before the wizard. A missing one is installed (ADR 0019):
+; the setup downloads Microsoft's installer into its temporary folder, runs it silently, deletes it and checks again,
+; in this order: the Windows App Runtime (for the user), the WebView2 Runtime (for the user when the setup is not
+; elevated), the .NET runtime (for the whole PC, so Windows asks for administrator rights; a silent setup that is not
+; elevated does not ask, and stops). The log names each URL, the file's size and SHA-256, and the installer's exit
+; code. One still missing after that stops the setup with exit code 1 and the winget command that installs it.
 ;
 ; Silent: CabinetOS-<version>-win-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=<file>
-; /SKIPPREREQUISITECHECK installs even when a prerequisite looks missing.
+; /SKIPPREREQUISITECHECK installs even when a prerequisite looks missing, and downloads nothing.
+; /PREREQTEST=1 only downloads the three installers, logs their sizes and hashes, and exits with code 1, having
+; installed nothing, CabinetOS included: the test of the download code on a PC that must stay as it is.
 
 #if VER < EncodeVer(6, 7, 0)
   #error Inno Setup 6.7 or newer is needed (the wizard's dynamic light and dark style): winget install --id JRSoftware.InnoSetup --exact --scope user
@@ -44,6 +50,12 @@
 #endif
 #ifndef DotnetWinget
   #define DotnetWinget "Microsoft.DotNet.Runtime.10"
+#endif
+#ifndef DotnetInstaller
+  #define DotnetInstaller "https://aka.ms/dotnet/10.0/dotnet-runtime-win-x64.exe"
+#endif
+#ifndef WebView2Installer
+  #define WebView2Installer "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 #endif
 #ifndef RuntimeName
   #define RuntimeName "Microsoft.WindowsAppRuntime.2"
@@ -117,6 +129,9 @@ Type: dirifempty; Name: "{app}"
 const
   WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
   NewLine = #13#10;
+  RuntimeFile = 'windowsappruntimeinstall-x64.exe';
+  WebView2File = 'MicrosoftEdgeWebview2Setup.exe';
+  DotnetFile = 'dotnet-runtime-setup.exe';
 
 // The Index-th number (from 0) of a version such as 10.0.12 or 10.0.0-rc.2; -1 when there is none.
 function VersionNumber(Text: String; Index: Integer): Integer;
@@ -240,44 +255,211 @@ begin
       Result := True;
 end;
 
-// Before the wizard: every prerequisite, and a message with the commands that install the missing ones.
+function PrerequisiteTest(): Boolean;
+var
+  Value: String;
+begin
+  Value := ExpandConstant('{param:PREREQTEST|}');
+  Result := (Value <> '') and (Value <> '0');
+end;
+
+// Downloads Url into the setup's temporary folder as Name and logs its size and SHA-256. No hash is pinned: the
+// links are Microsoft's "latest" links, whose bytes change with each runtime release (ADR 0019); the log line is the
+// trace. The file's path, or '' with Error set.
+function DownloadInstaller(const Url, Name: String; var Error: String): String;
+var
+  Size: Int64;
+begin
+  Result := '';
+  Log('downloading ' + Url);
+  try
+    Size := DownloadTemporaryFile(Url, Name, '', nil);
+    Result := ExpandConstant('{tmp}\') + Name;
+    Log('downloaded ' + Name + ': ' + IntToStr(Size) + ' bytes, SHA-256 ' + GetSHA256OfFile(Result));
+  except
+    Error := 'the download of ' + Url + ' failed: ' + GetExceptionMessage;
+    Log(Error);
+  end;
+end;
+
+// Downloads one prerequisite's installer, runs it silently, waits, and deletes it. AsAdmin runs it through Windows'
+// administrator prompt (UAC) unless the setup is elevated already. What happened, for the message when the
+// prerequisite is still missing afterwards.
+function InstallPrerequisite(const Url, Name, Params: String; AsAdmin: Boolean): String;
+var
+  Path, Error: String;
+  Code: Integer;
+  Started: Boolean;
+begin
+  Error := '';
+  Path := DownloadInstaller(Url, Name, Error);
+  if Path = '' then
+  begin
+    Result := Error;
+    Exit;
+  end;
+  Log('running ' + Name + ' ' + Params);
+  if AsAdmin and not IsAdmin() then
+    Started := ShellExec('runas', Path, Params, '', SW_SHOWNORMAL, ewWaitUntilTerminated, Code)
+  else
+    Started := Exec(Path, Params, '', SW_HIDE, ewWaitUntilTerminated, Code);
+  if Started then
+    Result := 'Microsoft''s installer ended with exit code ' + IntToStr(Code)
+  else
+    Result := Name + ' did not start: ' + SysErrorMessage(Code) + ' (code ' + IntToStr(Code) + ')';
+  Log(Result);
+  DeleteFile(Path);
+end;
+
+// /PREREQTEST: the three downloads and their log lines, and nothing installed.
+procedure TestDownloads();
+var
+  Path, Error: String;
+  Done: Integer;
+begin
+  Log('/PREREQTEST: the three installers are downloaded and deleted; nothing is installed');
+  Done := 0;
+  Path := DownloadInstaller('{#RuntimeInstaller}', RuntimeFile, Error);
+  if Path <> '' then
+  begin
+    Done := Done + 1;
+    DeleteFile(Path);
+  end;
+  Path := DownloadInstaller('{#WebView2Installer}', WebView2File, Error);
+  if Path <> '' then
+  begin
+    Done := Done + 1;
+    DeleteFile(Path);
+  end;
+  Path := DownloadInstaller('{#DotnetInstaller}', DotnetFile, Error);
+  if Path <> '' then
+  begin
+    Done := Done + 1;
+    DeleteFile(Path);
+  end;
+  Log('/PREREQTEST: ' + IntToStr(Done) + ' of 3 downloads succeeded; the setup exits without installing anything');
+end;
+
+function RuntimeText(): String;
+begin
+  Result := '- Windows App Runtime {#RuntimeVersion} or newer (x64)' + NewLine
+    + '    winget install --id {#RuntimeName} --exact' + NewLine
+    + '    If winget offers a version older than {#RuntimeVersion}, use Microsoft''s installer instead:' + NewLine
+    + '    {#RuntimeInstaller}' + NewLine;
+end;
+
+function WebView2Text(): String;
+begin
+  Result := '- Microsoft Edge WebView2 Runtime' + NewLine
+    + '    winget install --id Microsoft.EdgeWebView2Runtime --exact' + NewLine;
+end;
+
+function DotnetText(): String;
+begin
+  Result := '- .NET ' + IntToStr(VersionNumber('{#DotnetVersion}', 0)) + ' runtime ({#DotnetName} {#DotnetVersion} or a newer '
+    + IntToStr(VersionNumber('{#DotnetVersion}', 0)) + '.x)' + NewLine
+    + '    winget install --id {#DotnetWinget} --exact' + NewLine;
+end;
+
+// Before the wizard: every prerequisite; the missing ones installed from Microsoft's installers, and a message with
+// the commands that install those still missing after that.
 function InitializeSetup(): Boolean;
 var
-  Missing: String;
+  Missing, Wanted, Tried: String;
   Runtime: Integer;
+  NeedRuntime, NeedWebView2, NeedDotnet, Declined: Boolean;
 begin
   Result := True;
+  if PrerequisiteTest() then
+  begin
+    TestDownloads();
+    Result := False;
+    Exit;
+  end;
   if SkipPrerequisiteCheck() then
   begin
     Log('/SKIPPREREQUISITECHECK: the prerequisites are not checked');
     Exit;
   end;
-  Missing := '';
-  if not DotnetFound() then
-    Missing := Missing + '- .NET ' + IntToStr(VersionNumber('{#DotnetVersion}', 0)) + ' runtime ({#DotnetName} {#DotnetVersion} or a newer '
-      + IntToStr(VersionNumber('{#DotnetVersion}', 0)) + '.x)' + NewLine
-      + '    winget install --id {#DotnetWinget} --exact' + NewLine;
   Runtime := AppRuntimeState();
-  if Runtime = 1 then
-    Missing := Missing + '- Windows App Runtime {#RuntimeVersion} or newer (x64)' + NewLine
-      + '    winget install --id {#RuntimeName} --exact' + NewLine
-      + '    If winget offers a version older than {#RuntimeVersion}, use Microsoft''s installer instead:' + NewLine
-      + '    {#RuntimeInstaller}' + NewLine
-  else if Runtime = 2 then
+  if Runtime = 2 then
     Log('could not check the Windows App Runtime (Windows PowerShell did not answer); CabinetOS needs {#RuntimeVersion} or newer');
-  if not WebView2Found() then
-    Missing := Missing + '- Microsoft Edge WebView2 Runtime' + NewLine
-      + '    winget install --id Microsoft.EdgeWebView2Runtime --exact' + NewLine;
+  NeedRuntime := Runtime = 1;
+  NeedWebView2 := not WebView2Found();
+  NeedDotnet := not DotnetFound();
+  if not (NeedRuntime or NeedWebView2 or NeedDotnet) then
+  begin
+    Log('the prerequisites are there');
+    Exit;
+  end;
+
+  // A double-click would otherwise show nothing for the minutes the downloads take (the Windows App Runtime's
+  // installer alone is about 120 MB), and then an administrator prompt with no context.
+  Declined := False;
+  if not WizardSilent() then
+  begin
+    Wanted := '';
+    if NeedRuntime then
+      Wanted := Wanted + '- Windows App Runtime {#RuntimeVersion} (x64)' + NewLine;
+    if NeedWebView2 then
+      Wanted := Wanted + '- Microsoft Edge WebView2 Runtime' + NewLine;
+    if NeedDotnet then
+      Wanted := Wanted + '- .NET ' + IntToStr(VersionNumber('{#DotnetVersion}', 0)) + ' runtime' + NewLine;
+    Wanted := 'CabinetOS needs these parts of Windows from Microsoft, and this PC does not have them yet:' + NewLine + NewLine
+      + Wanted + NewLine + 'The setup now downloads them from Microsoft and installs them. This can take a few minutes.';
+    if NeedDotnet and not IsAdmin() then
+      Wanted := Wanted + ' The .NET runtime installs for every user of this PC, so Windows asks for administrator rights.';
+    Wanted := Wanted + NewLine + NewLine + 'Cancel stops the setup and lists the commands that install them by hand.';
+    Declined := SuppressibleMsgBox(Wanted, mbConfirmation, MB_OKCANCEL, IDOK) <> IDOK;
+    if Declined then
+      Log('the downloads were declined');
+  end;
+
+  Missing := '';
+  if NeedRuntime then
+  begin
+    if Declined then
+      Tried := 'not tried: the download was declined'
+    else
+      Tried := InstallPrerequisite('{#RuntimeInstaller}', RuntimeFile, '--quiet', False);
+    if AppRuntimeState() = 1 then
+      Missing := Missing + RuntimeText() + '    The setup''s try: ' + Tried + NewLine;
+  end;
+  if NeedWebView2 then
+  begin
+    if Declined then
+      Tried := 'not tried: the download was declined'
+    else
+      Tried := InstallPrerequisite('{#WebView2Installer}', WebView2File, '/silent /install', False);
+    if not WebView2Found() then
+      Missing := Missing + WebView2Text() + '    The setup''s try: ' + Tried + NewLine;
+  end;
+  if NeedDotnet then
+  begin
+    if Declined then
+      Tried := 'not tried: the download was declined'
+    else if WizardSilent() and not IsAdmin() then
+    begin
+      // A silent setup has nobody to answer the administrator prompt (winget runs it so): it does not ask.
+      Tried := 'not tried: the .NET runtime installs for the whole PC and needs administrator rights, which a silent setup does not ask for';
+      Log(Tried);
+    end
+    else
+      Tried := InstallPrerequisite('{#DotnetInstaller}', DotnetFile, '/install /quiet /norestart', True);
+    if not DotnetFound() then
+      Missing := Missing + DotnetText() + '    The setup''s try: ' + Tried + NewLine;
+  end;
+
   if Missing <> '' then
   begin
     Missing := 'CabinetOS needs these first:' + NewLine + NewLine + Missing + NewLine
-      + 'Install them, then run this setup again. The setup downloads nothing itself.';
+      + 'Install them, then run this setup again.';
     Log(Missing);
     SuppressibleMsgBox(Missing, mbCriticalError, MB_OK, IDOK);
     Result := False;
   end
   else
-    Log('the prerequisites are there');
+    Log('the prerequisites are there now');
 end;
 
 // An install by install.ps1 in the same folder has its own record, uninstaller and Apps entry: the two must not mix.
