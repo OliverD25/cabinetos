@@ -32,6 +32,9 @@ public sealed partial class MainWindow
     private string _workspaceFor = "";
     private int _workspaceAsked;
 
+    // The questions to the core that are out (workspace_info): the snapshot aid's until:workspace waits for none.
+    private int _workspaceAsking;
+
     private void SetUpShell()
     {
         _crumbViews = [LeftCrumbs, RightCrumbs];
@@ -252,6 +255,7 @@ public sealed partial class MainWindow
         WorkspaceInfoReply? workspace = null;
         if (folder.Length > 0 && !_unavailable.Contains("workspace_info"))
         {
+            _workspaceAsking++;
             try
             {
                 switch (await _session.RequestAsync(new WorkspaceInfoRequest(folder)))
@@ -271,6 +275,10 @@ public sealed partial class MainWindow
             catch (IOException error)
             {
                 Diag.Debug(ShellTarget, "cannot ask for the workspace", new LogField("error", error.Message));
+            }
+            finally
+            {
+                _workspaceAsking--;
             }
         }
         if (asked != _workspaceAsked)

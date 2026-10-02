@@ -859,6 +859,8 @@ public sealed partial class MainWindow : Window
                 "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,
+                // The core has answered every question about the active folder's workspace (the pill's branch, Quick Open's root).
+                "workspace" => _workspaceAsking == 0,
                 _ => true,
             };
             if (met)

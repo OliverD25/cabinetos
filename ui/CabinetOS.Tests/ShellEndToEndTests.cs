@@ -167,7 +167,8 @@ public class ShellEndToEndTests
                 $"path:{data}",
                 "pane:0",
                 $"path:{Path.Combine(project, "src")}",
-                "wait:500",
+                // The core's answer about the workspace (the branch) comes after the folder is listed; a busy machine is late with it.
+                "until:workspace",
                 "shell:pill",
                 "quick-open:notes",
                 "shell:typed",
@@ -182,7 +183,7 @@ public class ShellEndToEndTests
                 "cmd:overlay.close",
                 "pane:1",
                 $"path:{data}",
-                "wait:500",
+                "until:workspace",
                 "shell:no-repository",
                 "shot:done"));
             var logs = await run.FinishAsync("quick", process, "done");
@@ -493,7 +494,8 @@ public class ShellEndToEndTests
 
     private static string FindTimeline(List<string> logs) =>
         string.Join('\n', logs.Where(l => Message(l) is "find opened" or "find filtered" or "find closed" or "shell state"
-            or "quick open shown" or "quick open went to a row" or "quick-open step ended" or "workspace pill shows a branch").Select(l =>
+            or "quick open shown" or "quick open went to a row" or "quick-open step ended" or "quick-open step ended before Quick Open answered"
+            or "workspace pill shows a branch").Select(l =>
         {
             using var parsed = JsonDocument.Parse(l);
             var fields = parsed.RootElement.GetProperty("fields");
