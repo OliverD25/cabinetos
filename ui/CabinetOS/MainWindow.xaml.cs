@@ -557,7 +557,7 @@ public sealed partial class MainWindow : Window
                     LogLayoutForSnapshot(step.Argument);
                     break;
                 case "click":
-                    ClickForSnapshot(step.Argument);
+                    await ClickForSnapshotAsync(step.Argument);
                     break;
                 case "focus":
                     LogFocusForSnapshot(step.Argument);
@@ -723,8 +723,23 @@ public sealed partial class MainWindow : Window
 
     // The snapshot aid's click: step: the first shown button or menu item (open menus included) with that
     // accessible name, pressed as assistive technology may press it: the keyboard moves to it, then its
-    // automation peer invokes it.
-    private void ClickForSnapshot(string name)
+    // automation peer invokes it. A button that is not drawn yet is waited for, at most 20 s: XAML builds the rows of a list (the
+    // sidebar's, the tree's) and the items of a menu on its next frames, which a busy machine draws a few hundred milliseconds
+    // late, and a click that found no button logged "no shown button" and went on (a run beside two full test runs).
+    private async Task ClickForSnapshotAsync(string name)
+    {
+        for (var waited = 0; waited < 20_000; waited += 100)
+        {
+            if (TryClickForSnapshot(name))
+            {
+                return;
+            }
+            await Task.Delay(100);
+        }
+        Diag.Info(Target, "snapshot click: no shown button has that name", new LogField("name", name));
+    }
+
+    private bool TryClickForSnapshot(string name)
     {
         var pending = new Stack<DependencyObject>();
         pending.Push(RootGrid);
@@ -749,14 +764,14 @@ public sealed partial class MainWindow : Window
                 // Best effort: the window's chrome buttons refuse the keyboard (IsTabStop off, as under a real click), and the press goes on.
                 _ = button.Focus(FocusState.Keyboard);
                 invoke.Invoke();
-                return;
+                return true;
             }
             for (var i = VisualTreeHelper.GetChildrenCount(element) - 1; i >= 0; i--)
             {
                 pending.Push(VisualTreeHelper.GetChild(element, i));
             }
         }
-        Diag.Info(Target, "snapshot click: no shown button has that name", new LogField("name", name));
+        return false;
     }
 
     // The snapshot aid's tooltip: step: opens the tooltip of the first element with that accessible
@@ -883,6 +898,22 @@ public sealed partial class MainWindow : Window
                 "tabs-saved" => !_tabsSaveTimer.IsRunning && _tabsWritten == CurrentTabs().ToJson().GetRawText(),
                 // No pane keeps a listing for a tab that went behind: its time was up and the core closed it.
                 "kept-released" => _panes.All(p => !p.HasKeptListing),
+                // pane-at:<folder>: the active pane shows that folder (a pick has run and its listing is shown); case and a trailing
+                // backslash do not count.
+                _ when condition.StartsWith("pane-at:", StringComparison.Ordinal) =>
+                    string.Equals(Active.Path.TrimEnd('\\'), condition["pane-at:".Length..].TrimEnd('\\'), StringComparison.OrdinalIgnoreCase),
+                // sidebar-page:<tool>: that tool's sidebar page has started ("a sidebar page started" is logged);
+                // page-suspended:<tool> and page-awake:<tool>: its page is put to sleep (WebView2's TrySuspend), or is awake.
+                _ when condition.StartsWith("sidebar-page:", StringComparison.Ordinal) =>
+                    _sidebarPages.TryGetValue(condition["sidebar-page:".Length..], out var startedPage) && startedPage.Up,
+                _ when condition.StartsWith("page-suspended:", StringComparison.Ordinal) =>
+                    _sidebarPages.TryGetValue(condition["page-suspended:".Length..], out var sleepingPage) && sleepingPage.Host.Page.IsSuspended,
+                _ when condition.StartsWith("page-awake:", StringComparison.Ordinal) =>
+                    _sidebarPages.TryGetValue(condition["page-awake:".Length..], out var wakePage) && !wakePage.Host.Page.IsSuspended,
+                // sidebar-view:<id>: the sidebar shows that view, which a tool's view does once the tools are read (a busy machine reads them late).
+                _ when condition.StartsWith("sidebar-view:", StringComparison.Ordinal) => _sidebarView == condition["sidebar-view:".Length..],
+                // The rail's settings (its order, the sidebar's width and view) have all been written to the core: no write is out.
+                "rail-saved" => _railWrites == 0 && _widthWrites == 0 && _viewWrites == 0,
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,
                 // The core has answered every question about the active folder's workspace (the workspace row's branch, Quick Open's root).

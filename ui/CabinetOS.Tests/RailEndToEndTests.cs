@@ -230,27 +230,30 @@ public class RailEndToEndTests
                 $"path:{folder}",
                 $"tree:{sub}",
                 "rail-state:tree",
+                // Each wait is for what the next step needs, not for a time: a page starts, goes to sleep and wakes when WebView2 does
+                // (a busy machine is seconds late), and the sidebar's width is laid out on XAML's next frames.
                 "search:one",
-                "wait:1500",
+                "until:search",
                 "rail:search",
-                "wait:500",
                 "rail-state:search",
                 "rail:quick-notes",
-                "until:tool",
+                "until:sidebar-page:quick-notes",
                 "plugin-event:badge|{\"view\":\"quick-notes\",\"kind\":\"dot\"}",
                 "rail-state:notes",
                 "rail:pin-notes",
-                "wait:1500",
+                "until:sidebar-page:pin-notes",
                 "rail:explorer",
-                "wait:1500",
+                "until:page-suspended:quick-notes",
                 "rail:quick-notes",
-                "wait:1000",
+                "until:page-awake:quick-notes",
                 "rail-move:quick-notes|-1",
                 "divider:320",
                 "rail-state:wide",
                 "divider:90",
-                "wait:500",
+                "until:page-suspended:pin-notes",
                 "rail-state:closed",
+                // The test reads the file after the window closed: the writes of the order, the width and the view must have landed.
+                "until:rail-saved",
                 "shot:done"));
             var logs = await run.FinishAsync("first", first, "done");
 
@@ -302,7 +305,7 @@ public class RailEndToEndTests
             }
 
             // The next start: the sidebar is closed as it was left; opened again it is 320 px wide and shows the same view.
-            var second = run.Start("second", "size:1400x800;cmd:view.toggleSidebar;wait:1500;rail-state:restored;shot:restored");
+            var second = run.Start("second", "size:1400x800;cmd:view.toggleSidebar;until:sidebar-view:quick-notes;rail-state:restored;shot:restored");
             logs = await run.FinishAsync("second", second, "restored");
             State(logs, "restored", state =>
             {
@@ -355,21 +358,23 @@ public class RailEndToEndTests
                 $"path:{windows}",
                 "wait:800",
                 "rail-state:start",
+                // A click waits for its button to be drawn, and each pick for the pane to show the folder it took it to: the sidebar's
+                // rows and the keys are handled on XAML's next frames, and a "rail state" line read 300 ms after the pick came first.
                 $"click:{driveName}",
-                "wait:300",
+                $"until:pane-at:{driveRoot}",
                 "rail-state:drive",
                 "click:pinned-folder",
-                "wait:300",
+                $"until:pane-at:{pinned}",
                 "rail-state:pinned",
                 $"tree:{Path.Combine(data, "a")}",
-                "wait:500",
                 "click:click-target",
-                "wait:300",
+                $"until:pane-at:{clickTarget}",
+                "until:tree",
                 "rail-state:tree-click",
                 "cmd:view.showExplorer",
                 "key:Down",
                 "key:Enter",
-                "wait:300",
+                $"until:pane-at:{enterTarget}",
                 "rail-state:tree-enter",
                 "shot:done"));
             await WaitForAsync(() => LogFiles.Ui(Path.Combine(root, "logs-run")).Any(l => Message(l) == "listing shown" && SamePath(Field(l, "path").GetString()!, enterTarget)),
