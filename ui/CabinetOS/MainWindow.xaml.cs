@@ -881,6 +881,8 @@ public sealed partial class MainWindow : Window
                 "windows-menu" => _windowsMenuAsking == 0 && (!_windowsMenu.IsOpen || _windowsMenuPlaced),
                 // What ui.tabs holds in the file is what the window shows: the save after the last change is done.
                 "tabs-saved" => !_tabsSaveTimer.IsRunning && _tabsWritten == CurrentTabs().ToJson().GetRawText(),
+                // No pane keeps a listing for a tab that went behind: its time was up and the core closed it.
+                "kept-released" => _panes.All(p => !p.HasKeptListing),
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,
                 // The core has answered every question about the active folder's workspace (the workspace row's branch, Quick Open's root).

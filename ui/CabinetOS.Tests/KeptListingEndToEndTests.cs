@@ -60,8 +60,10 @@ public class KeptListingEndToEndTests
             {
                 start.Environment[$"CABINETOS_{name}_DIR"] = Path.Combine(root, folder);
             }
-            // Three seconds instead of thirty, so the test sees the kept listing go.
-            start.Environment[ParkedListing.LifetimeEnv] = "3000";
+            // Ten seconds instead of thirty, so the test sees the kept listing go. The time must be longer than the longest step between
+            // two switches: with 3 s a step took 3.5 s beside three full test runs, the listing was let go before the tab came back, and
+            // the tab listed its folder again (2 of 4 switches kept, 3 of 5 runs).
+            start.Environment[ParkedListing.LifetimeEnv] = "10000";
             start.Environment["CABINETOS_UI_SNAPSHOT"] = Path.Combine(root, "shots");
             start.Environment["CABINETOS_UI_SNAPSHOT_STEPS"] = string.Join(';',
                 "pane:0",
@@ -77,15 +79,16 @@ public class KeptListingEndToEndTests
                 "tab:next",
                 "tab:next",
                 "tabs:switched",
-                // The listing of one, kept since the last switch, goes after three seconds.
-                "wait:4500",
+                // The listing of one, kept since the last switch, goes when its 10 s are up: waited for until it is let go (a timer that
+                // a busy machine runs late made a fixed wait of 1.5 s more than the lifetime too short).
+                "until:kept-released",
                 "tabs:expired",
                 "tab:next",
                 "shell:listed-again",
                 "wait:500",
                 "shot:done");
             process = Process.Start(start)!;
-            await WaitForAsync(() => File.Exists(Path.Combine(root, "shots", "done.png")), "the window's last snapshot", TimeSpan.FromSeconds(90));
+            await WaitForAsync(() => File.Exists(Path.Combine(root, "shots", "done.png")), "the window's last snapshot", TimeSpan.FromSeconds(150));
             process.CloseMainWindow();
             Assert.True(process.WaitForExit(20_000), "the window did not close");
 
@@ -127,7 +130,7 @@ public class KeptListingEndToEndTests
             var again = ui.Last(l => Message(l) == "listing shown" && Text(l, "path") == one);
             Assert.False(Field(again, "kept").GetBoolean());
         }
-        catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
+        catch (Xunit.Sdk.XunitException error)
         {
             // A window that never reached its last snapshot has no "seen" yet: its log is read now.
             var window = seen.Count > 0 ? seen : Directory.Exists(Path.Combine(root, "logs")) ? Lines(Path.Combine(root, "logs"), "ui.*.jsonl") : new List<string>();
