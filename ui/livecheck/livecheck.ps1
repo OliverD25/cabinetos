@@ -2295,15 +2295,16 @@ if (-not $ukrainian) {
   }
 }
 
-# ----- 21: the terminal's panes (docs/ui.md, "The terminal"; terminal units 1 and 2 of 2026-10-01/02) -----
+# ----- 21: the terminal's panes (docs/ui.md, "The terminal"; terminal units 1 to 3 of 2026-10-01/02) -----
 # Each terminal session belongs to a pane. Ctrl+Backquote in a pane reaches that pane's session (Active Summoning), and
 # nothing a pane does changes the shown tab or types into a shell (Zero-Hijack). With real keys and the real mouse: the
 # left pane's session, then the right pane's (the dock stays: switching panes never hides it), a click and a folder
 # change in the left pane (the shown tab stays), Ctrl+Backquote there (the left session comes back), the tab keys
 # Alt+] and Alt+[ and Ctrl+Shift+T and Ctrl+Shift+W, the Locked/Linked toggle clicked, Ctrl+Shift+V pasting a command
 # that writes a file and Ctrl+Shift+C copying a selection, the prompt hook (a linked session follows its pane when
-# Enter draws its next prompt, and a half-typed line runs as typed), and Alt+] as a physical key on the Ukrainian
-# layout.
+# Enter draws its next prompt, and a half-typed line runs as typed), Alt+] as a physical key on the Ukrainian
+# layout, and the split mirror (Ctrl+Backslash is Up to Root in a pane and splits the dock under the two panes in the
+# terminal, the halves under their panes as the window's log says).
 function TermLines([string]$message) { @(ShellLines $message | Where-Object { $_.target -eq 'cabinetos_ui::terminal' }) }
 function Summoned { TermLines 'terminal summoned' | Select-Object -Last 1 }
 function TermRequests { @(ShellLines 'request sent' | Where-Object { $_.fields.request -like 'terminal_*' -and $_.fields.request -ne 'terminal_resize' }).Count }
@@ -2522,6 +2523,51 @@ if (-not $ukrainian) {
     "21: the window's layout is back ({0:X8}): {1}" -f ([Live]::LayoutOf($script:h)).ToInt64(), ([Live]::LayoutOf($script:h) -eq $layoutBefore)
   }
 }
+
+Step "21: Ctrl+Backslash: Up to Root in a pane, the split dock in the terminal"
+# The split mirror (terminal unit 3): the same keys, by where the keyboard is. In the left pane they are Up to Root
+# (go.root); in the terminal they split the dock under the two panes, the left session under the left pane and the right
+# under the right. The window logs "terminal split" with the halves and the panes in one measure.
+# Ctrl+Backquote in the terminal hands the keyboard back to the active pane, the left one (not a click from the terminal).
+[Live]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 800
+$roots = CommandCount 'go.root'
+$toggles = CommandCount 'terminal.toggleSplit'
+[Live]::Press($VK.Ctrl, $VK.Backslash); Start-Sleep -Milliseconds 1200
+"21: Ctrl+Backslash in the left pane ran go.root and no terminal.toggleSplit: $((CommandCount 'go.root') -gt $roots -and (CommandCount 'terminal.toggleSplit') -eq $toggles)"
+GoLeftPane $t21
+# A click on the left tab gives the left session the keyboard; there the same keys split the dock.
+$tab = ShellElement "pwsh [Left], session $leftSession"
+if ($tab) { ClickElement $tab; Start-Sleep -Milliseconds 800 }
+$splits = @(TermLines 'terminal split').Count
+$toggles = CommandCount 'terminal.toggleSplit'
+[Live]::Press($VK.Ctrl, $VK.Backslash)
+$on = WaitShellLines 'terminal split' $splits 5
+Start-Sleep -Milliseconds 1200
+"21: Ctrl+Backslash in the terminal ran terminal.toggleSplit and split the dock (setting $($on.fields.split), shown $($on.fields.effective)): $((CommandCount 'terminal.toggleSplit') -gt $toggles -and $on.fields.split -eq $true -and $on.fields.effective -eq $true)"
+function SplitSpans([string]$text) { @($text -split '\|' | Where-Object { $_ } | ForEach-Object { $part = $_ -split ':'; [pscustomobject]@{ X = [double]$part[$part.Count - 2]; W = [double]$part[$part.Count - 1] } }) }
+$halfSpans = SplitSpans "$($on.fields.halves)"
+$paneSpans = @(SplitSpans "$($on.fields.left_pane)") + @(SplitSpans "$($on.fields.right_pane)")
+$under = $halfSpans.Count -eq 2 -and $paneSpans.Count -eq 2
+if ($under) {
+  foreach ($i in 0, 1) {
+    $under = $under -and [math]::Abs($halfSpans[$i].X - [math]::Max(0, $paneSpans[$i].X)) -le 2 -and [math]::Abs(($halfSpans[$i].X + $halfSpans[$i].W) - ($paneSpans[$i].X + $paneSpans[$i].W)) -le 2
+  }
+}
+"21: the halves sit under the panes, as the log says (halves '$($on.fields.halves)', panes '$($on.fields.left_pane)' and '$($on.fields.right_pane)'): $under"
+"21: the left half shows session $($on.fields.left_session) and the right half session $($on.fields.right_session): $($on.fields.left_session -eq $leftSession -and $on.fields.right_session -eq $rightSession)"
+$newLeft = ShellElement "New terminal on the left pane"
+$newRight = ShellElement "New terminal on the right pane"
+"21: each half has its own header ('New terminal on the left pane' and on the right pane), the left's before the right's: $([bool]$newLeft -and [bool]$newRight -and $newLeft.Current.BoundingRectangle.Left -lt $newRight.Current.BoundingRectangle.Left)"
+Start-Sleep -Milliseconds 800
+$splitConfig = Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json
+"21: the setting is in cabinetos.json (terminal.split): $($splitConfig.terminal.split -eq $true)"
+Shot $h "$ShotDir\21-split-live.png"
+$splits = @(TermLines 'terminal split').Count
+[Live]::Press($VK.Ctrl, $VK.Backslash)
+$off = WaitShellLines 'terminal split' $splits 5
+Start-Sleep -Milliseconds 1000
+$splitConfig = Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json
+"21: Ctrl+Backslash again showed the one view and wrote false: $($off.fields.split -eq $false -and $off.fields.effective -eq $false -and $splitConfig.terminal.split -eq $false)"
 
 Step "21: a click on the left tab; Ctrl+Backquote gives the keyboard back to the pane; again: the dock hides"
 # Alt+] above may have brought the right pane's tab to the front: the second Ctrl+Backquote hides only the pane's own.

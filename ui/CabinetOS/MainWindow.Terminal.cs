@@ -527,11 +527,17 @@ public sealed partial class MainWindow
         }
     }
 
-    // "terminal split": the split turned on or off, and the halves' widths and the panes' (device-independent pixels).
-    private void LogSplit(bool on) =>
-        Diag.Info(TerminalTarget, "terminal split", new LogField("split", on), new LogField("effective", _terminal.Split),
+    // "terminal split": the split turned on or off, the halves (pane:x:width, from the page's left edge) and the panes
+    // (x:width, in the same measure), in device-independent pixels, so a reader judges the halves against the panes.
+    private void LogSplit(bool on)
+    {
+        var inset = Dock.BodyInset;
+        string Pane(FrameworkElement side) => string.Create(CultureInfo.InvariantCulture, $"{side.ActualOffset.X - inset:0.#}:{side.ActualWidth:0.#}");
+        Diag.Info(TerminalTarget, "terminal split", new LogField("split", on), new LogField("effective", _terminal.Split), new LogField("dual", _dual),
             new LogField("halves", _terminal.Split ? SplitSignature(_terminal.Halves()) : "none"),
-            new LogField("left_pane_width", Math.Round(LeftSide.ActualWidth, 1)), new LogField("right_pane_width", Math.Round(_dual ? RightSide.ActualWidth : 0, 1)));
+            new LogField("left_session", _terminal.ShownIn(0)?.SessionId), new LogField("right_session", _terminal.ShownIn(1)?.SessionId),
+            new LogField("left_pane", Pane(LeftSide)), new LogField("right_pane", _dual ? Pane(RightSide) : "none"));
+    }
 
     // The snapshot aid's terminal-state:<label> step: the tabs as the header shows them, who has the keyboard, and the
     // split: each half's shown session and place on the window, and each pane's, so a test judges the halves against the panes.
