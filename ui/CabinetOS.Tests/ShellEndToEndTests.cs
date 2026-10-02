@@ -405,9 +405,11 @@ public class ShellEndToEndTests
                 "shot:done"));
             var logs = await run.FinishAsync("menus", process, "done");
 
-            // The registry's titles, as the palette shows them: a rename there shows here too.
+            // The registry's titles, as the palette shows them: a rename there shows here too. After Toggle Sidebar come the preferences
+            // that were in the file only (Phase 23): Layout with its three, and the two toggles with their state.
             State(logs, "menu", state => Assert.Equal(
-                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Browse Extensions|Open Keyboard Shortcuts|Check for Updates",
+                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Layout (Classic Layout [x], Terminal on the Right, Activity Rail)|Show Hidden Files [ ]"
+                + "|Follow the Active Pane [x]|Browse Extensions|Open Keyboard Shortcuts|Check for Updates",
                 state.GetProperty("menu").GetString()));
             State(logs, "menu-closed", state => Assert.Equal("", state.GetProperty("menu").GetString()));
             State(logs, "workspace", state => Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString()));

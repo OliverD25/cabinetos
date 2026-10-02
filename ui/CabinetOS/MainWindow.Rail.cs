@@ -518,6 +518,8 @@ public sealed partial class MainWindow
     private void ApplyRailSettings(UiSettings settings, UiSettings previous, bool firstStart)
     {
         _autoReveal = settings.SidebarAutoReveal;
+        // The pin in the Explorer's header is the setting (sidebar.toggleFollow): it follows the file.
+        SidebarView.Tree.FollowsActivePane = _autoReveal;
         if ((firstStart || !(settings.Rail ?? []).SequenceEqual(previous.Rail ?? [])) && _railWrites == 0)
         {
             _rail.SetOrder(settings.Rail ?? []);

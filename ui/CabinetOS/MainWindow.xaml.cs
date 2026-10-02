@@ -165,6 +165,7 @@ public sealed partial class MainWindow : Window
         SetUpMarket();
         SetUpGallery();
         SetUpRail();
+        SetUpThreeWays();
         SetUpColumns();
         SetUpCompact();
 
@@ -776,6 +777,15 @@ public sealed partial class MainWindow : Window
                 invoke.Invoke();
                 return true;
             }
+            // A check box or a toggle has no Invoke: assistive technology toggles it.
+            if (element is Microsoft.UI.Xaml.Controls.Primitives.ToggleButton toggleButton
+                && Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(toggleButton) is { } togglePeer
+                && togglePeer.GetName() == name
+                && togglePeer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Toggle) is Microsoft.UI.Xaml.Automation.Provider.IToggleProvider toggle)
+            {
+                toggle.Toggle();
+                return true;
+            }
             for (var i = VisualTreeHelper.GetChildrenCount(element) - 1; i >= 0; i--)
             {
                 pending.Push(VisualTreeHelper.GetChild(element, i));
@@ -949,6 +959,9 @@ public sealed partial class MainWindow : Window
                 // painted on the window as a preview (the status bar says so).
                 "gallery-ready" => GalleryView.IsOpen && _gallery.Market.Status is not (MarketStatus.Idle or MarketStatus.Loading) && GalleryView.TilesComplete,
                 "gallery-preview" => _gallery.IsPreviewShown,
+                // setting:<name>=<value>: the window holds that setting's value (layout=rail, hidden=on, follow=off, shell-menu=on), which
+                // is what the file says once config_changed came; the control that shows it is drawn by the same turn.
+                _ when condition.StartsWith("setting:", StringComparison.Ordinal) => SettingIs(condition["setting:".Length..]),
                 _ when condition.StartsWith("gallery-applied:", StringComparison.Ordinal) => _gallery.CurrentThemeId == condition["gallery-applied:".Length..],
                 _ => true,
             };
@@ -1135,6 +1148,12 @@ public sealed partial class MainWindow : Window
             }
         }
         UpdateLayoutText();
+        UpdateHiddenPill();
+        if (settings.Layout != previous.Layout || Layouts.Normalize(_layoutWanted) == Layouts.Normalize(settings.Layout))
+        {
+            // The file shows the layout a command asked for (or another): the next Next Layout starts from it.
+            _layoutWanted = null;
+        }
         if (firstStart || settings.Layout != previous.Layout)
         {
             ApplyDockPlacement(DockLayout.PlacementFor(settings.Layout));
@@ -1633,6 +1652,7 @@ public sealed partial class MainWindow : Window
         RegisterToolCommands();
         RegisterThemeCommands();
         RegisterGalleryCommands();
+        RegisterThreeWaysCommands();
         RegisterMarketCommands();
         RegisterRailCommands();
         RegisterColumnCommands();

@@ -28,6 +28,7 @@ public sealed partial class FolderTreeView : UserControl
         TreeList.ElementPrepared += (_, e) => SizeRow(e.Element);
         LocateButton.Click += (_, _) => LocateRequested?.Invoke();
         LockButton.Click += (_, _) => LockToggled?.Invoke();
+        FollowButton.Click += (_, _) => FollowToggled?.Invoke();
         PointerPressed += (_, _) => Focus(FocusState.Pointer);
         GotFocus += (_, _) => OnGotFocus();
         LostFocus += (_, _) => OnLostFocus();
@@ -43,6 +44,9 @@ public sealed partial class FolderTreeView : UserControl
 
     /// <summary>The locate button was pressed.</summary>
     public event Action? LocateRequested;
+
+    /// <summary>The pin was pressed: the window runs <c>sidebar.toggleFollow</c>, which writes <c>ui.sidebarAutoReveal</c>.</summary>
+    public event Action? FollowToggled;
 
     /// <summary>Esc: the keyboard goes back to the active pane.</summary>
     public event Action? EscapePressed;
@@ -72,6 +76,23 @@ public sealed partial class FolderTreeView : UserControl
     }
 
     private bool _locked;
+
+    /// <summary>Whether the tree follows the active pane (<c>ui.sidebarAutoReveal</c>): the pin shows it, and the file moves it.</summary>
+    public bool FollowsActivePane
+    {
+        get => _follows;
+        set
+        {
+            _follows = value;
+            FollowIcon.Glyph = value ? "\uE842" : "\uE718";
+            FollowButton.Foreground = ThemeResources.Brush(value ? "CbAccentBrush" : "CbTextSecondaryBrush");
+            ToolTipService.SetToolTip(FollowButton, value
+                ? "The tree follows the active pane (click to keep it where it is)"
+                : "The tree stays where it is (click to follow the active pane)");
+        }
+    }
+
+    private bool _follows = true;
 
     /// <summary>Lays the header and the rows out with the window's sizes now (docs/ui.md, "Metrics and chrome").</summary>
     public void ApplyMetrics()

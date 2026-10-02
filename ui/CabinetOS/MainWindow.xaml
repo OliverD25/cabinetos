@@ -477,6 +477,26 @@
                             FontSize="11"
                             Foreground="{ThemeResource CbAccentBrush}"
                             Visibility="Collapsed" />
+                        <!-- panes.showHidden is on (view.toggleHiddenFiles): the status bar says so, and a click turns it off. -->
+                        <Button
+                            x:Name="HiddenPill"
+                            Height="20"
+                            MinWidth="0"
+                            Padding="8,0"
+                            AllowFocusOnInteraction="False"
+                            AutomationProperties.Name="Hidden files are shown"
+                            Background="{ThemeResource CbPillFillBrush}"
+                            CornerRadius="10"
+                            IsTabStop="False"
+                            Style="{StaticResource CbSubtleButtonStyle}"
+                            ToolTipService.ToolTip="Hidden files are shown. Click to hide them again (View: Toggle Hidden Files)"
+                            Visibility="Collapsed">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Foreground="{ThemeResource CbStatusTextBrush}"
+                                Text="hidden" />
+                        </Button>
                         <!-- The last run crashed while heavy logging was on: the zip with the logs around the crash is in the log folder (docs/ui.md, "Heavy logging"). -->
                         <Button
                             x:Name="CrashFolderLink"

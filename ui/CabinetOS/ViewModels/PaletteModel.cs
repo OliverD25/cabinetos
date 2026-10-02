@@ -47,6 +47,12 @@ public sealed class PaletteRow : ObservableObject
     /// <summary>The plugin's name for a plugin's command, else null.</summary>
     public string? Badge => Info.Source.Kind == "plugin" ? Info.Source.Name ?? Info.Source.Id : null;
 
+    /// <summary>
+    /// What the row says of the setting its command changes: "current" on the layout in effect, "on" or "off" on a toggle
+    /// (the settings-three-ways skill); null for any other command.
+    /// </summary>
+    public string? StateText { get; init; }
+
     /// <summary>The first binding as keycaps; chords are joined by "then".</summary>
     public IReadOnlyList<KeycapPart> Keycaps { get; private set; }
 
@@ -124,6 +130,9 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
 
     /// <summary>Raised with the core's keymap after a rebinding took effect.</summary>
     public event Action<KeymapData>? KeymapUpdated;
+
+    /// <summary>The window's answer to "what does this command's row say of its setting": a mark, or null (<see cref="PaletteRow.StateText"/>).</summary>
+    public Func<CommandInfo, string?>? StateOf { get; set; }
 
     /// <summary>The rows shown, best match first.</summary>
     public ObservableCollection<PaletteRow> Rows { get; } = [];
@@ -208,7 +217,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         {
             if (router.Find(hit.Id) is { } info)
             {
-                Rows.Add(new PaletteRow(info));
+                Rows.Add(new PaletteRow(info) { StateText = StateOf?.Invoke(info) });
             }
             else
             {
