@@ -5,10 +5,10 @@
 #   dist\CabinetOS-<version>-win-x64\            the folder a user installs
 #   dist\CabinetOS-<version>-win-x64.zip         that folder's contents, zipped
 #   dist\CabinetOS-<version>-win-x64.zip.sha256  the zip's SHA-256
-#   dist\winget\<version>\                       winget manifests with that hash
 #   dist\update\<channel>\latest.json            what the in-app updater reads
 #   dist\update\<channel>\notes-<version>.md     the release notes it shows
 #   dist\CabinetOS-<version>-win-x64-setup.exe   the setup file for a first install, and its .sha256
+#   dist\winget\<version>\                       winget manifests with the setup file's hash
 #
 # The version has one source: `version` in [workspace.package] of
 # core\Cargo.toml. ui\Directory.Build.props must carry the same <Version>
@@ -37,8 +37,7 @@
 #     build embeds it, and build\make-icon.ps1 remakes it from the design's
 #     size cuts in docs\design\icons), for the setup, its shortcuts and its
 #     Settings > Apps entry.
-#  6. The zip, its SHA-256, and the winget manifests of build\winget with
-#     this version, URL and hash.
+#  6. The zip and its SHA-256.
 #  7. The in-app update's files for -Channel (stable unless it says
 #     preview): latest.json with the zip's address on the GitHub Release,
 #     its hash and size, the notes' address on the marketplace site and the
@@ -50,18 +49,28 @@
 #     SHA-256 (docs\release.md, "The setup file"). Without Inno Setup the
 #     step is skipped with a warning that says how to install it; -NoSetup
 #     skips it on purpose.
+#  9. The winget manifests of build\winget with this version, the setup
+#     file's URL and SHA-256 and the build's date, checked with winget
+#     validate (ADR 0019: the winget package is the setup file). Without a
+#     setup file there are none.
 #
 # -PackageOnly skips steps 1-5 and zips the existing folder again, for
 # example after signing its programs (docs\release.md); the setup file is
 # made again too.
 #
+# -WingetOnly does step 9 alone, from the files already in dist\: the
+# release folder's release.json (the version and the date) and the setup
+# file's .sha256 (the hash). For a setup file signed and hashed again after
+# the build.
+#
 # Run from anywhere, in PowerShell 7:
-#   pwsh -File <repo>\build\release.ps1 [-SyncVersion] [-PackageOnly] [-NoSetup] [-Channel stable|preview]
+#   pwsh -File <repo>\build\release.ps1 [-SyncVersion] [-PackageOnly] [-NoSetup] [-WingetOnly] [-Channel stable|preview]
 
 param(
     [switch] $SyncVersion,
     [switch] $PackageOnly,
     [switch] $NoSetup,
+    [switch] $WingetOnly,
     [ValidateSet('stable', 'preview')]
     [string] $Channel = 'stable'
 )
@@ -108,6 +117,48 @@ function Find-InnoCompiler {
     $null
 }
 
+# Step 9: the winget manifests, from the release folder's release.json and
+# the setup file's .sha256 as they are on disk, so that a setup signed and
+# hashed again after the build gets its new hash (-WingetOnly).
+function Write-WingetManifests {
+    $releaseJson = Join-Path $folder 'release.json'
+    $setupSha = "$setup.sha256"
+    foreach ($needed in $releaseJson, $setup, $setupSha) {
+        if (-not (Test-Path -LiteralPath $needed)) {
+            throw "$needed is missing, and the winget manifests need it. Build the release with its setup file first: pwsh -File $PSCommandPath"
+        }
+    }
+    $raw = [System.IO.File]::ReadAllText($releaseJson)
+    $releaseVersion = (ConvertFrom-Json $raw).version
+    if ($releaseVersion -ne $version) { throw "$releaseJson holds version $releaseVersion, not $version" }
+    # From the text: ConvertFrom-Json would turn the time into a local DateTime.
+    $date = [regex]::Match($raw, '"builtUtc"\s*:\s*"(\d{4}-\d{2}-\d{2})T').Groups[1].Value
+    if (-not $date) { throw "$releaseJson has no builtUtc date" }
+    $setupHash = ([System.IO.File]::ReadAllText($setupSha).Trim() -split '\s+')[0].ToUpperInvariant()
+    if ($setupHash -notmatch '^[0-9A-F]{64}$') { throw "$setupSha does not start with a SHA-256" }
+    $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $setup).Hash
+    if ($actual -ne $setupHash) { throw "$setupSha says $setupHash, but $setup has $actual; write its hash again" }
+
+    $repository = (Get-WorkspaceValue 'repository').TrimEnd('/')
+    if (Test-Path -LiteralPath $wingetOut) { Remove-Item -LiteralPath $wingetOut -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $wingetOut | Out-Null
+    foreach ($manifest in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'winget') -Filter '*.yaml') {
+        $text = [System.IO.File]::ReadAllText($manifest.FullName)
+        $text = $text -replace '(?m)^(\s*PackageVersion:\s*).*$', "`${1}$version"
+        $text = $text -replace '(?m)^(\s*InstallerUrl:\s*).*$', "`${1}$repository/releases/download/v$version/$setupName.exe"
+        $text = $text -replace '(?m)^(\s*InstallerSha256:\s*).*$', "`${1}$setupHash"
+        $text = $text -replace '(?m)^(\s*ReleaseNotesUrl:\s*).*$', "`${1}$repository/releases/tag/v$version"
+        $text = $text -replace '(?m)^(\s*ReleaseDate:\s*).*$', "`${1}$date"
+        [System.IO.File]::WriteAllText((Join-Path $wingetOut $manifest.Name), $text, $utf8)
+    }
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Invoke-Native 'winget' @('validate', '--manifest', $wingetOut, '--disable-interactivity') $repo
+    }
+    else {
+        Write-Host 'winget is not installed here; the manifests were not validated.'
+    }
+}
+
 # --- The version ------------------------------------------------------
 
 $version = Get-WorkspaceValue 'version'
@@ -135,6 +186,12 @@ $zip = "$folder.zip"
 $setupName = "$name-setup"
 $setup = Join-Path $dist "$setupName.exe"
 $wingetOut = Join-Path $dist "winget\$version"
+
+if ($WingetOnly) {
+    Write-WingetManifests
+    Write-Host "winget:         $wingetOut"
+    return
+}
 
 if (-not $PackageOnly) {
     $commit = ''
@@ -218,7 +275,7 @@ elseif (-not (Test-Path -LiteralPath $folder)) {
     throw "$folder does not exist; build it first (without -PackageOnly)"
 }
 
-# --- 6. The zip, its hash, the winget manifests -----------------------
+# --- 6. The zip and its hash ------------------------------------------
 
 $built = (Get-Content -Raw -LiteralPath (Join-Path $folder 'release.json') | ConvertFrom-Json).version
 if ($built -ne $version) { throw "$folder holds version $built, not $version" }
@@ -233,22 +290,6 @@ $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash
 [System.IO.File]::WriteAllText("$zip.sha256", "$($hash.ToLowerInvariant())  $name.zip`n", $utf8)
 
 $repository = (Get-WorkspaceValue 'repository').TrimEnd('/')
-New-Item -ItemType Directory -Force -Path $wingetOut | Out-Null
-foreach ($manifest in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'winget') -Filter '*.yaml') {
-    $text = [System.IO.File]::ReadAllText($manifest.FullName)
-    $text = $text -replace '(?m)^(\s*PackageVersion:\s*).*$', "`${1}$version"
-    $text = $text -replace '(?m)^(\s*InstallerUrl:\s*).*$', "`${1}$repository/releases/download/v$version/$name.zip"
-    $text = $text -replace '(?m)^(\s*InstallerSha256:\s*).*$', "`${1}$hash"
-    $text = $text -replace '(?m)^(\s*ReleaseNotesUrl:\s*).*$', "`${1}$repository/releases/tag/v$version"
-    $text = $text -replace '(?m)^(\s*ReleaseDate:\s*).*$', "`${1}$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd'))"
-    [System.IO.File]::WriteAllText((Join-Path $wingetOut $manifest.Name), $text, $utf8)
-}
-if (Get-Command winget -ErrorAction SilentlyContinue) {
-    Invoke-Native 'winget' @('validate', '--manifest', $wingetOut, '--disable-interactivity') $repo
-}
-else {
-    Write-Host 'winget is not installed here; the manifests were not validated.'
-}
 
 # --- 7. The in-app update: latest.json and the notes ------------------
 
@@ -326,6 +367,12 @@ if (-not $NoSetup) {
             'Microsoft.AspNetCore.App' { "Microsoft.DotNet.AspNetCore.$major" }
             default { "Microsoft.DotNet.Runtime.$major" }
         }
+        # Microsoft's link to the newest installer of that runtime's major version.
+        $dotnetFile = switch ($framework.name) {
+            'Microsoft.WindowsDesktop.App' { 'windowsdesktop-runtime' }
+            'Microsoft.AspNetCore.App' { 'aspnetcore-runtime' }
+            default { 'dotnet-runtime' }
+        }
         $family = $facts.windowsAppRuntime.packageFamily
         $defines = [ordered]@{
             AppVersion       = $version
@@ -337,6 +384,7 @@ if (-not $NoSetup) {
             DotnetName       = $framework.name
             DotnetVersion    = $framework.version
             DotnetWinget     = $dotnetWinget
+            DotnetInstaller  = "https://aka.ms/dotnet/$major.0/$dotnetFile-win-x64.exe"
             RuntimeName      = $family.Substring(0, $family.LastIndexOf('_'))
             RuntimeVersion   = $facts.windowsAppRuntime.version
             RuntimeInstaller = $facts.windowsAppRuntime.installer
@@ -350,11 +398,22 @@ if (-not $NoSetup) {
     }
 }
 
+# --- 9. The winget manifests, on the setup file -----------------------
+
+$wingetLine = $wingetOut
+if (Test-Path -LiteralPath $setup) {
+    Write-WingetManifests
+}
+else {
+    Write-Warning 'No setup file, so no winget manifests: the winget package is the setup file (ADR 0019).'
+    $wingetLine = 'not written: no setup file'
+}
+
 $files = @(Get-ChildItem -LiteralPath $folder -Recurse -File)
 Write-Host ''
 Write-Host ("Release folder: {0} ({1} files, {2:N1} MB)" -f $folder, $files.Count, (($files | Measure-Object Length -Sum).Sum / 1MB))
 Write-Host ("Zip:            {0} ({1:N1} MB)" -f $zip, ((Get-Item -LiteralPath $zip).Length / 1MB))
 Write-Host "SHA-256:        $($hash.ToLowerInvariant())"
-Write-Host "winget:         $wingetOut"
 Write-Host "Update ($Channel): $latestPath and $notesName"
 Write-Host "Setup:          $setupLine"
+Write-Host "winget:         $wingetLine"

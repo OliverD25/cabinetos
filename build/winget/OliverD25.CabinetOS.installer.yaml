@@ -1,34 +1,33 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
-# The release zip as a portable package: winget unpacks it into its own
-# folder and puts that folder on the PATH, because CabinetOS.exe needs the
-# files next to it (the core, the libraries). No Start Menu entry and no
-# indexer service: install.ps1 in the zip does those (ADR 0009).
-# build/release.ps1 fills in the version, the URL, the SHA-256 and the date
-# in its copy under dist/winget/<version>/; the zeros here are a
-# placeholder.
+# The release's setup file as an Inno Setup package (ADR 0019): the same
+# per-user install a double-click makes, with the Start Menu shortcut, the
+# Settings > Apps entry (CabinetOS_is1, the ProductCode) and in-app updates;
+# no PATH entry and no indexer service (install.ps1 in the zip does those).
+# The setup installs the Windows App Runtime itself when it is missing, so
+# it is no dependency here: winget's catalogue lacks the version CabinetOS
+# needs. .NET and WebView2 are, because winget has them and installs the
+# .NET runtime with administrator rights, which a silent setup does not ask
+# for. build/release.ps1 fills in the version, the URL, the setup's SHA-256
+# and the date in its copy under dist/winget/<version>/; the zeros here are
+# a placeholder.
 
 PackageIdentifier: OliverD25.CabinetOS
 PackageVersion: 0.1.0
 Platform:
   - Windows.Desktop
 MinimumOSVersion: 10.0.22621.0
-InstallerType: zip
-NestedInstallerType: portable
-NestedInstallerFiles:
-  - RelativeFilePath: CabinetOS.exe
-  - RelativeFilePath: cabinetos-cli.exe
-  - RelativeFilePath: cab.exe
-ArchiveBinariesDependOnPath: true
+InstallerType: inno
+Scope: user
+UpgradeBehavior: install
+ProductCode: CabinetOS_is1
 Dependencies:
   PackageDependencies:
     - PackageIdentifier: Microsoft.DotNet.Runtime.10
-    - PackageIdentifier: Microsoft.WindowsAppRuntime.2
-      MinimumVersion: 2.5.1
     - PackageIdentifier: Microsoft.EdgeWebView2Runtime
 ReleaseDate: 2026-09-28
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/OliverD25/cabinetos/releases/download/v0.1.0/CabinetOS-0.1.0-win-x64.zip
+    InstallerUrl: https://github.com/OliverD25/cabinetos/releases/download/v0.1.0/CabinetOS-0.1.0-win-x64-setup.exe
     InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
 ManifestType: installer
 ManifestVersion: 1.10.0
