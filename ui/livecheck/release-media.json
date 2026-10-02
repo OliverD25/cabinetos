@@ -1,0 +1,61 @@
+{
+  "left": "C:\\Demo",
+  "right": "C:\\Demo\\Projects",
+  "items": [
+    {
+      "name": "hero",
+      "kind": "image",
+      "steps": [
+        { "do": "down", "count": 3 },
+        { "do": "tab" },
+        { "do": "down", "count": 1 },
+        { "do": "tab" }
+      ]
+    },
+    {
+      "name": "command-palette",
+      "kind": "image",
+      "steps": [
+        { "do": "palette", "text": "copy" }
+      ]
+    },
+    {
+      "name": "command-palette",
+      "kind": "video",
+      "seconds": 6,
+      "steps": [
+        { "do": "palette" },
+        { "do": "type", "text": "copy", "delayMs": 350 },
+        { "do": "wait", "ms": 1200 },
+        { "do": "esc" }
+      ]
+    },
+    {
+      "name": "terminal",
+      "kind": "image",
+      "steps": [
+        { "do": "go", "path": "C:\\Demo\\Projects\\cabinetos-sample" },
+        { "do": "terminal" },
+        { "do": "type", "text": "git log --oneline -3" },
+        { "do": "enter" },
+        { "do": "wait", "ms": 3000 }
+      ]
+    },
+    {
+      "name": "commander-compact",
+      "kind": "image",
+      "steps": [
+        { "do": "theme", "downs": 1 }
+      ]
+    },
+    {
+      "name": "marketplace",
+      "kind": "image",
+      "steps": [
+        { "do": "palette", "text": "marketplace" },
+        { "do": "enter" },
+        { "do": "wait", "ms": 7000 }
+      ]
+    }
+  ]
+}
