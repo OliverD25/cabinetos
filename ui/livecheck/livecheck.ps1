@@ -61,6 +61,7 @@ public static class Live {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern uint GetDoubleClickTime();
   [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
   [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
@@ -2198,6 +2199,145 @@ $gone = @(ShellLines 'column released' | Select-Object -Skip $released)
 "20: the two other columns were released ($(($gone | ForEach-Object { "$($_.fields.depth):$($_.fields.path)" }) -join ', ')): $($gone.Count -eq 2)"
 Shot $h "$ShotDir\20-list-live.png"
 
+# ----- 24: sorting by the column headings and the dividers (docs/ui.md, "A pane's order", "The divider between the panes",
+# "The activity rail and the sidebar") -----
+# Phase 24, with the real mouse. A click on a heading of the left pane sorts it: the window logs "pane sorted" (the key, the
+# direction, whether the order is the pane's own) and "command executed" with the trigger "heading". A second click on the same
+# heading, after the double-click time, reverses it. A double-click fits the column and leaves the order as it was (the first
+# click sorted at once, and the double-click took that back). The divider between the panes is dragged 120 px to the right:
+# the Size heading of the left pane moves with it and ui.paneSplit is a number. A double-click on the divider makes the panes
+# equal again (null in the file), and so does the palette's Equal Panes. The sidebar's divider, in the classic layout this
+# part of the run is in, is dragged to 300 px (ui.sidebarWidth) and a double-click on it gives the design's width back. The Tool
+# Dock's splitter has its drag at the end of section 21, where the dock is up. The headings are found by UI Automation, as in
+# section 19: the left pane's are the ones furthest left; the right pane's Name heading is the second.
+function HeadingElements([string]$name) {
+  $ae = [System.Windows.Automation.AutomationElement]
+  $condition = New-Object System.Windows.Automation.AndCondition(
+    (New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $name)),
+    (New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text)))
+  $mine = New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, [int]$script:p.Id)
+  $found = foreach ($window in $ae::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $mine)) {
+    $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition) | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.BoundingRectangle.Width -gt 0 }
+  }
+  @($found | Sort-Object { $_.Current.BoundingRectangle.Left })
+}
+function SortedLines { @(ShellLines 'pane sorted') }
+function HeadingCommandCount([string]$command) { @(ShellLines 'command executed' | Where-Object { $_.fields.command -eq $command -and $_.fields.trigger -eq 'heading' }).Count }
+function SplitLines([string]$how) { @(ShellLines 'pane split' | Where-Object { $_.fields.how -eq $how }) }
+$warn24 = @(UiLines '"level":"(WARN|WARNING|ERROR)"').Count
+$c24 = "$files\sort24"
+New-Item -ItemType Directory -Force "$c24\a folder" | Out-Null
+Set-Content -LiteralPath "$c24\a.txt" -Value "x" -NoNewline
+Set-Content -LiteralPath "$c24\b.md" -Value "xxx" -NoNewline
+Set-Content -LiteralPath "$c24\c.json" -Value "xx" -NoNewline
+$doubleClickWait = [int][Live]::GetDoubleClickTime() + 300
+
+Step "24: a click on the Size heading of the left pane sorts it, a second click reverses it, a click on Name is the pane's own order"
+GoLeftPane $c24
+$sizeHeading = @(HeadingElements 'Size')[0]
+$nameHeading = @(HeadingElements 'Name')[0]
+if ($sizeHeading -and $nameHeading) {
+  $sorted = (SortedLines).Count
+  $viaHeading = HeadingCommandCount 'view.sortBySize'
+  ClickElement $sizeHeading
+  $first = WaitShellLines 'pane sorted' $sorted 5
+  "24: the Size heading ran view.sortBySize from the heading and sorted the left pane by size, largest first, as its own order ($($first.fields.key), descending $($first.fields.descending), own $($first.fields.own), pane $($first.fields.pane)): $((HeadingCommandCount 'view.sortBySize') -eq $viaHeading + 1 -and $first.fields.key -eq 'size' -and $first.fields.descending -eq $true -and $first.fields.own -eq $true -and $first.fields.pane -eq 0)"
+  Start-Sleep -Milliseconds $doubleClickWait
+  $sorted = (SortedLines).Count
+  ClickElement $sizeHeading
+  $second = WaitShellLines 'pane sorted' $sorted 5
+  "24: the same heading again reversed it ($($second.fields.key), descending $($second.fields.descending)): $($second.fields.key -eq 'size' -and $second.fields.descending -eq $false)"
+  Shot $h "$ShotDir\24-sorted-live.png"
+  Start-Sleep -Milliseconds $doubleClickWait
+  $sorted = (SortedLines).Count
+  ClickElement $nameHeading
+  $third = WaitShellLines 'pane sorted' $sorted 5
+  "24: the Name heading made name from A to Z the pane's own order ($($third.fields.key), descending $($third.fields.descending), own $($third.fields.own)): $($third.fields.key -eq 'name' -and $third.fields.descending -eq $false -and $third.fields.own -eq $true)"
+  "24: the right pane was not sorted by any of it: $(@(SortedLines | Where-Object { $_.fields.pane -ne 0 }).Count -eq 0)"
+} else {
+  "24: the Size and Name headings were found by UI Automation: False"
+}
+
+Step "24: a double-click on the Type heading fits the column and leaves the order as it was"
+Start-Sleep -Milliseconds $doubleClickWait
+$typeHeading = @(HeadingElements 'Type')[0]
+if ($typeHeading) {
+  $fits = @(ShellLines 'columns changed' | Where-Object { $_.fields.how -eq 'fit' }).Count
+  $tr = $typeHeading.Current.BoundingRectangle
+  $tx = [int]($tr.Left + $tr.Width / 2); $ty = [int]($tr.Top + $tr.Height / 2)
+  [Live]::Click($tx, $ty); [Live]::Click($tx, $ty)
+  Start-Sleep -Milliseconds 1800
+  $fitsNow = @(ShellLines 'columns changed' | Where-Object { $_.fields.how -eq 'fit' }).Count
+  $lastSort = SortedLines | Select-Object -Last 1
+  "24: the double-click fitted the column ($fitsNow fits, $fits before) and the last sort is the one that took the first click's back ($($lastSort.fields.key), own $($lastSort.fields.own)): $($fitsNow -gt $fits -and $lastSort.fields.key -eq 'name' -and $lastSort.fields.descending -eq $false -and $lastSort.fields.own -eq $true)"
+} else {
+  "24: the Type heading was found by UI Automation: False"
+}
+
+Step "24: the divider between the panes dragged 120 px to the right with the real mouse"
+$sizes = @(HeadingElements 'Size')
+$names = @(HeadingElements 'Name')
+if ($sizes.Count -ge 2 -and $names.Count -ge 2) {
+  $ls = $sizes[0].Current.BoundingRectangle; $rn = $names[1].Current.BoundingRectangle
+  # The left pane ends 14 px of padding and 1 px of frame after its Size heading, the right one starts as much before its
+  # Name heading; the divider is the middle of the 8 px gap between them.
+  $seamX = [int]((($ls.Right + 15 * $scale) + ($rn.Left - 15 * $scale)) / 2); $seamY = [int]($ls.Top + 120 * $scale)
+  $sizeX0 = $ls.Right
+  $splits = (SplitLines 'drag').Count
+  [Live]::Drag($seamX, $seamY, [int]($seamX + 120 * $scale), $seamY)
+  $drag = WaitShellLines 'pane split' $splits 5 { param($line) $line.fields.how -eq 'drag' }
+  Start-Sleep -Milliseconds 1500
+  $share = (ConfigUi).paneSplit
+  $sizeX1 = @(HeadingElements 'Size')[0].Current.BoundingRectangle.Right
+  "24: the Size heading of the left pane moved $([Math]::Round(($sizeX1 - $sizeX0) / $scale, 1)) px with the divider (120 wanted): $([Math]::Abs(($sizeX1 - $sizeX0) / $scale - 120) -le 4)"
+  "24: ui.paneSplit is $share, which is the share the drag logged ($($drag.fields.share), room $($drag.fields.room) px): $($share -is [double] -and $share -gt 0.5 -and $share -lt 0.8 -and $drag.fields.how -eq 'drag' -and [Math]::Abs($share - $drag.fields.share) -le 0.0015)"
+  Shot $h "$ShotDir\24-panes-dragged-live.png"
+
+  Step "24: a double-click on the divider makes the panes equal again"
+  $x1 = [int]($seamX + 120 * $scale)
+  $resets = (SplitLines 'divider').Count
+  [Live]::Click($x1, $seamY); [Live]::Click($x1, $seamY)
+  $reset = WaitShellLines 'pane split' $resets 5 { param($line) $line.fields.how -eq 'divider' }
+  Start-Sleep -Milliseconds 1500
+  $sizeX2 = @(HeadingElements 'Size')[0].Current.BoundingRectangle.Right
+  "24: the double-click wrote null to ui.paneSplit ($(if ($null -eq (ConfigUi).paneSplit) { 'null' } else { (ConfigUi).paneSplit }), the log says $($reset.fields.how)) and the Size heading is back within 4 px: $([bool]$reset -and $null -eq (ConfigUi).paneSplit -and [Math]::Abs($sizeX2 - $sizeX0) / $scale -le 4)"
+
+  Step "24: the palette's View: Equal Panes after a second drag"
+  [Live]::Drag($seamX, $seamY, [int]($seamX + 120 * $scale), $seamY)
+  Start-Sleep -Milliseconds 1800
+  $dragged = $null -ne (ConfigUi).paneSplit
+  $commands = (SplitLines 'command').Count
+  OpenPalette 500
+  [Live]::Type("equal panes"); Start-Sleep -Milliseconds 900
+  [Live]::Press($VK.Enter)
+  $equal = WaitShellLines 'pane split' $commands 5 { param($line) $line.fields.how -eq 'command' }
+  Start-Sleep -Milliseconds 1500
+  $sizeX3 = @(HeadingElements 'Size')[0].Current.BoundingRectangle.Right
+  "24: the second drag wrote a share, and Equal Panes from the palette wrote null and moved the panes back within 4 px: $($dragged -and [bool]$equal -and $null -eq (ConfigUi).paneSplit -and [Math]::Abs($sizeX3 - $sizeX0) / $scale -le 4)"
+  Shot $h "$ShotDir\24-panes-equal-live.png"
+} else {
+  "24: the headings of both panes were found by UI Automation ($($sizes.Count) Size, $($names.Count) Name): False"
+}
+
+Step "24: the sidebar's divider in the classic layout: drag it to 300 px, double-click it for the design's width"
+$f24 = LastFields '"the sidebar shows a view"'
+$w24 = [int]$f24.width
+$dr24 = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$dr24, 16)
+$dy24 = [int]($dr24.Top + ($dr24.Bottom - $dr24.Top) * 0.55)
+$nameX0 = @(HeadingElements 'Name')[0].Current.BoundingRectangle.Left
+# The divider is the 8 px strip at the sidebar's right edge: 8 px gutter, then the width, then 4 px to its middle (no rail here).
+[Live]::Drag([int]($dr24.Left + (12 + $w24) * $scale), $dy24, [int]($dr24.Left + (12 + 300) * $scale), $dy24)
+Start-Sleep -Milliseconds 1800
+$nameX1 = @(HeadingElements 'Name')[0].Current.BoundingRectangle.Left
+"24: ui.sidebarWidth is near 300 (the design's width was $w24) and the left pane moved with the divider by $([Math]::Round(($nameX1 - $nameX0) / $scale, 1)) px (wanted $(300 - $w24)): $([Math]::Abs([double](ConfigUi).sidebarWidth - 300) -le 4 -and [Math]::Abs(($nameX1 - $nameX0) / $scale - (300 - $w24)) -le 4)"
+Shot $h "$ShotDir\24-sidebar-dragged-live.png"
+$x24 = [int]($dr24.Left + (12 + 300) * $scale)
+[Live]::Click($x24, $dy24); [Live]::Click($x24, $dy24)
+Start-Sleep -Milliseconds 1800
+$nameX2 = @(HeadingElements 'Name')[0].Current.BoundingRectangle.Left
+"24: the double-click wrote null to ui.sidebarWidth ($(if ($null -eq (ConfigUi).sidebarWidth) { 'null' } else { (ConfigUi).sidebarWidth })) and the left pane is back within 4 px: $($null -eq (ConfigUi).sidebarWidth -and [Math]::Abs($nameX2 - $nameX0) / $scale -le 4)"
+"24: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warn24)"
+
 # ----- compact overlay (docs/ui.md, "Compact overlay") -----
 # Ctrl+Alt+Up with real keys makes the window a small always-on-top drawer, and the same key brings it back. The window's
 # own rectangle comes from DWM (extended frame bounds, in pixels), its topmost style from Windows (WS_EX_TOPMOST), and its
@@ -2732,6 +2872,25 @@ $off = WaitShellLines 'terminal split' $splits 5
 Start-Sleep -Milliseconds 1000
 $splitConfig = Get-Content "$root\config\cabinetos.json" -Raw | ConvertFrom-Json
 "21: Ctrl+Backslash again showed the one view and wrote false: $($off.fields.split -eq $false -and $off.fields.effective -eq $false -and $splitConfig.terminal.split -eq $false)"
+
+Step "24: the Tool Dock's splitter dragged with the real mouse (up 60 px, then down 40 px) saves ui.dockSize.bottom each time"
+# The header is 34 px high and the left tab is in its middle; the splitter is the 8 px gap above the dock, so its middle is 17 + 4 px above the tab's.
+$tab24 = ShellElement "pwsh [Left], session $leftSession"
+if ($tab24) {
+  $tr24 = $tab24.Current.BoundingRectangle
+  $dock24 = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$dock24, 16)
+  $sx24 = [int](($dock24.Left + $dock24.Right) / 2); $sy24 = [int]($tr24.Top + $tr24.Height / 2 - 21 * $scale)
+  [Live]::Drag($sx24, $sy24, $sx24, [int]($sy24 - 60 * $scale))
+  Start-Sleep -Milliseconds 1800
+  $up24 = (ConfigUi).dockSize.bottom
+  $sy25 = [int]($sy24 - 60 * $scale)
+  [Live]::Drag($sx24, $sy25, $sx24, [int]($sy25 + 40 * $scale))
+  Start-Sleep -Milliseconds 1800
+  $down24 = (ConfigUi).dockSize.bottom
+  "24: the drag up saved ui.dockSize.bottom ($up24 px) and the drag down 40 px made it $down24 px: $($null -ne $up24 -and $null -ne $down24 -and [Math]::Abs(($up24 - $down24) - 40) -le 3)"
+} else {
+  "24: the left terminal tab was found by UI Automation: False"
+}
 
 Step "21: a click on the left tab; Ctrl+Backquote gives the keyboard back to the pane; again: the dock hides"
 # Alt+] above may have brought the right pane's tab to the front: the second Ctrl+Backquote hides only the pane's own.

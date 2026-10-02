@@ -103,7 +103,7 @@ the next audit does not ask again.
 | `ui.pinned` | `sidebar.pin`, `sidebar.unpin` | the sidebar | fine |
 | `ui.compactOverlay` | `view.toggleCompactOverlay`, Ctrl+Alt+Up | to check | command fine; window to check |
 | `panes.showHidden` | none | none | **Gap 2.** "View: Toggle Hidden Files" and a menu item |
-| `panes.sort.*` | `view.sortBy*` | column headers | fine |
+| `panes.sort.*` | `view.sortBy*` | column headers (since Phase 24) | fine |
 | `panes.folderSizes` | `view.toggleFolderSizes` | to check | command fine; window to check |
 | `files.editor` | none (`file.edit` uses it) | the "Open with" picker is per file | **Gap 7.** "Preferences: Choose Editor" and a Settings entry |
 | `contextMenu` (the menu's rows) | `menu.edit` | "Edit Menu…" in the menu | fine |
