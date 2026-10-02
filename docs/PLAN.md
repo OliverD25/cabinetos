@@ -1798,6 +1798,70 @@ converter `release-media-convert.py`; its dry run on the laptop made the six
 clean media files of 0.1.0 over a `C:\Demo` folder, in
 `_io/release-notes-dry-run/media`, for the Luminart site's page.
 
+**Status (2026-10-03, 00:33): units 1, 2, 3 and 5 are on main** (merge c822076,
+with the coder's branch verified again by the planning session: the five
+core checks, both window builds, 1279 fast tests, and the live check on
+the laptop). Three things came with the merge. `cargo deny` found seven new
+advisories against wasmtime 49.0.1, the sandbox's runtime (RUSTSEC-2026-0321
+to 0327); the merge raises it to 49.0.2. While the verification ran,
+another Claude session committed 0.1.1 on main from the same checkout and
+published it on GitHub at 00:20 (tag `v0.1.1`), with its own ADR 0019: the
+setup file installs a missing prerequisite itself. That replaces unit 5's
+decision that the setup downloads nothing; the creator's later action
+wins, the merge keeps it, and the coder's symbols ADR moves to the free
+number 0021. So 0.1.1 carries neither the symbols zip, nor the indexer's
+automatic start, nor the wasmtime fix: they are the first content of
+0.1.2. And one core test, the job progress rate over 10,000 files, failed
+once under the load of the full run and passed three times alone: a timing
+flake to make robust. Unit 3's claim, the service up by itself after a
+restart, is still not shown in the VM: guest control cannot answer a UAC
+prompt, so the install there is one elevated step by hand
+([release.md](release.md), "The indexer service"). Unit 4 is answered by
+the 11g decisions (the publisher is the pull request's GitHub login;
+`verified` is the creator's badge).
+
+### Phase 23 — The theme gallery and the first three-ways gaps (the creator's word of 2026-10-03: "do gaps 1 to 4 with the theme gallery")
+
+Covers the desk cards "Themes get their own catalogue and gallery (split
+from the extensions)" and "Settings reachable three ways" (gaps 1 to 4 of
+the audit in the `settings-three-ways` skill). Before 11b, by the creator's
+choice of 2026-10-02.
+
+Produces: 1. two catalogue files from one build script, `index.json` for
+plugins and tools and `themes.json` for themes, where a theme entry carries
+`appearance` (dark, light or system), `density` and three tile colours,
+read by the core with the same cache, ETag and trust rules
+(`marketplace.themes`, default the public address); 2. the Extensions page:
+today's marketplace page without themes (Discover, Plugins, Tools,
+Installed; "Search extensions"); 3. the theme gallery: colour tiles, each
+painted in its theme's background, text and accent, with name, author and a
+dark or light mark; selecting a tile previews the theme on the whole window,
+Esc restores the one that was applied, Install downloads it to the themes
+folder and applies it; filters for dark, light and density presets, the
+system's mode first; reached from the theme picker's last row "Browse more
+themes" and the palette's "Themes: Browse" (`themes.browse`), while
+`marketplace.browse` and the rail's button open Extensions; 4. the
+three-ways gaps 1 to 4: "View: Classic Layout", "View: Terminal on the
+Right" and "View: Activity Rail" with the current one marked, a "Layout"
+item in the top row's menu and one chord that cycles; "View: Toggle Hidden
+Files" with a menu item; "Sidebar: Follow the Active Pane" with a toggle in
+the Explorer view's header; "Menu: Toggle Windows' Shell Menu" with a row
+in "Edit Menu…"; each writes its key through `set_value`, and each way has a
+test; 5. the documents: `marketplace.md`, `themes.md`, `config.md`,
+`keybindings.md`, an ADR for the two catalogues, CHANGELOG lines that name
+the three ways.
+
+Done when: the marketplace site serves both files and the window shows the
+Extensions page with no theme and the gallery with every theme of the
+collection; a tile's selection previews live and Esc restores; a theme
+installs from the gallery and the picker lists it; each of the four
+settings changes the same way from the file, the palette and the window,
+with a test per way; the live check passes on the laptop.
+
+Articles: 3, 4, 6, 7, 8, 10.
+
+**Status (2026-10-03, 00:33): handed to a coder on Sonnet.**
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
