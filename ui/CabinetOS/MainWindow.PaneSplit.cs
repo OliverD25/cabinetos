@@ -24,6 +24,10 @@ public sealed partial class MainWindow
     // The share laid out now: the setting kept within what this window's width allows, or the drag's share while it goes on.
     private double _paneSplitShare = PaneSplit.Equal;
     private bool _paneSplitDragging;
+
+    // Whether the pointer moved this press at all: a click is a press and a release, with the pointer's own sub-pixel jitter
+    // between, which the real mouse sends (the live check of 2026-10-03 saw a double-click write the share back).
+    private bool _paneSplitMoved;
     private double _paneSplitDragStart;
     private double _paneSplitDragStartShare;
 
@@ -33,7 +37,7 @@ public sealed partial class MainWindow
     private void SetUpPaneSplit()
     {
         PaneSplitter.DragStarted += StartPaneSplitDrag;
-        PaneSplitter.Dragged += delta => ResizePanes(PaneSplit.Drag(_paneSplitDragStart, delta, PanesGrid.ActualWidth, MinPaneWidth()));
+        PaneSplitter.Dragged += OnPaneSplitDragged;
         PaneSplitter.DragCompleted += EndPaneSplitDrag;
         PaneSplitter.DoubleClicked += () => SetEqualPanes("divider");
         PanesGrid.SizeChanged += (_, _) => ApplyPaneSplit();
@@ -68,12 +72,24 @@ public sealed partial class MainWindow
     private void StartPaneSplitDrag()
     {
         _paneSplitDragging = true;
+        _paneSplitMoved = false;
         _paneSplitDragStart = LeftColumn.ActualWidth;
         _paneSplitDragStartShare = _paneSplitShare;
     }
 
+    // A move of under a pixel before the first real one is jitter, not a drag.
+    private void OnPaneSplitDragged(double delta)
+    {
+        if (!_paneSplitDragging || (!_paneSplitMoved && Math.Abs(delta) < 1))
+        {
+            return;
+        }
+        ResizePanes(PaneSplit.Drag(_paneSplitDragStart, delta, PanesGrid.ActualWidth, MinPaneWidth()));
+    }
+
     private void ResizePanes(double share)
     {
+        _paneSplitMoved = true;
         _paneSplitShare = share;
         ApplyPaneSplit();
     }
@@ -83,10 +99,12 @@ public sealed partial class MainWindow
     private void EndPaneSplitDrag()
     {
         _paneSplitDragging = false;
-        if (Math.Abs(_paneSplitShare - _paneSplitDragStartShare) < 1e-9)
+        if (!_paneSplitMoved || Math.Abs(_paneSplitShare - _paneSplitDragStartShare) < 1e-9)
         {
+            _paneSplitMoved = false;
             return;
         }
+        _paneSplitMoved = false;
         _paneSplit = PaneSplit.ToSetting(_paneSplitShare);
         ApplyPaneSplit();
         LogPaneSplit("drag");
@@ -94,10 +112,15 @@ public sealed partial class MainWindow
     }
 
     // The divider's double-click and view.equalPanes: equal panes, and null in the file.
+    // A double-click's event comes while the second press is still down, before its release: that press is no drag, so the
+    // drag ends here, or the layout would wait for the release and the release would write the share that was just taken away.
     private void SetEqualPanes(string how)
     {
+        _paneSplitDragging = false;
+        _paneSplitMoved = false;
         if (_paneSplit is null)
         {
+            ApplyPaneSplit();
             return;
         }
         _paneSplit = null;
@@ -166,10 +189,19 @@ public sealed partial class MainWindow
                 EndPaneSplitDrag();
                 break;
             case "pane-divider-reset":
+                // What a real double-click raises, in its order: the press, the pointer's jitter, the double-click's event, the release.
+                StartPaneSplitDrag();
+                OnPaneSplitDragged(0.3);
                 SetEqualPanes("divider");
+                EndPaneSplitDrag();
                 break;
             case "sidebar-divider-reset":
+                _sidebarDragging = true;
+                _sidebarMoved = false;
+                _sidebarDragStart = SidebarColumn.ActualWidth;
+                OnSidebarDragged(0.3);
                 ResetSidebarWidth();
+                EndSidebarDrag();
                 break;
             case "pane-split":
                 // The panes' widths come from XAML's next frames, which a busy machine draws late.

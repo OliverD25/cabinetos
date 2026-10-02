@@ -37,6 +37,9 @@ public sealed partial class MainWindow
     private double _windowWidth;
     private double _sidebarDragStart;
     private bool _sidebarDragging;
+
+    // Whether the pointer moved this press: a click, or a double-click's half, writes no width.
+    private bool _sidebarMoved;
     private bool _sidebarWillClose;
     private bool _treeLocked;
     private bool _autoReveal = true;
@@ -70,9 +73,10 @@ public sealed partial class MainWindow
         SidebarSplitter.DragStarted += () =>
         {
             _sidebarDragging = true;
+            _sidebarMoved = false;
             _sidebarDragStart = SidebarColumn.ActualWidth;
         };
-        SidebarSplitter.Dragged += delta => ResizeSidebar(_sidebarDragStart + delta);
+        SidebarSplitter.Dragged += OnSidebarDragged;
         SidebarSplitter.DragCompleted += EndSidebarDrag;
         SidebarSplitter.DoubleClicked += ResetSidebarWidth;
 
@@ -439,8 +443,19 @@ public sealed partial class MainWindow
     // ----- The divider -----
 
     // The width follows the pointer; under 150 px the column fades to say that letting go closes the sidebar.
+    private void OnSidebarDragged(double delta)
+    {
+        // A move of under a pixel before the first real one is the pointer's jitter, not a drag.
+        if (!_sidebarDragging || (!_sidebarMoved && Math.Abs(delta) < 1))
+        {
+            return;
+        }
+        ResizeSidebar(_sidebarDragStart + delta);
+    }
+
     private void ResizeSidebar(double proposed)
     {
+        _sidebarMoved = true;
         var drag = SidebarSizing.Drag(proposed, _windowWidth);
         _sidebarWillClose = drag.Close;
         SidebarColumn.Width = drag.Width;
@@ -451,6 +466,11 @@ public sealed partial class MainWindow
     {
         _sidebarDragging = false;
         SidebarColumn.Opacity = 1;
+        if (!_sidebarMoved)
+        {
+            return;
+        }
+        _sidebarMoved = false;
         if (_sidebarWillClose)
         {
             // Snapped shut: the width it had before stays for the next time it opens.
@@ -465,8 +485,14 @@ public sealed partial class MainWindow
     }
 
     // A double-click on the divider: the design's width again, and null in the file. One that changes nothing writes nothing.
+    // The double-click's event comes while the second press is still down, before its release: that press is no drag, so the drag
+    // ends here, or its release would write the width that was just taken away.
     private void ResetSidebarWidth()
     {
+        _sidebarDragging = false;
+        _sidebarMoved = false;
+        _sidebarWillClose = false;
+        SidebarColumn.Opacity = 1;
         if (_sidebarWidth is null)
         {
             return;

@@ -2224,6 +2224,8 @@ function HeadingElements([string]$name) {
 function SortedLines { @(ShellLines 'pane sorted') }
 function HeadingCommandCount([string]$command) { @(ShellLines 'command executed' | Where-Object { $_.fields.command -eq $command -and $_.fields.trigger -eq 'heading' }).Count }
 function SplitLines([string]$how) { @(ShellLines 'pane split' | Where-Object { $_.fields.how -eq $how }) }
+# ui.paneSplit as a number (Windows PowerShell 5.1 reads one with decimals as a decimal), or $null.
+function PaneSplitInFile { $v = (ConfigUi).paneSplit; if ($null -eq $v) { $null } else { [double]$v } }
 $warn24 = @(UiLines '"level":"(WARN|WARNING|ERROR)"').Count
 $c24 = "$files\sort24"
 New-Item -ItemType Directory -Force "$c24\a folder" | Out-Null
@@ -2283,29 +2285,33 @@ if ($sizes.Count -ge 2 -and $names.Count -ge 2) {
   # Name heading; the divider is the middle of the 8 px gap between them.
   $seamX = [int]((($ls.Right + 15 * $scale) + ($rn.Left - 15 * $scale)) / 2); $seamY = [int]($ls.Top + 120 * $scale)
   $sizeX0 = $ls.Right
-  $splits = (SplitLines 'drag').Count
+  $splits = @(ShellLines 'pane split').Count
   [Live]::Drag($seamX, $seamY, [int]($seamX + 120 * $scale), $seamY)
   $drag = WaitShellLines 'pane split' $splits 5 { param($line) $line.fields.how -eq 'drag' }
   Start-Sleep -Milliseconds 1500
-  $share = (ConfigUi).paneSplit
+  $share = PaneSplitInFile
   $sizeX1 = @(HeadingElements 'Size')[0].Current.BoundingRectangle.Right
   "24: the Size heading of the left pane moved $([Math]::Round(($sizeX1 - $sizeX0) / $scale, 1)) px with the divider (120 wanted): $([Math]::Abs(($sizeX1 - $sizeX0) / $scale - 120) -le 4)"
-  "24: ui.paneSplit is $share, which is the share the drag logged ($($drag.fields.share), room $($drag.fields.room) px): $($share -is [double] -and $share -gt 0.5 -and $share -lt 0.8 -and $drag.fields.how -eq 'drag' -and [Math]::Abs($share - $drag.fields.share) -le 0.0015)"
+  "24: ui.paneSplit is $share, which is the share the drag logged ($($drag.fields.share), room $($drag.fields.room) px): $($null -ne $share -and $share -gt 0.5 -and $share -lt 0.8 -and $drag.fields.how -eq 'drag' -and [Math]::Abs($share - [double]$drag.fields.share) -le 0.0015)"
   Shot $h "$ShotDir\24-panes-dragged-live.png"
 
   Step "24: a double-click on the divider makes the panes equal again"
   $x1 = [int]($seamX + 120 * $scale)
-  $resets = (SplitLines 'divider').Count
+  $resets = @(ShellLines 'pane split').Count
+  $drags = (SplitLines 'drag').Count
   [Live]::Click($x1, $seamY); [Live]::Click($x1, $seamY)
   $reset = WaitShellLines 'pane split' $resets 5 { param($line) $line.fields.how -eq 'divider' }
   Start-Sleep -Milliseconds 1500
   $sizeX2 = @(HeadingElements 'Size')[0].Current.BoundingRectangle.Right
-  "24: the double-click wrote null to ui.paneSplit ($(if ($null -eq (ConfigUi).paneSplit) { 'null' } else { (ConfigUi).paneSplit }), the log says $($reset.fields.how)) and the Size heading is back within 4 px: $([bool]$reset -and $null -eq (ConfigUi).paneSplit -and [Math]::Abs($sizeX2 - $sizeX0) / $scale -le 4)"
+  # The double-click's own release must not write the share back: no drag is logged, and the file is still null a moment later.
+  Start-Sleep -Milliseconds 1500
+  $shareLater = PaneSplitInFile
+  "24: the double-click wrote null to ui.paneSplit ($(if ($null -eq $shareLater) { 'null' } else { $shareLater }), the log says $($reset.fields.how)), no drag was logged for its clicks and the Size heading is back within 4 px: $([bool]$reset -and $reset.fields.how -eq 'divider' -and $null -eq $shareLater -and (SplitLines 'drag').Count -eq $drags -and [Math]::Abs($sizeX2 - $sizeX0) / $scale -le 4)"
 
   Step "24: the palette's View: Equal Panes after a second drag"
   [Live]::Drag($seamX, $seamY, [int]($seamX + 120 * $scale), $seamY)
   Start-Sleep -Milliseconds 1800
-  $dragged = $null -ne (ConfigUi).paneSplit
+  $dragged = $null -ne (PaneSplitInFile)
   $commands = (SplitLines 'command').Count
   OpenPalette 500
   [Live]::Type("equal panes"); Start-Sleep -Milliseconds 900
@@ -2313,29 +2319,33 @@ if ($sizes.Count -ge 2 -and $names.Count -ge 2) {
   $equal = WaitShellLines 'pane split' $commands 5 { param($line) $line.fields.how -eq 'command' }
   Start-Sleep -Milliseconds 1500
   $sizeX3 = @(HeadingElements 'Size')[0].Current.BoundingRectangle.Right
-  "24: the second drag wrote a share, and Equal Panes from the palette wrote null and moved the panes back within 4 px: $($dragged -and [bool]$equal -and $null -eq (ConfigUi).paneSplit -and [Math]::Abs($sizeX3 - $sizeX0) / $scale -le 4)"
+  "24: the second drag wrote a share, and Equal Panes from the palette wrote null and moved the panes back within 4 px: $($dragged -and [bool]$equal -and $null -eq (PaneSplitInFile) -and [Math]::Abs($sizeX3 - $sizeX0) / $scale -le 4)"
   Shot $h "$ShotDir\24-panes-equal-live.png"
 } else {
   "24: the headings of both panes were found by UI Automation ($($sizes.Count) Size, $($names.Count) Name): False"
 }
 
-Step "24: the sidebar's divider in the classic layout: drag it to 300 px, double-click it for the design's width"
-$f24 = LastFields '"the sidebar shows a view"'
-$w24 = [int]$f24.width
+Step "24: the sidebar's divider in the classic layout: drag it 80 px to the right, double-click it for the design's width"
+# The divider is the 8 px strip at the left pane's left edge, and the pane's first heading text starts 15 px inside it (1 px of frame,
+# 14 px of padding): the strip's middle is 19 px before the text. (The window's log of the sidebar's width is no help: section 13's last
+# line is the width it left, not this one.)
 $dr24 = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$dr24, 16)
 $dy24 = [int]($dr24.Top + ($dr24.Bottom - $dr24.Top) * 0.55)
 $nameX0 = @(HeadingElements 'Name')[0].Current.BoundingRectangle.Left
-# The divider is the 8 px strip at the sidebar's right edge: 8 px gutter, then the width, then 4 px to its middle (no rail here).
-[Live]::Drag([int]($dr24.Left + (12 + $w24) * $scale), $dy24, [int]($dr24.Left + (12 + 300) * $scale), $dy24)
+$divX = [int]($nameX0 - 19 * $scale)
+[Live]::Drag($divX, $dy24, [int]($divX + 80 * $scale), $dy24)
 Start-Sleep -Milliseconds 1800
 $nameX1 = @(HeadingElements 'Name')[0].Current.BoundingRectangle.Left
-"24: ui.sidebarWidth is near 300 (the design's width was $w24) and the left pane moved with the divider by $([Math]::Round(($nameX1 - $nameX0) / $scale, 1)) px (wanted $(300 - $w24)): $([Math]::Abs([double](ConfigUi).sidebarWidth - 300) -le 4 -and [Math]::Abs(($nameX1 - $nameX0) / $scale - (300 - $w24)) -le 4)"
+$width24 = (ConfigUi).sidebarWidth
+"24: ui.sidebarWidth is $width24 and the left pane moved with the divider by $([Math]::Round(($nameX1 - $nameX0) / $scale, 1)) px (80 wanted): $($null -ne $width24 -and [Math]::Abs(($nameX1 - $nameX0) / $scale - 80) -le 4)"
 Shot $h "$ShotDir\24-sidebar-dragged-live.png"
-$x24 = [int]($dr24.Left + (12 + 300) * $scale)
+$x24 = [int]($divX + 80 * $scale)
 [Live]::Click($x24, $dy24); [Live]::Click($x24, $dy24)
 Start-Sleep -Milliseconds 1800
 $nameX2 = @(HeadingElements 'Name')[0].Current.BoundingRectangle.Left
-"24: the double-click wrote null to ui.sidebarWidth ($(if ($null -eq (ConfigUi).sidebarWidth) { 'null' } else { (ConfigUi).sidebarWidth })) and the left pane is back within 4 px: $($null -eq (ConfigUi).sidebarWidth -and [Math]::Abs($nameX2 - $nameX0) / $scale -le 4)"
+# The double-click's own release must not write the width back: the file is still null a moment later.
+Start-Sleep -Milliseconds 1500
+"24: the double-click wrote null to ui.sidebarWidth ($(if ($null -eq (ConfigUi).sidebarWidth) { 'null' } else { (ConfigUi).sidebarWidth })) and the left pane is back within 4 px (was $([Math]::Round(($nameX2 - $nameX0) / $scale, 1)) px off): $($null -eq (ConfigUi).sidebarWidth -and [Math]::Abs($nameX2 - $nameX0) / $scale -le 4)"
 "24: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warn24)"
 
 # ----- compact overlay (docs/ui.md, "Compact overlay") -----

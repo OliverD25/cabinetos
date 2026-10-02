@@ -205,6 +205,9 @@ public class DividersEndToEndTests
             var reset = Split(logs, "reset");
             Assert.Null(reset.Setting);
             Assert.Null(afterReset);
+            // The step runs a double-click as the real mouse sends it: the press, a sub-pixel jitter, the double-click, the release.
+            // The release must not write the share back, and the panes are equal after it.
+            AssertNear(reset.Room / 2, reset.LeftColumn, 1.5, "the left column after the divider's double-click");
             Assert.Contains(logs, l => Message(l) == "pane split" && Field(l, "how").GetString() == "command");
             Assert.Contains(logs, l => Message(l) == "pane split" && Field(l, "how").GetString() == "divider");
 
