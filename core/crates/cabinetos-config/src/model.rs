@@ -5,7 +5,9 @@
 use std::collections::BTreeMap;
 
 use cabinetos_commands::{KeySequence, Override};
-use cabinetos_protocol::{DEFAULT_UPDATE_SOURCE, SortKey, SortSpec, UpdateChannel};
+use cabinetos_protocol::{
+    DEFAULT_UPDATE_SOURCE, Pane, SortKey, SortSpec, TerminalMode, UpdateChannel,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::menu::{ContextMenuConfig, ProgramEntry};
@@ -389,15 +391,84 @@ impl From<SortConfig> for SortSpec {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields, default, rename_all = "camelCase")]
 pub struct TerminalConfig {
-    /// The `name` of the profile a new terminal starts with.
+    /// The `name` of the profile a new terminal starts with when its client
+    /// names none; it must name one of `profiles`. A change applies to the
+    /// next session.
     pub default_profile: String,
-    /// The shells a terminal can run.
+    /// The shells a terminal can run. Names must be unique. An edited
+    /// profile applies to the next session; a running shell keeps what it
+    /// started with.
     pub profiles: Vec<TerminalProfile>,
     /// Whether the Tool Dock is split under the two panes, the left pane's
     /// sessions under the left pane and the right pane's under the right
     /// (`terminal.toggleSplit`, Ctrl+\ in the terminal). The window writes it
     /// when the user toggles it and follows a change of the file.
     pub split: bool,
+    /// Whether the terminal tabs come back after a restart: the first time
+    /// the dock is shown after the window starts, the sessions it last had
+    /// are started again as fresh shells, each with its profile, folder, pane
+    /// and mode. The window owns the saved sessions; the core only stores them.
+    pub restore: bool,
+    /// The mode a new session starts in when its client names none:
+    /// `locked`, or `linked` (the shell follows its pane). A profile that is
+    /// not linkable stays `locked` whatever this says.
+    pub default_mode: TerminalMode,
+    /// The terminal sessions as the window last saved them, so the first
+    /// time the dock is shown after a restart they come back (`restore`).
+    /// The window owns them; the core only checks and stores them.
+    pub tabs: TerminalTabs,
+}
+
+/// The terminal sessions of a window, in the order of its tabs, and which
+/// tabs were in front.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default)]
+pub struct TerminalTabs {
+    /// The sessions, in the order of the tabs. Empty: nothing to restore.
+    pub items: Vec<SavedTerminal>,
+    /// The index in `items` of the tab in front, from 0; it must name one of
+    /// `items`. Left out: none was in front.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub front: Option<u32>,
+    /// Each pane's own front tab, which the split dock shows in that pane's
+    /// half.
+    pub shown: ShownTerminals,
+}
+
+/// Each pane's front tab, as an index in `terminal.tabs.items`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default)]
+pub struct ShownTerminals {
+    /// The left pane's front tab. Left out: none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left: Option<u32>,
+    /// The right pane's front tab. Left out: none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right: Option<u32>,
+}
+
+/// One saved terminal session: what is needed to start the same kind of
+/// shell again. Its output and its history are not saved.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct SavedTerminal {
+    /// The profile's `name`. A profile that is gone falls back to
+    /// `terminal.defaultProfile` when the session comes back.
+    pub profile: String,
+    /// The shell's folder: the one its prompt hook reported last, else the
+    /// one it started in. Left out: the user's profile folder. A folder that
+    /// is gone falls back to the user's profile folder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// The file pane the session belongs to. Left out: `left`.
+    #[serde(default)]
+    pub pane: Pane,
+    /// How the session is bound to its pane. Left out: `locked`.
+    #[serde(default)]
+    pub mode: TerminalMode,
 }
 
 /// The note the `claude` profile adds to Claude Code's system prompt: where
@@ -434,6 +505,9 @@ impl Default for TerminalConfig {
                 ),
             ],
             split: false,
+            restore: true,
+            default_mode: TerminalMode::Locked,
+            tabs: TerminalTabs::default(),
         }
     }
 }
@@ -712,6 +786,12 @@ mod tests {
         assert_eq!(config.terminal.default_profile, "pwsh");
         // Article 4: one terminal view until the user splits the dock.
         assert!(!config.terminal.split);
+        assert!(config.terminal.restore, "the tabs come back by default");
+        assert_eq!(
+            config.terminal.default_mode,
+            TerminalMode::Locked,
+            "Article 4: a new session is locked until the user links it"
+        );
         let names: Vec<&str> = config
             .terminal
             .profiles
@@ -1025,5 +1105,86 @@ mod tests {
         assert!(text.contains("\"files\":{\"editor\":null}"), "{text}");
         assert!(text.contains("\"defaultProfile\":\"pwsh\""));
         assert!(text.contains("\"allowInsecure\":false"));
+    }
+
+    #[test]
+    fn the_terminal_keys_for_the_tabs_across_a_restart_are_read_and_written_as_documented() {
+        let text = serde_json::to_string(&Config::default()).unwrap();
+        // The saved sessions: nothing by default, and only what is set is written.
+        assert!(
+            text.contains("\"tabs\":{\"items\":[],\"shown\":{}}"),
+            "{text}"
+        );
+        let saved: TerminalConfig = serde_json::from_str(
+            r#"{"tabs": {"items": [
+                {"profile": "pwsh", "folder": "E:\\work", "pane": "right", "mode": "linked"},
+                {"profile": "cmd"}
+            ], "front": 1, "shown": {"right": 0}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            saved.tabs.items,
+            [
+                SavedTerminal {
+                    profile: "pwsh".to_owned(),
+                    folder: Some(r"E:\work".to_owned()),
+                    pane: Pane::Right,
+                    mode: TerminalMode::Linked,
+                },
+                SavedTerminal {
+                    profile: "cmd".to_owned(),
+                    folder: None,
+                    pane: Pane::Left,
+                    mode: TerminalMode::Locked,
+                },
+            ],
+            "a session may leave out all but its profile"
+        );
+        assert_eq!(
+            (
+                saved.tabs.front,
+                saved.tabs.shown.left,
+                saved.tabs.shown.right
+            ),
+            (Some(1), None, Some(0))
+        );
+        assert_eq!(
+            serde_json::to_string(&saved.tabs).unwrap(),
+            r#"{"items":[{"profile":"pwsh","folder":"E:\\work","pane":"right","mode":"linked"},{"profile":"cmd","pane":"left","mode":"locked"}],"front":1,"shown":{"right":0}}"#
+        );
+        for bad in [
+            r#"{"tabs": {"items": [{"folder": "E:\\"}]}}"#,
+            r#"{"tabs": {"items": [{"profile": "a", "pane": "middle"}]}}"#,
+            r#"{"tabs": {"items": [{"profile": "a", "mode": "following"}]}}"#,
+            r#"{"tabs": {"items": [{"profile": "a", "cwd": "E:\\"}]}}"#,
+            r#"{"tabs": {"front": -1}}"#,
+            r#"{"tabs": {"shown": {"middle": 0}}}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<TerminalConfig>(bad).is_err(),
+                "{bad}"
+            );
+        }
+        // The restoration and the new session's mode are written with the terminal's other keys.
+        assert!(
+            text.contains("\"restore\":true,\"defaultMode\":\"locked\""),
+            "{text}"
+        );
+        let kept: TerminalConfig =
+            serde_json::from_str(r#"{"restore": false, "defaultMode": "linked"}"#).unwrap();
+        assert!(!kept.restore);
+        assert_eq!(kept.default_mode, TerminalMode::Linked);
+        assert_eq!(kept.default_profile, "pwsh", "the other keys keep theirs");
+        for bad in [
+            r#"{"restore": "no"}"#,
+            r#"{"defaultMode": "following"}"#,
+            r#"{"defaultMode": "Linked"}"#,
+            r#"{"defaultMode": true}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<TerminalConfig>(bad).is_err(),
+                "{bad}"
+            );
+        }
     }
 }

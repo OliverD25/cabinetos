@@ -30,8 +30,9 @@ Measured on 2026-09-28 on the development PC (Windows 11, debug build):
 ## Profiles
 
 A session starts a profile from `terminal.profiles` in `cabinetos.json`
-([config.md](config.md)); without a name it starts `terminal.defaultProfile`.
-The defaults:
+([config.md](config.md)); without a name it starts `terminal.defaultProfile`,
+and without a mode it starts in `terminal.defaultMode` ("Panes and modes"
+below). The defaults:
 
 ```json
 "terminal": {
@@ -142,7 +143,9 @@ and `terminal_list` report.
   lets go of the last, so the name never disappears in between.
 - **The session belongs to the core**, not to the client. A client may
   leave, crash or restart; the shell goes on. A restarted UI connects,
-  calls `terminal_list`, and opens the same pipe again.
+  calls `terminal_list`, and opens the same pipe again. The window does
+  that when its dock is first shown, before it restores anything from the
+  file ("Restoring the tabs" below).
 - **Output waits for a client**, up to 1 MiB. When the buffer is full, the
   core stops reading the pseudo-console, so the shell waits too, until a
   client reads (backpressure). The core logs `terminal output
@@ -181,8 +184,13 @@ left pane stays the left pane's. Each session also has a mode:
   its next prompt follow (press Enter at an empty prompt to follow at
   once). cmd and Claude Code cannot be linked.
 
-`terminal_open` takes the mode too (`locked` when left out).
-`terminal_set_mode` changes it later. Every connection that said `hello`
+`terminal_open` takes the mode too. Left out, the core takes
+`terminal.defaultMode` from `cabinetos.json` ([config.md](config.md)),
+`locked` unless the file says `linked`, and `locked` for a profile that
+is not linkable, so a default of `linked` never fails a `cmd` session with
+`not_linkable`. It reads the setting at each open, so an edit applies to the
+next session. A mode the client names wins. `terminal_set_mode` changes it
+later. Every connection that said `hello`
 then gets `terminal_mode_changed` with the session and its new mode, so
 two windows, or a window and the CLI, show the same mode. The same mode
 again changes nothing and sends no event. An exited session takes the
@@ -224,6 +232,95 @@ both halves again after a restart of the window. A half whose pane has no
 session shows a hint; starting a session for that pane (Ctrl+` in it)
 fills it. The drawing, the keys and the halves' layout are in
 [ui.md](ui.md), "The terminal".
+
+## Restoring the tabs
+
+Unit 5 of the terminal sprint (2026-10-02). After a restart, the first time
+the dock is shown, the sessions the last run had come back as fresh shells,
+each with its profile, folder, pane and mode, in the same order, with the
+same tabs in front. What a shell printed, its history and any program that
+ran in it do not come back: a restored session is a new shell that starts
+where the old one was. The core is not involved in the restoration, except
+that it starts the shells and checks the folders: the window saves and reads
+the layout, as it does for `ui.tabs` ([ui.md](ui.md), "What the window
+remembers").
+
+**What is saved.** One entry per running session, in the order of the tabs
+(`terminal.tabs`, [config.md](config.md)):
+
+| Field | Value |
+|---|---|
+| `profile` | The profile's `name`. |
+| `folder` | The folder the shell's prompt hook reported last ("The prompt hook"), else the one the session started in; left out when neither is known (the user's profile folder). |
+| `pane` | `left` or `right`. |
+| `mode` | `locked` or `linked`. |
+
+and the index of the tab in front (`front`) and of each pane's own front tab
+(`shown.left`, `shown.right`; the split dock shows those in the halves). The
+split itself is `terminal.split` and is not saved twice. A session whose
+shell ended is not saved.
+
+**Where and when it is written.** In `cabinetos.json`, through the core's
+`set_value`, which is how the window saves its other restart state; the
+window never touches the file. It writes a second after any change of the
+tabs (a session opens or closes, its mode or its reported folder changes,
+another tab comes to the front), and once more when the window closes; a
+write that would change nothing is skipped. Nothing is written before the
+dock is first shown after the window started, nor while a restoration runs:
+the empty tabs of a window that has started no session say nothing about
+what is saved. The window logs "terminal layout saved" with the counts.
+
+**When it is read.** At the start of the window; it is used when the dock is
+first shown: the first Ctrl+Backquote, the terminal button or the rail's, Ctrl+Shift+T
+or "Open in Terminal" (the new session comes after the restored ones). It
+happens once per start. When the core stops and the window starts it again,
+the shells end with it; the first show after that brings back the tabs the
+stopped core had.
+
+**What happens at that first show** (`TerminalRestore`, a pure class with
+unit tests, as `TerminalSummoning` and `TerminalSplitLayout` are):
+
+1. The window asks the core which sessions it runs (`terminal_list`). When
+   it runs sessions the window does not show, the window shows those and
+   restores nothing from the file, whatever `terminal.restore` says. This is
+   the reading chosen for "the core's own sessions win": a restarted window
+   connects to what lives in the core and does not start a second set. Today
+   the window starts its own core and the core ends with it (`--parent-pid`),
+   so a core never outlives its window and this rule has nothing to show
+   yet; it is there so that the file never doubles sessions a core already
+   runs. The log says `adopted`.
+2. With `terminal.restore` false, nothing is restored, and the log says why.
+   The window still saves the sessions, so turning the setting on later
+   brings back the last layout.
+3. With nothing saved, nothing is restored.
+4. Otherwise each saved session is started again, in the saved order, one
+   `terminal_open` each. After them each pane's own front tab comes to the
+   front, and then the saved front tab, so the one view ends on the tab that
+   was in front and the split dock shows each pane's tab in its half. The
+   terminal gets the keyboard.
+
+What cannot come back as it was falls back, and each fallback has a log
+line (`terminal restore fell back`: the index, what, the saved value and
+the value used):
+
+| Saved | Falls back to |
+|---|---|
+| A profile that no longer exists | `terminal.defaultProfile` |
+| A folder that no longer exists | The user's profile folder. The window reads no disk, so it asks the core: a `terminal_open` the core refuses with `spawn_failed` is asked once more in the profile folder (the log says `terminal restore tries again`). |
+| No folder | The user's profile folder (no fallback: nothing was lost). |
+| `linked` for a profile that cannot be linked now | `locked` (`not_linkable`, asked once more locked). |
+| A session that still cannot start | Skipped, with the warning `terminal session not restored` (the code and the core's message); the others still come back. |
+| More than 32 sessions in the file | The first 32, the core's limit. |
+
+Each session that comes back logs `terminal session restored` with its
+profile, folder, pane, mode and the number of fallbacks, and the whole ends
+with one `terminal restored` line: `count`, how many were `saved`, how many
+`skipped`, and the tabs. The window's `terminal restore` line, before them,
+says what was decided and why. A restored session also logs the usual
+`terminal session opened`, since it is one.
+
+A new window (`window.new`) has its own core and its own sessions, and both
+windows write `terminal.tabs`: the last write wins, as it does for `ui.tabs`.
 
 ## The prompt hook
 
@@ -402,7 +499,9 @@ cabinetos-cli --pipe demo term --profile pwsh --cwd E:\ --pane right
   unchanged and waits for the shell to exit, so the input should end with
   `exit`: `printf 'Get-Location\r\nexit\r\n' | cabinetos-cli term`.
 - Without `--profile`, the default profile; without `--cwd`, the CLI's own
-  folder; without `--pane`, the left pane. The session starts locked.
+  folder; without `--pane`, the left pane. The session starts in
+  `terminal.defaultMode`: locked unless the file says `linked`, and locked
+  for a profile that cannot be linked.
 
 `cabinetos-cli term cwd` is what a prompt hook runs: it prints the folder
 a linked session follows (its pane's folder), one line, or nothing for a
@@ -458,8 +557,9 @@ cab move --selection --dest D:\archive
 
 - `cab pane` prints the folder of the active pane, the one that has the
   keyboard; `--left` and `--right` print a pane's. `--json` prints the
-  whole context: `active`, `left`, `right`, `selection`, `selection_total`
-  and `cursor` (a pane that shows no folder is `null`).
+  whole context: `active`, `left`, `right`, `selection`, `selection_total`,
+  `cursor` (a pane that shows no folder is `null`) and `dual`, whether the
+  window shows both panes.
 - `cab selection` prints what the window's own file commands act on in the
   active pane, one full path to a line (`--json`: a list): the marked rows,
   or the row the cursor is on when none is marked.
@@ -469,18 +569,23 @@ cab move --selection --dest D:\archive
   folder the other pane shows. A path is read as the other commands read
   one, against the folder the shell is in (a folder that is called
   `opposite_pane` is `.\opposite_pane`). The first line says what is going
-  where, so a copy into a pane the user cannot see (one pane shown) is not
-  silent.
+  where. With one pane shown, `opposite_pane` is refused, as the window's
+  own "copy to the other pane" is: exit 1, one line, "the other pane is
+  hidden; show both panes or name a path", nothing started (the creator's
+  answer of 2026-10-02; protocol 19, `window_state`'s `dual`). A named path
+  still works with one pane shown.
 - Conflicts: the default is `--on-conflict skip`, since a job started from
   a shell must not wait for an answer a shell cannot give; what exists at
-  the destination stays, and the summary counts it as skipped. `--on-conflict
+  the destination stays, and the summary counts it as skipped. The creator
+  confirmed this default on 2026-10-02; `ask` and `rename` stay a choice
+  per command. `--on-conflict
   overwrite|rename|newer|ask`, `--resolve`, `--verify` and `--stats` work
   as with paths. With `ask` a conflict waits, and the window's transfer
   flyout shows it as for any job.
 - The exit code: 0 when it answered or the job completed; 1 for a failure
   (no core within 1 s, a job that did not complete or that the core
-  refused, an opposite pane that shows no folder, a selection the window
-  cut: see below); 2 when there is nothing to act on (no window has said
+  refused, an opposite pane that is hidden or shows no folder, a
+  selection the window cut: see below); 2 when there is nothing to act on (no window has said
   what it shows, nothing is selected, the pane shows no folder). `cab
   selection` with nothing selected prints nothing (`[]` with `--json`) and
   exits 2. The usage errors of the command line itself also exit 2, with
@@ -538,6 +643,20 @@ shell's `cab` copies and moves the window's selection), and the live
 check's section 21. To test `term` in a
 real console, a CLI test runs `cabinetos-cli term` as the program of a
 session of its own and types into that pseudo-console, `Ctrl+]` included.
+
+The restoration is tested at three levels: the pure rules (the window's
+`TerminalRestoreTests`: whether to restore, the plan, every fallback, what
+to try again, which tabs come to the front) and the saved layout's reading
+and writing (`TerminalLayoutTests`); the core's checks of `terminal.tabs`,
+`terminal.restore` and `terminal.defaultMode` (`cabinetos-config`'s tests
+and `cabinetos-core`'s `tests/terminal.rs`, `tests/shell_requests.rs`); and
+the whole path with real windows (`TerminalEndToEndTests`: a first window
+opens three sessions and closes, a second one starts on the same file and its
+first Ctrl+Backquote brings them back; with `terminal.restore` off nothing
+comes back and a new session starts in `terminal.defaultMode`; a gone
+profile, folder and link, and a session that cannot start). The live check
+starts one window and never restarts it, so its section 21 judges the save
+only.
 
 The shells run only `echo`, `cd`, `mode con`, `Get-Location`, `pwd` and
 `exit`, in folders under `%TEMP%\cabinetos-term-test\`, which the tests

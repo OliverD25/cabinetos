@@ -2149,6 +2149,11 @@
           "description": "The pane that has the keyboard.",
           "$ref": "#/$defs/Pane"
         },
+        "dual": {
+          "description": "Whether the window shows both panes (protocol version 19). With one\npane shown, the right pane's folder is a pane nobody sees, so a\nprogram that means \"the other pane\" must refuse. Left out: `true`,\nsince a window older than version 19 did not say.",
+          "type": "boolean",
+          "default": true
+        },
         "panes": {
           "description": "Both panes.",
           "$ref": "#/$defs/WindowPanes"

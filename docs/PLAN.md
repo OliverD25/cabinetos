@@ -1470,6 +1470,62 @@ shell needs next to the core, so section 21 answered False nine times
 against the next copy (cc99de9). Still open for the creator:
 `opposite_pane` with one pane shown, the default `skip`.
 
+**Status (2026-10-02, 12:00): unit 5 built, on its branch, not merged.**
+Config and restoration, by a coder on Sonnet, 61d4257..4a4380c and the docs
+on the branch `worktree-agent-a8a124e56be8f0285`
+([log/2026-10-02/terminal-unit5-report.md](log/2026-10-02/terminal-unit5-report.md)).
+The two open questions of unit 4 are answered as the creator decided:
+`cab copy|move --selection --dest opposite_pane` is refused with exit 1
+("the other pane is hidden; show both panes or name a path") while only one
+pane is shown, for which `window_state` and the `gui_context` answer carry
+`dual` (protocol 19; a window that does not send it means both panes), and
+the default `skip` is recorded as confirmed. `terminal.restore` (on by
+default) and `terminal.defaultMode` (`locked` by default; a profile that
+cannot be linked stays locked) are new keys, and the re-audit of the
+`terminal.*` keys found them all in the schema and in config.md, and the two
+profile keys' doc comments now say when an edit applies. The window saves
+its terminal sessions in `cabinetos.json` as `terminal.tabs` through the
+core's `set_value`, as it saves `ui.tabs` (profile, folder, pane, mode and the
+order of the tabs, the tab in front and each pane's front tab; a second after
+any change and when it closes). At the first show of the dock after a
+restart, with `terminal.restore` true and no session yet, the saved sessions
+start again as fresh shells: a gone profile falls back to
+`terminal.defaultProfile`, a gone folder to the home folder (one retry after
+the core's `spawn_failed`: the window reads no disk), a link the profile
+cannot have to locked; a session that cannot start is skipped; every step
+has a log line. The rules are a pure class, `TerminalRestore`, with its own
+tests. Sessions the core itself already runs win over the file (today a core
+never outlives its window, so only the rule has a test). Checks: core 879
+passed, 6 ignored, clippy, fmt and deny clean; window 1333 tests (1275 passed
+and 58 end-to-end skipped in the fast run); the full window suite with the
+end-to-end tests on this PC 1333 of 1333 in 3 min 57 s (a first run had a
+changelog test of mine, since fixed, and two tests that fail by turns under
+the suite's load and pass alone); the live check on this PC 253 True, 1
+False in 7 min 58 s (`run-unit5-a.txt`; the False line is section 18's
+clipboard step after Windows' own Copy, not the terminal) and on the laptop
+262 True, 0 False in 8 min 57 s (`run-2026-10-02-1130-rd-omen-laptop.txt`;
+the panel goal is met: 267 frames, none with UI work over 20 ms or 33 ms);
+the end-to-end suite on the laptop 1331 of 1333 in 4 min 38 s
+(`tests-2026-10-02-1140-rd-omen-laptop.txt`; the two failures are known
+timing tests, the column view test and the context menu edit test, and none
+is in the terminal). Open for the creator: which reading of "the core's own
+sessions win" is wanted when a later unit lets a core outlive its window,
+and whether the saved front tab or the pane pressed should win at the first
+show.
+
+**Status (2026-10-02, 11:58): unit 5 merged into main** (a fast-forward to
+2ee3399, since main had not moved) after the planning session's own
+checks on the branch: the five core checks green (879 passed, 6 ignored),
+the window built with warnings as errors, 1275 fast tests; the coder's own
+end-to-end suites and live checks on both machines stand as the window
+runs (above). The two readings left open for the creator are the
+defaults until they say otherwise. Noticed by the coder and left: `cab
+pane --right` with one pane shown still prints the hidden pane's folder;
+the `cab state` table does not show `dual`; the live check's section 18
+reads the clipboard after a fixed 500 ms (the flake's cause); the rail
+test `Every_way_of_picking_a_folder_in_the_sidebar_runs_go_toPath_once`
+failed once under suite load here and is not in the flakes report yet.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):

@@ -151,6 +151,7 @@ fn state_prints_what_the_window_said() {
             },
             right: PaneState::default(),
         },
+        dual: true,
     };
     // The window stays connected while the CLI asks: its state goes with it.
     let window = runtime.block_on(async {

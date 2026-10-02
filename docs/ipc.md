@@ -164,7 +164,14 @@ terminal sprint, 2026-10-02) added the prompt hook's messages:
 `terminal_list` ("Terminal sessions"). Version 18 (unit 4 of the terminal
 sprint, 2026-10-02) added the GUI context for `cab`: `gui_context` with
 its reply `gui_context` ("The GUI context"), and `marked_total`, an
-optional field of a pane in `window_state`.
+optional field of a pane in `window_state`. Version 19 (unit 5 of the
+terminal sprint, 2026-10-02) added `dual` to `window_state` and to the
+reply `gui_context`: whether the window shows both panes, so that `cab`
+can refuse "the other pane" while only one is shown. A window older than
+19 sends no `dual`, which reads as `true`. The same unit added the
+settings `terminal.restore`, `terminal.defaultMode` and `terminal.tabs`
+([config.md](config.md)); `terminal_open` without a `mode` now takes
+`terminal.defaultMode`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -214,7 +221,7 @@ as absent from an older core.
 | `grant_capabilities` | `plugin_id`, `capabilities` | `ok` |
 | `search` | `query`; `limit` (default 100, at most 1,000); `root` | `file_search_results` |
 | `index_status` | — | `index_status` (`available`, `volumes`) |
-| `terminal_open` | `cols`, `rows`, `pane` (`left` or `right`); `profile` (default `terminal.defaultProfile`); `cwd` (default the user's profile folder); `mode` (`locked` or `linked`, default `locked`) | `terminal_opened` (`session_id`, `pipe`, `pid`, `mode`, `linkable`) |
+| `terminal_open` | `cols`, `rows`, `pane` (`left` or `right`); `profile` (default `terminal.defaultProfile`); `cwd` (default the user's profile folder); `mode` (`locked` or `linked`, default `terminal.defaultMode`, which is `locked` unless the file says `linked`; `locked` for a profile that is not linkable) | `terminal_opened` (`session_id`, `pipe`, `pid`, `mode`, `linkable`) |
 | `terminal_resize` | `session_id`, `cols`, `rows` | `ok` |
 | `terminal_close` | `session_id` | `ok`, once the shell has ended |
 | `terminal_type_paths` | `session_id`, `paths` | `ok` |
@@ -1289,9 +1296,11 @@ restarts, finds its sessions in `terminal_list` and attaches again.
   without it, the user's profile folder. `cols` and `rows` are the size in
   character cells, from 1 to 32,767.
 - `pane` is the file pane the session belongs to, `left` or `right`; it
-  never changes. `mode` is `locked` (the default) or `linked`; `linked`
-  for a profile that is not linkable fails with `not_linkable` and starts
-  no shell. A linked session follows its pane through its shell's prompt
+  never changes. `mode` is `locked` or `linked`; left out, the core takes
+  `terminal.defaultMode` (read at each open, `locked` unless the file says
+  `linked`), and `locked` for a profile that is not linkable. A `mode` the
+  client names wins, and `linked` for a profile that is not linkable fails
+  with `not_linkable` and starts no shell. A linked session follows its pane through its shell's prompt
   hook, at the shell's next prompt (`terminal_pane_folder` below;
   [terminal.md](terminal.md), "The prompt hook"). `linkable` in the reply
   says whether the session may be linked (the profile's `linkable`,
@@ -1745,11 +1754,18 @@ at. The core only stores it.
  "left":{"tabs":[{"path":"C:\\Users\\me","locked":false,"tool":null},
                  {"path":"E:\\work\\README.md","locked":false,"tool":"md-preview"}],
          "active":0,"cursor":"C:\\Users\\me\\notes.txt","marked":["C:\\Users\\me\\notes.txt"]},
- "right":{"tabs":[{"path":"D:\\","locked":true,"tool":null}],"active":0,"cursor":null,"marked":[]}}}
+ "right":{"tabs":[{"path":"D:\\","locked":true,"tool":null}],"active":0,"cursor":null,"marked":[]}},
+ "dual":true}
 {"id":"01M…","type":"ok"}
 ```
 
 - `active_pane` is `left` or `right`: the pane that has the keyboard.
+- `dual` says whether the window shows both panes (protocol 19). With one
+  pane shown the right pane's tabs are still listed, but nobody sees them,
+  so a program that means "the other pane" must refuse (`cab` does; the
+  window's own "copy to the other pane" does too). Left out: `true`, since
+  a window older than 19 did not say. The window sends a new state when
+  the second pane comes or goes.
 - Each pane has its `tabs`, left to right (`path`; `locked`; `tool`, the
   ID of the Tool Extension the tab shows, or `null` for a folder), the
   index of the tab in front (`active`, from 0), the full path of the cursor
@@ -1801,7 +1817,8 @@ soon as the user moves. So the core answers from the newest
 ```json
 {"id":"01Q…","type":"gui_context"}
 {"id":"01Q…","type":"gui_context","active":"left","left":"E:\\work","right":"D:\\backup",
- "selection":["E:\\work\\a.txt","E:\\work\\b.txt"],"selection_total":2,"cursor":"E:\\work\\b.txt"}
+ "selection":["E:\\work\\a.txt","E:\\work\\b.txt"],"selection_total":2,"cursor":"E:\\work\\b.txt",
+ "dual":true}
 ```
 
 - `active` is the pane that has the keyboard. `left` and `right` are the
@@ -1816,6 +1833,11 @@ soon as the user moves. So the core answers from the newest
   the length of `selection` when the window listed only the first 1,000
   marked rows (`marked_total`); a program that acts on the selection must
   then refuse, as `cab` does.
+- `dual` is whether the window shows both panes (protocol 19). With one
+  pane shown, `right` is a folder nobody sees: a program that means "the
+  opposite pane" must refuse (`cab copy|move --selection --dest
+  opposite_pane` exits 1 with "the other pane is hidden; show both panes
+  or name a path"). It is `true` when the window did not say.
 - The newest state of any window decides, as for `terminal_pane_folder`.
   With no window, or after the last one has gone, the answer is
   `no_window`. It needs no `hello`.

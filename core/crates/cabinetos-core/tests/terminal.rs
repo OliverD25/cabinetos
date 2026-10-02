@@ -62,8 +62,12 @@ impl Drop for Core {
 }
 
 fn start_core(dir: &Path) -> Core {
+    start_core_with(dir, CONFIG)
+}
+
+fn start_core_with(dir: &Path, text: &str) -> Core {
     let config = dir.join("cabinetos.json");
-    std::fs::write(&config, CONFIG).unwrap();
+    std::fs::write(&config, text).unwrap();
     let pipe = PipeName::random();
     let child = Command::new(CORE_EXE)
         .args(["--pipe", pipe.token()])
@@ -505,6 +509,115 @@ async fn sessions_have_a_pane_and_a_mode_and_every_client_hears_a_change() {
     }
 }
 
+/// A session whose client names no mode starts in `terminal.defaultMode`,
+/// read at each open, except for a profile that cannot be linked, which
+/// stays locked. A mode the client names wins.
+#[tokio::test]
+async fn a_session_without_a_mode_starts_in_the_default_mode() {
+    let dir = scratch("core-default-mode");
+    let core = start_core_with(
+        dir.path(),
+        r#"{
+  "terminal": {
+    "defaultProfile": "hooked",
+    "defaultMode": "linked",
+    "profiles": [
+      { "name": "cmd", "command": "cmd.exe" },
+      { "name": "hooked", "command": "cmd.exe", "linkable": true }
+    ]
+  }
+}"#,
+    );
+    let mut client = connect(&core.pipe).await;
+    let open_as = |profile: Option<&str>, mode: Option<TerminalMode>| Request::TerminalOpen {
+        profile: profile.map(str::to_owned),
+        cwd: Some(shown(dir.path())),
+        cols: 80,
+        rows: 25,
+        pane: Pane::Left,
+        mode,
+    };
+    let mut opened = Vec::new();
+    for (profile, mode) in [
+        (None, None),
+        (Some("cmd"), None),
+        (Some("hooked"), Some(TerminalMode::Locked)),
+    ] {
+        let reply = ask(&mut client, open_as(profile, mode)).await;
+        let Response::TerminalOpened {
+            session_id,
+            mode,
+            linkable,
+            ..
+        } = reply
+        else {
+            panic!("expected terminal_opened, got {reply:?}");
+        };
+        opened.push((session_id, mode, linkable));
+    }
+    assert_eq!(
+        opened
+            .iter()
+            .map(|(_, mode, linkable)| (*mode, *linkable))
+            .collect::<Vec<_>>(),
+        [
+            (TerminalMode::Linked, true),
+            (TerminalMode::Locked, false),
+            (TerminalMode::Locked, true),
+        ],
+        "the default for a linkable profile, locked for cmd, and the asked mode"
+    );
+    // The listing says the same, so a window that connects later draws the same modes.
+    let listed = bindings(&mut client).await;
+    assert_eq!(
+        listed
+            .iter()
+            .map(|(_, _, mode, _)| *mode)
+            .collect::<Vec<_>>(),
+        [
+            TerminalMode::Linked,
+            TerminalMode::Locked,
+            TerminalMode::Locked
+        ]
+    );
+    for (session_id, ..) in opened {
+        assert_eq!(
+            ask(&mut client, Request::TerminalClose { session_id }).await,
+            Response::Ok
+        );
+    }
+
+    // An edit of the file applies to the next session, as an edited profile does.
+    std::fs::write(
+        dir.path().join("cabinetos.json"),
+        r#"{ "terminal": { "defaultProfile": "hooked", "defaultMode": "locked", "profiles": [
+            { "name": "hooked", "command": "cmd.exe", "linkable": true } ] } }"#,
+    )
+    .unwrap();
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let reply = ask(&mut client, open_as(None, None)).await;
+        let Response::TerminalOpened {
+            session_id, mode, ..
+        } = reply
+        else {
+            panic!("expected terminal_opened, got {reply:?}");
+        };
+        assert_eq!(
+            ask(&mut client, Request::TerminalClose { session_id }).await,
+            Response::Ok
+        );
+        if mode == TerminalMode::Locked {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the edited default never applied"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
 /// A `window_state` whose panes show `left` and `right` (each the tab in
 /// front of two).
 fn window_showing(left: &str, right: &str) -> Request {
@@ -528,6 +641,7 @@ fn window_showing(left: &str, right: &str) -> Request {
             left: pane(left),
             right: pane(right),
         },
+        dual: true,
     })
 }
 

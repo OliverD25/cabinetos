@@ -144,9 +144,15 @@ impl Window {
     }
 
     fn say(&mut self, active_pane: Pane, left: PaneState, right: PaneState) {
+        self.say_showing(active_pane, left, right, true);
+    }
+
+    /// As `say`, also saying whether the window shows both panes.
+    fn say_showing(&mut self, active_pane: Pane, left: PaneState, right: PaneState, dual: bool) {
         let state = WindowState {
             active_pane,
             panes: WindowPanes { left, right },
+            dual,
         };
         let Self { client, runtime } = self;
         let reply = runtime
@@ -236,6 +242,7 @@ fn pane_prints_the_folders_the_window_shows() {
     assert_eq!(whole["selection"], serde_json::json!([]));
     assert_eq!(whole["selection_total"], 0);
     assert_eq!(whole["cursor"], Value::Null);
+    assert_eq!(whole["dual"], true);
 
     // A tool in front of a pane: that pane has no folder to print.
     let mut tool = pane(&left, None, &[]);
@@ -419,6 +426,72 @@ fn copy_runs_the_selection_into_the_opposite_pane_and_skips_what_is_there() {
     assert_eq!(
         fs::read_to_string(left.join("only-right.txt")).unwrap(),
         "from the right"
+    );
+}
+
+#[test]
+fn with_one_pane_shown_the_opposite_pane_is_refused_and_a_path_still_works() {
+    let dir = scratch("one-pane");
+    let core = start_core(dir.path());
+    let (left, right) = folders(dir.path(), &["a.txt", "b.txt"]);
+    let [a, b] = ["a.txt", "b.txt"].map(|name| left.join(name));
+    let mut window = Window::connect(&core);
+    // The window shows only the left pane; the right pane's folder is still in its state.
+    window.say_showing(
+        Pane::Left,
+        pane(&left, Some(&a), &[&a, &b]),
+        pane(&right, None, &[]),
+        false,
+    );
+
+    for verb in ["copy", "move"] {
+        let refused = cab(&core, &[verb, "--selection", "--dest", "opposite_pane"]);
+        assert_eq!(code(&refused), 1, "{verb}: {}", err(&refused));
+        assert_eq!(out(&refused), "", "{verb} started nothing and said nothing");
+        assert!(
+            err(&refused).contains("the other pane is hidden; show both panes or name a path"),
+            "{verb}: {}",
+            err(&refused)
+        );
+    }
+    assert_eq!(
+        out(&cab(&core, &["jobs"])).trim(),
+        "no jobs",
+        "no job was queued"
+    );
+    assert!(a.exists() && b.exists(), "a refused move moved nothing");
+    assert!(
+        !right.join("a.txt").exists(),
+        "a refused copy copied nothing"
+    );
+
+    // The pane commands still say what the state holds, and `--json` says why.
+    assert_eq!(
+        out(&cab(&core, &["pane", "--right"])),
+        format!("{}\n", shown(&right))
+    );
+    let whole: Value = serde_json::from_str(&out(&cab(&core, &["pane", "--json"]))).unwrap();
+    assert_eq!(whole["dual"], false);
+
+    // Naming a path is what the message offers: it works with one pane shown.
+    let named = cab(&core, &["copy", "--selection", "--dest", &shown(&right)]);
+    assert_eq!(code(&named), 0, "{}\n{}", out(&named), err(&named));
+    assert_eq!(
+        fs::read_to_string(right.join("a.txt")).unwrap(),
+        "left a.txt"
+    );
+
+    // Showing both panes again lifts the refusal.
+    window.say(
+        Pane::Left,
+        pane(&left, Some(&b), &[]),
+        pane(&right, None, &[]),
+    );
+    let both = cab(&core, &["copy", "--selection", "--dest", "opposite_pane"]);
+    assert_eq!(code(&both), 0, "{}", err(&both));
+    assert_eq!(
+        fs::read_to_string(right.join("b.txt")).unwrap(),
+        "left b.txt"
     );
 }
 

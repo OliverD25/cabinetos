@@ -154,6 +154,7 @@ fn window(folder: &Path, cursor: Option<&Path>, marked: &[&Path]) -> Request {
                 marked_total: None,
             },
         },
+        dual: true,
     })
 }
 

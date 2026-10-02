@@ -66,7 +66,10 @@ file itself shows everything that can be set:
       { "name": "wsl", "command": "wsl.exe", "args": [], "linkable": true },
       { "name": "claude", "command": "claude.exe", "args": ["--append-system-prompt", "…"], "linkable": false }
     ],
-    "split": false
+    "split": false,
+    "restore": true,
+    "defaultMode": "locked",
+    "tabs": { "items": [], "shown": {} }
   },
   "keybindings": [],
   "logging": {
@@ -145,6 +148,9 @@ while you type.
 | `terminal.defaultProfile` | a profile `name` | `pwsh` | The shell a new terminal starts with when the client names none; must name one of the profiles |
 | `terminal.profiles` | list of `{ "name", "command", "args", "linkable", "hook" }` | pwsh, cmd, wsl, claude | The programs a terminal can run. Names must be unique; `args`, `linkable` and `hook` may be left out. `command` is a full path, or a program name looked up in the `PATH` ([terminal.md](terminal.md)). `linkable`: whether a session of the profile may be linked to its pane ([terminal.md](terminal.md), "Panes and modes"); left out, `true` for PowerShell and WSL (while `hook` is not `false`) and `false` for any other program; `false` for cmd and `claude`, where no prompt hook can be added. `hook`: the prompt hook, the few lines the shell runs each time it draws its prompt ([terminal.md](terminal.md), "The prompt hook"); PowerShell and WSL (bash) only, ignored for any other program. `true` (the default when left out): CabinetOS's own, which makes a linked session follow its pane (one run of `cab term cwd` per prompt) and reports the shell's folder for the header's caption. `false`: none; the session does not follow and reports nothing. A string: your own code, in the shell's language (PowerShell, or bash for WSL), run at each prompt in place of the follow step; the folder report stays, and errors are swallowed. It may use `$env:CABINETOS_SESSION` and `$env:CABINETOS_PIPE` (`$CABINETOS_SESSION` and `$CABINETOS_PIPE` in bash) and `cab term cwd`. A change applies to the next session. `followsPane`, the key of the folder sync before 2026-10-01, is ignored: a file that has it still loads, and the core no longer writes it. |
 | `terminal.split` | `true` or `false` | `false` | Whether the Tool Dock is split under the two panes: the left pane's sessions under the left pane, the right pane's under the right (the split mirror, [ui.md](ui.md), "The terminal"). `terminal.toggleSplit` (Ctrl+\ in the terminal, or the palette) flips it; the window writes it when the user toggles, and follows a change of the file at once. It holds only while the dock is under the panes (`ui.layout` `classic` or `rail`): beside them (`right`) the dock shows one view and the setting waits. With one pane shown, the split shows one half, the left's. |
+| `terminal.restore` | `true` or `false` | `true` | Whether the terminal tabs come back after a restart: the first time the dock is shown after the window starts (the first Ctrl+Backquote, the terminal button, or Ctrl+Shift+T), the sessions the last run had are started again as fresh shells, each with its profile, folder, pane and mode ([terminal.md](terminal.md), "Restoring the tabs"). Nothing a shell printed comes back. `false`: the window still saves the sessions, and Ctrl+Backquote starts one session as it always did. Read when the dock is first shown, so an edit of the file applies at once. |
+| `terminal.defaultMode` | `locked` or `linked` | `locked` | The mode a new session starts in when its client names none (Ctrl+Shift+T, Ctrl+Backquote, the dock's "+", `cabinetos-cli term`): `linked` makes the shell follow its pane through the prompt hook. A profile that is not linkable (`cmd`, `claude`, or a profile that says `"linkable": false`) stays `locked` whatever this says, and a mode the client names wins. The core reads it at each `terminal_open`, so an edit applies to the next session; a running session keeps its mode. |
+| `terminal.tabs` | `{ "items", "front", "shown" }` | nothing saved | The terminal's sessions as the window last saved them, so the first show of the dock after a restart can bring them back (`terminal.restore`). The window owns it and writes it whole a second after any change of its tabs (and when it closes); the core only checks and stores it. `items` is a list of `{ "profile", "folder", "pane", "mode" }` in the order of the tabs: the profile's `name` (a profile that is gone falls back to `terminal.defaultProfile`), the shell's folder (the one its prompt hook reported last, else the one it started in; left out: the user's profile folder; a folder that is gone falls back to the user's profile folder), `left` or `right` (default `left`), and `locked` or `linked` (default `locked`). `front` is the index in `items` of the tab in front, and `shown.left` and `shown.right` each pane's own front tab, which the split dock shows in that pane's half; each is left out when none, and each must name one of `items` (an index past the end is an error that names the key, for example `terminal.tabs.front is 2, but 1 terminal tab is saved; it counts from 0`). Only running sessions are saved. An edit of the file while the window runs is not read until the next start. |
 | `keybindings` | list of `{ "command", "keys", "when" }` | empty | Changes to key bindings: [keybindings.md](keybindings.md) |
 | `logging.level` | `trace`, `debug`, `info`, `warn`, `error` | `info` | The least important level the core writes to its log |
 | `logging.heavy` | `true`, `false` | `false` | Heavy logging: every operation is also written, at every level, into `heavy-<process>.<date>.jsonl` files next to the logs, at most 2 GB in all, even when that slows an operation down. On until turned off ([diagnostics.md](diagnostics.md), "Heavy mode") |
@@ -198,11 +204,15 @@ Who uses what:
   to only a plugin's `settings` does not restart it: the plugin is told.
   Example:
   `"plugins": { "reader": { "granted": ["cmd:register", "fs:read"] } }`.
-- `terminal`: the core, at each `terminal_open`. An edited profile applies
-  to the next shell; running shells keep what they started with
+- `terminal`: the core, at each `terminal_open`: `defaultProfile`,
+  `profiles` and `defaultMode`. An edited profile or default applies to
+  the next shell; running shells keep what they started with
   ([terminal.md](terminal.md)). `terminal.split` is the window's, at once:
   it splits or joins the dock when the file changes, except in the window
-  that wrote it ([ui.md](ui.md), "The terminal").
+  that wrote it ([ui.md](ui.md), "The terminal"). `terminal.restore` is
+  the window's, read when the dock is first shown, and `terminal.tabs` is
+  the window's too: it writes it and reads it at start only
+  ([terminal.md](terminal.md), "Restoring the tabs").
 - `files.editor`: the core, at each `edit_path` ([ipc.md](ipc.md), "Files
   and folders").
 - `programs`: the core, at once. Each entry becomes the command

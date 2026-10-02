@@ -21,6 +21,7 @@ namespace CabinetOS.Core.Settings;
 /// <see cref="FolderSizes"/> is <c>panes.folderSizes</c>: whether every folder of a listing is measured when it opens.
 /// <see cref="CompactOverlay"/> is <c>ui.compactOverlay</c>: the drawer's size the user last resized it to, or null for 480 by 640.
 /// <see cref="TerminalSplit"/> is <c>terminal.split</c>: whether the Tool Dock is split under the two panes.
+/// <see cref="TerminalRestore"/> is <c>terminal.restore</c>: whether the terminal tabs come back after a restart (the first show of the dock).
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -41,7 +42,8 @@ public sealed record UiSettings(
     ColumnWidths? Columns = null,
     bool FolderSizes = false,
     CompactSize? CompactOverlay = null,
-    bool TerminalSplit = false)
+    bool TerminalSplit = false,
+    bool TerminalRestore = true)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -75,7 +77,8 @@ public sealed record UiSettings(
             ColumnLayout.FromConfig(config),
             Bool(panes, "folderSizes") ?? Defaults.FolderSizes,
             CompactOverlayLayout.FromConfig(config),
-            Bool(Section(config, "terminal"), "split") ?? Defaults.TerminalSplit);
+            Bool(Section(config, "terminal"), "split") ?? Defaults.TerminalSplit,
+            Bool(Section(config, "terminal"), "restore") ?? Defaults.TerminalRestore);
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).

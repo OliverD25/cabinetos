@@ -496,7 +496,7 @@ public sealed partial class MainWindow
         {
             return;
         }
-        var request = WindowStateBuilder.Build(_active, Snapshot(0), Snapshot(1));
+        var request = WindowStateBuilder.Build(_active, Snapshot(0), Snapshot(1), _dual);
         try
         {
             if (await _session.RequestAsync(request) is ErrorReply { Code: ErrorCodes.UnknownRequest })

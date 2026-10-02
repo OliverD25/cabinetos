@@ -434,6 +434,7 @@ impl Window {
                 left: pane(left),
                 right: pane(right),
             },
+            dual: true,
         };
         assert_eq!(self.ask(Request::WindowState(state)), Response::Ok);
     }

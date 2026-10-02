@@ -332,7 +332,7 @@ public sealed partial class MainWindow : Window
         Diag.Info(Target, "window closing");
         // Closing must stay quick: what the core does not answer within a second is not waited for.
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-        await Task.WhenAll(SaveLastPathsAsync(), FlushTabsAsync(deadline.Token));
+        await Task.WhenAll(SaveLastPathsAsync(), FlushTabsAsync(deadline.Token), SaveTerminalLayoutAsync(deadline.Token));
         await _session.StopAsync();
         StartRestart();
         foreach (var columns in _columnViews)
@@ -844,6 +844,8 @@ public sealed partial class MainWindow : Window
                 "conflict" => _transfers.Conflicts.Current is not null,
                 "running" => _transfers.Shown is { State.Type: JobState.Running, Progress.FilesDone: > 0 },
                 "terminal" => _terminal.Shown is { Pipe: not null },
+                // The first show of the dock has been dealt with: the saved sessions are back (or none came), and the front tab is shown.
+                "terminal-restored" => _terminalRestoreHandled && !_terminalRestoring,
                 // terminals:<n>: that many tabs, each with its pipe connected.
                 _ when condition.StartsWith("terminals:", StringComparison.Ordinal) && int.TryParse(condition["terminals:".Length..], out var tabs) =>
                     _terminal.Tabs.Count >= tabs && _terminal.Tabs.All(t => t.Pipe is not null),
@@ -970,6 +972,8 @@ public sealed partial class MainWindow : Window
             {
                 _savedTabs = TabsConfig.FromConfig(config.Config);
                 _tabsWritten = _savedTabs.ToJson().GetRawText();
+                _savedTerminal = TerminalLayout.FromConfig(config.Config);
+                _terminalLayoutWritten = _savedTerminal.ToJson().GetRawText();
             }
             SetPinnedFolders();
             ApplySettings(UiSettings.FromConfig(config.Config), firstStart);
@@ -1269,7 +1273,9 @@ public sealed partial class MainWindow : Window
             _restarts.Dequeue();
         }
         _transfers.Reset();
-        // The core closes its shells when it stops; the tabs go with them.
+        // The core closes its shells when it stops; the tabs go with them, and the first show of the dock after the core runs
+        // again brings them back.
+        ArmTerminalRestore();
         _terminal.Reset();
         // Its plugins start over too: what the review or the list showed is stale.
         _plugins.Reset();
@@ -2374,6 +2380,8 @@ public sealed partial class MainWindow : Window
         {
             UpdateTabRows();
         }
+        // The core keeps whether both panes show, so `cab` can refuse "the other pane" while one is hidden.
+        ScheduleWindowState();
         // Two panes show 3 parts of a path whole, one pane 5 (Breadcrumbs).
         UpdateCrumbs();
     }

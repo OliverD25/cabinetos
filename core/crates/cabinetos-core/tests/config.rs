@@ -535,6 +535,8 @@ async fn commands_are_listed_searched_and_run() {
             assert_eq!(config["ui"]["layout"], "classic");
             assert_eq!(config["terminal"]["defaultProfile"], "pwsh");
             assert_eq!(config["terminal"]["split"], false);
+            assert_eq!(config["terminal"]["restore"], true);
+            assert_eq!(config["terminal"]["defaultMode"], "locked");
         }
         other => panic!("expected config, got {other:?}"),
     }

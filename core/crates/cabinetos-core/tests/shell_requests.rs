@@ -348,6 +348,84 @@ async fn set_value_writes_one_setting_and_tells_every_client() {
     );
 }
 
+/// The terminal's restoration and the mode of a new session (unit 5), and the sessions the window saves for the restoration:
+/// set from anywhere, checked as the file is, and every client hears the change.
+#[tokio::test]
+async fn set_value_writes_the_terminal_s_restore_default_mode_and_saved_tabs() {
+    let core = start_core();
+    let (mut client, mut events) = greeted(&core).await;
+    assert_eq!(
+        get_value(&mut client, "terminal.restore").await,
+        Response::Value { value: json!(true) }
+    );
+    assert_eq!(
+        get_value(&mut client, "terminal.defaultMode").await,
+        Response::Value {
+            value: json!("locked")
+        }
+    );
+    assert_eq!(
+        set_value(&mut client, "terminal.restore", json!(false)).await,
+        Response::Ok
+    );
+    assert_eq!(config_changed(&mut events).await, ["terminal.restore"]);
+    assert_eq!(
+        set_value(&mut client, "terminal.defaultMode", json!("linked")).await,
+        Response::Ok
+    );
+    assert_eq!(config_changed(&mut events).await, ["terminal.defaultMode"]);
+    let written = read_config(&core);
+    assert_eq!(written["terminal"]["restore"], json!(false));
+    assert_eq!(written["terminal"]["defaultMode"], json!("linked"));
+    // A mode that is neither word is refused and changes nothing.
+    let refused = set_value(&mut client, "terminal.defaultMode", json!("following")).await;
+    assert!(
+        matches!(refused, Response::Error { .. }),
+        "an unknown mode: {refused:?}"
+    );
+    assert_eq!(
+        read_config(&core)["terminal"]["defaultMode"],
+        json!("linked")
+    );
+
+    // The window saves its sessions whole, in one write; no session is saved by default.
+    assert_eq!(
+        get_value(&mut client, "terminal.tabs").await,
+        Response::Value {
+            value: json!({"items": [], "shown": {}})
+        }
+    );
+    let tabs = json!({
+        "items": [
+            {"profile": "pwsh", "folder": r"E:\Звіт 'проєкт'", "pane": "left", "mode": "linked"},
+            {"profile": "cmd", "pane": "right", "mode": "locked"}
+        ],
+        "front": 1,
+        "shown": {"left": 0, "right": 1}
+    });
+    assert_eq!(
+        set_value(&mut client, "terminal.tabs", tabs.clone()).await,
+        Response::Ok
+    );
+    let changed = config_changed(&mut events).await;
+    assert!(
+        changed.iter().all(|key| key.starts_with("terminal.tabs")),
+        "{changed:?}"
+    );
+    assert_eq!(read_config(&core)["terminal"]["tabs"], tabs);
+    assert_eq!(
+        get_value(&mut client, "terminal.tabs").await,
+        Response::Value { value: tabs }
+    );
+    // A front tab that is none of the saved sessions is refused, and the file keeps what it had.
+    let refused = set_value(&mut client, "terminal.tabs.front", json!(5)).await;
+    assert!(
+        matches!(&refused, Response::Error { message, .. } if message.contains("terminal.tabs.front is 5")),
+        "{refused:?}"
+    );
+    assert_eq!(read_config(&core)["terminal"]["tabs"]["front"], json!(1));
+}
+
 #[tokio::test]
 async fn a_value_the_file_could_not_hold_is_refused_and_the_file_kept() {
     let core = start_core();

@@ -10,6 +10,7 @@ using CabinetOS.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.UI;
+using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace CabinetOS;
 
@@ -39,11 +40,28 @@ public sealed partial class MainWindow
     // hides: Ctrl+` there is the "second" one, which hides the dock. A pane switch in between (closing a tool in
     // the other pane, the drive list) keeps it, or the second Ctrl+` would give the keyboard back instead.
     private int? _terminalHandedBackTo;
+    // The terminal's tabs across a restart (terminal.tabs). The layout the file held when the window started (or the tabs a
+    // core that stopped had) is what the first show of the dock brings back, and until then the empty tabs of a window that
+    // has started no session say nothing about it: nothing is saved while the restoration is still to come. The save follows
+    // a change of the tabs by a second, like ui.tabs.
+    private TerminalLayout _savedTerminal = TerminalLayout.Empty;
+    private bool _terminalFirstShow = true;
+    private bool _terminalRestoring;
+    private bool _terminalRestoreHandled;
+    private bool _terminalDirty;
+    private Task<int>? _terminalRestoreTask;
+    private string _terminalLayoutWritten = "";
+    private DispatcherQueueTimer _terminalSaveTimer = null!;
 
     private void SetUpTerminal()
     {
         _terminal = new TerminalController(_session, DispatcherQueue, Dock.TerminalPage) { EstimateSize = Dock.EstimateCells };
         _terminal.Changed += UpdateDockHeader;
+        _terminal.Changed += SaveTerminalLayoutSoon;
+        _terminalSaveTimer = DispatcherQueue.CreateTimer();
+        _terminalSaveTimer.IsRepeating = false;
+        _terminalSaveTimer.Interval = TimeSpan.FromSeconds(1);
+        _terminalSaveTimer.Tick += (_, _) => _ = SaveTerminalLayoutAsync();
         _terminal.Notice += (text, isError) => ShowNotice(text, isError);
         _terminal.KeyCommand += command => _ = _router.ExecuteAsync(command, trigger: "key");
         _terminal.PasteRequested += session => _ = PasteIntoTerminalAsync(session);
@@ -164,6 +182,12 @@ public sealed partial class MainWindow
         {
             return;
         }
+        // The first show after a restart brings the last run's sessions back, and the saved front tab is the one shown.
+        if (await RestoreTerminalsAsync() > 0)
+        {
+            FocusTerminal();
+            return;
+        }
         switch (summon.Action)
         {
             case SummonAction.FocusShown:
@@ -192,6 +216,8 @@ public sealed partial class MainWindow
         {
             return;
         }
+        // The dock's first show after a restart brings the last run's sessions back; the new one comes after them.
+        await RestoreTerminalsAsync();
         // Ctrl+Shift+T acts for the active pane, also while the other half has the keyboard; a half's own "+" names its pane.
         var bound = pane ?? TerminalSplitLayout.NewTabPane(_dual, _active);
         await OpenInDockAsync(profile, folder ?? PaneFolder(bound), bound, requestId);
@@ -437,6 +463,118 @@ public sealed partial class MainWindow
     private static string SplitSignature(IReadOnlyList<SplitHalf>? halves) =>
         halves is null ? "" : string.Join('|', halves.Select(h => string.Create(CultureInfo.InvariantCulture, $"{h.Pane}:{h.X:0.#}:{h.Width:0.#}")));
 
+    // ----- Saving the sessions and bringing them back (docs/terminal.md, "Restoring the tabs") -----
+
+    private string UserHome() => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    // The first show of the dock after the window started, or after its core started again: the sessions of the last run come
+    // back as fresh shells, or the ones the core still runs are shown (TerminalRestore.Decide). Whatever comes of it, it happens
+    // once; a second show that comes meanwhile waits for it. Returns how many tabs it made.
+    private Task<int> RestoreTerminalsAsync()
+    {
+        if (!_terminalFirstShow)
+        {
+            return _terminalRestoreTask ?? Task.FromResult(0);
+        }
+        _terminalFirstShow = false;
+        return _terminalRestoreTask = RestoreTerminalsCoreAsync();
+    }
+
+    private async Task<int> RestoreTerminalsCoreAsync()
+    {
+        _terminalRestoring = true;
+        var count = 0;
+        try
+        {
+            var running = await _terminal.CoreSessionsAsync();
+            var decision = TerminalRestore.Decide(_settings.TerminalRestore, _terminal.Tabs.Count, running.Count, _savedTerminal);
+            Diag.Info(TerminalTarget, "terminal restore", new LogField("action", decision.Kind.ToString()), new LogField("reason", decision.Reason),
+                new LogField("saved", _savedTerminal.Items.Count), new LogField("core_sessions", running.Count));
+            if (decision.Kind == RestoreKind.Nothing)
+            {
+                return 0;
+            }
+            SetDockVisible(true);
+            if (_terminal.Tabs.Count == 0)
+            {
+                Dock.ShowStarting();
+            }
+            count = decision.Kind == RestoreKind.Adopt
+                ? await _terminal.AdoptAsync(running)
+                : await _terminal.RestoreAsync(_savedTerminal, _terminal.Profiles.Names, _terminal.Profiles.DefaultProfile, UserHome());
+            if (count == 0 && _terminal.Tabs.Count == 0)
+            {
+                // Nothing came back (the log says why): an empty dock would only be in the way.
+                SetDockVisible(false);
+            }
+            return count;
+        }
+        finally
+        {
+            _terminalRestoring = false;
+            _terminalRestoreHandled = true;
+            if (count > 0)
+            {
+                // What came back may differ from what was saved (a profile or a folder that was gone): save what runs now.
+                SaveTerminalLayoutSoon();
+            }
+        }
+    }
+
+    // Every change of the tabs saves the layout a second later (the folder a shell reports changes at each prompt), but not while
+    // the restoration is still to come or under way: the tabs then say nothing, or something half done, about the saved layout.
+    private void SaveTerminalLayoutSoon()
+    {
+        if (_terminalFirstShow || _terminalRestoring)
+        {
+            return;
+        }
+        _terminalDirty = true;
+        if (!_terminalSaveTimer.IsRunning)
+        {
+            _terminalSaveTimer.Start();
+        }
+    }
+
+    /// <summary>Writes <c>terminal.tabs</c> when the tabs changed since the last write and the file differs; once more when the window closes.</summary>
+    private async Task SaveTerminalLayoutAsync(CancellationToken cancellationToken = default)
+    {
+        _terminalSaveTimer.Stop();
+        if (!_terminalDirty || _terminalFirstShow || _terminalRestoring)
+        {
+            return;
+        }
+        _terminalDirty = false;
+        var layout = _terminal.Layout();
+        var value = layout.ToJson();
+        var text = value.GetRawText();
+        if (text == _terminalLayoutWritten)
+        {
+            return;
+        }
+        if (await _settingsWriter.SetAsync(TerminalLayout.Key, value, cancellationToken))
+        {
+            _terminalLayoutWritten = text;
+            Diag.Info(TerminalTarget, "terminal layout saved", new LogField("sessions", layout.Items.Count),
+                new LogField("left", layout.Items.Count(i => i.Pane == 0)), new LogField("right", layout.Items.Count(i => i.Pane == 1)),
+                new LogField("front", layout.Front), new LogField("shown_left", layout.ShownLeft), new LogField("shown_right", layout.ShownRight),
+                new LogField("folders", string.Join(" | ", layout.Items.Select(i => i.Folder ?? "(home)"))));
+        }
+    }
+
+    // The core stopped: its shells ended with it. The sessions the tabs had are what the first show after it runs again brings
+    // back, and until then nothing is saved. Before the first show of the run the saved layout is still the one to restore.
+    private void ArmTerminalRestore()
+    {
+        if (!_terminalFirstShow)
+        {
+            _savedTerminal = _terminal.Layout();
+        }
+        _terminalFirstShow = true;
+        _terminalRestoreTask = null;
+        _terminalDirty = false;
+    }
+
     // ----- The split mirror (docs/ui.md, "The terminal") -----
 
     // terminal.toggleSplit: Ctrl+\ in the terminal, or the palette. {"split": true|false} sets it instead of flipping it.
@@ -550,6 +688,7 @@ public sealed partial class MainWindow
             new("caption", _terminal.Caption().Text), new("folder", _terminal.Shown?.Folder),
             new("split", _terminal.Split), new("split_setting", _splitSetting), new("dual", _dual),
             new("keyboard_half", _terminal.Split ? TerminalBinding.PaneName(_terminal.KeyboardPane) : null),
+            new("restore_pending", _terminalFirstShow),
         };
         if (_dockVisible)
         {

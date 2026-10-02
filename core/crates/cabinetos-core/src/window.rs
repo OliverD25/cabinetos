@@ -124,6 +124,7 @@ impl WindowStates {
             right = right.as_deref().unwrap_or(""),
             selection = selection.len(),
             selection_total,
+            dual = state.dual,
             "gui context answered"
         );
         Response::GuiContext {
@@ -133,6 +134,7 @@ impl WindowStates {
             selection,
             selection_total,
             cursor: active.cursor.clone().filter(|_| listing),
+            dual: state.dual,
         }
     }
 
@@ -293,6 +295,7 @@ mod tests {
                 selection,
                 selection_total,
                 cursor,
+                dual: _,
             } => Ok((active, left, right, selection, selection_total, cursor)),
             Response::Error { code, .. } => Err(code),
             other => panic!("not a gui_context: {other:?}"),
@@ -408,6 +411,29 @@ mod tests {
         whole.panes.left.marked_total = Some(1);
         states.store("CabinetOS#1", whole);
         assert_eq!(context(&states).unwrap().4, 2);
+    }
+
+    #[test]
+    fn the_context_says_whether_both_panes_show() {
+        let dual = |states: &WindowStates| match states.gui_context() {
+            Response::GuiContext { dual, .. } => dual,
+            other => panic!("not a gui_context: {other:?}"),
+        };
+        let states = WindowStates::default();
+        let mut shown = state(Pane::Left);
+        shown.panes.left = shows(r"E:\left", Some(r"E:\left\a"), &[]);
+        shown.panes.right = shows(r"D:\right", None, &[]);
+        states.store("CabinetOS#1", shown.clone());
+        assert!(dual(&states), "both panes show");
+        // One pane shown: the right pane's folder is still in the state, but nobody sees it.
+        shown.dual = false;
+        states.store("CabinetOS#1", shown);
+        assert!(!dual(&states));
+        assert_eq!(
+            states.pane_folder(Pane::Right).as_deref(),
+            Some(r"D:\right"),
+            "the folder is kept with the rest"
+        );
     }
 
     #[test]

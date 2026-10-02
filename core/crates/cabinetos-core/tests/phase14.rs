@@ -136,6 +136,7 @@ fn window(active_pane: Pane, folder: &str) -> WindowState {
             },
             right: PaneState::default(),
         },
+        dual: true,
     }
 }
 

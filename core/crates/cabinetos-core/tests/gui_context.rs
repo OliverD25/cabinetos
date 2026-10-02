@@ -145,9 +145,15 @@ fn pane(folder: &str, cursor: Option<&str>, marked: &[&str]) -> PaneState {
 }
 
 fn state(active_pane: Pane, left: PaneState, right: PaneState) -> Request {
+    state_showing(active_pane, left, right, true)
+}
+
+/// As `state`, saying whether the window shows both panes.
+fn state_showing(active_pane: Pane, left: PaneState, right: PaneState, dual: bool) -> Request {
     Request::WindowState(WindowState {
         active_pane,
         panes: WindowPanes { left, right },
+        dual,
     })
 }
 
@@ -159,6 +165,7 @@ struct Context {
     selection: Vec<String>,
     selection_total: u32,
     cursor: Option<String>,
+    dual: bool,
 }
 
 async fn context(client: &mut PipeClient) -> Context {
@@ -170,6 +177,7 @@ async fn context(client: &mut PipeClient) -> Context {
             selection,
             selection_total,
             cursor,
+            dual,
         } => Context {
             active,
             left,
@@ -177,9 +185,50 @@ async fn context(client: &mut PipeClient) -> Context {
             selection,
             selection_total,
             cursor,
+            dual,
         },
         other => panic!("expected gui_context, got {other:?}"),
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_context_says_whether_the_window_shows_both_panes() {
+    let core = start_core(None);
+    let (mut shell_window, _events) = window(&core).await;
+    let mut cab = connect(&core.pipe).await;
+
+    let both = state(
+        Pane::Left,
+        pane(r"E:\left", None, &[]),
+        pane(r"D:\right", None, &[]),
+    );
+    assert_eq!(ask(&mut shell_window, both).await, Response::Ok);
+    assert!(context(&mut cab).await.dual);
+
+    // One pane shown: the right pane's folder is still named, and `dual` says nobody sees it.
+    let single = state_showing(
+        Pane::Left,
+        pane(r"E:\left", None, &[]),
+        pane(r"D:\right", None, &[]),
+        false,
+    );
+    assert_eq!(ask(&mut shell_window, single).await, Response::Ok);
+    let got = context(&mut cab).await;
+    assert!(!got.dual);
+    assert_eq!(got.right.as_deref(), Some(r"D:\right"));
+
+    // A window older than protocol 19 sends no `dual`: both panes show.
+    let older: Request = serde_json::from_value(serde_json::json!({
+        "type": "window_state",
+        "active_pane": "left",
+        "panes": {
+            "left": {"tabs": [{"path": "E:\\left"}], "active": 0, "marked": []},
+            "right": {"tabs": [{"path": "D:\\right"}], "active": 0, "marked": []}
+        }
+    }))
+    .unwrap();
+    assert_eq!(ask(&mut shell_window, older).await, Response::Ok);
+    assert!(context(&mut cab).await.dual);
 }
 
 #[tokio::test(flavor = "multi_thread")]
