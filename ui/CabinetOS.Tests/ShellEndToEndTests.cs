@@ -437,7 +437,9 @@ public class ShellEndToEndTests
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
-            Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
+            // The error lines themselves, not the whole log as the collection assert prints it.
+            var errors = logs.Where(l => Level(l) == "ERROR").ToList();
+            Assert.True(errors.Count == 0, $"the {name} window logged {errors.Count} error line(s):\n{string.Join('\n', errors.Select(l => l.Length > 500 ? l[..500] : l))}");
             return logs;
         }
 
