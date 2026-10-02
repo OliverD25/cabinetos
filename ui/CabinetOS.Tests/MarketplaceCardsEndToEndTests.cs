@@ -32,7 +32,8 @@ public class MarketplaceCardsEndToEndTests
         var logs = await RunAsync("all", string.Join(';',
             "size:1400x900",
             "cmd:marketplace.browse",
-            "wait:2000",
+            // The slices come one low-priority dispatcher turn each, which a busy machine runs late: wait for the last one's line.
+            "until:market-complete",
             "market:complete",
             // Tab from a card goes to the next item's card, across the slices' borders too.
             $"click:{CardName(11)}",
@@ -81,7 +82,7 @@ public class MarketplaceCardsEndToEndTests
             "market:discover",
             "click:Themes",
             "market:themes",
-            "wait:2000",
+            "until:market-complete",
             "market:themes-done",
             "shot:done"));
 
@@ -105,9 +106,10 @@ public class MarketplaceCardsEndToEndTests
         // The window prepares the view while it is idle after start, after the menu shapes; nothing here is input.
         var logs = await RunAsync("prepared", string.Join(';',
             "size:1400x900",
-            "wait:2500",
+            // The idle slot after the menu shapes (low priority, and only once no key or pointer came for a moment) is late on a busy machine.
+            "until:market-prepared",
             "cmd:marketplace.browse",
-            "wait:2000",
+            "until:market-complete",
             "market:complete",
             "shot:done"));
 

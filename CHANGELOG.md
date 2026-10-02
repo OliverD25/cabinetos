@@ -49,6 +49,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The command palette ignores a search answer that comes after it closed. Closing it in the few milliseconds the core needs to answer could end with an error in the log ("a background task failed and nobody observed it"); nothing showed on screen.
 - A click from the terminal into a file pane gives the pane the keyboard: the keys pressed right after it (Home, Enter, Backspace, any pane key) act on the pane. They used to do nothing, and did not reach the shell either: right after the click, the window's UI framework (WinUI) moved the keyboard a second time, to the window's background.
 - A run of the window that ended without closing, as a native failure of WinUI does without a crash trace, is noted in the log at the next start: a WARN line, `previous run ended without closing`, with the time that run started. Nothing is shown on screen. The window now writes its clean end into `ui.last-start`, in the log folder.
 - Quick Open and the search of a folder find names after the first 20,000 entries of a large folder, such as one of 100,000 files. The core's walk without the indexer now stops after 2 s or 200,000 entries, not 20,000. When it still stops early, Quick Open says "Not every name was searched" under its rows, also when there are none, instead of a bare "0 results".

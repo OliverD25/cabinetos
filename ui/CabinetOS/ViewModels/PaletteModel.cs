@@ -194,7 +194,10 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
             Diag.Info(Target, "search failed", new LogField("error", error.Message));
             return;
         }
-        if (search != _search || reply is not SearchResultsReply results)
+        // A palette closed while the question was out has no list to show. Applying the answer set the highlight, and the
+        // view's GetOrCreateElement failed on its collapsed list ("Element is already the child of another element"; the log
+        // showed it as an unobserved task). A TextChanged that XAML raises late starts a search after the close too.
+        if (search != _search || !IsOpen || reply is not SearchResultsReply results)
         {
             return;
         }

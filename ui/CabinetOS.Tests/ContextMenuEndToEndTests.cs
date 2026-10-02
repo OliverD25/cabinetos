@@ -498,19 +498,29 @@ public class ContextMenuEndToEndTests
                 $"path:{data}",
                 "wait:800",
                 "menu:row-040.txt",
-                "wait:800",
+                // "context menu placed" is logged some low-priority dispatcher turns after WinUI opens the menu, which a busy
+                // machine does late; closing the menu before that logs no place (all of 5 runs beside two full test runs).
+                "until:menu-placed",
                 "shell:open",
                 "cmd:overlay.close",
                 "wait:300",
                 "shot:done"));
             var logs = await run.FinishAsync("out-of-view", process, "done");
 
-            var shown = Assert.Single(logs, l => Message(l) == "context menu shown");
-            Assert.True(Field(shown, "keyboard").GetBoolean());
-            Assert.InRange(Field(shown, "y").GetDouble(), 0, 700);
-            State(logs, "open", state => Assert.True(state.GetProperty("context_menu_on_screen").GetBoolean()));
-            var placed = Assert.Single(logs, l => Message(l) == "context menu placed");
-            Assert.InRange(Field(placed, "top").GetDouble() + Field(placed, "height").GetDouble(), 0, 700);
+            // A failure shows the window's lines with their times: which step ran when, and what the menu did.
+            try
+            {
+                var shown = OnlyLine(logs, "context menu shown");
+                Assert.True(Field(shown, "keyboard").GetBoolean());
+                Assert.InRange(Field(shown, "y").GetDouble(), 0, 700);
+                State(logs, "open", state => Assert.True(state.GetProperty("context_menu_on_screen").GetBoolean()));
+                var placed = OnlyLine(logs, "context menu placed");
+                Assert.InRange(Field(placed, "top").GetDouble() + Field(placed, "height").GetDouble(), 0, 700);
+            }
+            catch (Xunit.Sdk.XunitException error)
+            {
+                throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's log lines (times in UTC):\n{Timeline(logs)}");
+            }
         }
         finally
         {
@@ -808,7 +818,9 @@ public class ContextMenuEndToEndTests
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
-            Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
+            // The error lines themselves, not the whole log as the collection assert prints it.
+            var errors = logs.Where(l => Level(l) == "ERROR").ToList();
+            Assert.True(errors.Count == 0, $"the {name} window logged {errors.Count} error line(s):\n{string.Join('\n', errors.Select(l => l.Length > 500 ? l[..500] : l))}");
             return logs;
         }
 
@@ -848,6 +860,23 @@ public class ContextMenuEndToEndTests
     // Where in the log the lines that match are, oldest first: a line's place says what came before what, whatever the clock says.
     private static List<int> Positions(List<string> logs, Func<string, bool> match) =>
         [.. logs.Select((line, index) => (line, index)).Where(p => match(p.line)).Select(p => p.index)];
+
+    // The one line with this message; a failure names the message, which Assert.Single does not.
+    private static string OnlyLine(List<string> logs, string message)
+    {
+        var found = logs.Where(l => Message(l) == message).ToList();
+        Assert.True(found.Count == 1, $"the window logged \"{message}\" {found.Count} times, once was expected");
+        return found[0];
+    }
+
+    // The window's last log lines, each with its time, message and fields (cut short): what a failed check shows.
+    private static string Timeline(List<string> logs, int last = 45) =>
+        string.Join('\n', logs.Where(l => Message(l) is not ("slow frame" or "frame stats")).TakeLast(last).Select(l =>
+        {
+            using var parsed = JsonDocument.Parse(l);
+            var fields = parsed.RootElement.TryGetProperty("fields", out var f) ? f.ToString() : "";
+            return $"  {parsed.RootElement.GetProperty("ts").GetString()} {Message(l)} {(fields.Length > 200 ? fields[..200] : fields)}";
+        }));
 
     private static void State(List<string> logs, string label, Action<JsonElement> check)
     {

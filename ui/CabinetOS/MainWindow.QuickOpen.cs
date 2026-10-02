@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Settings;
@@ -17,12 +18,15 @@ public sealed partial class MainWindow
 
     private QuickOpenModel _quickOpen = null!;
 
+    // The last row's opening, which the snapshot aid's quick-open-key:enter waits for (the pane lists the folder, the cursor goes to the row).
+    private Task _quickOpenOpening = Task.CompletedTask;
+
     private void SetUpQuickOpen()
     {
         _quickOpen = new QuickOpenModel(_session);
         QuickOpenView.Model = _quickOpen;
         QuickOpenView.QueryChanged += OnQuickOpenTextChanged;
-        QuickOpenView.OpenRequested += (row, otherPane) => _ = OpenFromQuickOpenAsync(row, otherPane);
+        QuickOpenView.OpenRequested += (row, otherPane) => _quickOpenOpening = OpenFromQuickOpenAsync(row, otherPane);
         QuickOpenView.CloseRequested += () => CloseQuickOpen(returnFocus: true);
         Palette.FilesRequested += () =>
         {
@@ -117,6 +121,45 @@ public sealed partial class MainWindow
 
     // ----- The snapshot aid -----
 
+    // The text reaches the model when XAML raises the box's TextChanged (its next frame, which a busy machine draws a few
+    // hundred milliseconds late), the search goes out after the keys pause (80 ms) and the core answers after that. The
+    // model's Changed with the typed text as its Query is that answer. The 500 ms stay as the least wait (the speed review
+    // types with this step at that pace); then the step waits for the answer, at most 20 s. A text that begins with ">"
+    // closes Quick Open for the palette instead, which ends the wait too; a text the box already holds raises no change.
+    private async Task TypeAndWaitForQuickOpenAnswerAsync(string text)
+    {
+        var answered = false;
+        void OnChanged() => answered |= _quickOpen.Query == text;
+        var started = Stopwatch.GetTimestamp();
+        _quickOpen.Changed += OnChanged;
+        try
+        {
+            QuickOpenView.Type(text);
+            await Task.Delay(500);
+            for (var waited = 0; !answered && _quickOpen.IsOpen && waited < 20_000; waited += 20)
+            {
+                await Task.Delay(20);
+            }
+        }
+        finally
+        {
+            _quickOpen.Changed -= OnChanged;
+        }
+        LogField[] fields =
+        [
+            new("text", text), new("answered", answered), new("open", _quickOpen.IsOpen), new("rows", _quickOpen.Rows.Count),
+            new("ms", Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds)),
+        ];
+        if (answered || !_quickOpen.IsOpen)
+        {
+            Diag.Info(QuickOpenTarget, "quick-open step ended", fields);
+        }
+        else
+        {
+            Diag.Warn(QuickOpenTarget, "quick-open step ended before Quick Open answered", fields);
+        }
+    }
+
     // quick-open:<text> opens Quick Open and types; quick-open-key:enter|ctrl+enter|down|esc presses the key there.
     private async Task RunQuickOpenStepAsync(string kind, string argument)
     {
@@ -126,15 +169,16 @@ public sealed partial class MainWindow
             {
                 await _router.ExecuteAsync("quickOpen.show", trigger: "snapshot");
             }
-            QuickOpenView.Type(argument);
-            // The keys pause, the core answers: the checks read the rows after that.
-            await Task.Delay(500);
+            await TypeAndWaitForQuickOpenAnswerAsync(argument);
             return;
         }
         switch (argument)
         {
             case "enter" or "ctrl+enter":
                 await QuickOpenView.OpenHighlightedAsync(otherPane: argument == "ctrl+enter");
+                // The opening lists a folder through the core, and the pane takes the keyboard (GotFocus, on XAML's next frames).
+                await _quickOpenOpening;
+                await SettleFramesAsync();
                 await Task.Delay(400);
                 break;
             case "down":

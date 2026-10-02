@@ -167,7 +167,8 @@ public class ShellEndToEndTests
                 $"path:{data}",
                 "pane:0",
                 $"path:{Path.Combine(project, "src")}",
-                "wait:500",
+                // The core's answer about the workspace (the branch) comes after the folder is listed; a busy machine is late with it.
+                "until:workspace",
                 "shell:pill",
                 "quick-open:notes",
                 "shell:typed",
@@ -182,7 +183,7 @@ public class ShellEndToEndTests
                 "cmd:overlay.close",
                 "pane:1",
                 $"path:{data}",
-                "wait:500",
+                "until:workspace",
                 "shell:no-repository",
                 "shot:done"));
             var logs = await run.FinishAsync("quick", process, "done");
@@ -437,7 +438,9 @@ public class ShellEndToEndTests
             Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
-            Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
+            // The error lines themselves, not the whole log as the collection assert prints it.
+            var errors = logs.Where(l => Level(l) == "ERROR").ToList();
+            Assert.True(errors.Count == 0, $"the {name} window logged {errors.Count} error line(s):\n{string.Join('\n', errors.Select(ErrorText))}");
             return logs;
         }
 
@@ -484,18 +487,22 @@ public class ShellEndToEndTests
         }
         catch (Xunit.Sdk.XunitException error)
         {
-            // A state that came before the filter did shows in the times: the find's lines against the state's.
-            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe find and state lines of the window's log:\n{FindTimeline(logs)}");
+            // A state that came before the answer did shows in the times: the find's, Quick Open's and the workspace's lines against the state's.
+            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe find, Quick Open, workspace and state lines of the window's log:\n{FindTimeline(logs)}");
         }
     }
 
     private static string FindTimeline(List<string> logs) =>
-        string.Join('\n', logs.Where(l => Message(l) is "find opened" or "find filtered" or "find closed" or "shell state").Select(l =>
+        string.Join('\n', logs.Where(l => Message(l) is "find opened" or "find filtered" or "find closed" or "shell state"
+            or "quick open shown" or "quick open went to a row" or "quick-open step ended" or "quick-open step ended before Quick Open answered"
+            or "workspace pill shows a branch").Select(l =>
         {
             using var parsed = JsonDocument.Parse(l);
             var fields = parsed.RootElement.GetProperty("fields");
             var detail = Message(l) == "shell state"
                 ? $"{fields.GetProperty("label")} active_pane={fields.GetProperty("active_pane")} pane0_find={fields.GetProperty("pane0_find")} pane0_shown={fields.GetProperty("pane0_shown")} pane0_find_count={fields.GetProperty("pane0_find_count")}"
+                    + $" quick_open={fields.GetProperty("quick_open")} rows=[{fields.GetProperty("quick_open_rows")}] branch={fields.GetProperty("branch")} root={fields.GetProperty("workspace_root")}"
+                    + $" pane0={fields.GetProperty("pane0_path")}>{fields.GetProperty("pane0_cursor")} pane1={fields.GetProperty("pane1_path")}>{fields.GetProperty("pane1_cursor")}"
                 : fields.ToString();
             return $"  {parsed.RootElement.GetProperty("ts").GetString()} {Message(l)} {detail}";
         }));
@@ -504,6 +511,15 @@ public class ShellEndToEndTests
     {
         using var parsed = JsonDocument.Parse(line);
         return parsed.RootElement.GetProperty("message").GetString();
+    }
+
+    // An error line as text: its message, then the error field's first 40 lines (an exception with its stack), one to a line.
+    private static string ErrorText(string line)
+    {
+        using var parsed = JsonDocument.Parse(line);
+        var fields = parsed.RootElement.GetProperty("fields");
+        var text = fields.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String ? error.GetString()! : fields.ToString();
+        return $"{parsed.RootElement.GetProperty("message").GetString()}\n{string.Join('\n', text.Replace("\r", "", StringComparison.Ordinal).Split('\n').Take(40).Select(t => "    " + t))}";
     }
 
     private static string? Level(string line)

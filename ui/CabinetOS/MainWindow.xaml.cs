@@ -856,9 +856,17 @@ public sealed partial class MainWindow : Window
                 "tree" => TreeFollowsActiveFolder(),
                 // The right-click menu is on screen (a newer one no longer waits for the one before it), or it is gone.
                 "menu" => _contextMenu.IsSettled,
+                // Its place has been measured and logged too ("context menu placed"): a few dispatcher turns after "menu".
+                "menu-placed" => _contextMenu.IsSettled && _menuPlaced,
                 "menu-closed" => !_contextMenu.IsOpen && !_contextMenu.IsOnScreen,
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,
+                // The core has answered every question about the active folder's workspace (the pill's branch, Quick Open's root).
+                "workspace" => _workspaceAsking == 0,
+                // The marketplace view was laid out ahead while the window was idle after start (a busy machine is late with
+                // that), and: every card of its set is made and "marketplace cards complete" is logged.
+                "market-prepared" => MarketView.WasPreparedAhead,
+                "market-complete" => MarketView.CardsComplete,
                 _ => true,
             };
             if (met)

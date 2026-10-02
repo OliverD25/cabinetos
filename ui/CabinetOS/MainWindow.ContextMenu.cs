@@ -42,6 +42,10 @@ public sealed partial class MainWindow
     // A Windows menu that answers after a newer gesture is not shown.
     private int _windowsMenuAsked;
 
+    // WinUI has laid the menu asked for last out and the window has logged where it is ("context menu placed"): the
+    // snapshot aid's until:menu-placed. That comes some dispatcher turns after the menu is on screen (until:menu).
+    private bool _menuPlaced;
+
     private void SetUpContextMenu()
     {
         foreach (var view in _paneViews)
@@ -54,7 +58,11 @@ public sealed partial class MainWindow
             FocusActivePane();
         };
         _contextMenu.Opened += () => Diag.Info(MenuTarget, "context menu opened");
-        _contextMenu.Placed += bounds => Diag.Info(MenuTarget, "context menu placed", PlacedFields(bounds));
+        _contextMenu.Placed += bounds =>
+        {
+            _menuPlaced = true;
+            Diag.Info(MenuTarget, "context menu placed", PlacedFields(bounds));
+        };
         _contextMenu.Run = RunMenuEntry;
         _windowsMenu.Placed += bounds => Diag.Info(MenuTarget, "windows menu placed", PlacedFields(bounds));
         _windowsMenu.Closed += () =>
@@ -117,6 +125,7 @@ public sealed partial class MainWindow
             return;
         }
         _windowsMenuAsked++;
+        _menuPlaced = false;
         SetActive(paneIndex);
         var pane = _panes[paneIndex];
         var position = at ?? view.RowAnchor(index);
