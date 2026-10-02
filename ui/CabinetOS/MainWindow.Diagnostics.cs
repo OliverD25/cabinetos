@@ -7,6 +7,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 
 namespace CabinetOS;
 
@@ -85,6 +86,8 @@ public sealed partial class MainWindow
         }
         FocusManager.GotFocus -= OnHeavyGotFocus;
         FocusManager.GotFocus += OnHeavyGotFocus;
+        FocusManager.GettingFocus -= OnHeavyGettingFocus;
+        FocusManager.GettingFocus += OnHeavyGettingFocus;
         _heavyPillTimer?.Start();
     }
 
@@ -92,6 +95,7 @@ public sealed partial class MainWindow
     {
         _heavyFrames?.Stop();
         FocusManager.GotFocus -= OnHeavyGotFocus;
+        FocusManager.GettingFocus -= OnHeavyGettingFocus;
         _heavyPillTimer?.Stop();
     }
 
@@ -242,8 +246,37 @@ public sealed partial class MainWindow
         var to = DescribeElement(e.NewFocusedElement);
         var keys = WindowsPlatform.KeyboardFocus(_uiThreadId);
         Diag.Heavy("focus", "focus changed", new LogField("from", _focusShown), new LogField("to", to),
+            new LogField("within", DescribeElement(ViewAround(e.NewFocusedElement as DependencyObject))),
             new LogField("keys_to", keys is { } owner ? KeyboardOwnerName(owner.Window, owner.Class, owner.ProcessId) : "none"));
         _focusShown = to;
+    }
+
+    // A focus move as it starts, with what started it: a pointer, a key (Tab, an arrow) or the program
+    // (FocusState Programmatic), and from which device. A move nobody asked for shows here as one the
+    // window's code did not make.
+    private void OnHeavyGettingFocus(object? sender, GettingFocusEventArgs e)
+    {
+        if (!Diag.HeavyEnabled)
+        {
+            return;
+        }
+        Diag.Heavy("focus", "focus moving", new LogField("from", DescribeElement(e.OldFocusedElement)),
+            new LogField("to", DescribeElement(e.NewFocusedElement)), new LogField("within", DescribeElement(ViewAround(e.NewFocusedElement))),
+            new LogField("state", e.FocusState.ToString()), new LogField("device", e.InputDevice.ToString()),
+            new LogField("direction", e.Direction.ToString()));
+    }
+
+    // The window's own view (a pane, the dock, the palette) that holds the element, or null outside every one.
+    private static DependencyObject? ViewAround(DependencyObject? element)
+    {
+        for (var at = element; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is UserControl)
+            {
+                return at;
+            }
+        }
+        return null;
     }
 
     // The element's type and its name (x:Name, else its accessible name): "TextBox AddressEdit". Never its text.
