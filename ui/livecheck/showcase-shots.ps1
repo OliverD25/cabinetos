@@ -14,7 +14,7 @@ param(
   [string]$ShotDir = "$env:TEMP\cabinetos-showcase",
   [string]$Left = (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent),
   [string]$Right = '',
-  [string]$TerminalCommand = 'cab pane'
+  [string]$TerminalCommand = 'git log --oneline -3'
 )
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 6) { $env:PSModulePath = "$PSHOME\Modules;$env:PSModulePath" }
@@ -69,8 +69,8 @@ function Shot([string]$name) {
   $bmp = New-Object System.Drawing.Bitmap ($r.Right - $r.Left), ($r.Bottom - $r.Top)
   $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
   $path = Join-Path $ShotDir "$name.png"
-  $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
-  Step "screenshot $path ($($bmp.Width)x$($bmp.Height))"
+  $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $size = "$($bmp.Width)x$($bmp.Height)"; $g.Dispose(); $bmp.Dispose()
+  Step "screenshot $path ($size)"
 }
 function GoPath([string]$path) {
   [Show]::Press($VK.Ctrl, $VK.L); Start-Sleep -Milliseconds 700
@@ -120,8 +120,8 @@ foreach ($try in 1..8) {
   if ([Show]::ForegroundPid() -eq [uint32]$p.Id) { break }
   "front try $try failed; in front: pid $([Show]::ForegroundPid())"
 }
-[void][Show]::ShowWindow($h, 3); Start-Sleep -Milliseconds 600
-[Show]::Front($h); Start-Sleep -Milliseconds 1500
+# Maximized last: the front call restores a window, which would undo it.
+[void][Show]::ShowWindow($h, 3); Start-Sleep -Milliseconds 1500
 "foreground ok: $([Show]::ForegroundPid() -eq [uint32]$p.Id)"
 
 Step "1: the two panes, $Left and $Right"
@@ -144,20 +144,23 @@ Step "3: the terminal"
 Shot '03-terminal'
 [Show]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 1000
 
-Step "4: the marketplace"
+# The theme picker lists the shipped themes by id: catppuccin-mocha, commander-compact, default, ... (Home, then Down).
+function ChooseTheme([int]$downs) {
+  [Show]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 200
+  [Show]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 1000
+  [Show]::Press($VK.Home); Start-Sleep -Milliseconds 200
+  foreach ($i in 1..$downs) { [Show]::Press($VK.Down); Start-Sleep -Milliseconds 300 }
+  [Show]::Press($VK.Enter); Start-Sleep -Milliseconds 2500
+}
+Step "4: Commander Compact over the panes (Ctrl+K Ctrl+T, Home, Down, Enter)"
+ChooseTheme 1
+Shot '04-commander-compact'
+ChooseTheme 2
+
+Step "5: the marketplace, in the Default theme again"
 Palette 'marketplace'
 [Show]::Press($VK.Enter); Start-Sleep -Milliseconds 7000
-Shot '04-marketplace'
-Palette 'explorer'
-[Show]::Press($VK.Enter); Start-Sleep -Milliseconds 1500
-
-Step "5: Commander Compact (Ctrl+K Ctrl+T, Home, Down, Enter)"
-[Show]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 200
-[Show]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 1000
-[Show]::Press($VK.Home); Start-Sleep -Milliseconds 200
-[Show]::Press($VK.Down); Start-Sleep -Milliseconds 500
-[Show]::Press($VK.Enter); Start-Sleep -Milliseconds 2500
-Shot '05-commander-compact'
+Shot '05-marketplace'
 
 Step "close"
 [void]$p.CloseMainWindow()
