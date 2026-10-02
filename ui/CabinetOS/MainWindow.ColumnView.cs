@@ -126,6 +126,10 @@ public sealed partial class MainWindow
         switch (kind)
         {
             case "column-view":
+                // What is on screen follows the model on XAML's next frames: the rows each column draws, the strip's scroll after
+                // an open. Beside two test runs those came after the log line, and "the keyboard's column is in view" read False.
+                await SettleFramesAsync();
+                await WaitForConditionAsync(() => _paneViews[_active].ColumnViewShown is not { } shownView || shownView.IsLaidOut());
                 LogColumnView(argument);
                 break;
             case "column-open":

@@ -53,9 +53,16 @@ public class RailEndToEndTests
         // Waits for the last snapshot, closes the window the way a user does and returns the UI's log lines.
         public async Task<List<string>> FinishAsync(string name, Process process, string lastShot)
         {
-            await WaitForAsync(() => File.Exists(Shot(name, lastShot)), $"the {name} window's last snapshot", TimeSpan.FromSeconds(90));
+            try
+            {
+                await WaitForAsync(() => File.Exists(Shot(name, lastShot)), $"the {name} window's last snapshot", TimeSpan.FromSeconds(240));
+            }
+            catch (Xunit.Sdk.XunitException error)
+            {
+                throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's last log lines (times in UTC):\n{WindowLog.Last(LogFiles.Ui(Path.Combine(root, "logs-" + name)), 60)}");
+            }
             process.CloseMainWindow();
-            Assert.True(process.WaitForExit(20_000), $"the {name} window did not close");
+            Assert.True(process.WaitForExit(60_000), $"the {name} window did not close");
             var logs = LogFiles.Ui(Path.Combine(root, "logs-" + name));
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-" + name), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
@@ -188,7 +195,7 @@ public class RailEndToEndTests
             }
             var logs = log();
             process.CloseMainWindow();
-            Assert.True(process.WaitForExit(20_000), "the window did not close");
+            Assert.True(process.WaitForExit(60_000), "the window did not close");
 
             var shown = Assert.Single(logs, l => Message(l) == "the tree shows a folder");
             Assert.Equal(folder, Field(shown, "path").GetString(), ignoreCase: true);
@@ -223,27 +230,30 @@ public class RailEndToEndTests
                 $"path:{folder}",
                 $"tree:{sub}",
                 "rail-state:tree",
+                // Each wait is for what the next step needs, not for a time: a page starts, goes to sleep and wakes when WebView2 does
+                // (a busy machine is seconds late), and the sidebar's width is laid out on XAML's next frames.
                 "search:one",
-                "wait:1500",
+                "until:search",
                 "rail:search",
-                "wait:500",
                 "rail-state:search",
                 "rail:quick-notes",
-                "until:tool",
+                "until:sidebar-page:quick-notes",
                 "plugin-event:badge|{\"view\":\"quick-notes\",\"kind\":\"dot\"}",
                 "rail-state:notes",
                 "rail:pin-notes",
-                "wait:1500",
+                "until:sidebar-page:pin-notes",
                 "rail:explorer",
-                "wait:1500",
+                "until:page-suspended:quick-notes",
                 "rail:quick-notes",
-                "wait:1000",
+                "until:page-awake:quick-notes",
                 "rail-move:quick-notes|-1",
                 "divider:320",
                 "rail-state:wide",
                 "divider:90",
-                "wait:500",
+                "until:page-suspended:pin-notes",
                 "rail-state:closed",
+                // The test reads the file after the window closed: the writes of the order, the width and the view must have landed.
+                "until:rail-saved",
                 "shot:done"));
             var logs = await run.FinishAsync("first", first, "done");
 
@@ -295,7 +305,7 @@ public class RailEndToEndTests
             }
 
             // The next start: the sidebar is closed as it was left; opened again it is 320 px wide and shows the same view.
-            var second = run.Start("second", "size:1400x800;cmd:view.toggleSidebar;wait:1500;rail-state:restored;shot:restored");
+            var second = run.Start("second", "size:1400x800;cmd:view.toggleSidebar;until:sidebar-view:quick-notes;rail-state:restored;shot:restored");
             logs = await run.FinishAsync("second", second, "restored");
             State(logs, "restored", state =>
             {
@@ -326,6 +336,7 @@ public class RailEndToEndTests
     public async Task Every_way_of_picking_a_folder_in_the_sidebar_runs_go_toPath_once()
     {
         var (run, root, data) = Prepare("rail-pick", "{}");
+        List<string> seen = [];
         try
         {
             var clickTarget = Path.Combine(data, "a", "click-target");
@@ -347,26 +358,35 @@ public class RailEndToEndTests
                 $"path:{windows}",
                 "wait:800",
                 "rail-state:start",
+                // A click waits for its button to be drawn, and each pick for the pane to show the folder it took it to: the sidebar's
+                // rows and the keys are handled on XAML's next frames, and a "rail state" line read 300 ms after the pick came first.
+                // "listing shown" is logged at the first frame after a listing is bound, and a pick that comes before that frame
+                // replaces the pending line: the drive's listing was never logged beside three test runs (a frame took 4.6 s), and the
+                // test judges the pane's folders by those lines. So each pick waits until its listing is drawn.
                 $"click:{driveName}",
-                "wait:300",
+                $"until:pane-at:{driveRoot}",
+                "until:listing-drawn",
                 "rail-state:drive",
                 "click:pinned-folder",
-                "wait:300",
+                $"until:pane-at:{pinned}",
+                "until:listing-drawn",
                 "rail-state:pinned",
                 $"tree:{Path.Combine(data, "a")}",
-                "wait:500",
                 "click:click-target",
-                "wait:300",
+                $"until:pane-at:{clickTarget}",
+                "until:listing-drawn",
+                "until:tree",
                 "rail-state:tree-click",
                 "cmd:view.showExplorer",
                 "key:Down",
                 "key:Enter",
-                "wait:300",
+                $"until:pane-at:{enterTarget}",
                 "rail-state:tree-enter",
                 "shot:done"));
             await WaitForAsync(() => LogFiles.Ui(Path.Combine(root, "logs-run")).Any(l => Message(l) == "listing shown" && SamePath(Field(l, "path").GetString()!, enterTarget)),
-                "the pane to show the folder Enter in the tree took it to", TimeSpan.FromSeconds(60));
+                "the pane to show the folder Enter in the tree took it to", TimeSpan.FromSeconds(180));
             var logs = await run.FinishAsync("run", process, "done");
+            seen = logs;
 
             Assert.DoesNotContain(logs, l => Message(l) == "snapshot click: no shown button has that name");
             Assert.Equal(1, SidebarRuns(logs, "start", "drive"));
@@ -383,6 +403,12 @@ public class RailEndToEndTests
                 Assert.True(at >= 0, $"the pane never showed {expected} after the earlier picks; it showed: {string.Join(" | ", shown)}");
                 searchFrom = at + 1;
             }
+        }
+        catch (Xunit.Sdk.XunitException error) when (seen.Count > 0)
+        {
+            // The picks and the listings of the whole run, then the last lines of all kinds: the pick that failed is rarely among the last.
+            var steps = WindowLog.Last(seen, 80, l => Message(l) is "command executed" or "listing shown" or "rail state" or "snapshot click: no shown button has that name");
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's picks, listings and rail states (times in UTC):\n{steps}\nthe window's last log lines:\n{WindowLog.Last(seen, 60)}");
         }
         finally
         {
@@ -499,7 +525,14 @@ public class RailEndToEndTests
     {
         var line = Assert.Single(logs, l => Message(l) == "rail state" && Field(l, "label").GetString() == label);
         using var parsed = JsonDocument.Parse(line);
-        check(parsed.RootElement.GetProperty("fields"));
+        try
+        {
+            check(parsed.RootElement.GetProperty("fields"));
+        }
+        catch (Xunit.Sdk.XunitException error)
+        {
+            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe window's log lines around the state (times in UTC):\n{WindowLog.Around(logs, logs.IndexOf(line))}");
+        }
     }
 
     private static void CopyFolder(string from, string to)

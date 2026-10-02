@@ -91,7 +91,11 @@ try {
       "run $run of ${Times}: NOT PASSED in $seconds s, exit code $code ($counts)"
       $from = -1
       for ($n = 0; $n -lt $lines.Count; $n++) { if ($lines[$n] -match '^\s*failed ') { $from = $n; break } }
-      if ($from -ge 0) { $shown = $lines[$from..([Math]::Min($lines.Count - 1, $from + 60))] } else { $shown = $lines | Select-Object -Last 30 }
+      # Every failed test, not only the first: from the first "failed" line to the assembly's summary line (a run beside a load
+      # often fails more than one test, and each message names a different step). At most 300 lines.
+      $to = $lines.Count - 1
+      for ($n = [Math]::Max($from, 0); $n -lt $lines.Count; $n++) { if ($lines[$n] -match 'failed with \d+ error') { $to = $n; break } }
+      if ($from -ge 0) { $shown = $lines[$from..([Math]::Min($to, $from + 299))] } else { $shown = $lines | Select-Object -Last 30 }
       foreach ($line in $shown) { '    ' + $(if ($line.Length -gt 600) { $line.Substring(0, 600) + '...' } else { $line }) }
     }
   }

@@ -36,6 +36,8 @@ public class ColumnViewEndToEndTests
 
         var root = Repo.NewTempFolder("column-view-e2e");
         var started = new List<Process>();
+        // The first window's log, for the message of a failed check.
+        List<string> seen = [];
         try
         {
             // data\a\b\c, a file in each folder; folders sort first, so a folder's first row is its subfolder.
@@ -102,14 +104,15 @@ public class ColumnViewEndToEndTests
                 "shell:back",
                 "cmd:view.toggleColumns",
                 "column-view:again",
-                "wait:1500",
+                "until:tabs-saved",
                 "tabs:saved",
                 "shot:done"));
-            await WaitForAsync(() => File.Exists(Shot("first", "done")), "the first window's last snapshot", TimeSpan.FromSeconds(90));
+            await WaitForAsync(() => File.Exists(Shot("first", "done")), "the first window's last snapshot", TimeSpan.FromSeconds(240));
             first.CloseMainWindow();
-            Assert.True(first.WaitForExit(15_000), "the first window did not close");
+            Assert.True(first.WaitForExit(60_000), "the first window did not close");
 
             var logs = LogFiles.Ui(Path.Combine(root, "logs-first"));
+            seen = logs;
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-first"), "crash-*.json"));
             Assert.DoesNotContain(logs, l => Level(l) == "ERROR");
             string Shown(string label, string field) => Text(Assert.Single(logs, l => Message(l) == "column view shown" && Text(l, "label") == label), field);
@@ -188,15 +191,21 @@ public class ColumnViewEndToEndTests
 
             // A second window on the same configuration: the tab starts in columns, its folder as the one column.
             var second = Start("second", "pane:0;column-view:start;shell:start;wait:500;shot:start");
-            await WaitForAsync(() => File.Exists(Shot("second", "start")), "the second window's snapshot", TimeSpan.FromSeconds(60));
+            await WaitForAsync(() => File.Exists(Shot("second", "start")), "the second window's snapshot", TimeSpan.FromSeconds(180));
             second.CloseMainWindow();
-            Assert.True(second.WaitForExit(15_000), "the second window did not close");
+            Assert.True(second.WaitForExit(60_000), "the second window did not close");
             var again = LogFiles.Ui(Path.Combine(root, "logs-second"));
             Assert.Contains(again, l => Message(l) == "column view entered" && Text(l, "path") == b);
             var start = Assert.Single(again, l => Message(l) == "column view shown" && Text(l, "label") == "start");
             Assert.Equal(("columns", "1", b, "c>|b.txt"), (Text(start, "mode"), Text(start, "depth"), Text(start, "folders"), Text(start, "rows")));
             Assert.Equal(1, Field(Assert.Single(again, l => Message(l) == "shell state" && Text(l, "label") == "start"), "pane0_listings").GetInt32());
             Assert.Empty(Directory.GetFiles(Path.Combine(root, "logs-second"), "crash-*.json"));
+        }
+        catch (Xunit.Sdk.XunitException error)
+        {
+            // A window that never reached its last snapshot has no "seen" yet: its log is read now.
+            var window = seen.Count > 0 ? seen : LogFiles.Ui(Path.Combine(root, "logs-first"));
+            throw new Xunit.Sdk.XunitException($"{error.Message}\nthe first window's last log lines (times in UTC):\n{WindowLog.Last(window, 90, fieldChars: 420)}");
         }
         finally
         {

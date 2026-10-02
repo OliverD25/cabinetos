@@ -164,6 +164,9 @@ public sealed partial class ColumnList : UserControl
     /// <summary>The row shown at <paramref name="position"/>, when it is on screen.</summary>
     public ColumnRow? RowAt(int position) => position >= 0 ? Repeater.TryGetElement(position) as ColumnRow : null;
 
+    /// <summary>How many rows the column has: the ones on screen are only some of them.</summary>
+    internal int RowCount => _shown?.Count ?? 0;
+
     /// <summary>The rows on screen, top first (the snapshot aid's log).</summary>
     public IEnumerable<ColumnRow> RealizedRows => _realized.Where(r => r.Index >= 0).OrderBy(r => r.Index);
 
