@@ -108,13 +108,21 @@ trap {
   if ($script:p -and -not $script:p.HasExited) { [void]$script:p.CloseMainWindow(); if (-not $script:p.WaitForExit(8000)) { $script:p.Kill() } }
   exit 1
 }
+# As the live check does: the window needs a few seconds before its main handle is the real one (an early handle is a
+# window that never shows); then it is brought to the front, repeated until its process is in front, then maximized.
+Start-Sleep -Seconds 6
 $deadline = (Get-Date).AddSeconds(40)
-do { Start-Sleep -Milliseconds 250; $p.Refresh() } while ($p.MainWindowHandle -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline)
-if ($p.MainWindowHandle -eq [IntPtr]::Zero) { "STOP: no window within 40 s"; exit 1 }
+do { $p.Refresh(); if ($p.MainWindowHandle -ne [IntPtr]::Zero) { break }; Start-Sleep -Milliseconds 250 } while ((Get-Date) -lt $deadline)
+if ($p.MainWindowHandle -eq [IntPtr]::Zero) { "STOP: no window within 46 s"; exit 1 }
 $h = $p.MainWindowHandle
-[void][Show]::ShowWindow($h, 3)
-[Show]::Front($h)
-Start-Sleep -Milliseconds 4000
+foreach ($try in 1..8) {
+  [Show]::Front($h); Start-Sleep -Milliseconds 800
+  if ([Show]::ForegroundPid() -eq [uint32]$p.Id) { break }
+  "front try $try failed; in front: pid $([Show]::ForegroundPid())"
+}
+[void][Show]::ShowWindow($h, 3); Start-Sleep -Milliseconds 600
+[Show]::Front($h); Start-Sleep -Milliseconds 1500
+"foreground ok: $([Show]::ForegroundPid() -eq [uint32]$p.Id)"
 
 Step "1: the two panes, $Left and $Right"
 GoPath $Left
