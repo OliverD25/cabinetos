@@ -484,18 +484,21 @@ public class ShellEndToEndTests
         }
         catch (Xunit.Sdk.XunitException error)
         {
-            // A state that came before the filter did shows in the times: the find's lines against the state's.
-            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe find and state lines of the window's log:\n{FindTimeline(logs)}");
+            // A state that came before the answer did shows in the times: the find's, Quick Open's and the workspace's lines against the state's.
+            throw new Xunit.Sdk.XunitException($"state \"{label}\": {error.Message}\nthe find, Quick Open, workspace and state lines of the window's log:\n{FindTimeline(logs)}");
         }
     }
 
     private static string FindTimeline(List<string> logs) =>
-        string.Join('\n', logs.Where(l => Message(l) is "find opened" or "find filtered" or "find closed" or "shell state").Select(l =>
+        string.Join('\n', logs.Where(l => Message(l) is "find opened" or "find filtered" or "find closed" or "shell state"
+            or "quick open shown" or "quick open went to a row" or "quick-open step ended" or "workspace pill shows a branch").Select(l =>
         {
             using var parsed = JsonDocument.Parse(l);
             var fields = parsed.RootElement.GetProperty("fields");
             var detail = Message(l) == "shell state"
                 ? $"{fields.GetProperty("label")} active_pane={fields.GetProperty("active_pane")} pane0_find={fields.GetProperty("pane0_find")} pane0_shown={fields.GetProperty("pane0_shown")} pane0_find_count={fields.GetProperty("pane0_find_count")}"
+                    + $" quick_open={fields.GetProperty("quick_open")} rows=[{fields.GetProperty("quick_open_rows")}] branch={fields.GetProperty("branch")} root={fields.GetProperty("workspace_root")}"
+                    + $" pane0={fields.GetProperty("pane0_path")}>{fields.GetProperty("pane0_cursor")} pane1={fields.GetProperty("pane1_path")}>{fields.GetProperty("pane1_cursor")}"
                 : fields.ToString();
             return $"  {parsed.RootElement.GetProperty("ts").GetString()} {Message(l)} {detail}";
         }));

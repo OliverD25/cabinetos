@@ -505,12 +505,20 @@ public class ContextMenuEndToEndTests
                 "shot:done"));
             var logs = await run.FinishAsync("out-of-view", process, "done");
 
-            var shown = Assert.Single(logs, l => Message(l) == "context menu shown");
-            Assert.True(Field(shown, "keyboard").GetBoolean());
-            Assert.InRange(Field(shown, "y").GetDouble(), 0, 700);
-            State(logs, "open", state => Assert.True(state.GetProperty("context_menu_on_screen").GetBoolean()));
-            var placed = Assert.Single(logs, l => Message(l) == "context menu placed");
-            Assert.InRange(Field(placed, "top").GetDouble() + Field(placed, "height").GetDouble(), 0, 700);
+            // A failure shows the window's lines with their times: which step ran when, and what the menu did.
+            try
+            {
+                var shown = Assert.Single(logs, l => Message(l) == "context menu shown");
+                Assert.True(Field(shown, "keyboard").GetBoolean());
+                Assert.InRange(Field(shown, "y").GetDouble(), 0, 700);
+                State(logs, "open", state => Assert.True(state.GetProperty("context_menu_on_screen").GetBoolean()));
+                var placed = Assert.Single(logs, l => Message(l) == "context menu placed");
+                Assert.InRange(Field(placed, "top").GetDouble() + Field(placed, "height").GetDouble(), 0, 700);
+            }
+            catch (Xunit.Sdk.XunitException error)
+            {
+                throw new Xunit.Sdk.XunitException($"{error.Message}\nthe window's log lines (times in UTC):\n{Timeline(logs)}");
+            }
         }
         finally
         {
@@ -848,6 +856,15 @@ public class ContextMenuEndToEndTests
     // Where in the log the lines that match are, oldest first: a line's place says what came before what, whatever the clock says.
     private static List<int> Positions(List<string> logs, Func<string, bool> match) =>
         [.. logs.Select((line, index) => (line, index)).Where(p => match(p.line)).Select(p => p.index)];
+
+    // The window's last log lines, each with its time, message and fields (cut short): what a failed check shows.
+    private static string Timeline(List<string> logs, int last = 45) =>
+        string.Join('\n', logs.TakeLast(last).Select(l =>
+        {
+            using var parsed = JsonDocument.Parse(l);
+            var fields = parsed.RootElement.TryGetProperty("fields", out var f) ? f.ToString() : "";
+            return $"  {parsed.RootElement.GetProperty("ts").GetString()} {Message(l)} {(fields.Length > 200 ? fields[..200] : fields)}";
+        }));
 
     private static void State(List<string> logs, string label, Action<JsonElement> check)
     {
