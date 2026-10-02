@@ -491,6 +491,10 @@ public sealed class PaneModel : ObservableObject, IRowDetails
         return [.. Selection.SelectedUnordered.Where(index => (uint)index < (uint)view.Count).Order().Take(limit).Select(index => DisplayFormat.Join(Path, view.Name(index)))];
     }
 
+    /// <summary>How many rows <see cref="MarkedPaths"/> would list with no limit: the true count behind a cut list (the window's state message).</summary>
+    public int MarkedCount() =>
+        _view is { } view && Selection.HasMarks ? Selection.SelectedUnordered.Count(index => (uint)index < (uint)view.Count) : 0;
+
     /// <summary>
     /// A name for a new entry that the listing does not have yet:
     /// <paramref name="baseName"/>, then "<paramref name="baseName"/> (2)", …

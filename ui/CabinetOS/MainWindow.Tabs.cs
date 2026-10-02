@@ -515,13 +515,16 @@ public sealed partial class MainWindow
         var pane = _panes[index];
         // A tool in front has no cursor and no marks; a search shows hits, not the listing's rows.
         var listing = !strip.Active.IsTool && pane.Search is null && _held[index] == strip.Active;
+        var marked = listing ? pane.MarkedPaths(WindowStateBuilder.MaxMarked) : [];
         return new PaneSnapshot(
             strip.Tabs,
             strip.ActiveIndex,
             listing ? pane.EntryAt(pane.FocusIndex)?.Path : null,
-            listing ? pane.MarkedPaths(WindowStateBuilder.MaxMarked) : [],
+            marked,
             // In the column view the cursor and the marks are the keyboard's column's rows: its folder goes with them.
-            listing && _columnViews[index] is not null ? pane.Path : null);
+            listing && _columnViews[index] is not null ? pane.Path : null,
+            // Counted only when the list was cut: the count walks every marked row.
+            marked.Count >= WindowStateBuilder.MaxMarked ? pane.MarkedCount() : null);
     }
 
     // ----- Start and close -----
