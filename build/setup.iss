@@ -108,6 +108,11 @@ Name: "{autodesktop}\CabinetOS"; Filename: "{app}\CabinetOS.exe"; WorkingDir: "{
 [Run]
 Filename: "{app}\CabinetOS.exe"; Description: "Start CabinetOS"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
+[UninstallDelete]
+; The install folder also when it was there before the setup: Inno removes only a folder it made itself, so an empty
+; folder an earlier uninstall left behind stayed after every later uninstall (seen in the VM on 2026-10-02).
+Type: dirifempty; Name: "{app}"
+
 [Code]
 const
   WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
@@ -284,32 +289,40 @@ begin
       + 'your settings stay:' + NewLine + 'powershell -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\uninstall.ps1') + '"';
 end;
 
-// The CabinetOS programs that run from Folder or below it (previous\ too), named with their process IDs.
-function RunningFrom(const Folder: String): String;
+// The CabinetOS programs in Folder, previous\ and previous-old\ that a running process holds: Windows refuses to
+// open a running program's file for writing. WMI could name the processes, but it waits for a service: right after a
+// restart the VM's uninstall took 22 minutes on 2026-10-02 (a second once the VM had settled). This test needs no
+// service and asks what the uninstall needs.
+function ProgramsInUse(const Folder: String): String;
 var
-  Locator, Service, Processes, Process: Variant;
-  I: Integer;
+  Names, Dirs: TArrayOfString;
+  I, J: Integer;
   Path: String;
+  Stream: TFileStream;
 begin
   Result := '';
-  try
-    Locator := CreateOleObject('WbemScripting.SWbemLocator');
-    Service := Locator.ConnectServer('.', 'root\CIMV2');
-    Processes := Service.ExecQuery('SELECT Name, ProcessId, ExecutablePath FROM Win32_Process WHERE Name = ''CabinetOS.exe'''
-      + ' OR Name = ''cabinetos-core.exe'' OR Name = ''cabinetos-cli.exe'' OR Name = ''cab.exe'' OR Name = ''cabinetos-indexer.exe''');
-    for I := 0 to Processes.Count - 1 do
+  SetArrayLength(Names, 5);
+  Names[0] := 'CabinetOS.exe';
+  Names[1] := 'cabinetos-core.exe';
+  Names[2] := 'cabinetos-cli.exe';
+  Names[3] := 'cab.exe';
+  Names[4] := 'cabinetos-indexer.exe';
+  SetArrayLength(Dirs, 3);
+  Dirs[0] := Folder;
+  Dirs[1] := Folder + '\previous';
+  Dirs[2] := Folder + '\previous-old';
+  for J := 0 to GetArrayLength(Dirs) - 1 do
+    for I := 0 to GetArrayLength(Names) - 1 do
     begin
-      Process := Processes.ItemIndex(I);
-      if not VarIsNull(Process.ExecutablePath) then
-      begin
-        Path := Process.ExecutablePath;
-        if Pos(Lowercase(AddBackslash(Folder)), Lowercase(Path)) = 1 then
-          Result := Result + ' ' + Process.Name + ' (' + IntToStr(Process.ProcessId) + ')';
-      end;
+      Path := Dirs[J] + '\' + Names[I];
+      if FileExists(Path) then
+        try
+          Stream := TFileStream.Create(Path, fmOpenReadWrite or fmShareDenyNone);
+          Stream.Free;
+        except
+          Result := Result + ' ' + Path;
+        end;
     end;
-  except
-    Log('cannot list the running programs: ' + GetExceptionMessage);
-  end;
 end;
 
 // A running program's files cannot be deleted: the uninstall would leave half a CabinetOS behind.
@@ -317,24 +330,26 @@ function InitializeUninstall(): Boolean;
 var
   Running: String;
 begin
-  Running := RunningFrom(ExpandConstant('{app}'));
+  Running := ProgramsInUse(ExpandConstant('{app}'));
   Result := Running = '';
   if not Result then
   begin
-    Log('CabinetOS runs:' + Running);
-    SuppressibleMsgBox('Close CabinetOS first:' + Running + ' running from ' + ExpandConstant('{app}') + '.', mbError, MB_OK, IDOK);
+    Log('CabinetOS runs, these files are in use:' + Running);
+    SuppressibleMsgBox('Close CabinetOS first. These files are in use:' + Running, mbError, MB_OK, IDOK);
   end;
 end;
 
-// After Inno has removed what it installed: what the in-app updater added (previous\, previous-old\, the files a
-// later version brought), so the whole folder goes. Only a folder named CabinetOS, never a drive's root; Inno's own
-// uninstaller files go last, by Inno, and the empty folder with them.
+// Before Inno removes what it installed: everything in the install folder but Inno's own uninstaller files, so what
+// the in-app updater added (previous\, previous-old\, the files a later version brought) goes too, and Inno's removal
+// of the folder finds it empty. Run after that removal, this left an empty folder behind (seen in the VM on
+// 2026-10-02). Only a folder named CabinetOS, never a drive's root; Inno's uninstaller files go last, by Inno, and the
+// folder with them.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   App: String;
   Found: TFindRec;
 begin
-  if CurUninstallStep <> usPostUninstall then
+  if CurUninstallStep <> usUninstall then
     Exit;
   App := RemoveBackslash(ExpandConstant('{app}'));
   if (CompareText(ExtractFileName(App), 'CabinetOS') <> 0) or (Length(App) <= 3) then
@@ -351,7 +366,7 @@ begin
           DelTree(App + '\' + Found.Name, True, True, True)
         else
           DeleteFile(App + '\' + Found.Name);
-        Log('removed what the updater left: ' + Found.Name);
+        Log('removed: ' + Found.Name);
       end;
     until not FindNext(Found);
   finally
