@@ -367,4 +367,5 @@ Each line: what, because, undo.
 | 17325c8 | fix: the menu's edit mode ignores a late GotFocus of a row that a rebuild replaced, and the key step waits for the focus (product code) |
 | 894d03b | test: the shellmenu steps ask again when the core answers "took longer than 3 s" |
 | 9b3baa5 | test: the sidebar pick test waits until each pick's listing is drawn, and a failure shows the picks of the whole run |
-| (this report) | docs: the snapshot steps, the changelog, the plan and the report of the third round |
+| 5c806b6 | docs: the snapshot steps of the third round of flakes and the changelog's two fixes |
+| 180c869 | docs: the report of the third round of flaky end-to-end tests, the plan's note and the log's index |
