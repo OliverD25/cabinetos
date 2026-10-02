@@ -83,6 +83,17 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
   window and is always fine. The Omen laptop (`ui/livecheck/remote-livecheck.ps1`,
   `remote-tests.ps1`, `remote-script.ps1`) and the VM (`vm-livecheck.ps1`)
   need no consent.
+- **The laptop's numbers are the market's numbers.** The creator's rule of
+  2026-10-02: this PC is a strong machine, and most users' machines are
+  closer to the Omen laptop. So every merge's live check runs on the
+  laptop too (`ui/livecheck/remote-livecheck.ps1`), and the laptop's frame
+  numbers (the scroll goal, the frames over 20 and 33 ms) decide whether a
+  speed goal is met. The end-to-end suite runs there as well
+  (`remote-tests.ps1 -EndToEnd`) when this PC is held or busy. A run on
+  this PC alone proves the logic, not the speed. The laptop's dead
+  `CabinetOS.exe` processes, which lock its clones after a crashed run,
+  end with `taskkill /F /IM CabinetOS.exe` over SSH (seen 2026-10-02); no
+  restart is needed.
 - Unsafe Rust only in the crates that talk to Windows (`ipc`, `fs`, `jobs`,
   `index`), every `unsafe` block with a `// SAFETY:` comment.
 - Project skills live in `.claude/skills/`. `heavy-logging` says when and
