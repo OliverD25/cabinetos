@@ -1640,6 +1640,37 @@ Articles: 2, 3, 10, 12.
 on Sonnet; unit 4's design note goes to a coder on Opus after them; unit 6
 waits for the creator's word on the public repository.
 
+**Status (2026-10-02, 21:44): unit 1 done, and it was in place already.** The
+window's project has referenced only the Windows App SDK components it uses
+(WinUI, Foundation, InteractiveExperiences and Runtime, at the 2.5.1
+package's versions) since 2026-09-29 (6fdc435), so the unit's premise, the
+whole `Microsoft.WindowsAppSDK` package, was out of date: the release folder
+of 2026-10-02 held no `onnxruntime.dll`, `DirectML.dll` or AI or
+machine-learning library, and the three attempts the handout allows for the
+per-component route were not needed. What the unit added: `release.ps1`
+stops before it zips when its folder holds one (tested with fake files), the
+docs say which components and why ([dev-setup.md](dev-setup.md),
+[release.md](release.md), "Sizes"), and the cost is measured, in a scratch
+copy of the project: the window's publish with the whole package is 60
+files, 100.3 MB, 34.7 MB zipped; with the components 45 files, 57.8 MB,
+17.3 MB zipped (15 files, 42.5 MB and 17.4 MB less).
+
+**Status (2026-10-02, 21:44): unit 2 done.** `release.ps1` moves every
+`.pdb` file out of the release folder into
+`CabinetOS-<version>-win-x64-symbols.zip` (43.6 MB, with its `.sha256`);
+`setup.iss` excludes `*.pdb` besides; the updater's swap needed no change
+([ADR 0019](decisions/0019-symbols-in-their-own-zip.md)). Release folder
+71 files and 251.7 MB before, 66 and 100.5 MB now; zip 75.7 MB before, 32.1
+MB now; setup file 42.5 MB before, 20.0 MB now: the goal (a zip under 60 MB
+and a setup file under 35 MB, no machine-learning library inside) is met.
+A crash trace, measured on a copy of the release folder: with the symbols
+unpacked next to the programs every frame names function, file and line; without
+them the Rust programs' `backtrace` is a list of `<unknown>` frames (the
+panic's `location` and the log lines stay), and the window's names its methods
+with no file and line. So a trace without symbols still names functions for
+the window only, not for the Rust programs ([release.md](release.md), "The
+symbols").
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):

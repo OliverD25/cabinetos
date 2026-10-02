@@ -56,6 +56,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Shortcuts work while a text box has the keyboard, when they type nothing there: Ctrl+B, Ctrl+Tab, Alt+Left, Ctrl+K Ctrl+T and the function keys run their command. The box keeps the keys that type or edit, such as letters, Enter, Tab, the arrows, Ctrl+A, Ctrl+C and Ctrl+V. In a pane's find box and address box the pane's keys work too: F5 copies the cursor row to the other pane, Ctrl+T opens a tab. Before, only Ctrl+Shift+P, Esc and Ctrl+K Ctrl+S worked in a box.
 - Quick Open and the search of a folder, when no indexer answers, keep only the best hits while the core walks the folders, not every name that matches. A query that matches every name of a large walk no longer holds up to about 30 MB of hits for a moment, and a walk of 100,000 names answers about 10 ms sooner (about 100 ms instead of 111 to 114 ms). The hits and their order are the same.
+- The release zip and the setup file no longer hold the `.pdb` symbol files: they are a download of their own, `CabinetOS-<version>-win-x64-symbols.zip`. The release zip is 32 MB instead of 76 MB and the setup file 20 MB instead of 43 MB. A crash trace from an install names function, file and line once you unpack the symbols of the same version next to the programs; without them the Rust programs' trace shows `<unknown>` frames, though its `location` still names the line of the panic.
 
 ### Fixed
 

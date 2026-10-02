@@ -12,15 +12,16 @@ for the WSL bash terminal unless marked `# PowerShell`, as in
 
 One folder, zipped as `CabinetOS-<version>-win-x64.zip`, and the same
 folder wrapped in a setup file, `CabinetOS-<version>-win-x64-setup.exe`
-("The setup file", below). The zip has its files at its root:
+("The setup file", below). The symbols, the `.pdb` files, are in neither:
+they are a third file, `CabinetOS-<version>-win-x64-symbols.zip` ("The
+symbols", below). The zip has its files at its root:
 
 | Part | What it is |
 |---|---|
-| `CabinetOS.exe` and the libraries next to it | The window: .NET 10, WinUI 3, published framework-dependent and compiled ahead of time (ReadyToRun) |
+| `CabinetOS.exe` and the libraries next to it | The window: .NET 10, WinUI 3, published framework-dependent and compiled ahead of time (ReadyToRun). Of the Windows App SDK only the components the window uses (WinUI, Foundation, InteractiveExperiences, Runtime), so the folder holds no machine-learning library; `release.ps1` stops when one turns up ("Sizes", below) |
 | `CabinetOS.pri` | The window's compiled XAML; without it the window cannot start |
 | `cabinetos-core.exe`, `cabinetos-indexer.exe`, `cabinetos-cli.exe` | The Rust programs. The window's launcher finds the core next to `CabinetOS.exe` ([ui.md](ui.md)) |
 | `cab.exe` | `cabinetos-cli.exe` once more, under a short name to type: `cab jobs`, `cab undo --last`. The same program, byte for byte; everything else keeps the name `cabinetos-cli` (the docs, the help text, the tests) |
-| `*.pdb` | Symbols, so crash traces name file and line |
 | `Assets\xterm\` | The terminal page |
 | `extras\themes\` | Copies of the four built-in themes and their schema, as a start for your own. The core also writes them into `%LOCALAPPDATA%\CabinetOS\themes` |
 | `extras\tools\markdown-preview\` | The Markdown Preview tool. Opt-in (Constitution Article 10): the window does not load it from here |
@@ -34,17 +35,51 @@ The version has one source: `version` in `[workspace.package]` of
 lines and crash traces (from `<Version>` in `ui/Directory.Build.props`,
 which must match), and it names the zip.
 
-Measured on 2026-09-28 for 0.1.0: 83 files, 246 MB unpacked, a 77 MB zip.
-The Rust `.pdb` files are 38 MB of the zip, and the Windows App SDK's AI and
-machine-learning libraries (`onnxruntime.dll`, `DirectML.dll` and their
-projections), which CabinetOS does not use, another 17 MB.
+### Sizes
+
+Measured on 2026-10-02 for 0.1.0 (`release.ps1` prints MB as 1 MB =
+1,048,576 bytes, and so do the figures here):
+
+| Build | Files | Folder | Zip | Setup | Symbols zip |
+|---|---|---|---|---|---|
+| The first release build, 2026-09-28: the whole Windows App SDK, no ReadyToRun, symbols in the zip | 83 | 246 MB | 77 MB | none yet | none |
+| Before Phase 22: only the SDK components the window uses and ReadyToRun, symbols still in the zip and the setup | 71 | 251.7 MB | 75.7 MB (79,348,730 bytes) | 42.5 MB (44,550,486 bytes) | none |
+| Now: the symbols in a zip of their own | 66 | 100.5 MB | 32.1 MB | 20.0 MB | 43.6 MB |
+
+The release is under 60 MB zipped and its setup file under 35 MB (Phase 22's
+goal). The second row's zip and setup carried 43.6 MB of symbols; the
+symbols zip holds them now ("The symbols", below).
+
+**No machine-learning libraries.** The window's project once referenced the
+whole `Microsoft.WindowsAppSDK` package, which also brings the AI,
+machine-learning, Search and Widgets components that CabinetOS never uses
+(Constitution Article 10). Since 2026-09-29 it references only the
+components it needs, at the same Windows App SDK version (2.5.1;
+[dev-setup.md](dev-setup.md), "Phase 5 and later"). Measured on
+2026-10-02, a publish of the window alone with the release script's flags
+against a scratch copy of the project that names the whole package:
+
+| Window's publish | Files | Unpacked | Zipped |
+|---|---|---|---|
+| The whole package | 60 | 100.3 MB | 34.7 MB |
+| The components the window uses | 45 | 57.8 MB | 17.3 MB |
+| What the whole package adds | 15 | 42.5 MB | 17.4 MB |
+
+The 15 files are `onnxruntime.dll` (20.7 MB), `DirectML.dll` (17.8 MB),
+`Microsoft.ML.OnnxRuntime.dll`, `System.Numerics.Tensors.dll`, eight
+`Microsoft.Windows.AI.*` libraries, `Microsoft.Graphics.Imaging.Projection.dll`
+and the Search and Widgets projections. `release.ps1` stops, before it
+zips anything, when its release folder holds a file named `*onnxruntime*`,
+`DirectML*`, `*.AI.*` or `*.MachineLearning.*`, and says that the project
+must not reference the whole package or an AI or machine-learning
+component. So a package that brings them back cannot reach a release
+unseen.
 
 ReadyToRun (since 2026-10-01) makes the window's folder bigger and its start
 shorter. The window's own files grow from 41 to 57 MB unpacked (45 files
 either way; `Microsoft.WinUI.dll` from 7 to 16 MB, `CabinetOS.Core.dll` from
-1.6 to 3.8 MB), and zipped that part grows from 11.8 to 17.0 MB. So the
-release zip is about 5 MB bigger than the 77 MB above, and the unpacked
-folder about 16 MB bigger. The start is 0.14 to 0.24 s shorter
+1.6 to 3.8 MB), and zipped that part grows from 11.8 to 17.0 MB. The start
+is 0.14 to 0.24 s shorter
 ([speed review](log/2026-10-01/speed-review.md), proposal A).
 
 ## Build
@@ -60,6 +95,8 @@ It writes, into `dist\` (ignored by git):
 
 - `dist\CabinetOS-<version>-win-x64\`, the release folder;
 - `dist\CabinetOS-<version>-win-x64.zip` and its `.zip.sha256`;
+- `dist\CabinetOS-<version>-win-x64-symbols.zip` and its `.sha256`, the
+  `.pdb` files ("The symbols", below);
 - `dist\winget\<version>\`, the winget manifests with this version and the
   zip's SHA-256, checked with `winget validate` when winget is installed;
 - `dist\update\<channel>\latest.json` and `notes-<version>.md`, what the
@@ -81,9 +118,10 @@ What it runs, in order:
    which writes `CabinetOS.pri`, the compiled XAML, into the publish; without
    it the window stops at start. The app stays unpackaged. The script stops
    if the `.pri` file is missing.
-3. Copies the three programs and their `.pdb` files, `cabinetos-cli.exe`
-   once more as `cab.exe`, the themes, Markdown Preview, `LICENSE` and the
-   two install scripts; copies the committed `CabinetOS.ico` (made from the
+3. Copies the three programs and their `.pdb` files (step 5 takes the
+   `.pdb` files out again), `cabinetos-cli.exe` once more as `cab.exe`,
+   the themes, Markdown Preview, `LICENSE` and the two install scripts;
+   copies the committed `CabinetOS.ico` (made from the
    design's PNG size cuts; see "The icon"); writes `release.json`
    from the publish output and the Windows App SDK package (the minimum
    Windows App Runtime is the one the SDK's bootstrapper asks for).
@@ -93,8 +131,13 @@ What it runs, in order:
    package in the published `CabinetOS.deps.json`, the .NET application host
    and the bundled JavaScript, with their license files. It stops when a
    component has no license text.
-5. Zips the folder, writes the hash, fills the winget manifests.
-6. Writes the in-app update's two files for the channel (`-Channel`,
+5. Moves every `.pdb` file out of the release folder into the symbols
+   zip and writes its hash ("The symbols"), then checks the folder: the
+   script stops when it holds `onnxruntime`, `DirectML` or an AI or
+   machine-learning library of the Windows App SDK ("Sizes"). Nothing is
+   zipped before this check.
+6. Zips the folder, writes the hash, fills the winget manifests.
+7. Writes the in-app update's two files for the channel (`-Channel`,
    `stable` unless it says `preview`): `latest.json`, with the zip's
    address on the GitHub Release
    (`https://github.com/OliverD25/cabinetos/releases/download/v<version>/CabinetOS-<version>-win-x64.zip`),
@@ -106,7 +149,7 @@ What it runs, in order:
    version has no section yet, the notes are the `## [Unreleased]` section,
    and the script says so. The stable channel refuses a version with a
    pre-release tag.
-7. Compiles `build\setup.iss` with Inno Setup 6.7 or newer (`ISCC.exe` on
+8. Compiles `build\setup.iss` with Inno Setup 6.7 or newer (`ISCC.exe` on
    the PATH, or where Inno's installer puts it, per user or for every user)
    around the release folder, with the facts of its `release.json` as
    defines (the version, the runtimes, the Windows App Runtime's installer
@@ -123,8 +166,10 @@ Switches:
   writes the Cargo version there first (commit that change).
 - `-PackageOnly`: builds nothing; zips the existing release folder again and
   writes a new hash, new manifests, new update files and a new setup file.
-  For after signing (below).
-- `-NoSetup`: no setup file (step 7).
+  For after signing (below). Step 5 still checks the folder, and the
+  symbols zip of the build before stays as it is (signing does not change a
+  `.pdb` file).
+- `-NoSetup`: no setup file (step 8).
 - `-Channel stable|preview`: which channel's `latest.json` to write;
   `stable` by default. A version such as `0.2.0-preview.1` needs
   `preview`.
@@ -191,6 +236,9 @@ the build's last step.
   before the wizard, as `install.ps1` checks them. A missing one stops the
   setup with a message that names the winget command (and, for the Windows
   App Runtime, Microsoft's installer). The setup downloads nothing.
+- **No symbols.** The setup holds no `.pdb` file: `release.ps1` takes them
+  out of the folder first, and `setup.iss` excludes `*.pdb` besides ("The
+  symbols"). It is 20.0 MB.
 - **Over an install.ps1 install** in the same folder the setup stops and
   names that install's `uninstall.ps1`: the two keep separate records and
   Apps entries and must not mix. `install.ps1` likewise refuses the setup's
@@ -228,6 +276,54 @@ the build's last step.
   installed program, lets it update itself to a real next version, restarts
   it through the notice and uninstalls it ([ui.md](ui.md), "The live check
   in a virtual machine"). Its report is `_io\live-check\DONE-install.md`.
+
+## The symbols
+
+`CabinetOS-<version>-win-x64-symbols.zip`, with its `.sha256`, holds the
+`.pdb` files of the release: `cabinetos_core.pdb`, `cabinetos_cli.pdb` and
+`cabinetos_indexer.pdb` (the Rust programs'; 116, 26 and 16 MB unpacked) and
+`CabinetOS.pdb` and `CabinetOS.Core.pdb` (the window's; 0.4 and 0.8 MB). It is
+43.6 MB zipped, and neither the release zip nor the setup file carries it:
+nobody needs symbols to run CabinetOS, and they were more than half of the
+zip ([ADR 0019](decisions/0019-symbols-in-their-own-zip.md)). `release.ps1`
+makes it and puts the files at its root.
+
+**What they are for.** When a program crashes, it writes a crash trace
+(`crash-<time>.json` for the core, the indexer and the CLI, the window's own
+for the window; [diagnostics.md](diagnostics.md)). A trace shows the way to
+the crash in full only with the symbols next to the programs. What a trace
+holds without them and with them, checked on 2026-10-02 on a copy of the
+release folder (`cabinetos-core --self-test-panic`, and an exception
+thrown inside `CabinetOS.Core.dll`):
+
+| | The Rust programs | The window |
+|---|---|---|
+| Without the symbols | `backtrace` is a list of `<unknown>` frames: only Windows' own `BaseThreadInitThunk` and `RtlUserThreadStart` have names. The panic's `location` (file, line and column), the message, the thread, the boundary and the last log lines are still in the file | `backtrace` names every method, with no file and no line; `location` is `null` |
+| With the symbols next to the programs | every frame has its function and its file and line, for example `cabinetos_core::self_test_panic at .\core\crates\cabinetos-core\src\main.rs:154` | every method has its file and line, and `location` holds the first one |
+
+So a crash from a release with no symbols still says which process failed
+(`boundary`, Constitution Article 12) and, for a Rust panic, the line of the
+panic, but not the way to it. For that, use the symbols of the same
+version; `.pdb` files of another build do not match. The Rust programs
+record their `.pdb` by its file name alone, not by a path on the build
+machine, so only a file next to the `.exe` counts (checked in the binary).
+
+**How to use them.** Download the symbols zip of the version that crashed,
+and unpack it into the install folder, next to the programs, then make the
+crash again (or read a trace written later):
+
+```powershell
+# PowerShell - the symbols next to the programs of a per-user install
+Expand-Archive "$env:USERPROFILE\Downloads\CabinetOS-0.1.0-win-x64-symbols.zip" "$env:LOCALAPPDATA\Programs\CabinetOS" -Force
+```
+
+Nothing else needs a setting. A trace written before the symbols were there
+stays as it was written. An in-app update moves every file of the install
+folder into `previous\` before it copies the next version in, so the old
+version's symbols go there too: unpack the new version's symbols again.
+`uninstall.ps1` removes what it installed and leaves the symbols you added
+(and the folder with them); the setup's uninstaller removes the whole
+folder.
 
 ## Install
 
@@ -462,13 +558,10 @@ them (checked 2026-09-28 with winget 1.29.380).
 - The indexer service starts manually, so it is off after each restart of
   Windows until started again.
 - x64 only; ARM64 is untested.
-- The window's project references the whole Windows App SDK, so the
-  release carries its AI and machine-learning libraries (about 40 MB
-  unpacked) that CabinetOS does not use.
 - The setup file installs no prerequisite: it names the winget commands
-  and stops. It is per user only (no all-users install, no indexer
-  service, no PATH entry: `install.ps1` does those), and unsigned like the
-  rest.
+  and stops. It is per user only (no
+  all-users install, no indexer service, no PATH entry: `install.ps1` does
+  those), and unsigned like the rest.
 - The setup does not remove files an earlier version had and the new one
   lacks when it installs over an earlier setup install; the in-app update,
   which replaces the whole folder, does.
