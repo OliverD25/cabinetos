@@ -106,7 +106,11 @@ they pass locally. Toolchains and setup: [docs/dev-setup.md](docs/dev-setup.md).
   public "What's new" page of a release is made for the Luminart site: the
   changelog becomes `notes.md`, `ui/livecheck/release-media.ps1` takes clean
   screenshots and recordings on the laptop over a demo folder, and nothing
-  is deployed without the creator's word in the chat.
+  is deployed without the creator's word in the chat. `settings-three-ways`
+  holds the creator's rule of 2026-10-03: every preference is reachable
+  from the window, from the command palette and from the settings file,
+  all three in sync; a unit that adds a setting names all three, and the
+  skill carries the audit of the settings that exist.
 - Implementation goes to the `coder` agent once the plan is concrete; small
   fixes are done directly.
 
