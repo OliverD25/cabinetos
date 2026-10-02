@@ -1670,6 +1670,21 @@ a "Code signing policy" section, version resources for the four Rust
 programs), and the order: the 0.1.0 release, then the README section, then
 the form.
 
+**Status (2026-10-02, 23:28): 0.1.0 is published, and the release-notes-page skill
+is on main.** The creator ran the publish sheet's steps (b), (c) and (d)
+themselves at 23:04 to 23:10: the CHANGELOG cut (9fcb599), `release.ps1`,
+the tag `v0.1.0` and the GitHub Release with the zip, the setup file and
+their hashes (no symbols zip: unit 2 was not on main yet), and the
+marketplace site's `latest.json` for the stable channel. So 0.1.0 is the
+state of main at 9fcb599, before units 1, 2 and 3 of this phase; they land
+afterwards and need the creator's decision: a 0.1.1 soon after, or the next
+version. The release-notes-page skill (merge 1863cc0, a coder on Sonnet from
+the creator's brief): `.claude/skills/release-notes-page/SKILL.md`, the
+capture script `ui/livecheck/release-media.ps1` with its list and the
+converter `release-media-convert.py`; its dry run on the laptop made the six
+clean media files of 0.1.0 over a `C:\Demo` folder, in
+`_io/release-notes-dry-run/media`, for the Luminart site's page.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
