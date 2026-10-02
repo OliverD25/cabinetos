@@ -45,7 +45,11 @@
 #     Then the folder is checked: the script stops when it holds a library of
 #     the Windows App SDK's AI or machine-learning components (onnxruntime,
 #     DirectML, Microsoft.Windows.AI.*, Microsoft.Windows.MachineLearning.*),
-#     which CabinetOS never uses (Constitution Article 10).
+#     which CabinetOS never uses (Constitution Article 10). It stops too when
+#     cabinetos-core.exe, cabinetos-indexer.exe, cabinetos-cli.exe or cab.exe
+#     has no Windows version resource of this version with the copyright line
+#     (the build.rs of each crate embeds it; Explorer's Details page shows it
+#     and the code signing service requires it).
 #  6. The zip and its SHA-256.
 #  7. The in-app update's files for -Channel (stable unless it says
 #     preview): latest.json with the zip's address on the GitHub Release,
@@ -332,6 +336,23 @@ if ($unused.Count -gt 0) {
         "They add about 40 MB. A package brought them in: ui\CabinetOS\CabinetOS.csproj may reference only the Windows App SDK components the window needs " +
         "(WinUI, Foundation, InteractiveExperiences and Runtime; docs\dev-setup.md), never the Microsoft.WindowsAppSDK package as a whole or an AI or machine-learning component. " +
         "Nothing was zipped.")
+}
+
+# The Rust programs carry a Windows version resource (the build.rs of each crate under core\crates). Explorer's Details
+# page shows it, and SignPath, the code signing service, requires it before it signs a program. cab.exe is
+# cabinetos-cli.exe again, so it carries the same one. A mismatch means a build.rs stopped embedding the resource, or a
+# program came from an older build.
+$copyright = 'Copyright (c) 2026 the CabinetOS authors. MIT license.'
+foreach ($program in 'cabinetos-core.exe', 'cabinetos-indexer.exe', 'cabinetos-cli.exe', 'cab.exe') {
+    $info = (Get-Item -LiteralPath (Join-Path $folder $program)).VersionInfo
+    if (-not "$($info.ProductVersion)".StartsWith($version, [System.StringComparison]::Ordinal)) {
+        throw ("$program carries the ProductVersion '$($info.ProductVersion)' in its Windows version resource, not $version. " +
+            "Its crate's build.rs must embed the resource (winresource), and the program must come from this build. Nothing was zipped.")
+    }
+    if ($info.LegalCopyright -ne $copyright) {
+        throw ("$program carries the LegalCopyright '$($info.LegalCopyright)' in its Windows version resource, not '$copyright'. " +
+            "Fix the crate's build.rs; the line is the one build\setup.iss and ui\Directory.Build.props use. Nothing was zipped.")
+    }
 }
 
 # --- 6. The zip and its hash ------------------------------------------
