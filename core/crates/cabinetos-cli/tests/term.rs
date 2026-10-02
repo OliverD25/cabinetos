@@ -414,7 +414,7 @@ impl Window {
                 })) => self.reports.push((session_id, folder)),
                 Ok(Some(_)) => {}
                 Ok(None) => panic!("the events ended"),
-                Err(_) => panic!("no report of {folder}; reported: {reported:?}"),
+                Err(timeout) => panic!("no report of {folder} ({timeout}); reported: {reported:?}"),
             }
         }
     }
@@ -608,8 +608,14 @@ fn a_linked_powershell_follows_its_pane_at_the_next_prompt_when_installed() {
         // and each shell reported its folder.
         window.read_until(&mut left, |output| output.contains(&prompt(&first)));
         window.read_until(&mut right, |output| output.contains(&prompt(&start)));
-        assert_eq!(window.folder_reported(linked, &first), [first.clone()]);
-        assert_eq!(window.folder_reported(locked, &start), [start.clone()]);
+        assert_eq!(
+            window.folder_reported(linked, &first),
+            std::slice::from_ref(&first)
+        );
+        assert_eq!(
+            window.folder_reported(locked, &start),
+            std::slice::from_ref(&start)
+        );
 
         // A half-typed line; the pane moves; then Enter.
         left.forget();
@@ -622,13 +628,19 @@ fn a_linked_powershell_follows_its_pane_at_the_next_prompt_when_installed() {
             has_line(&ran, "half-typed") && has_line(&ran, &first),
             "{program}: the line ran as typed, where its prompt was drawn:\n{ran}"
         );
-        assert_eq!(window.folder_reported(linked, &second), [second.clone()]);
+        assert_eq!(
+            window.folder_reported(linked, &second),
+            std::slice::from_ref(&second)
+        );
 
         // The user's own cd stays while the pane stays.
         left.forget();
         window.send(&mut left, &format!("Set-Location -LiteralPath '{own}'\r"));
         window.read_until(&mut left, |output| output.contains(&prompt(&own)));
-        assert_eq!(window.folder_reported(linked, &own), [own.clone()]);
+        assert_eq!(
+            window.folder_reported(linked, &own),
+            std::slice::from_ref(&own)
+        );
         left.forget();
         window.send(&mut left, "\r");
         let stayed = window.read_until(&mut left, |output| output.contains(&prompt(&own)));
@@ -639,7 +651,10 @@ fn a_linked_powershell_follows_its_pane_at_the_next_prompt_when_installed() {
         left.forget();
         window.send(&mut left, "\r(Get-Location).Path\r");
         window.read_until(&mut left, |output| has_line(output, &third));
-        assert_eq!(window.folder_reported(linked, &third), [third.clone()]);
+        assert_eq!(
+            window.folder_reported(linked, &third),
+            std::slice::from_ref(&third)
+        );
 
         // The locked session's pane moves; it stays.
         right.forget();

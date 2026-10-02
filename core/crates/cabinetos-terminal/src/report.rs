@@ -36,6 +36,9 @@ enum Scan {
 
 impl FolderReports {
     /// Reads `bytes`; returns the folders reported in them, oldest first.
+    // The match is a transition table, one line per state and byte; merging the arms that land in the same
+    // state would hide which states exist.
+    #[allow(clippy::match_same_arms)]
     pub(crate) fn read(&mut self, bytes: &[u8]) -> Vec<String> {
         let mut folders = Vec::new();
         let mut rest = bytes;
