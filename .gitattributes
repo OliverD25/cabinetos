@@ -35,6 +35,8 @@ LICENSE     text eol=lf
 *.cmd       text eol=crlf
 *.bat       text eol=crlf
 *.rc        text eol=crlf
+# Inno Setup scripts (build/setup.iss): Inno's own editor writes CRLF.
+*.iss       text eol=crlf
 
 # Binary
 *.png   binary

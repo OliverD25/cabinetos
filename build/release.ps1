@@ -8,6 +8,7 @@
 #   dist\winget\<version>\                       winget manifests with that hash
 #   dist\update\<channel>\latest.json            what the in-app updater reads
 #   dist\update\<channel>\notes-<version>.md     the release notes it shows
+#   dist\CabinetOS-<version>-win-x64-setup.exe   the setup file for a first install, and its .sha256
 #
 # The version has one source: `version` in [workspace.package] of
 # core\Cargo.toml. ui\Directory.Build.props must carry the same <Version>
@@ -31,7 +32,9 @@
 #     the Markdown Preview tool, which is opt-in (Constitution Article 10).
 #  5. LICENSE, THIRD-PARTY-NOTICES.md (build\notices.ps1), install.ps1,
 #     uninstall.ps1, and release.json: the version, the commit, and the
-#     runtimes the build needs, which install.ps1 checks.
+#     runtimes the build needs, which install.ps1 checks. CabinetOS.ico, the
+#     app's icon from the design's size cuts (docs\design\icons), for the
+#     setup, its shortcuts and its Settings > Apps entry.
 #  6. The zip, its SHA-256, and the winget manifests of build\winget with
 #     this version, URL and hash.
 #  7. The in-app update's files for -Channel (stable unless it says
@@ -40,16 +43,23 @@
 #     runtimes release.json names; and the notes, the CHANGELOG.md section
 #     of this version (or the Unreleased section, with a warning, while the
 #     version has none). docs\release.md, "Publish", says where they go.
+#  8. The setup file: build\setup.iss compiled by Inno Setup 6.7 or newer
+#     around the release folder, with the facts of its release.json, and its
+#     SHA-256 (docs\release.md, "The setup file"). Without Inno Setup the
+#     step is skipped with a warning that says how to install it; -NoSetup
+#     skips it on purpose.
 #
 # -PackageOnly skips steps 1-5 and zips the existing folder again, for
-# example after signing its programs (docs\release.md).
+# example after signing its programs (docs\release.md); the setup file is
+# made again too.
 #
 # Run from anywhere, in PowerShell 7:
-#   pwsh -File <repo>\build\release.ps1 [-SyncVersion] [-PackageOnly] [-Channel stable|preview]
+#   pwsh -File <repo>\build\release.ps1 [-SyncVersion] [-PackageOnly] [-NoSetup] [-Channel stable|preview]
 
 param(
     [switch] $SyncVersion,
     [switch] $PackageOnly,
+    [switch] $NoSetup,
     [ValidateSet('stable', 'preview')]
     [string] $Channel = 'stable'
 )
@@ -83,6 +93,48 @@ function Get-WorkspaceValue([string] $Key) {
     $value.Groups[1].Value
 }
 
+# The design's size cuts (docs\design\icons; ICON_HANDOFF.md: never a scaled
+# master) in one .ico, each image stored as the PNG it is, which Windows reads
+# at every size.
+function Write-IconFile([string] $Path) {
+    $sizes = 16, 24, 32, 48, 256
+    $images = [System.Collections.Generic.List[byte[]]]::new()
+    foreach ($size in $sizes) { $images.Add([System.IO.File]::ReadAllBytes((Join-Path $repo "docs\design\icons\cabinetos-$size.png"))) }
+    $stream = [System.IO.MemoryStream]::new()
+    $writer = [System.IO.BinaryWriter]::new($stream)
+    $writer.Write([uint16] 0)
+    $writer.Write([uint16] 1)
+    $writer.Write([uint16] $sizes.Count)
+    $offset = 6 + 16 * $sizes.Count
+    for ($i = 0; $i -lt $sizes.Count; $i++) {
+        $side = if ($sizes[$i] -ge 256) { 0 } else { $sizes[$i] }
+        $writer.Write([byte] $side)
+        $writer.Write([byte] $side)
+        $writer.Write([uint16] 0)
+        $writer.Write([uint16] 1)
+        $writer.Write([uint16] 32)
+        $writer.Write([uint32] $images[$i].Length)
+        $writer.Write([uint32] $offset)
+        $offset += $images[$i].Length
+    }
+    foreach ($image in $images) { $writer.Write($image) }
+    $writer.Flush()
+    [System.IO.File]::WriteAllBytes($Path, $stream.ToArray())
+}
+
+# Inno Setup's compiler: on the PATH, or where its installer puts it, per
+# user or for every user.
+function Find-InnoCompiler {
+    $onPath = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+    if ($onPath) { return $onPath.Source }
+    $folders = @($env:LOCALAPPDATA, ${env:ProgramFiles(x86)}, $env:ProgramFiles) | Where-Object { $_ }
+    foreach ($folder in $folders) {
+        $candidate = if ($folder -eq $env:LOCALAPPDATA) { Join-Path $folder 'Programs\Inno Setup 6\ISCC.exe' } else { Join-Path $folder 'Inno Setup 6\ISCC.exe' }
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
+    $null
+}
+
 # --- The version ------------------------------------------------------
 
 $version = Get-WorkspaceValue 'version'
@@ -107,6 +159,8 @@ $name = "CabinetOS-$version-win-x64"
 $dist = Join-Path $repo 'dist'
 $folder = Join-Path $dist $name
 $zip = "$folder.zip"
+$setupName = "$name-setup"
+$setup = Join-Path $dist "$setupName.exe"
 $wingetOut = Join-Path $dist "winget\$version"
 
 if (-not $PackageOnly) {
@@ -119,7 +173,7 @@ if (-not $PackageOnly) {
         $dirty = [bool](git -C $repo status --porcelain -- core ui sdk build LICENSE)
         if ($dirty) { Write-Warning 'The working tree has uncommitted changes, and this build includes them.' }
     }
-    foreach ($old in $folder, $zip, "$zip.sha256", $wingetOut) {
+    foreach ($old in $folder, $zip, "$zip.sha256", $wingetOut, $setup, "$setup.sha256") {
         if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force }
     }
 
@@ -148,6 +202,7 @@ if (-not $PackageOnly) {
     Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $folder
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Destination $folder
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $folder
+    Write-IconFile (Join-Path $folder 'CabinetOS.ico')
 
     $options = (Get-Content -Raw -LiteralPath (Join-Path $folder 'CabinetOS.runtimeconfig.json') | ConvertFrom-Json).runtimeOptions
     $frameworks = if ($options.PSObject.Properties['frameworks']) { @($options.frameworks) } else { @($options.framework) }
@@ -266,6 +321,54 @@ if (-not (Test-Json -LiteralPath $latestPath -SchemaFile $schema)) {
     throw "$latestPath does not follow $schema"
 }
 
+# --- 8. The setup file ------------------------------------------------
+
+foreach ($old in $setup, "$setup.sha256") {
+    if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force }
+}
+$setupLine = 'not built (-NoSetup)'
+if (-not $NoSetup) {
+    $iscc = Find-InnoCompiler
+    if (-not $iscc) {
+        Write-Warning 'Inno Setup 6 is not installed here, so this build has no setup file. Install it for your user (no administrator rights), then build again: winget install --id JRSoftware.InnoSetup --exact --scope user'
+        $setupLine = 'not built: Inno Setup is not installed (winget install --id JRSoftware.InnoSetup --exact --scope user)'
+    }
+    else {
+        if (-not (Test-Path -LiteralPath (Join-Path $folder 'CabinetOS.ico'))) {
+            throw "$folder has no CabinetOS.ico, which the setup needs; build the release again without -PackageOnly"
+        }
+        $facts = (Get-Content -Raw -LiteralPath (Join-Path $folder 'release.json') | ConvertFrom-Json).requires
+        $framework = @($facts.dotnet | Where-Object { $_.name -eq 'Microsoft.NETCore.App' }) + @($facts.dotnet) | Select-Object -First 1
+        $major = ([version] ($framework.version -split '-')[0]).Major
+        $dotnetWinget = switch ($framework.name) {
+            'Microsoft.WindowsDesktop.App' { "Microsoft.DotNet.DesktopRuntime.$major" }
+            'Microsoft.AspNetCore.App' { "Microsoft.DotNet.AspNetCore.$major" }
+            default { "Microsoft.DotNet.Runtime.$major" }
+        }
+        $family = $facts.windowsAppRuntime.packageFamily
+        $defines = [ordered]@{
+            AppVersion       = $version
+            FileVersion      = "$(($version -split '-')[0]).0"
+            ReleaseDir       = $folder
+            OutputDir        = $dist
+            OutputName       = $setupName
+            WindowsBuild     = [string] $facts.windowsBuild
+            DotnetName       = $framework.name
+            DotnetVersion    = $framework.version
+            DotnetWinget     = $dotnetWinget
+            RuntimeName      = $family.Substring(0, $family.LastIndexOf('_'))
+            RuntimeVersion   = $facts.windowsAppRuntime.version
+            RuntimeInstaller = $facts.windowsAppRuntime.installer
+        }
+        $arguments = @('/Q') + @($defines.GetEnumerator() | ForEach-Object { "/D$($_.Key)=$($_.Value)" }) + @((Join-Path $PSScriptRoot 'setup.iss'))
+        Invoke-Native $iscc $arguments $repo
+        if (-not (Test-Path -LiteralPath $setup)) { throw "Inno Setup ran, but $setup is not there" }
+        $setupHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $setup).Hash.ToLowerInvariant()
+        [System.IO.File]::WriteAllText("$setup.sha256", "$setupHash  $setupName.exe`n", $utf8)
+        $setupLine = "{0} ({1:N1} MB, SHA-256 {2})" -f $setup, ((Get-Item -LiteralPath $setup).Length / 1MB), $setupHash
+    }
+}
+
 $files = @(Get-ChildItem -LiteralPath $folder -Recurse -File)
 Write-Host ''
 Write-Host ("Release folder: {0} ({1} files, {2:N1} MB)" -f $folder, $files.Count, (($files | Measure-Object Length -Sum).Sum / 1MB))
@@ -273,3 +376,4 @@ Write-Host ("Zip:            {0} ({1:N1} MB)" -f $zip, ((Get-Item -LiteralPath $
 Write-Host "SHA-256:        $($hash.ToLowerInvariant())"
 Write-Host "winget:         $wingetOut"
 Write-Host "Update ($Channel): $latestPath and $notesName"
+Write-Host "Setup:          $setupLine"
