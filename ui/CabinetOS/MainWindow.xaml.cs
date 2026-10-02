@@ -914,6 +914,14 @@ public sealed partial class MainWindow : Window
                 _ when condition.StartsWith("sidebar-view:", StringComparison.Ordinal) => _sidebarView == condition["sidebar-view:".Length..],
                 // The rail's settings (its order, the sidebar's width and view) have all been written to the core: no write is out.
                 "rail-saved" => _railWrites == 0 && _widthWrites == 0 && _viewWrites == 0,
+                // The configuration the window holds has what a test wrote or saved, which until:config cannot say: the window reads the
+                // configuration for its own writes too (the tabs it saves a second after the last folder it opened), and that read
+                // ends the wait. file-menu-rows:<n>: the file menu has n rows; shell-menu: contextMenu.shellMenu is on; command:<id>:
+                // the core's command list has that command (a program of the file, after the read that follows the change).
+                _ when condition.StartsWith("file-menu-rows:", StringComparison.Ordinal) && int.TryParse(condition["file-menu-rows:".Length..], out var fileRows) =>
+                    _menuConfig.File.Items.Count == fileRows,
+                "shell-menu" => _menuConfig.ShellMenu,
+                _ when condition.StartsWith("command:", StringComparison.Ordinal) => _router.Commands.Any(c => c.Id == condition["command:".Length..]),
                 // Every hand-over of the keyboard to a web page has been checked (the page has it, or the window gave up).
                 "keyboard" => _pageChecksPending == 0,
                 // The core has answered every question about the active folder's workspace (the workspace row's branch, Quick Open's root).

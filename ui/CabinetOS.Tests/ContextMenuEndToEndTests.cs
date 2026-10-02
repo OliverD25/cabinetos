@@ -75,11 +75,13 @@ public class ContextMenuEndToEndTests
                 "until:windows-menu",
                 "shell:shell-off",
                 "cmd:overlay.close",
-                // The test writes the file when it sees this state, as an editor would; the window reads it again. The wait starts in
-                // the same turn as the state is logged, so the read it waits for is the one of that write (the test did not wait for
-                // "background": the window read the file while the steps before ran, and until:config then waited for nothing).
+                // The test writes the file when it sees this state, as an editor would (it did not wait for "background": the window read
+                // the file while the steps before ran, and until:config then waited for nothing). The window is waited for until it holds
+                // the file's shellMenu and its program, not for "a read": it reads the configuration for its own writes too (the tabs it
+                // saves a second after the last folder it opened), and a menu built after that read had no Record Paths.
                 "shell:edit-now",
-                "until:config",
+                "until:shell-menu",
+                "until:command:program.record",
                 "menu:Alphabet.md",
                 "until:menu",
                 "shell:md",
@@ -396,7 +398,8 @@ public class ContextMenuEndToEndTests
                 "menu-edit-drag:Copy to other pane|Open in other pane",
                 "shell:dragged-back",
                 "click:Done",
-                "until:config",
+                // The read of the saved list, not any read: the window reads the configuration for its own writes too.
+                "until:file-menu-rows:3",
                 "until:menu-edit-closed",
                 "shell:saved",
                 "menu:alpha.txt",
@@ -417,7 +420,7 @@ public class ContextMenuEndToEndTests
                 // The test puts the file back; the core says it is valid again.
                 "until:config",
                 "click:Done",
-                "until:config",
+                "until:file-menu-rows:2",
                 "until:menu-edit-closed",
                 "shell:saved-again",
                 // Esc leaves without saving.
