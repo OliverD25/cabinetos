@@ -6,12 +6,18 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The theme gallery: the themes as colour tiles, each painted in the theme's own colours, with filters for dark, light, system themes, density presets and the installed ones (Windows' mode first), and a search. Selecting a tile previews the theme on the whole window with nothing installed or written, and Esc paints the theme in effect again. Enter or a double-click installs a theme and applies it. Open it with "Themes: Browse" in the command palette (`themes.browse`; bind it to keys if you like) or the new last row of the theme picker, "Browse more themes…". If the themes catalogue cannot be read, the gallery shows your installed themes and says so.
+- Four settings that could be changed only by editing `cabinetos.json` now have a command and a control in the window. The layout (`ui.layout`): "View: Classic Layout", "View: Terminal on the Right" and "View: Activity Rail" in the palette, "View: Next Layout" on Ctrl+K Ctrl+L, and a "Layout" menu in the top row's menu that checks the current one. Hidden files (`panes.showHidden`): "View: Toggle Hidden Files" on Ctrl+K Ctrl+H, a "Show Hidden Files" row in the top row's menu, and the word "hidden" in the status bar while they are shown. The Explorer following the active pane (`ui.sidebarAutoReveal`): "Sidebar: Follow the Active Pane" in the palette, a pin in the Explorer view's header, and a "Follow the Active Pane" row in the top row's menu. Windows' own menu on Shift+right-click (`contextMenu.shellMenu`): "Menu: Toggle Windows' Shell Menu" in the palette and a check box at the end of "Edit Menu…". Each is the same change whichever way you make it: the file, the palette and the window follow each other at once. The palette's rows for them say "current", "on" or "off".
+
 ### Fixed
 
 - The plugin sandbox runs on wasmtime 49.0.2, which closes seven security advisories of 49.0.1 (RUSTSEC-2026-0321 to 0327: GC heap corruption through mis-typed tag imports or `try_call`, a stack overflow through an unvalidated callback result count, a fuel bypass and three WASI faults). None was reachable without a plugin written to exploit it.
 
 ### Changed
 
+- The marketplace page is now the Extensions page (Discover, Plugins, Tools and Installed, "Search extensions") and lists no themes. Themes come from a catalogue of their own, `themes.json`, at `marketplace.themes` (the public address by default); `index.json` lists plugins and tools only. A server that has not published `themes.json` yet still works: until it does, the gallery shows the themes its `index.json` carries. The command keeps its ID and is now called "Marketplace: Browse Extensions"; the core's protocol version is 20, and `cabinetos-cli market` has `--themes` to ask for the themes catalogue.
 - The release zip and the setup file no longer hold the `.pdb` symbol files: they are a download of their own, `CabinetOS-<version>-win-x64-symbols.zip`. The release zip is 32 MB instead of 76 MB and the setup file 20 MB instead of 43 MB. A crash trace from an install names function, file and line once you unpack the symbols of the same version next to the programs; without them the Rust programs' trace shows `<unknown>` frames, though its `location` still names the line of the panic.
 - `cabinetos-indexer --install` registers the service with an automatic, delayed start and starts it once, so the index is there after every restart of Windows with nobody starting the service (it was a manual start, off after each restart). `install.ps1 -AllUsers -Indexer` does the same. If you registered the service by hand before, run `cabinetos-indexer --uninstall` and then `--install` again.
 

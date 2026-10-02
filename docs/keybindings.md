@@ -40,10 +40,15 @@ The core's commands, in palette order:
 | `view.focusOtherPane` | View: Focus Other Pane | `tab` | `filesView` | UI |
 | `view.toggleSidebar` | View: Toggle Sidebar | `ctrl+b` | | UI |
 | `view.toggleCompactOverlay` | View: Toggle Compact Overlay | `ctrl+alt+up` | | UI |
+| `view.layoutClassic` | View: Classic Layout | | | UI |
+| `view.layoutRight` | View: Terminal on the Right | | | UI |
+| `view.layoutRail` | View: Activity Rail | | | UI |
+| `view.cycleLayout` | View: Next Layout | `ctrl+k ctrl+l` | | UI |
 | `view.showExplorer` | View: Show Explorer | `ctrl+shift+e` | | UI |
 | `view.showSearch` | View: Show Search | `ctrl+shift+f` | | UI |
 | `sidebar.locate` | Sidebar: Locate Active Folder | `shift+alt+l` | | UI |
 | `sidebar.lock` | Sidebar: Lock Folder Tree | | | UI |
+| `sidebar.toggleFollow` | Sidebar: Follow the Active Pane | | | UI |
 | `sidebar.pin` | Sidebar: Pin Folder | | | UI |
 | `sidebar.unpin` | Sidebar: Unpin Folder | | | UI |
 | `pane.openSelected` | Pane: Open Selected Item | `enter` | `filesView` | UI |
@@ -77,10 +82,11 @@ The core's commands, in palette order:
 | `transfer.next` | Transfer: Show Next Job | | | UI |
 | `transfer.close` | Transfer: Close Panel | | | UI |
 | `conflict.resolve` | Transfer: Resolve Conflict | | | UI |
-| `marketplace.browse` | Marketplace: Browse Plugins and Themes | `ctrl+shift+x` | | UI |
+| `marketplace.browse` | Marketplace: Browse Extensions | `ctrl+shift+x` | | UI |
 | `plugins.list` | Plugins: Show Plugins | | | UI |
 | `workspace.switch` | Workspace: Switch Workspace… | `ctrl+k ctrl+w` | | UI |
 | `preferences.selectColorTheme` | Preferences: Color Theme | `ctrl+k ctrl+t` | | UI |
+| `themes.browse` | Themes: Browse | | | UI |
 | `terminal.runTask` | Terminal: Run Task… | `ctrl+shift+b` | | UI |
 | `terminal.new` | Terminal: New Terminal | `ctrl+shift+t` | `terminalFocus` | UI |
 | `terminal.show` | Terminal: Show Terminal | | | UI |
@@ -134,6 +140,7 @@ The core's commands, in palette order:
 | `settings.open` | Preferences: Open Settings | `ctrl+comma` | | UI |
 | `menu.showShell` | File: Show Windows Context Menu | `ctrl+shift+f10` | `filesView` | UI |
 | `menu.edit` | Preferences: Edit Context Menu… | | | UI |
+| `menu.toggleShellMenu` | Menu: Toggle Windows' Shell Menu | | | UI |
 | `window.new` | Window: New Window | `ctrl+n` | | UI |
 | `help.about` | Help: About CabinetOS | | | UI |
 | `diagnostics.toggleHeavy` | Diagnostics: Toggle Heavy Logging | | | UI |
@@ -146,6 +153,7 @@ The core's commands, in palette order:
 | `view.fitColumns` | View: Fit Columns to Content | | `filesView` | UI |
 | `view.resetColumns` | View: Reset Column Widths | | `filesView` | UI |
 | `view.toggleFolderSizes` | View: Toggle Folder Sizes | | | UI |
+| `view.toggleHiddenFiles` | View: Toggle Hidden Files | `ctrl+k ctrl+h` | | UI |
 | `view.toggleColumns` | View: Toggle Column View | `ctrl+alt+c` | `filesView` | UI |
 
 - The list is the design's `COMMANDS` array without its plugin commands
@@ -182,6 +190,19 @@ The core's commands, in palette order:
   measured when the listing opens ([ui.md](ui.md), "Folder sizes"). It has
   no default key: the palette is its place. It works from anywhere, so its
   context is empty.
+- **Four settings that were in the file only** (Phase 23, the project skill
+  `settings-three-ways`): each has a command that writes its key with
+  `set_value`, and a control in the window ([ui.md](ui.md), "Settings
+  reachable three ways"). `view.layoutClassic`, `view.layoutRight` and
+  `view.layoutRail` choose `ui.layout`, and `view.cycleLayout`
+  (`ctrl+k ctrl+l`, a chord under `ctrl+k` like `ctrl+k ctrl+s`) goes to the
+  next one: classic, right, rail. `view.toggleHiddenFiles` flips
+  `panes.showHidden`; its chord `ctrl+k ctrl+h` is free in every context.
+  `sidebar.toggleFollow` flips `ui.sidebarAutoReveal` and
+  `menu.toggleShellMenu` flips `contextMenu.shellMenu`; neither has a key.
+  The palette's row of each says "current" or "on" or "off".
+- `themes.browse` (Phase 23) opens the theme gallery ([ui.md](ui.md), "The
+  theme gallery"). It has no key; the theme picker's last row opens it too.
 - `view.toggleColumns` (Phase 19f) shows the active pane's front tab as
   columns, or as the list again ([ui.md](ui.md), "The column view"). Its
   key, `ctrl+alt+c`, is the one ADR 0016 names; no other command has it by
@@ -492,8 +513,10 @@ no tab key came out of a page):
 **One overlay at a time.** The palette, Quick Open, a prompt (the drive list,
 the pattern box, the pinned folders, a plugin's question), the theme picker and
 the plugin list are the overlays. Opening one closes every other one first, so
-at most one is open and Esc closes the one on screen. The marketplace, which
-covers the panes, closes them all as it opens. Each closes as Esc closes it:
+at most one is open and Esc closes the one on screen. The Extensions page and the
+theme gallery, which cover the panes, close them all as they open (and the
+gallery closes the picker with the theme in effect painted back); the gallery's Esc
+paints the theme in effect back too. Each closes as Esc closes it:
 the keyboard goes to the pane, then the new overlay takes it. `OverlayRule`
 says what closes (tested), and `MainWindow.CloseOtherOverlays` is the one
 step every opening calls. Ctrl+K Ctrl+T works from any box ("Text boxes"), so

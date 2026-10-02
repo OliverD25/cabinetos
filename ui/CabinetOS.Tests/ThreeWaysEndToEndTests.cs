@@ -113,10 +113,10 @@ public class ThreeWaysEndToEndTests
             var logs = await run.FinishAsync("layout", process);
 
             string Shell(string label, string field) => Text(State(logs, "shell state", label), field);
-            Assert.Equal(("classic", "False", "Terminal: bottom"), (Shell("start", "layout"), Shell("start", "rail_shown"), Shell("start", "layout_status")));
+            Assert.Equal(("classic", "false", "Terminal: bottom"), (Shell("start", "layout"), Shell("start", "rail_shown"), Shell("start", "layout_status")));
 
             // The command wrote the key; the window shows the rail.
-            Assert.Equal(("rail", "True", "Activity rail"), (Shell("rail-by-command", "layout"), Shell("rail-by-command", "rail_shown"), Shell("rail-by-command", "layout_status")));
+            Assert.Equal(("rail", "true", "Activity rail"), (Shell("rail-by-command", "layout"), Shell("rail-by-command", "rail_shown"), Shell("rail-by-command", "layout_status")));
             var palette = Shell("palette-layout", "palette_states").Split('|');
             Assert.Contains("view.layoutRail=current", palette);
             Assert.DoesNotContain("view.layoutClassic=current", palette);
@@ -124,10 +124,10 @@ public class ThreeWaysEndToEndTests
             // The hamburger: Layout with its three, the current one checked; a click on one of them is the same command.
             Assert.Contains("Layout (Classic Layout, Terminal on the Right, Activity Rail [x])", Shell("menu-closed-submenu", "menu"));
             Assert.Equal("Layout: Classic Layout|Terminal on the Right|Activity Rail [x]", Shell("menu-submenu", "menu"));
-            Assert.Equal(("classic", "False"), (Shell("classic-by-menu", "layout"), Shell("classic-by-menu", "rail_shown")));
+            Assert.Equal(("classic", "false"), (Shell("classic-by-menu", "layout"), Shell("classic-by-menu", "rail_shown")));
 
             // The file: the window follows it, and the menu's check moves to the layout the file names.
-            Assert.Equal(("right", "Terminal: right", "False"), (Shell("right-by-file", "layout"), Shell("right-by-file", "layout_status"), Shell("right-by-file", "rail_shown")));
+            Assert.Equal(("right", "Terminal: right", "false"), (Shell("right-by-file", "layout"), Shell("right-by-file", "layout_status"), Shell("right-by-file", "rail_shown")));
             Assert.Contains("Layout (Classic Layout, Terminal on the Right [x], Activity Rail)", Shell("menu-after-file", "menu"));
 
             Assert.Equal("rail", Shell("cycled-to-rail", "layout"));
@@ -199,16 +199,16 @@ public class ThreeWaysEndToEndTests
             var logs = await run.FinishAsync("hidden", process);
 
             string Shell(string label, string field) => Text(State(logs, "shell state", label), field);
-            Assert.Equal(("False", "False", "1"), (Shell("start", "show_hidden"), Shell("start", "hidden_pill"), Shell("start", "pane0_count")));
+            Assert.Equal(("false", "false", "1"), (Shell("start", "show_hidden"), Shell("start", "hidden_pill"), Shell("start", "pane0_count")));
 
-            Assert.Equal(("True", "True", "2"), (Shell("on-by-command", "show_hidden"), Shell("on-by-command", "hidden_pill"), Shell("on-by-command", "pane0_count")));
+            Assert.Equal(("true", "true", "2"), (Shell("on-by-command", "show_hidden"), Shell("on-by-command", "hidden_pill"), Shell("on-by-command", "pane0_count")));
             Assert.Contains("view.toggleHiddenFiles=on", Shell("palette-on", "palette_states").Split('|'));
             Assert.Contains("Show Hidden Files [x]", Shell("menu-on", "menu").Split('|'));
-            Assert.Equal(("False", "False", "1"), (Shell("off-by-menu", "show_hidden"), Shell("off-by-menu", "hidden_pill"), Shell("off-by-menu", "pane0_count")));
+            Assert.Equal(("false", "false", "1"), (Shell("off-by-menu", "show_hidden"), Shell("off-by-menu", "hidden_pill"), Shell("off-by-menu", "pane0_count")));
 
             // An edit of the file: the pill, the listing and (below) the menu follow.
-            Assert.Equal(("True", "True", "2"), (Shell("on-by-file", "show_hidden"), Shell("on-by-file", "hidden_pill"), Shell("on-by-file", "pane0_count")));
-            Assert.Equal(("False", "False", "1"), (Shell("off-by-pill", "show_hidden"), Shell("off-by-pill", "hidden_pill"), Shell("off-by-pill", "pane0_count")));
+            Assert.Equal(("true", "true", "2"), (Shell("on-by-file", "show_hidden"), Shell("on-by-file", "hidden_pill"), Shell("on-by-file", "pane0_count")));
+            Assert.Equal(("false", "false", "1"), (Shell("off-by-pill", "show_hidden"), Shell("off-by-pill", "hidden_pill"), Shell("off-by-pill", "pane0_count")));
             Assert.Contains("Show Hidden Files [ ]", Shell("menu-off", "menu").Split('|'));
             Assert.Equal("false", Key(run.ReadConfig(), "panes", "showHidden"));
         }
@@ -285,13 +285,13 @@ public class ThreeWaysEndToEndTests
             var logs = await run.FinishAsync("follow", process);
 
             string Shell(string label, string field) => Text(State(logs, "shell state", label), field);
-            Assert.Equal(("rail", "True", "True"), (Shell("start", "layout"), Shell("start", "follow_pin"), Shell("start", "auto_reveal")));
-            Assert.Equal(("False", "False"), (Shell("off-by-command", "follow_pin"), Shell("off-by-command", "auto_reveal")));
+            Assert.Equal(("rail", "true", "true"), (Shell("start", "layout"), Shell("start", "follow_pin"), Shell("start", "auto_reveal")));
+            Assert.Equal(("false", "false"), (Shell("off-by-command", "follow_pin"), Shell("off-by-command", "auto_reveal")));
             Assert.Contains("sidebar.toggleFollow=off", Shell("palette-off", "palette_states").Split('|'));
-            Assert.Equal(("True", "True"), (Shell("on-by-pin", "follow_pin"), Shell("on-by-pin", "auto_reveal")));
+            Assert.Equal(("true", "true"), (Shell("on-by-pin", "follow_pin"), Shell("on-by-pin", "auto_reveal")));
             Assert.Contains("Follow the Active Pane [x]", Shell("menu-on", "menu").Split('|'));
-            Assert.Equal(("False", "False"), (Shell("off-by-menu", "follow_pin"), Shell("off-by-menu", "auto_reveal")));
-            Assert.Equal(("True", "True"), (Shell("on-by-file", "follow_pin"), Shell("on-by-file", "auto_reveal")));
+            Assert.Equal(("false", "false"), (Shell("off-by-menu", "follow_pin"), Shell("off-by-menu", "auto_reveal")));
+            Assert.Equal(("true", "true"), (Shell("on-by-file", "follow_pin"), Shell("on-by-file", "auto_reveal")));
             Assert.Contains("Follow the Active Pane [ ]", Shell("classic-menu", "menu").Split('|'));
             Assert.Equal("false", Key(run.ReadConfig(), "ui", "sidebarAutoReveal"));
         }
@@ -354,12 +354,12 @@ public class ThreeWaysEndToEndTests
             var logs = await run.FinishAsync("shellmenu", process);
 
             string Shell(string label, string field) => Text(State(logs, "shell state", label), field);
-            Assert.Equal(("False", "False"), (Shell("start", "shell_menu"), Shell("start", "editor_shell_check")));
-            Assert.Equal("True", Shell("on-by-command", "shell_menu"));
+            Assert.Equal(("false", "false"), (Shell("start", "shell_menu"), Shell("start", "editor_shell_check")));
+            Assert.Equal("true", Shell("on-by-command", "shell_menu"));
             Assert.Contains("menu.toggleShellMenu=on", Shell("palette-on", "palette_states").Split('|'));
-            Assert.Equal(("True", "True"), (Shell("editor-on", "shell_menu"), Shell("editor-on", "editor_shell_check")));
-            Assert.Equal(("False", "False"), (Shell("off-by-row", "shell_menu"), Shell("off-by-row", "editor_shell_check")));
-            Assert.Equal(("True", "True"), (Shell("on-by-file", "shell_menu"), Shell("on-by-file", "editor_shell_check")));
+            Assert.Equal(("true", "true"), (Shell("editor-on", "shell_menu"), Shell("editor-on", "editor_shell_check")));
+            Assert.Equal(("false", "false"), (Shell("off-by-row", "shell_menu"), Shell("off-by-row", "editor_shell_check")));
+            Assert.Equal(("true", "true"), (Shell("on-by-file", "shell_menu"), Shell("on-by-file", "editor_shell_check")));
             Assert.Equal("true", Key(run.ReadConfig(), "contextMenu", "shellMenu"));
         }
         finally

@@ -12,18 +12,30 @@ namespace CabinetOS.Tests;
 /// </summary>
 public class ThemeGalleryEndToEndTests
 {
-    // The configuration: the local catalogue is both the extensions index and the themes catalogue.
-    private static Func<string, JsonObject> Config(string? themes = null) => root =>
+    // The configuration: the local catalogue is both the extensions index and the themes catalogue. With brokenThemes the themes
+    // address is a themes.json that is no JSON, which is a catalogue that cannot be read (a file that is not there at all is the
+    // transition rule: the themes of index.json, of which there are none now).
+    private static Func<string, JsonObject> Config(bool brokenThemes = false) => root =>
     {
         var catalogue = Path.Combine(root, "catalogue");
         EndToEndTests.BuildLocalIndex(catalogue, collection: true);
+        var themes = catalogue;
+        if (brokenThemes)
+        {
+            themes = Path.Combine(root, "broken");
+            Directory.CreateDirectory(themes);
+            File.WriteAllText(Path.Combine(themes, "themes.json"), "{ \"schemaVersion\": ");
+        }
         return new JsonObject
         {
             ["version"] = 1,
             ["ui"] = new JsonObject { ["dualPane"] = true },
-            ["marketplace"] = new JsonObject { ["index"] = catalogue, ["themes"] = themes ?? catalogue },
+            ["marketplace"] = new JsonObject { ["index"] = catalogue, ["themes"] = themes },
         };
     };
+
+    // ui.theme in the file: absent or "default" until a theme is chosen (the core writes the default when it starts).
+    private static string ThemeInFile(WindowRun run) => run.ReadConfig()["ui"]?["theme"]?.GetValue<string>() ?? "default";
 
     /// <summary>
     /// The Extensions page lists no theme. The theme picker's last row opens the gallery, so does the palette's "Themes: Browse".
@@ -126,7 +138,7 @@ public class ThemeGalleryEndToEndTests
             Assert.True(themeLines.FindIndex(lastPreview, l => Message(l) == "theme restored" && Text(l, "theme") == "default") > lastPreview,
                 "the theme in effect was not painted back");
             Assert.DoesNotContain(logs, l => Message(l) == "theme chosen");
-            Assert.False(run.ReadConfig()["ui"] is JsonObject ui && ui.ContainsKey("theme"));
+            Assert.Equal("default", ThemeInFile(run));
 
             // The status bar said which theme was previewed, and was empty again after Esc.
             var status = logs.Where(l => Message(l) == "preview status shown").Select(l => Text(l, "text")).ToList();
@@ -182,7 +194,7 @@ public class ThemeGalleryEndToEndTests
 
             // Nothing was installed or written.
             Assert.False(File.Exists(Path.Combine(run.ThemesFolder, "dracula.json")));
-            Assert.False(run.ReadConfig()["ui"] is JsonObject ui && ui.ContainsKey("theme"));
+            Assert.Equal("default", ThemeInFile(run));
         }
         finally
         {
@@ -225,7 +237,7 @@ public class ThemeGalleryEndToEndTests
             Assert.Equal("", Text(installed, "previewing"));
             Assert.Contains(logs, l => Message(l) == "notice shown" && Text(l, "text") == "Dracula is installed and applied.");
             // The theme in effect now: no preview is left on the status bar.
-            Assert.Equal("", logs.Where(l => Message(l) == "preview status shown").Select(l => Text(l, "text")).Last());
+            Assert.Equal("", logs.Where(l => Message(l) == "preview status shown").Select(l => Text(l, "text")).LastOrDefault() ?? "");
             // The picker lists it (and the gallery's own row after the themes).
             var listed = Assert.Single(logs, l => Message(l) == "theme picker listed");
             Assert.Contains("dracula", Text(listed, "ids").Split(','));
@@ -242,7 +254,7 @@ public class ThemeGalleryEndToEndTests
     [Fact]
     public async Task A_catalogue_that_cannot_be_read_leaves_the_installed_themes_and_one_line_in_the_gallery()
     {
-        var run = Prepare("gallery-offline", Config(themes: Path.Combine(Path.GetTempPath(), "cabinetos-no-such-themes-catalogue", "themes.json")));
+        var run = Prepare("gallery-offline", Config(brokenThemes: true));
         try
         {
             var process = run.Start("offline", string.Join(';',
