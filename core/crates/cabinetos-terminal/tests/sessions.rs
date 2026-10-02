@@ -306,6 +306,29 @@ impl Harness {
         self.send(client, &format!("\x1b[H{command}\r"));
     }
 
+    /// Waits for the session's `terminal_folder_changed` with `folder`;
+    /// returns the folders it reported until then, oldest first.
+    fn folder_reports(&self, session_id: u64, folder: &str) -> Vec<String> {
+        let deadline = Instant::now() + DEADLINE;
+        let mut reported = Vec::new();
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.events.recv_timeout(left) {
+                Ok(Event::TerminalFolderChanged {
+                    session_id: changed,
+                    folder: got,
+                }) if changed == session_id => {
+                    reported.push(got.clone());
+                    if got == folder {
+                        return reported;
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => panic!("no report of {folder}: {error}; reported: {reported:?}"),
+            }
+        }
+    }
+
     /// The next `terminal_mode_changed`; fails on any other event.
     fn mode_change(&self) -> (u64, TerminalMode) {
         match self.events.recv_timeout(Duration::from_secs(5)) {
@@ -1063,6 +1086,11 @@ fn powershell_runs_its_hook_at_each_prompt_when_installed() {
         let mut client = harness.attach(&opened);
         let prompt = format!("PS {}>", shown(&target));
         harness.read_until(&mut client, |output| output.contains(&prompt));
+        // The report: once per change, the folder as the shell names it.
+        assert_eq!(
+            harness.folder_reports(opened.session_id, &shown(&target)),
+            [shown(&target)]
+        );
 
         client.forget();
         harness.send(&mut client, "cmd /c exit 3\r");
@@ -1078,6 +1106,9 @@ fn powershell_runs_its_hook_at_each_prompt_when_installed() {
         harness.send(&mut client, "exit\r");
         harness.read_to_end(&mut client);
         assert_eq!(harness.exit_code(opened.session_id), 0, "{program}");
+        let listed = harness.terminals.list();
+        assert_eq!(listed[0].folder.as_deref(), Some(shown(&target).as_str()));
+        harness.terminals.close(opened.session_id).unwrap();
 
         // A command of the profile's own: no hook, the command runs.
         let once = profile(

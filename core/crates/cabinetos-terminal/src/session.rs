@@ -5,7 +5,8 @@
 //! - `term-<id>-out` reads the pseudo-console's output into [`Output`], a
 //!   buffer of at most [`OUTPUT_LIMIT`] bytes. When it is full the thread
 //!   stops reading, so the pseudo-console waits, until a client takes
-//!   bytes out (backpressure).
+//!   bytes out (backpressure). On the way it reads the prompt hook's folder
+//!   reports and sends `terminal_folder_changed` when the folder changed.
 //! - `term-<id>-in` writes what clients type (and the paths of
 //!   `type_paths`) into the pseudo-console.
 //! - `term-<id>-exit` waits for the shell to exit, closes the
@@ -32,6 +33,7 @@ use tracing::Instrument;
 
 use crate::conpty::{self, Child, PseudoConsole};
 use crate::hook;
+use crate::report::FolderReports;
 use crate::shell::{self, ShellKind};
 use crate::{Binding, EventSink, HookHost, OUTPUT_LIMIT, PIPE_PREFIX, Profile, TerminalError};
 
@@ -413,8 +415,9 @@ pub(crate) fn start(
 
     let reader = Arc::clone(&session);
     let watcher = Arc::clone(&session);
+    let reports = Arc::clone(&sink);
     let started = spawn_thread(format!("term-{id}-out"), &span, move || {
-        reader.read_output(output_read);
+        reader.read_output(output_read, &reports);
     })
     .and_then(|()| {
         spawn_thread(format!("term-{id}-in"), &span, move || {
@@ -515,16 +518,40 @@ impl Session {
         lock(&self.info)
     }
 
-    /// Reads the output until the pseudo-console closes.
-    fn read_output(&self, mut pipe: File) {
+    /// Reads the output until the pseudo-console closes; a folder the
+    /// prompt hook reported goes to `sink` when it changed.
+    fn read_output(&self, mut pipe: File, sink: &EventSink) {
         let mut chunk = vec![0; READ_CHUNK];
+        let mut reports = FolderReports::default();
         loop {
             match pipe.read(&mut chunk) {
                 Ok(0) | Err(_) => break,
-                Ok(read) => self.output.push(&chunk[..read]),
+                Ok(read) => {
+                    // The last report of a chunk is the shell's folder now.
+                    if let Some(folder) = reports.read(&chunk[..read]).pop() {
+                        self.reported(folder, sink);
+                    }
+                    self.output.push(&chunk[..read]);
+                }
             }
         }
         self.output.end();
+    }
+
+    /// The prompt hook reported `folder`: kept, and sent when it is not the
+    /// folder reported last.
+    fn reported(&self, folder: String, sink: &EventSink) {
+        let mut info = self.info();
+        if info.folder.as_deref() == Some(folder.as_str()) {
+            return;
+        }
+        info.folder = Some(folder.clone());
+        drop(info);
+        tracing::debug!(session_id = self.id, folder = %folder, "terminal folder reported");
+        sink(Event::TerminalFolderChanged {
+            session_id: self.id,
+            folder,
+        });
     }
 
     /// Waits for the shell, then lets the pseudo-console paint the last

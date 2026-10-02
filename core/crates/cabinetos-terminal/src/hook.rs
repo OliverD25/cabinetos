@@ -12,8 +12,8 @@
 //!   and nothing is ever typed into the shell.
 //! - **Report.** Locked or linked, the hook then prints the shell's folder
 //!   as `ESC ] 9 ; 9 ; <folder> ESC \` (OSC 9;9, what Windows Terminal
-//!   reads), for the session's output thread to read; the bytes stay in
-//!   the stream, and xterm.js ignores the sequence.
+//!   reads), which the session's output thread reads (`report.rs`) and
+//!   sends on as `terminal_folder_changed`.
 //! - **Never in the way.** The hook prints nothing of its own, swallows
 //!   every error, and gives the user's prompt the last command's status.
 //!

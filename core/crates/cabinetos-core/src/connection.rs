@@ -1806,6 +1806,15 @@ impl Session {
                             mode: session.mode,
                         },
                     ));
+                    if let Some(folder) = session.folder {
+                        self.out.send(&Envelope::new(
+                            RequestId::new(),
+                            Event::TerminalFolderChanged {
+                                session_id: session.session_id,
+                                folder,
+                            },
+                        ));
+                    }
                     if let TerminalState::Exited { code } = session.state {
                         self.out.send(&Envelope::new(
                             RequestId::new(),

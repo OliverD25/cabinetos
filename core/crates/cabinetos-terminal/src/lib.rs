@@ -10,7 +10,8 @@
 //!   the end of `PATH`, so `cabinetos-cli` runs from any of its shells.
 //! - A PowerShell or WSL shell gets a prompt hook ([`Hook`], the `hook`
 //!   module): at each prompt a linked session follows its pane's folder,
-//!   and every session reports its own folder.
+//!   and every session reports its own folder, which the event sink gets
+//!   as `terminal_folder_changed` when it changed.
 //! - Each session's bytes travel on a byte pipe of its own,
 //!   `\\.\pipe\cabinetos-term-<random>`: raw bytes, no framing, both ways,
 //!   one client at a time, the current user only and no remote clients (the
@@ -47,6 +48,7 @@ mod conpty;
 #[allow(unsafe_code)]
 pub mod console;
 mod hook;
+mod report;
 mod session;
 mod shell;
 
@@ -82,8 +84,8 @@ pub(crate) const CLOSE_GRACE: Duration = Duration::from_secs(2);
 /// 16-bit signed numbers).
 const MAX_CELLS: u16 = 32_767;
 
-/// Receives the events of every session: `terminal_exited` and
-/// `terminal_mode_changed`.
+/// Receives the events of every session: `terminal_exited`,
+/// `terminal_mode_changed` and `terminal_folder_changed`.
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
 
 /// One shell a session can run: a profile from `terminal.profiles`.

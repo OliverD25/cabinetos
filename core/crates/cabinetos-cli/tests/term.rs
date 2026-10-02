@@ -20,7 +20,8 @@ use std::time::{Duration, Instant};
 
 use cabinetos_ipc::{PipeClient, PipeName};
 use cabinetos_protocol::{
-    Event, Pane, PaneState, Request, Response, TerminalMode, WindowPanes, WindowState, WindowTab,
+    Envelope, Event, Pane, PaneState, Request, Response, TerminalMode, WindowPanes, WindowState,
+    WindowTab,
 };
 use cabinetos_terminal::{Binding, EventSink, Hook, Opened, Profile, Terminals};
 use tempfile::TempDir;
@@ -350,9 +351,13 @@ fn type_puts_quoted_paths_at_the_prompt_without_enter() {
     term.finish();
 }
 
-/// The window this test plays: it says `hello` and what its panes show.
+/// The window this test plays: it says `hello` and what its panes show,
+/// and hears the core's events.
 struct Window {
     client: PipeClient,
+    events: tokio::sync::mpsc::UnboundedReceiver<Envelope<Event>>,
+    /// Folder reports heard and not looked at yet: session and folder.
+    reports: Vec<(u64, String)>,
     runtime: tokio::runtime::Runtime,
 }
 
@@ -362,17 +367,56 @@ impl Window {
             .enable_all()
             .build()
             .unwrap();
-        let client = runtime.block_on(async {
+        let (client, events) = runtime.block_on(async {
             let mut client = PipeClient::connect(&core.pipe, DEADLINE).await.unwrap();
             client.hello("term-cwd-test").await.unwrap();
-            client
+            let events = client.events().unwrap();
+            (client, events)
         });
-        Self { client, runtime }
+        Self {
+            client,
+            events,
+            reports: Vec::new(),
+            runtime,
+        }
     }
 
     fn ask(&mut self, request: Request) -> Response {
-        let Self { client, runtime } = self;
+        let Self {
+            client, runtime, ..
+        } = self;
         runtime.block_on(client.request(request)).unwrap().body
+    }
+
+    /// Waits for `terminal_folder_changed` of `session` with `folder`;
+    /// returns its reports until then, oldest first. Other sessions'
+    /// reports wait for their own turn.
+    fn folder_reported(&mut self, session: u64, folder: &str) -> Vec<String> {
+        let mut reported = Vec::new();
+        let deadline = Instant::now() + DEADLINE;
+        loop {
+            if let Some(at) = self.reports.iter().position(|(id, _)| *id == session) {
+                let (_, got) = self.reports.remove(at);
+                reported.push(got.clone());
+                if got == folder {
+                    return reported;
+                }
+                continue;
+            }
+            let Self {
+                events, runtime, ..
+            } = self;
+            let left = deadline.saturating_duration_since(Instant::now());
+            match runtime.block_on(async { tokio::time::timeout(left, events.recv()).await }) {
+                Ok(Some(Envelope {
+                    body: Event::TerminalFolderChanged { session_id, folder },
+                    ..
+                })) => self.reports.push((session_id, folder)),
+                Ok(Some(_)) => {}
+                Ok(None) => panic!("the events ended"),
+                Err(_) => panic!("no report of {folder}; reported: {reported:?}"),
+            }
+        }
     }
 
     /// The left pane shows `left`, the right pane `right`.
@@ -560,9 +604,12 @@ fn a_linked_powershell_follows_its_pane_at_the_next_prompt_when_installed() {
             window.open_shell("shell", &start, Pane::Right, TerminalMode::Locked);
         let mut left = window.attach(&linked_pipe);
         let mut right = window.attach(&locked_pipe);
-        // The first prompt: the linked shell is in its pane's folder already.
+        // The first prompt: the linked shell is in its pane's folder already,
+        // and each shell reported its folder.
         window.read_until(&mut left, |output| output.contains(&prompt(&first)));
         window.read_until(&mut right, |output| output.contains(&prompt(&start)));
+        assert_eq!(window.folder_reported(linked, &first), [first.clone()]);
+        assert_eq!(window.folder_reported(locked, &start), [start.clone()]);
 
         // A half-typed line; the pane moves; then Enter.
         left.forget();
@@ -575,11 +622,13 @@ fn a_linked_powershell_follows_its_pane_at_the_next_prompt_when_installed() {
             has_line(&ran, "half-typed") && has_line(&ran, &first),
             "{program}: the line ran as typed, where its prompt was drawn:\n{ran}"
         );
+        assert_eq!(window.folder_reported(linked, &second), [second.clone()]);
 
         // The user's own cd stays while the pane stays.
         left.forget();
         window.send(&mut left, &format!("Set-Location -LiteralPath '{own}'\r"));
         window.read_until(&mut left, |output| output.contains(&prompt(&own)));
+        assert_eq!(window.folder_reported(linked, &own), [own.clone()]);
         left.forget();
         window.send(&mut left, "\r");
         let stayed = window.read_until(&mut left, |output| output.contains(&prompt(&own)));
@@ -590,6 +639,7 @@ fn a_linked_powershell_follows_its_pane_at_the_next_prompt_when_installed() {
         left.forget();
         window.send(&mut left, "\r(Get-Location).Path\r");
         window.read_until(&mut left, |output| has_line(output, &third));
+        assert_eq!(window.folder_reported(linked, &third), [third.clone()]);
 
         // The locked session's pane moves; it stays.
         right.forget();
@@ -664,6 +714,9 @@ fn a_linked_wsl_shell_follows_its_pane_at_the_next_prompt_when_installed() {
     window.read_until(&mut shell, |output| {
         in_linux(output, "/Звіт 'проєкт' $HOME")
     });
+    // WSL reports its folder as Windows names it.
+    let reported = window.folder_reported(session_id, &shown(&target));
+    assert_eq!(reported.last(), Some(&shown(&target)));
     window.send(&mut shell, "exit\r");
     let closed = window.ask(Request::TerminalClose { session_id });
     assert!(
