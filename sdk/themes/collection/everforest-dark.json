@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "everforest-dark",
+  "name": "Everforest Dark",
+  "author": "sainnhe, port by CabinetOS",
+  "attribution": "Colours from Everforest Dark, medium contrast, by sainnhe (https://github.com/sainnhe/everforest), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#A7C080",
+  "mica": {
+    "tint": "#232A2E",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#D8CDB4",
+    "textSecondary": "#D8CDB4",
+    "textTertiary": "#9DA9A0",
+    "textDisabled": "#7A8478",
+    "layerFill": "#343F4480",
+    "layerStroke": "#47525899",
+    "layerStrokeActive": "#859289",
+    "controlFill": "#3D484DB3",
+    "controlFillHover": "#475258B3",
+    "acrylicTint": "#232A2EB8",
+    "terminalBackground": "#232A2E99",
+    "folderIcon": "#DBBC7F",
+    "folderIconFront": "#E8D3AC",
+    "fileTypeColors": {
+      "md": "#7FBBB3",
+      "rs": "#E69875",
+      "toml": "#D699B6",
+      "exe": "#A7C080",
+      "dll": "#A7C080",
+      "bin": "#E67E80",
+      "pdf": "#E67E80",
+      "zip": "#DBBC7F"
+    },
+    "permissionLow": "#A7C080",
+    "permissionMedium": "#DBBC7F",
+    "permissionHigh": "#E67E80"
+  },
+  "terminal": {
+    "foreground": "#D3C6AA",
+    "background": "#2D353B",
+    "cursor": "#D3C6AA",
+    "ansi": [
+      "#475258",
+      "#E67E80",
+      "#A7C080",
+      "#DBBC7F",
+      "#7FBBB3",
+      "#D699B6",
+      "#83C092",
+      "#D3C6AA",
+      "#475258",
+      "#E67E80",
+      "#A7C080",
+      "#DBBC7F",
+      "#7FBBB3",
+      "#D699B6",
+      "#83C092",
+      "#D3C6AA"
+    ]
+  }
+}

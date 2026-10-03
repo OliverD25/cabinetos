@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "poimandres",
+  "name": "Poimandres",
+  "author": "Paul Henschel (drcmda), port by CabinetOS",
+  "attribution": "Colours from Poimandres by Paul Henschel and the pmndrs collective (https://github.com/drcmda/poimandres-theme), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#5DE4C7",
+  "mica": {
+    "tint": "#1B1E28",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#E4F0FB",
+    "textSecondary": "#E4F0FB",
+    "textTertiary": "#E4F0FB8B",
+    "textDisabled": "#767C9D80",
+    "layerFill": "#30334080",
+    "layerStroke": "#30334099",
+    "layerStrokeActive": "#767C9D",
+    "controlFill": "#30334080",
+    "controlFillHover": "#303340CC",
+    "acrylicTint": "#1B1E28B8",
+    "terminalBackground": "#1B1E2899",
+    "folderIcon": "#FFFAC2",
+    "folderIconFront": "#FFFCD7",
+    "fileTypeColors": {
+      "md": "#ADD7FF",
+      "rs": "#F087BD",
+      "toml": "#91B4D5",
+      "exe": "#5DE4C7",
+      "dll": "#5DE4C7",
+      "bin": "#D0679D",
+      "pdf": "#D0679D",
+      "zip": "#FFFAC2"
+    },
+    "permissionLow": "#5DE4C7",
+    "permissionMedium": "#FFFAC2",
+    "permissionHigh": "#D0679D"
+  },
+  "terminal": {
+    "foreground": "#A6ACCD",
+    "background": "#1B1E28",
+    "cursor": "#A6ACCD",
+    "ansi": [
+      "#1B1E28",
+      "#D0679D",
+      "#5DE4C7",
+      "#FFFAC2",
+      "#89DDFF",
+      "#F087BD",
+      "#89DDFF",
+      "#FFFFFF",
+      "#A6ACCD",
+      "#D0679D",
+      "#5DE4C7",
+      "#FFFAC2",
+      "#ADD7FF",
+      "#F087BD",
+      "#ADD7FF",
+      "#FFFFFF"
+    ]
+  }
+}

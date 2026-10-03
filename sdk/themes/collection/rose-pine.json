@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "rose-pine",
+  "name": "Rosé Pine",
+  "author": "Rosé Pine, port by CabinetOS",
+  "attribution": "Colours from the Rosé Pine palette by the Rosé Pine project (https://rosepinetheme.com), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#EBBCBA",
+  "mica": {
+    "tint": "#191724",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#E0DEF4",
+    "textSecondary": "#E0DEF4C8",
+    "textTertiary": "#908CAA",
+    "textDisabled": "#6E6A86",
+    "layerFill": "#1F1D2E80",
+    "layerStroke": "#26233A99",
+    "layerStrokeActive": "#524F67",
+    "controlFill": "#1F1D2EB3",
+    "controlFillHover": "#26233AB3",
+    "acrylicTint": "#191724B8",
+    "terminalBackground": "#19172499",
+    "folderIcon": "#F6C177",
+    "folderIconFront": "#F9D7A7",
+    "fileTypeColors": {
+      "md": "#9CCFD8",
+      "rs": "#EBBCBA",
+      "toml": "#C4A7E7",
+      "exe": "#31748F",
+      "dll": "#31748F",
+      "bin": "#EB6F92",
+      "pdf": "#EB6F92",
+      "zip": "#F6C177"
+    },
+    "permissionLow": "#9CCFD8",
+    "permissionMedium": "#F6C177",
+    "permissionHigh": "#EB6F92"
+  },
+  "terminal": {
+    "foreground": "#E0DEF4",
+    "background": "#191724",
+    "cursor": "#6E6A86",
+    "ansi": [
+      "#26233A",
+      "#EB6F92",
+      "#31748F",
+      "#F6C177",
+      "#9CCFD8",
+      "#C4A7E7",
+      "#EBBCBA",
+      "#E0DEF4",
+      "#908CAA",
+      "#EB6F92",
+      "#31748F",
+      "#F6C177",
+      "#9CCFD8",
+      "#C4A7E7",
+      "#EBBCBA",
+      "#E0DEF4"
+    ]
+  }
+}

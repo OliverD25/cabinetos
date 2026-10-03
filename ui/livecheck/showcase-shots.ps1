@@ -144,7 +144,8 @@ Step "3: the terminal"
 Shot '03-terminal'
 [Show]::Press($VK.Ctrl, $VK.Backquote); Start-Sleep -Milliseconds 1000
 
-# The theme picker lists the shipped themes by id: catppuccin-mocha, commander-compact, default, ... (Home, then Down).
+# The theme picker lists the shipped themes by id: catppuccin-latte, catppuccin-mocha, commander-compact, default, ...
+# (Home, then Down).
 function ChooseTheme([int]$downs) {
   [Show]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 200
   [Show]::Press($VK.Ctrl, $VK.T); Start-Sleep -Milliseconds 1000
@@ -152,10 +153,10 @@ function ChooseTheme([int]$downs) {
   foreach ($i in 1..$downs) { [Show]::Press($VK.Down); Start-Sleep -Milliseconds 300 }
   [Show]::Press($VK.Enter); Start-Sleep -Milliseconds 2500
 }
-Step "4: Commander Compact over the panes (Ctrl+K Ctrl+T, Home, Down, Enter)"
-ChooseTheme 1
-Shot '04-commander-compact'
+Step "4: Commander Compact over the panes (Ctrl+K Ctrl+T, Home, Down, Down, Enter)"
 ChooseTheme 2
+Shot '04-commander-compact'
+ChooseTheme 3
 
 Step "5: the marketplace, in the Default theme again"
 Palette 'marketplace'

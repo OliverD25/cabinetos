@@ -1,7 +1,8 @@
 # The theme collection
 
-36 colour themes, ported from 27 of the most popular editor themes, for the
-marketplace. They are not part of the core: the core ships four themes,
+52 colour themes for the marketplace: 34 ported from 27 of the most popular
+editor themes (the first list, 2026-09-28) and 18 more from a second list of
+20 candidates (round 2, 2026-10-03). They are not part of the core: the core ships seven themes,
 and everything else is opt-in (Constitution Article 10, the Zero-Bloat
 Foundation). A user installs the ones they want from the marketplace view,
 or with `cabinetos-cli market install <id>`.
@@ -26,7 +27,7 @@ popular themes (2026-09-28).
 | # | ID | Name | Kind | Source |
 |---|---|---|---|---|
 | 1 | `github-dark` | GitHub Dark | dark | [primer/github-vscode-theme](https://github.com/primer/github-vscode-theme) |
-| 1 | `github-light` | GitHub Light | light | [primer/github-vscode-theme](https://github.com/primer/github-vscode-theme) |
+| 1 | (ships with the core: `github-light`) | GitHub Light | light | |
 | 2 | `one-dark-pro` | One Dark Pro | dark | [Binaryify/OneDark-Pro](https://github.com/Binaryify/OneDark-Pro) |
 | 3 | `dracula` | Dracula | dark | [dracula/visual-studio-code](https://github.com/dracula/visual-studio-code) |
 | 4 | `material-theme` | Material Theme | dark | [SublimeText/material-theme](https://github.com/SublimeText/material-theme) |
@@ -47,7 +48,7 @@ popular themes (2026-09-28).
 | 15 | `cobalt2` | Cobalt2 | dark | [wesbos/cobalt2-vscode](https://github.com/wesbos/cobalt2-vscode) |
 | 16 | `noctis` | Noctis (cold) | dark | [liviuschera/noctis](https://github.com/liviuschera/noctis) |
 | 16 | `noctis-lux` | Noctis Lux (warm) | light | [liviuschera/noctis](https://github.com/liviuschera/noctis) |
-| 17 | `catppuccin-latte` | Catppuccin Latte | light | [catppuccin/palette](https://github.com/catppuccin/palette) |
+| 17 | (ships with the core: `catppuccin-latte`) | Catppuccin Latte | light | |
 | 17 | `catppuccin-frappe` | Catppuccin Frappé | dark | [catppuccin/palette](https://github.com/catppuccin/palette) |
 | 17 | `catppuccin-macchiato` | Catppuccin Macchiato | dark | [catppuccin/palette](https://github.com/catppuccin/palette) |
 | 17 | (ships with the core: `catppuccin-mocha`) | Catppuccin Mocha | dark | |
@@ -68,6 +69,46 @@ popular themes (2026-09-28).
 
 28 of the 30 are here: 27 as files and Nord in the core. City Lights and
 Dainty are left out ([NOTICES.md](NOTICES.md), "Not used, and why").
+
+GitHub Light and Catppuccin Latte were files of this folder until
+2026-10-03 and now ship with the core (`sdk/themes`), so a fresh install has
+a light theme by name. Their measurements stay in the contrast table below.
+
+## Round 2 (2026-10-03)
+
+18 themes ported from a second list of 20 candidates (the creator's card
+"Theme collection, round 2", 2026-10-03). They have no number in the list of
+30 above. 11 are dark and 7 are light.
+
+The rule for each candidate: it is ported only when (1) its license allows a
+port (MIT, BSD, Apache 2.0, ISC, Unlicense or CC0, or a GPL or MPL that the
+collection already accepts for other themes, which today is none), and (2) its
+colours are published in the theme's own repository. 16 of the 20 pass, as 18
+files (Everforest and Flexoki each have a dark and a light file). The other 4
+fail the first check, and [NOTICES.md](NOTICES.md), "Not used, and why", gives
+the license of each: Modus Vivendi and Modus Operandi (GPL 3 or later),
+Zenburn (GPL) and Bluloco Light (LGPL 3).
+
+| ID | Name | Kind | Source |
+|---|---|---|---|
+| `everforest-dark` | Everforest Dark | dark | [sainnhe/everforest](https://github.com/sainnhe/everforest) |
+| `everforest-light` | Everforest Light | light | [sainnhe/everforest](https://github.com/sainnhe/everforest) |
+| `kanagawa` | Kanagawa | dark | [rebelot/kanagawa.nvim](https://github.com/rebelot/kanagawa.nvim) |
+| `rose-pine` | Rosé Pine | dark | [rose-pine/palette](https://github.com/rose-pine/palette) |
+| `rose-pine-dawn` | Rosé Pine Dawn | light | [rose-pine/palette](https://github.com/rose-pine/palette) |
+| `nightfox` | Nightfox | dark | [EdenEast/nightfox.nvim](https://github.com/EdenEast/nightfox.nvim) |
+| `dayfox` | Dayfox | light | [EdenEast/nightfox.nvim](https://github.com/EdenEast/nightfox.nvim) |
+| `vitesse-dark` | Vitesse Dark | dark | [antfu/vscode-theme-vitesse](https://github.com/antfu/vscode-theme-vitesse) |
+| `vitesse-light` | Vitesse Light | light | [antfu/vscode-theme-vitesse](https://github.com/antfu/vscode-theme-vitesse) |
+| `flexoki-dark` | Flexoki Dark | dark | [kepano/flexoki](https://github.com/kepano/flexoki) |
+| `flexoki-light` | Flexoki Light | light | [kepano/flexoki](https://github.com/kepano/flexoki) |
+| `oceanic-next` | Oceanic Next | dark | [voronianski/oceanic-next-color-scheme](https://github.com/voronianski/oceanic-next-color-scheme) |
+| `spacegray` | Spacegray | dark | [kkga/spacegray](https://github.com/kkga/spacegray) |
+| `moonlight` | Moonlight | dark | [atomiks/moonlight-vscode-theme](https://github.com/atomiks/moonlight-vscode-theme) |
+| `poimandres` | Poimandres | dark | [drcmda/poimandres-theme](https://github.com/drcmda/poimandres-theme) |
+| `andromeda` | Andromeda | dark | [EliverLara/Andromeda](https://github.com/EliverLara/Andromeda) |
+| `quiet-light` | Quiet Light | light | [microsoft/vscode](https://github.com/microsoft/vscode/tree/main/extensions/theme-quietlight) |
+| `min-light` | Min Light | light | [miguelsolorio/min-theme](https://github.com/miguelsolorio/min-theme) |
 
 ## How a palette becomes a theme
 
@@ -101,6 +142,7 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 
 | Theme | Lowest body text | Where | Tertiary text (plain, as a hint) |
 |---|---|---|---|
+| `andromeda` | 4.63:1 | row details on the selected row | 5.09:1, 3.96:1 |
 | `atom-one-light` | 4.86:1 | row details on the selected row | 5.25:1, 3.69:1 |
 | `ayu-dark` | 4.72:1 | row details on the hovered row | 5.34:1, 4.06:1 |
 | `ayu-light` | 4.68:1 | row details on the hovered row | 5.35:1, 3.73:1 |
@@ -110,7 +152,12 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 | `catppuccin-macchiato` | 4.98:1 | row details on the selected row | 5.84:1, 4.50:1 |
 | `cobalt2` | 4.80:1 | row details on the selected row | 5.49:1, 4.27:1 |
 | `darcula` | 4.90:1 | row details on the hovered row | 5.08:1, 3.94:1 |
+| `dayfox` | 4.98:1 | row details on the hovered row | 6.52:1, 4.43:1 |
 | `dracula` | 4.80:1 | row details on the selected row | 4.97:1, 3.89:1 |
+| `everforest-dark` | 4.56:1 | row details on the hovered row | 5.21:1, 4.08:1 |
+| `everforest-light` | 4.58:1 | row details on the selected row | 5.00:1, 3.55:1 |
+| `flexoki-dark` | 5.38:1 | row details on the selected row | 8.80:1, 6.38:1 |
+| `flexoki-light` | 4.66:1 | row details on the selected row | 6.83:1, 4.51:1 |
 | `github-dark` | 5.33:1 | row details on the selected row | 4.90:1, 3.76:1 |
 | `github-light` | 5.26:1 | row details on the selected row | 4.93:1, 3.50:1 |
 | `gruvbox-dark` | 4.68:1 | row details on the selected row | 4.72:1, 3.74:1 |
@@ -118,24 +165,36 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 | `horizon-bright` | 8.31:1 | row details on the selected row | 7.11:1, 4.70:1 |
 | `horizon-dark` | 5.73:1 | row details on the selected row | 5.88:1, 4.52:1 |
 | `houston` | 4.94:1 | row details on the hovered row | 4.61:1, 3.61:1 |
+| `kanagawa` | 5.24:1 | row details on the selected row | 8.72:1, 6.41:1 |
 | `matcha` | 4.58:1 | row details on the hovered row | 5.46:1, 4.24:1 |
 | `material-theme` | 5.17:1 | row details on the selected row | 6.78:1, 5.19:1 |
+| `min-light` | 5.31:1 | row details on the selected row | 5.77:1, 3.95:1 |
 | `monokai` | 5.03:1 | row details on the selected row | 4.50:1, 3.54:1 |
+| `moonlight` | 4.66:1 | row details on the selected row | 7.24:1, 5.46:1 |
 | `night-owl` | 4.68:1 | row details on the selected row | 6.39:1, 4.80:1 |
+| `nightfox` | 4.81:1 | row details on the selected row | 7.10:1, 5.32:1 |
 | `noctis` | 4.68:1 | row details on the hovered row | 5.13:1, 3.98:1 |
 | `noctis-lux` | 4.67:1 | row details on the selected row | 5.09:1, 3.62:1 |
+| `oceanic-next` | 4.88:1 | row details on the selected row | 5.70:1, 4.42:1 |
 | `omni` | 5.05:1 | row details on the selected row | 4.83:1, 3.72:1 |
 | `one-dark-pro` | 4.87:1 | row details on the selected row | 5.82:1, 4.49:1 |
 | `one-monokai` | 4.87:1 | row details on the selected row | 5.82:1, 4.49:1 |
 | `palenight` | 4.73:1 | row details on the selected row | 4.81:1, 3.81:1 |
 | `panda` | 4.53:1 | row details on the selected row | 5.93:1, 4.57:1 |
+| `poimandres` | 6.65:1 | row details on the selected row | 4.83:1, 3.78:1 |
+| `quiet-light` | 5.21:1 | row details on the selected row | 7.45:1, 4.83:1 |
+| `rose-pine` | 4.87:1 | row details on the selected row | 5.28:1, 4.04:1 |
+| `rose-pine-dawn` | 4.58:1 | row details on the selected row | 4.91:1, 3.51:1 |
 | `shades-of-purple` | 5.30:1 | row details on the selected row | 5.77:1, 4.44:1 |
 | `snazzy-light` | 4.51:1 | row details on the selected row | 5.01:1, 3.53:1 |
 | `solarized-dark` | 4.56:1 | row details on the selected row | 5.06:1, 3.94:1 |
 | `solarized-light` | 4.51:1 | row details on the selected row | 4.84:1, 3.44:1 |
+| `spacegray` | 4.92:1 | row details on the selected row | 6.59:1, 5.00:1 |
 | `sublime-material` | 4.57:1 | row details on the selected row | 7.33:1, 5.56:1 |
 | `synthwave-84` | 5.79:1 | row details on the selected row | 4.85:1, 3.76:1 |
 | `tokyo-night` | 4.71:1 | row details on the selected row | 4.66:1, 3.58:1 |
+| `vitesse-dark` | 4.79:1 | row details on the selected row | 9.35:1, 6.74:1 |
+| `vitesse-light` | 5.09:1 | row details on the selected row | 7.71:1, 4.94:1 |
 | `winter-is-coming` | 6.63:1 | row details on the selected row | 5.33:1, 4.11:1 |
 
 What needed a text colour other than the theme's usual one:
@@ -163,3 +222,30 @@ What needed a text colour other than the theme's usual one:
     `#005661` became `#004952` (15 %).
   - `tokyo-night`: the terminal's text `#787C99` (4.40:1) became
     `#A9B1D6`, the theme's editor text.
+
+Round 2 (2026-10-03), by the same rules:
+
+- **Secondary text.** `textSecondary` is the main text at `C8` in `rose-pine`,
+  `vitesse-dark` and `flexoki-light`; at `E6` in `andromeda`, `flexoki-dark`,
+  `kanagawa`, `min-light`, `moonlight` and `nightfox`; and opaque in `dayfox`,
+  `everforest-dark`, `everforest-light`, `oceanic-next`, `poimandres`,
+  `quiet-light`, `rose-pine-dawn`, `spacegray` and `vitesse-light`. Where it
+  is not `C8`, the row details, dimmed to 76 %, fell below 4.5:1 at the
+  lower alpha.
+- **The main text itself, where it was too dim even opaque:**
+  - `everforest-dark`: `#D3C6AA` became `#D8CDB4` (12 % toward white).
+  - `everforest-light`: `#5C6A72` became `#374044` (40 % toward black).
+  - `rose-pine-dawn`: `#575279` became `#403D5A` (26 % toward black).
+  - `poimandres`: `#A6ACCD` became `#E4F0FB`, the theme's own variable and
+    hover text.
+- **Tertiary text.** The theme's own grey is `textTertiary` where it reaches
+  4.5:1 plain and 3:1 as a hint on the pane and on the backdrop. In five
+  themes it does not, and the main text at a lower alpha stands in:
+  `everforest-light` (`#829181`) and `rose-pine-dawn` (`#797593`) use the
+  main text at `C8`; `flexoki-light` (`#6F6E69`) and `min-light` (`#757575`)
+  use it at `B3`; `poimandres` (`#767C9D`) uses it at `8B`.
+- **The terminal's text** needed no change: each scheme's foreground reaches
+  4.5:1 on its background.
+- **Cursors.** `rose-pine-dawn` keeps the Windows Terminal scheme's cursor
+  `#9893A5`, which is 2.7:1 on its background; the shipped Rosé Pine Moon's
+  cursor is fainter still.

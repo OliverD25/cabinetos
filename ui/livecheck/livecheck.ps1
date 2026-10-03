@@ -910,8 +910,8 @@ foreach ($command in "file.delete", "file.deletePermanently", "edit.selectByPatt
 }
 
 # ----- Commander Compact (docs/ui.md, "Metrics and chrome"): the density preset, switched live -----
-# The picker lists the run's shipped themes by ID: catppuccin-mocha, commander-compact, default, nord,
-# rose-pine-moon; its highlight starts on the theme in effect. The last "metrics applied" line of the
+# The picker lists the run's shipped themes by ID: catppuccin-latte, catppuccin-mocha, commander-compact, default,
+# github-light, nord, rose-pine-moon; its highlight starts on the theme in effect. The last "metrics applied" line of the
 # window's log says what the window laid itself out with.
 function LastChosenTheme {
   $line = UiLast '"theme chosen"'
@@ -948,16 +948,17 @@ $restored = if ($lastPreview -ge 0) { $themeLines | Select-Object -Skip ($lastPr
 "theme preview: Down previewed $previewed, not the theme in effect ($themeBefore): $([bool]($lastPreview -ge 0 -and $previewed -ne $themeBefore))"
 "theme preview: Esc painted $(if ($restored) { $restored.fields.theme } else { '(nothing)' }) back after it ($themeBefore expected): $([bool]($restored -and $restored.fields.theme -eq $themeBefore))"
 
-Step "compact: Ctrl+K Ctrl+T, the theme picker; Home, Down to Commander Compact, Enter"
+Step "compact: Ctrl+K Ctrl+T, the theme picker; Home, Down, Down to Commander Compact, Enter"
 # The mouse goes to the corner first: a pointer left over the list would pull the highlight to its row.
 ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 2000 -what 'the theme picker'
 Shot $h "$ShotDir\compact-picker-live.png"
-# The picker lists the themes by id (catppuccin-mocha, commander-compact, default, nord, rose-pine-moon)
-# and highlights the current one; Home makes the walk independent of where it started. In the first
-# real-key run a single Up from default chose catppuccin-mocha, and a Down from there chose it again.
+# The picker lists the themes by id (catppuccin-latte, catppuccin-mocha, commander-compact, default, github-light,
+# nord, rose-pine-moon) and highlights the current one; Home makes the walk independent of where it started. In the
+# first real-key run a single Up from default chose the theme before it, and a Down from there chose it again.
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2000
 "picker chose: $(LastChosenTheme) (commander-compact expected)"
@@ -1066,11 +1067,12 @@ if ($bigList) {
   [void][Live]::SetCursorPos(2, 2)
 } else { "compact: no scrollable list found in the automation tree: False" }
 
-Step "compact: Ctrl+K Ctrl+T, Home, Down, Down to Default, Enter"
+Step "compact: Ctrl+K Ctrl+T, Home, Down, Down, Down to Default, Enter"
 ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 2000 -what 'the theme picker'
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 300
 [Live]::Press($VK.Enter); Start-Sleep -Milliseconds 2000

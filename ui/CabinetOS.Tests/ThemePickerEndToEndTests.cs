@@ -16,8 +16,8 @@ public class ThemePickerEndToEndTests
     private const string OptIn = "CABINETOS_UI_E2E";
 
     // The core writes its shipped themes into an empty themes folder; the picker lists them in its order:
-    // catppuccin-mocha, commander-compact, default, nord, rose-pine-moon. Row 3 is Nord.
-    private const int NordRow = 3;
+    // catppuccin-latte, catppuccin-mocha, commander-compact, default, github-light, nord, rose-pine-moon. Row 5 is Nord.
+    private const int NordRow = 5;
 
     /// <summary>
     /// A theme highlighted and left with Esc is previewed and then painted back, and nothing is

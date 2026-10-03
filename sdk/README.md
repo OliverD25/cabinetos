@@ -40,10 +40,11 @@ What lives here, or will:
   PowerShell 7, no administrator rights).
 - `themes/` — the JSON theme format (Phase 9): `theme.schema.json`,
   exported from the Rust types in `core/crates/cabinetos-protocol`, and the
-  five themes that ship with the core (`default`, `commander-compact`,
-  `nord`, `catppuccin-mocha`, `rose-pine-moon`), which the core embeds and
+  seven themes that ship with the core (`default`, `commander-compact`,
+  `nord`, `catppuccin-mocha`, `rose-pine-moon`, `catppuccin-latte`,
+  `github-light`), which the core embeds and
   writes into the themes folder when they are missing
-  ([../docs/themes.md](../docs/themes.md)). `themes/collection/` holds 36
+  ([../docs/themes.md](../docs/themes.md)). `themes/collection/` holds 52
   more themes for the marketplace, which the core does not embed.
 - `marketplace/` — the marketplace index format (Phase 9):
   `index.schema.json`, exported from the Rust types in

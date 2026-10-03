@@ -45,6 +45,19 @@ No value was written from memory, so nothing here is marked "to verify".
 | `houston` | [withastro/houston-vscode](https://github.com/withastro/houston-vscode): `themes/houston.json` | Copyright (c) 2022 The Astro Technology Company | MIT | 0.1.2, `4d9923d077061e1696c32e4033edc43d9747be12` |
 | `horizon-dark`, `horizon-bright` | [jolaleye/horizon-theme-vscode](https://github.com/jolaleye/horizon-theme-vscode): `themes/horizon.json`, `themes/horizon-bright.json` | Copyright (c) 2018 Jonathan Olaleye | MIT | 2.0.2, `5ae91b6d49bf291e0a34c0a1cb277d9738aadd90` |
 | (the terminal colours SynthWave '84 and Horizon leave unset) | [microsoft/vscode](https://github.com/microsoft/vscode): `src/vs/workbench/contrib/terminal/common/terminalColorRegistry.ts`, Visual Studio Code's own defaults, which is what those themes show in Visual Studio Code | Copyright (c) 2015 - present Microsoft Corporation | MIT | `d082ab087d3eeccd2f97ce273ee2c1b8c1247a0d` |
+| `everforest-dark`, `everforest-light` | [sainnhe/everforest](https://github.com/sainnhe/everforest): `autoload/everforest.vim` (the palette, dark and light, medium contrast) and `colors/everforest.vim` (which colours the terminal gets) | Copyright (c) 2019 sainnhe | MIT | no version, `85a86eb62409e3ec88713bff3d1b9d7374e112e4` |
+| `kanagawa` | [rebelot/kanagawa.nvim](https://github.com/rebelot/kanagawa.nvim): `lua/kanagawa/colors.lua` (the palette), `lua/kanagawa/themes.lua` (the roles of the Wave theme) and `extras/windows-terminal/kanagawa.json` (the Wave terminal colours) | Copyright (c) 2021 Tommaso Laurenzi | MIT | no version, `bb85e4bfc8d89b0e62c8fa53ccdd13d12e2f77b3` |
+| `rose-pine`, `rose-pine-dawn` | [rose-pine/palette](https://github.com/rose-pine/palette): `source/index.ts` (the palette with its highlight shades; the older `palette.json` of the same version still has Dawn's text as `#464261`, so it was not used); the terminal colours from [rose-pine/windows-terminal](https://github.com/rose-pine/windows-terminal): `rose-pine.scheme.json`, `rose-pine-dawn.scheme.json` | Copyright (c) mvllow (palette); Copyright (c) Rosé Pine (windows-terminal) | MIT (both) | palette 4.0.1, `92af52b465ab6e47437aca223c9b8d3009a2023b`; windows-terminal `89e1a277e4ac10e06f33b13cddabde3c42d8d411` |
+| `nightfox`, `dayfox` | [EdenEast/nightfox.nvim](https://github.com/EdenEast/nightfox.nvim): `lua/nightfox/palette/nightfox.lua` and `dayfox.lua` (the palettes) and `extra/nightfox/windows_terminal.json` and `extra/dayfox/windows_terminal.json` (the terminal colours, which the project generates from them) | Copyright (c) 2021 James Simpson | MIT | 3.10.0 (its changelog), `4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a` |
+| `vitesse-dark`, `vitesse-light` | [antfu/vscode-theme-vitesse](https://github.com/antfu/vscode-theme-vitesse): `themes/vitesse-dark.json`, `themes/vitesse-light.json` | Copyright (c) 2020 Primer; Copyright (c) 2021 Anthony Fu | MIT | 1.0.1, `2862595c3d5d05fabfd5aeb50bcbb79ea2f8d85f` |
+| `flexoki-dark`, `flexoki-light` | [kepano/flexoki](https://github.com/kepano/flexoki): `README.md` (the colour tables), `vscode/Flexoki-Dark-color-theme.json` and `vscode/Flexoki-Light-color-theme.json` (which colour goes where) and `windows-terminal/flexoki-dark.json` and `flexoki-light.json` (the terminal colours) | Copyright (c) 2023 Steph Ango | MIT; its README asks every port to include attribution and a link to stephango.com/flexoki, and each theme file's `attribution` does | no version, `8d723bac4a9ac46adfdf99d42155286977aac72a` |
+| `oceanic-next` | [voronianski/oceanic-next-color-scheme](https://github.com/voronianski/oceanic-next-color-scheme): `README.md` ("Color Palette", the sixteen base colours) and `Oceanic Next.tmTheme` | None given: the repository has no license file and no copyright line; its `README.md` ends with the line "MIT Licensed" | MIT, as that line declares | no version, `44a1eca851f86d4cc82f5c41734c917c65fa5710` |
+| `spacegray` | [kkga/spacegray](https://github.com/kkga/spacegray): `Base16 Ocean Dark.sublime-color-scheme` (the sixteen colours, and its accent `base0A`) and `Spacegray.sublime-theme` (the two darker shades of the title bar and the side bar) | Copyright (c) 2024 Sublime Text Packages | MIT | no version, `4d76bfce0df58c1122ce811ccf5ff64ff94f38b6` |
+| `moonlight` | [atomiks/moonlight-vscode-theme](https://github.com/atomiks/moonlight-vscode-theme): `src/colors.ts` (the palette) and `src/ui.json` (which colour goes where); the repository builds the theme files from them with `scripts/build.ts` and does not hold them | Copyright (c) 2018 atomiks | MIT | 0.11.1, `05c2cdb1fbd65b6e58ab0e8abdea0db7619f2acf` |
+| `poimandres` | [drcmda/poimandres-theme](https://github.com/drcmda/poimandres-theme): `themes/poimandres-color-theme.json` | Copyright (c) 2023 drcmda | MIT | 0.3.7, `fafa97959af95bd2cdbcff151c3e9c537d355f37` |
+| `andromeda` | [EliverLara/Andromeda](https://github.com/EliverLara/Andromeda): `themes/Andromeda-color-theme.json`; the four ANSI colours it leaves unset are Visual Studio Code's defaults, from [microsoft/vscode](https://github.com/microsoft/vscode): `src/vs/workbench/contrib/terminal/common/terminalColorRegistry.ts` | Copyright (c) 2017 <eliverlara@gmail.com>; Copyright (c) 2015 - present Microsoft Corporation | MIT (both) | 1.10.0, `d1abb48c69493000aa0133a32d594eb25e523d4f`; Visual Studio Code 1.141.0 (development), `67cb2a17e24d903be7d50486a70d9bd835e95ad6` |
+| `quiet-light` | [microsoft/vscode](https://github.com/microsoft/vscode): `extensions/theme-quietlight/themes/quietlight-color-theme.json`, the Quiet Light scheme as Visual Studio Code ships it; its `cgmanifest.json` names [Colorsublime/Colorsublime-Themes](https://github.com/Colorsublime/Colorsublime-Themes) as the origin, and Visual Studio Code's `ThirdPartyNotices.txt` gives that project the MIT License with the notice "Copyright (c) 2015 Colorsublime.com" | Copyright (c) 2015 - present Microsoft Corporation | MIT (both) | 1.141.0 (development), `67cb2a17e24d903be7d50486a70d9bd835e95ad6` |
+| `min-light` | [miguelsolorio/min-theme](https://github.com/miguelsolorio/min-theme): `themes/min-light.json` | Copyright (c) 2018-2021 Miguel Solorio | MIT | 1.5.0, `dd796c3f294daecfb7f10ed277ffdc30517d59cf` |
 
 ## What the port derives
 
@@ -66,7 +79,16 @@ The source colours are used as they are. What the port adds:
   case is listed in [README.md](README.md), "Contrast".
 - **Terminal colours.** Atom One Light, the Darcula port, Material Theme
   and Sublime Material define no terminal colours; theirs are built from
-  the theme's own syntax colours. Where SynthWave '84 and Horizon leave an
+  the theme's own syntax colours. So are those of Quiet Light, which has
+  none either. Oceanic Next and Spacegray are Base16 palettes with no
+  terminal colours of their own: the sixteen colours follow the usual Base16
+  shell order (red, green, yellow, blue, magenta and cyan from `base08`,
+  `base0B`, `base0A`, `base0D`, `base0E` and `base0C`; white `base05`;
+  bright black `base03`; bright white `base07`), with `base01` for black so
+  that black can be told from the background. Andromeda leaves black, white,
+  bright black and bright white unset, and takes Visual Studio Code's
+  defaults for them. Min Light's ANSI blue (`#E0E0E0`) cannot be read on
+  white, so its bright blue (`#6871FF`) is used for both. Where SynthWave '84 and Horizon leave an
   ANSI colour unset, it is Visual Studio Code's default. Horizon Bright's
   cursor is its editor cursor colour, because its terminal cursor colour
   (`#F9CEC3B3`) cannot be seen on its background; Shades of Purple's red
@@ -96,8 +118,32 @@ The source colours are used as they are. What the port adds:
   `dainty-shared` package, whose repository and package are no longer
   published, and no public file holds the generated colours. Left out
   rather than written from memory.
-- **Nord** and **Catppuccin Mocha** ship with the core; the collection does
-  not repeat them.
+- **Modus Vivendi and Modus Operandi** (Protesilaos Stavrou,
+  [protesilaos/modus-themes](https://github.com/protesilaos/modus-themes) 5.3.0
+  at `4fcc8d00540a81936a213d608a69c4c85df8f970`) are GNU Emacs files:
+  "Copyright (C) 2019-2026 Free Software Foundation, Inc." under the GNU
+  General Public License, version 3 or later (`COPYING`). The collection
+  takes no GPL theme, so they are left out, although their colours are
+  published.
+- **Zenburn** ([jnurmine/Zenburn](https://github.com/jnurmine/Zenburn),
+  `colors/zenburn.vim` at `9d7988abf0d2654f837fcd288145afd5f316b70c`): the
+  `README.md` has a "LICENSE" section that says "GNU GPL", and the scheme's
+  own header says "License: GNU GPL". There is no license file, and no GPL
+  theme in the collection. Left out.
+- **Bluloco Light** ([uloco/theme-bluloco-light](https://github.com/uloco/theme-bluloco-light)
+  3.10.0 at `3363134c8563da0bb03c675aa163796eb1b8f454`) is licensed under the
+  GNU Lesser General Public License, version 3 (`LICENSE`). The collection
+  takes no (L)GPL theme. Left out.
+- **The Neovim port of Oceanic Next**
+  ([mhartington/oceanic-next](https://github.com/mhartington/oceanic-next))
+  holds a copy of Neovim's own license file (Apache License 2.0, and the Vim
+  license for parts of Neovim), not a license for its colours. The original
+  Sublime Text scheme by Dmitri Voronianski, which declares the MIT License,
+  is used instead.
+- **Nord**, **Catppuccin Mocha**, **Catppuccin Latte** and **GitHub Light**
+  ship with the core; the collection does not repeat them. Latte and GitHub
+  Light were files of this folder until 2026-10-03; their rows in the table
+  above still name their sources and commits.
 
 ## The MIT License
 

@@ -38,7 +38,8 @@
 #   terminal (wait)        Ctrl+Backquote; the first time it waits wait ms (default 6000) for the shell to start
 #   wait (ms)              do nothing for ms milliseconds
 #   theme (downs)          Ctrl+K Ctrl+T, Home, Down downs times, Enter: the theme picker lists the shipped themes by
-#                          id (catppuccin-mocha, commander-compact, default, nord, rose-pine-moon)
+#                          id (catppuccin-latte, catppuccin-mocha, commander-compact, default, github-light, nord,
+#                          rose-pine-moon)
 #
 # -LocalCatalogue builds the marketplace's two catalogues into the run's own folder (build-index.ps1 -Collection, with
 # -Extensions when the Agent's plugin is built) and points every window at them: the Extensions page and the theme

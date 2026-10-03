@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "moonlight",
+  "name": "Moonlight",
+  "author": "atomiks, port by CabinetOS",
+  "attribution": "Colours from Moonlight by atomiks (https://github.com/atomiks/moonlight-vscode-theme), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#7CAFFF",
+  "mica": {
+    "tint": "#1E2030",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#C8D3F5",
+    "textSecondary": "#C8D3F5E6",
+    "textTertiary": "#A9B8E8",
+    "textDisabled": "#444A73",
+    "layerFill": "#2F334D80",
+    "layerStroke": "#444A7399",
+    "layerStrokeActive": "#828BB8",
+    "controlFill": "#222436B3",
+    "controlFillHover": "#2F334DB3",
+    "acrylicTint": "#191A2AB8",
+    "terminalBackground": "#1E203099",
+    "folderIcon": "#FFC777",
+    "folderIconFront": "#FFDBA7",
+    "fileTypeColors": {
+      "md": "#7CAFFF",
+      "rs": "#FF966C",
+      "toml": "#C4A2FF",
+      "exe": "#C3E88D",
+      "dll": "#C3E88D",
+      "bin": "#FF757F",
+      "pdf": "#FF757F",
+      "zip": "#FFC777"
+    },
+    "permissionLow": "#C3E88D",
+    "permissionMedium": "#FFC777",
+    "permissionHigh": "#FF757F"
+  },
+  "terminal": {
+    "foreground": "#D5DEF8",
+    "background": "#1E2030",
+    "cursor": "#7CAFFF",
+    "ansi": [
+      "#000000",
+      "#FF757F",
+      "#C3E88D",
+      "#FFC777",
+      "#7CAFFF",
+      "#FCA7EA",
+      "#78DBFF",
+      "#C8D3F5",
+      "#828BB8",
+      "#FF757F",
+      "#C3E88D",
+      "#FFC777",
+      "#7CAFFF",
+      "#FCA7EA",
+      "#78DBFF",
+      "#C8D3F5"
+    ]
+  }
+}

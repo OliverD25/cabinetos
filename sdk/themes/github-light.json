@@ -2,7 +2,7 @@
   "$schema": "./theme.schema.json",
   "id": "github-light",
   "name": "GitHub Light",
-  "author": "GitHub (Primer), port by CabinetOS",
+  "author": "CabinetOS",
   "attribution": "Colours from GitHub Light Default of the GitHub VS Code Theme and Primer Primitives by GitHub (https://github.com/primer/github-vscode-theme), used under the MIT License.",
   "version": "1.0.0",
   "kind": "light",

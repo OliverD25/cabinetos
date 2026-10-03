@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "kanagawa",
+  "name": "Kanagawa",
+  "author": "Tommaso Laurenzi (rebelot), port by CabinetOS",
+  "attribution": "Colours from Kanagawa Wave by Tommaso Laurenzi (https://github.com/rebelot/kanagawa.nvim), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#7E9CD8",
+  "mica": {
+    "tint": "#16161D",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#DCD7BA",
+    "textSecondary": "#DCD7BAE6",
+    "textTertiary": "#C8C093",
+    "textDisabled": "#54546D",
+    "layerFill": "#2A2A3780",
+    "layerStroke": "#36364699",
+    "layerStrokeActive": "#727169",
+    "controlFill": "#2A2A37B3",
+    "controlFillHover": "#363646B3",
+    "acrylicTint": "#16161DB8",
+    "terminalBackground": "#16161D99",
+    "folderIcon": "#E6C384",
+    "folderIconFront": "#EFD8AF",
+    "fileTypeColors": {
+      "md": "#7E9CD8",
+      "rs": "#FFA066",
+      "toml": "#957FB8",
+      "exe": "#98BB6C",
+      "dll": "#98BB6C",
+      "bin": "#E46876",
+      "pdf": "#E46876",
+      "zip": "#E6C384"
+    },
+    "permissionLow": "#98BB6C",
+    "permissionMedium": "#E6C384",
+    "permissionHigh": "#E46876"
+  },
+  "terminal": {
+    "foreground": "#DCD7BA",
+    "background": "#1F1F28",
+    "cursor": "#C8C093",
+    "ansi": [
+      "#090618",
+      "#C34043",
+      "#76946A",
+      "#C0A36E",
+      "#7E9CD8",
+      "#957FB8",
+      "#6A9589",
+      "#C8C093",
+      "#727169",
+      "#E82424",
+      "#98BB6C",
+      "#E6C384",
+      "#7FB4CA",
+      "#938AA9",
+      "#7AA89F",
+      "#DCD7BA"
+    ]
+  }
+}

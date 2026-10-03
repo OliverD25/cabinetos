@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "min-light",
+  "name": "Min Light",
+  "author": "Miguel Solorio, port by CabinetOS",
+  "attribution": "Colours from Min Light by Miguel Solorio (https://github.com/miguelsolorio/min-theme), used under the MIT License. Its ANSI blue (#E0E0E0) cannot be read on white, so its bright blue is used for both.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#1976D2",
+  "mica": {
+    "tint": "#F6F6F6",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#212121",
+    "textSecondary": "#212121E6",
+    "textTertiary": "#212121B3",
+    "textDisabled": "#CCCCCC",
+    "layerFill": "#FFFFFFB3",
+    "layerStroke": "#E0E0E0",
+    "layerStrokeActive": "#9E9E9E",
+    "controlFill": "#EEEEEEB3",
+    "controlFillHover": "#E0E0E0B3",
+    "acrylicTint": "#F6F6F6D9",
+    "terminalBackground": "#F6F6F699",
+    "folderIcon": "#F29718",
+    "folderIconFront": "#F7BB69",
+    "fileTypeColors": {
+      "md": "#1976D2",
+      "rs": "#FF9800",
+      "toml": "#6F42C1",
+      "exe": "#22863A",
+      "dll": "#22863A",
+      "bin": "#D32F2F",
+      "pdf": "#D32F2F",
+      "zip": "#F29718"
+    },
+    "permissionLow": "#22863A",
+    "permissionMedium": "#F29718",
+    "permissionHigh": "#D32F2F"
+  },
+  "terminal": {
+    "foreground": "#212121",
+    "background": "#FFFFFF",
+    "cursor": "#212121",
+    "ansi": [
+      "#333333",
+      "#D32F2F",
+      "#77CC00",
+      "#F29718",
+      "#6871FF",
+      "#9966CC",
+      "#4DBF99",
+      "#C7C7C7",
+      "#A1A1A1",
+      "#D6656A",
+      "#A3D900",
+      "#E7C547",
+      "#6871FF",
+      "#A37ACC",
+      "#57D9AD",
+      "#7E7E7E"
+    ]
+  }
+}

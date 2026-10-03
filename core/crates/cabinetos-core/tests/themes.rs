@@ -171,9 +171,11 @@ async fn a_theme_applies_live_and_a_broken_edit_never_applies() {
     assert_eq!(
         ids,
         [
+            "catppuccin-latte",
             "catppuccin-mocha",
             "commander-compact",
             "default",
+            "github-light",
             "nord",
             "rose-pine-moon"
         ]
@@ -187,15 +189,17 @@ async fn a_theme_applies_live_and_a_broken_edit_never_applies() {
     assert_eq!(
         tints,
         [
+            Some("#EFF1F5"),
             Some("#1E1E2E"),
             None,
             None,
+            Some("#F6F8FA"),
             Some("#2E3440"),
             Some("#232136")
         ]
     );
     let dense: Vec<bool> = themes.iter().map(|theme| theme.has_metrics).collect();
-    assert_eq!(dense, [false, true, false, false, false]);
+    assert_eq!(dense, [false, false, true, false, false, false, false]);
     assert!(core.themes_dir().join("theme.schema.json").is_file());
     let default = theme(&mut client, None).await;
     assert_eq!(default.id, "default");

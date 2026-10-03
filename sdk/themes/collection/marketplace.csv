@@ -1,6 +1,5 @@
 id,license,source,description
 github-dark,MIT,https://github.com/primer/github-vscode-theme,"GitHub Dark Default: the near-black canvas and blue accent of GitHub.com, from the official GitHub VS Code Theme."
-github-light,MIT,https://github.com/primer/github-vscode-theme,"GitHub Light Default: the white canvas, grey borders and blue accent of GitHub.com."
 one-dark-pro,MIT,https://github.com/Binaryify/OneDark-Pro,"One Dark Pro: Atom's One Dark, grey-blue with a blue accent."
 dracula,MIT,https://github.com/dracula/visual-studio-code,"Dracula: the dark theme with purple, pink and green highlights."
 material-theme,MIT,https://github.com/SublimeText/material-theme,"Material Theme: Google Material's blue grey with a teal accent, by Mattia Astorino."
@@ -20,7 +19,6 @@ shades-of-purple,MIT,https://github.com/ahmadawais/shades-of-purple-vscode,"Shad
 cobalt2,MIT,https://github.com/wesbos/cobalt2-vscode,"Cobalt2: deep blue with a yellow accent, by Wes Bos."
 noctis,MIT,https://github.com/liviuschera/noctis,"Noctis: a cold, dark teal theme."
 noctis-lux,MIT,https://github.com/liviuschera/noctis,"Noctis Lux: the warm, cream light variant of Noctis."
-catppuccin-latte,MIT,https://github.com/catppuccin/palette,"Catppuccin Latte: the soothing pastel palette, light flavour."
 catppuccin-frappe,MIT,https://github.com/catppuccin/palette,"Catppuccin Frappé: the soothing pastel palette, muted dark flavour."
 catppuccin-macchiato,MIT,https://github.com/catppuccin/palette,"Catppuccin Macchiato: the soothing pastel palette, medium dark flavour."
 panda,MIT,https://github.com/siamak/atom-panda-syntax,"Panda: a superminimal dark theme with pink, blue and mint, by Siamak Mokhtari."
@@ -35,3 +33,21 @@ matcha,MIT,https://github.com/lucafalasco/matcha,"Matcha: a dark, earthy theme o
 houston,MIT,https://github.com/withastro/houston-vscode,"Houston: the Astro team's dark theme with mint and cyan accents."
 horizon-dark,MIT,https://github.com/jolaleye/horizon-theme-vscode,"Horizon Dark: a warm sunset of pink and apricot on dark blue-grey."
 horizon-bright,MIT,https://github.com/jolaleye/horizon-theme-vscode,"Horizon Bright: the warm sunset palette on pale peach."
+everforest-dark,MIT,https://github.com/sainnhe/everforest,"Everforest Dark: a green-based palette, warm and soft to protect the eyes (medium contrast)."
+everforest-light,MIT,https://github.com/sainnhe/everforest,"Everforest Light: the same warm, soft green palette on cream (medium contrast)."
+kanagawa,MIT,https://github.com/rebelot/kanagawa.nvim,Kanagawa Wave: a dark scheme inspired by the colours of Hokusai's famous painting.
+rose-pine,MIT,https://github.com/rose-pine/palette,"Rosé Pine: all natural pine, faux fur and a bit of soho vibes for the classy minimalist."
+rose-pine-dawn,MIT,https://github.com/rose-pine/palette,"Rosé Pine Dawn: the light variant of Rosé Pine, warm cream with dusky rose."
+nightfox,MIT,https://github.com/EdenEast/nightfox.nvim,"Nightfox: a dark blue theme with soft, clear colours."
+dayfox,MIT,https://github.com/EdenEast/nightfox.nvim,"Dayfox: the light theme of the Nightfox family, warm paper with deep violet text."
+vitesse-dark,MIT,https://github.com/antfu/vscode-theme-vitesse,Vitesse Dark: a minimal near-black theme with muted green.
+vitesse-light,MIT,https://github.com/antfu/vscode-theme-vitesse,Vitesse Light: a minimal white theme with muted green.
+flexoki-dark,MIT,https://github.com/kepano/flexoki,"Flexoki Dark: an inky scheme inspired by printing inks, on black."
+flexoki-light,MIT,https://github.com/kepano/flexoki,Flexoki Light: an inky scheme inspired by printing inks and warm paper.
+oceanic-next,MIT,https://github.com/voronianski/oceanic-next-color-scheme,Oceanic Next: a colourful dark scheme on deep blue-green.
+spacegray,MIT,https://github.com/kkga/spacegray,"Spacegray: hype and minimal, in the Base16 Ocean Dark colours."
+moonlight,MIT,https://github.com/atomiks/moonlight-vscode-theme,Moonlight: bubblegum colours on a moonlit background.
+poimandres,MIT,https://github.com/drcmda/poimandres-theme,"Poimandres: a minimal, frameless dark theme with mint and soft blue."
+andromeda,MIT,https://github.com/EliverLara/Andromeda,"Andromeda: a dark theme with a taste of the universe, cyan and violet."
+quiet-light,MIT,https://github.com/microsoft/vscode/tree/main/extensions/theme-quietlight,"Quiet Light: a calm light theme with lilac accents, as Visual Studio Code ships it."
+min-light,MIT,https://github.com/miguelsolorio/min-theme,Min Light: a minimal light theme in white and grey.

@@ -2,7 +2,7 @@
   "$schema": "./theme.schema.json",
   "id": "catppuccin-latte",
   "name": "Catppuccin Latte",
-  "author": "Catppuccin, port by CabinetOS",
+  "author": "CabinetOS",
   "attribution": "Colours from the Catppuccin Latte palette by the Catppuccin organization (https://catppuccin.com), used under the MIT License.",
   "version": "1.0.0",
   "kind": "light",
