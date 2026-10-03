@@ -3637,7 +3637,12 @@ elements apply the same way ("Metrics and chrome").
   or a click runs `themes.browse`, and the picker closes with the theme in
   effect painted again, since the gallery previews on its own. The row is no
   theme: highlighting it paints the theme in effect, and applying it
-  applies nothing.
+  applies nothing. Only a pointer that moves takes the highlight: XAML
+  replays the last pointer position as a move when rows are drawn under a
+  pointer that rests, and that put the highlight on the last row, under the
+  point of an earlier click, each time the picker opened (the live check on
+  the laptop, 2026-10-03). A row takes the highlight only for an event at a
+  place other than the one before it.
   The tints come with `list_themes` (protocol 11), so opening it is one
   request; with an older core every swatch shows plain Mica. An open
   picker draws its swatches again when Windows' accent or mode changes.

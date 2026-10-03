@@ -1860,7 +1860,7 @@ with a test per way; the live check passes on the laptop.
 
 Articles: 3, 4, 6, 7, 8, 10.
 
-**Status (2026-10-03, 00:33): handed to a coder on Sonnet.**
+**Status (2026-10-03, 03:35): built and checked on the branch `worktree-agent-aeba340e544ea5221`, waiting for the merge; after it the creator publishes `themes.json` ([report](log/2026-10-03/theme-gallery-and-three-ways-report.md)).**
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 

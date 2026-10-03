@@ -66,6 +66,16 @@ that (Article 3, Native Modern Aesthetics; Article 4, Progressive Disclosure).
    the theme items of `index.json` are ignored, with one log line. Any other
    failure of the themes address is an error for the gallery alone, not a
    reason to fall back: only a 404 means "not published yet".
+6. **The gallery previews a theme before it is installed with a request of
+   its own.** `preview_theme` (coder's choice, protocol 20, the same version
+   as the catalogues) has the core download a theme of the themes catalogue to
+   a temporary file in its marketplace folder, check its SHA-256 and that it
+   is a valid theme, delete the file and answer `theme`. Nothing reaches the
+   themes folder, the record of installs or `cabinetos.json`, so Esc leaves
+   the user's machine as it was. The window paints the answer through the
+   picker's path. The other way, a gallery that installed a theme to look at
+   it, would leave 41 files after a browse and would need an uninstall for
+   each rejected one.
 
 Options considered:
 
