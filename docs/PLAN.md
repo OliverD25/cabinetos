@@ -2028,6 +2028,17 @@ process starts; a click inside a viewer returns the keyboard to the list;
 a hung Windows preview handler is not settled and must be tested with a
 handler that hangs on purpose before the Office viewer ships.
 
+**Status (2026-10-03, 19:50): step 2 in work.** The core's part (items C1 to
+C6 of the ADR) is built and tested on the branch
+`worktree-agent-a3d9117b76f4ae7e0` (Opus): protocol 21, the thumbnail
+queue on two COM threads with its limits and cache (warm thumbnails in 24
+to 94 ms on this PC, 165 ms cold), the drawings, the viewer table with
+`quickView.viewers` and `--dev-tools-dir`, the fixture viewer, the offer
+with its seven-day cache, and the keys (Space opens Quick View, marking in
+place on Shift+Space). It is not merged alone: without the panel, Space
+would do nothing in the window. The window's part (W1 to W9) is in work on
+Opus from that branch and the laptop-lock branch; both merge together.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
