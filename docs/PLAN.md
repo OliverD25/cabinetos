@@ -1820,6 +1820,21 @@ prompt, so the install there is one elevated step by hand
 the 11g decisions (the publisher is the pull request's GitHub login;
 `verified` is the creator's badge).
 
+**Status (2026-10-03, 04:17): 0.1.2 is published.** Built from 358eaa2 by
+`release.ps1` on this PC (the zip 32.4 MB, the setup file 20.2 MB, the
+symbols zip apart; the four programs carry their version resource;
+release.json names the commit with no uncommitted change); the live check
+of that build ran on the laptop (no check answered False; the panel goal
+met: 334 frames, none with UI work over 20 ms); tag `v0.1.2` and the GitHub
+release with six files at 04:14; `latest.json` and `notes-0.1.2.md` on the
+marketplace site, read back with the zip's hash; `themes.json` published
+there at 04:00, so 0.1.2's gallery reads the public catalogue. All on the
+creator's word of 03:00 ("release by yourself", "do it by yourself"). The
+release page for the Luminart site is built and committed there, not
+deployed: the release-notes-page rule leaves the deploy to the creator.
+The winget submission waits too: the 0.1.1 pull request at
+microsoft/winget-pkgs is still open and the tool asks for a sign-in.
+
 ### Phase 23 — The theme gallery and the first three-ways gaps (the creator's word of 2026-10-03: "do gaps 1 to 4 with the theme gallery")
 
 Covers the desk cards "Themes get their own catalogue and gallery (split
