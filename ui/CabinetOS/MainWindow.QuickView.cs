@@ -316,7 +316,22 @@ public sealed partial class MainWindow
         if (_quickView.IsOpen && _quickViewPane >= 0)
         {
             _paneViews[_quickViewPane].Focus(FocusState.Programmatic);
+            SetActive(_quickViewPane);
         }
+    }
+
+    // The other pane took the keyboard only because a closing viewer's WebView2 moved it there: the keys stay with the
+    // panel's pane, or a Down would move the other pane's cursor under an open panel (the laptop's suite, 2026-10-03).
+    private bool QuickViewKeepsActivePane(int pane)
+    {
+        if (!_quickView.IsOpen || _quickViewPane < 0 || pane == _quickViewPane
+            || _quickViewClock.ElapsedMilliseconds >= _quickViewFocusGuardUntil)
+        {
+            return false;
+        }
+        Diag.Info(QuickViewTarget, "the other pane's late activation came from a closing viewer; ignored", new LogField("pane", pane));
+        DispatcherQueue.TryEnqueue(FocusQuickViewList);
+        return true;
     }
 
     // ----- One file -----
@@ -609,7 +624,8 @@ public sealed partial class MainWindow
 
     private void CloseQuickViewHost(QuickViewHost host)
     {
-        _quickViewFocusGuardUntil = _quickViewClock.ElapsedMilliseconds + 500;
+        // A second: the other pane's activation, which the focus move brings, can come a few hundred milliseconds late.
+        _quickViewFocusGuardUntil = _quickViewClock.ElapsedMilliseconds + 1000;
         host.Close();
         _quickViewHosts.Remove(host.Viewer.Id);
         _quickViewPool.Remove(host.Viewer.Id);

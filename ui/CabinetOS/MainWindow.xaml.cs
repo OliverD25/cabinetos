@@ -2624,6 +2624,10 @@ public sealed partial class MainWindow : Window
     {
         _paneActivations++;
         _lastActivatedPane = Array.IndexOf(_paneViews, view);
+        if (QuickViewKeepsActivePane(_lastActivatedPane))
+        {
+            return;
+        }
         SetActive(_lastActivatedPane);
     }
 

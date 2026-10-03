@@ -321,6 +321,7 @@ public class QuickViewEndToEndTests
                 "crash:quickview:quickview-fixture",
                 "until:quickview-state:stopped",
                 "quickview:crashed",
+                "focus:after-crash",
                 "key:down",
                 "until:quickview-shown",
                 "quickview:after-crash",
