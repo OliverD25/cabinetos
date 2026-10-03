@@ -1835,6 +1835,33 @@ deployed: the release-notes-page rule leaves the deploy to the creator.
 The winget submission waits too: the 0.1.1 pull request at
 microsoft/winget-pkgs is still open and the tool asks for a sign-in.
 
+**Status (2026-10-03, 06:50): three merges after 0.1.2, the first content of
+0.1.3.** The command palette's COMException under load has its cause and
+fix (merge 99273ec, Opus): before the palette's first layout, a second
+answer or a key re-added a recycled row to the list; the palette now waits
+for the list's Loaded before it scrolls to the highlight, seven unawaited
+tasks on its paths log a failure with its place, and an end-to-end test
+reproduces the fault on purpose. The theme collection's round 2 is in
+(merge be90a0d): Catppuccin Latte and GitHub Light ship with the core
+(seven themes in the picker), sixteen ports join the collection (52
+themes; Modus Vivendi, Modus Operandi, Zenburn and Bluloco Light left out,
+GPL or LGPL), and the public `themes.json` lists 59 themes since 06:23.
+The fourth round of test fixes (merge 071a620): the job clock's stopped time
+stamp (a core fix: the clock stops under the emitter's lock and only the
+final record follows), the update tests' fixture (it wrote an install of
+0.1.0 beside a newer core; it reads the core's version now), and the hello
+test's place (it runs in the collection that runs alone; the 60 ms limit
+stays); the coder's end-to-end run on the laptop passed 1427 of 1427, the
+first full green run there. Each merge verified on main: the five core
+checks, both window builds, the fast tests, and the laptop's live check
+(no check answered False; the panel goal met). The flakes merge's first
+laptop run had one frame of 285 with UI work over 33 ms, so the panel goal
+was not met; the rerun had none of 273, so the first was noise, and both
+numbers are kept here. Open: the laptop's single
+clone and the shared inbox of the remote scripts still let two sessions'
+runs collide (a lock or one clone per branch), and one core test of the
+GUI context read the log before the log thread wrote it, once.
+
 ### Phase 23 — The theme gallery and the first three-ways gaps (the creator's word of 2026-10-03: "do gaps 1 to 4 with the theme gallery")
 
 Covers the desk cards "Themes get their own catalogue and gallery (split
