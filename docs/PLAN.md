@@ -2039,6 +2039,14 @@ place on Shift+Space). It is not merged alone: without the panel, Space
 would do nothing in the window. The window's part (W1 to W9) is in work on
 Opus from that branch and the laptop-lock branch; both merge together.
 
+**Status (2026-10-03, 20:08): the laptop's lock is on main (merge 99474a5).**
+Every remote run takes one lock on the laptop, checks out the exact commit
+it sends and prints it, and the wrapper exits with the run's own code; the
+ssh calls use Windows' own OpenSSH by full path, so Windows PowerShell
+5.1, PowerShell 7 and Git Bash behave the same. The open item of the night
+about the shared clone is closed. The gui_context core test waits for its
+log lines.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
