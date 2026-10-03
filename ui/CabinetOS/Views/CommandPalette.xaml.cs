@@ -170,18 +170,21 @@ public sealed partial class CommandPalette : UserControl
     }
 
     /// <summary>
-    /// The snapshot aid's look at the list: whether it is in the window's live tree, and whether the
-    /// highlighted row is laid out whole inside the list's visible part.
+    /// The snapshot aid's look at the list: whether it is in the window's live tree, where the highlighted
+    /// row lies in the list's visible part (NaN when the list has no laid-out row for it), the visible
+    /// part's height and the scroll offset, and whether the row lies whole inside (1 px for rounding).
     /// </summary>
-    internal (bool ListLoaded, bool HighlightShown) HighlightState()
+    internal (bool ListLoaded, double RowTop, double RowBottom, double Viewport, double Offset, bool HighlightShown) HighlightState()
     {
+        var viewport = ListScroller.ViewportHeight;
+        var offset = ListScroller.VerticalOffset;
         if (!List.IsLoaded || _model is not { HighlightIndex: >= 0 } model
             || List.TryGetElement(model.HighlightIndex) is not FrameworkElement { ActualHeight: > 0 } row)
         {
-            return (List.IsLoaded, false);
+            return (List.IsLoaded, double.NaN, double.NaN, viewport, offset, false);
         }
         var bounds = row.TransformToVisual(ListScroller).TransformBounds(new Windows.Foundation.Rect(0, 0, row.ActualWidth, row.ActualHeight));
-        return (true, bounds.Top >= -0.5 && bounds.Bottom <= ListScroller.ViewportHeight + 0.5);
+        return (true, bounds.Top, bounds.Bottom, viewport, offset, bounds.Top >= -1 && bounds.Bottom <= viewport + 1);
     }
 
     private void OnPanelKeyDown(object sender, KeyRoutedEventArgs e)

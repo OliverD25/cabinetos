@@ -1856,10 +1856,13 @@ public sealed partial class MainWindow : Window
     {
         await WaitForConditionAsync(() => Palette.HighlightState().HighlightShown, 5_000);
         await SettleFramesAsync();
-        var (loaded, shown) = Palette.HighlightState();
+        var look = Palette.HighlightState();
         Diag.Info("cabinetos_ui::snapshot", "palette state", new LogField("label", label), new LogField("open", _palette.IsOpen),
             new LogField("rows", _palette.Rows.Count), new LogField("highlight", _palette.HighlightIndex),
-            new LogField("list_loaded", loaded), new LogField("highlight_shown", shown));
+            new LogField("list_loaded", look.ListLoaded), new LogField("highlight_shown", look.HighlightShown),
+            new LogField("row_top", double.IsNaN(look.RowTop) ? null : Math.Round(look.RowTop, 2)),
+            new LogField("row_bottom", double.IsNaN(look.RowBottom) ? null : Math.Round(look.RowBottom, 2)),
+            new LogField("viewport", Math.Round(look.Viewport, 2)), new LogField("offset", Math.Round(look.Offset, 2)));
     }
 
     // Esc: the palette, then the context menu, then an edit in place, then the address box

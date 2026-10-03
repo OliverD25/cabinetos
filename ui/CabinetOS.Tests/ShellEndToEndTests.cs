@@ -362,11 +362,11 @@ public class ShellEndToEndTests
             Assert.True(Field(burst, "list_loaded").GetBoolean(), "the palette's list never joined the window's tree");
             Assert.True(Field(burst, "rows").GetInt32() > 28, $"the palette lists {Field(burst, "rows").GetInt32()} commands");
             Assert.Equal(20, Field(burst, "highlight").GetInt32());
-            Assert.True(Field(burst, "highlight_shown").GetBoolean(), "the highlighted row is not in the list's visible part");
+            Assert.True(Field(burst, "highlight_shown").GetBoolean(), $"the highlighted row is not in the list's visible part: {burst}");
             // PageDown: eight rows on, and the list follows.
             var paged = Assert.Single(logs, l => Message(l) == "palette state" && Field(l, "label").GetString() == "paged");
             Assert.Equal(28, Field(paged, "highlight").GetInt32());
-            Assert.True(Field(paged, "highlight_shown").GetBoolean(), "the highlighted row is not in the list's visible part after PageDown");
+            Assert.True(Field(paged, "highlight_shown").GetBoolean(), $"the highlighted row is not in the list's visible part after PageDown: {paged}");
         }
         finally
         {
