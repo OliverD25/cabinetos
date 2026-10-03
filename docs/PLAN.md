@@ -2006,6 +2006,14 @@ Articles: 1, 3, 4, 7, 10, 11.
 
 **Status (2026-10-03, 00:46): planned, to start after Phase 23.**
 
+**Status (2026-10-03, 07:54): started, on the creator's word of the morning
+("decide for me"): the design note goes to a coder on Opus as ADR 0023,
+the contract between the panel and a viewer page. The same word settled
+the rest of the night's list: the site is deployed with the 0.1.0 pictures
+and the 0.1.2 page (verified live), the winget submission of 0.1.2 is the
+creator's own step (this session may not create a pull request in their
+name), and GPL or LGPL themes stay out of the collection.**
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
