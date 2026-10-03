@@ -1,5 +1,5 @@
 //! Colour themes (`docs/themes.md`): the JSON theme format, the themes
-//! folder `%LOCALAPPDATA%\CabinetOS\themes`, and the five themes that ship
+//! folder `%LOCALAPPDATA%\CabinetOS\themes`, and the seven themes that ship
 //! with the core.
 //!
 //! - [`parse`] reads a theme file strictly: an unknown key, a missing key, a
@@ -49,7 +49,7 @@ pub const SCHEMA_JSON: &str = include_str!("../../../../sdk/themes/theme.schema.
 
 /// The themes that ship with the core: each ID with its file, as
 /// `sdk/themes/` has them. The default is first.
-pub const SHIPPED: [(&str, &str); 5] = [
+pub const SHIPPED: [(&str, &str); 7] = [
     (
         DEFAULT_THEME,
         include_str!("../../../../sdk/themes/default.json"),
@@ -62,6 +62,14 @@ pub const SHIPPED: [(&str, &str); 5] = [
     (
         "rose-pine-moon",
         include_str!("../../../../sdk/themes/rose-pine-moon.json"),
+    ),
+    (
+        "catppuccin-latte",
+        include_str!("../../../../sdk/themes/catppuccin-latte.json"),
+    ),
+    (
+        "github-light",
+        include_str!("../../../../sdk/themes/github-light.json"),
     ),
     (
         COMMANDER_COMPACT,
@@ -475,9 +483,12 @@ mod tests {
             assert_eq!(theme.id, id);
             assert_eq!(theme.schema, None, "{id}: $schema is for editors only");
             // The default and its compact preset follow Windows' light or
-            // dark mode; the named palettes are dark ones.
+            // dark mode; the named palettes are dark ones, but the two
+            // light flavours.
             let kind = if [DEFAULT_THEME, COMMANDER_COMPACT].contains(&id) {
                 ThemeKind::System
+            } else if ["catppuccin-latte", "github-light"].contains(&id) {
+                ThemeKind::Light
             } else {
                 ThemeKind::Dark
             };
@@ -495,6 +506,8 @@ mod tests {
             ("nord", "#88C0D0", "#2E3440", 0.88),
             ("catppuccin-mocha", "#CBA6F7", "#1E1E2E", 0.9),
             ("rose-pine-moon", "#EBBCBA", "#232136", 0.9),
+            ("catppuccin-latte", "#8839EF", "#EFF1F5", 0.9),
+            ("github-light", "#0969DA", "#F6F8FA", 0.9),
         ] {
             let theme = shipped(id);
             assert_eq!(theme.accent.unwrap().as_str(), accent, "{id}");
@@ -709,9 +722,11 @@ mod tests {
         assert_eq!(
             ids,
             [
+                "catppuccin-latte",
                 "catppuccin-mocha",
                 "commander-compact",
                 "default",
+                "github-light",
                 "nord",
                 "rose-pine-moon"
             ]
@@ -840,9 +855,11 @@ mod tests {
         assert_eq!(
             ids,
             [
+                "catppuccin-latte",
                 "catppuccin-mocha",
                 "commander-compact",
                 "default",
+                "github-light",
                 "nord",
                 "rose-pine-moon"
             ],

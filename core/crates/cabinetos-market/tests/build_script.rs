@@ -69,7 +69,7 @@ fn both_files_follow_the_format_and_hold_only_their_own_kinds() {
     assert_eq!(
         themes.len(),
         41,
-        "the five shipped themes and the 36 of the collection"
+        "the seven shipped themes and the 34 of the collection"
     );
     assert!(themes.iter().all(|item| item.kind == ExtensionKind::Theme));
     assert!(

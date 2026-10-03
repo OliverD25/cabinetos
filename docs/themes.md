@@ -19,8 +19,9 @@ How the window applies a theme, and its theme picker:
 
 - A theme is `<themes folder>\<id>.json`. `ui.theme` in `cabinetos.json`
   names the theme in effect; the default is `default`.
-- Five themes ship with the core: `default`, its density preset
-  `commander-compact`, `nord`, `catppuccin-mocha` and `rose-pine-moon`. At
+- Seven themes ship with the core: `default`, its density preset
+  `commander-compact`, `nord`, `catppuccin-mocha` and `rose-pine-moon`, and
+  the two light ones, `catppuccin-latte` and `github-light`. At
   every start the core writes each one that is missing into the folder,
   and brings each copy the user never changed up to the version it ships.
 - Change the theme with `set_value` on `ui.theme` (the settings UI, or
@@ -29,7 +30,7 @@ How the window applies a theme, and its theme picker:
   when the theme in effect changes, and when its file is saved.
 - A theme that is not valid is never applied, not even in part: the last
   good theme stays, and a `config_error` event says why.
-- 36 more themes, ported from the most popular editor themes, are in
+- 34 more themes, ported from the most popular editor themes, are in
   `sdk/themes/collection` for the marketplace, not in the core (see "The
   collection").
 
@@ -382,6 +383,8 @@ reading is strict about unknown keys; that is why the format number moved.
 | `nord` | Nord | `#88C0D0` | `#2E3440` at 0.88 | The Nord palette (MIT) |
 | `catppuccin-mocha` | Catppuccin Mocha | `#CBA6F7` | `#1E1E2E` at 0.9 | The Catppuccin Mocha palette (MIT) |
 | `rose-pine-moon` | Rosé Pine Moon | `#EBBCBA` | `#232136` at 0.9 | The Rosé Pine Moon palette (MIT) |
+| `catppuccin-latte` | Catppuccin Latte | `#8839EF` | `#EFF1F5` at 0.9 | The Catppuccin Latte palette (MIT). Light |
+| `github-light` | GitHub Light | `#0969DA` | `#F6F8FA` at 0.9 | GitHub Light Default of the GitHub VS Code Theme and Primer Primitives (MIT). Light |
 
 The accents and tints are the design's. `default` leaves `accent` and
 `mica` `null`: the design's `#60CDFF` is the Windows default accent in dark
@@ -390,7 +393,20 @@ the default theme follows the system instead. It follows Windows' light or
 dark mode too (`kind: "system"`). Its palette holds the design's tokens,
 which are dark-mode ones; what it shows in light mode is the window's
 choice ([ui.md](ui.md), "Themes"). Each named theme keeps an attribution
-line for the palette it uses; their palettes are dark.
+line for the palette it uses; their palettes are dark, except the two light
+ones at the end of the table.
+
+**Why two light themes ship.** A fresh install's theme picker had no light
+choice by name: `default` follows Windows' mode, and the five others were
+dark. `catppuccin-latte` and `github-light` were the first two light themes
+of the collection and are now in the core (Constitution Article 3, Native
+Modern Aesthetics: the window should fit a user who works in light mode
+from the first start). They moved: `sdk/themes/collection` no longer holds
+them, because `build-index.ps1` and the collection's test refuse a theme
+that ships with the core. Their `author` is `CabinetOS`, like the other
+shipped themes, and the `attribution` still names the palette. A copy that
+was installed from the marketplace before they moved stays as it is: the
+core keeps a copy it did not write.
 
 `commander-compact` is the creator's own design, so it ships with the core;
 the collection below is for other people's palettes. It keeps `mica`
@@ -443,11 +459,13 @@ theme as JSON: the one named, or the one in effect, with its `metrics` and
 
 ## The collection
 
-`sdk/themes/collection` holds 36 themes ported from 27 of the 30 most
+`sdk/themes/collection` holds 34 themes ported from 27 of the 30 most
 popular editor themes (the creator's list of 2026-09-28): GitHub, One Dark
 Pro, Dracula, Material Theme, Ayu, Monokai, Night Owl, Tokyo Night,
 Solarized, Gruvbox, Catppuccin and more, with their well-known light and
-dark variants. 27 are dark and 9 are light. The folder has:
+dark variants. 27 are dark and 7 are light. (GitHub Light and Catppuccin
+Latte were two of the original 36; they ship with the core since
+2026-10-03.) The folder has:
 
 - `<id>.json`: one theme per file, in the format above.
 - [README.md](../sdk/themes/collection/README.md): the list, with each
@@ -461,7 +479,7 @@ dark variants. 27 are dark and 9 are light. The folder has:
   `license`, `source` and `description`.
 
 **Why not in the core.** Constitution Article 10 (the Zero-Bloat
-Foundation): the core ships the four themes above, and everything else is
+Foundation): the core ships the seven themes above, and everything else is
 opt-in through the marketplace. The core neither embeds these files nor
 writes them into the themes folder. A user installs the themes they want,
 one by one.
@@ -560,7 +578,8 @@ a lower alpha instead; the README lists each case.
 
 ## Not yet
 
-- No light theme ships with the core; the collection has nine.
+- Two light themes ship with the core (Catppuccin Latte and GitHub Light);
+  the collection has seven more.
 - The collection reaches the public site only when the creator publishes
   `themes.json` ([ADR 0022](decisions/0022-two-catalogues-extensions-and-themes.md));
   until then the theme items of the public `index.json` stand in for it.

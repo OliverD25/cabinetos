@@ -233,7 +233,7 @@ public class ThemeTests
     [Fact]
     public void Each_shipped_theme_maps()
     {
-        foreach (var id in new[] { "default", "nord", "catppuccin-mocha", "rose-pine-moon" })
+        foreach (var id in new[] { "default", "nord", "catppuccin-mocha", "rose-pine-moon", "catppuccin-latte", "github-light" })
         {
             var look = ThemeMapper.Map(Shipped(id), DesignAccent);
             Assert.Equal(id, look.Id);
@@ -293,14 +293,11 @@ public class ThemeTests
         Assert.Equal(Argb.White, ThemeMapper.OnAccent(new Argb(0xFF, 0x09, 0x69, 0xDA)));
         foreach (var id in new[] { "github-light", "catppuccin-latte" })
         {
-            var look = ThemeMapper.Map(Collection(id), DesignAccent);
+            var look = ThemeMapper.Map(Shipped(id), DesignAccent);
             var onAccent = look.Brushes["CbOnAccentBrush"];
             Assert.Equal((id, Argb.White), (id, onAccent));
             Assert.True(look.Accent.ContrastWith(onAccent) >= 4.5, $"{id}: {look.Accent.ContrastWith(onAccent):F2}:1");
             Assert.True(look.Accent.ContrastWith(nearBlack) < 4.5, $"{id}: near-black would have passed");
         }
     }
-
-    private static ColorTheme Collection(string id) =>
-        JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(Repo.Root, "sdk", "themes", "collection", id + ".json")), ProtocolJson.Default.ColorTheme)!;
 }

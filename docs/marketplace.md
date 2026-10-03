@@ -272,8 +272,8 @@ powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 
 
 `-ThemesOnly` leaves the fixture plugins out: they are test material, not
 extensions for the public. So the public `index.json` has no item yet (no
-real plugin exists), and `themes.json` offers 41 themes: the five shipped
-themes and the 36 of the collection (the first index, 2026-09-29, offered
+real plugin exists), and `themes.json` offers 41 themes: the seven shipped
+themes and the 34 of the collection (the first index, 2026-09-29, offered
 the same 41 in `index.json`). **Publishing this changes what older
 versions see**: CabinetOS 0.1.0 and 0.1.1 read `index.json` only, so once
 the new `index.json` replaces the old one they list no theme in their
@@ -310,7 +310,7 @@ from the public site.
 
 The shipped themes are in `themes.json` too, but installing one is refused
 while its file is in the themes folder (trust rule 7). With `-Collection`
-the catalogue also offers the 36 themes of `sdk/themes/collection`
+the catalogue also offers the 34 themes of `sdk/themes/collection`
 ([themes.md](themes.md), "The collection").
 
 With `-Extensions` the index also offers the extensions of `sdk/extensions`:

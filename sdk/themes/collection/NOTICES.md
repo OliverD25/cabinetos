@@ -96,8 +96,10 @@ The source colours are used as they are. What the port adds:
   `dainty-shared` package, whose repository and package are no longer
   published, and no public file holds the generated colours. Left out
   rather than written from memory.
-- **Nord** and **Catppuccin Mocha** ship with the core; the collection does
-  not repeat them.
+- **Nord**, **Catppuccin Mocha**, **Catppuccin Latte** and **GitHub Light**
+  ship with the core; the collection does not repeat them. Latte and GitHub
+  Light were files of this folder until 2026-10-03; their rows in the table
+  above still name their sources and commits.
 
 ## The MIT License
 

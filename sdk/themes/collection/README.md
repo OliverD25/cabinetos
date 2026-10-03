@@ -1,7 +1,7 @@
 # The theme collection
 
-36 colour themes, ported from 27 of the most popular editor themes, for the
-marketplace. They are not part of the core: the core ships four themes,
+34 colour themes, ported from 27 of the most popular editor themes, for the
+marketplace. They are not part of the core: the core ships seven themes,
 and everything else is opt-in (Constitution Article 10, the Zero-Bloat
 Foundation). A user installs the ones they want from the marketplace view,
 or with `cabinetos-cli market install <id>`.
@@ -26,7 +26,7 @@ popular themes (2026-09-28).
 | # | ID | Name | Kind | Source |
 |---|---|---|---|---|
 | 1 | `github-dark` | GitHub Dark | dark | [primer/github-vscode-theme](https://github.com/primer/github-vscode-theme) |
-| 1 | `github-light` | GitHub Light | light | [primer/github-vscode-theme](https://github.com/primer/github-vscode-theme) |
+| 1 | (ships with the core: `github-light`) | GitHub Light | light | |
 | 2 | `one-dark-pro` | One Dark Pro | dark | [Binaryify/OneDark-Pro](https://github.com/Binaryify/OneDark-Pro) |
 | 3 | `dracula` | Dracula | dark | [dracula/visual-studio-code](https://github.com/dracula/visual-studio-code) |
 | 4 | `material-theme` | Material Theme | dark | [SublimeText/material-theme](https://github.com/SublimeText/material-theme) |
@@ -47,7 +47,7 @@ popular themes (2026-09-28).
 | 15 | `cobalt2` | Cobalt2 | dark | [wesbos/cobalt2-vscode](https://github.com/wesbos/cobalt2-vscode) |
 | 16 | `noctis` | Noctis (cold) | dark | [liviuschera/noctis](https://github.com/liviuschera/noctis) |
 | 16 | `noctis-lux` | Noctis Lux (warm) | light | [liviuschera/noctis](https://github.com/liviuschera/noctis) |
-| 17 | `catppuccin-latte` | Catppuccin Latte | light | [catppuccin/palette](https://github.com/catppuccin/palette) |
+| 17 | (ships with the core: `catppuccin-latte`) | Catppuccin Latte | light | |
 | 17 | `catppuccin-frappe` | Catppuccin Frappé | dark | [catppuccin/palette](https://github.com/catppuccin/palette) |
 | 17 | `catppuccin-macchiato` | Catppuccin Macchiato | dark | [catppuccin/palette](https://github.com/catppuccin/palette) |
 | 17 | (ships with the core: `catppuccin-mocha`) | Catppuccin Mocha | dark | |
@@ -68,6 +68,10 @@ popular themes (2026-09-28).
 
 28 of the 30 are here: 27 as files and Nord in the core. City Lights and
 Dainty are left out ([NOTICES.md](NOTICES.md), "Not used, and why").
+
+GitHub Light and Catppuccin Latte were files of this folder until
+2026-10-03 and now ship with the core (`sdk/themes`), so a fresh install has
+a light theme by name. Their measurements stay in the contrast table below.
 
 ## How a palette becomes a theme
 

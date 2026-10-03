@@ -1,6 +1,5 @@
 id,license,source,description
 github-dark,MIT,https://github.com/primer/github-vscode-theme,"GitHub Dark Default: the near-black canvas and blue accent of GitHub.com, from the official GitHub VS Code Theme."
-github-light,MIT,https://github.com/primer/github-vscode-theme,"GitHub Light Default: the white canvas, grey borders and blue accent of GitHub.com."
 one-dark-pro,MIT,https://github.com/Binaryify/OneDark-Pro,"One Dark Pro: Atom's One Dark, grey-blue with a blue accent."
 dracula,MIT,https://github.com/dracula/visual-studio-code,"Dracula: the dark theme with purple, pink and green highlights."
 material-theme,MIT,https://github.com/SublimeText/material-theme,"Material Theme: Google Material's blue grey with a teal accent, by Mattia Astorino."
@@ -20,7 +19,6 @@ shades-of-purple,MIT,https://github.com/ahmadawais/shades-of-purple-vscode,"Shad
 cobalt2,MIT,https://github.com/wesbos/cobalt2-vscode,"Cobalt2: deep blue with a yellow accent, by Wes Bos."
 noctis,MIT,https://github.com/liviuschera/noctis,"Noctis: a cold, dark teal theme."
 noctis-lux,MIT,https://github.com/liviuschera/noctis,"Noctis Lux: the warm, cream light variant of Noctis."
-catppuccin-latte,MIT,https://github.com/catppuccin/palette,"Catppuccin Latte: the soothing pastel palette, light flavour."
 catppuccin-frappe,MIT,https://github.com/catppuccin/palette,"Catppuccin Frappé: the soothing pastel palette, muted dark flavour."
 catppuccin-macchiato,MIT,https://github.com/catppuccin/palette,"Catppuccin Macchiato: the soothing pastel palette, medium dark flavour."
 panda,MIT,https://github.com/siamak/atom-panda-syntax,"Panda: a superminimal dark theme with pink, blue and mint, by Siamak Mokhtari."
