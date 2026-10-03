@@ -34,6 +34,13 @@ public sealed partial class ThemePicker : UserControl
     // preview would grow them back, and so on.
     private ThemeMetrics? _metrics;
 
+    // Where the last pointer event on a row was, in window coordinates. XAML replays the last pointer position as a
+    // PointerMoved whenever rows are drawn under a pointer that rests, so a resting pointer would take the highlight
+    // from the keys: the picker's last row, "Browse more themes", sat under the point of an earlier click, started
+    // highlighted, and Enter opened the gallery (the live check on the laptop, 2026-10-03). Only an event at a place
+    // other than the one before it is a hover.
+    private Windows.Foundation.Point? _lastPointer;
+
     /// <summary>Creates the picker, hidden.</summary>
     public ThemePicker()
     {
@@ -87,6 +94,7 @@ public sealed partial class ThemePicker : UserControl
         if (!IsOpen)
         {
             _metrics = WindowMetrics.Current;
+            _lastPointer = null;
         }
         Visibility = Visibility.Visible;
         _entrance.Begin();
@@ -111,6 +119,17 @@ public sealed partial class ThemePicker : UserControl
         if (IsOpen)
         {
             Render();
+        }
+    }
+
+    private void OnRowPointerMoved(PointerRoutedEventArgs e, int index)
+    {
+        var at = e.GetCurrentPoint(null).Position;
+        var moved = _lastPointer is { } last && (Math.Abs(at.X - last.X) > 0.5 || Math.Abs(at.Y - last.Y) > 0.5);
+        _lastPointer = at;
+        if (moved)
+        {
+            _model?.SetHighlight(index);
         }
     }
 
@@ -206,7 +225,7 @@ public sealed partial class ThemePicker : UserControl
             });
         }
         AutomationProperties.SetName(row, "Browse more themes");
-        row.PointerMoved += (_, _) => _model?.SetHighlight(index);
+        row.PointerMoved += (_, e) => OnRowPointerMoved(e, index);
         row.Tapped += (_, _) => _ = RunCommand?.Invoke("themes.browse", null, "mouse");
         return row;
     }
@@ -317,7 +336,7 @@ public sealed partial class ThemePicker : UserControl
         }
         // On a move only: the rows are built again at every highlight change, and a pointer that
         // merely sits over the list would snap the highlight back under itself after each key.
-        row.PointerMoved += (_, _) => _model?.SetHighlight(index);
+        row.PointerMoved += (_, e) => OnRowPointerMoved(e, index);
         row.Tapped += (_, _) => _ = RunCommand?.Invoke("theme.apply", CommandArgs.Object(("index", index)), "mouse");
         return row;
     }

@@ -60,6 +60,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# A Windows PowerShell 5.1 started from PowerShell 7 inherits 7's module path and then lacks Get-FileHash.
+if ($PSVersionTable.PSVersion.Major -lt 6) { $env:PSModulePath = "$PSHOME\Modules;$env:PSModulePath" }
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 

@@ -1336,6 +1336,8 @@ function RailButtonElement([string]$name) {
 $railRects = @{}
 function ClickRail([string]$name) {
   $r = $railRects[$name]
+  # No rectangle would be a click at the screen's corner, which brings the desktop in front and stops the run.
+  if (-not $r) { "13: the $name button was not found, so it is not clicked"; return }
   [Live]::Click([int]($r.Left + $r.Width / 2), [int]($r.Top + $r.Height / 2))
 }
 function LockTreeFromPalette {
@@ -1388,7 +1390,7 @@ Step "13: the rail's five buttons, found by UI Automation"
 $names = 'Explorer', 'Search', 'Extensions', 'Terminal', 'Quick Notes'
 $buttons = @{}
 foreach ($n in $names) { $buttons[$n] = RailButtonElement $n; if ($buttons[$n]) { $railRects[$n] = $buttons[$n].Current.BoundingRectangle } }
-"13: the rail has its five buttons: $(@($names | Where-Object { $buttons[$_] }).Count -eq 5)"
+"13: the rail has its five buttons (missing: $((@($names | Where-Object { -not $buttons[$_] }) -join ', '))): $(@($names | Where-Object { $buttons[$_] }).Count -eq 5)"
 if ($buttons['Explorer'] -and $buttons['Search']) {
   $wr = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$wr, 16)
   $e = $buttons['Explorer'].Current.BoundingRectangle; $s = $buttons['Search'].Current.BoundingRectangle

@@ -710,10 +710,8 @@ async fn a_theme_is_previewed_through_the_core_without_installing_it() {
     let (error_code, _) = error_of(ask(&mut client, preview("hello")).await);
     assert_eq!(error_code, ErrorCode::NoSuchExtension);
     assert!(
-        fs::read_dir(core.path("themes"))
-            .map(|entries| entries
-                .flatten()
-                .all(|entry| entry.file_name() != "fresh.json"))
-            .unwrap_or(true)
+        fs::read_dir(core.path("themes")).map_or(true, |entries| entries
+            .flatten()
+            .all(|entry| entry.file_name() != "fresh.json"))
     );
 }
