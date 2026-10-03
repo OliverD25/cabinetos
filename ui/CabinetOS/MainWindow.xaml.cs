@@ -163,6 +163,7 @@ public sealed partial class MainWindow : Window
         SetUpQuickOpen();
         SetUpPreview();
         SetUpMarket();
+        SetUpQuickView();
         SetUpGallery();
         SetUpRail();
         SetUpThreeWays();
@@ -546,6 +547,9 @@ public sealed partial class MainWindow : Window
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
                     break;
+                case "quickview":
+                    LogQuickViewState(step.Argument);
+                    break;
                 case "dock" when double.TryParse(step.Argument, System.Globalization.CultureInfo.InvariantCulture, out var dockSize):
                     // A drag of the dock's splitter to this size: the same resize and save as the pointer's.
                     StartDockDrag();
@@ -744,7 +748,8 @@ public sealed partial class MainWindow : Window
     }
 
     // Every WebView2 the window hosts, for the snapshot aid.
-    private IEnumerable<WebViewHost> WebPages() => [Dock.TerminalPage, .. AllToolHosts().Select(h => h.Page)];
+    private IEnumerable<WebViewHost> WebPages() =>
+        [Dock.TerminalPage, .. AllToolHosts().Select(h => h.Page), .. _quickViewHosts.Values.Where(h => h.Frame.Opacity > 0).Select(h => h.Page)];
 
     // The snapshot aid's click: step: the first shown button or menu item (open menus included) with that
     // accessible name, pressed as assistive technology may press it: the keyboard moves to it, then its
@@ -873,7 +878,7 @@ public sealed partial class MainWindow : Window
     {
         var page = which == "terminal"
             ? Dock.TerminalPage
-            : _toolHosts.FirstOrDefault(h => h is not null && which == $"tool:{h.Tool.Manifest.Id}")?.Page;
+            : QuickViewHostToCrash(which)?.Page ?? _toolHosts.FirstOrDefault(h => h is not null && which == $"tool:{h.Tool.Manifest.Id}")?.Page;
         if (page is not { BrowserProcessId: > 0 and var pid })
         {
             Diag.Info(Target, "nothing to crash", new LogField("page", which));
@@ -984,6 +989,9 @@ public sealed partial class MainWindow : Window
                 // is what the file says once config_changed came; the control that shows it is drawn by the same turn.
                 _ when condition.StartsWith("setting:", StringComparison.Ordinal) => SettingIs(condition["setting:".Length..]),
                 _ when condition.StartsWith("gallery-applied:", StringComparison.Ordinal) => _gallery.CurrentThemeId == condition["gallery-applied:".Length..],
+                // Quick View (ADR 0023): quickview-shown (the page's frame drawn), quickview-thumbnail, quickview-closed, quickview-idle
+                // (no request out, the viewer not loading), quickview-state:<state>, quickview-viewer:<id> (the table has it).
+                _ when condition.StartsWith("quickview-", StringComparison.Ordinal) => QuickViewConditionMet(condition),
                 _ => true,
             };
             if (met)
@@ -1026,6 +1034,7 @@ public sealed partial class MainWindow : Window
                 }
             }
             await Task.WhenAll(theme, keymap, commands, volumes, jobs);
+            await LoadQuickViewTableAsync();
             await RefreshPluginsAsync();
             await ReadUpdateStatusAsync();
         }
@@ -1332,6 +1341,9 @@ public sealed partial class MainWindow : Window
             case ToolsChangedEvent:
                 _market.OnEvent(coreEvent);
                 _toolsLoading = ReloadToolsAsync();
+                return;
+            case QuickViewTableChangedEvent table:
+                ApplyQuickViewTable(new Core.QuickView.QuickViewTable(table.Viewers, table.Kinds));
                 return;
             case JobProgressEvent or JobStateChangedEvent or JobConflictEvent:
                 _transfers.OnEvent(coreEvent);
@@ -1673,6 +1685,7 @@ public sealed partial class MainWindow : Window
         RegisterShellCommands();
         RegisterPluginCommands();
         RegisterToolCommands();
+        RegisterQuickViewCommands();
         RegisterThemeCommands();
         RegisterGalleryCommands();
         RegisterThreeWaysCommands();
@@ -1936,6 +1949,10 @@ public sealed partial class MainWindow : Window
         else if (PluginsView.IsOpen)
         {
             ClosePlugins();
+        }
+        else if (_quickView.IsOpen)
+        {
+            CloseQuickView("escape");
         }
         else if (GalleryView.IsOpen)
         {
@@ -2654,6 +2671,22 @@ public sealed partial class MainWindow : Window
         {
             UpdateCrumbs();
         }
+        // Quick View follows its pane's cursor, closes when its folder changes, and grows a measured folder's size.
+        if (sender is PaneModel quickPane && _quickViewPane >= 0 && quickPane == _panes[_quickViewPane])
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(PaneModel.Path):
+                    OnQuickViewFolderChanged(quickPane);
+                    break;
+                case nameof(PaneModel.Selection) or nameof(PaneModel.Rows) or nameof(PaneModel.Count):
+                    FollowQuickViewCursor();
+                    break;
+                case nameof(PaneModel.Sizes):
+                    UpdateQuickViewFolderSize();
+                    break;
+            }
+        }
         if (e.PropertyName is nameof(PaneModel.Path) or nameof(PaneModel.CanGoBack) or nameof(PaneModel.CanGoForward) or nameof(PaneModel.CanGoUp))
         {
             UpdateNavigationButtons();
@@ -2685,6 +2718,8 @@ public sealed partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // The zero of Quick View's times: the moment the window handles the key (ADR 0023, decision 4.5).
+        _quickViewKeyAt = _quickViewClock.ElapsedMilliseconds;
         LogHeavyKey(e);
         HandleWindowKey(e);
         // The character this key types, if any, arrives next (CharacterReceived): a key the window
@@ -2781,6 +2816,10 @@ public sealed partial class MainWindow : Window
             case KeyOutcome.NotBound notBound:
                 e.Handled = true;
                 ShowNotice(ChordNotice.Text(notBound));
+                break;
+            default:
+                // No binding wants the key: a key the Quick View page was granted goes to the page, any other is the list's.
+                e.Handled = SendQuickViewKey(combo, e.KeyStatus.WasKeyDown);
                 break;
         }
     }

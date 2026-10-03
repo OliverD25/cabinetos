@@ -79,6 +79,28 @@ public enum OfferPhase
     InstallFailed,
 }
 
+/// <summary>
+/// The panel's waits, in milliseconds (ADR 0023, decisions 2.3 and 7). The window's end-to-end tests shorten them
+/// with <c>CABINETOS_QUICKVIEW_LIMITS</c> (<see cref="Parse"/>), so a hang is judged in seconds, not in half a minute.
+/// </summary>
+public sealed record QuickViewLimits(int RestMs, int ReadyMs, int StillLoadingMs, int GiveUpMs)
+{
+    /// <summary>The ADR's waits: 120 ms rest, 3 s to ready, "Still loading…" at 5 s, failed at 30 s.</summary>
+    public static readonly QuickViewLimits Default = new(QuickViewSession.RestMs, QuickViewSession.ReadyMs, QuickViewSession.StillLoadingMs, QuickViewSession.GiveUpMs);
+
+    /// <summary>"rest,ready,still,giveup" in milliseconds, or the defaults for anything else.</summary>
+    public static QuickViewLimits Parse(string? text)
+    {
+        var parts = (text ?? "").Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 4 || !parts.All(p => int.TryParse(p, System.Globalization.CultureInfo.InvariantCulture, out var ms) && ms is >= 0 and <= 600_000))
+        {
+            return Default;
+        }
+        var ms = parts.Select(p => int.Parse(p, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        return new QuickViewLimits(ms[0], ms[1], ms[2], ms[3]);
+    }
+}
+
 /// <summary>What the window does when <see cref="QuickViewSession.Tick"/> says a moment has come.</summary>
 public enum QuickViewDue
 {
@@ -117,6 +139,9 @@ public sealed class QuickViewSession(Func<long> nowMilliseconds)
 
     /// <summary>The window in which <see cref="StopsToOff"/> stops turn a viewer off.</summary>
     public const int StopWindowMs = 60_000;
+
+    /// <summary>The waits in use: the ADR's, unless a test shortened them.</summary>
+    public QuickViewLimits Limits { get; init; } = QuickViewLimits.Default;
 
     private readonly Dictionary<string, List<long>> _stops = new(StringComparer.Ordinal);
     private readonly HashSet<string> _off = new(StringComparer.Ordinal);
@@ -213,7 +238,7 @@ public sealed class QuickViewSession(Func<long> nowMilliseconds)
         InstallError = null;
         _keyAt = keyAt;
         Cold = Viewer is { } shown && !_loaded.Contains(shown.Id);
-        Timing = new QuickViewTiming { Token = Token, Viewer = Viewer?.Id, Cold = Cold };
+        Timing = new QuickViewTiming { Token = Token, Viewer = Viewer?.Id, Cold = Cold, Kind = file.IsFolder ? "folder" : file.Extension is { Length: > 0 } extension ? extension : "none" };
         Offer = !file.IsFolder && Viewer is null && OffViewer is null && !match.Off ? OfferPhase.Asking : OfferPhase.None;
         if (Viewer is null)
         {
@@ -225,7 +250,7 @@ public sealed class QuickViewSession(Func<long> nowMilliseconds)
         {
             Phase = ViewerPhase.Resting;
         }
-        _phaseSince = rest ? nowMilliseconds() : nowMilliseconds() - RestMs;
+        _phaseSince = rest ? nowMilliseconds() : nowMilliseconds() - Limits.RestMs;
         return Token;
     }
 
@@ -251,20 +276,20 @@ public sealed class QuickViewSession(Func<long> nowMilliseconds)
         var now = nowMilliseconds();
         switch (Phase)
         {
-            case ViewerPhase.Resting when now - _phaseSince >= RestMs:
+            case ViewerPhase.Resting when now - _phaseSince >= Limits.RestMs:
                 return QuickViewDue.StartViewer;
-            case ViewerPhase.Starting when now - _phaseSince >= GiveUpMs:
-            case ViewerPhase.Loading when now - _phaseSince >= GiveUpMs:
+            case ViewerPhase.Starting when now - _phaseSince >= Limits.GiveUpMs:
+            case ViewerPhase.Loading when now - _phaseSince >= Limits.GiveUpMs:
                 Fail("not-finished", null);
                 return QuickViewDue.Redraw;
-            case ViewerPhase.Starting when now - _phaseSince >= ReadyMs:
+            case ViewerPhase.Starting when now - _phaseSince >= Limits.ReadyMs:
                 // A ready that still comes is taken (OnReady): this only says so meanwhile.
                 Fail("not-started", null);
                 return QuickViewDue.Redraw;
-            case ViewerPhase.Loading when !StillLoading && now - _readyAt >= StillLoadingMs:
+            case ViewerPhase.Loading when !StillLoading && now - _readyAt >= Limits.StillLoadingMs:
                 StillLoading = true;
                 return QuickViewDue.Redraw;
-            case ViewerPhase.Failed when FailReason == "not-started" && now - _phaseSince >= GiveUpMs:
+            case ViewerPhase.Failed when FailReason == "not-started" && now - _phaseSince >= Limits.GiveUpMs:
                 FailReason = "not-finished";
                 Timing.Full = "failed:not-finished";
                 return QuickViewDue.Redraw;
@@ -279,11 +304,11 @@ public sealed class QuickViewSession(Func<long> nowMilliseconds)
         var now = nowMilliseconds();
         long? due = Phase switch
         {
-            ViewerPhase.Resting => _phaseSince + RestMs,
-            ViewerPhase.Starting => _phaseSince + ReadyMs,
-            ViewerPhase.Loading when !StillLoading => Math.Min(_readyAt + StillLoadingMs, _phaseSince + GiveUpMs),
-            ViewerPhase.Loading => _phaseSince + GiveUpMs,
-            ViewerPhase.Failed when FailReason == "not-started" => _phaseSince + GiveUpMs,
+            ViewerPhase.Resting => _phaseSince + Limits.RestMs,
+            ViewerPhase.Starting => _phaseSince + Limits.ReadyMs,
+            ViewerPhase.Loading when !StillLoading => Math.Min(_readyAt + Limits.StillLoadingMs, _phaseSince + Limits.GiveUpMs),
+            ViewerPhase.Loading => _phaseSince + Limits.GiveUpMs,
+            ViewerPhase.Failed when FailReason == "not-started" => _phaseSince + Limits.GiveUpMs,
             _ => null,
         };
         return due is { } at ? Math.Max(0, at - now) : null;
@@ -315,12 +340,14 @@ public sealed class QuickViewSession(Func<long> nowMilliseconds)
 
     /// <summary>
     /// The page said <c>ready</c>: the window sends <c>quickview-show</c> when this is true. A ready after the
-    /// "did not start" line is still taken, and the page gets the file.
+    /// "did not start" line is still taken, and the page gets the file; so is a second ready while it loads.
     /// </summary>
     public bool OnReady(long token)
     {
+        // A second ready while the page loads is taken too: a stale ready of the page before can come between the new
+        // load's start and its own ready, and the new page still needs the file.
         var lateReady = Phase == ViewerPhase.Failed && FailReason == "not-started";
-        if (token != Token || (Phase != ViewerPhase.Starting && !lateReady))
+        if (token != Token || (Phase is not (ViewerPhase.Starting or ViewerPhase.Loading) && !lateReady))
         {
             return false;
         }
@@ -643,6 +670,9 @@ public sealed class QuickViewTiming
 
     /// <summary>The viewer, or null.</summary>
     public string? Viewer { get; init; }
+
+    /// <summary>The file's kind for the log: its extension with the dot, <c>folder</c>, or <c>none</c>.</summary>
+    public string Kind { get; init; } = "none";
 
     /// <summary>The first load of that viewer in this window.</summary>
     public bool Cold { get; init; }

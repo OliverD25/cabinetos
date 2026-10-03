@@ -716,6 +716,9 @@
             </Border>
         </Grid>
 
+        <!-- Quick View (Space; ADR 0023): the floating panel over the panes, under the other overlays and the transfer card. -->
+        <views:QuickViewPanel x:Name="QuickViewView" />
+
         <!-- The transfer flyout: right 16 px, bottom 36 px (above the status bar), non-modal. -->
         <views:TransferFlyout
             x:Name="TransferView"

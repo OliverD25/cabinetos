@@ -57,16 +57,28 @@ public sealed class CoreLauncher
     public static string NewToken() => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
 
     /// <summary>
+    /// The folder the core installs Tool Extensions into instead of <c>%LOCALAPPDATA%\CabinetOS\tools</c>: for the
+    /// window tests, which must leave the machine's own tools alone. The window reads installed viewers from the core's
+    /// Quick View table, so it needs no folder of its own for them.
+    /// </summary>
+    public const string InstalledToolsEnv = "CABINETOS_CORE_TOOLS_DIR";
+
+    /// <summary>
     /// Starts the core and connects to it. Waits at most
     /// <paramref name="pipeDeadline"/> for its pipe, and fails early when the
     /// core exits first. <paramref name="environment"/> adds variables for the
-    /// core only, such as <c>CABINETOS_CONFIG</c> in a test.
+    /// core only, such as <c>CABINETOS_CONFIG</c> in a test. <paramref name="devToolsDir"/>,
+    /// the window's tools folder in development, goes to the core as
+    /// <c>--dev-tools-dir</c>: the core lists it first in the Quick View table (ADR 0023, decision 1.3).
+    /// <see cref="InstalledToolsEnv"/>, when set, goes to the core as <c>--tools-dir</c>, so a window test's installs
+    /// land in its own folder.
     /// </summary>
     public static async Task<CoreConnection> StartAsync(
         string coreExe,
         TimeSpan pipeDeadline,
         IReadOnlyDictionary<string, string>? environment = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? devToolsDir = null)
     {
         var token = NewToken();
         var start = new ProcessStartInfo(coreExe)
@@ -84,6 +96,16 @@ public sealed class CoreLauncher
         start.ArgumentList.Add(token);
         start.ArgumentList.Add("--parent-pid");
         start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (!string.IsNullOrEmpty(devToolsDir))
+        {
+            start.ArgumentList.Add("--dev-tools-dir");
+            start.ArgumentList.Add(devToolsDir);
+        }
+        if (Environment.GetEnvironmentVariable(InstalledToolsEnv) is { Length: > 0 } installed)
+        {
+            start.ArgumentList.Add("--tools-dir");
+            start.ArgumentList.Add(installed);
+        }
 
         var stderr = new StderrTail();
         Process process;

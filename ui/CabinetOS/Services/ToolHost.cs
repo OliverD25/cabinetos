@@ -31,7 +31,7 @@ internal sealed class ToolHost : IToolPage
     {
         Tool = tool;
         _files = new ToolFileSession(tool.Manifest.Id, WebViewHost.Domain, this);
-        _page = new WebViewHost(frame, dataName ?? $"tool-{tool.Manifest.Id}") { HostScript = hostScript };
+        _page = new WebViewHost(frame, dataName ?? $"tool-{tool.Manifest.Id}") { HostScript = hostScript, BrowserArguments = WebViewHost.ToolBrowserArguments };
         _page.MapFolder(PageHost, tool.Folder, CoreWebView2HostResourceAccessKind.Deny);
         _page.MessageReceived += OnMessage;
         _page.Failed += reason =>

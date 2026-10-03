@@ -21,6 +21,9 @@ public enum Overlay
 
     /// <summary>The plugin list.</summary>
     PluginList,
+
+    /// <summary>Quick View (Space): the floating panel over the panes; the keyboard stays in the pane's list.</summary>
+    QuickView,
 }
 
 /// <summary>
