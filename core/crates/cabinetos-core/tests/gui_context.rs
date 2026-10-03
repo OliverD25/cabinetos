@@ -74,21 +74,42 @@ fn start_core(level: Option<&str>) -> Core {
 }
 
 impl Core {
-    /// Every line of the core's log, parsed.
+    /// Every complete line of the core's log, parsed. A line the log thread
+    /// is still writing does not parse and is left out.
     fn log_lines(&self) -> Vec<Value> {
         let mut lines = Vec::new();
-        for entry in fs::read_dir(self.dir.path().join("logs")).unwrap() {
+        let Ok(entries) = fs::read_dir(self.dir.path().join("logs")) else {
+            return lines;
+        };
+        for entry in entries {
             let path = entry.unwrap().path();
             if path
                 .extension()
                 .is_some_and(|extension| extension == "jsonl")
+                && let Ok(text) = fs::read_to_string(&path)
             {
-                for line in fs::read_to_string(&path).unwrap().lines() {
-                    lines.push(serde_json::from_str(line).unwrap());
-                }
+                lines.extend(
+                    text.lines()
+                        .filter_map(|line| serde_json::from_str(line).ok()),
+                );
             }
         }
         lines
+    }
+
+    /// The log's lines once `enough` holds for them. The log thread writes
+    /// after the answer has gone out, so a read straight after the last
+    /// answer can come first; a busy machine gets a minute.
+    async fn log_lines_when(&self, what: &str, enough: impl Fn(&[Value]) -> bool) -> Vec<Value> {
+        let deadline = Instant::now() + Duration::from_mins(1);
+        loop {
+            let lines = self.log_lines();
+            if enough(&lines) {
+                return lines;
+            }
+            assert!(Instant::now() < deadline, "the log never held {what}");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
     }
 }
 
@@ -325,7 +346,15 @@ async fn the_context_is_the_newest_state_with_marks_a_cursor_a_tool_an_empty_fol
 
     // The request is a debug line, with the answer's numbers; it is not an
     // info line, since a script may ask as often as it likes.
-    let lines = core.log_lines();
+    let lines = core
+        .log_lines_when("one line for each of the five answers", |lines| {
+            lines
+                .iter()
+                .filter(|line| line["message"] == "gui context answered")
+                .count()
+                >= 5
+        })
+        .await;
     let answered = lines
         .iter()
         .filter(|line| line["message"] == "gui context answered")

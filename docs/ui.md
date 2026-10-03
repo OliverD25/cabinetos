@@ -294,12 +294,14 @@ scheduled task `CabinetOS-LiveCheck` that starts `run-livecheck.ps1` in the
 logged-in session (a process started over SSH gets no desktop; the task is
 what gives it one), the .NET Desktop Runtime and the Windows App Runtime the
 window needs, and the Ukrainian keyboard layout; it builds nothing. The
-script sends the commits the clone lacks as a bundle, copies this PC's
+script takes the laptop's lock (below), checks out the exact commit it sends
+(below), copies this PC's
 Release window, release core and `cabinetos-cli.exe` (the shell the core
 starts finds the CLI next to the core; without it the prompt hook and
 every `cab` command have nothing to run) into the clone's build paths, starts the
-task, waits for the run's `DONE.md`, and copies the run's output into
-`_io\live-check` here as `run-<time>-<machine>.txt`. The machine must be
+task, waits for the run's own `DONE-<id>.md`, and copies the run's output into
+`_io\live-check` here as `run-<id>-<machine>.txt`, with the DONE file as
+`DONE-<id>-<machine>.md`. The machine must be
 logged in and unlocked; its own countdown window shows there first. The
 frame numbers of such a run come from that machine's graphics card: on the
 Omen laptop the integrated AMD Radeon, which drives its 144 Hz screen, not
@@ -308,8 +310,57 @@ rows reaches the screen about 90 ms after the UI thread's 8 ms of work; the
 portability report has the numbers), so the laptop's run judges the goal by
 the window's UI work (`-Panel`, below).
 `-Branch <name>` sends another branch than `main` (a coder's worktree sends
-its own; it must be a fast-forward of what the clone has), and `-Io <folder>`
-names where the output lands.
+its own; it need not be a descendant of anything the clone has had), and `-Io
+<folder>` names where the output lands. The script exits with the run's own
+exit code (the live check's: 1 when a strict goal was not met), not with 0
+because the copying worked.
+
+**One lock, one commit, one id** (the three faults of the night of 2026-10-02/03,
+when four sessions used the laptop: a branch checked out under a running live
+check, a `CS2012` file lock in a build, a wait loop that returned another run's
+result, and a pull that failed or tested old code). The clone, the desktop and
+the three tasks are one resource, so the three remote scripts share
+`ui\livecheck\laptop-run.ps1`:
+
+- **The lock** is the file `C:\Dev\cabinetos\_io\laptop.lock` on the laptop,
+  made with "create new", which only one run can win. It names the run's id,
+  who holds it (this PC, the script, the branch, the PC process), the request,
+  the task, the time it was taken and the time it counts as dead: the task's
+  own maximum run time (`CabinetOS-LiveCheck` 1 h, `CabinetOS-Tests` and
+  `CabinetOS-Script` 2 h; read from the task) plus 10 minutes for the sync
+  before the task starts. A run takes it before it touches the clone and gives
+  it back in a `finally` block, so an error or Ctrl-C releases it. Only a
+  killed PC process or a power cut leaves it, and it then dies by its time:
+  the next run moves it aside (`laptop.lock.dead-<id>`, kept as the record),
+  writes a line into `C:\Dev\cabinetos\_io\laptop-lock.log` (which also lists
+  every acquire and release) and prints "the laptop's lock was dead and is
+  taken over". The laptop's own clock judges the time. A second run waits,
+  polling every 15 s, up to `-LockWaitMinutes` (`-WaitMinutes` when left out),
+  and then stops with a message that names the holder, since when, and for
+  what. `-WaitMinutes` still limits the wait for the run itself.
+- **The exact commit.** The script bundles what the clone lacks, fetches the
+  bundle into the clone (no branch is made or moved) and runs `git checkout
+  --detach <hash>`, then reads HEAD back. The clone's `main` is left alone.
+  The wrapper on the laptop checks HEAD against the request's commit again
+  before it runs anything, writes `ran commit <hash>` into the run's output and
+  its DONE file, and the script on this PC compares that hash with the one it
+  sent and stops loudly ("WRONG CODE RAN") on a mismatch. A tracked file that
+  was changed in the clone makes the checkout fail (it is never forced).
+  `-NoSync` (tests and script) sends nothing and expects the clone's current
+  commit, which it prints.
+- **The id** (`yyyy-MM-dd-HHmm-xxxx`) is in the request's file name
+  (`inbox\<kind>-request-<id>.txt`), the output's (`run-`, `tests-`,
+  `script-<id>.txt`) and the DONE file's, and the wrappers read it from the
+  lock, so a request is taken by the run that made it. The wait looks for that
+  DONE file only; it also stops when the task has been idle for four checks
+  without leaving one.
+- **The wrappers** that the tasks run (`run-livecheck-laptop.ps1`,
+  `run-tests-laptop.ps1`, `run-script-laptop.ps1`) are kept in
+  `ui\livecheck\laptop\` and copied to `C:\Dev\cabinetos\_io` under the lock
+  when they differ. A DONE file ends with the lines `ran commit <hash>` and
+  `exit code <n>` (the tests': the build's when it failed, else the tests').
+  `laptop-probe.ps1` is a script that only waits, for proving the lock through
+  `remote-script.ps1`.
 
 The scripts that write into the exchange folder `_io` (`run-livecheck.ps1`,
 `remote-livecheck.ps1`, `remote-tests.ps1`, `remote-script.ps1`,
@@ -373,8 +424,8 @@ protocol-version test), writes the
 request (a `--filter`, whether the end-to-end tests run) into the
 laptop's `_io\inbox`, starts the task `CabinetOS-Tests` (its wrapper sets
 the per-user .NET SDK's variables, builds with warnings as errors and runs
-`dotnet test`), waits for `DONE-tests.md`, and copies the output into
-`_io\test-runs` here as `tests-<time>-<machine>.txt`. First run
+`dotnet test`), waits for `DONE-tests-<id>.md`, and copies the output into
+`_io\test-runs` here as `tests-<id>-<machine>.txt`. First run
 2026-10-01: `-Filter "FullyQualifiedName~KeysEndToEnd" -EndToEnd`, 8 of 8
 passed there, the build and the tests in three minutes.
 
@@ -395,8 +446,8 @@ processes, a cover window and one suite did not).
 same way, in its logged-in session, through the task `CabinetOS-Script`
 and its wrapper `C:\Dev\cabinetos\_io\run-script-laptop.ps1`: a bundle of
 the commits, the request (the script's path and its arguments) in the
-laptop's inbox, the task, a wait for `DONE-script.md`, the output copied
-home as `_io\script-runs\script-<time>-<machine>.txt`. `-Env
+laptop's inbox, the task, a wait for `DONE-script-<id>.md`, the output copied
+home as `_io\script-runs\script-<id>-<machine>.txt`. `-Env
 "NAME=VALUE;NAME=VALUE"` sets variables for the script and the window it
 starts; `-CopyBuilds` sends this PC's Release window and core first. The
 wrapper sets `CABINETOS_UI_FRAMESTATS=1`, so `scroll-keys.ps1` and
@@ -415,8 +466,8 @@ machine.
 
 **A laptop panel** (the Omen laptop) runs the check with `-Panel`
 (`run-livecheck.ps1 -Panel` passes it on to `livecheck.ps1`; the laptop's
-wrapper, `C:\Dev\cabinetos\_io\run-livecheck-laptop.ps1`, which lives on the
-laptop and not in the repository, passes it). The panel's display path sleeps
+wrapper, `ui\livecheck\laptop\run-livecheck-laptop.ps1`, which
+`remote-livecheck.ps1` copies to `C:\Dev\cabinetos\_io` on the laptop, passes it). The panel's display path sleeps
 between pages and wakes in about 80 ms, so the gaps between frames there are
 the display's wait and not the window's drawing
 ([log/2026-10-01/scroll-gaps-laptop.md](log/2026-10-01/scroll-gaps-laptop.md)).
