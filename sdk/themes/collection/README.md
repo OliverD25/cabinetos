@@ -91,6 +91,11 @@ list of 30 above.
 | `vitesse-light` | Vitesse Light | light | [antfu/vscode-theme-vitesse](https://github.com/antfu/vscode-theme-vitesse) |
 | `flexoki-dark` | Flexoki Dark | dark | [kepano/flexoki](https://github.com/kepano/flexoki) |
 | `flexoki-light` | Flexoki Light | light | [kepano/flexoki](https://github.com/kepano/flexoki) |
+| `oceanic-next` | Oceanic Next | dark | [voronianski/oceanic-next-color-scheme](https://github.com/voronianski/oceanic-next-color-scheme) |
+| `spacegray` | Spacegray | dark | [kkga/spacegray](https://github.com/kkga/spacegray) |
+| `moonlight` | Moonlight | dark | [atomiks/moonlight-vscode-theme](https://github.com/atomiks/moonlight-vscode-theme) |
+| `poimandres` | Poimandres | dark | [drcmda/poimandres-theme](https://github.com/drcmda/poimandres-theme) |
+| `andromeda` | Andromeda | dark | [EliverLara/Andromeda](https://github.com/EliverLara/Andromeda) |
 
 ## How a palette becomes a theme
 
@@ -124,6 +129,7 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 
 | Theme | Lowest body text | Where | Tertiary text (plain, as a hint) |
 |---|---|---|---|
+| `andromeda` | 4.63:1 | row details on the selected row | 5.09:1, 3.96:1 |
 | `atom-one-light` | 4.86:1 | row details on the selected row | 5.25:1, 3.69:1 |
 | `ayu-dark` | 4.72:1 | row details on the hovered row | 5.34:1, 4.06:1 |
 | `ayu-light` | 4.68:1 | row details on the hovered row | 5.35:1, 3.73:1 |
@@ -150,21 +156,25 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 | `matcha` | 4.58:1 | row details on the hovered row | 5.46:1, 4.24:1 |
 | `material-theme` | 5.17:1 | row details on the selected row | 6.78:1, 5.19:1 |
 | `monokai` | 5.03:1 | row details on the selected row | 4.50:1, 3.54:1 |
+| `moonlight` | 4.66:1 | row details on the selected row | 7.24:1, 5.46:1 |
 | `night-owl` | 4.68:1 | row details on the selected row | 6.39:1, 4.80:1 |
 | `nightfox` | 4.81:1 | row details on the selected row | 7.10:1, 5.32:1 |
 | `noctis` | 4.68:1 | row details on the hovered row | 5.13:1, 3.98:1 |
 | `noctis-lux` | 4.67:1 | row details on the selected row | 5.09:1, 3.62:1 |
+| `oceanic-next` | 4.88:1 | row details on the selected row | 5.70:1, 4.42:1 |
 | `omni` | 5.05:1 | row details on the selected row | 4.83:1, 3.72:1 |
 | `one-dark-pro` | 4.87:1 | row details on the selected row | 5.82:1, 4.49:1 |
 | `one-monokai` | 4.87:1 | row details on the selected row | 5.82:1, 4.49:1 |
 | `palenight` | 4.73:1 | row details on the selected row | 4.81:1, 3.81:1 |
 | `panda` | 4.53:1 | row details on the selected row | 5.93:1, 4.57:1 |
+| `poimandres` | 6.65:1 | row details on the selected row | 4.83:1, 3.78:1 |
 | `rose-pine` | 4.87:1 | row details on the selected row | 5.28:1, 4.04:1 |
 | `rose-pine-dawn` | 4.58:1 | row details on the selected row | 4.91:1, 3.51:1 |
 | `shades-of-purple` | 5.30:1 | row details on the selected row | 5.77:1, 4.44:1 |
 | `snazzy-light` | 4.51:1 | row details on the selected row | 5.01:1, 3.53:1 |
 | `solarized-dark` | 4.56:1 | row details on the selected row | 5.06:1, 3.94:1 |
 | `solarized-light` | 4.51:1 | row details on the selected row | 4.84:1, 3.44:1 |
+| `spacegray` | 4.92:1 | row details on the selected row | 6.59:1, 5.00:1 |
 | `sublime-material` | 4.57:1 | row details on the selected row | 7.33:1, 5.56:1 |
 | `synthwave-84` | 5.79:1 | row details on the selected row | 4.85:1, 3.76:1 |
 | `tokyo-night` | 4.71:1 | row details on the selected row | 4.66:1, 3.58:1 |

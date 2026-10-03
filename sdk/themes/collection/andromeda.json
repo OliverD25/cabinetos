@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "andromeda",
+  "name": "Andromeda",
+  "author": "Eliver Lara, port by CabinetOS",
+  "attribution": "Colours from Andromeda by Eliver Lara (https://github.com/EliverLara/Andromeda), used under the MIT License. The ANSI colours the theme leaves unset are Visual Studio Code's defaults (MIT).",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#00E8C6",
+  "mica": {
+    "tint": "#20232A",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#D5CED9",
+    "textSecondary": "#D5CED9E6",
+    "textTertiary": "#999999",
+    "textDisabled": "#746F77",
+    "layerFill": "#2B303B80",
+    "layerStroke": "#1B1D2399",
+    "layerStrokeActive": "#746F77",
+    "controlFill": "#2B303BB3",
+    "controlFillHover": "#3D4352B3",
+    "acrylicTint": "#20232AB8",
+    "terminalBackground": "#20232A99",
+    "folderIcon": "#FFE66D",
+    "folderIconFront": "#FFEFA0",
+    "fileTypeColors": {
+      "md": "#7CB7FF",
+      "rs": "#F39C12",
+      "toml": "#C74DED",
+      "exe": "#96E072",
+      "dll": "#96E072",
+      "bin": "#EE5D43",
+      "pdf": "#EE5D43",
+      "zip": "#FFE66D"
+    },
+    "permissionLow": "#96E072",
+    "permissionMedium": "#FFE66D",
+    "permissionHigh": "#EE5D43"
+  },
+  "terminal": {
+    "foreground": "#D5CED9",
+    "background": "#23262E",
+    "cursor": "#FFE66D",
+    "ansi": [
+      "#000000",
+      "#EE5D43",
+      "#96E072",
+      "#FFE66D",
+      "#7CB7FF",
+      "#FF00AA",
+      "#00E8C6",
+      "#E5E5E5",
+      "#666666",
+      "#EE5D43",
+      "#96E072",
+      "#FFE66D",
+      "#7CB7FF",
+      "#FF00AA",
+      "#00E8C6",
+      "#E5E5E5"
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "spacegray",
+  "name": "Spacegray",
+  "author": "kkga, port by CabinetOS",
+  "attribution": "Colours from Spacegray (its Base16 Ocean Dark scheme) by kkga (https://github.com/kkga/spacegray), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#EBCB8B",
+  "mica": {
+    "tint": "#1C1F26",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#C0C5CE",
+    "textSecondary": "#C0C5CE",
+    "textTertiary": "#A7ADBA",
+    "textDisabled": "#65737E",
+    "layerFill": "#2B303B80",
+    "layerStroke": "#343D4699",
+    "layerStrokeActive": "#65737E",
+    "controlFill": "#2B303BB3",
+    "controlFillHover": "#343D46B3",
+    "acrylicTint": "#1C1F26B8",
+    "terminalBackground": "#1C1F2699",
+    "folderIcon": "#EBCB8B",
+    "folderIconFront": "#F2DDB4",
+    "fileTypeColors": {
+      "md": "#8FA1B3",
+      "rs": "#D08770",
+      "toml": "#B48EAD",
+      "exe": "#A3BE8C",
+      "dll": "#A3BE8C",
+      "bin": "#BF616A",
+      "pdf": "#BF616A",
+      "zip": "#EBCB8B"
+    },
+    "permissionLow": "#A3BE8C",
+    "permissionMedium": "#EBCB8B",
+    "permissionHigh": "#BF616A"
+  },
+  "terminal": {
+    "foreground": "#C0C5CE",
+    "background": "#2B303B",
+    "cursor": "#C0C5CE",
+    "ansi": [
+      "#343D46",
+      "#BF616A",
+      "#A3BE8C",
+      "#EBCB8B",
+      "#8FA1B3",
+      "#B48EAD",
+      "#96B5B4",
+      "#C0C5CE",
+      "#65737E",
+      "#BF616A",
+      "#A3BE8C",
+      "#EBCB8B",
+      "#8FA1B3",
+      "#B48EAD",
+      "#96B5B4",
+      "#EFF1F5"
+    ]
+  }
+}

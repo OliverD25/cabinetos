@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "oceanic-next",
+  "name": "Oceanic Next",
+  "author": "Dmitri Voronianski, port by CabinetOS",
+  "attribution": "Colours from Oceanic Next by Dmitri Voronianski (https://github.com/voronianski/oceanic-next-color-scheme), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#6699CC",
+  "mica": {
+    "tint": "#1B2B34",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#CDD3DE",
+    "textSecondary": "#CDD3DE",
+    "textTertiary": "#A7ADBA",
+    "textDisabled": "#65737E",
+    "layerFill": "#343D4680",
+    "layerStroke": "#4F5B6699",
+    "layerStrokeActive": "#65737E",
+    "controlFill": "#343D46B3",
+    "controlFillHover": "#4F5B66B3",
+    "acrylicTint": "#1B2B34B8",
+    "terminalBackground": "#1B2B3499",
+    "folderIcon": "#FAC863",
+    "folderIconFront": "#FCDB9A",
+    "fileTypeColors": {
+      "md": "#6699CC",
+      "rs": "#F99157",
+      "toml": "#C594C5",
+      "exe": "#99C794",
+      "dll": "#99C794",
+      "bin": "#EC5F67",
+      "pdf": "#EC5F67",
+      "zip": "#FAC863"
+    },
+    "permissionLow": "#99C794",
+    "permissionMedium": "#FAC863",
+    "permissionHigh": "#EC5F67"
+  },
+  "terminal": {
+    "foreground": "#CDD3DE",
+    "background": "#1B2B34",
+    "cursor": "#C0C5CE",
+    "ansi": [
+      "#343D46",
+      "#EC5F67",
+      "#99C794",
+      "#FAC863",
+      "#6699CC",
+      "#C594C5",
+      "#5FB3B3",
+      "#C0C5CE",
+      "#65737E",
+      "#EC5F67",
+      "#99C794",
+      "#FAC863",
+      "#6699CC",
+      "#C594C5",
+      "#5FB3B3",
+      "#D8DEE9"
+    ]
+  }
+}
