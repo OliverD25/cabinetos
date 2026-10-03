@@ -2055,6 +2055,25 @@ window control, written through `set_value`, with a test per way; the
 coder's whole end-to-end suite on the laptop passed 1449 of 1449. Gap 8,
 the Settings page (11c) with the advanced keys, stays open.
 
+**Status (2026-10-04, 00:20): step 2 is on main (merge 6b4eaa3): Quick
+View works end to end.** The core's part (Opus) and the window's part
+(Opus, branch `worktree-agent-ad726eae3ae77782c`) merged together: Space
+on a file opens the floating panel with the card at once, Windows'
+thumbnail next and the viewer's full view after it; Space and Esc close
+it, Up and Down walk the folder under it, Enter opens the file; a kind
+without a viewer shows the install offer; the panel is a Tool Extension
+page by ADR 0023, and only the test fixture viewer exists so far. The
+laptop's live check, section 25, met every goal: the first Space of the
+session showed the full view in 519 ms (ceiling 1500 ms); warm, the card
+came within 11 ms, the thumbnail's 90th percentile was 22 ms (goal 100
+ms) and the full view's 124 ms (goal 1000 ms); Down held over 50 images
+gave 406 frames with none over 20 ms; the scroll panel goal stayed met.
+Verified before the merge: the five core checks, both window builds with
+warnings as errors, the fast tests (1423 passed, 86 skipped). Step 3,
+the viewer pack in the marketplace, is next: images and media first,
+then text and Markdown, then PDF; the Office viewer waits for the
+hanging-handler test the ADR asks for.**
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
