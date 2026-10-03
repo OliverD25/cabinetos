@@ -6,17 +6,47 @@
       "name": "hero",
       "kind": "image",
       "steps": [
-        { "do": "down", "count": 5 },
-        { "do": "tab" },
-        { "do": "down", "count": 1 },
-        { "do": "tab" }
+        {
+          "do": "down",
+          "count": 5
+        },
+        {
+          "do": "tab"
+        },
+        {
+          "do": "down",
+          "count": 1
+        },
+        {
+          "do": "tab"
+        }
+      ]
+    },
+    {
+      "name": "headings-sorted",
+      "kind": "image",
+      "steps": [
+        {
+          "do": "palette",
+          "text": "sort by modified"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 1200
+        }
       ]
     },
     {
       "name": "command-palette",
       "kind": "image",
       "steps": [
-        { "do": "palette", "text": "copy" }
+        {
+          "do": "palette",
+          "text": "copy"
+        }
       ]
     },
     {
@@ -24,38 +54,273 @@
       "kind": "video",
       "seconds": 6,
       "steps": [
-        { "do": "palette" },
-        { "do": "type", "text": "copy", "delayMs": 400 },
-        { "do": "wait", "ms": 1000 },
-        { "do": "down", "count": 2 },
-        { "do": "wait", "ms": 800 }
+        {
+          "do": "palette"
+        },
+        {
+          "do": "type",
+          "text": "copy",
+          "delayMs": 400
+        },
+        {
+          "do": "wait",
+          "ms": 1000
+        },
+        {
+          "do": "down",
+          "count": 2
+        },
+        {
+          "do": "wait",
+          "ms": 800
+        }
       ]
     },
     {
       "name": "terminal",
       "kind": "image",
       "steps": [
-        { "do": "go", "path": "C:\\Demo\\Projects\\cabinetos-sample" },
-        { "do": "terminal" },
-        { "do": "type", "text": "git log --oneline -3" },
-        { "do": "enter" },
-        { "do": "wait", "ms": 3000 }
+        {
+          "do": "go",
+          "path": "C:\\Demo\\Projects\\cabinetos-sample"
+        },
+        {
+          "do": "terminal"
+        },
+        {
+          "do": "type",
+          "text": "git log --oneline -3"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 3000
+        }
       ]
     },
     {
       "name": "commander-compact",
       "kind": "image",
       "steps": [
-        { "do": "theme", "downs": 1 }
+        {
+          "do": "theme",
+          "downs": 1
+        }
       ]
     },
     {
       "name": "marketplace",
       "kind": "image",
       "steps": [
-        { "do": "palette", "text": "marketplace" },
-        { "do": "enter" },
-        { "do": "wait", "ms": 7000 }
+        {
+          "do": "palette",
+          "text": "marketplace"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 7000
+        }
+      ]
+    },
+    {
+      "name": "theme-gallery",
+      "kind": "image",
+      "steps": [
+        {
+          "do": "key",
+          "key": "Ctrl+K Ctrl+T"
+        },
+        {
+          "do": "wait",
+          "ms": 1200
+        },
+        {
+          "do": "key",
+          "key": "End"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 5000
+        },
+        {
+          "do": "key",
+          "key": "Home"
+        },
+        {
+          "do": "key",
+          "key": "Right"
+        },
+        {
+          "do": "key",
+          "key": "Down"
+        },
+        {
+          "do": "wait",
+          "ms": 1500
+        }
+      ]
+    },
+    {
+      "name": "theme-gallery-light",
+      "kind": "image",
+      "steps": [
+        {
+          "do": "key",
+          "key": "Ctrl+K Ctrl+T"
+        },
+        {
+          "do": "wait",
+          "ms": 1200
+        },
+        {
+          "do": "key",
+          "key": "End"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 5000
+        },
+        {
+          "do": "type",
+          "text": "light"
+        },
+        {
+          "do": "wait",
+          "ms": 1500
+        },
+        {
+          "do": "key",
+          "key": "Down"
+        },
+        {
+          "do": "wait",
+          "ms": 2000
+        }
+      ]
+    },
+    {
+      "name": "theme-gallery-compact",
+      "kind": "image",
+      "steps": [
+        {
+          "do": "key",
+          "key": "Ctrl+K Ctrl+T"
+        },
+        {
+          "do": "wait",
+          "ms": 1200
+        },
+        {
+          "do": "key",
+          "key": "End"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 5000
+        },
+        {
+          "do": "type",
+          "text": "compact"
+        },
+        {
+          "do": "wait",
+          "ms": 1500
+        },
+        {
+          "do": "key",
+          "key": "Down"
+        },
+        {
+          "do": "wait",
+          "ms": 2000
+        }
+      ]
+    },
+    {
+      "name": "theme-gallery-applied",
+      "kind": "image",
+      "steps": [
+        {
+          "do": "key",
+          "key": "Ctrl+K Ctrl+T"
+        },
+        {
+          "do": "wait",
+          "ms": 1200
+        },
+        {
+          "do": "key",
+          "key": "End"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 5000
+        },
+        {
+          "do": "type",
+          "text": "dracula"
+        },
+        {
+          "do": "wait",
+          "ms": 1500
+        },
+        {
+          "do": "key",
+          "key": "Down"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 3500
+        },
+        {
+          "do": "key",
+          "key": "Ctrl+A"
+        },
+        {
+          "do": "key",
+          "key": "Backspace"
+        },
+        {
+          "do": "wait",
+          "ms": 2500
+        }
+      ]
+    },
+    {
+      "name": "extensions",
+      "kind": "image",
+      "steps": [
+        {
+          "do": "palette",
+          "text": "browse extensions"
+        },
+        {
+          "do": "enter"
+        },
+        {
+          "do": "wait",
+          "ms": 4000
+        }
       ]
     }
   ]

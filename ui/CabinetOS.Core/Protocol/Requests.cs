@@ -541,19 +541,38 @@ public sealed class GetThemeRequest() : CoreRequest("get_theme")
 public sealed class ListToolsRequest() : CoreRequest("list_tools");
 
 /// <summary>
-/// Reads the marketplace index that <c>marketplace.index</c> names (version
-/// 10); the reply is <c>marketplace_index</c>, in the index's order.
+/// Reads a marketplace catalogue (version 10; <see cref="Catalogue"/> since 20): the extensions' index
+/// <c>marketplace.index</c> names, or the themes' <c>marketplace.themes</c>; the reply is
+/// <c>marketplace_index</c>, in the catalogue's order.
 /// </summary>
-public sealed class MarketplaceRefreshRequest() : CoreRequest("marketplace_refresh");
+public sealed class MarketplaceRefreshRequest() : CoreRequest("marketplace_refresh")
+{
+    /// <summary>Which list (<see cref="Catalogues"/>); absent: the extensions.</summary>
+    public string? Catalogue { get; init; }
+}
 
-/// <summary>Searches the index read last; the reply is <c>marketplace_index</c>, best first.</summary>
+/// <summary>Searches the catalogue read last; the reply is <c>marketplace_index</c>, best first.</summary>
 public sealed class MarketplaceSearchRequest(string query) : CoreRequest("marketplace_search")
 {
     /// <summary>Text to look for in the name, the ID or the publisher; empty for every item.</summary>
     public string Query { get; } = query;
 
-    /// <summary>Only items of this kind (<see cref="ExtensionKinds"/>); absent: every kind.</summary>
+    /// <summary>Only items of this kind (<see cref="ExtensionKinds"/>); absent: every kind of the catalogue.</summary>
     public string? Kind { get; init; }
+
+    /// <summary>Which list (<see cref="Catalogues"/>); absent: the extensions.</summary>
+    public string? Catalogue { get; init; }
+}
+
+/// <summary>
+/// Reads a theme of the themes catalogue without installing it (version 20), so the gallery can preview it on
+/// the window before the user installs it; the reply is <c>theme</c>. An installed theme is read with
+/// <see cref="GetThemeRequest"/>.
+/// </summary>
+public sealed class PreviewThemeRequest(string extensionId) : CoreRequest("preview_theme")
+{
+    /// <summary>The theme's ID in the catalogue (not <c>id</c>, which is the request's own).</summary>
+    public string ExtensionId { get; } = extensionId;
 }
 
 /// <summary>

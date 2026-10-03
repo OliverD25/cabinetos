@@ -7,7 +7,8 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use cabinetos_ipc::PipeClient;
 use cabinetos_protocol::{
-    CapabilityLevel, Envelope, Event, ExtensionKind, MarketItem, Request, Response, ToolInfo,
+    CapabilityLevel, Envelope, Event, ExtensionKind, MarketItem, Request, Response, ThemeKind,
+    ToolInfo,
 };
 
 use crate::{binary_size, expect_welcome, failure, say, send};
@@ -50,8 +51,22 @@ fn describe(item: &MarketItem) -> Vec<String> {
         .installed_version
         .as_ref()
         .map_or_else(String::new, |version| format!(", installed {version}"));
+    // A theme says what it looks like: dark, light, or as Windows is set,
+    // and whether it is a density preset.
+    let look = match (item.appearance, item.density) {
+        (Some(appearance), density) => {
+            let preset = if density == Some(true) {
+                ", density preset"
+            } else {
+                ""
+            };
+            format!(", {}{preset}", appearance_name(appearance))
+        }
+        (None, Some(true)) => ", density preset".to_owned(),
+        (None, _) => String::new(),
+    };
     let mut lines = vec![format!(
-        "{:<18} {:<8} {:<6} {} by {}{verified}, {}{installed}",
+        "{:<18} {:<8} {:<6} {} by {}{verified}, {}{look}{installed}",
         item.id,
         item.version,
         kind_name(item.kind),
@@ -79,6 +94,14 @@ fn kind_name(kind: ExtensionKind) -> &'static str {
         ExtensionKind::Plugin => "plugin",
         ExtensionKind::Theme => "theme",
         ExtensionKind::Tool => "tool",
+    }
+}
+
+fn appearance_name(appearance: ThemeKind) -> &'static str {
+    match appearance {
+        ThemeKind::Dark => "dark",
+        ThemeKind::Light => "light",
+        ThemeKind::System => "system",
     }
 }
 
@@ -295,6 +318,36 @@ mod tests {
         assert_eq!(
             success_lines("hello", follow.finished.as_ref()),
             ["installed hello 0.1.0 (plugin)", "installed version: 0.1.0"]
+        );
+    }
+
+    #[test]
+    fn a_theme_says_its_appearance_and_whether_it_is_a_density_preset() {
+        let theme = |appearance: &str, density: bool| -> MarketItem {
+            serde_json::from_value(json!({
+                "id": "commander-compact",
+                "kind": "theme",
+                "name": "Commander Compact",
+                "author": {"name": "CabinetOS"},
+                "version": "1.2.0",
+                "description": "A dense theme.",
+                "size": 2048,
+                "download": {"url": "files/c.json", "sha256": "0".repeat(64)},
+                "manifest": {},
+                "minCoreVersion": "0.1.0",
+                "license": "MIT",
+                "appearance": appearance,
+                "density": density
+            }))
+            .unwrap()
+        };
+        assert_eq!(
+            describe(&theme("system", true))[0],
+            "commander-compact  1.2.0    theme  Commander Compact by CabinetOS, 2.00 KiB, system, density preset"
+        );
+        assert_eq!(
+            describe(&theme("dark", false))[0],
+            "commander-compact  1.2.0    theme  Commander Compact by CabinetOS, 2.00 KiB, dark"
         );
     }
 

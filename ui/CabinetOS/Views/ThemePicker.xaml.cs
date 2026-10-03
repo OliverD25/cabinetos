@@ -3,6 +3,7 @@ using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Themes;
 using CabinetOS.Services;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -19,7 +20,9 @@ namespace CabinetOS.Views;
 /// accent over the Mica tint), its name and author, and a check on the
 /// theme in effect. Up and Down move, and the window shows the highlighted
 /// theme as a preview; Enter or a click applies through the window's router,
-/// Esc and the scrim close and bring the theme in effect back.
+/// Esc and the scrim close and bring the theme in effect back. The last row,
+/// "Browse more themes…", opens the theme gallery (<c>themes.browse</c>) with
+/// Enter or a click.
 /// </summary>
 public sealed partial class ThemePicker : UserControl
 {
@@ -30,6 +33,13 @@ public sealed partial class ThemePicker : UserControl
     // window's metrics; rows that shrank under the pointer would put another row under it, whose
     // preview would grow them back, and so on.
     private ThemeMetrics? _metrics;
+
+    // Where the last pointer event on a row was, in window coordinates. XAML replays the last pointer position as a
+    // PointerMoved whenever rows are drawn under a pointer that rests, so a resting pointer would take the highlight
+    // from the keys: the picker's last row, "Browse more themes", sat under the point of an earlier click, started
+    // highlighted, and Enter opened the gallery (the live check on the laptop, 2026-10-03). Only an event at a place
+    // other than the one before it is a hover.
+    private Windows.Foundation.Point? _lastPointer;
 
     /// <summary>Creates the picker, hidden.</summary>
     public ThemePicker()
@@ -84,6 +94,7 @@ public sealed partial class ThemePicker : UserControl
         if (!IsOpen)
         {
             _metrics = WindowMetrics.Current;
+            _lastPointer = null;
         }
         Visibility = Visibility.Visible;
         _entrance.Begin();
@@ -111,6 +122,17 @@ public sealed partial class ThemePicker : UserControl
         }
     }
 
+    private void OnRowPointerMoved(PointerRoutedEventArgs e, int index)
+    {
+        var at = e.GetCurrentPoint(null).Position;
+        var moved = _lastPointer is { } last && (Math.Abs(at.X - last.X) > 0.5 || Math.Abs(at.Y - last.Y) > 0.5);
+        _lastPointer = at;
+        if (moved)
+        {
+            _model?.SetHighlight(index);
+        }
+    }
+
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
         switch (e.Key)
@@ -128,11 +150,12 @@ public sealed partial class ThemePicker : UserControl
                 e.Handled = true;
                 break;
             case VirtualKey.End:
-                _model?.SetHighlight((_model?.Rows.Count ?? 1) - 1);
+                // The last row is the one that browses for more.
+                _model?.SetHighlight(_model.BrowseRow);
                 e.Handled = true;
                 break;
             case VirtualKey.Enter:
-                _ = RunCommand?.Invoke("theme.apply", null, "key");
+                _ = RunCommand?.Invoke(_model?.BrowseHighlighted == true ? "themes.browse" : "theme.apply", null, "key");
                 e.Handled = true;
                 break;
             case VirtualKey.Tab:
@@ -154,8 +177,57 @@ public sealed partial class ThemePicker : UserControl
         {
             Rows.Children.Add(RowFor(model.Rows[i], i, i == model.Highlight));
         }
-        FooterText.Text = model.Error ?? "↑↓ or hover to preview · ↵ apply · Esc keeps the current · themes live in %LOCALAPPDATA%\\CabinetOS\\themes";
+        Rows.Children.Add(BrowseRowFor(model.BrowseRow, model.BrowseHighlighted));
+        FooterText.Text = model.Error ?? (model.BrowseHighlighted
+            ? "↵ open the theme gallery · ↑ back to the themes · Esc keeps the current"
+            : "↑↓ or hover to preview · ↵ apply · Esc keeps the current · themes live in %LOCALAPPDATA%\\CabinetOS\\themes");
         FooterText.Foreground = ThemeResources.Brush(model.Error is null ? "CbHintTextBrush" : "CbErrorTextBrush");
+    }
+
+    // The last row: "Browse more themes…", which opens the gallery. It is no theme, so it has no swatch and no check.
+    private Grid BrowseRowFor(int index, bool highlighted)
+    {
+        var m = _metrics ?? WindowMetrics.Current;
+        var row = new Grid
+        {
+            Height = m.PaletteRowHeight,
+            Margin = new Thickness(0, 4, 0, 0),
+            Padding = new Thickness(12, 0, 12, 0),
+            ColumnSpacing = 12,
+            CornerRadius = WindowMetrics.Corners(m.RadiusControl),
+            Background = highlighted ? ThemeResources.Brush("CbSelectedFillBrush") : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+        };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.Children.Add(new FontIcon
+        {
+            Glyph = "\uE774",
+            FontSize = 14,
+            Foreground = ThemeResources.Brush("CbTextSecondaryBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        var text = new TextBlock { Text = "Browse more themes…", Foreground = ThemeResources.Brush("CbTextPrimaryBrush"), VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+        if (highlighted)
+        {
+            row.Children.Add(new Rectangle
+            {
+                Width = m.SelectionBarWidth,
+                Height = Math.Clamp(m.PaletteRowHeight - 4, 0, 16),
+                RadiusX = m.SelectionBarWidth / 2,
+                RadiusY = m.SelectionBarWidth / 2,
+                Margin = new Thickness(-12, 0, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                Fill = ThemeResources.Brush("CbAccentBrush"),
+            });
+        }
+        AutomationProperties.SetName(row, "Browse more themes");
+        row.PointerMoved += (_, e) => OnRowPointerMoved(e, index);
+        row.Tapped += (_, _) => _ = RunCommand?.Invoke("themes.browse", null, "mouse");
+        return row;
     }
 
     // A row, 36 px: the highlight's pill and fill, the swatch, name and author, and a check on the theme in effect.
@@ -264,7 +336,7 @@ public sealed partial class ThemePicker : UserControl
         }
         // On a move only: the rows are built again at every highlight change, and a pointer that
         // merely sits over the list would snap the highlight back under itself after each key.
-        row.PointerMoved += (_, _) => _model?.SetHighlight(index);
+        row.PointerMoved += (_, e) => OnRowPointerMoved(e, index);
         row.Tapped += (_, _) => _ = RunCommand?.Invoke("theme.apply", CommandArgs.Object(("index", index)), "mouse");
         return row;
     }

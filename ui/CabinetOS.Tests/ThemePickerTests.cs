@@ -108,13 +108,54 @@ public class ThemePickerTests
         Assert.Equal((0, 0), (picker.Highlight, redraws));
         picker.Move(1);
         Assert.Equal((1, 1), (picker.Highlight, redraws));
+        // Past the last theme is the "Browse more themes…" row, and no further.
         picker.Move(10);
-        Assert.Equal((2, 2), (picker.Highlight, redraws));
+        Assert.Equal((3, 2), (picker.Highlight, redraws));
+        Assert.True(picker.BrowseHighlighted);
         picker.SetHighlight(7);
         picker.SetHighlight(-1);
-        Assert.Equal((2, 2), (picker.Highlight, redraws));
+        Assert.Equal((3, 2), (picker.Highlight, redraws));
         picker.SetHighlight(0);
         Assert.Equal((0, 3), (picker.Highlight, redraws));
+        Assert.False(picker.BrowseHighlighted);
+    }
+
+    [Fact]
+    public async Task The_browse_row_is_the_last_row_applies_nothing_and_paints_the_theme_in_effect()
+    {
+        var core = Core();
+        var (picker, painted) = await OpenAsync(core);
+        Assert.Equal(3, picker.BrowseRow);
+
+        picker.SetHighlight(1);
+        await UntilAsync(() => painted.Count == 1);
+        Assert.Equal("nord", painted.Single());
+
+        // On the browse row the preview of the row before ends: the window shows the theme in effect again.
+        picker.SetHighlight(picker.BrowseRow);
+        await UntilAsync(() => painted.Count == 2);
+        Assert.Null(painted.Last());
+        Assert.False(picker.IsPreviewShown);
+
+        // Enter on it is not an apply: nothing is written.
+        Assert.False(await picker.ApplyAsync());
+        Assert.False(await picker.ApplyAsync(picker.BrowseRow));
+        Assert.Empty(core.Requests.OfType<SetValueRequest>());
+    }
+
+    [Fact]
+    public async Task With_no_theme_at_all_the_browse_row_is_the_only_row()
+    {
+        var picker = new ThemePickerModel(new FakeChannel(request => request is ListThemesRequest
+            ? new ThemesReply([])
+            : new ErrorReply(ErrorCodes.UnknownRequest, request.Type)));
+
+        Assert.True(await picker.LoadAsync(null));
+
+        Assert.Equal((0, 0), (picker.BrowseRow, picker.Highlight));
+        Assert.True(picker.BrowseHighlighted);
+        picker.Move(1);
+        Assert.Equal(0, picker.Highlight);
     }
 
     [Fact]

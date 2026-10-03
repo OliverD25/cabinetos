@@ -1860,7 +1860,23 @@ with a test per way; the live check passes on the laptop.
 
 Articles: 3, 4, 6, 7, 8, 10.
 
-**Status (2026-10-03, 00:33): handed to a coder on Sonnet.**
+**Status (2026-10-03, 03:35): built and checked on the branch `worktree-agent-aeba340e544ea5221`, waiting for the merge; after it the creator publishes `themes.json` ([report](log/2026-10-03/theme-gallery-and-three-ways-report.md)).**
+
+**Status (2026-10-03, 03:51): merged into main as 18ef423, after Phase 24.** The
+planning session merged the coder's branch over Phase 24 (eight conflicts:
+both sides' CHANGELOG lines, the command count 125, the config crate's
+re-exports, the audit's rows, config.md, the log README and ui.md's step
+row) and verified the merge: the five core checks, both window builds and
+1354 fast tests, all green. The coder's own live check on the laptop was
+green at 4c287dc (287 True, 0 False, the panel goal met). The merge's own
+laptop live check runs on the 0.1.2 release commit, which carries it: the
+laptop's clone sat on another coder's branch at that moment and the remote
+script only fast-forwards. The desk cards "Themes get their own catalogue
+and gallery" and gaps 1 to 4 of "Settings reachable three ways" are done.
+Next, by the creator's word of 03:00 ("do it by yourself", "release by
+yourself"): `themes.json` goes to the marketplace site, and 0.1.2 is cut
+from this commit with Phase 24, the version resources, the symbols zip,
+the indexer's automatic start and the wasmtime fix.
 
 ### Phase 24 — Sorting by the column headers, and the pane dividers (small; the desk cards of 2026-10-02)
 

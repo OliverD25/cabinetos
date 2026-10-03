@@ -14,12 +14,12 @@ namespace CabinetOS.Tests;
 /// </summary>
 public class CardSlicesTests
 {
-    // 120 items: every third a theme, the others plugins and tools, as an index of a grown collection may list them.
+    // 120 items: plugins and tools by turns, as an index of a grown collection may list them (the themes have their own catalogue).
     private static readonly MarketItem[] Index = [.. Enumerable.Range(0, 120).Select(i => Item(i))];
 
     private static MarketItem Item(int i)
     {
-        var kind = (i % 3) switch { 0 => ExtensionKinds.Theme, 1 => ExtensionKinds.Plugin, _ => ExtensionKinds.Tool };
+        var kind = i % 2 == 0 ? ExtensionKinds.Plugin : ExtensionKinds.Tool;
         using var manifest = JsonDocument.Parse("{}");
         return new MarketItem($"item-{i:000}", kind, $"Item {i}", new MarketAuthor("CabinetOS", false, null), "1.0.0", "For the tests.", 1000,
             new MarketDownload($"files/item-{i:000}-1.0.0.zip", new string('a', 64)), manifest.RootElement.Clone(), "0.1.0", "MIT");
@@ -99,8 +99,8 @@ public class CardSlicesTests
         Assert.True(grid.Turn(all));
         Assert.Equal(24, grid.Cards.Count);
 
-        // The Themes tab while slices of Discover are still to come: a new set, as the view starts one when the items differ.
-        market.SetTab(MarketTabs.Themes);
+        // The Tools tab while slices of Discover are still to come: a new set, as the view starts one when the items differ.
+        market.SetTab(MarketTabs.Tools);
         Assert.False(slices.Holds(market.Items));
         var themes = grid.Start(market.Items, perScreen: 12);
 
@@ -109,9 +109,9 @@ public class CardSlicesTests
         while (grid.Turn(themes))
         {
         }
-        Assert.Equal(40, grid.Cards.Count);
-        Assert.All(grid.Cards, id => Assert.Equal(0, int.Parse(id[5..], System.Globalization.CultureInfo.InvariantCulture) % 3));
-        Assert.Equal(Index.Where(item => item.Kind == ExtensionKinds.Theme).Select(item => item.Id), grid.Cards);
+        Assert.Equal(60, grid.Cards.Count);
+        Assert.All(grid.Cards, id => Assert.Equal(1, int.Parse(id[5..], System.Globalization.CultureInfo.InvariantCulture) % 2));
+        Assert.Equal(Index.Where(item => item.Kind == ExtensionKinds.Tool).Select(item => item.Id), grid.Cards);
         Assert.False(grid.Turn(all));
     }
 

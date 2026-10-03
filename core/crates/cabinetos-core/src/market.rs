@@ -1,15 +1,21 @@
-//! The marketplace as the core serves it (`docs/marketplace.md`): the index
-//! a client browses, and installs and uninstalls with what follows them.
+//! The marketplace as the core serves it (`docs/marketplace.md`): the two
+//! catalogues a client browses, and installs and uninstalls with what
+//! follows them.
 //!
-//! - The core reads the index only when a client asks: `marketplace_refresh`,
-//!   or a search or install before any index was read (or after
-//!   `marketplace.index` changed). There is no background refresh.
+//! - The marketplace has two catalogues (ADR 0022): `index.json` for the
+//!   extensions (`marketplace.index`) and `themes.json` for the themes
+//!   (`marketplace.themes`). Each is read, cached and answered on its own,
+//!   so a themes server that is down does not hide the extensions.
+//! - The core reads a catalogue only when a client asks: `marketplace_refresh`,
+//!   or a search or install before it was read (or after its address
+//!   changed). There is no background refresh.
 //! - Every plugin install, an update too, arrives as `needs_review`: the
 //!   core clears the plugin's grants before the new files are in place, and
 //!   the plugin host reloads it.
 //! - A theme install applies at once when `ui.theme` names it; a tool
 //!   install or uninstall sends `tools_changed`.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -18,7 +24,8 @@ use cabinetos_market::{Index, Installed, Market, MarketError, Source};
 use cabinetos_plugins::PluginHost;
 use cabinetos_plugins::manifest::{self, Capability};
 use cabinetos_protocol::{
-    CapabilityLevel, ErrorCode, Event, ExtensionKind, MarketItem, Response, ToolInfo,
+    CapabilityLevel, Catalogue, ErrorCode, Event, ExtensionKind, MarketItem, Response, Theme,
+    ToolInfo,
 };
 
 use crate::CORE_VERSION;
@@ -29,11 +36,25 @@ use crate::themes::Themes;
 /// Progress events of one download: at most 30 a second.
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(33);
 
+/// How many previewed themes the core keeps (about 2 KB each): the whole
+/// collection and some to spare. A full memory starts over.
+const PREVIEWS_KEPT: usize = 64;
+
+/// A catalogue read last, with the settings it came from.
+type Read = Option<(String, Arc<Index>)>;
+
 /// The marketplace client and what an install touches.
 pub(crate) struct Marketplace {
     market: Market,
-    /// The index read last, with the `marketplace.index` it came from.
-    index: Mutex<Option<(String, Arc<Index>)>>,
+    /// The extensions read last (plugins and tools), with the
+    /// `marketplace.index` they came from.
+    read_extensions: Mutex<Read>,
+    /// The themes read last, with the `marketplace.themes` and
+    /// `marketplace.index` they came from: while `themes.json` is missing
+    /// the themes are the index's own, so both settings decide.
+    read_themes: Mutex<Read>,
+    /// Themes read for a preview, by ID, version and hash.
+    previews: Mutex<HashMap<String, Theme>>,
     settings: Arc<Settings>,
     events: Arc<EventHub>,
     /// `None` when the plugin host could not start.
@@ -51,7 +72,9 @@ impl Marketplace {
     ) -> Self {
         Self {
             market,
-            index: Mutex::new(None),
+            read_extensions: Mutex::new(None),
+            read_themes: Mutex::new(None),
+            previews: Mutex::new(HashMap::new()),
             settings,
             events,
             plugins,
@@ -59,23 +82,64 @@ impl Marketplace {
         }
     }
 
-    /// The reply to `marketplace_refresh`: reads the index now. Blocking.
-    pub(crate) fn refresh(&self) -> Response {
-        match self.read_index() {
+    /// The reply to `marketplace_refresh`: reads the catalogue now.
+    /// Blocking.
+    pub(crate) fn refresh(&self, catalogue: Catalogue) -> Response {
+        match self.read(catalogue) {
             Ok(index) => index_reply(&index, self.market.offers(&index.items)),
             Err(error) => failure(error),
         }
     }
 
-    /// The reply to `marketplace_search`. Blocking when it reads the index.
-    pub(crate) fn search(&self, query: &str, kind: Option<ExtensionKind>) -> Response {
-        match self.current_index() {
+    /// The reply to `marketplace_search`. Blocking when it reads the
+    /// catalogue.
+    pub(crate) fn search(
+        &self,
+        query: &str,
+        kind: Option<ExtensionKind>,
+        catalogue: Catalogue,
+    ) -> Response {
+        match self.current(catalogue) {
             Ok(index) => {
                 let offered = self.market.offers(&index.items);
                 index_reply(&index, cabinetos_market::search(&offered, query, kind))
             }
             Err(error) => failure(error),
         }
+    }
+
+    /// The reply to `preview_theme`: the whole theme of the themes
+    /// catalogue, read without installing it. A theme read lately is
+    /// answered from memory: the gallery asks again each time the selection
+    /// returns to a tile. Blocking when it downloads.
+    pub(crate) fn preview_theme(&self, id: &str) -> Response {
+        match self.try_preview_theme(id) {
+            Ok(theme) => Response::Theme {
+                theme: Box::new(theme),
+            },
+            Err(error) => failure(error),
+        }
+    }
+
+    fn try_preview_theme(&self, id: &str) -> Result<Theme, MarketError> {
+        let themes = self.current(Catalogue::Themes)?;
+        let item = self.market.choose(&themes, id, None)?;
+        let key = format!("{}@{}@{}", item.id, item.version, item.download.sha256);
+        if let Some(theme) = self.lock_previews().get(&key) {
+            return Ok(theme.clone());
+        }
+        let allow_insecure = self.settings.snapshot().config.marketplace.allow_insecure;
+        let theme = self.market.preview_theme(&themes, item, allow_insecure)?;
+        let mut previews = self.lock_previews();
+        if previews.len() >= PREVIEWS_KEPT {
+            previews.clear();
+        }
+        previews.insert(key, theme.clone());
+        Ok(theme)
+    }
+
+    fn lock_previews(&self) -> MutexGuard<'_, HashMap<String, Theme>> {
+        self.previews.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Every installed Tool Extension. Blocking: it reads their folders.
@@ -115,7 +179,7 @@ impl Marketplace {
     }
 
     fn try_install(&self, id: &str, version: Option<&str>) -> Result<String, MarketError> {
-        let index = self.current_index()?;
+        let index = self.index_of(id)?;
         let item = self.market.choose(&index, id, version)?;
         if item.kind == ExtensionKind::Plugin {
             self.clear_grants(id)?;
@@ -230,33 +294,79 @@ impl Marketplace {
         }
     }
 
-    /// The index read last, or read now when there is none or
-    /// `marketplace.index` changed since.
-    fn current_index(&self) -> Result<Arc<Index>, MarketError> {
-        let location = self.settings.snapshot().config.marketplace.index.clone();
-        if let Some((read_from, index)) = &*self.lock_index()
-            && *read_from == location
+    /// The catalogue read last, or read now when there is none or its
+    /// settings changed since.
+    fn current(&self, catalogue: Catalogue) -> Result<Arc<Index>, MarketError> {
+        let key = self.key(catalogue);
+        if let Some((read_from, index)) = &*self.lock(catalogue)
+            && *read_from == key
         {
             return Ok(Arc::clone(index));
         }
-        self.read_index()
+        self.read(catalogue)
     }
 
-    fn read_index(&self) -> Result<Arc<Index>, MarketError> {
+    /// Where the extension `id` is offered, for an install: the extensions'
+    /// index, else the themes catalogue, so the command line installs a
+    /// theme by its ID too. The themes catalogue is read only when the
+    /// extensions do not have the ID. An ID that neither has gives the
+    /// extensions' index, whose `choose` says there is no such extension.
+    fn index_of(&self, id: &str) -> Result<Arc<Index>, MarketError> {
+        let has = |index: &Arc<Index>| index.items.iter().any(|item| item.id == id);
+        let extensions = self.current(Catalogue::Extensions)?;
+        if has(&extensions) {
+            return Ok(extensions);
+        }
+        let themes = self.current(Catalogue::Themes)?;
+        Ok(if has(&themes) { themes } else { extensions })
+    }
+
+    fn read(&self, catalogue: Catalogue) -> Result<Arc<Index>, MarketError> {
+        let key = self.key(catalogue);
         let config = self.settings.snapshot().config.marketplace.clone();
-        let source = Source::parse(&config.index, config.allow_insecure)?;
-        let index = Arc::new(self.market.fetch(&source, config.allow_insecure)?);
+        let index = match catalogue {
+            Catalogue::Extensions => {
+                let source = Source::parse(&config.index, config.allow_insecure)?;
+                self.market
+                    .fetch(&source, config.allow_insecure)?
+                    .only(Catalogue::Extensions)
+            }
+            Catalogue::Themes => {
+                let themes = Source::parse_themes(&config.themes, config.allow_insecure)?;
+                self.market.fetch_themes(
+                    &themes,
+                    || Source::parse(&config.index, config.allow_insecure),
+                    config.allow_insecure,
+                )?
+            }
+        };
+        let index = Arc::new(index);
         tracing::info!(
+            catalogue = ?catalogue,
             source = %index.source,
             items = index.items.len(),
-            "marketplace index read"
+            "marketplace catalogue read"
         );
-        *self.lock_index() = Some((config.index, Arc::clone(&index)));
+        *self.lock(catalogue) = Some((key, Arc::clone(&index)));
         Ok(index)
     }
 
-    fn lock_index(&self) -> MutexGuard<'_, Option<(String, Arc<Index>)>> {
-        self.index.lock().unwrap_or_else(PoisonError::into_inner)
+    /// The settings a catalogue read depends on, to tell when one is stale.
+    fn key(&self, catalogue: Catalogue) -> String {
+        let config = &self.settings.snapshot().config.marketplace;
+        match catalogue {
+            Catalogue::Extensions => config.index.clone(),
+            Catalogue::Themes => format!("{}\n{}", config.themes, config.index),
+        }
+    }
+
+    fn lock(&self, catalogue: Catalogue) -> MutexGuard<'_, Read> {
+        match catalogue {
+            Catalogue::Extensions => &self.read_extensions,
+            Catalogue::Themes => &self.read_themes,
+        }
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
     }
 }
 

@@ -466,8 +466,8 @@ opt-in through the marketplace. The core neither embeds these files nor
 writes them into the themes folder. A user installs the themes they want,
 one by one.
 
-**Installing one.** In the marketplace view: the Themes tab, then "Install
-and apply". From the command line:
+**Installing one.** In the theme gallery ("The gallery" below): select a
+tile, then Install. From the command line:
 
 ```text
 cabinetos-cli market install dracula
@@ -476,25 +476,57 @@ cabinetos-cli config set ui.theme dracula
 
 A theme installed this way lands in the themes folder like any other and
 can be uninstalled again (`cabinetos-cli market uninstall dracula`, once
-another theme is in effect). The marketplace needs an index that offers
-the collection. The public index does not exist yet
-([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)); when
-the creator publishes it, the collection goes with it. Until then,
-`build-index.ps1` builds a local one with `-Collection`:
+another theme is in effect). The collection is in the public themes
+catalogue, `themes.json` ([marketplace.md](marketplace.md), "The two
+catalogues"). `build-index.ps1` builds a local one with `-Collection`:
 
 ```text
 powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> -Collection
 cabinetos-cli config set marketplace.index "<folder>"
-cabinetos-cli market refresh
+cabinetos-cli config set marketplace.themes "<folder>"
+cabinetos-cli market refresh --themes
 ```
 
-Without `-Collection` the script builds the index it always did: the
-fixture plugins and the four shipped themes. With it, each collection
-theme becomes one more item, in the order of `marketplace.csv`, whose row
-gives the item's description, license and source link (the marketplace
-view's Source button opens it). Copying a file by hand into the themes
-folder works too; the marketplace then leaves that theme alone, as it
-does a shipped one ([marketplace.md](marketplace.md), trust rule 7).
+Without `-Collection` the script's `themes.json` holds the five shipped
+themes. With it, each collection theme becomes one more item, in the order
+of `marketplace.csv`, whose row gives the item's description, license and
+source link (the item keeps them; the gallery's tile does not show them).
+Copying a file by hand
+into the themes folder works too; the marketplace then leaves that theme
+alone, as it does a shipped one ([marketplace.md](marketplace.md), trust
+rule 7).
+
+## The gallery
+
+The theme gallery is where a user browses the themes of the marketplace:
+each one as a tile painted in its own colours, so a theme is seen before it
+is installed. "Preferences: Color Theme" is the picker for the themes
+already installed; the gallery is for the others, and for a closer look
+([ui.md](ui.md), "The theme gallery"). It reads `themes.json`, which lists
+each theme with three things the gallery needs beside the usual item keys
+([marketplace.md](marketplace.md), "The index"):
+
+- `appearance`: `dark`, `light` or `system`, the theme file's `kind`. The
+  gallery's filters Dark, Light and System use it.
+- `density`: `true` when the theme sets `metrics`. A density preset (today
+  Commander Compact) changes sizes and not only colours, so it has a filter
+  of its own, "Density presets".
+- `tile`: `{ "background", "text", "accent" }`, each `#RRGGBB`.
+
+**The gallery's tile.** The build script reads the three colours from the
+theme file, from the keys the window's file rows use, so the tile looks like
+a small file list in that theme:
+
+| Tile colour | From | Why |
+|---|---|---|
+| `background` | `palette.layerFill` laid over the Mica tint (`mica.tint` at `mica.opacity`), which is laid over plain Mica (`#202020` for a dark or `system` theme, `#F3F3F3` for a light one) | The pane's fill is `layerFill` over the window's backdrop, so this is the colour behind the rows |
+| `text` | `palette.textPrimary`, laid over `background` when it has an alpha part | The names in the rows |
+| `accent` | `accent`; for a theme without one (`null`), `#60CDFF` (Windows' default accent in dark mode) or `#005FB8` (its light-mode shade) | The selection pill and the check |
+
+A `system` theme's palette is its dark-mode look, so its stored tile is
+dark; the window paints a `system` tile in the mode Windows is in now (its
+light colours are the window's own, "Light mode of a `system` theme" in
+[ui.md](ui.md)), and in Windows' accent, as the picker's swatch does.
 
 **How the colours were chosen.** Every colour comes from the theme's own
 repository at a fixed commit, under an open license (all MIT). The same
@@ -529,5 +561,6 @@ a lower alpha instead; the README lists each case.
 ## Not yet
 
 - No light theme ships with the core; the collection has nine.
-- The collection can be installed only from a local index until the
-  public one exists ([ADR 0012](decisions/0012-marketplace-index-on-github-pages.md)).
+- The collection reaches the public site only when the creator publishes
+  `themes.json` ([ADR 0022](decisions/0022-two-catalogues-extensions-and-themes.md));
+  until then the theme items of the public `index.json` stand in for it.

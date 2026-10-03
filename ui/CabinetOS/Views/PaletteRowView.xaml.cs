@@ -88,8 +88,10 @@ public sealed partial class PaletteRowView : UserControl
         row.PropertyChanged += OnRowChanged;
         CategoryText.Text = row.CategoryText;
         TitleText.Text = row.Title;
-        Badge.Visibility = row.Badge is null ? Visibility.Collapsed : Visibility.Visible;
-        BadgeText.Text = row.Badge ?? "";
+        // A plugin's name, or the state of the setting the command changes: the same chip.
+        var chip = row.Badge ?? row.StateText;
+        Badge.Visibility = chip is null ? Visibility.Collapsed : Visibility.Visible;
+        BadgeText.Text = chip ?? "";
         PencilButton.Visibility = row.IsImmutable ? Visibility.Collapsed : Visibility.Visible;
         LockIcon.Visibility = row.IsImmutable ? Visibility.Visible : Visibility.Collapsed;
         BuildKeycaps(row);

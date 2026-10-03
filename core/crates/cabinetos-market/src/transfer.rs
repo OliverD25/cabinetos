@@ -249,6 +249,22 @@ pub fn get(
     what: &str,
     client: Client,
 ) -> Result<Fetched, String> {
+    get_optional(http, url, tag, allow_insecure, limit, what, client)?
+        .ok_or_else(|| format!("the server answered 404 for {what} {url}"))
+}
+
+/// Like [`get`], but a file the server does not have (404) is `Ok(None)`:
+/// for a file that is allowed to be missing, such as the themes catalogue
+/// before the marketplace site publishes it.
+pub fn get_optional(
+    http: &Http,
+    url: &Url,
+    tag: Option<&str>,
+    allow_insecure: bool,
+    limit: u64,
+    what: &str,
+    client: Client,
+) -> Result<Option<Fetched>, String> {
     let started = Instant::now();
     let mut request = http.agent(allow_insecure).get(url.as_str());
     if let Some(tag) = tag {
@@ -263,7 +279,8 @@ pub fn get(
         http_line(client, url, "GET", status, 0, started);
     }
     match status {
-        304 if tag.is_some() => Ok(Fetched::NotModified),
+        304 if tag.is_some() => Ok(Some(Fetched::NotModified)),
+        404 => Ok(None),
         200 => {
             let etag = response
                 .headers()
@@ -277,7 +294,7 @@ pub fn get(
                 .read_to_vec()
                 .map_err(|error| format!("cannot read {what} {url}: {error}"))?;
             http_line(client, url, "GET", status, bytes.len() as u64, started);
-            Ok(Fetched::Whole { bytes, etag })
+            Ok(Some(Fetched::Whole { bytes, etag }))
         }
         status => Err(format!("the server answered {status} for {what} {url}")),
     }

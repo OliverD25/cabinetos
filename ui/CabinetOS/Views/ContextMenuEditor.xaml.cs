@@ -66,6 +66,8 @@ public sealed partial class ContextMenuEditor : UserControl
                 FocusRow(FocusState.Programmatic);
             }
         };
+        ShellMenuCheck.Checked += OnShellMenuBox;
+        ShellMenuCheck.Unchecked += OnShellMenuBox;
         AddButton.Click += (_, _) => _ = AddCommandAsync();
         SeparatorButton.Click += (_, _) => AddSeparator();
         OpenFileButton.Click += (_, _) => OpenFile?.Invoke();
@@ -84,6 +86,42 @@ public sealed partial class ContextMenuEditor : UserControl
 
     /// <summary>Raised when the edit mode ends, before the surface collapses: whether the list was saved.</summary>
     public event Action<bool>? Closed;
+
+    /// <summary>The last row was pressed: the window runs <c>menu.toggleShellMenu</c>, which writes <c>contextMenu.shellMenu</c>.</summary>
+    public event Action? ShellMenuToggled;
+
+    private bool _shellMenuOn;
+    private bool _syncingBox;
+
+    // A click, the Space key or assistive technology changed the box: the box shows what the file says, so it is put back at once
+    // and the window is asked to change the setting; the file's change (the core's config_changed) moves the box.
+    private void OnShellMenuBox(object sender, RoutedEventArgs e)
+    {
+        if (_syncingBox || (ShellMenuCheck.IsChecked == true) == _shellMenuOn)
+        {
+            return;
+        }
+        _syncingBox = true;
+        ShellMenuCheck.IsChecked = _shellMenuOn;
+        _syncingBox = false;
+        ShellMenuToggled?.Invoke();
+    }
+
+    /// <summary>Whether the last row's box is checked now (the snapshot aid's log).</summary>
+    public bool ShellMenuChecked => ShellMenuCheck.IsChecked == true;
+
+    /// <summary>Whether <c>contextMenu.shellMenu</c> is on: the last row's check follows the file.</summary>
+    public bool ShellMenuOn
+    {
+        get => _shellMenuOn;
+        set
+        {
+            _shellMenuOn = value;
+            _syncingBox = true;
+            ShellMenuCheck.IsChecked = value;
+            _syncingBox = false;
+        }
+    }
 
     /// <summary>Whether the edit mode is on screen.</summary>
     public bool IsOpen => _model is not null;

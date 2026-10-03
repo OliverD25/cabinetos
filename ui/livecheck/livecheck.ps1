@@ -225,6 +225,17 @@ function ClickLeftPane {
   Start-Sleep -Milliseconds 400
 }
 
+# The pointer to a quiet place in the window (the status bar's left end) by a real mouse move, before a list opens under
+# it: a pointer resting where a row appears pulls the highlight to that row (the rows follow PointerMoved). The theme
+# picker's last row, "Browse more themes", is under the point ClickLeftPane clicked, so a picker opened after such a click
+# started on it and Enter opened the gallery (the laptop's run of 2026-10-03). SetCursorPos(2, 2) moved the cursor out of
+# the window without a pointer event the window could see, so the window still took the pointer to be where it was.
+function ParkMouse {
+  $rect = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($script:h, 9, [ref]$rect, 16)
+  [Live]::MoveTo([int]($rect.Left + 12), [int]($rect.Bottom - 10))
+  Start-Sleep -Milliseconds 250
+}
+
 function SelectionText {
   $line = UiLast '"selection shown"'
   if (-not $line) { return "(the window has not reported a selection yet)" }
@@ -417,16 +428,17 @@ log.WriteLine(WScript.Arguments.length > 0 ? WScript.Arguments(0) : "(no file)")
 log.Close();
 '@
 # Without a byte order mark (Windows PowerShell's UTF8 writes one): the core reads plain JSON.
-# A marketplace index of this run's own (built here, nothing uploaded, nothing fetched): the fixture plugins and the shipped
-# themes, and the Agent extension when the repository has it built (sdk\extensions\build-extensions.ps1).
+# The marketplace's two catalogues of this run's own (built here, nothing uploaded, nothing fetched; ADR 0022): index.json
+# with the fixture plugins and the Agent extension when the repository has it built (sdk\extensions\build-extensions.ps1),
+# and themes.json with the shipped themes and the theme collection, which section 22's gallery shows.
 $indexScript = "$PSScriptRoot\..\..\sdk\marketplace\build-index.ps1"
 $agentPlugin = "$PSScriptRoot\..\..\sdk\extensions\agent\plugin\plugin.wasm"
 $hasExtensions = (Test-Path -LiteralPath $indexScript) -and ((Get-Content -LiteralPath $indexScript -Raw) -match '\[switch\]\s*\$Extensions') -and (Test-Path -LiteralPath $agentPlugin)
 $indexDir = "$root\index"
-$indexArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $indexScript, '-OutDir', $indexDir)
+$indexArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $indexScript, '-OutDir', $indexDir, '-Collection')
 if ($hasExtensions) { $indexArgs += '-Extensions' }
 & powershell.exe @indexArgs | ForEach-Object { "index: $_" }
-$editorJson = @{ version = 1; files = @{ editor = @{ command = "wscript.exe"; args = [string[]]@("//B", "//Nologo", $stub) } }; marketplace = @{ index = $indexDir } } | ConvertTo-Json -Depth 5
+$editorJson = @{ version = 1; files = @{ editor = @{ command = "wscript.exe"; args = [string[]]@("//B", "//Nologo", $stub) } }; marketplace = @{ index = $indexDir; themes = $indexDir } } | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($env:CABINETOS_CONFIG, $editorJson, (New-Object System.Text.UTF8Encoding $false))
 $env:CABINETOS_LOG_DIR = "$root\logs"
 $env:CABINETOS_UI_FRAMESTATS = "1"
@@ -922,7 +934,7 @@ GoPath "$cc\dst" 1000
 function ThemeLog { UiObjects '"target":"cabinetos_ui::theme"' }
 Step "theme preview: Ctrl+K Ctrl+T, Down previews the next theme, Esc paints the theme in effect back"
 $themeBefore = (ThemeLog | Where-Object { $_.message -eq 'theme applied' -or $_.message -eq 'theme restored' } | Select-Object -Last 1).fields.theme
-[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
+ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 1500 -what 'the theme picker'
 [Live]::Press($VK.Down); Start-Sleep -Milliseconds 500
@@ -938,7 +950,7 @@ $restored = if ($lastPreview -ge 0) { $themeLines | Select-Object -Skip ($lastPr
 
 Step "compact: Ctrl+K Ctrl+T, the theme picker; Home, Down to Commander Compact, Enter"
 # The mouse goes to the corner first: a pointer left over the list would pull the highlight to its row.
-[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
+ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 2000 -what 'the theme picker'
 Shot $h "$ShotDir\compact-picker-live.png"
@@ -1055,7 +1067,7 @@ if ($bigList) {
 } else { "compact: no scrollable list found in the automation tree: False" }
 
 Step "compact: Ctrl+K Ctrl+T, Home, Down, Down to Default, Enter"
-[void][Live]::SetCursorPos(2, 2); Start-Sleep -Milliseconds 200
+ParkMouse
 [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
 PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 2000 -what 'the theme picker'
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
@@ -1325,6 +1337,8 @@ function RailButtonElement([string]$name) {
 $railRects = @{}
 function ClickRail([string]$name) {
   $r = $railRects[$name]
+  # No rectangle would be a click at the screen's corner, which brings the desktop in front and stops the run.
+  if (-not $r) { "13: the $name button was not found, so it is not clicked"; return }
   [Live]::Click([int]($r.Left + $r.Width / 2), [int]($r.Top + $r.Height / 2))
 }
 function LockTreeFromPalette {
@@ -1374,10 +1388,10 @@ $f = LastFields '"the sidebar shows a view"'
 Shot $h "$ShotDir\rail13-explorer-live.png"
 
 Step "13: the rail's five buttons, found by UI Automation"
-$names = 'Explorer', 'Search', 'Marketplace', 'Terminal', 'Quick Notes'
+$names = 'Explorer', 'Search', 'Extensions', 'Terminal', 'Quick Notes'
 $buttons = @{}
 foreach ($n in $names) { $buttons[$n] = RailButtonElement $n; if ($buttons[$n]) { $railRects[$n] = $buttons[$n].Current.BoundingRectangle } }
-"13: the rail has its five buttons: $(@($names | Where-Object { $buttons[$_] }).Count -eq 5)"
+"13: the rail has its five buttons (missing: $((@($names | Where-Object { -not $buttons[$_] }) -join ', '))): $(@($names | Where-Object { $buttons[$_] }).Count -eq 5)"
 if ($buttons['Explorer'] -and $buttons['Search']) {
   $wr = New-Object Live+RECT; [void][Live]::DwmGetWindowAttribute($h, 9, [ref]$wr, 16)
   $e = $buttons['Explorer'].Current.BoundingRectangle; $s = $buttons['Search'].Current.BoundingRectangle
@@ -1483,13 +1497,13 @@ PressUntil { [Live]::Press($VK.Ctrl, $VK.Shift, $VK.E) } '"command executed".*"c
 $f = LastFields '"the sidebar shows a view"'
 "13: the sidebar is open on the Explorer again: $($f.view -eq 'explorer' -and $f.open -eq $true)"
 
-Step "13: the mouse on the Marketplace button opens it; a second click closes it"
+Step "13: the mouse on the Extensions button opens the page; a second click closes it"
 $shown = @(UiLines '"marketplace shown"').Count
 $closed = @(UiLines '"marketplace closed"').Count
-ClickRail 'Marketplace'; Start-Sleep -Milliseconds 2500
-"13: the marketplace opened: $(@(UiLines '"marketplace shown"').Count -eq $shown + 1)"
-Shot $h "$ShotDir\rail13-marketplace-live.png"
-ClickRail 'Marketplace'; Start-Sleep -Milliseconds 1500
+ClickRail 'Extensions'; Start-Sleep -Milliseconds 2500
+"13: the Extensions page opened: $(@(UiLines '"marketplace shown"').Count -eq $shown + 1)"
+Shot $h "$ShotDir\rail13-extensions-live.png"
+ClickRail 'Extensions'; Start-Sleep -Milliseconds 1500
 "13: the second click closed it: $(@(UiLines '"marketplace closed"').Count -eq $closed + 1)"
 
 Step "13: the mouse on the active Explorer button closes the sidebar; Ctrl+Alt+B opens it"
@@ -2435,6 +2449,7 @@ OpenPalette 500
 ClickLeftPane
 
 Step "keys: Ctrl+K Ctrl+T, Tab, Enter: Tab stays in the theme picker, and Enter applies the highlighted theme"
+ParkMouse
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
 $applied = CommandCount 'theme.apply'
 $opens = CommandCount 'pane.openSelected'
@@ -2912,6 +2927,172 @@ $summons = @(TermLines 'terminal summoned').Count
 $hidden = WaitShellLines 'terminal summoned' $summons 3
 Start-Sleep -Milliseconds 500
 "21: the second Ctrl+Backquote from the pane hid the dock: $($hidden.fields.action -eq 'Hide')"
+
+# ----- 22: the theme gallery (docs/ui.md, "The theme gallery"; Phase 23) -----
+# The themes catalogue as colour tiles. This run's own catalogue (themes.json, built above with -Collection) holds the five
+# shipped themes and the theme collection, so most tiles are not installed. Real keys and the real mouse: the picker's
+# last row opens the gallery; an arrow key previews the tile it lands on (the window takes its colours, nothing is
+# installed or written) and the status bar says so; Esc closes the gallery and paints the theme in effect back; the
+# palette's "Themes: Browse" opens it again, a search narrows the tiles, and Enter installs the theme and applies it;
+# a double-click on an installed tile applies that one. The window's lines: "gallery shown", "gallery theme previewed",
+# "preview status shown", "gallery closed", "theme restored", "theme applied".
+function ThemeLines([string]$message) { @(ThemeLog | Where-Object { $_.message -eq $message }) }
+function ThemeInConfig { $t = (ConfigUi).theme; if ($t) { $t } else { 'default' } }
+function WaitConfigTheme([string]$want, [int]$seconds = 10) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ((ThemeInConfig) -ne $want -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+  (ThemeInConfig) -eq $want
+}
+# A tile's button, by the start of its accessible name ("Nord, by ..., dark, installed").
+function GalleryTile([string]$namePrefix) {
+  $ae = [System.Windows.Automation.AutomationElement]
+  $buttons = $ae::FromHandle($script:h).FindAll([System.Windows.Automation.TreeScope]::Descendants,
+    (New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))
+  @($buttons | Where-Object { $_.Current.Name -like "$namePrefix*" })[0]
+}
+$warn22 = @(UiLines '"level":"(WARN|WARNING|ERROR)"').Count
+
+Step "22: Ctrl+K Ctrl+T, End, Enter: the picker's last row, Browse more themes, opens the gallery"
+ClickLeftPane
+$inEffect = ThemeInConfig
+$shown = @(ShellLines 'gallery shown').Count
+ParkMouse
+[Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+PressUntil { [Live]::Press($VK.Ctrl, $VK.T) } '"reply received".*"request":"list_themes"' 1500 -what 'the theme picker'
+[Live]::Press($VK.End); Start-Sleep -Milliseconds 400
+[Live]::Press($VK.Enter)
+"22: the gallery opened from the picker's last row: $([bool](WaitShellLines 'gallery shown' $shown 8))"
+Start-Sleep -Milliseconds 3000
+
+Step "22: Home, Right, Down: each key previews the tile it lands on, and the status bar says so"
+ParkMouse
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 800
+$previews = @(ShellLines 'gallery theme previewed').Count
+[Live]::Press($VK.Right); Start-Sleep -Milliseconds 1000
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 1000
+$pv = @(ShellLines 'gallery theme previewed')
+$lastPreview = $pv | Select-Object -Last 1
+$statusLine = ShellLines 'preview status shown' | Select-Object -Last 1
+"22: Right and Down previewed tiles ($($pv.Count - $previews) new lines, the last is $($lastPreview.fields.theme)): $($pv.Count - $previews -ge 1)"
+"22: the status bar says what is previewed and how to leave ('$($statusLine.fields.text)'): $([bool]($statusLine -and $statusLine.fields.text -match '^Previewing .+Esc restores$'))"
+$previewFile = "$root\themes\$($lastPreview.fields.theme).json"
+"22: nothing was written: ui.theme is still $inEffect, and a theme that was not installed is still not ($($lastPreview.fields.installed)): $((ThemeInConfig) -eq $inEffect -and ($lastPreview.fields.installed -eq $true -or -not (Test-Path -LiteralPath $previewFile)))"
+Shot $h "$ShotDir\gallery-preview-live.png"
+
+Step "22: Esc closes the gallery and paints the theme in effect back"
+$closed = @(ShellLines 'gallery closed').Count
+$restoredBefore = @(ThemeLines 'theme restored').Count
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 1000
+$gc = WaitShellLines 'gallery closed' $closed 3
+$restored = @(ThemeLines 'theme restored')
+$statusLine = ShellLines 'preview status shown' | Select-Object -Last 1
+"22: Esc closed the gallery and said the theme was painted back: $([bool]($gc -and $gc.fields.restored -eq $true))"
+"22: the window painted $inEffect back: $([bool]($restored.Count -gt $restoredBefore -and $restored[-1].fields.theme -eq $inEffect))"
+"22: the status bar's preview line is empty again: $([bool]($statusLine -and $statusLine.fields.text -eq ''))"
+"22: nothing was written (ui.theme is $(ThemeInConfig)): $((ThemeInConfig) -eq $inEffect)"
+
+Step "22: the palette's Themes: Browse; 'dracula' in the search; Down; Enter installs Dracula and applies it"
+$shown = @(ShellLines 'gallery shown').Count
+OpenPalette 500
+[Live]::Type("themes: browse"); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Enter)
+"22: the palette's row opened the gallery again: $([bool](WaitShellLines 'gallery shown' $shown 8))"
+Start-Sleep -Milliseconds 2500
+[Live]::Type("dracula"); Start-Sleep -Milliseconds 1500
+[Live]::Press($VK.Down); Start-Sleep -Milliseconds 600
+$draculaTile = GalleryTile 'Dracula, by '
+"22: the search left the Dracula tile ('$($draculaTile.Current.Name)'): $([bool]$draculaTile)"
+Shot $h "$ShotDir\gallery-search-live.png"
+$appliedBefore = @(ThemeLines 'theme applied').Count
+[Live]::Press($VK.Enter)
+"22: ui.theme in the file is dracula: $(WaitConfigTheme 'dracula')"
+Start-Sleep -Milliseconds 1500
+"22: the theme's file is in the themes folder: $(Test-Path -LiteralPath "$root\themes\dracula.json")"
+$lastApplied = ThemeLines 'theme applied' | Select-Object -Last 1
+"22: the window painted dracula: $([bool](@(ThemeLines 'theme applied').Count -gt $appliedBefore -and $lastApplied.fields.theme -eq 'dracula'))"
+
+Step "22: the search cleared: every tile again, the applied theme's tile says Applied (a screenshot)"
+foreach ($i in 1..8) { [Live]::Press($VK.Back); Start-Sleep -Milliseconds 40 }
+Start-Sleep -Milliseconds 1800
+$appliedTile = GalleryTile 'Dracula, by '
+"22: the Dracula tile is named applied ('$($appliedTile.Current.Name)'): $([bool]($appliedTile -and $appliedTile.Current.Name -match ', applied'))"
+Shot $h "$ShotDir\gallery-applied-live.png"
+
+Step "22: 'nord' in the search; a real double-click on the Nord tile applies it"
+[Live]::Type("nord"); Start-Sleep -Milliseconds 1500
+$nordTile = GalleryTile 'Nord, by '
+"22: the Nord tile is found by its accessible name ('$($nordTile.Current.Name)'): $([bool]$nordTile)"
+if ($nordTile) {
+  $appliedBefore = @(ThemeLines 'theme applied').Count
+  ClickElement $nordTile; ClickElement $nordTile
+  "22: the double-click applied nord (ui.theme in the file): $(WaitConfigTheme 'nord')"
+  Start-Sleep -Milliseconds 1200
+  $lastApplied = ThemeLines 'theme applied' | Select-Object -Last 1
+  "22: the window painted nord: $([bool](@(ThemeLines 'theme applied').Count -gt $appliedBefore -and $lastApplied.fields.theme -eq 'nord'))"
+}
+
+Step "22: Esc closes the gallery; the keyboard is in the pane again"
+$closed = @(ShellLines 'gallery closed').Count
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 1000
+$gc = WaitShellLines 'gallery closed' $closed 3
+$statusLine = ShellLines 'preview status shown' | Select-Object -Last 1
+"22: Esc closed the gallery, with no preview left on the status bar and nord in effect: $([bool]($gc -and $statusLine.fields.text -eq '' -and (ThemeInConfig) -eq 'nord'))"
+"22: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warn22)"
+
+# ----- 23: the layout from the palette, the menu and the chord (docs/ui.md, "Settings reachable three ways"; Phase 23) -----
+# ui.layout was in the file only until Phase 23. Here the palette's "View: Activity Rail" writes it (the window follows the
+# change the core sends, as for a hand edit); the top row's menu has a Layout submenu that checks the current layout and
+# writes classic back; Ctrl+K Ctrl+L goes to the next layout (classic, right, rail) three times and is classic again.
+function LayoutInConfig { $l = (ConfigUi).layout; if ($l) { $l } else { 'classic' } }
+function WaitLayout([string]$want, [int]$seconds = 8) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ((LayoutInConfig) -ne $want -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+  (LayoutInConfig) -eq $want
+}
+$warn23 = @(UiLines '"level":"(WARN|WARNING|ERROR)"').Count
+
+Step "23: the palette's View: Activity Rail: ui.layout says rail, and the rail shows"
+ClickLeftPane
+$railOn = @(UiLines '"the rail layout is on"').Count
+OpenPalette 500
+[Live]::Type("activity rail"); Start-Sleep -Milliseconds 900
+[Live]::Press($VK.Enter)
+"23: ui.layout in the file is rail: $(WaitLayout 'rail')"
+Start-Sleep -Milliseconds 1800
+"23: the window switched to the rail layout: $(@(UiLines '"the rail layout is on"').Count -gt $railOn)"
+Shot $h "$ShotDir\layout-rail-live.png"
+
+Step "23: the top row's menu, Layout, Classic Layout: the window goes back to the classic layout"
+$railOff = @(UiLines '"the rail layout is off"').Count
+$menu = ShellElement 'Menu'
+"23: the top row has its Menu button: $([bool]$menu)"
+if ($menu) {
+  ClickElement $menu; Start-Sleep -Milliseconds 700
+  $layoutRow = AppElement 'Layout' 2
+  "23: the menu has a Layout row: $([bool]$layoutRow)"
+  if ($layoutRow) {
+    ClickElement $layoutRow; Start-Sleep -Milliseconds 700
+    $railRow = AppElement 'Activity Rail' 2
+    "23: the Layout menu checks the layout in effect (Activity Rail is $(if ($railRow) { $railRow.Current.ItemStatus } else { 'not there' })): $([bool]($railRow -and $railRow.Current.ItemStatus -eq 'on'))"
+    Shot $h "$ShotDir\layout-menu-live.png"
+    $classicRow = AppElement 'Classic Layout' 2
+    "23: the Layout menu has a Classic Layout row: $([bool]$classicRow)"
+    if ($classicRow) { ClickElement $classicRow }
+  }
+}
+"23: ui.layout in the file is classic: $(WaitLayout 'classic')"
+Start-Sleep -Milliseconds 1500
+"23: the window went back to the classic layout: $(@(UiLines '"the rail layout is off"').Count -gt $railOff)"
+
+Step "23: Ctrl+K Ctrl+L three times: right, rail, classic"
+ClickLeftPane
+foreach ($want in 'right', 'rail', 'classic') {
+  [Live]::Press($VK.Ctrl, $VK.K); Start-Sleep -Milliseconds 150
+  [Live]::Press($VK.Ctrl, $VK.L)
+  "23: Ctrl+K Ctrl+L chose $want in the file: $(WaitLayout $want)"
+  Start-Sleep -Milliseconds 1500
+}
+"23: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warn23)"
 
 Step "close"
 $script:h = $null

@@ -159,6 +159,11 @@ public sealed partial class MainWindow
     {
         var click = RailModel.Click(button, _sidebarOpen, _sidebarView, MarketView.IsOpen);
         Diag.Info(RailTarget, "a rail button was pressed", new LogField("button", button.Id), new LogField("action", click.Action.ToString()));
+        if (GalleryView.IsOpen)
+        {
+            // The gallery takes the main column's place, as the marketplace does: another view of the rail takes it over.
+            CloseGallery(restore: true, focusPane: false);
+        }
         switch (click.Action)
         {
             case RailAction.ShowView:
@@ -264,10 +269,7 @@ public sealed partial class MainWindow
             SidebarView.FocusFirstRow();
             return;
         }
-        if (MarketView.IsOpen)
-        {
-            CloseMarket(focusPane: false);
-        }
+        CloseCoveringViews();
         ShowSidebarView(RailModel.Explorer, focus: true);
     }
 
@@ -293,10 +295,7 @@ public sealed partial class MainWindow
             SearchPanelView.FocusQuery();
             return Task.CompletedTask;
         }
-        if (MarketView.IsOpen)
-        {
-            CloseMarket(focusPane: false);
-        }
+        CloseCoveringViews();
         ShowSidebarView(RailModel.Search, focus: true);
         return Task.CompletedTask;
     }
@@ -340,10 +339,7 @@ public sealed partial class MainWindow
             ShowNotice("The folder tree is in the rail layout (ui.layout: rail).");
             return;
         }
-        if (MarketView.IsOpen)
-        {
-            CloseMarket(focusPane: false);
-        }
+        CloseCoveringViews();
         ShowSidebarView(RailModel.Explorer, focus: false);
         await RevealActiveFolderAsync(force: true, focus: true);
     }
@@ -571,6 +567,8 @@ public sealed partial class MainWindow
     private void ApplyRailSettings(UiSettings settings, UiSettings previous, bool firstStart)
     {
         _autoReveal = settings.SidebarAutoReveal;
+        // The pin in the Explorer's header is the setting (sidebar.toggleFollow): it follows the file.
+        SidebarView.Tree.FollowsActivePane = _autoReveal;
         if ((firstStart || !(settings.Rail ?? []).SequenceEqual(previous.Rail ?? [])) && _railWrites == 0)
         {
             _rail.SetOrder(settings.Rail ?? []);

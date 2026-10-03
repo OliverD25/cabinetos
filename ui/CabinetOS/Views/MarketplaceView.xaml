@@ -111,7 +111,7 @@
                         FontSize="15"
                         FontWeight="SemiBold"
                         Foreground="{ThemeResource CbTextPrimaryBrush}"
-                        Text="Marketplace" />
+                        Text="Extensions" />
                     <StackPanel x:Name="NavRows" Spacing="2" />
                 </StackPanel>
             </Border>
@@ -133,8 +133,8 @@
                     <TextBox
                         x:Name="SearchField"
                         Height="32"
-                        AutomationProperties.Name="Search plugins and themes"
-                        PlaceholderText="Search plugins and themes" />
+                        AutomationProperties.Name="Search extensions"
+                        PlaceholderText="Search extensions" />
                     <TextBlock
                         x:Name="CaptionText"
                         Grid.Column="1"

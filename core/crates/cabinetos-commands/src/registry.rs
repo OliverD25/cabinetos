@@ -82,7 +82,7 @@ const TERMINAL: Option<&str> = Some("terminalFocus");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 117] = [
+const SEED: [Seed; 125] = [
     seed(
         "palette.show",
         "View",
@@ -158,6 +158,34 @@ const SEED: [Seed; 117] = [
         UI,
         None,
     ),
+    // `ui.layout` three ways (Phase 23, the settings-three-ways skill): one
+    // command per value, and one that goes to the next. The window marks the
+    // current layout in the palette row and checks it in the top row's menu.
+    seed(
+        "view.layoutClassic",
+        "View",
+        "Classic Layout",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "view.layoutRight",
+        "View",
+        "Terminal on the Right",
+        &[],
+        UI,
+        None,
+    ),
+    seed("view.layoutRail", "View", "Activity Rail", &[], UI, None),
+    seed(
+        "view.cycleLayout",
+        "View",
+        "Next Layout",
+        &["ctrl+k ctrl+l"],
+        UI,
+        None,
+    ),
     seed(
         "view.showExplorer",
         "View",
@@ -183,6 +211,16 @@ const SEED: [Seed; 117] = [
         None,
     ),
     seed("sidebar.lock", "Sidebar", "Lock Folder Tree", &[], UI, None),
+    // `ui.sidebarAutoReveal` from the palette (Phase 23): the Explorer view
+    // follows the active pane's folder, or stays where it is.
+    seed(
+        "sidebar.toggleFollow",
+        "Sidebar",
+        "Follow the Active Pane",
+        &[],
+        UI,
+        None,
+    ),
     seed("sidebar.pin", "Sidebar", "Pin Folder", &[], UI, None),
     seed("sidebar.unpin", "Sidebar", "Unpin Folder", &[], UI, None),
     seed(
@@ -320,14 +358,18 @@ const SEED: [Seed; 117] = [
         UI,
         None,
     ),
+    // The Extensions page (Core Plugins and Tool Extensions); the themes
+    // have their gallery, `themes.browse` (Phase 23, ADR 0022). The ID stays:
+    // a command is never renamed.
     seed(
         "marketplace.browse",
         "Marketplace",
-        "Browse Plugins and Themes",
+        "Browse Extensions",
         &["ctrl+shift+x"],
         UI,
         None,
     ),
+    seed("themes.browse", "Themes", "Browse", &[], UI, None),
     seed("plugins.list", "Plugins", "Show Plugins", &[], UI, None),
     seed(
         "workspace.switch",
@@ -717,6 +759,16 @@ const SEED: [Seed; 117] = [
         UI,
         None,
     ),
+    // contextMenu.shellMenu from the palette (Phase 23): Shift+right-click
+    // shows Windows' own menu, or does not.
+    seed(
+        "menu.toggleShellMenu",
+        "Menu",
+        "Toggle Windows' Shell Menu",
+        &[],
+        UI,
+        None,
+    ),
     // Explorer's key for another window of the same folder.
     seed("window.new", "Window", "New Window", &["ctrl+n"], UI, None),
     seed("help.about", "Help", "About CabinetOS", &[], UI, None),
@@ -795,6 +847,17 @@ const SEED: [Seed; 117] = [
         "View",
         "Toggle Folder Sizes",
         &[],
+        UI,
+        None,
+    ),
+    // panes.showHidden from the palette (Phase 23): hidden and system
+    // entries listed or not. Total Commander's Ctrl+H is the file panes'
+    // own; here it is the second half of a chord like the other settings'.
+    seed(
+        "view.toggleHiddenFiles",
+        "View",
+        "Toggle Hidden Files",
+        &["ctrl+k ctrl+h"],
         UI,
         None,
     ),
@@ -1156,7 +1219,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 117);
+        assert_eq!(registry.commands().len(), 125);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1535,6 +1598,84 @@ mod tests {
             .map(|command| command.id.as_str())
             .collect();
         assert!(core.is_empty(), "{core:?}");
+    }
+
+    /// Phase 23: the first four gaps of the settings-three-ways audit each get
+    /// their commands (a choice has one per value, a toggle has one), and the
+    /// theme gallery its way in. All run in the window; the keys that are
+    /// chords are free (no other command has them in any context).
+    #[test]
+    fn the_three_ways_commands_of_phase_23_are_seeded_with_their_titles_and_keys() {
+        let registry = CommandRegistry::core();
+        for (id, category, title, keys) in [
+            ("view.layoutClassic", "View", "Classic Layout", &[][..]),
+            ("view.layoutRight", "View", "Terminal on the Right", &[][..]),
+            ("view.layoutRail", "View", "Activity Rail", &[][..]),
+            (
+                "view.cycleLayout",
+                "View",
+                "Next Layout",
+                &["ctrl+k ctrl+l"][..],
+            ),
+            (
+                "view.toggleHiddenFiles",
+                "View",
+                "Toggle Hidden Files",
+                &["ctrl+k ctrl+h"][..],
+            ),
+            (
+                "sidebar.toggleFollow",
+                "Sidebar",
+                "Follow the Active Pane",
+                &[][..],
+            ),
+            (
+                "menu.toggleShellMenu",
+                "Menu",
+                "Toggle Windows' Shell Menu",
+                &[][..],
+            ),
+            ("themes.browse", "Themes", "Browse", &[][..]),
+            (
+                "marketplace.browse",
+                "Marketplace",
+                "Browse Extensions",
+                &["ctrl+shift+x"][..],
+            ),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                (category, title),
+                "{id}"
+            );
+            let have: Vec<String> = command
+                .default_keys
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            assert_eq!(have, keys, "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.when, None, "{id}");
+        }
+        // The layout commands' IDs say the values of `ui.layout`.
+        assert!(registry.get("view.layoutClassic").is_some());
+        // The chords are the only commands on them, and the keymap compiles.
+        for chord in ["ctrl+k ctrl+l", "ctrl+k ctrl+h"] {
+            let holders: Vec<&str> = registry
+                .commands()
+                .iter()
+                .filter(|command| {
+                    command
+                        .default_keys
+                        .iter()
+                        .any(|keys| keys.to_string() == chord)
+                })
+                .map(|command| command.id.as_str())
+                .collect();
+            assert_eq!(holders.len(), 1, "{chord}: {holders:?}");
+        }
+        crate::keymap::compile(&registry, &[]).unwrap();
     }
 
     /// Phase 13: the commands of the activity rail and its sidebar. They run
