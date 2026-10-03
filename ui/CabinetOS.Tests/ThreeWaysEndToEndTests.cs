@@ -603,4 +603,196 @@ public class ThreeWaysEndToEndTests
             run.Stop();
         }
     }
+
+    // ----- Gap 6: the update settings -----
+
+    private const string UpdateRowsDefault = "Check Automatically [x]|Install Automatically [x]|Stable Channel [x]|Preview Channel [ ]";
+
+    // The pill that holds the flyout is shown only while an update runs, which these windows do not have: the flyout's row is
+    // pressed through its automation peer (settings-do:update-flyout) and its text is read from the log.
+    private static async Task<List<string>> RunUpdateToggleAsync(WindowRun run, string name, string command, string rowTitle, string query, string setting,
+        string keyName)
+    {
+        var data = MakeData(run);
+        var process = run.Start(name, string.Join(';',
+            "size:1400x900",
+            "pane:1",
+            $"path:{data}",
+            "pane:0",
+            $"path:{data}",
+            "wait:500",
+            "settings-state:start",
+            // The command.
+            $"cmd:{command}",
+            $"until:setting:{setting}=off",
+            "wait:400",
+            "settings-state:off-by-command",
+            "cmd:palette.show",
+            "wait:300",
+            $"type:{query}",
+            "wait:600",
+            "settings-state:palette-off",
+            "cmd:overlay.close",
+            "wait:300",
+            // The top row's menu: Update Settings, then the row.
+            "cmd:menu.show",
+            "wait:500",
+            "click:Update Settings",
+            "wait:400",
+            "settings-state:submenu-off",
+            $"click:{rowTitle}",
+            $"until:setting:{setting}=on",
+            "wait:400",
+            "settings-state:on-by-menu",
+            // The pill's flyout.
+            $"settings-do:update-flyout|{rowTitle}",
+            $"until:setting:{setting}=off",
+            "wait:400",
+            "settings-state:off-by-flyout",
+            // The file.
+            "settings-state:edit-now",
+            $"until:setting:{setting}=on",
+            "wait:400",
+            "settings-state:on-by-file",
+            "shot:done"));
+        await run.WaitForStateAsync(name, "settings state", "edit-now");
+        Edit(run, config => Section(config, "update")[keyName] = true);
+        return await run.FinishAsync(name, process);
+    }
+
+    /// <summary>
+    /// update.check: the command, the "Check Automatically" row of the top row's "Update Settings" menu, the same row in the update pill's
+    /// flyout and the file give the same state; the palette's row says on or off.
+    /// </summary>
+    [Fact]
+    public async Task The_automatic_update_check_switches_from_the_command_the_menu_the_pill_s_flyout_and_the_file()
+    {
+        var run = Prepare("three-ways-update-check", _ => Config());
+        try
+        {
+            var logs = await RunUpdateToggleAsync(run, "updatecheck", "update.toggleCheck", "Check Automatically", "Automatic Check", "update-check", "check");
+
+            string Settings(string label, string field) => Text(State(logs, "settings state", label), field);
+            Assert.Equal(("true", UpdateRowsDefault), (Settings("start", "update_check"), Settings("start", "update_flyout")));
+            Assert.Equal(("false", "Check Automatically [ ]|Install Automatically [x]|Stable Channel [x]|Preview Channel [ ]"),
+                (Settings("off-by-command", "update_check"), Settings("off-by-command", "update_flyout")));
+            Assert.Contains("update.toggleCheck=off", Settings("palette-off", "palette_states").Split('|'));
+            Assert.Equal("Update Settings: Check Automatically [ ]|Install Automatically [x]|Stable Channel [x]|Preview Channel [ ]", Settings("submenu-off", "menu"));
+            Assert.Equal(("true", UpdateRowsDefault), (Settings("on-by-menu", "update_check"), Settings("on-by-menu", "update_flyout")));
+            Assert.Equal("false", Settings("off-by-flyout", "update_check"));
+            Assert.Equal(("true", UpdateRowsDefault), (Settings("on-by-file", "update_check"), Settings("on-by-file", "update_flyout")));
+            Assert.Equal("true", Key(run.ReadConfig(), "update", "check"));
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
+
+    /// <summary>
+    /// update.autoInstall: the command, the "Install Automatically" row of the "Update Settings" menu, the same row in the update pill's
+    /// flyout and the file give the same state; the palette's row says on or off.
+    /// </summary>
+    [Fact]
+    public async Task The_automatic_update_install_switches_from_the_command_the_menu_the_pill_s_flyout_and_the_file()
+    {
+        var run = Prepare("three-ways-update-install", _ => Config());
+        try
+        {
+            var logs = await RunUpdateToggleAsync(run, "updateinstall", "update.toggleAutoInstall", "Install Automatically", "Automatic Install", "auto-install", "autoInstall");
+
+            string Settings(string label, string field) => Text(State(logs, "settings state", label), field);
+            Assert.Equal(("true", UpdateRowsDefault), (Settings("start", "update_auto_install"), Settings("start", "update_flyout")));
+            Assert.Equal(("false", "Check Automatically [x]|Install Automatically [ ]|Stable Channel [x]|Preview Channel [ ]"),
+                (Settings("off-by-command", "update_auto_install"), Settings("off-by-command", "update_flyout")));
+            Assert.Contains("update.toggleAutoInstall=off", Settings("palette-off", "palette_states").Split('|'));
+            Assert.Equal("Update Settings: Check Automatically [x]|Install Automatically [ ]|Stable Channel [x]|Preview Channel [ ]", Settings("submenu-off", "menu"));
+            Assert.Equal(("true", UpdateRowsDefault), (Settings("on-by-menu", "update_auto_install"), Settings("on-by-menu", "update_flyout")));
+            Assert.Equal("false", Settings("off-by-flyout", "update_auto_install"));
+            Assert.Equal(("true", UpdateRowsDefault), (Settings("on-by-file", "update_auto_install"), Settings("on-by-file", "update_flyout")));
+            Assert.Equal("true", Key(run.ReadConfig(), "update", "autoInstall"));
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
+
+    /// <summary>
+    /// update.channel: the pick list "Update: Channel" (the channel in effect starts highlighted), the channel rows of the "Update Settings"
+    /// menu, the pill's flyout and the file give the same channel; the palette's row names it.
+    /// </summary>
+    [Fact]
+    public async Task The_update_channel_changes_from_the_palette_s_picker_the_menu_the_pill_s_flyout_and_the_file()
+    {
+        var run = Prepare("three-ways-update-channel", _ => Config());
+        try
+        {
+            var data = MakeData(run);
+            var process = run.Start("updatechannel", string.Join(';',
+                "size:1400x900",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "settings-state:start",
+                // The command's pick list.
+                "cmd-nowait:update.chooseChannel",
+                "until:prompt",
+                "settings-state:list",
+                "type:preview",
+                "accept",
+                "until:setting:channel=preview",
+                "wait:400",
+                "settings-state:preview-by-command",
+                "cmd:palette.show",
+                "wait:300",
+                "type:Update: Channel",
+                "wait:600",
+                "settings-state:palette-preview",
+                "cmd:overlay.close",
+                "wait:300",
+                // The top row's menu: Update Settings, then Stable Channel.
+                "cmd:menu.show",
+                "wait:500",
+                "click:Update Settings",
+                "wait:400",
+                "settings-state:submenu-preview",
+                "click:Stable Channel",
+                "until:setting:channel=stable",
+                "wait:400",
+                "settings-state:stable-by-menu",
+                // The pill's flyout.
+                "settings-do:update-flyout|Preview Channel",
+                "until:setting:channel=preview",
+                "wait:400",
+                "settings-state:preview-by-flyout",
+                // The file.
+                "settings-state:edit-now",
+                "until:setting:channel=stable",
+                "wait:400",
+                "settings-state:stable-by-file",
+                "shot:done"));
+            await run.WaitForStateAsync("updatechannel", "settings state", "edit-now");
+            Edit(run, config => Section(config, "update")["channel"] = "stable");
+            var logs = await run.FinishAsync("updatechannel", process);
+
+            string Settings(string label, string field) => Text(State(logs, "settings state", label), field);
+            Assert.Equal(("stable", UpdateRowsDefault), (Settings("start", "update_channel"), Settings("start", "update_flyout")));
+            Assert.Equal(("true", "*stable|preview"), (Settings("list", "prompt_open"), Settings("list", "prompt_rows")));
+            Assert.Equal(("preview", "Check Automatically [x]|Install Automatically [x]|Stable Channel [ ]|Preview Channel [x]"),
+                (Settings("preview-by-command", "update_channel"), Settings("preview-by-command", "update_flyout")));
+            Assert.Contains("update.chooseChannel=preview", Settings("palette-preview", "palette_states").Split('|'));
+            Assert.Equal("Update Settings: Check Automatically [x]|Install Automatically [x]|Stable Channel [ ]|Preview Channel [x]", Settings("submenu-preview", "menu"));
+            Assert.Equal(("stable", UpdateRowsDefault), (Settings("stable-by-menu", "update_channel"), Settings("stable-by-menu", "update_flyout")));
+            Assert.Equal("preview", Settings("preview-by-flyout", "update_channel"));
+            Assert.Equal(("stable", UpdateRowsDefault), (Settings("stable-by-file", "update_channel"), Settings("stable-by-file", "update_flyout")));
+            Assert.Equal("\"stable\"", Key(run.ReadConfig(), "update", "channel"));
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
 }

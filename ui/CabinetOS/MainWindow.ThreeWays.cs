@@ -28,7 +28,12 @@ public sealed partial class MainWindow
         MenuEditorView.ShellMenuToggled += () => _ = _router.ExecuteAsync("menu.toggleShellMenu", trigger: "button");
         // The palette's rows say which layout is in effect and whether a toggle is on.
         _palette.StateOf = info => SettingStates.Of(info.Id, _settings, _menuConfig.ShellMenu);
+        SetUpUpdateSettings();
     }
+
+    // The controls of gaps 5 to 7 that are drawn from the configuration: the update pill's flyout. Each read of the
+    // configuration comes here, from ApplySettings, so an edit of the file moves their checks.
+    private void UpdatePreferenceControls() => UpdateUpdateSettingsFlyout();
 
     private void RegisterThreeWaysCommands()
     {
@@ -101,11 +106,13 @@ public sealed partial class MainWindow
         HiddenPill.Visibility = _settings.ShowHidden ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    // The hamburger's preference rows (after Toggle Sidebar): Layout with its three, and the two toggles with their checks.
+    // The hamburger's preference rows (after Toggle Sidebar): Layout with its three, and the two toggles with their checks,
+    // then the settings of gaps 6 and 7 (ShellMenu.MoreSettings): Update Settings, Log Level and the editor.
     private IEnumerable<MenuEntry> PreferenceEntries() =>
-        ShellMenu.Preferences(_router.Commands, _settings.Layout, _settings.ShowHidden, _settings.SidebarAutoReveal).Select(row =>
+        ShellMenu.Preferences(_router.Commands, _settings.Layout, _settings.ShowHidden, _settings.SidebarAutoReveal)
+            .Concat(ShellMenu.MoreSettings(_router.Commands, _settings)).Select(row =>
             row.Choices is { } choices
                 ? new MenuEntry(MenuEntryKind.Item, row.Title, "", Keys: row.Keys,
-                    Children: [.. choices.Select(choice => new MenuEntry(MenuEntryKind.Item, choice.Title, null, choice.CommandId, Checked: choice.Checked))])
-                : new MenuEntry(MenuEntryKind.Item, row.Title, null, row.CommandId, Keys: row.Keys, Checked: row.Checked));
+                    Children: [.. choices.Select(choice => new MenuEntry(MenuEntryKind.Item, choice.Title, null, choice.CommandId, Args: choice.Args, Checked: choice.Checked))])
+                : new MenuEntry(MenuEntryKind.Item, row.Title, null, row.CommandId, Args: row.Args, Keys: row.Keys, Checked: row.Checked));
 }

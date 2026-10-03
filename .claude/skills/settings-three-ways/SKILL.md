@@ -116,9 +116,9 @@ the next audit does not ask again.
 | `logging.level` | none | none | **Gap 7.** "Diagnostics: Log Level" picker; Settings page |
 | `logging.heavy` | `diagnostics.toggleHeavy` | to check | command fine; window to check |
 | `marketplace.index`, `marketplace.themes`, `marketplace.allowInsecure` | none | none | **Gap 8.** The Settings page (advanced section) |
-| `update.check` (the daily check on or off) | none (`update.check` checks now) | none | **Gap 6.** "Update: Check Automatically" toggle; the status bar's update pill |
-| `update.autoInstall` | none | the notice's buttons act once | **Gap 6.** "Update: Install Automatically" toggle |
-| `update.channel` | none | none | **Gap 6.** "Update: Channel" picker |
+| `update.check` (the daily check on or off) | `update.toggleCheck` (on or off; `update.check` checks now) | the update pill's flyout and the top row menu's "Update Settings": "Check Automatically" | fine since this unit (was gap 6) |
+| `update.autoInstall` | `update.toggleAutoInstall` (on or off) | the same two places: "Install Automatically" | fine since this unit (was gap 6) |
+| `update.channel` | `update.chooseChannel` (picker; the row names the channel) | the same two places: "Stable Channel", "Preview Channel" | fine since this unit (was gap 6) |
 | `update.source`, `update.allowInsecure` | none | none | **Gap 8.** The Settings page (advanced section) |
 
 The gaps, in the order to fix them: 1 the layout (the creator's first ask),

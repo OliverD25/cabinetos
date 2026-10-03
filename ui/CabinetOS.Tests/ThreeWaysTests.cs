@@ -3,6 +3,7 @@ using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
 using CabinetOS.Core.Shell;
 using CabinetOS.Core.Terminal;
+using CabinetOS.Core.Updates;
 
 namespace CabinetOS.Tests;
 
@@ -155,6 +156,72 @@ public class ThreeWaysTests
         Assert.Equal(("Restore Tabs on Start", "terminal.toggleRestore", (bool?)true), (rows[5].Title, rows[5].CommandId, rows[5].Checked));
         Assert.Equal(("New Terminals Start Linked", "terminal.toggleDefaultMode", (bool?)false), (rows[6].Title, rows[6].CommandId, rows[6].Checked));
         Assert.Equal("pwsh|cmd (default)|wsl|-|Default Profile…|Restore Tabs on Start [x]|New Terminals Start Linked [ ]", TerminalDockMenu.Describe(rows));
+    }
+
+    // ----- Gap 6: the update settings -----
+
+    private static readonly CommandInfo[] UpdateCommands =
+    [
+        Command("update.check", "Check for Updates"),
+        Command("update.toggleCheck", "Toggle Automatic Check"),
+        Command("update.toggleAutoInstall", "Toggle Automatic Install"),
+        Command("update.chooseChannel", "Channel"),
+    ];
+
+    [Fact]
+    public void The_update_settings_are_read_from_the_configuration_and_default_to_on_on_and_stable()
+    {
+        var none = UiSettings.FromConfig(JsonDocument.Parse("""{"update": {}}""").RootElement);
+        Assert.Equal((true, true, "stable"), (none.UpdateCheck, none.UpdateAutoInstall, none.UpdateChannel));
+        var set = UiSettings.FromConfig(JsonDocument.Parse("""{"update": {"check": false, "autoInstall": false, "channel": "preview"}}""").RootElement);
+        Assert.Equal((false, false, "preview"), (set.UpdateCheck, set.UpdateAutoInstall, set.UpdateChannel));
+    }
+
+    [Fact]
+    public void The_palette_says_whether_the_update_toggles_are_on_and_names_the_channel()
+    {
+        var on = UiSettings.Defaults with { UpdateCheck = true, UpdateAutoInstall = true, UpdateChannel = "stable" };
+        var off = UiSettings.Defaults with { UpdateCheck = false, UpdateAutoInstall = false, UpdateChannel = "preview" };
+        Assert.Equal(("on", "on", "stable"), (SettingStates.Of("update.toggleCheck", on, false), SettingStates.Of("update.toggleAutoInstall", on, false),
+            SettingStates.Of("update.chooseChannel", on, false)));
+        Assert.Equal(("off", "off", "preview"), (SettingStates.Of("update.toggleCheck", off, false), SettingStates.Of("update.toggleAutoInstall", off, false),
+            SettingStates.Of("update.chooseChannel", off, false)));
+        // The command that checks now is no setting: its row has no mark.
+        Assert.Null(SettingStates.Of("update.check", off, false));
+        // A channel the core does not know shows stable, as the window does.
+        Assert.Equal("stable", SettingStates.Of("update.chooseChannel", on with { UpdateChannel = "nightly" }, false));
+    }
+
+    [Fact]
+    public void The_update_settings_menu_has_the_two_toggles_and_a_row_for_each_channel_with_the_one_in_effect_checked()
+    {
+        var rows = UpdateSettingsMenu.Rows(check: true, autoInstall: false, channel: "preview");
+
+        Assert.Equal(["Check Automatically", "Install Automatically", "Stable Channel", "Preview Channel"], rows.Select(r => r.Title));
+        Assert.Equal(["update.toggleCheck", "update.toggleAutoInstall", "update.chooseChannel", "update.chooseChannel"], rows.Select(r => r.CommandId));
+        Assert.Equal([null, null, "stable", "preview"], rows.Select(r => r.Value));
+        Assert.Equal([true, false, false, true], rows.Select(r => r.Checked));
+        Assert.Equal("Check Automatically [x]|Install Automatically [ ]|Stable Channel [ ]|Preview Channel [x]", UpdateSettingsMenu.Describe(rows));
+        // A channel the file names oddly shows stable.
+        Assert.Equal([true, false], UpdateSettingsMenu.Rows(true, true, "nightly").Skip(2).Select(r => r.Checked));
+    }
+
+    [Fact]
+    public void The_hamburger_shows_Update_Settings_as_a_submenu_whose_channel_rows_give_their_value_and_an_older_core_leaves_it_out()
+    {
+        var rows = ShellMenu.MoreSettings(UpdateCommands, UiSettings.Defaults with { UpdateAutoInstall = false });
+
+        var update = Assert.Single(rows);
+        Assert.Equal("Update Settings", update.Title);
+        Assert.Equal(["Check Automatically", "Install Automatically", "Stable Channel", "Preview Channel"], update.Choices!.Select(c => c.Title));
+        Assert.Equal([true, false, true, false], update.Choices!.Select(c => c.Checked == true));
+        Assert.Equal(["update.toggleCheck", "update.toggleAutoInstall", "update.chooseChannel", "update.chooseChannel"], update.Choices!.Select(c => c.CommandId));
+        Assert.Equal([null, null, """{"value":"stable"}""", """{"value":"preview"}"""], update.Choices!.Select(c => c.Args?.GetRawText()));
+
+        Assert.Empty(ShellMenu.MoreSettings([Command("update.check", "Check for Updates")], UiSettings.Defaults));
+        // Only the rows whose command the core lists are shown.
+        var onlyChannel = ShellMenu.MoreSettings(UpdateCommands.Where(c => c.Id == "update.chooseChannel"), UiSettings.Defaults);
+        Assert.Equal(["Stable Channel", "Preview Channel"], onlyChannel[0].Choices!.Select(c => c.Title));
     }
 
     [Fact]

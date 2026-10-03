@@ -534,6 +534,9 @@ public sealed partial class MainWindow : Window
                 case "settings-state":
                     LogSettingsState(step.Argument);
                     break;
+                case "settings-do":
+                    RunSettingsStep(step.Argument);
+                    break;
                 case "find" or "find-key":
                     await RunFindStepAsync(step.Kind, step.Argument);
                     break;
@@ -1175,6 +1178,7 @@ public sealed partial class MainWindow : Window
         }
         UpdateLayoutText();
         UpdateHiddenPill();
+        UpdatePreferenceControls();
         if (settings.Layout != previous.Layout || Layouts.Normalize(_layoutWanted) == Layouts.Normalize(settings.Layout))
         {
             // The file shows the layout a command asked for (or another): the next Next Layout starts from it.

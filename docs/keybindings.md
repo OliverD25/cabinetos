@@ -153,6 +153,9 @@ The core's commands, in palette order:
 | `update.apply` | Update: Restart to Update | | | UI |
 | `update.rollback` | Update: Roll Back to the Previous Version | | | UI |
 | `update.showNotes` | Update: Show Release Notes | | | UI |
+| `update.toggleCheck` | Update: Toggle Automatic Check | | | UI |
+| `update.toggleAutoInstall` | Update: Toggle Automatic Install | | | UI |
+| `update.chooseChannel` | Update: Channel | | | UI |
 | `view.fitColumns` | View: Fit Columns to Content | | `filesView` | UI |
 | `view.resetColumns` | View: Reset Column Widths | | `filesView` | UI |
 | `view.equalPanes` | View: Equal Panes | | | UI |
@@ -180,6 +183,12 @@ The core's commands, in palette order:
 - The four `update.*` commands (Phase 17) have no default keys either:
   the palette, the top row's menu and the status bar's update pill are
   their places ([ui.md](ui.md), "Updates").
+- **The three update settings** (the settings-three-ways audit, gap 6): `update.toggleCheck` flips `update.check`,
+  `update.toggleAutoInstall` flips `update.autoInstall`, and `update.chooseChannel` opens a pick list of the
+  channels and writes `update.channel` (with `{"value": "preview"}` it writes without the list). None has a key.
+  They are named apart from `update.check`, which checks now. The update pill's flyout and the top row menu's
+  "Update Settings" submenu have a row for each ([ui.md](ui.md), "Settings reachable three ways"). The palette's
+  row says "on" or "off", and the channel in effect.
 - `view.toggleCompactOverlay` (Phase 19c) makes the window a small
   always-on-top drawer with one pane, and back ([ui.md](ui.md),
   "Compact overlay"). Its key, `ctrl+alt+up`, is the one the Files app

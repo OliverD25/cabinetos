@@ -1,3 +1,5 @@
+using CabinetOS.Core.Updates;
+
 namespace CabinetOS.Core.Settings;
 
 /// <summary>
@@ -96,6 +98,10 @@ public static class SettingStates
         "terminal.chooseDefaultProfile" => settings.TerminalDefaultProfile,
         "terminal.toggleRestore" => OnOff(settings.TerminalRestore),
         "terminal.toggleDefaultMode" => settings.TerminalStartsLinked ? Linked : Locked,
+        // The update settings (gap 6): the toggles say on or off, the picker's row says the channel in effect.
+        "update.toggleCheck" => OnOff(settings.UpdateCheck),
+        "update.toggleAutoInstall" => OnOff(settings.UpdateAutoInstall),
+        "update.chooseChannel" => UpdateSettingsMenu.NormalizeChannel(settings.UpdateChannel),
         _ => null,
     };
 

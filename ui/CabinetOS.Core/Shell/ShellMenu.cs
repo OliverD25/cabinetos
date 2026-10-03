@@ -1,6 +1,8 @@
+using System.Text.Json;
 using CabinetOS.Core.Keys;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
+using CabinetOS.Core.Updates;
 
 namespace CabinetOS.Core.Shell;
 
@@ -13,9 +15,10 @@ public sealed record ShellMenuItem(string CommandId, string Title, string? Keys,
 /// <summary>
 /// A preference row of the hamburger menu (Phase 23, the settings-three-ways skill): a toggle with its state in
 /// <see cref="Checked"/>, or a submenu of <see cref="Choices"/> of which the current one is checked. A toggle runs its
-/// command; so does a choice, and the rows of a submenu run theirs.
+/// command; so does a choice, and the rows of a submenu run theirs. <see cref="Args"/> are what the command is given: a pick-list
+/// command takes the value of the row as <c>{"value": ...}</c> and writes without its list.
 /// </summary>
-public sealed record ShellPreference(string CommandId, string Title, bool? Checked = null, IReadOnlyList<ShellPreference>? Choices = null, string? Keys = null);
+public sealed record ShellPreference(string CommandId, string Title, bool? Checked = null, IReadOnlyList<ShellPreference>? Choices = null, string? Keys = null, JsonElement? Args = null);
 
 /// <summary>
 /// The top row's hamburger menu (the creator's SHELL_REDESIGN.md §1): the
@@ -83,6 +86,28 @@ public static class ShellMenu
         }
         return rows;
     }
+
+    /// <summary>
+    /// The settings the menu shows after the preference rows (the settings-three-ways skill, gaps 6 and 7): "Update Settings"
+    /// with a submenu of <see cref="UpdateSettingsMenu"/>. A row whose command the registry does not list (an older core) is left out.
+    /// </summary>
+    public static IReadOnlyList<ShellPreference> MoreSettings(IEnumerable<CommandInfo> commands, UiSettings settings)
+    {
+        var ids = commands.Select(command => command.Id).ToHashSet(StringComparer.Ordinal);
+        var rows = new List<ShellPreference>();
+        var update = UpdateSettingsMenu.Rows(settings.UpdateCheck, settings.UpdateAutoInstall, settings.UpdateChannel)
+            .Where(row => ids.Contains(row.CommandId))
+            .Select(row => new ShellPreference(row.CommandId, row.Title, row.Checked, Args: row.Value is null ? null : ValueArgs(row.Value)))
+            .ToList();
+        if (update.Count > 0)
+        {
+            rows.Add(new ShellPreference("", UpdateSettingsMenu.Title, Choices: update));
+        }
+        return rows;
+    }
+
+    /// <summary>The arguments <c>{"value": value}</c> of a pick-list command.</summary>
+    public static JsonElement ValueArgs(string value) => JsonSerializer.SerializeToElement(new Dictionary<string, string> { ["value"] = value });
 
     /// <summary>
     /// The menu's entries from the registry's commands, in the menu's order. While an update

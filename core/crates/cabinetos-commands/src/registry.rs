@@ -82,7 +82,7 @@ const TERMINAL: Option<&str> = Some("terminalFocus");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 128] = [
+const SEED: [Seed; 131] = [
     seed(
         "palette.show",
         "View",
@@ -845,6 +845,28 @@ const SEED: [Seed; 128] = [
         UI,
         None,
     ),
+    // The three update settings from the palette (the settings-three-ways
+    // skill, gap 6): the toggles write `update.check` and `update.autoInstall`,
+    // the picker writes `update.channel`. The status bar's update pill has them
+    // in its flyout and the top row's menu in its "Update Settings" submenu.
+    // Named apart from `update.check`, which checks now. No keys.
+    seed(
+        "update.toggleCheck",
+        "Update",
+        "Toggle Automatic Check",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "update.toggleAutoInstall",
+        "Update",
+        "Toggle Automatic Install",
+        &[],
+        UI,
+        None,
+    ),
+    seed("update.chooseChannel", "Update", "Channel", &[], UI, None),
     // The file panes' column widths (`ui.columns`): the Name heading's
     // double-click fits Modified, Type and Size to their texts; the reset
     // gives the theme's widths back. No keys: the palette is their place.
@@ -1247,7 +1269,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 128);
+        assert_eq!(registry.commands().len(), 131);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1734,6 +1756,36 @@ mod tests {
         assert_eq!(
             registry.get("terminal.setMode").unwrap().title,
             "Lock or Link Terminal to Its Pane"
+        );
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
+    /// Gap 6 of the settings-three-ways audit: the update settings each have a
+    /// command (a toggle for each of `update.check` and `update.autoInstall`, a
+    /// picker for `update.channel`), named apart from `update.check` (check
+    /// now), which keeps its id and title.
+    #[test]
+    fn the_update_settings_have_their_commands_and_the_check_now_command_is_unchanged() {
+        let registry = CommandRegistry::core();
+        for (id, title) in [
+            ("update.toggleCheck", "Toggle Automatic Check"),
+            ("update.toggleAutoInstall", "Toggle Automatic Install"),
+            ("update.chooseChannel", "Channel"),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                ("Update", title),
+                "{id}"
+            );
+            assert!(command.default_keys.is_empty(), "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.when, None, "{id}");
+        }
+        let check_now = registry.get("update.check").unwrap();
+        assert_eq!(
+            (check_now.category.as_str(), check_now.title.as_str()),
+            ("Update", "Check for Updates")
         );
         crate::keymap::compile(&registry, &[]).unwrap();
     }

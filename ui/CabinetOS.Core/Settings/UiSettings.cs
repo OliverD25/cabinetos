@@ -24,7 +24,8 @@ namespace CabinetOS.Core.Settings;
 /// <see cref="TerminalRestore"/> is <c>terminal.restore</c>: whether the terminal tabs come back after a restart (the first show of the dock).
 /// <see cref="PaneSplitShare"/> is <c>ui.paneSplit</c>: the left pane's share of the two panes' width, 0.2 to 0.8, or null for equal.
 /// <see cref="TerminalDefaultProfile"/> is <c>terminal.defaultProfile</c> and <see cref="TerminalStartsLinked"/> is <c>terminal.defaultMode</c>
-/// being <c>linked</c> (the settings-three-ways skill, gap 5).
+/// being <c>linked</c> (the settings-three-ways skill, gap 5). <see cref="UpdateCheck"/>, <see cref="UpdateAutoInstall"/> and
+/// <see cref="UpdateChannel"/> are <c>update.check</c>, <c>update.autoInstall</c> and <c>update.channel</c> (gap 6).
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -49,7 +50,10 @@ public sealed record UiSettings(
     bool TerminalRestore = true,
     double? PaneSplitShare = null,
     string TerminalDefaultProfile = "pwsh",
-    bool TerminalStartsLinked = false)
+    bool TerminalStartsLinked = false,
+    bool UpdateCheck = true,
+    bool UpdateAutoInstall = true,
+    string UpdateChannel = "stable")
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -87,7 +91,10 @@ public sealed record UiSettings(
             Bool(Section(config, "terminal"), "restore") ?? Defaults.TerminalRestore,
             PaneSplit.FromConfig(config),
             String(Section(config, "terminal"), "defaultProfile") ?? Defaults.TerminalDefaultProfile,
-            String(Section(config, "terminal"), "defaultMode") == "linked");
+            String(Section(config, "terminal"), "defaultMode") == "linked",
+            Bool(Section(config, "update"), "check") ?? Defaults.UpdateCheck,
+            Bool(Section(config, "update"), "autoInstall") ?? Defaults.UpdateAutoInstall,
+            String(Section(config, "update"), "channel") ?? Defaults.UpdateChannel);
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).

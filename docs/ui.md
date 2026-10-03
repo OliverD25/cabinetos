@@ -1081,6 +1081,7 @@ search hit. From the context menu it gets the menu's rows
 | `view.layoutClassic`, `view.layoutRight`, `view.layoutRail`, `view.cycleLayout` | Write `ui.layout` (`cycleLayout` goes classic, right, rail); the window follows the file ("Settings reachable three ways") |
 | `view.toggleHiddenFiles`, `sidebar.toggleFollow`, `menu.toggleShellMenu` | Flip `panes.showHidden`, `ui.sidebarAutoReveal` and `contextMenu.shellMenu`; the palette's row says on or off |
 | `terminal.chooseDefaultProfile`, `terminal.toggleRestore`, `terminal.toggleDefaultMode` | Write `terminal.defaultProfile` (a pick list; `{"value": name}` skips it), flip `terminal.restore`, and flip `terminal.defaultMode` between `locked` and `linked` ("Settings reachable three ways") |
+| `update.toggleCheck`, `update.toggleAutoInstall`, `update.chooseChannel` | Flip `update.check` and `update.autoInstall`, and write `update.channel` (a pick list; `{"value": channel}` skips it); the pill's flyout and the top row menu's "Update Settings" have a row for each ("Settings reachable three ways") |
 | `go.root` to `terminal.insertSelectedPaths` | Total Commander's small commands, 31 of them, run in the window ("Total Commander's keys") |
 | `workspace.switch` | The sidebar's workspace dropdown ("The sidebar header"); its "Open folder as workspace…" says that workspaces arrive in a later version |
 | `terminal.runTask` | "arrives in a later version" in the status bar |
@@ -4431,6 +4432,9 @@ defaults (gap 5), the update settings (gap 6) and the editor and the log level (
 | `terminal.defaultProfile` | "Terminal: Default Profile" (`terminal.chooseDefaultProfile`, no key): a pick list of `terminal.profiles`, the row says the profile in effect | the dock's chevron menu (the button after "+", "Other shells"): "Default Profile…" opens the same list, and the default shell says "(default)" in the list of shells | `terminal.defaultProfile`: the name of a profile |
 | `terminal.restore` | "Terminal: Toggle Restore Tabs on Start" (`terminal.toggleRestore`, no key), the row says on or off | the chevron menu's check row "Restore Tabs on Start" | `terminal.restore` |
 | `terminal.defaultMode` | "Terminal: New Terminals Start Locked or Linked" (`terminal.toggleDefaultMode`, no key), one toggle, the row says locked or linked | the chevron menu's check row "New Terminals Start Linked" (checked while the mode is `linked`) | `terminal.defaultMode`: `locked` or `linked` |
+| `update.check` | "Update: Toggle Automatic Check" (`update.toggleCheck`, no key), the row says on or off; "Update: Check for Updates" (`update.check`) still checks now | "Check Automatically", a check row in the update pill's flyout and in the top row menu's "Update Settings" submenu | `update.check` |
+| `update.autoInstall` | "Update: Toggle Automatic Install" (`update.toggleAutoInstall`, no key), the row says on or off | "Install Automatically", a check row in the same two places | `update.autoInstall` |
+| `update.channel` | "Update: Channel" (`update.chooseChannel`, no key): a pick list of `stable` and `preview`, the row names the channel in effect | "Stable Channel" and "Preview Channel", rows in the same two places, the one in effect checked | `update.channel`: `stable` or `preview` |
 
 - **The window follows the file.** The layout, the listing, the pill, the
   pin, the menu's checks and the edit mode's box are drawn from the
@@ -4457,6 +4461,13 @@ defaults (gap 5), the update settings (gap 6) and the editor and the log level (
   setting is, and its place stays empty while it is off. The rows are drawn again at each read of the configuration, so
   an edit of the file moves them (`TerminalDockMenu`, tested). A pick-list command takes `{"value": ...}` as its
   argument and writes at once without the list.
+- **The update settings** (gap 6) are in two places, drawn from one list (`UpdateSettingsMenu`, tested): the status bar's update
+  pill has them as a flyout, opened by a right-click on the pill (the pill's left click stays "Restart to Update"), and the
+  top row's menu has "Update Settings" with a submenu of them, after the preference rows. The pill is there only while an
+  update downloads or waits for a restart, so the menu is the control that is always there; the pill's flyout is the one
+  at hand when an update is the thing on screen. The rows: "Check Automatically" and "Install Automatically" with a check
+  while on, then "Stable Channel" and "Preview Channel", the one in effect checked. Both are drawn again at each read of the
+  configuration, so an edit of the file moves the checks.
 - **Panes list again** when `panes.showHidden` changes: the window asks the
   core for both listings again, as for the sort order.
 - **Logs.** Target `cabinetos_ui::settings`: "layout chosen" and "setting

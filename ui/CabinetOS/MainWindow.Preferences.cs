@@ -3,6 +3,7 @@ using CabinetOS.Core.Commands;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Prompts;
 using CabinetOS.Core.Settings;
+using CabinetOS.Core.Updates;
 using CabinetOS.Services;
 
 namespace CabinetOS;
@@ -23,6 +24,7 @@ public sealed partial class MainWindow
         _router.RegisterUiHandler("terminal.toggleDefaultMode", _ => ChooseSettingAsync("terminal.defaultMode",
             _settings.TerminalStartsLinked ? "locked" : "linked",
             mode => mode == "linked" ? "New terminals start linked to their pane." : "New terminals start locked.", "The terminal's starting mode"));
+        RegisterUpdateSettingsCommands();
     }
 
     // A text setting is written through set_value, as a toggle is; the core's own words say why it did not take it
@@ -84,8 +86,27 @@ public sealed partial class MainWindow
             "default-profile" => _settings.TerminalDefaultProfile == value,
             "restore" => _settings.TerminalRestore == on,
             "default-mode" => _settings.TerminalStartsLinked == (value == "linked"),
+            "update-check" => _settings.UpdateCheck == on,
+            "auto-install" => _settings.UpdateAutoInstall == on,
+            "channel" => UpdateSettingsMenu.NormalizeChannel(_settings.UpdateChannel) == value,
             _ => true,
         };
+    }
+
+    // settings-do:<what>|<argument>: a press the snapshot aid makes where a click cannot reach.
+    // update-flyout|<row title>: the update pill's flyout, which is shown only while an update runs.
+    private void RunSettingsStep(string argument)
+    {
+        var parts = argument.Split('|', 2);
+        var done = parts is [var what, var value] && what switch
+        {
+            "update-flyout" => PressUpdateFlyoutRow(value),
+            _ => false,
+        };
+        if (!done)
+        {
+            Diag.Info("cabinetos_ui::snapshot", "no such settings step", new LogField("step", argument));
+        }
     }
 
     // settings-state:<label>: what the controls of these settings show, in the log ("settings state"), for the checks that read it.
@@ -97,6 +118,11 @@ public sealed partial class MainWindow
             new LogField("default_profile", _settings.TerminalDefaultProfile),
             new LogField("restore", _settings.TerminalRestore),
             new LogField("default_mode", _settings.TerminalStartsLinked ? "linked" : "locked"),
+            new LogField("update_check", _settings.UpdateCheck),
+            new LogField("update_auto_install", _settings.UpdateAutoInstall),
+            new LogField("update_channel", _settings.UpdateChannel),
+            new LogField("update_flyout", _updateFlyoutText),
+            new LogField("menu", FileMenu.Describe()),
             new LogField("palette_states", string.Join("|", _palette.Rows.Select(r => r.StateText is { } state ? $"{r.Info.Id}={state}" : "").Where(s => s.Length > 0))),
             new LogField("prompt_open", PromptView.IsOpen),
             new LogField("prompt_rows", PromptView.IsOpen ? PromptView.DescribeRows() : ""));
