@@ -15,8 +15,9 @@ namespace CabinetOS.Tests;
 /// the open menus show.
 /// </summary>
 /// <summary>
-/// Tests that measure the window's frames run alone, after the tests that run in parallel: a frame
-/// goal says nothing about a window that shares the machine with other test windows.
+/// Tests that measure the window's frames, or the speed of its start, run alone, after the tests that
+/// run in parallel: a speed goal says nothing about a window that shares the machine with other test
+/// windows.
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class FrameTests
