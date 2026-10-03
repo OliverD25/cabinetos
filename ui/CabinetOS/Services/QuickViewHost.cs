@@ -21,9 +21,18 @@ internal sealed class QuickViewHost
 
     private readonly WebViewHost _page;
     private int _serial;
+    // The core keeps its drawings (render_image) in cache\render\<id>\image.png: cabinetos-core's cache_dir() is
+    // CABINETOS_CACHE_DIR, else %LOCALAPPDATA%\CabinetOS\cache, and the window, which starts the core, has the same environment.
+    private static readonly string RenderRoot = Path.Combine(
+        Environment.GetEnvironmentVariable("CABINETOS_CACHE_DIR") is { Length: > 0 } cache
+            ? cache
+            : Path.Combine(Environment.GetEnvironmentVariable("LOCALAPPDATA") is { Length: > 0 } local ? local : Path.GetTempPath(), "CabinetOS", "cache"),
+        "render");
+
     private int _renderSerial;
     private string? _fileHost;
     private string? _renderHost;
+    private bool _renderHostIsRoot;
 
     /// <summary>A host for <paramref name="viewer"/> whose WebView2 goes into a frame of its own in <paramref name="layer"/>.</summary>
     public QuickViewHost(QuickViewer viewer, Grid layer)
@@ -80,6 +89,7 @@ internal sealed class QuickViewHost
         {
             _page.MapFolder(host, Path.GetDirectoryName(path) ?? path, CoreWebView2HostResourceAccessKind.Allow, navigable: false);
             _fileHost = host;
+            MapRenderRoot();
             // Before the load: the page's ready can come before this method's caller runs again.
             FileUrl = ToolFileUrls.Url(host, path);
             var entry = EntryUri();
@@ -111,13 +121,45 @@ internal sealed class QuickViewHost
         return started;
     }
 
-    /// <summary>Serves a drawing's folder (<c>render_image</c>) on a new host <c>r&lt;n&gt;</c>; returns the URL of its image.</summary>
+    // The folder of the core's drawings goes onto a host of its own before the page loads: WebView2 says that a mapping set
+    // after a page loaded may not reach it, and a mapping made when the drawing is ready (below) did not in the Omen laptop's
+    // live check of 2026-10-04 (the page's request for the drawing failed, so the Image Viewer reported "damaged"). A drawing
+    // is then a file under that host, whenever the core makes it. When the folder cannot be mapped now, MapRender maps the
+    // drawing's folder when it is ready, as before.
+    private void MapRenderRoot()
+    {
+        var host = ToolFileUrls.RenderHost(Viewer.Id, ++_renderSerial, WebViewHost.Domain);
+        try
+        {
+            Directory.CreateDirectory(RenderRoot);
+            _page.MapFolder(host, RenderRoot, CoreWebView2HostResourceAccessKind.Allow, navigable: false);
+            _renderHost = host;
+            _renderHostIsRoot = true;
+        }
+        catch (Exception error) when (error is IOException or ArgumentException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+        {
+            Diag.Info(Target, "the folder of drawings could not be served before the load", new LogField("viewer", Viewer.Id), new LogField("error", error.Message));
+        }
+    }
+
+    /// <summary>
+    /// Where the page reads the drawing in <paramref name="folder"/> (<c>render_image</c>): <c>image.png</c> under the
+    /// host that serves the core's folder of drawings, or, for a drawing somewhere else, on a host mapped now. Null when
+    /// the folder cannot be served.
+    /// </summary>
     public string? MapRender(string folder)
     {
+        var trimmed = Path.TrimEndingDirectorySeparator(folder);
+        if (_renderHostIsRoot && _renderHost is { } served
+            && string.Equals(Path.GetDirectoryName(trimmed), Path.TrimEndingDirectorySeparator(RenderRoot), StringComparison.OrdinalIgnoreCase))
+        {
+            return $"https://{served}/{Uri.EscapeDataString(Path.GetFileName(trimmed))}/image.png";
+        }
         if (_renderHost is { } previous)
         {
             _page.UnmapFolder(previous);
             _renderHost = null;
+            _renderHostIsRoot = false;
         }
         var host = ToolFileUrls.RenderHost(Viewer.Id, ++_renderSerial, WebViewHost.Domain);
         try
@@ -165,6 +207,7 @@ internal sealed class QuickViewHost
         FileUrl = null;
         _fileHost = null;
         _renderHost = null;
+        _renderHostIsRoot = false;
         _page.Close();
         if (Frame.Parent is Panel layer)
         {
@@ -184,6 +227,7 @@ internal sealed class QuickViewHost
         {
             _page.UnmapFolder(render);
             _renderHost = null;
+            _renderHostIsRoot = false;
         }
     }
 
