@@ -44,7 +44,7 @@ What lives here, or will:
   `nord`, `catppuccin-mocha`, `rose-pine-moon`, `catppuccin-latte`,
   `github-light`), which the core embeds and
   writes into the themes folder when they are missing
-  ([../docs/themes.md](../docs/themes.md)). `themes/collection/` holds 34
+  ([../docs/themes.md](../docs/themes.md)). `themes/collection/` holds 52
   more themes for the marketplace, which the core does not embed.
 - `marketplace/` — the marketplace index format (Phase 9):
   `index.schema.json`, exported from the Rust types in

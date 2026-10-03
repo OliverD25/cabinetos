@@ -1,7 +1,8 @@
 # The theme collection
 
-34 colour themes, ported from 27 of the most popular editor themes, for the
-marketplace. They are not part of the core: the core ships seven themes,
+52 colour themes for the marketplace: 34 ported from 27 of the most popular
+editor themes (the first list, 2026-09-28) and 18 more from a second list of
+20 candidates (round 2, 2026-10-03). They are not part of the core: the core ships seven themes,
 and everything else is opt-in (Constitution Article 10, the Zero-Bloat
 Foundation). A user installs the ones they want from the marketplace view,
 or with `cabinetos-cli market install <id>`.
@@ -75,8 +76,18 @@ a light theme by name. Their measurements stay in the contrast table below.
 
 ## Round 2 (2026-10-03)
 
-Themes added after the first 36 (the planning session's list of 2026-10-03). They have no number in the
-list of 30 above.
+18 themes ported from a second list of 20 candidates (the creator's card
+"Theme collection, round 2", 2026-10-03). They have no number in the list of
+30 above. 11 are dark and 7 are light.
+
+The rule for each candidate: it is ported only when (1) its license allows a
+port (MIT, BSD, Apache 2.0, ISC, Unlicense or CC0, or a GPL or MPL that the
+collection already accepts for other themes, which today is none), and (2) its
+colours are published in the theme's own repository. 16 of the 20 pass, as 18
+files (Everforest and Flexoki each have a dark and a light file). The other 4
+fail the first check, and [NOTICES.md](NOTICES.md), "Not used, and why", gives
+the license of each: Modus Vivendi and Modus Operandi (GPL 3 or later),
+Zenburn (GPL) and Bluloco Light (LGPL 3).
 
 | ID | Name | Kind | Source |
 |---|---|---|---|
@@ -211,3 +222,30 @@ What needed a text colour other than the theme's usual one:
     `#005661` became `#004952` (15 %).
   - `tokyo-night`: the terminal's text `#787C99` (4.40:1) became
     `#A9B1D6`, the theme's editor text.
+
+Round 2 (2026-10-03), by the same rules:
+
+- **Secondary text.** `textSecondary` is the main text at `C8` in `rose-pine`,
+  `vitesse-dark` and `flexoki-light`; at `E6` in `andromeda`, `flexoki-dark`,
+  `kanagawa`, `min-light`, `moonlight` and `nightfox`; and opaque in `dayfox`,
+  `everforest-dark`, `everforest-light`, `oceanic-next`, `poimandres`,
+  `quiet-light`, `rose-pine-dawn`, `spacegray` and `vitesse-light`. Where it
+  is not `C8`, the row details, dimmed to 76 %, fell below 4.5:1 at the
+  lower alpha.
+- **The main text itself, where it was too dim even opaque:**
+  - `everforest-dark`: `#D3C6AA` became `#D8CDB4` (12 % toward white).
+  - `everforest-light`: `#5C6A72` became `#374044` (40 % toward black).
+  - `rose-pine-dawn`: `#575279` became `#403D5A` (26 % toward black).
+  - `poimandres`: `#A6ACCD` became `#E4F0FB`, the theme's own variable and
+    hover text.
+- **Tertiary text.** The theme's own grey is `textTertiary` where it reaches
+  4.5:1 plain and 3:1 as a hint on the pane and on the backdrop. In five
+  themes it does not, and the main text at a lower alpha stands in:
+  `everforest-light` (`#829181`) and `rose-pine-dawn` (`#797593`) use the
+  main text at `C8`; `flexoki-light` (`#6F6E69`) and `min-light` (`#757575`)
+  use it at `B3`; `poimandres` (`#767C9D`) uses it at `8B`.
+- **The terminal's text** needed no change: each scheme's foreground reaches
+  4.5:1 on its background.
+- **Cursors.** `rose-pine-dawn` keeps the Windows Terminal scheme's cursor
+  `#9893A5`, which is 2.7:1 on its background; the shipped Rosé Pine Moon's
+  cursor is fainter still.

@@ -30,7 +30,7 @@ How the window applies a theme, and its theme picker:
   when the theme in effect changes, and when its file is saved.
 - A theme that is not valid is never applied, not even in part: the last
   good theme stays, and a `config_error` event says why.
-- 34 more themes, ported from the most popular editor themes, are in
+- 52 more themes, ported from popular editor themes, are in
   `sdk/themes/collection` for the marketplace, not in the core (see "The
   collection").
 
@@ -459,13 +459,13 @@ theme as JSON: the one named, or the one in effect, with its `metrics` and
 
 ## The collection
 
-`sdk/themes/collection` holds 34 themes ported from 27 of the 30 most
-popular editor themes (the creator's list of 2026-09-28): GitHub, One Dark
-Pro, Dracula, Material Theme, Ayu, Monokai, Night Owl, Tokyo Night,
+`sdk/themes/collection` holds 52 themes. 34 are ported from 27 of the 30
+most popular editor themes (the creator's list of 2026-09-28): GitHub, One
+Dark Pro, Dracula, Material Theme, Ayu, Monokai, Night Owl, Tokyo Night,
 Solarized, Gruvbox, Catppuccin and more, with their well-known light and
-dark variants. 27 are dark and 7 are light. (GitHub Light and Catppuccin
-Latte were two of the original 36; they ship with the core since
-2026-10-03.) The folder has:
+dark variants. (GitHub Light and Catppuccin Latte were two of the original
+36; they ship with the core since 2026-10-03.) The other 18 are round 2
+(2026-10-03, "Round 2" below). 38 are dark and 14 are light. The folder has:
 
 - `<id>.json`: one theme per file, in the format above.
 - [README.md](../sdk/themes/collection/README.md): the list, with each
@@ -474,9 +474,47 @@ Latte were two of the original 36; they ship with the core since
 - [NOTICES.md](../sdk/themes/collection/NOTICES.md): the source, author,
   license and exact commit of every theme, what the port derives, and
   what was left out and why (City Lights, whose license forbids ports;
-  Dainty, whose colours are not published anywhere).
+  Dainty, whose colours are not published anywhere; Modus Vivendi, Modus
+  Operandi, Zenburn and Bluloco Light, whose licenses are GPL or LGPL).
 - `marketplace.csv`: each theme's line in the marketplace: `id`,
   `license`, `source` and `description`.
+
+**Round 2 (2026-10-03).** The creator's card "Theme collection, round 2"
+named 20 candidates. 16 are ported, as 18 files, all MIT licensed, and each
+colour is read from the theme's own repository at a fixed commit
+([NOTICES.md](../sdk/themes/collection/NOTICES.md) has the commits):
+
+| ID | Name | Kind | Colours read from |
+|---|---|---|---|
+| `everforest-dark`, `everforest-light` | Everforest Dark, Light | dark, light | [sainnhe/everforest](https://github.com/sainnhe/everforest) |
+| `kanagawa` | Kanagawa (Wave) | dark | [rebelot/kanagawa.nvim](https://github.com/rebelot/kanagawa.nvim) |
+| `rose-pine`, `rose-pine-dawn` | Rosé Pine, Rosé Pine Dawn | dark, light | [rose-pine/palette](https://github.com/rose-pine/palette) |
+| `nightfox`, `dayfox` | Nightfox, Dayfox | dark, light | [EdenEast/nightfox.nvim](https://github.com/EdenEast/nightfox.nvim) |
+| `vitesse-dark`, `vitesse-light` | Vitesse Dark, Light | dark, light | [antfu/vscode-theme-vitesse](https://github.com/antfu/vscode-theme-vitesse) |
+| `flexoki-dark`, `flexoki-light` | Flexoki Dark, Light | dark, light | [kepano/flexoki](https://github.com/kepano/flexoki) |
+| `oceanic-next` | Oceanic Next | dark | [voronianski/oceanic-next-color-scheme](https://github.com/voronianski/oceanic-next-color-scheme) |
+| `spacegray` | Spacegray | dark | [kkga/spacegray](https://github.com/kkga/spacegray) |
+| `moonlight` | Moonlight | dark | [atomiks/moonlight-vscode-theme](https://github.com/atomiks/moonlight-vscode-theme) |
+| `poimandres` | Poimandres | dark | [drcmda/poimandres-theme](https://github.com/drcmda/poimandres-theme) |
+| `andromeda` | Andromeda | dark | [EliverLara/Andromeda](https://github.com/EliverLara/Andromeda) |
+| `quiet-light` | Quiet Light | light | [microsoft/vscode](https://github.com/microsoft/vscode/tree/main/extensions/theme-quietlight) |
+| `min-light` | Min Light | light | [miguelsolorio/min-theme](https://github.com/miguelsolorio/min-theme) |
+
+Left out, with the reason ([NOTICES.md](../sdk/themes/collection/NOTICES.md),
+"Not used, and why"):
+
+- **Modus Vivendi and Modus Operandi:** GNU General Public License, version 3
+  or later (they are files of GNU Emacs). The collection takes no GPL theme.
+- **Zenburn:** GNU GPL (the original scheme's own license). The collection
+  takes no GPL theme.
+- **Bluloco Light:** GNU Lesser General Public License, version 3. The
+  collection takes no (L)GPL theme.
+
+Whether the collection should take a GPL or LGPL theme at all is the
+creator's decision: the colours of all four are published, and the license is
+the only reason they are out. One more note on a license: Oceanic Next's
+repository has no license file; its README declares "MIT Licensed", and
+NOTICES.md says so in those words.
 
 **Why not in the core.** Constitution Article 10 (the Zero-Bloat
 Foundation): the core ships the seven themes above, and everything else is
@@ -560,9 +598,11 @@ a lower alpha instead; the README lists each case.
 **Adding a theme.**
 
 1. Take the colours only from a source under an open license (MIT, BSD,
-   Apache-2.0, CC0, or terms of the theme's own that allow a port), and
-   read its license file at a fixed commit. A theme whose license cannot
-   be established stays out.
+   Apache-2.0, ISC, Unlicense, CC0, or terms of the theme's own that allow a
+   port), and read its license file at a fixed commit. A GPL or MPL license
+   counts only where the collection already takes a theme under it; today
+   it takes none. A theme whose license cannot be established stays out, and
+   so do colours that no public file of the theme's own repository holds.
 2. Write `sdk/themes/collection/<id>.json` in the format above: `version`
    `1.0.0`, `author` as "<the palette's author>, port by CabinetOS", and an
    `attribution` that names the source and its license. The ID must not
@@ -579,7 +619,7 @@ a lower alpha instead; the README lists each case.
 ## Not yet
 
 - Two light themes ship with the core (Catppuccin Latte and GitHub Light);
-  the collection has seven more.
+  the collection has 14 more.
 - The collection reaches the public site only when the creator publishes
   `themes.json` ([ADR 0022](decisions/0022-two-catalogues-extensions-and-themes.md));
   until then the theme items of the public `index.json` stand in for it.

@@ -79,7 +79,16 @@ The source colours are used as they are. What the port adds:
   case is listed in [README.md](README.md), "Contrast".
 - **Terminal colours.** Atom One Light, the Darcula port, Material Theme
   and Sublime Material define no terminal colours; theirs are built from
-  the theme's own syntax colours. Where SynthWave '84 and Horizon leave an
+  the theme's own syntax colours. So are those of Quiet Light, which has
+  none either. Oceanic Next and Spacegray are Base16 palettes with no
+  terminal colours of their own: the sixteen colours follow the usual Base16
+  shell order (red, green, yellow, blue, magenta and cyan from `base08`,
+  `base0B`, `base0A`, `base0D`, `base0E` and `base0C`; white `base05`;
+  bright black `base03`; bright white `base07`), with `base01` for black so
+  that black can be told from the background. Andromeda leaves black, white,
+  bright black and bright white unset, and takes Visual Studio Code's
+  defaults for them. Min Light's ANSI blue (`#E0E0E0`) cannot be read on
+  white, so its bright blue (`#6871FF`) is used for both. Where SynthWave '84 and Horizon leave an
   ANSI colour unset, it is Visual Studio Code's default. Horizon Bright's
   cursor is its editor cursor colour, because its terminal cursor colour
   (`#F9CEC3B3`) cannot be seen on its background; Shades of Purple's red

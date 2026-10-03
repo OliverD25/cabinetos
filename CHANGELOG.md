@@ -6,6 +6,11 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Two light themes ship with the core, Catppuccin Latte and GitHub Light, so a fresh install's theme picker has a light choice by name (the picker now lists seven themes). They moved from the theme collection: the collection no longer lists them, and a copy installed from the marketplace before stays as it is.
+- 18 more themes in the theme collection for the marketplace (the theme gallery), all MIT licensed ports with every colour read from the theme's own repository: Everforest Dark and Light, Kanagawa, Rosé Pine, Rosé Pine Dawn, Nightfox, Dayfox, Vitesse Dark and Light, Flexoki Dark and Light, Oceanic Next, Spacegray, Moonlight, Poimandres, Andromeda, Quiet Light and Min Light. Modus Vivendi, Modus Operandi, Zenburn and Bluloco Light are left out because their licenses are GPL or LGPL. The collection has 52 themes; they reach users when the public `themes.json` is published.
+
 ## [0.1.2] - 2026-10-03
 
 ### Added
