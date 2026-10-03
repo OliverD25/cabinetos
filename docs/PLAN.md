@@ -2047,6 +2047,14 @@ ssh calls use Windows' own OpenSSH by full path, so Windows PowerShell
 about the shared clone is closed. The gui_context core test waits for its
 log lines.
 
+**Status (2026-10-03, 21:41): gaps 5 to 7 of the settings audit are closed
+(merge 5e7b431, Sonnet).** The terminal's default profile, restore on start
+and default mode; the update's automatic check, automatic install and
+channel; the editor and the log level: each has a palette command and a
+window control, written through `set_value`, with a test per way; the
+coder's whole end-to-end suite on the laptop passed 1449 of 1449. Gap 8,
+the Settings page (11c) with the advanced keys, stays open.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
