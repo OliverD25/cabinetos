@@ -68,8 +68,8 @@ fn both_files_follow_the_format_and_hold_only_their_own_kinds() {
     assert_eq!(themes.len(), raw.len(), "no item may be left out");
     assert_eq!(
         themes.len(),
-        41,
-        "the seven shipped themes and the 34 of the collection"
+        46,
+        "the seven shipped themes and the 39 of the collection"
     );
     assert!(themes.iter().all(|item| item.kind == ExtensionKind::Theme));
     assert!(
@@ -152,7 +152,7 @@ fn the_built_folder_serves_both_catalogues_to_the_market_client() {
     let themes: Index = market
         .fetch_themes(&folder, || Ok(folder.clone()), false)
         .unwrap();
-    assert_eq!(themes.items.len(), 41);
+    assert_eq!(themes.items.len(), 46);
     assert!(themes.source.ends_with("themes.json"), "{}", themes.source);
     let extensions = market
         .fetch(&folder, false)

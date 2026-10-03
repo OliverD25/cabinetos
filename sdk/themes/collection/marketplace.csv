@@ -33,3 +33,8 @@ matcha,MIT,https://github.com/lucafalasco/matcha,"Matcha: a dark, earthy theme o
 houston,MIT,https://github.com/withastro/houston-vscode,"Houston: the Astro team's dark theme with mint and cyan accents."
 horizon-dark,MIT,https://github.com/jolaleye/horizon-theme-vscode,"Horizon Dark: a warm sunset of pink and apricot on dark blue-grey."
 horizon-bright,MIT,https://github.com/jolaleye/horizon-theme-vscode,"Horizon Bright: the warm sunset palette on pale peach."
+everforest-dark,MIT,https://github.com/sainnhe/everforest,"Everforest Dark: a green-based palette, warm and soft to protect the eyes (medium contrast)."
+everforest-light,MIT,https://github.com/sainnhe/everforest,"Everforest Light: the same warm, soft green palette on cream (medium contrast)."
+kanagawa,MIT,https://github.com/rebelot/kanagawa.nvim,Kanagawa Wave: a dark scheme inspired by the colours of Hokusai's famous painting.
+rose-pine,MIT,https://github.com/rose-pine/palette,"Rosé Pine: all natural pine, faux fur and a bit of soho vibes for the classy minimalist."
+rose-pine-dawn,MIT,https://github.com/rose-pine/palette,"Rosé Pine Dawn: the light variant of Rosé Pine, warm cream with dusky rose."

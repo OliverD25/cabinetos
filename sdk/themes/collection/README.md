@@ -73,6 +73,19 @@ GitHub Light and Catppuccin Latte were files of this folder until
 2026-10-03 and now ship with the core (`sdk/themes`), so a fresh install has
 a light theme by name. Their measurements stay in the contrast table below.
 
+## Round 2 (2026-10-03)
+
+Themes added after the first 36 (the planning session's list of 2026-10-03). They have no number in the
+list of 30 above.
+
+| ID | Name | Kind | Source |
+|---|---|---|---|
+| `everforest-dark` | Everforest Dark | dark | [sainnhe/everforest](https://github.com/sainnhe/everforest) |
+| `everforest-light` | Everforest Light | light | [sainnhe/everforest](https://github.com/sainnhe/everforest) |
+| `kanagawa` | Kanagawa | dark | [rebelot/kanagawa.nvim](https://github.com/rebelot/kanagawa.nvim) |
+| `rose-pine` | Rosé Pine | dark | [rose-pine/palette](https://github.com/rose-pine/palette) |
+| `rose-pine-dawn` | Rosé Pine Dawn | light | [rose-pine/palette](https://github.com/rose-pine/palette) |
+
 ## How a palette becomes a theme
 
 The same mapping for every theme, after the shipped Nord, Catppuccin Mocha
@@ -115,6 +128,8 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 | `cobalt2` | 4.80:1 | row details on the selected row | 5.49:1, 4.27:1 |
 | `darcula` | 4.90:1 | row details on the hovered row | 5.08:1, 3.94:1 |
 | `dracula` | 4.80:1 | row details on the selected row | 4.97:1, 3.89:1 |
+| `everforest-dark` | 4.56:1 | row details on the hovered row | 5.21:1, 4.08:1 |
+| `everforest-light` | 4.58:1 | row details on the selected row | 5.00:1, 3.55:1 |
 | `github-dark` | 5.33:1 | row details on the selected row | 4.90:1, 3.76:1 |
 | `github-light` | 5.26:1 | row details on the selected row | 4.93:1, 3.50:1 |
 | `gruvbox-dark` | 4.68:1 | row details on the selected row | 4.72:1, 3.74:1 |
@@ -122,6 +137,7 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 | `horizon-bright` | 8.31:1 | row details on the selected row | 7.11:1, 4.70:1 |
 | `horizon-dark` | 5.73:1 | row details on the selected row | 5.88:1, 4.52:1 |
 | `houston` | 4.94:1 | row details on the hovered row | 4.61:1, 3.61:1 |
+| `kanagawa` | 5.24:1 | row details on the selected row | 8.72:1, 6.41:1 |
 | `matcha` | 4.58:1 | row details on the hovered row | 5.46:1, 4.24:1 |
 | `material-theme` | 5.17:1 | row details on the selected row | 6.78:1, 5.19:1 |
 | `monokai` | 5.03:1 | row details on the selected row | 4.50:1, 3.54:1 |
@@ -133,6 +149,8 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 | `one-monokai` | 4.87:1 | row details on the selected row | 5.82:1, 4.49:1 |
 | `palenight` | 4.73:1 | row details on the selected row | 4.81:1, 3.81:1 |
 | `panda` | 4.53:1 | row details on the selected row | 5.93:1, 4.57:1 |
+| `rose-pine` | 4.87:1 | row details on the selected row | 5.28:1, 4.04:1 |
+| `rose-pine-dawn` | 4.58:1 | row details on the selected row | 4.91:1, 3.51:1 |
 | `shades-of-purple` | 5.30:1 | row details on the selected row | 5.77:1, 4.44:1 |
 | `snazzy-light` | 4.51:1 | row details on the selected row | 5.01:1, 3.53:1 |
 | `solarized-dark` | 4.56:1 | row details on the selected row | 5.06:1, 3.94:1 |
