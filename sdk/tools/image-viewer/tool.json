@@ -1,0 +1,33 @@
+{
+  "id": "image-viewer",
+  "name": "Image Viewer",
+  "version": "1.0.0",
+  "author": "CabinetOS",
+  "description": "Shows images in Quick View: photos, pictures, icons and SVG, and with Windows' codecs HEIC, TIFF and camera RAW.",
+  "entry": "index.html",
+  "accepts": [],
+  "placement": "pane",
+  "quickView": {
+    "kinds": [
+      "*.jpg",
+      "*.jpeg",
+      "*.png",
+      "*.gif",
+      "*.webp",
+      "*.avif",
+      "*.bmp",
+      "*.ico",
+      "*.svg",
+      "*.heic",
+      "*.heif",
+      "*.tif",
+      "*.tiff",
+      "*.jxr",
+      "*.dng",
+      "*.cr2",
+      "*.nef",
+      "*.arw"
+    ],
+    "entry": "quickview.html"
+  }
+}

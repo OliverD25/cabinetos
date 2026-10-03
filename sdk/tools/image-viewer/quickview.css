@@ -1,0 +1,71 @@
+:root {
+  --background: #202020;
+  --text: #ffffff;
+  --text-secondary: #c5c5c5;
+  --accent: #60cdff;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--text);
+  font: 14px "Segoe UI Variable", "Segoe UI", sans-serif;
+  user-select: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#stage.pannable {
+  cursor: grab;
+}
+
+#stage.panning {
+  cursor: grabbing;
+}
+
+#picture {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  max-height: none;
+  transform: translate(-50%, -50%);
+  -webkit-user-drag: none;
+}
+
+/* Far in, a pixel is a square, as in an editor. */
+#picture.pixelated {
+  image-rendering: pixelated;
+}
+
+#badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+  opacity: 0;
+  transition: opacity 150ms;
+  pointer-events: none;
+}
+
+#badge.on {
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #badge {
+    transition: none;
+  }
+}
