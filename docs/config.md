@@ -88,6 +88,9 @@ file itself shows everything that can be set:
     "source": "https://oliverd25.github.io/cabinetos-marketplace/update",
     "allowInsecure": false,
     "autoInstall": true
+  },
+  "quickView": {
+    "viewers": {}
   }
 }
 ```
@@ -168,6 +171,8 @@ while you type.
 | `update.source` | an `https:` URL, a `file:` URL, or a folder path | `https://oliverd25.github.io/cabinetos-marketplace/update` | The folder that holds one folder per channel, each with its `latest.json` ([sdk/update/latest.schema.json](../sdk/update/latest.schema.json)) |
 | `update.allowInsecure` | `true`, `false` | `false` | Also accept a plain `http:` source and download, which anyone on the network could change on the way. For testing only |
 | `update.autoInstall` | `true`, `false` | `true` | Install a downloaded version at once, in the background, once its SHA-256 is checked; the window then only says "CabinetOS <version> is installed; restart to use it" in the status bar, with Restart now and Later ([ADR 0018](decisions/0018-setup-file-and-silent-updates.md)). `cabinetos-cli update download` installs too. `false`: the download waits, and a dialog with the release notes asks Restart now or Later before the swap ([ADR 0014](decisions/0014-in-app-updates.md)). Three ways: this key; the command `update.toggleAutoInstall` (palette: "Update: Toggle Automatic Install", the row says on or off, no key); and the "Install Automatically" row of the update pill's flyout and of the "Update Settings" submenu |
+| `quickView.viewers` | object: a kind to a tool's ID or `none` | empty | Which Quick View viewer shows a kind of file ([ADR 0023](decisions/0023-quick-view-viewer-contract.md), decision 1.2). A key is a pattern in the grammar of a viewer's `quickView.kinds`: `*.ext` (an extension, which may have dots, such as `*.tar.gz`) or a whole name such as `README`, compared without case; a value is a Tool Extension's ID, or `none` for no viewer (the thumbnail only). Example: `{"*.pdf": "pdf-viewer", "*.svg": "none"}`. A kind not listed goes to the viewer installed first. A key that is not a kind, or a value that is neither an ID nor `none`, is an error that names the key; a value naming a tool that is not installed as a viewer is ignored. The panel's viewer button and the palette's "View: Choose Quick View Viewer…" write it with `set_value` on `quickView.viewers` as a whole (a key has dots, so it cannot be a step of a dotted path). The core sends `quick_view_table_changed` when it changes ([ipc.md](ipc.md), "Quick View"). |
+| `update.autoInstall` | `true`, `false` | `true` | Install a downloaded version at once, in the background, once its SHA-256 is checked; the window then only says "CabinetOS <version> is installed; restart to use it" in the status bar, with Restart now and Later ([ADR 0018](decisions/0018-setup-file-and-silent-updates.md)). `cabinetos-cli update download` installs too. `false`: the download waits, and a dialog with the release notes asks Restart now or Later before the swap ([ADR 0014](decisions/0014-in-app-updates.md)) |
 
 A pane with tabs, as the window saves it:
 

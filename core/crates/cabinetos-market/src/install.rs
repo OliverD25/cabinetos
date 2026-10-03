@@ -13,13 +13,14 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use cabinetos_protocol::{Catalogue, ErrorCode, ExtensionKind, MarketItem, ToolInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::index::{self, Index, Source};
-use crate::tools::{self, TOOL_MANIFEST_FILE};
+use crate::tools::{self, QuickViewTable, TOOL_MANIFEST_FILE};
 use crate::transfer::{self, Client, DownloadError, Http, ZipLimits};
 use crate::{MarketError, now_ms, parse_version};
 
@@ -284,6 +285,33 @@ impl Market {
     #[must_use]
     pub fn tools(&self) -> Vec<ToolInfo> {
         tools::list_tools(&self.dirs.tools)
+    }
+
+    /// The extensions' index from the marketplace's cache, for the Quick
+    /// View offer (ADR 0023, decision 5.1): the copy of the catalogue at
+    /// `source` when it is younger than `max_age`. `None` for a source on
+    /// this machine (read it with [`Market::fetch`]), and when there is no
+    /// such copy. Never reaches the network.
+    #[must_use]
+    pub fn cached_index(&self, source: &Source, max_age: Duration) -> Option<Index> {
+        let Source::Remote(url) = source else {
+            return None;
+        };
+        let max_age_ms = u64::try_from(max_age.as_millis()).unwrap_or(u64::MAX);
+        index::cached(url, Catalogue::Extensions, &self.dirs.market, max_age_ms)
+    }
+
+    /// The Quick View table (ADR 0023) of the viewers in `dev` (the
+    /// window's development folder) and the tools folder, with the user's
+    /// `quickView.viewers`. Reads the folders and the record of installs.
+    #[must_use]
+    pub fn quick_view_table(
+        &self,
+        dev: Option<&Path>,
+        choices: &BTreeMap<String, String>,
+    ) -> QuickViewTable {
+        let viewers = tools::quick_view_viewers(dev, &self.dirs.tools, &self.installed());
+        tools::quick_view_table(&viewers, choices)
     }
 
     /// Installs `item` of `index`: downloads it (or copies it from disk)

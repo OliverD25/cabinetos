@@ -36,8 +36,12 @@
 //!
 //! Unsafe code is allowed only in the modules that call Windows directly
 //! (`enumerate`, `volume`, `watch`, `drives`, `time`, `ops`, `open`, `shellmenu`, `com`,
-//! `hydrate`, `link`, `long_path`, `system`, `registry`, and one function in `sort`),
-//! each block with a `SAFETY:` comment.
+//! `hydrate`, `thumbnail`, `link`, `long_path`, `system`, `registry`, and one function in
+//! `sort`), each block with a `SAFETY:` comment.
+//!
+//! [`ShellImages`] asks the shell's image factory for a file's thumbnail or
+//! a drawing of an image (Quick View, ADR 0023), on a thread the caller
+//! keeps for it.
 //!
 //! [`registry`] reads and writes values under the current user's hive: the
 //! Settings > Apps entry the updater keeps current.
@@ -72,6 +76,8 @@ mod shellmenu;
 mod sort;
 #[allow(unsafe_code)]
 mod system;
+#[allow(unsafe_code)]
+mod thumbnail;
 pub mod time;
 #[allow(unsafe_code)]
 pub mod volume;
@@ -100,6 +106,7 @@ pub use shellmenu::{
     BUILD_TIMEOUT, BuiltMenu, INVOKE_WAIT, MENU_LIFETIME, ShellItem, ShellMenuError, ShellMenus,
 };
 pub use system::windows_build;
+pub use thumbnail::{ImageRequest, ShellImage, ShellImageError, ShellImages};
 pub use watch::{DetailedChange, DirectoryChanged, DirectoryWatcher, EntryChange, EntryChangeKind};
 
 /// The default buffer for one `NtQueryDirectoryFile` call: 256 KiB. NTFS

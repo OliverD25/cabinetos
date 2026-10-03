@@ -53,6 +53,30 @@
     "sidebar": {
       "description": "Optional, false when absent. true: the tool also has a page in the sidebar, with a button of its own in the activity rail (ui.layout rail). It starts with no file; give accepts an empty list if it opens none.",
       "type": "boolean"
+    },
+    "quickView": {
+      "description": "Optional: the tool is a Quick View viewer (ADR 0023). Space on a file of one of these kinds shows it in the floating panel with this page. A wrong block leaves the tool out of Quick View only; its pane use is not touched.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kinds"],
+      "properties": {
+        "kinds": {
+          "description": "1 to 512 patterns in the grammar of accepts: *.ext (an extension, which may have dots, such as *.tar.gz) or a whole name (README, Dockerfile), compared without case. No * alone and no other wildcards; no MIME types.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "items": {
+            "type": "string",
+            "maxLength": 255,
+            "pattern": "^(?=\\S)(?=.*\\S$)(\\*\\.[^*?\\\\/:]+|[^*?\\\\/:]+)$"
+          }
+        },
+        "entry": {
+          "description": "Optional: the page Quick View loads, with the rules of entry. Without it, the tool's entry is used.",
+          "type": "string",
+          "pattern": "^(?![\\\\/])(?!.*(^|[\\\\/])\\.{1,2}([\\\\/]|$))(?!.*:)[^\\\\/].*\\.html?$"
+        }
+      }
     }
   }
 }

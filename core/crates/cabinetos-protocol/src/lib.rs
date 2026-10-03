@@ -24,6 +24,7 @@ mod market;
 mod message;
 mod plugin;
 mod preview;
+mod quick_view;
 mod secret;
 pub mod shm;
 mod terminal;
@@ -54,6 +55,11 @@ pub use message::{
 };
 pub use plugin::{CapabilityInfo, CapabilityLevel, PluginInfo, PluginState};
 pub use preview::{ChangeKind, OpenedListing, PreviewRow};
+pub use quick_view::{
+    MAX_KIND_PATTERNS, MAX_RENDER_SIZE, NO_VIEWER, OfferReason, QuickViewKind, QuickViewOfferItem,
+    QuickViewer, THUMBNAIL_SIZES, ThumbnailReason, kind_pattern_matches, kind_pattern_order,
+    kind_pattern_problem,
+};
 pub use secret::SecretText;
 pub use terminal::{TerminalMode, TerminalSession, TerminalState};
 pub use theme::{
@@ -134,5 +140,9 @@ pub use window::{Pane, PaneState, WindowPanes, WindowState, WindowTab};
 /// marketplace catalogues (Phase 23, ADR 0022): `marketplace_refresh` and
 /// `marketplace_search` take an optional `catalogue` (`extensions`, the
 /// default, or `themes`), and a theme's item carries `appearance`,
-/// `density` and `tile`.
-pub const PROTOCOL_VERSION: u32 = 20;
+/// `density` and `tile`; version 21 Quick View (Phase 25, ADR 0023):
+/// `get_thumbnail` with the reply `thumbnail`, `render_image` with the
+/// reply `rendered_image`, `quick_view_table` with the reply
+/// `quick_view_table` and the event `quick_view_table_changed`, and
+/// `quick_view_offer` with the reply `quick_view_offer`.
+pub const PROTOCOL_VERSION: u32 = 21;

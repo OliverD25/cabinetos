@@ -1078,6 +1078,164 @@
         "menu_id",
         "items"
       ]
+    },
+    {
+      "description": "Reply to `get_thumbnail`: the picture, or why there is none.",
+      "type": "object",
+      "properties": {
+        "height": {
+          "description": "The picture's height in pixels; absent without one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "path": {
+          "description": "The path asked for.",
+          "type": "string"
+        },
+        "png_base64": {
+          "description": "The picture as a PNG with an alpha channel, in base64; `null`\nwhen there is none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "reason": {
+          "description": "Why there is no picture; absent with one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThumbnailReason"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "description": "The size asked for.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "thumbnail"
+        },
+        "width": {
+          "description": "The picture's width in pixels, aspect kept; absent without one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "size"
+      ]
+    },
+    {
+      "description": "Reply to `render_image`: `image.png` is in `folder`.",
+      "type": "object",
+      "properties": {
+        "folder": {
+          "description": "The folder the core wrote `image.png` into, new for every\nrender; the core keeps the last 16.",
+          "type": "string"
+        },
+        "height": {
+          "description": "The picture's height in pixels.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "rendered_image"
+        },
+        "width": {
+          "description": "The picture's width in pixels.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "type",
+        "folder",
+        "width",
+        "height"
+      ]
+    },
+    {
+      "description": "Reply to `quick_view_table`.",
+      "type": "object",
+      "properties": {
+        "kinds": {
+          "description": "The kinds, in the order the window tries them: the first whose\npattern matches a file's name decides.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuickViewKind"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "quick_view_table"
+        },
+        "viewers": {
+          "description": "Every installed viewer, the one installed first first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuickViewer"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "viewers",
+        "kinds"
+      ]
+    },
+    {
+      "description": "Reply to `quick_view_offer`.",
+      "type": "object",
+      "properties": {
+        "item": {
+          "description": "The item to offer, or `null`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/QuickViewOfferItem"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "description": "Why there is none; absent with an item.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OfferReason"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "quick_view_offer"
+        }
+      },
+      "required": [
+        "type"
+      ]
     }
   ],
   "required": [
@@ -3096,6 +3254,21 @@
         "opacity"
       ]
     },
+    "OfferReason": {
+      "description": "Why `quick_view_offer` offers nothing.",
+      "oneOf": [
+        {
+          "description": "The catalogue has no item this core can run, not installed, that\nclaims the name.",
+          "type": "string",
+          "const": "no_item"
+        },
+        {
+          "description": "The catalogue cannot be read.",
+          "type": "string",
+          "const": "offline"
+        }
+      ]
+    },
     "Opacity": {
       "description": "From 0 (none) to 1 (all).",
       "type": "number",
@@ -3489,6 +3662,104 @@
             "at_ms"
           ]
         }
+      ]
+    },
+    "QuickViewKind": {
+      "description": "One kind of the Quick View table: a pattern and the viewers for it.",
+      "type": "object",
+      "properties": {
+        "off": {
+          "description": "The user set this kind to `\"none\"`: the thumbnail only. Left out\nwhen false.",
+          "type": "boolean"
+        },
+        "pattern": {
+          "description": "The pattern, in lower case.",
+          "type": "string"
+        },
+        "viewers": {
+          "description": "The viewers' IDs, the one to use first: the user's choice, then the\nviewer installed first. Empty when `off`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "pattern",
+        "viewers"
+      ]
+    },
+    "QuickViewOfferItem": {
+      "description": "The marketplace item `quick_view_offer` offers: a Tool Extension of the\nextensions catalogue whose `quickView.kinds` claim the file's name.",
+      "type": "object",
+      "properties": {
+        "author": {
+          "description": "Who publishes it.",
+          "$ref": "#/$defs/Author"
+        },
+        "description": {
+          "description": "One or two sentences.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The item's ID, for `install_extension`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "size": {
+          "description": "The size of the download in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "version": {
+          "description": "The version an install would bring: the newest this core can run.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "size",
+        "author",
+        "description"
+      ]
+    },
+    "QuickViewer": {
+      "description": "One viewer of the Quick View table: a Tool Extension with a valid\n`quickView` block.",
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "Its folder, from which the window starts the page.",
+          "type": "string"
+        },
+        "entry": {
+          "description": "The page Quick View loads, relative to `dir`: `quickView.entry`, or\nthe tool's `entry` when it has none.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The tool's ID.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name, as the panel shows it (\"Image Viewer cannot show this\nfile.\").",
+          "type": "string"
+        },
+        "version": {
+          "description": "Its version.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "dir",
+        "entry"
       ]
     },
     "Rate": {
@@ -3955,6 +4226,36 @@
           "description": "Light or dark as Windows is set; the window decides which, and\nfollows when the user changes it.",
           "type": "string",
           "const": "system"
+        }
+      ]
+    },
+    "ThumbnailReason": {
+      "description": "Why a `thumbnail` reply carries no picture.",
+      "oneOf": [
+        {
+          "description": "The shell has no thumbnail for this file.",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "The shell did not answer within 2 s; its thread was replaced.",
+          "type": "string",
+          "const": "timeout"
+        },
+        {
+          "description": "Four of the core's thumbnail threads are stuck in the shell.",
+          "type": "string",
+          "const": "busy"
+        },
+        {
+          "description": "The file is not on this disk and its thumbnail is not in the\nshell's cache; nothing was downloaded.",
+          "type": "string",
+          "const": "cloud"
+        },
+        {
+          "description": "A newer request of the same connection took its place in the queue.",
+          "type": "string",
+          "const": "superseded"
         }
       ]
     },

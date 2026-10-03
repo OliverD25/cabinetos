@@ -61,8 +61,8 @@ public class EndToEndTests
             var client = core.Client;
 
             var welcome = await client.HelloAsync();
-            // Version 20: the marketplace's two catalogues (Phase 23), after 19's `dual` in the window's state.
-            Assert.Equal(20u, welcome.ProtocolVersion);
+            // Version 21: Quick View (Phase 25, ADR 0023), after 20's two marketplace catalogues.
+            Assert.Equal(21u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);

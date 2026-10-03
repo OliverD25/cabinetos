@@ -62,6 +62,7 @@ names the file and the problem.
 | `entry` | The page the tool starts from: an `.html` file inside the folder, without `..` or a drive. |
 | `accepts` | The file names it opens, without case: `*.ext` or a whole name such as `README`. May be empty. |
 | `placement` | `pane`: the pane's editor tab. `dock`: the Tool Dock; this version opens a dock tool in a pane too, until the dock has tabs for tools. |
+| `quickView` | Optional: the tool is a Quick View viewer ("Quick View" below). |
 | `sidebar` | Optional, `false` when it is left out. `true`: the tool also has a page in the sidebar, with a button of its own in the activity rail of the rail layout. Give `accepts` an empty list when the tool opens no file. |
 
 The window reads the file strictly, like `plugin.json`: an unknown key, a
@@ -277,6 +278,108 @@ let a page run the agent's commands: `agent.chat`, `agent.tier`, `agent.undo`,
 `editor.openMarkdownPreview` is also in the palette ("Editor: Open
 Markdown Preview", Ctrl+K V in a pane): it opens the focused Markdown file
 in the preview, or says that no Markdown tool is installed.
+
+## Quick View
+
+Space on a file opens the floating Quick View panel
+([ADR 0023](decisions/0023-quick-view-viewer-contract.md)). The panel shows
+Windows' thumbnail at once; a viewer, which is a Tool Extension, then shows
+the full view. CabinetOS ships no viewer (Constitution Article 10). A tool
+becomes a viewer with the `quickView` key of its `tool.json`:
+
+```json
+{
+  "id": "image-viewer",
+  "name": "Image Viewer",
+  "version": "1.0.0",
+  "author": "CabinetOS",
+  "description": "Shows images in Quick View.",
+  "entry": "index.html",
+  "accepts": [],
+  "placement": "pane",
+  "quickView": {
+    "kinds": ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.heic"],
+    "entry": "quickview.html"
+  }
+}
+```
+
+| Key | Rule |
+|---|---|
+| `quickView.kinds` | 1 to 512 patterns in the grammar of `accepts`: `*.ext` (an extension, which may have dots, such as `*.tar.gz`) or a whole name (`README`, `Dockerfile`), compared without case. No `*` alone, no `?` and no other wildcards; no MIME types. |
+| `quickView.entry` | Optional: the page Quick View loads, with the rules of `entry`. Without it, the tool's `entry` is used. |
+
+- `accepts` keeps its meaning (Enter opens such a file in the tool), so a
+  viewer that opens nothing in a pane gives it an empty list.
+- **The core reads the block**, not the window: it builds the Quick View
+  table at start, after a tool install or uninstall, and after a change of
+  `quickView.viewers`, and sends it to the window
+  ([ipc.md](ipc.md), "Quick View"). So a viewer installed while the window
+  runs works at once. A block that is wrong (a bad pattern, more than 512,
+  an unknown key, a bad or missing page) leaves the tool out of Quick View
+  with a warning in the core's log that names the file; its pane use is not
+  touched.
+- **Several viewers for one kind.** The user's choice
+  (`quickView.viewers` in [config.md](config.md)) first; then the viewer
+  installed first: the tools of the window's development folder
+  (`--tools-dir`, which the window passes to the core as
+  `--dev-tools-dir`), then marketplace installs by their time in
+  `installed.json`, then tools copied by hand, by folder name. Installing a
+  second viewer therefore never takes a kind from the first.
+- The page's messages in the panel (`quickview-show` and the reports) are
+  in ADR 0023, decisions 2 and 3. The test viewer
+  [sdk/fixtures/tools/quickview-fixture](../sdk/fixtures/tools/quickview-fixture/README.md)
+  does what a `.qvtest` file's first line says.
+- The marketplace item of a viewer sets `minCoreVersion` to the first
+  release with Quick View: an older window reads `tool.json` strictly and
+  would leave a tool with a `quickView` key out.
+
+### A viewer page in the panel
+
+What the window does with a viewer's page ([ui.md](ui.md), "Quick View";
+the messages' one description is
+[sdk/tools/quickview-messages.schema.json](../sdk/tools/quickview-messages.schema.json)):
+
+- **One file, one load.** For each file the window serves the file's
+  folder read-only on a new host `f<n>.<id>.cabinetos.example` and loads
+  the page's Quick View entry again (from the core's table, never from
+  `tool.json`). The page posts `{"type":"ready"}` once its listener is set
+  and gets one `quickview-show` (the token, the path, the `url` to read the
+  file from, the name, the extension, the matching `claim`, the size and
+  date, the thumbnail on screen as a data URL or `null`, the window's
+  `theme`, and the `panel` area in CSS pixels with the screen's scale). It
+  gets no `context` and no `open`. A newer file gives a new token and a new
+  load; a report with an older token is dropped.
+- **Reports.** `quickview-shown` after the first frame with content (with
+  optional `details`, at most 80 characters, and `keys`);
+  `quickview-failed` with `reason` (`unsupported`, `damaged`, `too-large`,
+  `other`) and `message` (at most 200 characters); `quickview-keys` for
+  keys wanted later; `quickview-render` (`width`, `height`, at most 2560)
+  for Windows' drawing of a file the browser cannot decode, answered with
+  `quickview-rendered` (a `url` on a host `r<n>.<id>.cabinetos.example`) or
+  `quickview-render-failed`, one at a time; `quickview-system-preview` is
+  answered with `quickview-system-preview-failed` in this version. A
+  message over a limit, or malformed, is dropped.
+- **Keys.** The page never has the keyboard. It may ask for Left, Right,
+  PageUp, PageDown, Home, End, the letters, the top row's digits, `plus`,
+  `minus`, `comma` and `period`, alone or with Shift; the window answers
+  `quickview-keys-granted` with those no binding wants, and sends each press
+  as `quickview-key` (`key`, `repeat`). `plus` is the key the core's
+  grammar calls `equal`. A video viewer pauses with K and seeks with J and
+  L; Space always closes the panel.
+- **Limits.** No `ready` within 3 s, no report within 30 s, and three
+  crashes within a minute are the panel's to handle; the page cannot hold
+  up a key. `command`, `subscribe` and `unsubscribe` from a page in the
+  panel are refused and logged with the trigger `quickview:<id>`. Media
+  plays without a click in every tool environment
+  (`--autoplay-policy=no-user-gesture-required`).
+- **Look.** `theme` has `appearance` (`dark` or `light`, which
+  `prefers-color-scheme` also follows), `background`, `text`,
+  `textSecondary`, `accent` (each `#RRGGBB`) and `font`; a
+  `quickview-theme` with the same object comes when the theme changes.
+- **Its own folder only.** The page loads everything from its folder, with
+  a Content-Security-Policy that allows `img-src` and `media-src` from
+  `https://*.cabinetos.example` and `data:`, as the fixture viewer does.
 
 ## Writing a tool
 

@@ -170,13 +170,35 @@ One JSON object per line, with the keys always in this order:
 | `plugin_id` | string | inside a plugin call | The plugin that caused the event, same rule as `request_id`. Every line a plugin's own thread writes has it. A line the core writes about a plugin elsewhere (a restart, a reload) names it in a `plugin_id` field, which moves here. |
 | `span` | string | inside a span | The name of the innermost span, for example `request` |
 | `fields` | object | when there are any | The event's other fields |
-| `thread` | string | always | The thread's name (`main`, `core-rt-3`), or its ID when it has no name. In the core, `core-rt-N` are the async runtime's threads, workers and blocking threads alike, `watch-<listing id>` threads watch directories, and `term-<session id>-out`, `-in` and `-exit` serve a terminal session, whose lines carry its `session_id` in `fields` (docs/terminal.md). |
+| `thread` | string | always | The thread's name (`main`, `core-rt-3`), or its ID when it has no name. In the core, `core-rt-N` are the async runtime's threads, workers and blocking threads alike, `watch-<listing id>` threads watch directories, `thumbnail-<n>` threads ask the shell for Quick View's thumbnails and drawings (a new number for each thread that replaces a stuck one; docs/ipc.md, "Quick View"), and `term-<session id>-out`, `-in` and `-exit` serve a terminal session, whose lines carry its `session_id` in `fields` (docs/terminal.md). |
 
 Example, one line from `core.<date>.jsonl`:
 
 ```json
 {"ts":"2026-09-28T00:16:18.959Z","level":"INFO","boundary":"engine","target":"cabinetos_core","message":"request handled","trace_id":"01M3JNX7ZQ2B0V3C6H8K1N4P5R","request_id":"01M3JNX80F5HE9R5F65SBDGNWS","span":"request","fields":{"elapsed_us":57,"request":"ping"},"thread":"core-rt-1"}
 ```
+
+## Quick View's line
+
+The window writes one info line per file the Quick View panel shows,
+`quick view shown` (target `cabinetos_ui::quickview`), with the trace of
+the command run that opened the panel (ADR 0023, decision 4.5; [ui.md](ui.md),
+"Quick View"). The live check reads its times.
+
+| Field | Meaning |
+|---|---|
+| `token` | The file's token in this window |
+| `kind` | The file's extension with its dot, `folder`, or `none` |
+| `viewer` | The viewer's ID, or `none` |
+| `card_ms` | The icon card on screen, from the key press |
+| `thumbnail_ms` | The thumbnail on screen, from the key press; without one, `thumbnail` says why: `none`, `none:<reason>` (the core's `timeout`, `busy`, `cloud`, `superseded`, or an error code), `after-page` (the page came first), `skipped` (the user moved on first) |
+| `full_ms` | The viewer's full view on screen (`quickview-shown` and its frame), from the key press; without one, `full` says why: `none` (no viewer), `off` (stopped three times this session), `failed:<reason>` (the page's reason, `not-started`, `not-finished` or `other`), `stopped`, `skipped` |
+| `cold` | The first load of that viewer in this window (its browser process starts) |
+
+Each time runs from the moment the window handled the key to the
+`CompositionTarget.Rendering` after the change: the card set, the
+thumbnail drawn, the page made visible. A line comes once the outcome is
+known; a file the user leaves first is written as skipped.
 
 ## How an action's trace id travels
 

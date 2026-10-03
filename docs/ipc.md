@@ -77,8 +77,8 @@ the job events (`job_progress`, `job_conflict`, `job_state_changed`),
 the plugin events (`plugin_state_changed`, `plugin_crashed`,
 `plugin_event`), `terminal_exited`, `terminal_mode_changed`,
 `terminal_folder_changed`, `volumes_changed`,
-`theme_changed`, and the marketplace events (`install_progress`,
-`install_finished`, `tools_changed`), and right after
+`theme_changed`, the marketplace events (`install_progress`,
+`install_finished`, `tools_changed`), `quick_view_table_changed`, and right after
 `welcome` a `job_conflict` for every conflict that already waits for a
 decision. Every other request works without `hello`.
 
@@ -183,7 +183,13 @@ meaning of a request without it changed: it used to list every kind of
 item, and now lists the extensions (plugins and tools) only. A client built
 for 19 that sends `marketplace_search` with `kind: "theme"` and no
 `catalogue` gets no theme from a version 20 core, and asks again with
-`catalogue: "themes"`.
+`catalogue: "themes"`. Version 21 (Phase 25, 2026-10-03,
+[ADR 0023](decisions/0023-quick-view-viewer-contract.md)) added Quick View:
+`get_thumbnail` with its reply `thumbnail`, `render_image` with its reply
+`rendered_image`, `quick_view_table` with its reply `quick_view_table` and
+the event `quick_view_table_changed`, and `quick_view_offer` with its reply
+`quick_view_offer` ("Quick View"); and the setting `quickView.viewers`
+([config.md](config.md)).
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -264,6 +270,10 @@ as absent from an older core.
 | `workspace_info` | `path` (absolute; need not exist) | `workspace_info` (`root`, `branch`) ("What the window shows") |
 | `shell_menu` | `paths` (absolute, at least one, all in one folder) | `shell_menu` (`menu_id`, `items`) ("Windows' context menu") |
 | `shell_menu_invoke` | `menu_id`, `item_id` | `ok`, once the item has run, or after 5 s while it still runs |
+| `get_thumbnail` | `path` (absolute), `size` (96, 256 or 768), `ahead` (optional) | `thumbnail` (`path`, `size`, `width`, `height`, `png_base64`, or `png_base64: null` and `reason`) ("Quick View") |
+| `render_image` | `path` (absolute), `max_size` (1 to 2560) | `rendered_image` (`folder`, `width`, `height`) |
+| `quick_view_table` | — | `quick_view_table` (`viewers`, `kinds`) |
+| `quick_view_offer` | `name` | `quick_view_offer` (`item`, or `item: null` and `reason`) |
 
 Any request can instead get `error` with a `code` and a `message`:
 
@@ -322,8 +332,9 @@ Requests on one connection are independent: `list_directory`,
 `terminal_open`, `terminal_close`, `list_themes`,
 `get_theme` of a named theme, `list_tools`, the marketplace requests,
 `preview_listing`, `open_preview`, `preview_apply`, the secret requests,
-the update steps, `execute_command` for a program, `shell_menu` and
-`shell_menu_invoke` run in the background, so a slow directory, plugin, search or shell does not hold up
+the update steps, `execute_command` for a program, `shell_menu`,
+`shell_menu_invoke`, `get_thumbnail`, `render_image`, `quick_view_table`
+and `quick_view_offer` run in the background, so a slow directory, plugin, search or shell does not hold up
 the next request, and their replies may come in any order. Match replies to
 requests by `id`.
 
@@ -1982,6 +1993,167 @@ until an item runs or 30 s pass. The window only shows the texts.
   window shows its own menu.
 - Plugins can never ask for either request ([plugins.md](plugins.md),
   "Asking the core"): a menu's items run programs with the user's rights.
+
+## Quick View
+
+The floating panel of Phase 25 ([ADR 0023](decisions/0023-quick-view-viewer-contract.md)):
+Space shows the cursor file's thumbnail at once, then a viewer's full view
+replaces it. Every viewer is a Tool Extension ([tool-extensions.md](tool-extensions.md),
+"Quick View"). The window reads no file for the panel (Prime Directive 1):
+it asks the core for the thumbnail, for a drawing of an image a page cannot
+decode, for the table of viewers, and for the item to offer when no viewer
+claims a file. None of these needs `hello`, except that only a connection
+that said `hello` gets `quick_view_table_changed`.
+
+### Thumbnails
+
+```json
+{"id":"01Q…","type":"get_thumbnail","path":"C:\\photos\\IMG_0412.jpg","size":256,"ahead":false}
+{"id":"01Q…","type":"thumbnail","path":"C:\\photos\\IMG_0412.jpg","size":256,
+ "width":256,"height":192,"png_base64":"iVBORw0KGgo…"}
+{"id":"01Q…","type":"thumbnail","path":"C:\\photos\\notes.xyz","size":256,
+ "png_base64":null,"reason":"none"}
+```
+
+- `path` is an absolute path to a file or a folder (the folder card shows
+  the shell's folder thumbnail). `size` is 96, 256 or 768, the sizes the
+  shell's thumbnail cache keeps; another size is a `protocol_error`. The
+  panel asks for 256. `ahead` is optional, `false` when left out.
+- The picture is the shell's thumbnail, the one Explorer shows
+  (`IShellItemImageFactory::GetImage` with `SIIGBF_RESIZETOFIT`,
+  `SIIGBF_BIGGERSIZEOK` and `SIIGBF_THUMBNAILONLY`): `size` pixels on the
+  longer side, aspect kept. A bigger answer from the shell's cache is scaled
+  down to fit; a smaller image keeps its own size. `width` and `height`
+  say what came, and `png_base64` is a PNG with an alpha channel.
+- Without a picture, `png_base64` is `null` and `reason` says why: `none`
+  (the shell has no thumbnail for this file, never a generic icon),
+  `timeout`, `busy`, `cloud` or `superseded` (below). A path that is not
+  there, not absolute or not allowed is the usual error reply:
+  `not_found`, `invalid_path`, `access_denied`.
+- **A file not on this disk** (a cloud placeholder, the listing's "not on
+  this disk" flag) is asked with `SIIGBF_INCACHEONLY` too, so a Space
+  never starts a download. Nothing in the shell's cache gives `cloud`.
+- **Threads.** The core asks the shell on two threads of its own, each in
+  a COM single-threaded apartment. When the shell has not answered a
+  request within 2 s, the request gets `timeout`, its thread is left to
+  finish, and a new thread takes its place. While four threads are stuck,
+  every request gets `busy`, until one of them comes back; the log names
+  the file each stuck thread is on. A thread that comes back puts its
+  picture in the cache, and ends if two others are working.
+- **Newest first.** A connection has at most one request with
+  `ahead: false` waiting: a newer one takes its place, and the older one
+  gets `superseded`. A request already in the shell runs to its end, and
+  its picture goes into the cache. Requests with `ahead: true` (at most
+  four waiting per connection; a fifth drops the oldest as `superseded`)
+  run only when no request without `ahead` waits.
+- **The cache.** The core keeps the last 128 pictures in memory, by the
+  path in lower case, the file's last-write time and size, and the size
+  asked for. A changed file is a new entry. A request the cache answers
+  never waits for a thread. There is no disk cache of CabinetOS's own:
+  the shell's thumbnail cache is the disk cache.
+- **Warm start.** After the first `list_directory` reply, the core starts
+  the two threads, and each has the shell load its image factory once on
+  the listed folder, so the first Space does not pay for the shell's
+  start.
+- The core writes one debug line per request, `thumbnail`, with
+  `took_ms`, `cached` and the `reason` when there is no picture.
+
+### Drawing an image for a page
+
+```json
+{"id":"01Q…","type":"render_image","path":"C:\\photos\\IMG_0413.heic","max_size":1380}
+{"id":"01Q…","type":"rendered_image","folder":"C:\\Users\\a\\AppData\\Local\\CabinetOS\\cache\\render\\01K6…","width":1380,"height":1035}
+```
+
+- For a viewer page that cannot decode a file in the browser (HEIC, TIFF,
+  camera RAW): the shell's image factory draws it with
+  `SIIGBF_RESIZETOFIT` and `SIIGBF_THUMBNAILONLY` at `max_size` pixels on
+  the longer side (1 to 2560; another value is a `protocol_error`), and
+  the core writes it as `image.png` into a folder of its own,
+  `%LOCALAPPDATA%\CabinetOS\cache\render\<ULID>\`, new for every render.
+  The window maps that folder read-only for the page.
+- The core keeps the last 16 renders: the 17th removes the oldest folder.
+  The `render` folder is emptied when the core starts.
+- It runs on the thumbnail threads, after the waiting thumbnails without
+  `ahead` and before those with it, with a limit of 5 s. A render the shell
+  cannot draw, one that takes longer than 5 s, and one asked for while
+  four threads are stuck are `io` errors with a message that says which.
+
+### The viewer table
+
+```json
+{"id":"01Q…","type":"quick_view_table"}
+{"id":"01Q…","type":"quick_view_table",
+ "viewers":[{"id":"image-viewer","name":"Image Viewer","version":"1.0.0",
+             "dir":"C:\\Users\\a\\AppData\\Local\\CabinetOS\\tools\\image-viewer",
+             "entry":"quickview.html"}],
+ "kinds":[{"pattern":"*.jpg","viewers":["image-viewer","photo-pro"]},
+          {"pattern":"*.svg","viewers":[],"off":true}]}
+{"id":"01R…","type":"quick_view_table_changed","viewers":[…],"kinds":[…]}
+```
+
+- `viewers` are the Tool Extensions whose `tool.json` has a valid
+  `quickView` block, the one installed first first: the development folder
+  (`--dev-tools-dir`, below) first, then marketplace installs by their time
+  in `installed.json`, then tools copied by hand, by folder name. `entry`
+  is `quickView.entry`, or the tool's `entry` when it has none, relative to
+  `dir`. A tool whose `quickView` block is wrong (a bad pattern, more than
+  512 patterns, a bad `entry`, a missing page) is not a viewer, with a
+  warning in the log that names the file; its pane use is not touched.
+- `kinds` has one entry per pattern, in lower case. `viewers` of an entry
+  are in the order of decision 1.2: the user's choice
+  (`quickView.viewers` in the configuration) first, then the viewers that
+  claim the pattern, the one installed first first. The window takes the
+  first. `"off": true` is a kind the user set to `"none"` (the thumbnail
+  only); its `viewers` is empty. `off` is left out when false.
+- **The order of `kinds` is the order to try them**: the window uses the
+  first entry whose pattern matches the file's name, with the matcher of
+  `accepts` (without case; `*.ext` needs a name before the extension). The
+  kinds of `quickView.viewers` come first, then the kinds the viewers
+  claim; within each group a whole name comes before an extension, and a
+  longer extension before a shorter one (`*.tar.gz` before `*.gz`).
+- A key of `quickView.viewers` that names a tool which is not a viewer is
+  left out of the table (the user's word cannot point at nothing); a key
+  set to `"none"` is always kept.
+- The core builds the table at start, after a tool install or uninstall
+  (after its `tools_changed`), and after a configuration change of
+  `quickView.viewers`. Each time the table differs from the one before,
+  every connection that said `hello` gets `quick_view_table_changed` with
+  the whole table. A client that fell behind on events gets it again, after
+  `tools_changed`.
+- **The development folder.** The window passes its tools folder in
+  development to the core with `--dev-tools-dir <folder>`. The core lists
+  it first: a tool there wins over an installed one with the same ID.
+
+### The install offer
+
+```json
+{"id":"01Q…","type":"quick_view_offer","name":"report.pdf"}
+{"id":"01Q…","type":"quick_view_offer","item":{"id":"document-viewer","name":"Document Viewer",
+ "version":"1.0.0","size":1240000,"author":{"name":"CabinetOS","verified":false},
+ "description":"Shows PDF and Office documents in Quick View."}}
+{"id":"01Q…","type":"quick_view_offer","item":null,"reason":"no_item"}
+{"id":"01Q…","type":"quick_view_offer","item":null,"reason":"offline"}
+```
+
+- The core matches `name` against the `quickView.kinds` of the tool items
+  of the extensions catalogue (`marketplace.index`) and answers the first
+  item, in the catalogue's order, that claims it, that this core can run
+  (its newest such version) and that is not installed (not in the tools
+  folder, the development folder or the record of installs). `item` is
+  `null` with `reason: "no_item"` when there is none.
+- **The catalogue.** The catalogue a `marketplace_refresh` read in this
+  session is used as it is. Otherwise a catalogue in a folder is read from
+  disk, and a catalogue on the web comes from the marketplace's cache when
+  that copy is under seven days old. When it is older, or missing, the core
+  reads it from the web (with its `ETag`) at most once per core session.
+  When it cannot be read, or the one read of the session failed, the answer
+  is `item: null` with `reason: "offline"`. This is the one request beside
+  `marketplace_refresh`, `marketplace_search`, `preview_theme` and
+  `install_extension` that may reach the network
+  ([marketplace.md](marketplace.md), trust rule 6).
+- The install is the marketplace's `install_extension`; when it ends, the
+  core sends `tools_changed` and then `quick_view_table_changed`.
 
 ## Trying it by hand
 

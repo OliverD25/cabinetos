@@ -17,6 +17,9 @@ public sealed class CoreSession : ICoreChannel
     // The core started at process start (StartEarly), taken by the first StartAsync.
     private static Task<CoreConnection?>? s_early;
 
+    // The window's tools folder in development (--tools-dir or CABINETOS_TOOLS_DIR), passed to every core it starts.
+    private static string? s_devToolsDir;
+
     private CoreConnection? _connection;
     private bool _stopping;
 
@@ -42,11 +45,15 @@ public sealed class CoreSession : ICoreChannel
     /// takes the connection, or the failure; a core that was not found is looked for again there,
     /// which reports where it looked.
     /// </summary>
-    public static void StartEarly() => s_early = Task.Run(async () =>
+    public static void StartEarly(string? devToolsDir)
     {
-        var exe = CoreLauncher.Find(AppContext.BaseDirectory, Environment.GetEnvironmentVariable, File.Exists);
-        return exe is null ? null : await CoreLauncher.StartAsync(exe, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-    });
+        s_devToolsDir = devToolsDir;
+        s_early = Task.Run(async () =>
+        {
+            var exe = CoreLauncher.Find(AppContext.BaseDirectory, Environment.GetEnvironmentVariable, File.Exists);
+            return exe is null ? null : await CoreLauncher.StartAsync(exe, TimeSpan.FromSeconds(10), devToolsDir: devToolsDir).ConfigureAwait(false);
+        });
+    }
 
     /// <summary>
     /// Finds and starts the core, connects and says hello. Call it on the UI
@@ -87,7 +94,7 @@ public sealed class CoreSession : ICoreChannel
                 $"Build the core (cargo build -p cabinetos-core in core\\), or set {CoreLauncher.CoreExeEnv} to its full path.");
         }
 
-        return await CoreLauncher.StartAsync(exe, TimeSpan.FromSeconds(10));
+        return await CoreLauncher.StartAsync(exe, TimeSpan.FromSeconds(10), devToolsDir: s_devToolsDir);
     }
 
     /// <inheritdoc/>

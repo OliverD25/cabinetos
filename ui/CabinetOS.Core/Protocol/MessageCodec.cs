@@ -46,6 +46,7 @@ public static class MessageCodec
         "preview_cancelled",
         "update_state_changed",
         "update_progress",
+        "quick_view_table_changed",
     ]);
 
     private static readonly FrozenDictionary<string, JsonTypeInfo> Known = new Dictionary<string, JsonTypeInfo>
@@ -110,6 +111,11 @@ public static class MessageCodec
         ["update_state_changed"] = ProtocolJson.Default.UpdateStateChangedEvent,
         ["update_progress"] = ProtocolJson.Default.UpdateProgressEvent,
         ["shell_menu"] = ProtocolJson.Default.ShellMenuReply,
+        ["thumbnail"] = ProtocolJson.Default.ThumbnailReply,
+        ["rendered_image"] = ProtocolJson.Default.RenderedImageReply,
+        ["quick_view_table"] = ProtocolJson.Default.QuickViewTableReply,
+        ["quick_view_offer"] = ProtocolJson.Default.QuickViewOfferReply,
+        ["quick_view_table_changed"] = ProtocolJson.Default.QuickViewTableChangedEvent,
     }.ToFrozenDictionary();
 
     /// <summary>

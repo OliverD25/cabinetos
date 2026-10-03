@@ -65,6 +65,8 @@ pub(crate) struct Services {
     pub(crate) terminals: Arc<Terminals>,
     /// Type names and icons, with their caches, for every connection.
     pub(crate) hydrator: Arc<Hydrator>,
+    /// Quick View's thumbnails and drawings, on threads of their own.
+    pub(crate) thumbnails: Arc<crate::quickview::Thumbnails>,
     /// The themes folder and the theme in effect.
     pub(crate) themes: Arc<Themes>,
     /// The marketplace: the index, installs and uninstalls.

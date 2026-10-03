@@ -64,6 +64,12 @@ struct Args {
     #[arg(long, value_name = "PATH")]
     tools_dir: Option<PathBuf>,
 
+    /// List the Tool Extensions of this folder first for Quick View: the
+    /// window's folder of tools in development (its --tools-dir). A tool
+    /// here wins over an installed one with the same ID.
+    #[arg(long, value_name = "PATH")]
+    dev_tools_dir: Option<PathBuf>,
+
     /// Keep the marketplace's own files (the index cache, downloads while
     /// they run, the record of installs) in this folder instead of
     /// %LOCALAPPDATA%\CabinetOS\marketplace (or the
@@ -126,6 +132,7 @@ fn main() -> ExitCode {
         plugins_data_dir: args.plugins_data_dir,
         themes_dir: args.themes_dir,
         tools_dir: args.tools_dir,
+        dev_tools_dir: args.dev_tools_dir,
         marketplace_dir: args.marketplace_dir,
         update_dir: args.update_dir,
     };
@@ -208,6 +215,8 @@ mod tests {
             r"E:\themes",
             "--tools-dir",
             r"E:\tools",
+            "--dev-tools-dir",
+            r"E:\dev-tools",
             "--marketplace-dir",
             r"E:\marketplace",
             "--update-dir",
@@ -227,6 +236,7 @@ mod tests {
         );
         assert_eq!(args.themes_dir, Some(PathBuf::from(r"E:\themes")));
         assert_eq!(args.tools_dir, Some(PathBuf::from(r"E:\tools")));
+        assert_eq!(args.dev_tools_dir, Some(PathBuf::from(r"E:\dev-tools")));
         assert_eq!(args.marketplace_dir, Some(PathBuf::from(r"E:\marketplace")));
         assert_eq!(args.update_dir, Some(PathBuf::from(r"E:\update")));
         assert!(args.self_test_panic);

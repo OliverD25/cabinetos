@@ -34,6 +34,7 @@ mod measure;
 mod plugins;
 mod preview;
 mod programs;
+mod quickview;
 mod search;
 mod secrets;
 mod settings;
@@ -71,6 +72,11 @@ pub const WORKERS_ENV: &str = "CABINETOS_WORKERS";
 /// saved copies, docs/jobs.md "Undo"); tests point it at a folder of their
 /// own. Default: `%LOCALAPPDATA%\CabinetOS\undo`.
 pub const UNDO_DIR_ENV: &str = "CABINETOS_UNDO_DIR";
+
+/// Environment variable that sets the core's cache folder (the drawings of
+/// `render_image` go into its `render` folder); tests point it at a folder
+/// of their own. Default: `%LOCALAPPDATA%\CabinetOS\cache`.
+pub const CACHE_DIR_ENV: &str = "CABINETOS_CACHE_DIR";
 
 /// Async worker threads when `CABINETOS_WORKERS` is not set. The workers only
 /// route messages and wait for events; disk work runs on blocking threads
@@ -132,6 +138,10 @@ pub struct CoreConfig {
     /// The folder the marketplace installs Tool Extensions into; `None`
     /// uses `%LOCALAPPDATA%\CabinetOS\tools`, where the window reads them.
     pub tools_dir: Option<PathBuf>,
+    /// The window's folder of tools in development (its `--tools-dir`),
+    /// listed first for the Quick View table: a tool there wins over an
+    /// installed one with the same ID. `None`: no such folder.
+    pub dev_tools_dir: Option<PathBuf>,
     /// The marketplace's own folder (the index cache, downloads, the record
     /// of installs); `None` uses `CABINETOS_MARKETPLACE_DIR` or
     /// `%LOCALAPPDATA%\CabinetOS\marketplace`.
@@ -199,6 +209,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         plugins_data_dir,
         themes_dir,
         tools_dir,
+        dev_tools_dir,
         marketplace_dir,
         update_dir,
     } = config;
@@ -257,6 +268,11 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         Arc::clone(&events),
         plugins.clone(),
         Arc::clone(&themes),
+        dev_tools_dir,
+    ));
+    tokio::spawn(market::follow_quick_view(
+        Arc::clone(&market),
+        settings.subscribe(),
     ));
     let update_settings = Arc::clone(&settings);
     let update_events = Arc::clone(&events);
@@ -280,6 +296,11 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
     // The window asks for these first, and the shell draws one icon at a
     // time: they are drawn now, while the window builds itself.
     icons::at_start(&hydrator, &shutdown);
+    let thumbnails = quickview::Thumbnails::new(&cache_dir());
+    let clearing = Arc::clone(&thumbnails);
+    drop(tokio::task::spawn_blocking(move || {
+        clearing.clear_renders();
+    }));
     let services = Arc::new(Services {
         settings,
         jobs,
@@ -288,6 +309,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         indexer: search::IndexerLink::from_env(),
         terminals,
         hydrator,
+        thumbnails,
         themes,
         market,
         windows: window::WindowStates::default(),
@@ -332,6 +354,23 @@ fn undo_dir() -> Option<std::path::PathBuf> {
                     .join("undo")
             })
         })
+}
+
+/// The cache folder: `CABINETOS_CACHE_DIR`, else
+/// `%LOCALAPPDATA%\CabinetOS\cache`, else under the temp folder.
+fn cache_dir() -> PathBuf {
+    std::env::var_os(CACHE_DIR_ENV)
+        .filter(|dir| !dir.is_empty())
+        .map_or_else(
+            || {
+                std::env::var_os("LOCALAPPDATA")
+                    .filter(|dir| !dir.is_empty())
+                    .map_or_else(std::env::temp_dir, PathBuf::from)
+                    .join("CabinetOS")
+                    .join("cache")
+            },
+            PathBuf::from,
+        )
 }
 
 /// Logs a `CABINETOS_WORKERS` value that `worker_threads` refused.

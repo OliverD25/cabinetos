@@ -682,6 +682,35 @@
         "total",
         "bytes_per_second"
       ]
+    },
+    {
+      "description": "The Quick View table changed: a tool was installed or removed, or\n`quickView.viewers` changed. The same fields as `quick_view_table`.\nSent to every connection that said `hello`.",
+      "type": "object",
+      "properties": {
+        "kinds": {
+          "description": "The kinds, in the order the window tries them.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuickViewKind"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "quick_view_table_changed"
+        },
+        "viewers": {
+          "description": "Every installed viewer.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuickViewer"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "viewers",
+        "kinds"
+      ]
     }
   ],
   "required": [
@@ -2130,6 +2159,64 @@
             "at_ms"
           ]
         }
+      ]
+    },
+    "QuickViewKind": {
+      "description": "One kind of the Quick View table: a pattern and the viewers for it.",
+      "type": "object",
+      "properties": {
+        "off": {
+          "description": "The user set this kind to `\"none\"`: the thumbnail only. Left out\nwhen false.",
+          "type": "boolean"
+        },
+        "pattern": {
+          "description": "The pattern, in lower case.",
+          "type": "string"
+        },
+        "viewers": {
+          "description": "The viewers' IDs, the one to use first: the user's choice, then the\nviewer installed first. Empty when `off`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "pattern",
+        "viewers"
+      ]
+    },
+    "QuickViewer": {
+      "description": "One viewer of the Quick View table: a Tool Extension with a valid\n`quickView` block.",
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "Its folder, from which the window starts the page.",
+          "type": "string"
+        },
+        "entry": {
+          "description": "The page Quick View loads, relative to `dir`: `quickView.entry`, or\nthe tool's `entry` when it has none.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The tool's ID.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name, as the panel shows it (\"Image Viewer cannot show this\nfile.\").",
+          "type": "string"
+        },
+        "version": {
+          "description": "Its version.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "dir",
+        "entry"
       ]
     },
     "Rate": {

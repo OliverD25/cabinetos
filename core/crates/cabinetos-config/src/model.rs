@@ -88,6 +88,8 @@ pub struct Config {
     pub marketplace: MarketplaceConfig,
     /// In-app updates.
     pub update: UpdateConfig,
+    /// Quick View, the panel Space opens (ADR 0023).
+    pub quick_view: QuickViewConfig,
 }
 
 impl Default for Config {
@@ -106,6 +108,7 @@ impl Default for Config {
             plugins: BTreeMap::new(),
             marketplace: MarketplaceConfig::default(),
             update: UpdateConfig::default(),
+            quick_view: QuickViewConfig::default(),
         }
     }
 }
@@ -739,6 +742,21 @@ impl Default for UpdateConfig {
             auto_install: true,
         }
     }
+}
+
+/// Quick View (ADR 0023): which viewer shows which kind of file.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields, default, rename_all = "camelCase")]
+pub struct QuickViewConfig {
+    /// The user's choice of viewer for a kind of file: a pattern in the
+    /// grammar of a viewer's `quickView.kinds` (`*.pdf`, `*.tar.gz`, or a
+    /// whole name such as `README`) to a Tool Extension's ID, or to `none`
+    /// for no viewer, the thumbnail only. Example: `{"*.pdf": "pdf-viewer",
+    /// "*.svg": "none"}`. A kind not listed goes to the viewer installed
+    /// first. The panel's viewer button and the palette's "View: Choose
+    /// Quick View Viewer…" write it.
+    pub viewers: BTreeMap<String, String>,
 }
 
 /// Diagnostics.

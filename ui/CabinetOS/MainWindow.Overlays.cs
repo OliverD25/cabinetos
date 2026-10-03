@@ -32,6 +32,10 @@ public sealed partial class MainWindow
         {
             open.Add(Overlay.PluginList);
         }
+        if (_quickView.IsOpen)
+        {
+            open.Add(Overlay.QuickView);
+        }
         return open;
     }
 
@@ -61,6 +65,9 @@ public sealed partial class MainWindow
                     break;
                 case Overlay.PluginList:
                     ClosePlugins();
+                    break;
+                case Overlay.QuickView:
+                    CloseQuickView("another overlay");
                     break;
             }
         }

@@ -1,0 +1,14 @@
+{
+  "id": "quickview-fixture",
+  "name": "Quick View Fixture",
+  "version": "1.0.0",
+  "author": "CabinetOS",
+  "description": "The test viewer of ADR 0023: in Quick View it does what a .qvtest file's first line says, and shows a PNG.",
+  "entry": "index.html",
+  "accepts": [],
+  "placement": "pane",
+  "quickView": {
+    "kinds": ["*.qvtest", "*.png"],
+    "entry": "quickview.html"
+  }
+}

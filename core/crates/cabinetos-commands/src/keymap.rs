@@ -507,6 +507,32 @@ mod tests {
     }
 
     #[test]
+    fn space_can_be_given_back_to_marking_in_place() {
+        // Total Commander's Space: marking takes Space back once Quick View
+        // has another key (ADR 0023, decision 6).
+        let keymap = compile_with(&[
+            over("edit.toggleSelectionInPlace", "space"),
+            over("quickView.toggle", "ctrl+q"),
+        ])
+        .unwrap()
+        .keymap;
+        assert_eq!(keys(&keymap, "edit.toggleSelectionInPlace"), ["space"]);
+        assert_eq!(keys(&keymap, "quickView.toggle"), ["ctrl+q"]);
+        let marking = keymap
+            .bindings()
+            .iter()
+            .find(|binding| binding.command == "edit.toggleSelectionInPlace")
+            .unwrap();
+        assert_eq!(marking.when.as_deref(), Some("filesView"));
+        // While Quick View keeps Space, the two would share it.
+        let error = compile_with(&[over("edit.toggleSelectionInPlace", "space")]).unwrap_err();
+        assert!(
+            matches!(&error, KeymapError::Conflict { keys, .. } if keys == "space"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn different_contexts_do_not_conflict() {
         let mut in_terminal = over("help.about", "f5");
         in_terminal.when = Some("terminalFocus".to_owned());

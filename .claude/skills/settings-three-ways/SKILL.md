@@ -105,6 +105,7 @@ the next audit does not ask again.
 | `panes.showHidden` | `view.toggleHiddenFiles`, Ctrl+K Ctrl+H | the menu's "Show Hidden Files", the word "hidden" in the status bar | fine since Phase 23 (was gap 2) |
 | `panes.sort.*` | `view.sortBy*` | column headers (since Phase 24) | fine |
 | `panes.folderSizes` | `view.toggleFolderSizes` | to check | command fine; window to check |
+| `quickView.viewers` | `quickView.chooseViewer` ("View: Choose Quick View Viewer…", a prompt for the cursor file's kind) | the Quick View panel's viewer button (its list, then "No viewer (thumbnail only)") | fine since Phase 25 (ADR 0023; the window tests are in `QuickViewEndToEndTests`) |
 | `files.editor` | `preferences.chooseEditor` (picker: Windows' default, the programs of `programs`, Choose…; `file.edit` uses it) | the top row menu's "Editor" submenu | fine since this unit (was gap 7) |
 | `contextMenu` (the menu's rows) | `menu.edit` | "Edit Menu…" in the menu | fine |
 | `contextMenu.shellMenu` | `menu.toggleShellMenu` | the last row of "Edit Menu…" | fine since Phase 23 (was gap 4) |

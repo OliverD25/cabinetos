@@ -253,6 +253,31 @@ fn fetch_remote(
     }))
 }
 
+/// The cached copy of the catalogue at `url` when it was read or confirmed
+/// unchanged within `max_age_ms`, read from the cache folder alone: the web
+/// is not asked. `None` when there is no such copy, it is older, or it
+/// cannot be read.
+pub(crate) fn cached(
+    url: &Url,
+    catalogue: Catalogue,
+    cache_dir: &Path,
+    max_age_ms: u64,
+) -> Option<Index> {
+    let meta: CacheMeta = std::fs::read(cache_dir.join(meta_of(catalogue)))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())?;
+    if meta.source != url.as_str() || now_ms().saturating_sub(meta.fetched_at_ms) > max_age_ms {
+        return None;
+    }
+    let items = read_cached(&cache_dir.join(file_of(catalogue)), url, catalogue).ok()?;
+    Some(Index {
+        items,
+        source: url.to_string(),
+        fetched_at_ms: meta.fetched_at_ms,
+        base: Base::Web(url.clone()),
+    })
+}
+
 /// What one request for a catalogue brought.
 enum Downloaded {
     /// The server confirmed the tag sent: the cached copy is current.
@@ -577,5 +602,44 @@ mod tests {
             2
         );
         assert!(search(&items, "zzz", None).is_empty());
+    }
+
+    #[test]
+    fn a_cached_catalogue_is_used_only_while_it_is_young_enough() {
+        const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+        let root = std::env::temp_dir().join("cabinetos-core-test");
+        std::fs::create_dir_all(&root).unwrap();
+        let scratch = tempfile::Builder::new()
+            .prefix("index-cache")
+            .tempdir_in(root)
+            .unwrap();
+        let cache = scratch.path();
+        let url = Url::parse("https://example.invalid/market/index.json").unwrap();
+        std::fs::write(
+            cache.join("index.json"),
+            index(&[item("viewer", "tool", "1.0.0")]),
+        )
+        .unwrap();
+        let write_meta = |source: &str, age_ms: u64| {
+            let meta = CacheMeta {
+                source: source.to_owned(),
+                etag: Some("\"v1\"".to_owned()),
+                fetched_at_ms: now_ms() - age_ms,
+            };
+            std::fs::write(
+                cache.join("index.meta.json"),
+                serde_json::to_vec(&meta).unwrap(),
+            )
+            .unwrap();
+        };
+        let seven_days = 7 * DAY_MS;
+        write_meta(url.as_str(), 6 * DAY_MS);
+        let young = cached(&url, Catalogue::Extensions, cache, seven_days).unwrap();
+        assert_eq!(young.items[0].id, "viewer");
+        assert_eq!(young.source, url.as_str());
+        write_meta(url.as_str(), 8 * DAY_MS);
+        assert!(cached(&url, Catalogue::Extensions, cache, seven_days).is_none());
+        write_meta("https://example.invalid/other/index.json", 0);
+        assert!(cached(&url, Catalogue::Extensions, cache, seven_days).is_none());
     }
 }

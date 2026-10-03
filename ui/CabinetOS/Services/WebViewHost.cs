@@ -89,6 +89,19 @@ internal sealed class WebViewHost
     public string? HostScript { get; set; }
 
     /// <summary>
+    /// Arguments for the browser process, set before <see cref="StartAsync"/>. Hosts that share a data folder share one
+    /// browser process, and WebView2 refuses a second environment there with other options, so every host of a tool's
+    /// folder passes the same ones (<see cref="ToolBrowserArguments"/>).
+    /// </summary>
+    public string? BrowserArguments { get; set; }
+
+    /// <summary>
+    /// The browser arguments of every Tool Extension's environment: media plays without a click, so a video viewer in
+    /// Quick View plays when it is shown (ADR 0023, decision 7).
+    /// </summary>
+    public const string ToolBrowserArguments = "--autoplay-policy=no-user-gesture-required";
+
+    /// <summary>
     /// Serves <paramref name="folder"/> at <c>https://&lt;host&gt;/</c>; kept
     /// across restarts. A host that is not <paramref name="navigable"/> only
     /// answers requests (a tool's file folder): the page cannot go there.
@@ -127,7 +140,8 @@ internal sealed class WebViewHost
         _view = view;
         try
         {
-            _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, DataFolder, new CoreWebView2EnvironmentOptions());
+            _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, DataFolder,
+                new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = BrowserArguments ?? "" });
             await view.EnsureCoreWebView2Async(_environment);
         }
         catch (Exception error) when (error is COMException or FileNotFoundException or UnauthorizedAccessException or IOException or ArgumentException)
@@ -208,6 +222,51 @@ internal sealed class WebViewHost
         IsRunning = true;
         _core.Navigate(start.AbsoluteUri);
         return true;
+    }
+
+    /// <summary>
+    /// Loads <paramref name="uri"/> in the running page (a Quick View viewer loads its entry again for every file);
+    /// a suspended page is woken first. False when no page runs: <see cref="StartAsync"/> or <see cref="RestartAsync"/> it.
+    /// </summary>
+    public bool Navigate(Uri uri)
+    {
+        if (!IsRunning || _core is not { } core)
+        {
+            return false;
+        }
+        Resume();
+        _start = uri;
+        try
+        {
+            core.Navigate(uri.AbsoluteUri);
+            return true;
+        }
+        catch (Exception error) when (error is COMException or ArgumentException or InvalidOperationException)
+        {
+            Diag.Info(Target, "a navigation could not start", new LogField("host", _name), new LogField("error", error.Message));
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Empties the page (<c>about:blank</c>): a video stops and its decoder is freed. The entry stays the page to start
+    /// again from.
+    /// </summary>
+    public void NavigateToBlank()
+    {
+        if (!IsRunning || _core is not { } core)
+        {
+            return;
+        }
+        Resume();
+        try
+        {
+            core.Navigate("about:blank");
+        }
+        catch (Exception error) when (error is COMException or ArgumentException or InvalidOperationException)
+        {
+            Diag.Info(Target, "the page could not be emptied", new LogField("host", _name), new LogField("error", error.Message));
+        }
     }
 
     /// <summary>

@@ -103,6 +103,10 @@ public class ProtocolTests
             new UpdateSnoozeRequest(),
             new ShellMenuRequest([@"C:\data\a.txt", @"C:\data\b.md"]),
             new ShellMenuInvokeRequest(3, 19),
+            new GetThumbnailRequest(@"C:\photos\IMG_0412.jpg", 256) { Ahead = true },
+            new RenderImageRequest(@"C:\photos\IMG_0413.heic", 1380),
+            new QuickViewTableRequest(),
+            new QuickViewOfferRequest("report.pdf"),
         ];
     }
 
@@ -183,8 +187,9 @@ public class ProtocolTests
             }
             checkedTypes.Add(request.Type);
         }
-        // 54 since Phase 16's workspace_info, 60 since Phase 17's six update requests, 62 since Phase 18's shell menu.
-        Assert.Equal(62, checkedTypes.Count);
+        // 54 since Phase 16's workspace_info, 60 since Phase 17's six update requests, 62 since Phase 18's shell menu,
+        // 66 since Phase 25's four Quick View requests.
+        Assert.Equal(66, checkedTypes.Count);
     }
 
     [Fact]
@@ -451,6 +456,25 @@ public class ProtocolTests
                     Assert.Equal(["api.anthropic.com", "localhost:11434"], capability.Hosts);
                     Assert.Equal(["anthropic"], capability.Secrets);
                 }),
+            ($$$"""{"id":"{{{Id}}}","type":"thumbnail","path":"C:\\photos\\IMG_0412.jpg","size":256,"width":256,"height":192,"png_base64":"iVBORw0KGgo="}""",
+                b => Assert.Equal(new ThumbnailReply(@"C:\photos\IMG_0412.jpg", 256, 256, 192, "iVBORw0KGgo="), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"thumbnail","path":"C:\\photos\\notes.xyz","size":256,"png_base64":null,"reason":"none"}""",
+                b => Assert.Equal(new ThumbnailReply(@"C:\photos\notes.xyz", 256, null, null, null, ThumbnailReasons.None), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"rendered_image","folder":"C:\\cache\\render\\01J9ZQ","width":1380,"height":1035}""",
+                b => Assert.Equal(new RenderedImageReply(@"C:\cache\render\01J9ZQ", 1380, 1035), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"quick_view_table","viewers":[{"id":"image-viewer","name":"Image Viewer","version":"1.0.0","dir":"C:\\tools\\image-viewer","entry":"quickview.html"}],"kinds":[{"pattern":"*.jpg","viewers":["image-viewer","photo-pro"]},{"pattern":"*.svg","viewers":[],"off":true}]}""",
+                b =>
+                {
+                    var table = Assert.IsType<QuickViewTableReply>(b);
+                    Assert.Equal(new QuickViewer("image-viewer", "Image Viewer", "1.0.0", @"C:\tools\image-viewer", "quickview.html"), table.Viewers.Single());
+                    Assert.Equal(("*.jpg", false, "image-viewer,photo-pro"), (table.Kinds[0].Pattern, table.Kinds[0].Off, string.Join(",", table.Kinds[0].Viewers)));
+                    Assert.Equal(("*.svg", true, 0), (table.Kinds[1].Pattern, table.Kinds[1].Off, table.Kinds[1].Viewers.Count));
+                }),
+            ($$$"""{"id":"{{{Id}}}","type":"quick_view_offer","item":{"id":"document-viewer","name":"Document Viewer","version":"1.0.0","size":1240000,"author":{"name":"CabinetOS","verified":false},"description":"Shows PDF and Office documents in Quick View."}}""",
+                b => Assert.Equal(new QuickViewOfferItem("document-viewer", "Document Viewer", "1.0.0", 1240000, new MarketAuthor("CabinetOS"),
+                    "Shows PDF and Office documents in Quick View."), Assert.IsType<QuickViewOfferReply>(b).Item)),
+            ($$$"""{"id":"{{{Id}}}","type":"quick_view_offer","item":null,"reason":"offline"}""",
+                b => Assert.Equal(new QuickViewOfferReply(null, OfferReasons.Offline), b)),
         };
         foreach (var (json, check) in samples)
         {
@@ -547,6 +571,8 @@ public class ProtocolTests
                 b => Assert.Equal(UpdatePhases.Downloaded, Assert.IsType<UpdateStateChangedEvent>(b).Status.State)),
             ($$$"""{"id":"{{{Id}}}","type":"update_progress","version":"0.2.0","bytes":4194304,"total":80123456,"bytes_per_second":2097152}""",
                 b => Assert.Equal(new UpdateProgressEvent("0.2.0", 4194304, 80123456, 2097152), b)),
+            ($$$"""{"id":"{{{Id}}}","type":"quick_view_table_changed","viewers":[],"kinds":[{"pattern":"*.qvtest","viewers":["quickview-fixture"]}]}""",
+                b => Assert.Equal("quickview-fixture", Assert.IsType<QuickViewTableChangedEvent>(b).Kinds.Single().Viewers.Single())),
         };
         foreach (var (json, check) in samples)
         {

@@ -63,8 +63,11 @@ internal sealed class WindowRun
     /// <summary>The configuration file as a tree.</summary>
     public JsonObject ReadConfig() => JsonNode.Parse(File.ReadAllText(ConfigPath))!.AsObject();
 
-    /// <summary>Starts a window on the run's configuration; <paramref name="steps"/> are the snapshot steps, the test's script.</summary>
-    public Process Start(string name, string steps)
+    /// <summary>
+    /// Starts a window on the run's configuration; <paramref name="steps"/> are the snapshot steps, the test's script.
+    /// <paramref name="environment"/> adds variables of the test's own.
+    /// </summary>
+    public Process Start(string name, string steps, IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo(_exe) { UseShellExecute = false };
         start.Environment["CABINETOS_CORE_EXE"] = _core;
@@ -80,6 +83,10 @@ internal sealed class WindowRun
         start.Environment["CABINETOS_UPDATE_DIR"] = Path.Combine(Root, "update");
         start.Environment["CABINETOS_UI_SNAPSHOT"] = Path.Combine(Root, "shots-" + name);
         start.Environment["CABINETOS_UI_SNAPSHOT_STEPS"] = steps;
+        foreach (var (key, value) in environment ?? new Dictionary<string, string>())
+        {
+            start.Environment[key] = value;
+        }
         var process = Process.Start(start)!;
         _started.Add(process);
         return process;

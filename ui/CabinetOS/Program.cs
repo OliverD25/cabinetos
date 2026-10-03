@@ -49,7 +49,9 @@ public static class Program
             new LogField("version", Version), new LogField("os", os.ToString()), new LogField("pid", Environment.ProcessId));
         // Beside WinUI's own start: the protocol's tables (not on the pipe's reader at the core's first reply), and the core.
         _ = Task.Run(MessageCodec.Warm);
-        CoreSession.StartEarly();
+        // The tools folder in development goes to the core too: its Quick View table lists that folder first (ADR 0023).
+        var development = WindowArgs.Parse(args).ToolsDir ?? Environment.GetEnvironmentVariable("CABINETOS_TOOLS_DIR");
+        CoreSession.StartEarly(string.IsNullOrEmpty(development) ? null : Path.GetFullPath(development));
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(_ignored =>
         {

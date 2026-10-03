@@ -13,24 +13,28 @@
 //!   core clears the plugin's grants before the new files are in place, and
 //!   the plugin host reloads it.
 //! - A theme install applies at once when `ui.theme` names it; a tool
-//!   install or uninstall sends `tools_changed`.
+//!   install or uninstall sends `tools_changed`, and then
+//!   `quick_view_table_changed` when the Quick View table changed with it.
+//! - The Quick View table (ADR 0023, decision 1) is built from the tools'
+//!   `quickView` blocks at start, after a tool install or uninstall, and
+//!   after `quickView.viewers` changes.
 
-use std::collections::HashMap;
-use std::path::Path;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use cabinetos_market::{Index, Installed, Market, MarketError, Source};
+use cabinetos_market::{Index, Installed, Market, MarketError, QuickViewTable, Source};
 use cabinetos_plugins::PluginHost;
 use cabinetos_plugins::manifest::{self, Capability};
 use cabinetos_protocol::{
-    CapabilityLevel, Catalogue, ErrorCode, Event, ExtensionKind, MarketItem, Response, Theme,
-    ToolInfo,
+    CapabilityLevel, Catalogue, ErrorCode, Event, ExtensionKind, MarketItem, OfferReason, Response,
+    Theme, ToolInfo,
 };
 
 use crate::CORE_VERSION;
 use crate::events::EventHub;
-use crate::settings::Settings;
+use crate::settings::{Settings, Snapshot};
 use crate::themes::Themes;
 
 /// Progress events of one download: at most 30 a second.
@@ -39,6 +43,10 @@ const PROGRESS_INTERVAL: Duration = Duration::from_millis(33);
 /// How many previewed themes the core keeps (about 2 KB each): the whole
 /// collection and some to spare. A full memory starts over.
 const PREVIEWS_KEPT: usize = 64;
+
+/// How old the cached extensions' index may be for the Quick View offer
+/// before the core reads it from the web again (ADR 0023, decision 5.1).
+const OFFER_CACHE_AGE: Duration = Duration::from_hours(7 * 24);
 
 /// A catalogue read last, with the settings it came from.
 type Read = Option<(String, Arc<Index>)>;
@@ -60,6 +68,15 @@ pub(crate) struct Marketplace {
     /// `None` when the plugin host could not start.
     plugins: Option<Arc<PluginHost>>,
     themes: Arc<Themes>,
+    /// The window's tools folder in development (`--dev-tools-dir`), listed
+    /// first for Quick View.
+    dev_tools: Option<PathBuf>,
+    /// The Quick View table built last. The lock is held while one is
+    /// built, so two builds never cross.
+    quick_view: Mutex<Option<Arc<QuickViewTable>>>,
+    /// The `marketplace.index` addresses the Quick View offer read from
+    /// the web in this session: at most once each.
+    offer_reads: Mutex<HashSet<String>>,
 }
 
 impl Marketplace {
@@ -69,6 +86,7 @@ impl Marketplace {
         events: Arc<EventHub>,
         plugins: Option<Arc<PluginHost>>,
         themes: Arc<Themes>,
+        dev_tools: Option<PathBuf>,
     ) -> Self {
         Self {
             market,
@@ -79,7 +97,141 @@ impl Marketplace {
             events,
             plugins,
             themes,
+            dev_tools,
+            quick_view: Mutex::new(None),
+            offer_reads: Mutex::new(HashSet::new()),
         }
+    }
+
+    /// The reply to `quick_view_offer`: the first tool of the extensions
+    /// catalogue, in its order, that claims `name`, that this core can run
+    /// and that is not installed. Blocking: it reads the record of installs
+    /// and the tools folders, and may read the catalogue.
+    pub(crate) fn quick_view_offer(&self, name: &str) -> Response {
+        let Some(index) = self.offer_catalogue() else {
+            return Response::QuickViewOffer {
+                item: None,
+                reason: Some(OfferReason::Offline),
+            };
+        };
+        let mut installed: BTreeSet<String> = self.market.installed().into_keys().collect();
+        installed.extend(self.market.tools().into_iter().map(|tool| tool.id));
+        if let Some(dev) = &self.dev_tools {
+            installed.extend(
+                cabinetos_market::list_tools(dev)
+                    .into_iter()
+                    .map(|tool| tool.id),
+            );
+        }
+        let offered = self.market.offers(&index.items);
+        match cabinetos_market::quick_view_offer(name, &offered, &installed) {
+            Some(item) => Response::QuickViewOffer {
+                item: Some(item),
+                reason: None,
+            },
+            None => Response::QuickViewOffer {
+                item: None,
+                reason: Some(OfferReason::NoItem),
+            },
+        }
+    }
+
+    /// The extensions catalogue for the offer, `None` when it cannot be
+    /// read: the one read in this session for the current address; else a
+    /// catalogue on this machine from disk; else the marketplace's cached
+    /// copy while it is under seven days old; else the web, once per
+    /// session and address.
+    fn offer_catalogue(&self) -> Option<Arc<Index>> {
+        let key = self.key(Catalogue::Extensions);
+        if let Some((read_from, index)) = &*self.lock(Catalogue::Extensions)
+            && *read_from == key
+        {
+            return Some(Arc::clone(index));
+        }
+        let config = self.settings.snapshot().config.marketplace.clone();
+        let source = Source::parse(&config.index, config.allow_insecure)
+            .inspect_err(|error| {
+                tracing::info!(error = %error.message, "no catalogue for the quick view offer");
+            })
+            .ok()?;
+        if let Source::Local(_) = source {
+            return self
+                .market
+                .fetch(&source, config.allow_insecure)
+                .inspect_err(|error| {
+                    tracing::info!(error = %error.message, "no catalogue for the quick view offer");
+                })
+                .ok()
+                .map(|index| Arc::new(index.only(Catalogue::Extensions)));
+        }
+        if let Some(index) = self.market.cached_index(&source, OFFER_CACHE_AGE) {
+            return Some(Arc::new(index.only(Catalogue::Extensions)));
+        }
+        let first = self
+            .offer_reads
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(key);
+        if !first {
+            return None;
+        }
+        tracing::info!(
+            source = %config.index,
+            "the quick view offer reads the extensions catalogue (once this session)"
+        );
+        self.read(Catalogue::Extensions)
+            .inspect_err(|error| {
+                tracing::info!(error = %error.message, "no catalogue for the quick view offer");
+            })
+            .ok()
+    }
+
+    /// The reply to `quick_view_table`. Blocking when no table is built yet.
+    pub(crate) fn quick_view_table(&self) -> Response {
+        let (viewers, kinds) = (*self.current_quick_view()).clone();
+        Response::QuickViewTable { viewers, kinds }
+    }
+
+    /// The table built last, built now when there is none. Blocking then.
+    pub(crate) fn current_quick_view(&self) -> Arc<QuickViewTable> {
+        let mut table = self
+            .quick_view
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        Arc::clone(table.get_or_insert_with(|| Arc::new(self.build_quick_view())))
+    }
+
+    /// Builds the table again; when it differs from the one before, every
+    /// client gets `quick_view_table_changed`. Blocking: it reads the tools
+    /// folders.
+    pub(crate) fn rebuild_quick_view(&self) {
+        let mut table = self
+            .quick_view
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let built = self.build_quick_view();
+        if table.as_deref() == Some(&built) {
+            return;
+        }
+        let first = table.is_none();
+        *table = Some(Arc::new(built.clone()));
+        drop(table);
+        let (viewers, kinds) = built;
+        tracing::info!(
+            viewers = viewers.len(),
+            kinds = kinds.len(),
+            "quick view table built"
+        );
+        if !first {
+            self.events
+                .publish(Event::QuickViewTableChanged { viewers, kinds });
+        }
+    }
+
+    fn build_quick_view(&self) -> QuickViewTable {
+        let choices = self.settings.snapshot().config.quick_view.viewers.clone();
+        self.market
+            .quick_view_table(self.dev_tools.as_deref(), &choices)
     }
 
     /// The reply to `marketplace_refresh`: reads the catalogue now.
@@ -244,9 +396,12 @@ impl Marketplace {
                 }
             }
             ExtensionKind::Theme => self.themes.refresh(),
-            ExtensionKind::Tool => self.events.publish(Event::ToolsChanged {
-                tools: self.market.tools(),
-            }),
+            ExtensionKind::Tool => {
+                self.events.publish(Event::ToolsChanged {
+                    tools: self.market.tools(),
+                });
+                self.rebuild_quick_view();
+            }
         }
     }
 
@@ -271,6 +426,7 @@ impl Marketplace {
                     self.events.publish(Event::ToolsChanged {
                         tools: self.market.tools(),
                     });
+                    self.rebuild_quick_view();
                 }
                 Response::Ok
             }
@@ -367,6 +523,36 @@ impl Marketplace {
         }
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Builds the Quick View table at start, then again each time
+/// `quickView.viewers` changes in the configuration (from the window, the
+/// palette or the file).
+pub(crate) async fn follow_quick_view(
+    market: Arc<Marketplace>,
+    mut changes: tokio::sync::watch::Receiver<Arc<Snapshot>>,
+) {
+    let mut applied = changes
+        .borrow_and_update()
+        .config
+        .quick_view
+        .viewers
+        .clone();
+    let building = Arc::clone(&market);
+    let _ = tokio::task::spawn_blocking(move || building.rebuild_quick_view()).await;
+    while changes.changed().await.is_ok() {
+        let viewers = changes
+            .borrow_and_update()
+            .config
+            .quick_view
+            .viewers
+            .clone();
+        if viewers != applied {
+            applied = viewers;
+            let market = Arc::clone(&market);
+            let _ = tokio::task::spawn_blocking(move || market.rebuild_quick_view()).await;
+        }
     }
 }
 
