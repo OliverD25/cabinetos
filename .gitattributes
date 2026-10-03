@@ -45,6 +45,20 @@ LICENSE     text eol=lf
 *.gif   binary
 *.ico   binary
 *.zip   binary
+# Media fixtures of the live check (ui/livecheck/fixtures/media)
+*.mp4   binary
+*.m4v   binary
+*.mov   binary
+*.mkv   binary
+*.webm  binary
+*.mp3   binary
+*.m4a   binary
+*.aac   binary
+*.flac  binary
+*.wav   binary
+*.ogg   binary
+*.opus  binary
+*.weba  binary
 *.wasm  binary
 *.pdf   binary
 *.ttf   binary
