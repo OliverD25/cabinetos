@@ -2985,7 +2985,7 @@ mod tests {
     }
 
     #[test]
-    fn quick_view_messages_have_the_documented_wire_form() {
+    fn thumbnail_messages_have_the_documented_wire_form() {
         let request: Envelope<Request> = serde_json::from_value(json!({
             "id": ID, "type": "get_thumbnail", "path": r"C:\photos\IMG_0412.jpg", "size": 256
         }))
@@ -3030,7 +3030,10 @@ mod tests {
             let parsed: ThumbnailReason = serde_json::from_value(json!(reason)).unwrap();
             assert_eq!(serde_json::to_value(parsed).unwrap(), json!(reason));
         }
+    }
 
+    #[test]
+    fn quick_view_table_render_and_offer_have_the_documented_wire_form() {
         let render: Envelope<Request> = serde_json::from_value(
             json!({"id": ID, "type": "render_image", "path": r"C:\a.heic", "max_size": 2560}),
         )

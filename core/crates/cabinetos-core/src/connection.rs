@@ -15,8 +15,8 @@
 //!   the keybinding and plugin settings writes, `start_job`, a plugin's command, a program's
 //!   command, `shell_menu`, `shell_menu_invoke`, `reload_plugin`, `search`,
 //!   `index_status`, `terminal_open`, `terminal_close`,
-//!   `list_themes`, `get_theme` of a named theme, `list_tools` and the
-//!   marketplace requests)
+//!   `list_themes`, `get_theme` of a named theme, `list_tools`, the
+//!   marketplace requests and Quick View's)
 //!   as tasks, so one slow directory, plugin, search, shell or download
 //!   never holds up the next request. After `hello` it also forwards the configuration,
 //!   theme, job, plugin, terminal and volume events every connection
@@ -33,8 +33,8 @@ use cabinetos_diag::{current_trace, span_for_action, span_for_request};
 use cabinetos_fs::{DirectoryWatcher, ListOptions};
 use cabinetos_ipc::{IpcError, PipeConnection};
 use cabinetos_protocol::{
-    Envelope, ErrorCode, Event, JobRequest, MAX_DESCRIBED, OpenedListing, PROTOCOL_VERSION,
-    Request, RequestId, Response, SortSpec, TerminalState,
+    Envelope, ErrorCode, Event, JobRequest, MAX_DESCRIBED, MAX_RENDER_SIZE, OpenedListing,
+    PROTOCOL_VERSION, Request, RequestId, Response, SortSpec, THUMBNAIL_SIZES, TerminalState,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -460,10 +460,10 @@ impl Session {
                 request @ (Request::ShellMenu { .. } | Request::ShellMenuInvoke { .. }) => {
                     self.shell_menu_request(&id, &span, kind, request)
                 }
-                Request::GetThumbnail { .. }
-                | Request::RenderImage { .. }
-                | Request::QuickViewTable
-                | Request::QuickViewOffer { .. } => Some(Response::Error {
+                request @ (Request::GetThumbnail { .. } | Request::RenderImage { .. }) => {
+                    self.image_request(&id, &span, kind, request)
+                }
+                Request::QuickViewTable | Request::QuickViewOffer { .. } => Some(Response::Error {
                     code: ErrorCode::NotImplemented,
                     message: format!("{kind} is not built yet"),
                 }),
@@ -856,6 +856,50 @@ impl Session {
                 Err(error) => failure_reply(listing::fs_failure(&error)),
             }
         });
+        None
+    }
+
+    /// `get_thumbnail` and `render_image`: checked here, then answered by
+    /// Quick View's own threads (`quickview.rs`) as a task, so a shell that
+    /// hangs holds up no other request.
+    fn image_request(
+        &mut self,
+        id: &RequestId,
+        span: &tracing::Span,
+        kind: &'static str,
+        request: Request,
+    ) -> Option<Response> {
+        let thumbnails = Arc::clone(&self.services.thumbnails);
+        let connection = self.connection;
+        match request {
+            Request::GetThumbnail { path, size, ahead } => {
+                if !THUMBNAIL_SIZES.contains(&size) {
+                    return Some(protocol_error(&format!(
+                        "size is {size}; thumbnails come in 96, 256 or 768 pixels"
+                    )));
+                }
+                if let Some(refused) = not_absolute(&path) {
+                    return Some(refused);
+                }
+                self.spawn_task_reply(id, span, kind, async move {
+                    thumbnails.thumbnail(connection, path, size, ahead).await
+                });
+            }
+            Request::RenderImage { path, max_size } => {
+                if !(1..=MAX_RENDER_SIZE).contains(&max_size) {
+                    return Some(protocol_error(&format!(
+                        "max_size is {max_size}; it is from 1 to {MAX_RENDER_SIZE} pixels"
+                    )));
+                }
+                if let Some(refused) = not_absolute(&path) {
+                    return Some(refused);
+                }
+                self.spawn_task_reply(id, span, kind, async move {
+                    thumbnails.render(connection, path, max_size).await
+                });
+            }
+            _ => {}
+        }
         None
     }
 
@@ -1966,6 +2010,7 @@ impl Session {
         // request has no window to show them to.
         if !self.in_process {
             icons::for_listing(&self.services.hydrator, &self.shutdown, current.get().1);
+            self.services.thumbnails.warm_start(&path);
         }
         let refresh = watch.map(|(directory_watcher, changes)| {
             let listing = WatchedListing {
