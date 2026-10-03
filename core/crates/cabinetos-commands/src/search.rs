@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn a_word_finds_its_command_first() {
         assert_eq!(ids("dual")[0], "view.toggleDualPane");
-        // The five sidebar commands lead; the four whose category is the
+        // The six sidebar commands lead; the five whose category is the
         // word itself come first.
         let sidebar = ids("sidebar");
         for id in [
@@ -154,9 +154,10 @@ mod tests {
             "sidebar.unpin",
             "sidebar.lock",
             "sidebar.locate",
+            "sidebar.toggleFollow",
             "view.toggleSidebar",
         ] {
-            assert!(sidebar[..5].contains(&id.to_owned()), "{sidebar:?}");
+            assert!(sidebar[..6].contains(&id.to_owned()), "{sidebar:?}");
         }
         assert_eq!(ids("toggle sidebar")[0], "view.toggleSidebar");
         // Every terminal command leads, the ones whose category is the word
@@ -190,7 +191,12 @@ mod tests {
                 "terminal.reload"
             ]
         );
-        assert_eq!(terminal[11], "view.toggleTerminal");
+        // The layout command "Terminal on the Right" (Phase 23) also has the
+        // word in its title; both come right after the terminal commands.
+        assert!(
+            terminal[11..13].contains(&"view.toggleTerminal".to_owned()),
+            "{terminal:?}"
+        );
         assert_eq!(ids("toggle term")[0], "view.toggleTerminal");
         assert_eq!(ids("about")[0], "help.about");
         assert_eq!(ids("plugins")[0], "plugins.list");

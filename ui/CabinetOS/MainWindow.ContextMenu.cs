@@ -132,6 +132,8 @@ public sealed partial class MainWindow
     private void ApplyMenuConfig(JsonElement config)
     {
         _menuConfig = ContextMenuConfig.FromConfig(config);
+        // The last row of "Edit Menu…" is contextMenu.shellMenu (menu.toggleShellMenu): its check follows the file.
+        MenuEditorView.ShellMenuOn = _menuConfig.ShellMenu;
         // An ID left out once is logged again after a change: a plugin may have come, or the file been fixed.
         _menuWarned.Clear();
     }

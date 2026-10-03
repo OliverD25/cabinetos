@@ -171,7 +171,19 @@ can refuse "the other pane" while only one is shown. A window older than
 19 sends no `dual`, which reads as `true`. The same unit added the
 settings `terminal.restore`, `terminal.defaultMode` and `terminal.tabs`
 ([config.md](config.md)); `terminal_open` without a `mode` now takes
-`terminal.defaultMode`.
+`terminal.defaultMode`. Version 20 (Phase 23, 2026-10-03,
+[ADR 0022](decisions/0022-two-catalogues-extensions-and-themes.md)) split
+the marketplace into two catalogues: `marketplace_refresh` and
+`marketplace_search` take an optional `catalogue`, `extensions` (the
+default) or `themes`, and a theme's item carries `appearance`, `density`
+and `tile`. The same version adds the request `preview_theme`, which reads
+a theme of the themes catalogue for the gallery's live preview without
+installing it. The version rises, although the field is optional, because the
+meaning of a request without it changed: it used to list every kind of
+item, and now lists the extensions (plugins and tools) only. A client built
+for 19 that sends `marketplace_search` with `kind: "theme"` and no
+`catalogue` gets no theme from a version 20 core, and asks again with
+`catalogue: "themes"`.
 
 **What changes the version.** A new message, a new value of an existing
 kind or code, a new required field, or a changed meaning raises the
@@ -230,9 +242,10 @@ as absent from an older core.
 | `terminal_pane_folder` | `session_id` | `terminal_pane_folder` (`session_id`, `pane`, `mode`, `folder`: a path or `null`) |
 | `list_themes` | — | `themes` (`themes`) |
 | `get_theme` | `theme_id` (without it: the theme in effect) | `theme` (`theme`) |
+| `preview_theme` | `extension_id` (a theme of the themes catalogue) | `theme` (`theme`), nothing installed |
 | `list_tools` | — | `tools` (`tools`) |
-| `marketplace_refresh` | — | `marketplace_index` (`items`, `source`, `fetched_at_ms`) |
-| `marketplace_search` | `query`; `kind` (`plugin`, `theme` or `tool`) | `marketplace_index` |
+| `marketplace_refresh` | `catalogue` (`extensions`, the default, or `themes`) | `marketplace_index` (`items`, `source`, `fetched_at_ms`) |
+| `marketplace_search` | `query`; `kind` (`plugin`, `theme` or `tool`); `catalogue` (`extensions`, the default, or `themes`) | `marketplace_index` |
 | `install_extension` | `extension_id`; `version` (without it: the newest this core runs) | `ok`, once it is in place |
 | `uninstall_extension` | `extension_id` | `ok` |
 | `window_state` | `active_pane`, `panes` (after `hello`) | `ok` |
@@ -1424,6 +1437,21 @@ configuration names the theme in effect.
   chrome"). Both, and `has_metrics`, are optional, so protocol version 11
   stays ("What changes the version", above).
 
+- `preview_theme` (protocol 20, for the theme gallery) answers `theme`
+  with the whole theme of a catalogue item that is not installed, so a
+  client can show it before the user installs it. The field is
+  `extension_id`, as for `install_extension`. The core reads the themes
+  catalogue (as `marketplace_refresh` with `catalogue: "themes"` does),
+  downloads the item's file to a temporary file in the marketplace's own
+  folder, checks its SHA-256 and that it is a valid theme of the item's
+  version, deletes the file and answers; nothing reaches the themes folder,
+  the record of installs or `cabinetos.json`. It keeps the last 64 themes it
+  answered, so asking again for a tile is not a second download. An ID
+  the catalogue does not list is `no_such_extension`; an item that is not a
+  theme, a download that fails and a file that is no valid theme are
+  `marketplace_error` (`hash_mismatch` for a wrong SHA-256), as for an
+  install. An installed theme is read with `get_theme`.
+
 A client changes the theme with `set_value` on `ui.theme`:
 
 ```json
@@ -1451,20 +1479,40 @@ A client changes the theme with `set_value` on `ui.theme`:
 
 ## The marketplace
 
-Extensions come from an index ([marketplace.md](marketplace.md) has the
-format, the folders and the trust rules). `marketplace.index` in the
-configuration says where it is; the core reads it only when a client asks.
+Extensions and colour themes come from two catalogues, in one format
+([marketplace.md](marketplace.md) has the format, the folders and the trust
+rules). `marketplace.index` in the configuration says where the extensions'
+`index.json` is, and `marketplace.themes` where the themes' `themes.json`
+is; the core reads a catalogue only when a client asks for it.
 
 ```json
 {"id":"01M…","type":"marketplace_refresh"}
+{"id":"01M…","type":"marketplace_refresh","catalogue":"themes"}
 {"id":"01M…","type":"marketplace_index","source":"C:\\market\\index.json","fetched_at_ms":1790000000000,
  "items":[{"id":"hello","kind":"plugin","name":"Hello","author":{"name":"CabinetOS","verified":false},
  "version":"0.1.0","description":"…","long":"…","size":27003,
  "download":{"url":"files/hello-0.1.0.zip","sha256":"8818…cac3"},"manifest":{…},
  "capabilities":[{"name":"cmd:register","reason":"…","level":"low"},…],
  "minCoreVersion":"0.1.0","license":"MIT"},…]}
-{"id":"01M…","type":"marketplace_search","query":"nord","kind":"theme"}
+{"id":"01M…","type":"marketplace_search","query":"nord","catalogue":"themes"}
 ```
+
+- `catalogue` is `extensions` (Core Plugins and Tool Extensions, the file
+  `index.json`) or `themes` (the file `themes.json`). Without it, a
+  request is for the extensions. Each catalogue is read, cached and
+  answered on its own: one that cannot be read gives `marketplace_error`
+  and leaves the other alone. While the themes address answers 404 (or the
+  file is missing from a local folder), the core answers `themes` with the
+  theme items of `index.json`, and ignores them once `themes.json` exists
+  (the transition rule of ADR 0022). `install_extension` finds its
+  extension in either catalogue, the extensions' first.
+- A theme's item carries three optional keys beside the index's own:
+  `appearance` (`dark`, `light` or `system`, the theme file's `kind`),
+  `density` (`true` for a density preset such as Commander Compact) and
+  `tile` (`background`, `text` and `accent`, each `#RRGGBB`, which the
+  gallery paints the theme's tile with). An item with a tile colour that
+  is not `#RRGGBB`, or an appearance the core does not know, is left out
+  of the catalogue, with a log line.
 
 - `items` are in the index file's own format (camelCase keys); the core
   adds each capability's `level`, and `installedVersion` when the
@@ -1473,8 +1521,9 @@ configuration says where it is; the core reads it only when a client asks.
   After `marketplace_refresh` they come in index order; after
   `marketplace_search`, best first, ranked as the palette ranks commands,
   by name, ID and publisher. An empty `query` keeps every item.
-- `marketplace_search` searches the index read last; it reads the index
-  first when there is none yet, or when `marketplace.index` changed.
+- `marketplace_search` searches the catalogue read last; it reads the
+  catalogue first when there is none yet, or when its address changed
+  (`marketplace.index`, or `marketplace.themes` for the themes).
 - `source` is the index's file or URL; `fetched_at_ms` is when it was read
   or confirmed unchanged, in milliseconds since 1970-01-01 UTC.
 

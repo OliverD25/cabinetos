@@ -7,6 +7,9 @@
 //!   `ureq` over rustls, using the Windows certificate store, and a cache
 //!   with `If-None-Match`. An index item that does not follow the format is
 //!   left out (and logged), so one bad item does not hide the others.
+//!   [`Market::fetch_themes`] reads the themes catalogue, `themes.json`, the
+//!   same way; the theme items of `index.json` stand in for it while it is
+//!   missing (ADR 0022).
 //! - [`Market::install`] downloads (or copies) the item into a temporary
 //!   file, checks its SHA-256, unpacks it into a staging folder, checks it
 //!   as its kind needs, and only then puts it in place. It records exactly
@@ -38,7 +41,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use cabinetos_protocol::ErrorCode;
 
-pub use index::{Index, Source, parse_index, search};
+pub use index::{Index, Source, parse_catalogue, parse_index, search};
 
 pub use install::{Dirs, Installed, Market};
 pub use tools::{TOOL_MANIFEST_FILE, list_tools};

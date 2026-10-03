@@ -14,6 +14,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock
                 x:Name="FoldersLabel"
@@ -34,9 +35,23 @@
                 ToolTipService.ToolTip="Locate the active folder (Alt+Shift+L)">
                 <FontIcon FontSize="12" Glyph="&#xE81D;" />
             </Button>
+            <!-- ui.sidebarAutoReveal (sidebar.toggleFollow): the pin is accent while the tree follows the active pane. -->
+            <Button
+                x:Name="FollowButton"
+                Grid.Column="2"
+                Width="24"
+                Height="24"
+                MinWidth="24"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="Follow the active pane"
+                IsTabStop="False"
+                Style="{StaticResource CbSubtleButtonStyle}"
+                ToolTipService.ToolTip="Follow the active pane: the tree shows the folder of the active pane">
+                <FontIcon x:Name="FollowIcon" FontSize="12" Glyph="&#xE718;" />
+            </Button>
             <Button
                 x:Name="LockButton"
-                Grid.Column="2"
+                Grid.Column="3"
                 Width="24"
                 Height="24"
                 MinWidth="24"
