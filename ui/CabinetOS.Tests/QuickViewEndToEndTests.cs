@@ -21,7 +21,7 @@ public class QuickViewEndToEndTests
 
     // A run whose panes start in <root>\data, with a local catalogue (no web read), and the fixture viewer in the tools
     // folder in development unless the test installs it itself.
-    private static WindowRun Prepare(string purpose, Action<string>? makeData, bool fixtureInDevelopment = true, Func<string, JsonArray>? catalogue = null)
+    private static WindowRun Prepare(string purpose, Action<string>? makeData, bool fixtureInDevelopment = true, Func<string, JsonArray>? catalogue = null, string[]? realViewers = null)
     {
         return WindowRun.Prepare(purpose, root =>
         {
@@ -30,6 +30,10 @@ public class QuickViewEndToEndTests
             if (fixtureInDevelopment)
             {
                 CopyFixture(Path.Combine(root, "tools"), Fixture, null);
+            }
+            foreach (var id in realViewers ?? [])
+            {
+                CopyFolder(Path.Combine(Repo.Tools, id), Path.Combine(root, "tools", id));
             }
             var index = Directory.CreateDirectory(Path.Combine(root, "index")).FullName;
             File.WriteAllText(Path.Combine(index, "index.json"), new JsonObject
@@ -61,6 +65,16 @@ public class QuickViewEndToEndTests
             manifest["id"] = id;
             manifest["name"] = name ?? id;
             File.WriteAllText(Path.Combine(folder, "tool.json"), manifest.ToJsonString());
+        }
+    }
+
+    // A viewer of the viewer pack (sdk/tools), copied as it is.
+    private static void CopyFolder(string from, string to)
+    {
+        Directory.CreateDirectory(to);
+        foreach (var file in Directory.GetFiles(from))
+        {
+            File.Copy(file, Path.Combine(to, Path.GetFileName(file)), overwrite: true);
         }
     }
 
@@ -274,6 +288,41 @@ public class QuickViewEndToEndTests
             Assert.StartsWith("notes.xyz|", Q(logs, "xyz", "card"));
             var xyz = Shown(logs).First(l => Text(l, "kind") == ".xyz");
             Assert.Equal(("none", "none"), (Text(xyz, "viewer"), Text(xyz, "full")));
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
+
+    /// <summary>
+    /// A picture the browser cannot decode (a TIFF) is drawn by Windows through the core and shown by the real Image
+    /// Viewer of the viewer pack (sdk/tools/image-viewer): the page's quickview-render is answered with a drawing it can read.
+    /// </summary>
+    [Fact]
+    public async Task A_picture_the_browser_cannot_decode_is_drawn_by_Windows_and_shown_by_the_Image_Viewer()
+    {
+        var run = Prepare("quickview-render", data => TestTiff.Write(Path.Combine(data, "scan.tif"), 1200, 800),
+            fixtureInDevelopment: false, realViewers: ["image-viewer"]);
+        try
+        {
+            var process = run.Start("render", Steps(
+                "size:1400x900",
+                "pane:0",
+                "until:listing-drawn",
+                "select:scan.tif",
+                "key:space",
+                "until:quickview-shown",
+                "quickview:tif",
+                "key:space",
+                "until:quickview-closed",
+                "shot:done"));
+            var logs = await run.FinishAsync("render", process);
+
+            Assert.Equal(("shown", "image-viewer"), (Q(logs, "tif", "state"), Q(logs, "tif", "viewer")));
+            Assert.Contains("Drawn by Windows", Q(logs, "tif", "facts"), StringComparison.Ordinal);
+            var shown = Shown(logs).First(l => Text(l, "kind") == ".tif");
+            Assert.True(long.TryParse(Text(shown, "full_ms"), out _), QuickViewLines(logs));
         }
         finally
         {
