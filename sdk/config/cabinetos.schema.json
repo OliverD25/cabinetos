@@ -129,7 +129,8 @@
       "$ref": "#/$defs/MarketplaceConfig",
       "default": {
         "allowInsecure": false,
-        "index": "https://oliverd25.github.io/cabinetos-marketplace/index.json"
+        "index": "https://oliverd25.github.io/cabinetos-marketplace/index.json",
+        "themes": "https://oliverd25.github.io/cabinetos-marketplace/themes.json"
       }
     },
     "panes": {
@@ -724,6 +725,11 @@
           "description": "Where the index is: an `https:` URL, a `file:` URL, or the path of an\n`index.json` or of its folder. The core reads it only when a client\nasks.",
           "type": "string",
           "default": "https://oliverd25.github.io/cabinetos-marketplace/index.json"
+        },
+        "themes": {
+          "description": "Where the themes catalogue is, `themes.json`: an `https:` URL, a\n`file:` URL, or the path of a `themes.json` or of its folder. The core\nreads it only when the theme gallery asks. While it answers 404 (or\nthe file is missing from a local folder), the theme items of\n`index.json` are used instead.",
+          "type": "string",
+          "default": "https://oliverd25.github.io/cabinetos-marketplace/themes.json"
         }
       },
       "additionalProperties": false

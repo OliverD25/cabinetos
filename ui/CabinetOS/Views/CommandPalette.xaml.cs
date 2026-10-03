@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Shell;
 using CabinetOS.Services;
 using CabinetOS.ViewModels;
@@ -20,12 +21,14 @@ namespace CabinetOS.Views;
 /// </summary>
 public sealed partial class CommandPalette : UserControl
 {
+    private const string Target = "cabinetos_ui::palette";
     private static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(30);
 
     private readonly Storyboard _entrance;
     private readonly DispatcherQueueTimer _searchTimer;
     private PaletteModel? _model;
     private bool _settingText;
+    private bool _highlightPending;
 
     /// <summary>Creates the palette, hidden.</summary>
     public CommandPalette()
@@ -35,7 +38,13 @@ public sealed partial class CommandPalette : UserControl
         _searchTimer = DispatcherQueue.CreateTimer();
         _searchTimer.Interval = SearchDelay;
         _searchTimer.IsRepeating = false;
-        _searchTimer.Tick += (_, _) => _ = _model?.SearchAsync(Input.Text);
+        _searchTimer.Tick += (_, _) =>
+        {
+            if (_model is { } model)
+            {
+                Diag.Observe(model.SearchAsync(Input.Text), Target, "the palette's search for the typed text failed");
+            }
+        };
         Input.TextChanged += (_, _) =>
         {
             if (!_settingText)
@@ -54,6 +63,14 @@ public sealed partial class CommandPalette : UserControl
         };
         List.ElementPrepared += OnElementPrepared;
         List.ElementClearing += OnElementClearing;
+        // The list joins the window's live tree at the palette's first layout: a highlight set before then comes into view now.
+        List.Loaded += (_, _) =>
+        {
+            if (_highlightPending)
+            {
+                BringHighlightIntoView();
+            }
+        };
         SizeChanged += (_, e) => Panel.Width = Math.Max(200, Math.Min(640, e.NewSize.Width - 32));
     }
 
@@ -135,10 +152,48 @@ public sealed partial class CommandPalette : UserControl
 
     private void BringHighlightIntoView()
     {
+        // WinUI's ItemsRepeater can hand out a row only while it is in the window's live tree. The palette starts collapsed,
+        // and its list is the content of a ScrollViewer whose template WinUI applies at the palette's first layout; until
+        // then the list is not live. VisualTreeHelper.GetParent answers null for a row there, so the repeater takes a row it
+        // recycled (every answer clears the rows) for one without a parent and adds it to its children a second time:
+        // GetOrCreateElement threw "Element is already the child of another element" when a second answer, or an answer
+        // and a key, came before that first layout (2026-10-03). The list's Loaded comes once it is live.
+        _highlightPending = !List.IsLoaded;
+        if (_highlightPending)
+        {
+            return;
+        }
         if (_model is { HighlightIndex: >= 0 } model && model.HighlightIndex < model.Rows.Count)
         {
-            List.GetOrCreateElement(model.HighlightIndex).StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+            var row = List.GetOrCreateElement(model.HighlightIndex);
+            // A row the list makes for this call (outside the rows it has laid out, as at its first layout) is measured but
+            // not laid out. StartBringIntoView's target is the render size, 0 x 0 for that row, and the row stayed outside the
+            // visible part (the palette-burst test); its measured size is the row's own.
+            var size = row.RenderSize.Height > 0 ? row.RenderSize : row.DesiredSize;
+            row.StartBringIntoView(new BringIntoViewOptions
+            {
+                AnimationDesired = false,
+                TargetRect = new Windows.Foundation.Rect(0, 0, size.Width, size.Height),
+            });
         }
+    }
+
+    /// <summary>
+    /// The snapshot aid's look at the list: whether it is in the window's live tree, where the highlighted
+    /// row lies in the list's visible part (NaN when the list has no laid-out row for it), the visible
+    /// part's height and the scroll offset, and whether the row lies whole inside (1 px for rounding).
+    /// </summary>
+    internal (bool ListLoaded, double RowTop, double RowBottom, double Viewport, double Offset, bool HighlightShown) HighlightState()
+    {
+        var viewport = ListScroller.ViewportHeight;
+        var offset = ListScroller.VerticalOffset;
+        if (!List.IsLoaded || _model is not { HighlightIndex: >= 0 } model
+            || List.TryGetElement(model.HighlightIndex) is not FrameworkElement { ActualHeight: > 0 } row)
+        {
+            return (List.IsLoaded, double.NaN, double.NaN, viewport, offset, false);
+        }
+        var bounds = row.TransformToVisual(ListScroller).TransformBounds(new Windows.Foundation.Rect(0, 0, row.ActualWidth, row.ActualHeight));
+        return (true, bounds.Top, bounds.Bottom, viewport, offset, bounds.Top >= -1 && bounds.Bottom <= viewport + 1);
     }
 
     private void OnPanelKeyDown(object sender, KeyRoutedEventArgs e)
@@ -164,7 +219,7 @@ public sealed partial class CommandPalette : UserControl
             case VirtualKey.Enter:
                 // Run what the core ranked for the text as typed, not a stale list.
                 _searchTimer.Stop();
-                _ = RunHighlightedAsync();
+                Diag.Observe(RunHighlightedAsync(), Target, "running the palette's highlighted command failed");
                 break;
             case VirtualKey.Tab:
                 // The palette keeps the focus while it is open.

@@ -30,6 +30,7 @@ The Constitution outranks every record here. A record may refine the brief
 | [0019](0019-setup-installs-prerequisites-and-is-the-winget-package.md) | The setup file downloads and installs a missing prerequisite itself, and the winget package is the setup file | 2026-10-02 | accepted |
 | [0020](0020-indexer-service-starts-by-itself.md) | The indexer service starts by itself after Windows restarts (automatic start, delayed) | 2026-10-02 | accepted |
 | [0021](0021-symbols-in-their-own-zip.md) | The symbols (`.pdb` files) ship in a zip of their own, not in the release zip or the setup file | 2026-10-02 | accepted |
+| [0022](0022-two-catalogues-extensions-and-themes.md) | The marketplace has two catalogues, extensions (`index.json`) and themes (`themes.json`), and the theme gallery is its own page | 2026-10-03 | accepted |
 
 ## Template
 

@@ -40,6 +40,12 @@
 #   theme (downs)          Ctrl+K Ctrl+T, Home, Down downs times, Enter: the theme picker lists the shipped themes by
 #                          id (catppuccin-mocha, commander-compact, default, nord, rose-pine-moon)
 #
+# -LocalCatalogue builds the marketplace's two catalogues into the run's own folder (build-index.ps1 -Collection, with
+# -Extensions when the Agent's plugin is built) and points every window at them: the Extensions page and the theme
+# gallery then show a catalogue with tile colours and the collection's themes, which the public site has not had since
+# Phase 23 until its themes.json is published (the public index.json lists no theme, and an older one lists themes
+# without tile colours). Without it every window reads the public catalogues, as a user's does.
+#
 # A recording needs ffmpeg: -Ffmpeg, else C:\ffmpeg\bin\ffmpeg.exe, else C:\Dev\tools\ffmpeg\ffmpeg.exe (the laptop's).
 # -Capture screen (default) records the rectangle of the window's frame from the screen. -Capture title records by the
 # window's title, read from the process just before the recording starts. The title mode records only black for the
@@ -60,6 +66,7 @@ param(
   [ValidateSet('screen', 'title')][string]$Capture = 'screen',
   # Only the items with these names (comma separated), for a second try of one or two of them.
   [string[]]$Only = @(),
+  [switch]$LocalCatalogue,
   [switch]$CheckOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -272,6 +279,7 @@ $script:p = $null
 $script:h = $null
 $script:terminalShown = $false
 $runRoot = "$env:TEMP\cabinetos-release-media-run"
+$script:catalogue = $null
 
 # Every action checks first that the window is in front, so no key goes to another program.
 function Step($text) {
@@ -354,7 +362,11 @@ function Start-App([string]$label) {
   $root = Join-Path $runRoot $label
   New-Item -ItemType Directory -Force "$root\config", "$root\logs" | Out-Null
   $env:CABINETOS_CONFIG = "$root\config\cabinetos.json"
-  [System.IO.File]::WriteAllText($env:CABINETOS_CONFIG, '{"version":1,"ui":{"sidebar":false}}', (New-Object System.Text.UTF8Encoding $false))
+  $config = if ($script:catalogue) {
+    $folder = $script:catalogue | ConvertTo-Json
+    '{"version":1,"ui":{"sidebar":false},"marketplace":{"index":' + $folder + ',"themes":' + $folder + '}}'
+  } else { '{"version":1,"ui":{"sidebar":false}}' }
+  [System.IO.File]::WriteAllText($env:CABINETOS_CONFIG, $config, (New-Object System.Text.UTF8Encoding $false))
   $env:CABINETOS_LOG_DIR = "$root\logs"
   $env:CABINETOS_CORE_EXE = $Core
   $env:CABINETOS_THEMES_DIR = "$root\themes"
@@ -464,6 +476,14 @@ function Invoke-MediaItem($item) {
 }
 
 if (Test-Path -LiteralPath $runRoot) { Remove-Item -LiteralPath $runRoot -Recurse -Force -ErrorAction SilentlyContinue }
+if ($LocalCatalogue) {
+  $indexScript = [System.IO.Path]::GetFullPath("$PSScriptRoot\..\..\sdk\marketplace\build-index.ps1")
+  $indexArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $indexScript, '-OutDir', "$runRoot\catalogue", '-Collection')
+  if (Test-Path -LiteralPath "$PSScriptRoot\..\..\sdk\extensions\agent\plugin\plugin.wasm") { $indexArgs += '-Extensions' }
+  & powershell.exe @indexArgs | ForEach-Object { "catalogue: $_" }
+  if ($LASTEXITCODE -ne 0) { "STOP: the local catalogue could not be built"; exit 1 }
+  $script:catalogue = "$runRoot\catalogue"
+}
 foreach ($item in $items) {
   "=== $($item.name) ($($item.kind))"
   try { Invoke-MediaItem $item }

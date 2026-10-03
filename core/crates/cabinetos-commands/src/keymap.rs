@@ -577,9 +577,9 @@ mod tests {
             "{error}"
         );
         // A new chord on a free first combination is fine.
-        let keymap = compile_with(&[over("help.about", "ctrl+k ctrl+h")])
+        let keymap = compile_with(&[over("help.about", "ctrl+k ctrl+j")])
             .unwrap()
             .keymap;
-        assert_eq!(keys(&keymap, "help.about"), ["ctrl+k ctrl+h"]);
+        assert_eq!(keys(&keymap, "help.about"), ["ctrl+k ctrl+j"]);
     }
 }

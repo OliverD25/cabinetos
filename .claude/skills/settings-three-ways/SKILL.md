@@ -91,23 +91,23 @@ the next audit does not ask again.
 
 | Key | Palette | Window | Verdict |
 |---|---|---|---|
-| `ui.layout` (classic, right, rail) | none | none | **Gap 1.** Three commands, a menu item "Layout", a chord |
+| `ui.layout` (classic, right, rail) | `view.layoutClassic`, `view.layoutRight`, `view.layoutRail`, `view.cycleLayout` (Ctrl+K Ctrl+L) | the menu's "Layout" submenu | fine since Phase 23 (was gap 1) |
 | `ui.dualPane` | `view.toggleDualPane`, Ctrl+Shift+D | top-row button | fine |
 | `ui.sidebar` | `view.toggleSidebar`, Ctrl+B | the menu | fine |
-| `ui.theme` | `preferences.selectColorTheme`, Ctrl+K Ctrl+T | the picker, the marketplace | fine |
-| `ui.sidebarAutoReveal` | none | none | **Gap 3.** A toggle command and a toggle in the Explorer view's header |
+| `ui.theme` | `preferences.selectColorTheme`, Ctrl+K Ctrl+T, `themes.browse` | the picker, the theme gallery | fine |
+| `ui.sidebarAutoReveal` | `sidebar.toggleFollow` | the pin in the Explorer view's header, the menu's "Follow the Active Pane" | fine since Phase 23 (was gap 3) |
 | `ui.sidebarView` | `view.showExplorer`, `view.showSearch` | the rail's buttons | remembered state, fine |
 | `ui.rail` (the buttons' order) | none | dragging in the rail | remembered state, fine |
 | `ui.sidebarWidth`, `ui.dockSize.*`, `ui.columns` | none | dragging | remembered state, fine |
 | `ui.lastPaths`, `ui.tabs.*`, `panes.selection`, `terminal.tabs` | none | the panes and the dock | remembered state, fine |
 | `ui.pinned` | `sidebar.pin`, `sidebar.unpin` | the sidebar | fine |
 | `ui.compactOverlay` | `view.toggleCompactOverlay`, Ctrl+Alt+Up | to check | command fine; window to check |
-| `panes.showHidden` | none | none | **Gap 2.** "View: Toggle Hidden Files" and a menu item |
+| `panes.showHidden` | `view.toggleHiddenFiles`, Ctrl+K Ctrl+H | the menu's "Show Hidden Files", the word "hidden" in the status bar | fine since Phase 23 (was gap 2) |
 | `panes.sort.*` | `view.sortBy*` | column headers (since Phase 24) | fine |
 | `panes.folderSizes` | `view.toggleFolderSizes` | to check | command fine; window to check |
 | `files.editor` | none (`file.edit` uses it) | the "Open with" picker is per file | **Gap 7.** "Preferences: Choose Editor" and a Settings entry |
 | `contextMenu` (the menu's rows) | `menu.edit` | "Edit Menu…" in the menu | fine |
-| `contextMenu.shellMenu` | none | none | **Gap 4.** A toggle command and a row in "Edit Menu…" |
+| `contextMenu.shellMenu` | `menu.toggleShellMenu` | the last row of "Edit Menu…" | fine since Phase 23 (was gap 4) |
 | `terminal.defaultProfile` | none | the dock's "+" chooses per terminal | **Gap 5.** "Terminal: Default Profile" picker and a chevron entry |
 | `terminal.profiles` | none | none | **Gap 8.** The Settings page (11c); until then "Terminal: Edit Profiles" opens the file at the key |
 | `terminal.split` | `terminal.toggleSplit`, Ctrl+\ | the dock | fine |
@@ -115,7 +115,7 @@ the next audit does not ask again.
 | `terminal.defaultMode` | none (`terminal.setMode` is per session) | the Locked/Linked switch is per session | **Gap 5.** "Terminal: New Terminals Start Locked/Linked" |
 | `logging.level` | none | none | **Gap 7.** "Diagnostics: Log Level" picker; Settings page |
 | `logging.heavy` | `diagnostics.toggleHeavy` | to check | command fine; window to check |
-| `marketplace.index`, `marketplace.allowInsecure` | none | none | **Gap 8.** The Settings page (advanced section) |
+| `marketplace.index`, `marketplace.themes`, `marketplace.allowInsecure` | none | none | **Gap 8.** The Settings page (advanced section) |
 | `update.check` (the daily check on or off) | none (`update.check` checks now) | none | **Gap 6.** "Update: Check Automatically" toggle; the status bar's update pill |
 | `update.autoInstall` | none | the notice's buttons act once | **Gap 6.** "Update: Install Automatically" toggle |
 | `update.channel` | none | none | **Gap 6.** "Update: Channel" picker |
@@ -125,7 +125,9 @@ The gaps, in the order to fix them: 1 the layout (the creator's first ask),
 2 hidden files, 3 the Explorer view following the pane, 4 the shell menu,
 5 the terminal's defaults, 6 the update settings, 7 the editor and the log
 level, 8 the Settings page of Phase 11c for the rest. The desk card
-"Settings reachable three ways" tracks them; gaps 1 to 4 fit one coder unit.
+"Settings reachable three ways" tracks them; gaps 1 to 4 fit one coder unit
+and were closed in Phase 23 (the rows above say which command and which
+control; the window tests are in `ThreeWaysEndToEndTests`).
 
 ## 6. How to run the audit again
 

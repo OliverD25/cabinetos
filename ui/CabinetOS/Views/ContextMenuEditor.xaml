@@ -108,8 +108,21 @@
                     <StackPanel x:Name="Rows" />
                 </ScrollViewer>
 
-                <!-- The plugins' group, Properties and Edit Menu…: not rows of the file, so greyed here. -->
-                <StackPanel x:Name="Tail" Grid.Row="3" />
+                <StackPanel Grid.Row="3">
+                    <!-- The plugins' group, Properties and Edit Menu…: not rows of the file, so greyed here. -->
+                    <StackPanel x:Name="Tail" />
+
+                    <!-- The last row: contextMenu.shellMenu, a setting and not a row of the list (menu.toggleShellMenu); it follows the file. -->
+                    <CheckBox
+                        x:Name="ShellMenuCheck"
+                        MinWidth="0"
+                        Margin="10,6,0,0"
+                        AllowFocusOnInteraction="True"
+                        AutomationProperties.Name="Show Windows' own menu with Shift+right-click"
+                        Content="Show Windows' own menu with Shift+right-click"
+                        FontSize="12"
+                        ToolTipService.ToolTip="Shift+right-click on a row shows Windows' own menu instead of this one (menu.toggleShellMenu, contextMenu.shellMenu)" />
+                </StackPanel>
 
                 <Border
                     Grid.Row="4"

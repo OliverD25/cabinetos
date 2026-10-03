@@ -341,6 +341,41 @@ public class ShellEndToEndTests
     }
 
     [Fact]
+    public async Task The_palette_takes_two_answers_and_a_key_before_its_first_layout_and_keeps_the_highlight_in_view()
+    {
+        // The race of 2026-10-03: until WinUI first lays the palette out, its list is not in the window's live tree, and a
+        // second answer there made ItemsRepeater add a recycled row twice ("Element is already the child of another element").
+        var (run, root, _) = Prepare("shell-palette-burst");
+        try
+        {
+            var process = run.Start("burst", string.Join(';',
+                "size:1200x700",
+                "palette-burst:20",
+                "palette-state:burst",
+                "key:pagedown",
+                "palette-state:paged",
+                "shot:done"));
+            var logs = await run.FinishAsync("burst", process, "done");
+
+            var burst = Assert.Single(logs, l => Message(l) == "palette state" && Field(l, "label").GetString() == "burst");
+            Assert.True(Field(burst, "open").GetBoolean());
+            Assert.True(Field(burst, "list_loaded").GetBoolean(), "the palette's list never joined the window's tree");
+            Assert.True(Field(burst, "rows").GetInt32() > 28, $"the palette lists {Field(burst, "rows").GetInt32()} commands");
+            Assert.Equal(20, Field(burst, "highlight").GetInt32());
+            Assert.True(Field(burst, "highlight_shown").GetBoolean(), $"the highlighted row is not in the list's visible part: {burst}");
+            // PageDown: eight rows on, and the list follows.
+            var paged = Assert.Single(logs, l => Message(l) == "palette state" && Field(l, "label").GetString() == "paged");
+            Assert.Equal(28, Field(paged, "highlight").GetInt32());
+            Assert.True(Field(paged, "highlight_shown").GetBoolean(), $"the highlighted row is not in the list's visible part after PageDown: {paged}");
+        }
+        finally
+        {
+            run.Stop();
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    [Fact]
     public async Task The_menus_come_from_the_registry_the_crumbs_navigate_and_settings_open_with_the_editor()
     {
         // An editor found nowhere: Settings must say so and open nothing else, so no Notepad opens here.
@@ -405,9 +440,11 @@ public class ShellEndToEndTests
                 "shot:done"));
             var logs = await run.FinishAsync("menus", process, "done");
 
-            // The registry's titles, as the palette shows them: a rename there shows here too.
+            // The registry's titles, as the palette shows them: a rename there shows here too. After Toggle Sidebar come the preferences
+            // that were in the file only (Phase 23): Layout with its three, and the two toggles with their state.
             State(logs, "menu", state => Assert.Equal(
-                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Browse Plugins and Themes|Open Keyboard Shortcuts|Check for Updates",
+                "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Layout (Classic Layout [x], Terminal on the Right, Activity Rail)|Show Hidden Files [ ]"
+                + "|Follow the Active Pane [x]|Browse Extensions|Open Keyboard Shortcuts|Check for Updates",
                 state.GetProperty("menu").GetString()));
             State(logs, "menu-closed", state => Assert.Equal("", state.GetProperty("menu").GetString()));
             State(logs, "workspace", state => Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString()));

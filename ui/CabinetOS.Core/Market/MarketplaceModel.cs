@@ -6,17 +6,20 @@ using CabinetOS.Core.Protocol;
 
 namespace CabinetOS.Core.Market;
 
-/// <summary>The marketplace's four tabs (design view C), in the nav's order.</summary>
+/// <summary>
+/// The Extensions page's four tabs (design view C, without its Themes tab since Phase 23: the themes have their
+/// gallery), in the nav's order.
+/// </summary>
 public static class MarketTabs
 {
     public const string Discover = "discover";
     public const string Plugins = "plugins";
-    public const string Themes = "themes";
+    public const string Tools = "tools";
     public const string Installed = "installed";
 
     /// <summary>Every tab with its title.</summary>
     public static IReadOnlyList<(string Id, string Title)> All { get; } =
-        [(Discover, "Discover"), (Plugins, "Plugins"), (Themes, "Themes"), (Installed, "Installed")];
+        [(Discover, "Discover"), (Plugins, "Plugins"), (Tools, "Tools"), (Installed, "Installed")];
 }
 
 /// <summary>Where the view is with the index.</summary>
@@ -68,12 +71,13 @@ public sealed record MarketOutcome(string? Error)
 }
 
 /// <summary>
-/// The marketplace view (design view C, docs/ui.md, "The marketplace"): the
-/// index the core read, the tab and the search, the selected card, what is
-/// installed, and the installs on their way. The core does every download,
-/// check and file operation; this model only asks and follows its events.
+/// One catalogue of the marketplace (design view C, docs/ui.md, "The marketplace"): the items the core read,
+/// the tab and the search, the selected card, what is installed, and the installs on their way. The window has
+/// two of them (ADR 0022): the Extensions page's, for plugins and tools, and the theme gallery's, for themes
+/// (<paramref name="catalogue"/>). The core does every download, check and file operation; this model only asks
+/// and follows its events.
 /// </summary>
-public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, Task>? debounce = null)
+public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, Task>? debounce = null, string catalogue = Catalogues.Extensions)
 {
     /// <summary>How long typing must pause before the search goes to the core.</summary>
     public static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(150);
@@ -132,21 +136,52 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
     public IReadOnlyList<MarketItem> Items =>
         (Query.Trim().Length > 0 && _hits is { } hits ? hits : All).Where(item => InTab(item, Tab)).ToList();
 
-    /// <summary>The caption beside the search field.</summary>
-    public string Caption => $"{Items.Count} results · WebAssembly, sandboxed";
+    /// <summary>The catalogue this model reads (<see cref="Catalogues"/>).</summary>
+    public string Catalogue { get; } = catalogue;
+
+    /// <summary>
+    /// For the themes catalogue: the themes in the themes folder as <c>list_themes</c> last said, whoever put
+    /// them there. The gallery shows the ones the catalogue does not list, and all of them while the catalogue
+    /// cannot be read. Empty for the extensions.
+    /// </summary>
+    public IReadOnlyList<ThemeInfo> InstalledThemes { get; private set; } = [];
+
+    /// <summary>
+    /// The caption beside the search field: the count, and what the shown items are. Plugins are
+    /// WebAssembly and sandboxed; tools are Tool Extensions; a list of both says both.
+    /// </summary>
+    public string Caption
+    {
+        get
+        {
+            var items = Items;
+            var plugins = items.Any(item => item.Kind == ExtensionKinds.Plugin);
+            var tools = items.Any(item => item.Kind == ExtensionKinds.Tool);
+            var what = (plugins, tools) switch
+            {
+                (true, true) => " · WebAssembly, sandboxed · Tool Extensions",
+                (false, true) => " · Tool Extensions",
+                (true, false) => " · WebAssembly, sandboxed",
+                _ => "",
+            };
+            return $"{items.Count} results{what}";
+        }
+    }
 
     /// <summary>What to show instead of cards, or null when there are cards.</summary>
     public MarketNotice? Notice => Status switch
     {
-        MarketStatus.Idle or MarketStatus.Loading => new MarketNotice("Reading the marketplace index…", Source ?? ""),
+        MarketStatus.Idle or MarketStatus.Loading => new MarketNotice(IsThemes ? "Reading the themes catalogue…" : "Reading the marketplace index…", Source ?? ""),
         MarketStatus.Failed or MarketStatus.Unavailable => _failure,
         _ when Items.Count > 0 => null,
-        _ when All.Count == 0 => new MarketNotice("The index lists no extensions.", Source ?? ""),
+        _ when All.Count == 0 => new MarketNotice(IsThemes ? "The themes catalogue lists no themes." : "The index lists no extensions.", Source ?? ""),
         _ when Query.Trim().Length > 0 => new MarketNotice($"No results for “{Query.Trim()}”.", "The search looks at names, IDs and publishers."),
         _ when Tab == MarketTabs.Installed => new MarketNotice("Nothing was installed from the marketplace yet.",
-            "Install from Discover, Plugins or Themes. The themes CabinetOS ships with, and extensions copied in by hand, are not listed here."),
+            "Install from Discover, Plugins or Tools. Extensions copied in by hand are not listed here, and the themes have their own page: Themes: Browse."),
         _ => new MarketNotice($"The index has no {TitleOf(Tab).ToLowerInvariant()}.", Source ?? ""),
     };
+
+    private bool IsThemes => Catalogue == Catalogues.Themes;
 
     /// <summary>The extension with that ID, or null.</summary>
     public MarketItem? Find(string id) => All.FirstOrDefault(item => item.Id == id)
@@ -207,7 +242,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         try
         {
             var installed = ReadInstalledAsync();
-            reply = await core.RequestAsync(new MarketplaceRefreshRequest { Id = requestId ?? "" });
+            reply = await core.RequestAsync(new MarketplaceRefreshRequest { Id = requestId ?? "", Catalogue = Catalogue });
             await installed;
         }
         catch (IOException error)
@@ -221,9 +256,10 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         switch (reply)
         {
             case MarketplaceIndexReply index:
-                All = index.Items;
+                // A core before protocol 20 sends every kind: the other catalogue's items are not shown here.
+                All = index.Items.Where(item => Catalogues.Holds(Catalogue, item.Kind)).ToList();
                 _installedVersions.Clear();
-                TakeInstalledVersions(index.Items);
+                TakeInstalledVersions(All);
                 Source = index.Source;
                 Status = MarketStatus.Ready;
                 Diag.Info(Target, "marketplace index read", new LogField("source", index.Source), new LogField("items", All.Count));
@@ -245,18 +281,26 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
     }
 
     /// <summary>
-    /// Reads which plugins, themes and tools are in their folders
-    /// (<c>list_plugins</c>, <c>list_themes</c>, <c>list_tools</c>), whoever put
-    /// them there; a kind the core cannot list counts as none.
+    /// Reads which of this catalogue's kinds are in their folders (<c>list_plugins</c> and <c>list_tools</c>, or
+    /// <c>list_themes</c> for the themes), whoever put them there; a kind the core cannot list counts as none.
     /// </summary>
     public async Task ReadInstalledAsync()
     {
+        if (IsThemes)
+        {
+            var themes = await ListAsync(new ListThemesRequest(), reply =>
+            {
+                InstalledThemes = (reply as ThemesReply)?.Themes ?? InstalledThemes;
+                return (reply as ThemesReply)?.Themes.Select(t => t.Id);
+            });
+            Replace(ExtensionKinds.Theme, themes);
+            Changed?.Invoke();
+            return;
+        }
         var plugins = ListAsync(new ListPluginsRequest(), reply => (reply as PluginsReply)?.Plugins.Select(p => p.Id));
-        var themes = ListAsync(new ListThemesRequest(), reply => (reply as ThemesReply)?.Themes.Select(t => t.Id));
         var tools = ListAsync(new ListToolsRequest(), reply => (reply as ToolsReply)?.Tools.Select(t => t.Id));
-        await Task.WhenAll(plugins, tools, themes);
+        await Task.WhenAll(plugins, tools);
         Replace(ExtensionKinds.Plugin, await plugins);
-        Replace(ExtensionKinds.Theme, await themes);
         Replace(ExtensionKinds.Tool, await tools);
         Changed?.Invoke();
     }
@@ -528,11 +572,11 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         || commandId.StartsWith("terminal.", StringComparison.Ordinal)
         || commandId.StartsWith("editor.", StringComparison.Ordinal);
 
-    // Plugins and Tool Extensions both add function, so the Plugins tab has both; the chip tells them apart.
+    // The tabs are the Extensions page's; a themes model shows its whole catalogue (the gallery filters it).
     private bool InTab(MarketItem item, string tab) => tab switch
     {
-        MarketTabs.Plugins => item.Kind is ExtensionKinds.Plugin or ExtensionKinds.Tool,
-        MarketTabs.Themes => item.Kind == ExtensionKinds.Theme,
+        MarketTabs.Plugins => item.Kind == ExtensionKinds.Plugin,
+        MarketTabs.Tools => item.Kind == ExtensionKinds.Tool,
         MarketTabs.Installed => IsInstalled(item),
         _ => true,
     };
@@ -542,7 +586,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         CoreReply reply;
         try
         {
-            reply = await core.RequestAsync(new MarketplaceSearchRequest(text.Trim()));
+            reply = await core.RequestAsync(new MarketplaceSearchRequest(text.Trim()) { Catalogue = Catalogue });
         }
         catch (IOException error)
         {
@@ -558,7 +602,7 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
             case MarketplaceIndexReply hits:
                 // Their installedVersion is not taken: a reply computed before this window's own
                 // install or uninstall ended would undo it. The refresh and those actions keep it.
-                _hits = hits.Items;
+                _hits = hits.Items.Where(item => Catalogues.Holds(Catalogue, item.Kind)).ToList();
                 Changed?.Invoke();
                 break;
             case ErrorReply error:
@@ -569,33 +613,35 @@ public sealed class MarketplaceModel(ICoreChannel core, Func<CancellationToken, 
         }
     }
 
-    // The core's words for why the index could not be read, with the setting that decides it.
+    // The core's words for why the catalogue could not be read, with the setting that decides it.
     private async Task<MarketNotice> DescribeFailureAsync(ErrorReply error)
     {
-        string? index = null;
+        var setting = IsThemes ? "marketplace.themes" : "marketplace.index";
+        string? address = null;
         try
         {
-            if (await core.RequestAsync(new GetValueRequest("marketplace.index")) is ValueReply { Value.ValueKind: JsonValueKind.String } value)
+            if (await core.RequestAsync(new GetValueRequest(setting)) is ValueReply { Value.ValueKind: JsonValueKind.String } value)
             {
-                index = value.Value.GetString();
+                address = value.Value.GetString();
             }
         }
         catch (IOException)
         {
             // Only the words get less precise.
         }
-        if (string.IsNullOrWhiteSpace(index))
+        if (string.IsNullOrWhiteSpace(address))
         {
-            return new MarketNotice("No marketplace index is set.",
-                "Set marketplace.index in cabinetos.json to the folder, file or https: URL of an index.json.");
+            return IsThemes
+                ? new MarketNotice("No themes catalogue is set.", "Set marketplace.themes in cabinetos.json to the folder, file or https: URL of a themes.json.")
+                : new MarketNotice("No marketplace index is set.", "Set marketplace.index in cabinetos.json to the folder, file or https: URL of an index.json.");
         }
-        if (Uri.TryCreate(index, UriKind.Absolute, out var uri) && uri.Host.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase))
+        if (Uri.TryCreate(address, UriKind.Absolute, out var uri) && uri.Host.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase))
         {
-            // docs/marketplace.md, "The public index": a file written before the public index existed may still name the placeholder, which never resolves.
+            // docs/marketplace.md, "The public catalogues": a file written before the public index existed may still name the placeholder, which never resolves.
             return new MarketNotice("The marketplace index setting is stale.",
-                $"marketplace.index is the old placeholder {index}. Remove the line from cabinetos.json and the public index is used.");
+                $"{setting} is the old placeholder {address}. Remove the line from cabinetos.json and the public {(IsThemes ? "catalogue" : "index")} is used.");
         }
-        return new MarketNotice("Cannot read the marketplace index.", error.Message);
+        return new MarketNotice(IsThemes ? "Cannot read the themes catalogue." : "Cannot read the marketplace index.", error.Message);
     }
 
     private bool Fail(MarketStatus status, MarketNotice notice)

@@ -18,13 +18,13 @@ public class MarketplaceCardsEndToEndTests
 {
     private const string OptIn = "CABINETOS_UI_E2E";
 
-    // Every third item a theme, the others tools: 40 and 80.
+    // Every third item a plugin, the others tools: 40 and 80 (the Extensions page has no themes since Phase 23).
     private static readonly string[] Ids = [.. Enumerable.Range(0, 120).Select(i => $"item-{i:000}")];
 
-    private static bool IsTheme(int i) => i % 3 == 0;
+    private static bool IsPlugin(int i) => i % 3 == 0;
 
     // The card's accessible name, as the view gives it: "Item 11, Tool, by CabinetOS".
-    private static string CardName(int i) => $"Item {i}, {(IsTheme(i) ? "Theme" : "Tool")}, by CabinetOS";
+    private static string CardName(int i) => $"Item {i}, {(IsPlugin(i) ? "WASM plugin" : "Tool")}, by CabinetOS";
 
     [Fact]
     public async Task A_120_item_index_shows_a_screenful_at_once_and_all_120_in_index_order_after_the_slices()
@@ -70,30 +70,30 @@ public class MarketplaceCardsEndToEndTests
     [Fact]
     public async Task A_tab_chosen_while_the_slices_are_made_leaves_only_its_cards()
     {
-        var logs = await RunAsync("themes", string.Join(';',
+        var logs = await RunAsync("plugins", string.Join(';',
             "size:1400x900",
             "cmd:marketplace.browse",
             "wait:2000",
-            "click:Themes",
+            "click:Plugins",
             "wait:2000",
-            // Discover again, and Themes in the same dispatcher turn: steps without a wait run one after the other,
-            // and a slice waits for a turn of its own, so Discover's slices are still to come when Themes is clicked.
+            // Discover again, and Plugins in the same dispatcher turn: steps without a wait run one after the other,
+            // and a slice waits for a turn of its own, so Discover's slices are still to come when Plugins is clicked.
             "click:Discover",
             "market:discover",
-            "click:Themes",
-            "market:themes",
+            "click:Plugins",
+            "market:plugins",
             "until:market-complete",
-            "market:themes-done",
+            "market:plugins-done",
             "shot:done"));
 
         var discover = Cards(logs, "discover");
         Assert.Equal((120, false), (Field(discover, "total").GetInt32(), Field(discover, "complete").GetBoolean()));
         Assert.InRange(Field(discover, "cards").GetInt32(), 4, 119);
-        Assert.Equal(40, Field(Cards(logs, "themes"), "total").GetInt32());
+        Assert.Equal(40, Field(Cards(logs, "plugins"), "total").GetInt32());
 
-        var done = Cards(logs, "themes-done");
+        var done = Cards(logs, "plugins-done");
         Assert.Equal((40, 40, true), (Field(done, "cards").GetInt32(), Field(done, "total").GetInt32(), Field(done, "complete").GetBoolean()));
-        Assert.Equal(Ids.Where((_, i) => IsTheme(i)), Text(done, "ids").Split(','));
+        Assert.Equal(Ids.Where((_, i) => IsPlugin(i)), Text(done, "ids").Split(','));
         // Discover's second set stopped when the tab changed: after it began, no set of 120 cards was completed.
         var began = logs.FindIndex(l => Message(l) == "marketplace cards" && Text(l, "label") == "discover");
         Assert.DoesNotContain(logs.Skip(began), l => Message(l) == "marketplace cards complete" && Field(l, "cards").GetInt32() == 120);
@@ -202,7 +202,7 @@ public class MarketplaceCardsEndToEndTests
         ["items"] = new JsonArray([.. Enumerable.Range(0, 120).Select(i => (JsonNode)new JsonObject
         {
             ["id"] = Ids[i],
-            ["kind"] = IsTheme(i) ? "theme" : "tool",
+            ["kind"] = IsPlugin(i) ? "plugin" : "tool",
             ["name"] = $"Item {i}",
             ["author"] = new JsonObject { ["name"] = "CabinetOS" },
             ["version"] = "1.0.0",

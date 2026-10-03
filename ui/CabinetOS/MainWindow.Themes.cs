@@ -75,10 +75,18 @@ public sealed partial class MainWindow
     private async Task OpenThemePickerAsync()
     {
         FileMenu.Close();
+        if (GalleryView.IsOpen)
+        {
+            // The picker's preview and the gallery's are one screen's colours: the gallery ends first.
+            CloseGallery(restore: true, focusPane: false);
+        }
         CloseOtherOverlays(Overlay.ThemePicker);
         _picker.BeginPreviews();
         ThemesView.Open();
         await _picker.LoadAsync(_themes.Theme?.Id);
+        // What the picker lists, for the window tests (a theme installed from the gallery is in it).
+        Diag.Info("cabinetos_ui::theme", "theme picker listed", new LogField("themes", _picker.Rows.Count),
+            new LogField("ids", string.Join(",", _picker.Rows.Select(row => row.Info.Id))));
     }
 
     private async Task ApplyChosenThemeAsync(CommandInvocation invocation)

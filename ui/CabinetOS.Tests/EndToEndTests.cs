@@ -61,8 +61,8 @@ public class EndToEndTests
             var client = core.Client;
 
             var welcome = await client.HelloAsync();
-            // Version 17: the terminal's prompt hook (terminal unit 2), after 16's sessions bound to a pane.
-            Assert.Equal(19u, welcome.ProtocolVersion);
+            // Version 20: the marketplace's two catalogues (Phase 23), after 19's `dual` in the window's state.
+            Assert.Equal(20u, welcome.ProtocolVersion);
 
             var keymap = Keymap.From((await client.RequestAsync<KeymapReply>(new GetKeymapRequest())).ToData());
             Assert.Equal(1000, keymap.ChordWindowMs);
@@ -358,8 +358,9 @@ public class EndToEndTests
             var index = Path.Combine(root, "index");
             BuildLocalIndex(index);
             Directory.CreateDirectory(Path.Combine(root, "config"));
+            // The themes catalogue is the same folder: marketplace.themes is the public address until it is set.
             File.WriteAllText(Path.Combine(root, "config", "cabinetos.json"),
-                new JsonObject { ["marketplace"] = new JsonObject { ["index"] = index } }.ToJsonString());
+                new JsonObject { ["marketplace"] = new JsonObject { ["index"] = index, ["themes"] = index } }.ToJsonString());
 
             await using var core = await StartCoreAsync(coreExe, root);
             await core.Client.HelloAsync();
@@ -377,15 +378,10 @@ public class EndToEndTests
 
                 Assert.True(await market.RefreshAsync(), market.Notice?.Detail);
                 Assert.StartsWith(index, market.Source, StringComparison.OrdinalIgnoreCase);
-                // build-index.ps1 packs every shipped theme of sdk/themes (five since 9e4ce98).
-                Assert.Equal(ShippedThemeFiles(Path.Combine(Repo.Root, "sdk", "themes")).Count, market.CountOf(MarketTabs.Themes));
-                // The shipped themes are in the themes folder already, but not from the marketplace:
-                // shown as there, never replaced (trust rule 7), and not on the Installed tab.
-                Assert.All(market.All.Where(i => i.Kind == ExtensionKinds.Theme), theme =>
-                {
-                    Assert.True(market.IsPresent(theme), theme.Id);
-                    Assert.Null(theme.InstalledVersion);
-                });
+                // build-index.ps1 writes the themes to themes.json: the Extensions page has none of them.
+                Assert.DoesNotContain(market.All, item => item.Kind == ExtensionKinds.Theme);
+                Assert.Contains(market.All, item => item.Kind == ExtensionKinds.Plugin);
+                Assert.EndsWith("index.json", market.Source);
                 Assert.Equal(0, market.CountOf(MarketTabs.Installed));
                 var hello = market.Find("hello")!;
                 Assert.Equal(MarketAction.Install, market.ActionFor(hello));
@@ -415,6 +411,106 @@ public class EndToEndTests
                 Assert.True(await market.RefreshAsync());
                 Assert.Null(market.Find("hello")!.InstalledVersion);
                 Assert.Equal(0, market.CountOf(MarketTabs.Installed));
+                return true;
+            });
+            await core.ShutdownAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            Repo.RemoveTempFolder(root);
+        }
+    }
+
+    /// <summary>
+    /// The theme gallery against the real core and a local themes catalogue (Phase 23): every theme of the collection is a
+    /// tile in the colours the catalogue gives, a theme that is not installed is previewed without being installed
+    /// (<c>preview_theme</c>), Enter's way installs and applies it (<c>ui.theme</c>), the picker lists it, the core refuses to
+    /// remove the theme in effect, and Remove takes another one out.
+    /// </summary>
+    [Fact]
+    public async Task The_gallery_previews_installs_and_applies_a_theme_of_a_local_catalogue_and_the_picker_lists_it()
+    {
+        var coreExe = FindCoreOrSkip();
+        var root = Repo.NewTempFolder("e2e-gallery");
+        try
+        {
+            var catalogue = Path.Combine(root, "catalogue");
+            BuildLocalIndex(catalogue, collection: true);
+            var configPath = Path.Combine(root, "config", "cabinetos.json");
+            Directory.CreateDirectory(Path.Combine(root, "config"));
+            File.WriteAllText(configPath, new JsonObject { ["marketplace"] = new JsonObject { ["index"] = catalogue, ["themes"] = catalogue } }.ToJsonString());
+
+            await using var core = await StartCoreAsync(coreExe, root);
+            if ((await core.Client.HelloAsync()).ProtocolVersion < 20)
+            {
+                Assert.Skip("This core has no themes catalogue yet: build the core again.");
+            }
+            var themesFolder = Path.Combine(root, "themes");
+            string[] listed;
+            using (var catalogueFile = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(catalogue, "themes.json"))))
+            {
+                listed = [.. catalogueFile.RootElement.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetString()!)];
+            }
+
+            using var ui = new UiThread();
+            var seen = new List<CoreEvent>();
+            await ui.RunAsync(async () =>
+            {
+                var gallery = new ThemeGalleryModel(core.Client, () => false, () => new Argb(0xFF, 0x60, 0xCD, 0xFF), _ => Task.CompletedTask)
+                {
+                    PreviewDelay = TimeSpan.Zero,
+                };
+                _ = PumpAsync(core.Client, gallery, seen);
+                var previews = new List<string?>();
+                gallery.Preview += theme => previews.Add(theme?.Id);
+
+                Assert.True(await gallery.LoadAsync("default"), gallery.Market.Notice?.Detail);
+                // Every theme of the catalogue is a tile, in the catalogue's order; the core's own are installed, the collection is not.
+                Assert.Equal(listed, gallery.Tiles.Select(t => t.Id));
+                Assert.Equal(ShippedThemeFiles(themesFolder), gallery.Tiles.Where(t => t.IsPresent).Select(t => t.Id).Order(StringComparer.Ordinal));
+                var dracula = gallery.Tiles.Single(t => t.Id == "dracula");
+                Assert.Equal((false, TileAction.Install, ColorTheme.Dark), (dracula.IsPresent, dracula.Action, dracula.Appearance));
+                Assert.Equal(dracula.Item!.Tile!.Background, dracula.Colors.Background.ToString().Replace("#FF", "#"), ignoreCase: true);
+                Assert.Equal((true, TileAction.Applied), (gallery.Tiles.Single(t => t.Id == "default").IsApplied, gallery.Tiles.Single(t => t.Id == "default").Action));
+                Assert.Equal(TileAction.Apply, gallery.Tiles.Single(t => t.Id == "nord").Action);
+                Assert.True(gallery.Tiles.Single(t => t.Id == "commander-compact").Compact);
+
+                // A tile selected is previewed through the core, which downloads the theme into memory and installs nothing.
+                gallery.BeginPreviews();
+                gallery.Select(gallery.Tiles.ToList().FindIndex(t => t.Id == "dracula"));
+                await WaitUntilAsync(() => previews.Contains("dracula"), "the preview of dracula");
+                Assert.Equal("Previewing Dracula · Esc restores", gallery.PreviewText);
+                Assert.False(File.Exists(Path.Combine(themesFolder, "dracula.json")));
+                Assert.DoesNotContain("dracula", File.ReadAllText(configPath));
+                gallery.EndPreviews(restore: true);
+                Assert.Null(previews[^1]);
+                Assert.Null(gallery.PreviewText);
+
+                // Enter's way: the theme is downloaded, installed and made the theme in effect.
+                var outcome = await gallery.ActivateAsync("dracula");
+                Assert.True(outcome?.Ok, outcome?.Error);
+                await WaitUntilAsync(() => seen.OfType<ThemeChangedEvent>().Any(e => e.Theme.Id == "dracula"), "theme_changed for dracula");
+                Assert.True(File.Exists(Path.Combine(themesFolder, "dracula.json")));
+                Assert.Equal((true, TileAction.Applied, true), (gallery.Tiles.Single(t => t.Id == "dracula").IsApplied, gallery.Tiles.Single(t => t.Id == "dracula").Action,
+                    gallery.Tiles.Single(t => t.Id == "dracula").IsPresent));
+                Assert.Equal("dracula", Assert.IsType<ThemeReply>(await core.Client.RequestAsync(new GetThemeRequest())).Theme.Id);
+                Assert.Equal("dracula", System.Text.Json.JsonDocument.Parse(File.ReadAllText(configPath)).RootElement.GetProperty("ui").GetProperty("theme").GetString());
+
+                // The picker lists it, marked as the theme in effect.
+                var picker = new ThemePickerModel(core.Client);
+                Assert.True(await picker.LoadAsync("dracula"));
+                Assert.Contains(picker.Rows, row => row.Info.Id == "dracula" && row.IsCurrent);
+                Assert.Equal(picker.Rows.Count, picker.BrowseRow);
+
+                // The core keeps the theme in effect; another is applied, and then the first goes.
+                Assert.False((await gallery.RemoveAsync("dracula")).Ok);
+                Assert.True(File.Exists(Path.Combine(themesFolder, "dracula.json")));
+                Assert.True((await gallery.ApplyAsync("nord")).Ok);
+                await WaitUntilAsync(() => seen.OfType<ThemeChangedEvent>().Any(e => e.Theme.Id == "nord"), "theme_changed for nord");
+                var removed = await gallery.RemoveAsync("dracula");
+                Assert.True(removed.Ok, removed.Error);
+                Assert.False(File.Exists(Path.Combine(themesFolder, "dracula.json")));
+                Assert.Equal((false, TileAction.Install), (gallery.Tiles.Single(t => t.Id == "dracula").IsPresent, gallery.Tiles.Single(t => t.Id == "dracula").Action));
                 return true;
             });
             await core.ShutdownAsync(TimeSpan.FromSeconds(5));
@@ -602,10 +698,15 @@ public class EndToEndTests
             .Order(StringComparer.Ordinal),
     ];
 
-    private static void BuildLocalIndex(string folder)
+    internal static void BuildLocalIndex(string folder, bool collection = false)
     {
         var script = Path.Combine(Repo.Root, "sdk", "marketplace", "build-index.ps1");
-        var start = new ProcessStartInfo("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-OutDir", folder])
+        var arguments = new List<string> { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-OutDir", folder };
+        if (collection)
+        {
+            arguments.Add("-Collection");
+        }
+        var start = new ProcessStartInfo("powershell.exe", arguments)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -619,7 +720,7 @@ public class EndToEndTests
         var errors = process.StandardError.ReadToEndAsync();
         var output = process.StandardOutput.ReadToEnd();
         Assert.True(process.WaitForExit(120_000), "build-index.ps1 did not finish within 2 minutes");
-        Assert.True(process.ExitCode == 0 && File.Exists(Path.Combine(folder, "index.json")), output + errors.Result);
+        Assert.True(process.ExitCode == 0 && File.Exists(Path.Combine(folder, "index.json")) && File.Exists(Path.Combine(folder, "themes.json")), output + errors.Result);
     }
 
     // The window's event pump, for the marketplace: every core event goes to the model on the UI thread.
@@ -629,6 +730,17 @@ public class EndToEndTests
         {
             seen.Add(coreEvent);
             market.OnEvent(coreEvent);
+            (coreEvent as ICarriesSection)?.TakeSection()?.Dispose();
+        }
+    }
+
+    // The window's event pump, for the gallery: every core event goes to its model on the UI thread.
+    private static async Task PumpAsync(CoreClient client, ThemeGalleryModel gallery, List<CoreEvent> seen)
+    {
+        await foreach (var coreEvent in client.Events.ReadAllAsync())
+        {
+            seen.Add(coreEvent);
+            gallery.OnEvent(coreEvent);
             (coreEvent as ICarriesSection)?.TakeSection()?.Dispose();
         }
     }

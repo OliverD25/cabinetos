@@ -47,6 +47,12 @@ public sealed class PaletteRow : ObservableObject
     /// <summary>The plugin's name for a plugin's command, else null.</summary>
     public string? Badge => Info.Source.Kind == "plugin" ? Info.Source.Name ?? Info.Source.Id : null;
 
+    /// <summary>
+    /// What the row says of the setting its command changes: "current" on the layout in effect, "on" or "off" on a toggle
+    /// (the settings-three-ways skill); null for any other command.
+    /// </summary>
+    public string? StateText { get; init; }
+
     /// <summary>The first binding as keycaps; chords are joined by "then".</summary>
     public IReadOnlyList<KeycapPart> Keycaps { get; private set; }
 
@@ -125,6 +131,9 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
     /// <summary>Raised with the core's keymap after a rebinding took effect.</summary>
     public event Action<KeymapData>? KeymapUpdated;
 
+    /// <summary>The window's answer to "what does this command's row say of its setting": a mark, or null (<see cref="PaletteRow.StateText"/>).</summary>
+    public Func<CommandInfo, string?>? StateOf { get; set; }
+
     /// <summary>The rows shown, best match first.</summary>
     public ObservableCollection<PaletteRow> Rows { get; } = [];
 
@@ -160,7 +169,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         IsOpen = true;
         _query = "";
         Opened?.Invoke();
-        _ = SearchAsync("");
+        Diag.Observe(SearchAsync(""), Target, "the palette's first search failed");
     }
 
     /// <summary>Closes the palette; a recording in progress is dropped.</summary>
@@ -194,13 +203,23 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
             Diag.Info(Target, "search failed", new LogField("error", error.Message));
             return;
         }
-        // A palette closed while the question was out has no list to show. Applying the answer set the highlight, and the
-        // view's GetOrCreateElement failed on its collapsed list ("Element is already the child of another element"; the log
-        // showed it as an unobserved task). A TextChanged that XAML raises late starts a search after the close too.
+        // A palette closed while the question was out has no list to show. A TextChanged that XAML raises late starts a
+        // search after the close too. This check came with the race of "Element is already the child of another element"
+        // (2026-10-02); its cause, a list WinUI had not laid out yet, is handled in CommandPalette.BringHighlightIntoView.
         if (search != _search || !IsOpen || reply is not SearchResultsReply results)
         {
             return;
         }
+        Show(results, keepHighlight);
+    }
+
+    /// <summary>
+    /// Shows the core's ranking: its rows in its order, the highlight on the best match, or with
+    /// <paramref name="keepHighlight"/> on the command highlighted before while it is still listed.
+    /// The snapshot aid's <c>palette-burst</c> step calls it directly, to show two answers in one turn of the UI thread.
+    /// </summary>
+    internal void Show(SearchResultsReply results, bool keepHighlight)
+    {
         var highlightedId = _highlight >= 0 && _highlight < Rows.Count ? Rows[_highlight].Info.Id : null;
         Rows.Clear();
         var missing = false;
@@ -208,7 +227,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         {
             if (router.Find(hit.Id) is { } info)
             {
-                Rows.Add(new PaletteRow(info));
+                Rows.Add(new PaletteRow(info) { StateText = StateOf?.Invoke(info) });
             }
             else
             {
@@ -218,7 +237,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         if (missing)
         {
             // A plugin registered a command since the list was read.
-            _ = RefreshCommandsAsync();
+            Diag.Observe(RefreshCommandsAsync(), Target, "reading the command list again for the palette failed");
         }
         var keep = highlightedId is null ? -1 : IndexOf(highlightedId);
         _highlight = -1;
@@ -333,11 +352,11 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         var version = ++_recordingVersion;
         if (_combos.Count >= 2)
         {
-            _ = CommitAsync(version);
+            Diag.Observe(CommitAsync(version), Target, "saving the recorded keys failed");
         }
         else
         {
-            _ = CommitAfterWindowAsync(version);
+            Diag.Observe(CommitAfterWindowAsync(version), Target, "saving the recorded keys failed");
         }
     }
 

@@ -241,4 +241,65 @@ public class DiagnosticsTests
         Assert.Equal(@"D:\logs", Diag.DefaultDirectory(name => name == Diag.LogDirEnv ? @"D:\logs" : null));
         Assert.EndsWith(Path.Combine("CabinetOS", "logs"), Diag.DefaultDirectory(_ => null));
     }
+
+    [Collection(DiagStateTests.Name)]
+    public class ObservedTasks
+    {
+        [Fact]
+        public async Task A_task_nobody_awaits_logs_its_failure_at_once_with_its_place_and_a_task_that_ends_well_logs_nothing()
+        {
+            var dir = Repo.NewTempFolder("diag-observe");
+            try
+            {
+                Diag.Init("0.1.0", dir);
+                var gate = new TaskCompletionSource();
+                var failing = FailAfterAsync(gate.Task);
+                Diag.Observe(failing, "cabinetos_ui::test", "the test's work failed", new LogField("step", 3));
+                Diag.Observe(SucceedAfterAsync(gate.Task), "cabinetos_ui::test", "the work that ends well failed");
+                Diag.Observe(Task.CompletedTask, "cabinetos_ui::test", "the finished work failed");
+                gate.SetResult();
+                // WhenAny waits for the end without observing the failure itself.
+                await Task.WhenAny(failing);
+
+                List<string> errors = [];
+                for (var waited = 0; errors.Count == 0 && waited < 5000; waited += 50)
+                {
+                    Assert.True(Diag.Writer!.Flush(TimeSpan.FromSeconds(5)));
+                    errors = LogFiles.Ui(dir).Where(l => Text(l, "level") == "ERROR").ToList();
+                    if (errors.Count == 0)
+                    {
+                        await Task.Delay(50);
+                    }
+                }
+                var line = Assert.Single(errors);
+                using var parsed = JsonDocument.Parse(line);
+                Assert.Equal("the test's work failed", parsed.RootElement.GetProperty("message").GetString());
+                var fields = parsed.RootElement.GetProperty("fields");
+                Assert.Equal(3, fields.GetProperty("step").GetInt32());
+                // The exception itself, not the aggregate around it, with the place it was thrown.
+                var error = fields.GetProperty("error").GetString()!;
+                Assert.StartsWith("System.InvalidOperationException: the work broke", error, StringComparison.Ordinal);
+                Assert.Contains(nameof(FailAfterAsync), error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                Diag.Shutdown();
+                Repo.RemoveTempFolder(dir);
+            }
+        }
+
+        private static async Task FailAfterAsync(Task gate)
+        {
+            await gate;
+            throw new InvalidOperationException("the work broke");
+        }
+
+        private static async Task SucceedAfterAsync(Task gate) => await gate;
+
+        private static string? Text(string line, string name)
+        {
+            using var parsed = JsonDocument.Parse(line);
+            return parsed.RootElement.GetProperty(name).GetString();
+        }
+    }
 }

@@ -1820,6 +1820,21 @@ prompt, so the install there is one elevated step by hand
 the 11g decisions (the publisher is the pull request's GitHub login;
 `verified` is the creator's badge).
 
+**Status (2026-10-03, 04:17): 0.1.2 is published.** Built from 358eaa2 by
+`release.ps1` on this PC (the zip 32.4 MB, the setup file 20.2 MB, the
+symbols zip apart; the four programs carry their version resource;
+release.json names the commit with no uncommitted change); the live check
+of that build ran on the laptop (no check answered False; the panel goal
+met: 334 frames, none with UI work over 20 ms); tag `v0.1.2` and the GitHub
+release with six files at 04:14; `latest.json` and `notes-0.1.2.md` on the
+marketplace site, read back with the zip's hash; `themes.json` published
+there at 04:00, so 0.1.2's gallery reads the public catalogue. All on the
+creator's word of 03:00 ("release by yourself", "do it by yourself"). The
+release page for the Luminart site is built and committed there, not
+deployed: the release-notes-page rule leaves the deploy to the creator.
+The winget submission waits too: the 0.1.1 pull request at
+microsoft/winget-pkgs is still open and the tool asks for a sign-in.
+
 ### Phase 23 — The theme gallery and the first three-ways gaps (the creator's word of 2026-10-03: "do gaps 1 to 4 with the theme gallery")
 
 Covers the desk cards "Themes get their own catalogue and gallery (split
@@ -1860,7 +1875,23 @@ with a test per way; the live check passes on the laptop.
 
 Articles: 3, 4, 6, 7, 8, 10.
 
-**Status (2026-10-03, 00:33): handed to a coder on Sonnet.**
+**Status (2026-10-03, 03:35): built and checked on the branch `worktree-agent-aeba340e544ea5221`, waiting for the merge; after it the creator publishes `themes.json` ([report](log/2026-10-03/theme-gallery-and-three-ways-report.md)).**
+
+**Status (2026-10-03, 03:51): merged into main as 18ef423, after Phase 24.** The
+planning session merged the coder's branch over Phase 24 (eight conflicts:
+both sides' CHANGELOG lines, the command count 125, the config crate's
+re-exports, the audit's rows, config.md, the log README and ui.md's step
+row) and verified the merge: the five core checks, both window builds and
+1354 fast tests, all green. The coder's own live check on the laptop was
+green at 4c287dc (287 True, 0 False, the panel goal met). The merge's own
+laptop live check runs on the 0.1.2 release commit, which carries it: the
+laptop's clone sat on another coder's branch at that moment and the remote
+script only fast-forwards. The desk cards "Themes get their own catalogue
+and gallery" and gaps 1 to 4 of "Settings reachable three ways" are done.
+Next, by the creator's word of 03:00 ("do it by yourself", "release by
+yourself"): `themes.json` goes to the marketplace site, and 0.1.2 is cut
+from this commit with Phase 24, the version resources, the symbols zip,
+the indexer's automatic start and the wasmtime fix.
 
 ### Phase 24 — Sorting by the column headers, and the pane dividers (small; the desk cards of 2026-10-02)
 

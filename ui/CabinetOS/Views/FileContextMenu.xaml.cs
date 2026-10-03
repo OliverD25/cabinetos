@@ -26,6 +26,8 @@ public enum MenuEntryKind
 /// <summary>
 /// One row of the context menu, or one icon of its strip: every one runs a command. <see cref="Dot"/>
 /// draws the accent dot of an update that waits for a restart (the hamburger menu, Phase 17).
+/// <see cref="Checked"/> makes the row a setting's: its check mark is on while the setting is. <see cref="Children"/>
+/// makes it a submenu (the hamburger's Layout, Phase 23): the click shows the children in the menu's place, with a way back.
 /// </summary>
 public sealed record MenuEntry(
     MenuEntryKind Kind,
@@ -37,7 +39,9 @@ public sealed record MenuEntry(
     string? Badge = null,
     bool IsEnabled = true,
     string? Tooltip = null,
-    bool Dot = false)
+    bool Dot = false,
+    bool? Checked = null,
+    IReadOnlyList<MenuEntry>? Children = null)
 {
     /// <summary>A separator line.</summary>
     public static MenuEntry Separator { get; } = new(MenuEntryKind.Separator);
@@ -71,6 +75,11 @@ public sealed partial class FileContextMenu : UserControl
     private readonly Storyboard _entrance;
     private double? _rowHeight;
     private string _described = "";
+
+    // The rows the menu was shown with, which a submenu's way back builds again; the submenu shown and its way-back row.
+    private IReadOnlyList<MenuEntry> _rootItems = [];
+    private MenuEntry? _submenu;
+    private MenuEntry? _back;
 
     /// <summary>Creates the menu, hidden.</summary>
     public FileContextMenu()
@@ -110,7 +119,10 @@ public sealed partial class FileContextMenu : UserControl
     public void Show(Point at, IReadOnlyList<MenuEntry> strip, IReadOnlyList<MenuEntry> items, bool fromKeyboard = false, double? rowHeight = null, double? width = null)
     {
         _rowHeight = rowHeight;
-        _described = string.Join("|", items.Where(i => i.Kind == MenuEntryKind.Item).Select(i => i.Title));
+        _rootItems = items;
+        _submenu = null;
+        _back = null;
+        _described = Describe(items);
         Panel.Width = width ?? DefaultWidth;
         Build(strip, items);
         Visibility = Visibility.Visible;
@@ -127,6 +139,37 @@ public sealed partial class FileContextMenu : UserControl
         var first = Items.Children.OfType<Button>().FirstOrDefault(b => b.IsEnabled)
             ?? Strip.Children.OfType<Button>().FirstOrDefault(b => b.IsEnabled);
         first?.Focus(fromKeyboard ? FocusState.Keyboard : FocusState.Programmatic);
+    }
+
+    // The rows as the snapshot aid's log tells them: a setting's row says whether it is on, a submenu names its rows.
+    private static string Describe(IEnumerable<MenuEntry> items) =>
+        string.Join("|", items.Where(i => i.Kind == MenuEntryKind.Item).Select(entry => entry.Children is { } children
+            ? $"{entry.Title} ({string.Join(", ", children.Select(child => child.Title + (child.Checked == true ? " [x]" : "")))})"
+            : entry.Title + (entry.Checked switch { true => " [x]", false => " [ ]", _ => "" })));
+
+    // A click on a submenu's row: the menu shows that row's children in its place, under a row that goes back, and the
+    // keyboard goes to the checked child.
+    private void OpenSubmenu(MenuEntry entry)
+    {
+        if (entry.Children is not { } children)
+        {
+            return;
+        }
+        _submenu = entry;
+        var back = _back = new MenuEntry(MenuEntryKind.Item, entry.Title, "\uE72B", Tooltip: "Back to the menu");
+        _described = $"{entry.Title}: " + string.Join("|", children.Select(child => child.Title + (child.Checked == true ? " [x]" : "")));
+        Build([], [back, MenuEntry.Separator, .. children]);
+        var rows = Items.Children.OfType<Button>().ToList();
+        (rows.Skip(1).FirstOrDefault(b => b.Tag is true) ?? rows.Skip(1).FirstOrDefault() ?? rows.FirstOrDefault())?.Focus(FocusState.Keyboard);
+    }
+
+    private void CloseSubmenu()
+    {
+        _submenu = null;
+        _back = null;
+        _described = Describe(_rootItems);
+        Build([], _rootItems);
+        Items.Children.OfType<Button>().FirstOrDefault(b => b.IsEnabled)?.Focus(FocusState.Keyboard);
     }
 
     /// <summary>Closes the menu.</summary>
@@ -201,7 +244,10 @@ public sealed partial class FileContextMenu : UserControl
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        FrameworkElement icon = entry.Badge is null
+        // A setting's row has a check mark's place where the others have their icon.
+        FrameworkElement icon = entry.Checked is { } on
+            ? new FontIcon { Glyph = on ? "\uE73E" : "", FontSize = 14, Width = 14, Foreground = ThemeResources.Brush("CbAccentBrush") }
+            : entry.Badge is null
             ? new FontIcon { Glyph = entry.Glyph ?? "", FontSize = 14, Width = 14 }
             : new Border
             {
@@ -216,7 +262,20 @@ public sealed partial class FileContextMenu : UserControl
         Grid.SetColumn(title, 1);
         row.Children.Add(title);
 
-        if (entry.Dot)
+        if (entry.Children is not null)
+        {
+            // A submenu's row: the arrow that says the rows go on.
+            var arrow = new FontIcon
+            {
+                Glyph = "\uE76C",
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = ThemeResources.Brush("CbHintTextBrush"),
+            };
+            Grid.SetColumn(arrow, 2);
+            row.Children.Add(arrow);
+        }
+        else if (entry.Dot)
         {
             var dot = new Ellipse
             {
@@ -266,11 +325,28 @@ public sealed partial class FileContextMenu : UserControl
             FontSize = m.FontSize,
         };
         AutomationProperties.SetName(button, entry.Title);
+        if (entry.Checked is { } state)
+        {
+            AutomationProperties.SetItemStatus(button, state ? "on" : "off");
+        }
         if (entry.Tooltip is not null)
         {
             ToolTipService.SetToolTip(button, entry.Tooltip);
         }
-        button.Click += (_, _) => Run(entry);
+        // The checked row is where the keyboard goes in a submenu.
+        button.Tag = entry.Checked == true;
+        if (ReferenceEquals(entry, _back))
+        {
+            button.Click += (_, _) => CloseSubmenu();
+        }
+        else if (entry.Children is not null)
+        {
+            button.Click += (_, _) => OpenSubmenu(entry);
+        }
+        else
+        {
+            button.Click += (_, _) => Run(entry);
+        }
         return button;
     }
 

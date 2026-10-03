@@ -487,6 +487,26 @@ public static class ExtensionKinds
     public const string Tool = "tool";
 }
 
+/// <summary>The marketplace's two catalogues (protocol 20, ADR 0022): which list a request is for.</summary>
+public static class Catalogues
+{
+    /// <summary>Core Plugins and Tool Extensions: <c>index.json</c>.</summary>
+    public const string Extensions = "extensions";
+
+    /// <summary>Colour themes: <c>themes.json</c>.</summary>
+    public const string Themes = "themes";
+
+    /// <summary>Whether an item of <paramref name="kind"/> belongs in <paramref name="catalogue"/>.</summary>
+    public static bool Holds(string catalogue, string kind) =>
+        catalogue == Themes ? kind == ExtensionKinds.Theme : kind != ExtensionKinds.Theme;
+}
+
+/// <summary>
+/// The three colours a theme's gallery tile is painted with, each <c>#RRGGBB</c> (docs/themes.md, "The gallery"):
+/// the colour behind a file list, the text of its rows, and the accent.
+/// </summary>
+public sealed record MarketTile(string Background, string Text, string Accent);
+
 /// <summary>Who publishes an extension. <see cref="Verified"/> is shown, not checked (docs/marketplace.md, trust rule 8).</summary>
 public sealed record MarketAuthor(string Name, bool Verified = false, string? Url = null);
 
@@ -504,7 +524,9 @@ public sealed record MarketCapability(string Name, string Reason, string? Level 
 /// the newest version this core can run, one item per extension since
 /// protocol 11. These are the index's own keys, camelCase like a theme's;
 /// <see cref="InstalledVersion"/> is the core's addition, the version the
-/// marketplace installed, absent when it installed none.
+/// marketplace installed, absent when it installed none. A theme also has
+/// <see cref="Appearance"/> (<c>dark</c>, <c>light</c> or <c>system</c>), <see cref="Density"/> (a density
+/// preset) and <see cref="Tile"/> since protocol 20.
 /// </summary>
 public sealed record MarketItem(
     string Id,
@@ -522,7 +544,10 @@ public sealed record MarketItem(
     MarketRating? Rating = null,
     ulong? Installs = null,
     IReadOnlyList<MarketCapability>? Capabilities = null,
-    [property: JsonPropertyName("installedVersion")] string? InstalledVersion = null);
+    [property: JsonPropertyName("installedVersion")] string? InstalledVersion = null,
+    string? Appearance = null,
+    bool? Density = null,
+    MarketTile? Tile = null);
 
 /// <summary>
 /// Reply to <c>marketplace_refresh</c> (the index's order) and

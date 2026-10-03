@@ -216,8 +216,30 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   "terminal split" line must put each half under its pane within 2 px, with
   the left and right sessions in their halves, a header for each half in UI
   Automation and `terminal.split` written to the file; Ctrl+\ again joins
-  them and writes false), and last the two Ctrl+` that give the keyboard
-  back and hide the dock.
+  them and writes false), and the two Ctrl+` that give the keyboard
+  back and hide the dock. Then section 22, the theme gallery ("The theme
+  gallery"; the run builds both catalogues with `-Collection`, so the
+  gallery has the collection's tiles, and points `marketplace.themes` at
+  them): Ctrl+K Ctrl+T, End and Enter on the picker's last row, "Browse more
+  themes…", open the gallery; Home, Right and Down preview the tiles they land
+  on (each a "gallery theme previewed" line, the status bar text "Previewing
+  … Esc restores", `ui.theme` and the themes folder unchanged); Esc closes it
+  and the window paints the theme in effect back; the palette's "Themes:
+  Browse" opens it again, "dracula" is typed in the search, Down and Enter
+  install it and apply it (`dracula.json` in the themes folder, `ui.theme` in
+  the file, "theme applied" in the log); the search is cleared and the tile
+  must be named "applied" through UI Automation (`gallery-applied-live.png`);
+  "nord" is typed and a real double-click on the Nord tile, found by its
+  accessible name, applies it; Esc closes the gallery. Section 23, the layout
+  by three ways ("Settings reachable three ways"): the palette's "View:
+  Activity Rail" must write `ui.layout: rail` and show the rail; the top
+  row's menu, its "Layout" row and "Classic Layout" (the "Activity Rail" row
+  must be checked) must write `classic` and take the rail away; Ctrl+K
+  Ctrl+L three times must write `right`, `rail` and `classic`. Both sections
+  must leave no warning or error line in the window's log. The run keeps
+  `gallery-preview-live.png`, `gallery-search-live.png`,
+  `gallery-applied-live.png`, `layout-rail-live.png`, `layout-menu-live.png`
+  and, from section 13, `rail13-extensions-live.png` (the Extensions page).
 - `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
@@ -648,7 +670,7 @@ The record of the first runs is [log/2026-09-28/live-check.md](log/2026-09-28/li
 | `CABINETOS_UI_PARKED_LISTING_MS` | For the tests: how long a pane keeps the listing of the tab that went behind last, in milliseconds, instead of 30 s ("Tabs") |
 | `CABINETOS_UI_FRAMESTATS=1` | Logs one `frame stats` line per second: frames drawn, the longest gap between two, the gaps over 20 and 33 ms, the frames whose UI-thread work passed 16.7 ms, and the milliseconds of each timed part, with the garbage collector's pauses and collections in the second ("Scrolling"). A `slow frame` line for each frame of 33 ms or more, with the collector's pause in it. The snapshot aid's `scroll:` step adds a `scroll run` line with the run's whole frame table and the machine's CPU load |
 | `CABINETOS_UI_SNAPSHOT=<folder>` | Development aid: once the first folders are shown, runs the steps of `CABINETOS_UI_SNAPSHOT_STEPS` and renders the window to PNG files in that folder. It draws the window's own content, so it works when the screen is off or locked; Mica is not part of that content. An open dialog (the popup layer) is rendered on its own and laid over the image, without WinUI's dimming of the window under it. WebView2 pages (the terminal) draw outside that content: each one on screen is captured by WebView2 (`CapturePreviewAsync`) and laid over its place, which also works on a locked screen. The capture has no transparency, so the terminal's area shows `#202020` instead of the panel's colour. The image is laid over a stand-in for Mica, so it is opaque: `#202020` (`#F3F3F3` in light mode) with the theme's Mica tint over it. |
-| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active, once XAML has raised that pane's GotFocus and drawn two frames more (it does so on its next frames, a few hundred milliseconds late on a busy machine, and a late event of the pane before made that pane the active one again); `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row), as the keyboard opens it, under the row; `menu-at:<name>|<x>,<y>` opens it as a right-click at that point does, in the window's content DIPs (`menu-at:alpha.txt|300,200`); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits until the core has answered and the menu has logged where it is (`until:windows-menu`, 20 s at most; the core's first answer took 1.6 s and, more than once, over its limit of 3 s beside test runs, and the step waited a fixed 1.5 s before; an answer of "took longer than 3 s" is asked for again, up to three times in all, as a user would), and `shellmenu-at:<name>|<x>,<y>` does it at a point; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`) and waits until the keyboard is on the row the key left the focus on, and two frames more, and `menu-edit-drag:<title>|<title>` drops the first row on the second through the drag's own steps (not the pointer's events), after it has laid the rows out (the last change built new ones, whose height XAML gives at its next frame); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown (the prompt's rows follow the text when XAML raises the box's text change, on its next frame; the step waits, 20 s at most, until they do); `accept` presses Enter in that prompt; `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>` types into the active pane's find and waits, 300 ms at least and 20 s at most, until the filter is applied (the pane's find holds the text and the core's answer is in; XAML raises the box's text change on its next frame, which a busy machine draws 0.5 s late); `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `quick-open:<text>` types into Quick Open (opening it) and waits, 500 ms at least and 20 s at most, until the core's answer for that text is shown (a text that starts with `>` ends the wait when Quick Open closes for the palette), and `quick-open-key:enter` and `quick-open-key:ctrl+enter` wait until the row's folder is listed in its pane and two frames more are drawn; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `terminal-state:<label>` writes "terminal state" into the log (the tabs as the header shows them, the shown session, whether the dock is shown, whether the terminal has the keyboard, the active pane and the caption, and with the split mirror each half's session and place beside the panes'; "The terminal"); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels, 800 ms after each attempt and then until the content has taken the new size (5 s at most); `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `pick:<index>` puts the open theme picker's highlight on that row, as the pointer or a key moves it (its preview follows); `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, waiting for one to be drawn when there is none yet (20 s at most: XAML builds the rows of the sidebar's lists and the items of a menu on its next frames, which a busy machine draws a few hundred milliseconds late), the way assistive technology may press it: the keyboard moves to it when the button takes the keyboard (the window's chrome buttons refuse it, as under a real click), then its automation peer invokes it (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label, the element's type, accessible name and `x:Name`, and the overlays that are open as `overlays`: their names, comma-separated, empty for none; "One overlay at a time" in [keybindings.md](keybindings.md)); `key:<keys>` presses keys the way a real press arrives: key messages to the window's input window, which WinUI routes as it routes a real key (the window's `PreviewKeyDown`, the focused control, Tab's move between controls, a dialog's buttons), with the modifiers down in the UI thread's key state while they are handled, so the window need not be in front and no key reaches another program (`key:tab`, `key:shift+delete`, `key:ctrl+k ctrl+t` for a chord's two halves); while a web page (a tool's, the terminal) has the keyboard, the key goes into the page itself, through DevTools' `Input.dispatchKeyEvent`, because the window's input window drops a key as the page's, and the page's script passes it back as it does a real one (a key that closes the page, Ctrl+W on a tool's tab, does not hold the step up); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `market:<label>` writes the marketplace's cards into the log ("marketplace cards": how many are made, the set's `total`, whether it is `complete`, its `slices`, and the items' `ids` in the grid's order, which the keyboard follows; "The marketplace"); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree, `rail-state:<label>` logs what the rail, the sidebar and the tree show (every rail step ends with 400 ms and two frames, and `rail-state:` waits two frames first: the sidebar's new width and the rows it draws are laid out on XAML's next frames), and `tree-state:<label>|<folder>` logs what the tree shows of one folder (whether it has a row, whether the row is a hidden folder's and how opaque its drawn name is, the names of the rows right under it, and the folder the tree marked) ("The activity rail and the sidebar"); `columns:<label>` logs each pane's four column widths as laid out, the width they share, the first row's widths and how far the grips are from the dividers ("columns shown"), `column-drag:<divider>|<pixels>` drags a grip of the active pane (1 Name|Modified, 2 Modified|Type, 3 Type|Size) by that many pixels through the grip's own drag steps and lets go, and `column-fit:<column>` fits as a double-click on that heading does (`name`, `modified`, `type` or `size`); the last two do not wait, so an `until:config` right after them sees the save ("Column widths"); `column-view:<label>` waits two frames and then until the view is drawn as the columns say (every column has a width and, with rows, has drawn some; the keyboard's column lies whole in the strip; 20 s at most) and logs what the active pane shows ("column view shown": the mode, the columns' folders and cursors, the keyboard's column, its rows, the rows each column has on screen and the listings), `column-open:<name>` opens that row of the keyboard's column as Enter does, `column-key:<key>` presses `left`, `right`, `up`, `down`, `home`, `end` or `backspace` in the active pane, and `column-click:<depth>|<name>` clicks that row of that column, 1 being the first ("The column view"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:tree`, `until:menu`, `until:menu-placed`, `until:menu-closed`, `until:menu-edit`, `until:menu-edit-idle`, `until:menu-edit-closed`, `until:windows-menu`, `until:keyboard`, `until:workspace`, `until:market-prepared`, `until:market-complete`, `until:tabs-saved`, `until:kept-released`, `until:listing-drawn`, `until:menus-prepared`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the folder tree to mark the active pane's folder, the right-click menu to be on screen (a newer one no longer waiting for the one before it to close), to be on screen and to have logged where WinUI placed it ("context menu placed", some low-priority dispatcher turns after the menu is on screen, which a busy machine runs late) or to be gone, the menu's edit mode to be on screen, to have nothing in flight (no "Add Command…" prompt open for it and no save out) or to be gone, Windows' menu to be answered by the core and, when shown, to have logged where it is ("windows menu placed"), every check of a hand-over of the keyboard to a web page to have run ("The terminal"), the core's answers about the active folder's workspace (the branch of the sidebar's workspace row; `workspace_info`), the marketplace view to have been laid out ahead while the window was idle after start ("marketplace view prepared") and every card of its set to be made with "marketplace cards complete" logged ("The marketplace"), the tabs to be saved (what `ui.tabs` holds is what the window shows), no pane to keep a listing for a tab behind (its time was up: "Tabs"), every listing a pane bound to have had its first frame drawn (the line "listing shown" is logged at that frame, and a tab switch or a pick that comes before it replaces the pending line, which a busy machine, with a frame every few hundred milliseconds, makes a rule), the right-click menu's four shapes to be built ahead ("context menu prepared", while the window is idle after start), the next reading of the configuration (after an edit of the file; it counts reads from the step's start, so a read that came before the step began is not seen) or the core's next report of an error in the file; `until:pane-at:<folder>` waits until the active pane shows that folder (case and a trailing backslash do not count); `until:sidebar-page:<tool>` until that tool's sidebar page has started ("a sidebar page started"), `until:page-suspended:<tool>` until WebView2 has put it to sleep and `until:page-awake:<tool>` until it is awake; `until:sidebar-view:<id>` until the sidebar shows that view (a tool's view once the tools are read) and `until:rail-saved` until the rail's order, the sidebar's width and its view have been written to the core; `until:shell-menu` waits until `contextMenu.shellMenu` is on in the configuration the window holds, `until:command:<id>` until the core's command list has that command (a program of the file, after the list is asked for again), and `until:file-menu-rows:<n>` until the file menu has n rows: they say what a test wrote or saved has been read, where `until:config` ends at any read, and the window reads the configuration for its own writes too (the tabs it saves a second after the last folder it opened); `until:terminals:<n>` waits for n terminal tabs, each with its byte pipe connected; `until:terminal-folder:<path>` waits until a session's prompt hook has reported that folder (`terminal_folder_changed`; case and a trailing backslash do not count); `until:terminal-restored` waits until the dock's first show has been dealt with (the saved sessions are back and their front tab is shown, or none came: "Restoring the tabs" in [terminal.md](terminal.md)); `header-click:<column>[|<pane>]`, `header-doubleclick:<column>[|<pane>]` and `sort-state:<label>` (the headings' sort: "A pane's order"), `pane-divider:<pixels>`, `pane-divider-reset`, `sidebar-divider-reset` and `pane-split:<label>` (the dividers: "The divider between the panes"), with `until:sorted`, `until:split-saved` and `until:pane-split:<share or none>`; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
+| `CABINETOS_UI_SNAPSHOT_STEPS` | The steps, separated by `;` (default `shot:window`): `cmd:<command> [json]` runs a command through the router and waits for it; `cmd-nowait:<command>` runs one that waits for the user (a dialog, a rename); `path:<folder>` goes there in the active pane; `pane:0` or `pane:1` makes a pane active, once XAML has raised that pane's GotFocus and drawn two frames more (it does so on its next frames, a few hundred milliseconds late on a busy machine, and a late event of the pane before made that pane the active one again); `select:<name>` selects a row; `selectall`; `menu:<name>` opens the context menu on a row, selecting it first as a right-click does (`menu:*` on the empty space, `menu:` on the focused row), as the keyboard opens it, under the row; `menu-at:<name>|<x>,<y>` opens it as a right-click at that point does, in the window's content DIPs (`menu-at:alpha.txt|300,200`); `shellmenu:<name>` does the same as Shift+right-click (Windows' own menu with `contextMenu.shellMenu` on) and waits until the core has answered and the menu has logged where it is (`until:windows-menu`, 20 s at most; the core's first answer took 1.6 s and, more than once, over its limit of 3 s beside test runs, and the step waited a fixed 1.5 s before; an answer of "took longer than 3 s" is asked for again, up to three times in all, as a user would), and `shellmenu-at:<name>|<x>,<y>` does it at a point; `menu-click:<title>` runs an entry of the open context menu, and `shellmenu-click:<text>` an item of Windows' menu (in a submenu too), as a click does; `menu-edit-key:<keys>` presses a key in the menu's edit mode as the window passes a real one (`alt+down`, `delete`, `insert`, `ctrl+s`, `escape`) and waits until the keyboard is on the row the key left the focus on, and two frames more, and `menu-edit-drag:<title>|<title>` drops the first row on the second through the drag's own steps (not the pointer's events), after it has laid the rows out (the last change built new ones, whose height XAML gives at its next frame); `rename:<text>` types into the rename box and presses Enter; `dismiss` closes a dialog; `type:<text>` types into the palette, or into the prompt in its frame when one is shown (the prompt's rows follow the text when XAML raises the box's text change, on its next frame; the step waits, 20 s at most, until they do); `accept` presses Enter in that prompt; `palette-burst:<rows>` opens the palette for the first time in the window and, in the same turn of the UI thread (before WinUI's first layout of the palette, while its list is not in the window's live tree yet), shows the core's whole list twice and moves the highlight that many rows down, as two answers and a key can on a busy machine, with a refresh that keeps the highlighted command asked for at the opening (the race of 2026-10-03, [log/2026-10-03/palette-highlight-race-report.md](log/2026-10-03/palette-highlight-race-report.md)); `palette-state:<label>` waits until the palette's highlighted row lies inside the list's visible part (5 s at most) and logs "palette state" (whether the palette is open, its rows, the highlight, whether the list is in the window's tree, whether the highlighted row is in view); `drive:<letter>` presses a drive's letter in the open drive list; `quick:<text>` types letters into the active pane's quick search; `search:<text>` types into the Search view's field (the pane shows the hits); `find:<text>` types into the active pane's find and waits, 300 ms at least and 20 s at most, until the filter is applied (the pane's find holds the text and the core's answer is in; XAML raises the box's text change on its next frame, which a busy machine draws 0.5 s late); `find-key:`, `quick-open:<text>`, `quick-open-key:` and `shell:<label>` drive and log the shell of Phase 16 ("The shell"); `quick-open:<text>` types into Quick Open (opening it) and waits, 500 ms at least and 20 s at most, until the core's answer for that text is shown (a text that starts with `>` ends the wait when Quick Open closes for the palette), and `quick-open-key:enter` and `quick-open-key:ctrl+enter` wait until the row's folder is listed in its pane and two frames more are drawn; `open:<name>` presses Enter on a row (a file may open in a Tool Extension); `terminal:<text>` types into the shown shell (`{enter}` is Enter); `terminal-state:<label>` writes "terminal state" into the log (the tabs as the header shows them, the shown session, whether the dock is shown, whether the terminal has the keyboard, the active pane and the caption, and with the split mirror each half's session and place beside the panes'; "The terminal"); `crash:terminal` or `crash:tool:<id>` ends that page's browser process; `dock:<pixels>` drags the dock's splitter to that size and saves it, as a drag does; `mode:light`, `mode:dark` or `mode:windows` makes the window take Windows as set to that mode (a `system` theme follows) without changing the PC's setting; `size:<width>x<height>` sizes the window's content in device-independent pixels, 800 ms after each attempt and then until the content has taken the new size (5 s at most); `fit:<pixels>` makes the window as high as gives the active pane's list that height; `theme:<id>` sets `ui.theme` as the picker does and waits until the theme is applied; `pick:<index>` puts the open theme picker's highlight on that row, as the pointer or a key moves it (its preview follows); `layout:<label>` writes "layout measured" into the log: each pane's list height, its whole rows, their height and the texts cut short, the function keys' widths, every corner radius over 3 px outside the overlays, the sizes the metrics set, and the keymap's fingerprint ("Metrics and chrome"); `click:<name>` presses the first shown button or menu item (of an open menu too) with that name as UI Automation reports it, waiting for one to be drawn when there is none yet (20 s at most: XAML builds the rows of the sidebar's lists and the items of a menu on its next frames, which a busy machine draws a few hundred milliseconds late), the way assistive technology may press it: the keyboard moves to it when the button takes the keyboard (the window's chrome buttons refuse it, as under a real click), then its automation peer invokes it, or toggles it for a check box (`click:Installed` shows the marketplace's Installed tab, `click:Skip` answers a conflict, `click:Folders in between` goes to the folder a pane's "…" crumb stands for, `click:Menu` opens the top row's menu); `focus:<label>` writes where the keyboard is into the log ("keyboard focus", with the label, the element's type, accessible name and `x:Name`, and the overlays that are open as `overlays`: their names, comma-separated, empty for none; "One overlay at a time" in [keybindings.md](keybindings.md)); `key:<keys>` presses keys the way a real press arrives: key messages to the window's input window, which WinUI routes as it routes a real key (the window's `PreviewKeyDown`, the focused control, Tab's move between controls, a dialog's buttons), with the modifiers down in the UI thread's key state while they are handled, so the window need not be in front and no key reaches another program (`key:tab`, `key:shift+delete`, `key:ctrl+k ctrl+t` for a chord's two halves); while a web page (a tool's, the terminal) has the keyboard, the key goes into the page itself, through DevTools' `Input.dispatchKeyEvent`, because the window's input window drops a key as the page's, and the page's script passes it back as it does a real one (a key that closes the page, Ctrl+W on a tool's tab, does not hold the step up); `tooltip:<name>` opens the tooltip of the first element with that accessible name, shown or not, as the end of a hover delay would, and logs whether it stayed open; `preview:rename` proposes the active folder's files as a preview to the core and shows it (`preview:make` makes one and does not show it), `preview-key:enter` and `preview-key:escape` press its two keys, `plugin-event:<name>|<payload>` is a plugin's event (`$PREVIEW` stands for the made preview), `drop:<pane>` drops the cursor row on that pane's tool page, and `fake-command:x` adds a plugin command with an `input` (`demo.ask`) to the command list; `tab:new`, `tab:close`, `tab:next`, `tab:previous`, `tab:lock`, `tab:folder`, `tab:move` or `tab:select <index>` runs that tab command as its key would; `tabs:<label>` writes each pane's row into the log ("tabs shown": the titles, the front one marked with `*`, and the row's height); `market:<label>` writes the marketplace's cards into the log ("marketplace cards": how many are made, the set's `total`, whether it is `complete`, its `slices`, and the items' `ids` in the grid's order, which the keyboard follows; "The marketplace"); `gallery:state:<label>` writes "gallery state" into the log (whether the gallery is open, the filter, the search text, how many tiles there are and how many are made, the selected theme and what its tile offers, the theme in effect, the theme previewed, the columns, the chips in order, the line under the toolbar, where the keyboard is, and the tiles' `ids` in order), `gallery:click:<id>` and `gallery:double:<id>` click and double-click that theme's tile as the pointer does, `gallery:filter:<name>` presses a chip and `gallery:search:<text>` types into the search field, each waiting 300 ms ("The theme gallery"); `scroll:<pages>` presses PageDown in the active pane 30 times a second, as a held key repeats, and `scroll:<pages>/<n>` once every n frames (with `CABINETOS_UI_FRAMESTATS=1` each writes its frame table, "Scrolling"); `rail:<id>` presses a rail button, `rail-move:<id>|<1 or -1>` moves it, `divider:<pixels>` drags the sidebar's divider to that width and lets go, `tree:<path>` opens that folder in the Explorer's tree, `rail-state:<label>` logs what the rail, the sidebar and the tree show (every rail step ends with 400 ms and two frames, and `rail-state:` waits two frames first: the sidebar's new width and the rows it draws are laid out on XAML's next frames), and `tree-state:<label>|<folder>` logs what the tree shows of one folder (whether it has a row, whether the row is a hidden folder's and how opaque its drawn name is, the names of the rows right under it, and the folder the tree marked) ("The activity rail and the sidebar"); `columns:<label>` logs each pane's four column widths as laid out, the width they share, the first row's widths and how far the grips are from the dividers ("columns shown"), `column-drag:<divider>|<pixels>` drags a grip of the active pane (1 Name|Modified, 2 Modified|Type, 3 Type|Size) by that many pixels through the grip's own drag steps and lets go, and `column-fit:<column>` fits as a double-click on that heading does (`name`, `modified`, `type` or `size`); the last two do not wait, so an `until:config` right after them sees the save ("Column widths"); `column-view:<label>` waits two frames and then until the view is drawn as the columns say (every column has a width and, with rows, has drawn some; the keyboard's column lies whole in the strip; 20 s at most) and logs what the active pane shows ("column view shown": the mode, the columns' folders and cursors, the keyboard's column, its rows, the rows each column has on screen and the listings), `column-open:<name>` opens that row of the keyboard's column as Enter does, `column-key:<key>` presses `left`, `right`, `up`, `down`, `home`, `end` or `backspace` in the active pane, and `column-click:<depth>|<name>` clicks that row of that column, 1 being the first ("The column view"); `until:running`, `until:conflict`, `until:terminal`, `until:search`, `until:tool`, `until:tree`, `until:menu`, `until:menu-placed`, `until:menu-closed`, `until:menu-edit`, `until:menu-edit-idle`, `until:menu-edit-closed`, `until:windows-menu`, `until:keyboard`, `until:workspace`, `until:market-prepared`, `until:market-complete`, `until:gallery-ready`, `until:gallery-preview`, `until:tabs-saved`, `until:kept-released`, `until:listing-drawn`, `until:menus-prepared`, `until:config` or `until:config-error` waits for a job, a shell, an answer, a tool page (a sidebar page too), the folder tree to mark the active pane's folder, the right-click menu to be on screen (a newer one no longer waiting for the one before it to close), to be on screen and to have logged where WinUI placed it ("context menu placed", some low-priority dispatcher turns after the menu is on screen, which a busy machine runs late) or to be gone, the menu's edit mode to be on screen, to have nothing in flight (no "Add Command…" prompt open for it and no save out) or to be gone, Windows' menu to be answered by the core and, when shown, to have logged where it is ("windows menu placed"), every check of a hand-over of the keyboard to a web page to have run ("The terminal"), the core's answers about the active folder's workspace (the branch of the sidebar's workspace row; `workspace_info`), the marketplace view to have been laid out ahead while the window was idle after start ("marketplace view prepared") and every card of its set to be made with "marketplace cards complete" logged ("The marketplace"), the theme gallery to be shown with its catalogue read (or not readable) and every tile made, a theme to be previewed on the window ("The theme gallery"), the tabs to be saved (what `ui.tabs` holds is what the window shows), no pane to keep a listing for a tab behind (its time was up: "Tabs"), every listing a pane bound to have had its first frame drawn (the line "listing shown" is logged at that frame, and a tab switch or a pick that comes before it replaces the pending line, which a busy machine, with a frame every few hundred milliseconds, makes a rule), the right-click menu's four shapes to be built ahead ("context menu prepared", while the window is idle after start), the next reading of the configuration (after an edit of the file; it counts reads from the step's start, so a read that came before the step began is not seen) or the core's next report of an error in the file; `until:pane-at:<folder>` waits until the active pane shows that folder (case and a trailing backslash do not count); `until:sidebar-page:<tool>` until that tool's sidebar page has started ("a sidebar page started"), `until:page-suspended:<tool>` until WebView2 has put it to sleep and `until:page-awake:<tool>` until it is awake; `until:sidebar-view:<id>` until the sidebar shows that view (a tool's view once the tools are read) and `until:rail-saved` until the rail's order, the sidebar's width and its view have been written to the core; `until:gallery-applied:<id>` until that theme is the theme in effect, `until:setting:layout=rail` (also `hidden=on`, `follow=off` and `shell-menu=on`, or the other value of each) until the window holds that value of the setting, which is what the file says once `config_changed` came ("Settings reachable three ways"), `until:shell-menu` waits until `contextMenu.shellMenu` is on in the configuration the window holds, `until:command:<id>` until the core's command list has that command (a program of the file, after the list is asked for again), and `until:file-menu-rows:<n>` until the file menu has n rows: they say what a test wrote or saved has been read, where `until:config` ends at any read, and the window reads the configuration for its own writes too (the tabs it saves a second after the last folder it opened); `until:terminals:<n>` waits for n terminal tabs, each with its byte pipe connected; `until:terminal-folder:<path>` waits until a session's prompt hook has reported that folder (`terminal_folder_changed`; case and a trailing backslash do not count); `until:terminal-restored` waits until the dock's first show has been dealt with (the saved sessions are back and their front tab is shown, or none came: "Restoring the tabs" in [terminal.md](terminal.md)); `header-click:<column>[|<pane>]`, `header-doubleclick:<column>[|<pane>]` and `sort-state:<label>` (the headings' sort: "A pane's order"), `pane-divider:<pixels>`, `pane-divider-reset`, `sidebar-divider-reset` and `pane-split:<label>` (the dividers: "The divider between the panes"), with `until:sorted`, `until:split-saved` and `until:pane-split:<share or none>`; `wait:<ms>`; `shot:<name>` writes `<name>.png`, open dialogs and menus included. Example: `pane:0;select:report.txt;cmd:file.copyToOtherPane;until:conflict;shot:conflict`. A step's text cannot contain `;`, since that ends the step. One quirk: a check box always shows a dash there, checked or not (the bitmap draws the first frame of WinUI's animated check mark). |
 
 ### Logs and crashes
 
@@ -982,7 +1004,8 @@ the registry does not list its command; they are then not in the palette.
 A few commands exist only in the UI, because they belong to a dialog or to
 a view's buttons (`RegisterLocal`): the plugins' `plugins.review` and
 `plugins.reload` (`{"id": …}`) and `plugins.grant`, the theme picker's
-`theme.apply`, and the marketplace's `market.refresh`, `market.select`,
+`theme.apply`, the theme gallery's `gallery.activate` and `gallery.remove`
+(`{"id": …}`), and the marketplace's `market.refresh`, `market.select`,
 `market.install`, `market.uninstall` and `market.source` (`{"id": …}`).
 They run through the router like the others, but they are not in the
 palette and cannot be rebound.
@@ -994,7 +1017,7 @@ search hit. From the context menu it gets the menu's rows
 
 | Command | In this version |
 |---|---|
-| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, Quick Open, the prompt, the theme picker, the plugin review, the plugin list, the marketplace (its detail column first), the context menu, Windows' menu and the top row's dropdowns, a rename, a quick search, a path row's text box, the rail layout's or the Search view's focus, the find widget, the search results, and last folds the transfer flyout into the pill. Opening an overlay closes the others, so at most one of the palette, Quick Open, the prompt, the theme picker and the plugin list is open (the order matters for the review over the list and for the rest; [keybindings.md](keybindings.md), "One overlay at a time") |
+| `palette.show`, `overlay.close` | Open and close the palette; Esc closes, in order, the palette, Quick Open, the prompt, the theme picker, the plugin review, the plugin list, the theme gallery (a previewed theme is painted back), the marketplace (its detail column first), the context menu, Windows' menu and the top row's dropdowns, a rename, a quick search, a path row's text box, the rail layout's or the Search view's focus, the find widget, the search results, and last folds the transfer flyout into the pill. Opening an overlay closes the others, so at most one of the palette, Quick Open, the prompt, the theme picker and the plugin list is open (the gallery and the Extensions page cover the panes: each closes the overlays as it opens, and the other of the two) (the order matters for the review over the list and for the rest; [keybindings.md](keybindings.md), "One overlay at a time") |
 | `search.focus` | Opens the active pane's find widget ("Find in pane") |
 | `quickOpen.show`, `menu.show`, `settings.open` | Quick Open, the top row's menu, and `cabinetos.json` in the editor ("The shell") |
 | `keys.open` | Opens the palette: it lists every command with its keys and edits them |
@@ -1003,7 +1026,9 @@ search hit. From the context menu it gets the menu's rows
 | `help.about` | The window's command (target `ui`): its handler shows About CabinetOS ("About", below). An older core that ran it itself answered `command_result`; the window shows the same view for that |
 | `file.copyToOtherPane`, `file.moveToOtherPane`, `file.newFolder` | Run in the window: a job, or a folder (see below) |
 | `view.toggleTerminal` | Shows the pane's session with the keyboard, gives the keyboard back to the pane, or hides the dock ("The terminal") |
-| `marketplace.browse`, `preferences.selectColorTheme` | Open the marketplace and the theme picker ("The marketplace", "Themes") |
+| `marketplace.browse`, `preferences.selectColorTheme`, `themes.browse` | Open the Extensions page, the theme picker and the theme gallery ("The marketplace", "Themes", "The theme gallery") |
+| `view.layoutClassic`, `view.layoutRight`, `view.layoutRail`, `view.cycleLayout` | Write `ui.layout` (`cycleLayout` goes classic, right, rail); the window follows the file ("Settings reachable three ways") |
+| `view.toggleHiddenFiles`, `sidebar.toggleFollow`, `menu.toggleShellMenu` | Flip `panes.showHidden`, `ui.sidebarAutoReveal` and `contextMenu.shellMenu`; the palette's row says on or off |
 | `go.root` to `terminal.insertSelectedPaths` | Total Commander's small commands, 31 of them, run in the window ("Total Commander's keys") |
 | `workspace.switch` | The sidebar's workspace dropdown ("The sidebar header"); its "Open folder as workspace…" says that workspaces arrive in a later version |
 | `terminal.runTask` | "arrives in a later version" in the status bar |
@@ -1681,9 +1706,12 @@ control and a drag anywhere else moves the window. Left to right:
 
 - **The menu** (the hamburger, `topRowButtonSize`, 36 px): `menu.show`.
   Its dropdown lists New Tab, New Folder, Find in Pane, Go to Path…,
-  Toggle Sidebar, the marketplace, Keyboard Shortcuts and Check for
-  Updates, each with the title and the first key the registry has now
-  (`ShellMenu`), so a rebinding shows at once. While an update waits for
+  Toggle Sidebar, then Layout (a submenu of the three layouts, the current
+  one checked), Show Hidden Files and Follow the Active Pane (each checked
+  while its setting is on; "Settings reachable three ways"), then the
+  Extensions page, Keyboard Shortcuts and Check for Updates, each with the
+  title and the first key the registry has now (`ShellMenu`), so a
+  rebinding shows at once. While an update waits for
   a restart, the button carries an accent dot, and Check for Updates
   becomes "Restart to Update (0.2.0)" with the same dot ("Updates").
 - **The app icon**, 16 px.
@@ -2155,8 +2183,8 @@ pane's three rows.
 
 ### Where the shell differs from the handout
 
-- **The hamburger's rows are the registry's titles:** "Browse Plugins and
-  Themes" and "Open Keyboard Shortcuts" where the handout says
+- **The hamburger's rows are the registry's titles:** "Browse Extensions"
+  and "Open Keyboard Shortcuts" where the handout says
   "Marketplace" and "Keyboard Shortcuts", so a rename in the registry shows
   in both places. Plugins cannot add rows yet: the registry has no mark
   for "in this menu", and the handout changes nothing in the plugin model.
@@ -3602,7 +3630,7 @@ the run's own tools folder. Real keys and the mouse then check:
 - the mouse on the Quick Notes button starts the tool's page once and shows
   it; Ctrl+Shift+F, Esc and Ctrl+Shift+E from the page reach the window, and
   the toggle key closes the sidebar and gives the keyboard to the pane;
-- the mouse on the Marketplace button opens it, and a second click closes it;
+- the mouse on the Extensions button opens the Extensions page, and a second click closes it;
   the mouse on the active Explorer button closes the sidebar;
 - Shift+Down on the Explorer button, focused through UI Automation as
   assistive technology does (a click leaves the keyboard in the pane), moves
@@ -3715,7 +3743,18 @@ elements apply the same way ("Metrics and chrome").
   had when it opened: a density preset previewed changes the rest of the
   window, but a row that shrank under the pointer would put another row
   under it. A `theme_changed` from elsewhere while the picker is open
-  becomes the theme in effect, and the check moves to it.
+  becomes the theme in effect, and the check moves to it. The last row,
+  "Browse more themes…", sits a little apart after the themes and opens the
+  theme gallery ("The theme gallery"): End puts the highlight on it, Enter
+  or a click runs `themes.browse`, and the picker closes with the theme in
+  effect painted again, since the gallery previews on its own. The row is no
+  theme: highlighting it paints the theme in effect, and applying it
+  applies nothing. Only a pointer that moves takes the highlight: XAML
+  replays the last pointer position as a move when rows are drawn under a
+  pointer that rests, and that put the highlight on the last row, under the
+  point of an earlier click, each time the picker opened (the live check on
+  the laptop, 2026-10-03). A row takes the highlight only for an event at a
+  place other than the one before it.
   The tints come with `list_themes` (protocol 11), so opening it is one
   request; with an older core every swatch shows plain Mica. An open
   picker draws its swatches again when Windows' accent or mode changes.
@@ -3961,16 +4000,22 @@ name ("The live check").
 
 ## The marketplace
 
-The marketplace view (design view C) lists the extensions of the index the
-core reads, and installs and removes them through the core.
+The Extensions page (design view C; the window calls it "Extensions" since
+Phase 23, and `marketplace.browse` keeps its ID) lists the plugins and tools
+of the extensions index the core reads, and installs and removes them
+through the core. Themes have their own catalogue and page ("The theme
+gallery"; [ADR 0022](decisions/0022-two-catalogues-extensions-and-themes.md)):
+this page shows none, and a theme item that an old index still carries is
+left out of it.
 [marketplace.md](marketplace.md) has the index format, the folders and the
 trust rules (Constitution Articles 2, 8 and 10). The core does every
 download, hash check and file operation; the view only asks and follows
 the core's events.
 
-- **Opening.** "Marketplace: Browse Plugins and Themes"
-  (`marketplace.browse`, Ctrl+Shift+X) or the top row's store button
-  puts the view in place of the main column. The sidebar and the status
+- **Opening.** "Marketplace: Browse Extensions"
+  (`marketplace.browse`, Ctrl+Shift+X) or the top row's button, whose
+  tooltip and name are "Extensions", puts the view in place of the main
+  column. The sidebar and the status
   bar stay, and the button turns to the accent colour. The same keys or
   button close the view.
 - **Reading the index.** The first look asks the core to read it
@@ -3978,28 +4023,29 @@ the core's events.
   `marketplace.index` changes in `cabinetos.json`, the next look reads the
   new index, or at once while the view is shown. The core goes to the
   network only for these requests (trust rule 6).
-- **The nav** (180 px): Discover (everything), Plugins (Core Plugins and
-  Tool Extensions, since both add function; the chip on each card tells
-  them apart), Themes, and Installed, each with its count. Installed lists
+- **The nav** (180 px, headed "Extensions"): Discover (everything),
+  Plugins (the Core Plugins, "WebAssembly, sandboxed"), Tools (the Tool
+  Extensions) and Installed, each with its count. Installed lists
   what the marketplace installed: the items that carry `installedVersion`
   (protocol 11), the core's record of its installs. A shipped theme or a
   plugin copied in by hand is not listed there.
-- **Search.** The field ("Search plugins and themes") sends
+- **Search.** The field ("Search extensions") sends
   `marketplace_search` once typing pauses for 150 ms. Only the newest
   text's hits show, best first, narrowed by the tab. The caption says
-  "{n} results · WebAssembly, sandboxed". An empty field shows the whole
+  "{n} results · WebAssembly, sandboxed" for plugins, "{n} results · Tool
+  Extensions" for tools, and both when the list has both. An empty field shows the whole
   index again without asking the core.
 - **Cards** (the design's grid: as many 230 px columns as fit, sharing the
   width, 10 px apart): the 40 px tile, the name with the verified check
   when the index says so, the author, two lines of description, the star
   rating and its count (or "No ratings"), the installs when the index
-  knows them, and the kind chip ("WASM plugin", "Theme", "Tool"). The top
+  knows them, and the kind chip ("WASM plugin" or "Tool"). The top
   right corner says "Installing 45%", "Update available", "Installed" or
   "Applied". "Installed" also marks an extension that is in its folder but
   did not come from the marketplace (`list_plugins`, `list_themes`,
   `list_tools`), because the core would refuse to install it (trust rule
-  7). The tile shows the first letters of the name on a colour: a theme's
-  own accent, else a colour taken from the ID. The core offers one item per
+  7). The tile shows the first letters of the name on a colour taken from the
+  ID. The core offers one item per
   extension, the newest version it can run (protocol 11), so the view shows
   the items as they come.
 - **Cards in parts** (since 2026-10-01, the speed review's proposal C). A
@@ -4061,8 +4107,7 @@ the core's events.
   tiles (rating, installs, download size), the long description, and for
   a plugin "Requested capabilities" with level dots and reasons (the core
   adds the levels). × or Esc closes it.
-- **The primary button** says "Install", or "Install and apply" for a
-  theme. While installing it says "Installing…", and a 2 px bar under the
+- **The primary button** says "Install". While installing it says "Installing…", and a 2 px bar under the
   words follows `install_progress`. Installed, it says "Installed", or
   "Applied" for the theme in effect, and is disabled.
 - **Updates.** When the offered version is newer than `installedVersion`
@@ -4092,8 +4137,9 @@ the core's events.
   installs every plugin waiting for review; this review counts as that
   review, so no second one opens. A plugin that asks for nothing installs
   without a review. Cancel or Esc installs nothing.
-- **Installing a theme** installs it and makes it the theme in effect
-  (`set_value ui.theme`); `theme_changed` then repaints the window.
+- **Installing a theme** is the gallery's, with the same flow: the core
+  installs it and `set_value ui.theme` makes it the theme in effect;
+  `theme_changed` then repaints the window.
 - **Installing a tool.** The window reads its tools again at
   `tools_changed`, so the new tool opens files at once. An editor whose
   tool was removed closes.
@@ -4115,7 +4161,8 @@ the core's events.
   opened, never a file or another scheme from an index. Without one, the
   button is disabled.
 - **Empty and error states** say what happened and what to do:
-  - "No marketplace index is set.", with the key `marketplace.index`;
+  - "No marketplace index is set.", with the key `marketplace.index` (the
+    themes have `marketplace.themes`, and a note of their own in the gallery);
   - "The marketplace index setting is stale.", for the old placeholder
     address (a host ending in `.invalid`) that a file written before the
     public index existed may hold, with the advice to remove the line so
@@ -4175,12 +4222,198 @@ chosen during the slices leaves only its cards; a screen's columns and
 rows) and `MarketplaceCardsEndToEndTests` (with `CABINETOS_UI_E2E=1`: a
 real window on a local index of 120 items logs its first screenful, then
 all 120 in the index's order, and Tab goes from a card to the next item's;
-the Themes tab clicked while Discover's slices are still to come leaves the
-40 themes only; the view is prepared after start, after the first folders
+the Plugins tab clicked while Discover's slices are still to come leaves the
+40 plugins only; the view is prepared after start, after the first folders
 and the menu shapes, before the marketplace's command and without asking
 the core for the index, and the first opening afterwards still logs its
 first screenful and then all 120 in order). `InputQuietTests`: the quiet
 second before the preparation, put off again by each key or pointer event.
+
+## The theme gallery
+
+The gallery (Phase 23, [ADR 0022](decisions/0022-two-catalogues-extensions-and-themes.md))
+shows the themes catalogue as colour tiles, each painted in the theme's own
+colours, so a theme is judged before it is installed. It takes the main
+column's place, as the Extensions page does; the sidebar and the status bar
+stay. The picker ("Themes") stays the quick way to switch between the themes
+you have; the gallery is where you look for more
+(Constitution Articles 3 and 8).
+
+- **Opening.** "Themes: Browse" in the palette (`themes.browse`, no key;
+  every command can be bound) and the last row of the picker, "Browse more
+  themes…", with Enter or a click. The view first closes what floats over the
+  panes or edits them (the palette, Quick Open, a prompt, a menu, a rename,
+  the Extensions page) and the picker, and paints the theme in effect again
+  if the picker was previewing. Another `themes.browse` while it is open puts
+  the keyboard on the tiles. The core goes to the network only now (trust
+  rule 6): `marketplace_refresh` with `catalogue: "themes"` reads the themes
+  catalogue (`marketplace.themes`; the cache, ETag and trust rules are the
+  index's), and `list_themes` reads the themes folder. Windows' mode, the
+  accent and the theme in effect are taken from the window.
+- **The toolbar.** The heading "Themes", the search field "Search themes"
+  (`marketplace_search` of the themes catalogue 150 ms after typing pauses;
+  an empty field shows the catalogue as it was read), the count of the tiles
+  shown, and the chips All, Dark, Light, System, Density presets and
+  Installed. All is chosen at each opening. The chip for the mode Windows is
+  in comes first among Dark and Light, and the chips swap places when the
+  mode changes. System is the themes of kind `system`; Density presets are
+  the themes that set the window's sizes (Commander Compact); Installed is
+  the themes in the themes folder, whoever put them there.
+- **The tiles.** The design's grid, `repeat(auto-fill, minmax(200px, 1fr))`
+  with a 10 px gap (`CardGrid`, the Extensions page's panel). A tile has
+  radius 8 and the design's Layer stroke, and is painted in the colours the
+  catalogue gives (`tile.background`, `tile.text`, `tile.accent`, [themes.md](themes.md),
+  "The gallery's tile"): three short rows in the text colour at 100, 60 and
+  35 % (the first with the accent's 3 × 16 px pill at its left, as a file
+  list), the name (weight 600), the author (11 px, 60 %), and the marks
+  "Dark", "Light" or "System", and "Compact" for a density preset. An
+  installed theme has a 13 px accent check at the top right; the theme in
+  effect has the check and the word "Applied". The selected tile has a 2 px
+  accent stroke; the tile under the pointer has a stroke of its text colour
+  at 18 %. A `system` theme is painted as Windows is now (the window's dark
+  or light colours, the accent the theme names or Windows'). An installed
+  theme the catalogue does not list, and every installed theme while the
+  catalogue cannot be read, has a tile painted from `list_themes` (its Mica
+  tint, text by its kind, its accent). The sizes are fixed: a density preset
+  that is previewed changes the window's metrics, and a gallery that sized
+  itself with them would put another tile under the pointer. The tiles are
+  made like the Extensions page's cards: the screenful at once, the rest in
+  slices at low priority, in the catalogue's order, which the keys follow.
+- **The preview.** The tile selected is painted on the whole window, through
+  the picker's path (`ThemeApplier.Preview`): colours, Mica, sizes and the
+  terminal. 80 ms after the selection rests on a tile, the gallery fetches
+  its theme: `get_theme` for an installed one, and for one that is not
+  installed `preview_theme` (protocol 20), which has the core download the
+  theme to a temporary file in the marketplace's own folder, check its
+  SHA-256 and that it is a theme, delete the file and send the theme back;
+  nothing reaches the themes folder or `cabinetos.json`, so both are as they
+  were. The core keeps the last 64 it sent. A reply for a tile the
+  selection has left is dropped. The status bar says "Previewing Nord · Esc
+  restores". The tile of the theme in effect paints it back with no request.
+  A preview that fails shows its reason in the line under the toolbar and
+  leaves the screen as it is.
+- **Keys** (Article 7). The keyboard is on the tiles when the gallery opens.
+  Left, Right, Up and Down move the selection across the grid (one row down
+  from the row above a short last row lands on its last tile; Up from the
+  first row stays); Home and End go to the first and the last tile; Enter
+  installs and applies the selected theme, or applies it when it is
+  installed, or installs its update; Delete removes an installed theme the
+  marketplace put there (after a question); Tab and Shift+Tab step through
+  the chips. Ctrl+F (whatever `search.focus` is bound to) and typing a
+  letter or digit go to the search field; Up, Down, Enter and Esc work from
+  it, and Left, Right, Home, End and Delete stay the caret's. Esc closes
+  the gallery and paints the theme in effect again if a preview is on
+  screen. A command that works on the panes closes it first, as for the
+  Extensions page, and so does a click on the rail's other views.
+- **The pointer.** A click selects (and previews) a tile; a double-click
+  installs and applies it, or applies it. The selected tile, and the one under
+  the pointer, show a button: "Install", "Apply" or "Update", and, for a theme
+  the marketplace installed, an overflow with "Remove". The core's own five
+  themes are installed already and have no Install. A click on a chip or a
+  tile keeps the keyboard on the view.
+- **Install and apply.** The install is the marketplace's: `install_extension`
+  finds the theme in the themes catalogue, downloads it with the progress the
+  card shows ("Installing 45%" in the tile's last row), checks the hash and
+  writes the file, and `ui.theme` is then set with `set_value`, so
+  `theme_changed` paints the window with the theme and the tile says
+  "Applied". The status bar says "Dracula is installed and applied.".
+  Apply is `set_value ui.theme` alone. Remove is `uninstall_extension`; the
+  core refuses the theme in effect, and the status bar says so. The gallery
+  stays open after an apply, so more themes can be tried.
+- **When the catalogue cannot be read** (no network, a wrong address, the
+  server down) the gallery shows the installed themes, and one line under the
+  toolbar says why ("Cannot read the themes catalogue. Showing the installed
+  themes."). Never a dialog.
+- **Settings it follows.** `marketplace.themes` changing in the file reads the
+  catalogue again at once while the gallery is shown. The core stopping closes
+  the gallery (a preview is painted back), and the next opening reads again.
+- **Logs.** Target `cabinetos_ui::theme`: "gallery shown", "gallery closed"
+  (`restored`), "gallery theme previewed" (the ID, and whether it is
+  installed), "gallery theme preview failed" (debug), "theme previewed" and
+  "theme restored" from the painting, "preview status shown" with the status
+  bar's text, "theme picker listed" with the picker's IDs, and "gallery
+  state" from the snapshot step.
+
+**Checks.** `ThemeGalleryTests` (Core, with a fake core): the filter chips and
+their order for each mode, the tiles' colours from the catalogue and for a
+`system` theme, the selection moving across a grid, the preview through
+`get_theme` and `preview_theme`, a preview dropped when the selection moved on,
+Enter's three actions, Remove, and the installed themes the catalogue does not
+list. `ThemePickerTests`: the browse row. `EndToEndTests` (against the real
+core and a local catalogue, no window): the 41 tiles, a preview that installs
+nothing, an install that applies, the picker listing the theme, the core
+refusing to remove the theme in effect, and Remove. `ThemeGalleryEndToEndTests`
+(with `CABINETOS_UI_E2E=1`, a real window): the Extensions page has no theme;
+the gallery opens from the picker's last row (End, Enter) and from the
+palette's row (typed), the keys move across the tiles (Home, Right, Down, End)
+and Esc paints the theme in effect again; Windows' mode puts Dark or Light
+first; a clicked tile is previewed and installs nothing; a double-click installs
+and applies a theme and the picker lists it; an unreachable catalogue shows the
+installed themes and one line.
+
+**The live check** (`ui/livecheck/livecheck.ps1`, the section "The theme
+gallery"): with real keys, the gallery opens from the picker's last row, a
+tile is previewed with the arrow keys (the status bar says so), Esc paints
+the theme in effect back, and one theme of the run's local catalogue is
+installed and applied. The section "The layouts": the layout is switched to
+the rail by its command and back to the classic one by the hamburger's Layout
+menu.
+
+## Settings reachable three ways
+
+The creator's rule of 2026-10-03: no preference exists only in the file. Every
+preference is a key of `cabinetos.json`, a command in the palette (which can be
+bound to keys) and a control in the window, and the three stay in step: a
+command and a control write the key with `set_value`, and the window shows the
+key the core announces with `config_changed`, so a change made any of the
+three ways is the same change (Constitution Articles 4, 6 and 7; the project
+skill `settings-three-ways`). Phase 23 closed the first four gaps of its audit.
+
+| Setting | Commands (palette) | Control in the window | File |
+|---|---|---|---|
+| `ui.layout` | "View: Classic Layout" (`view.layoutClassic`), "View: Terminal on the Right" (`view.layoutRight`), "View: Activity Rail" (`view.layoutRail`), and "View: Next Layout" (`view.cycleLayout`, Ctrl+K Ctrl+L) which goes classic, right, rail, classic | the hamburger's "Layout" row, a submenu of the three with the current one checked | `ui.layout`: `classic`, `right` or `rail` |
+| `panes.showHidden` | "View: Toggle Hidden Files" (`view.toggleHiddenFiles`, Ctrl+K Ctrl+H) | the hamburger's "Show Hidden Files" (checked while on) and the status bar's "hidden", which is there while it is on and turns it off when clicked | `panes.showHidden` |
+| `ui.sidebarAutoReveal` | "Sidebar: Follow the Active Pane" (`sidebar.toggleFollow`, no key) | the pin in the Explorer view's header (accent while the tree follows the pane; rail layout) and the hamburger's "Follow the Active Pane" (checked while on), which is the control in the other layouts | `ui.sidebarAutoReveal` |
+| `contextMenu.shellMenu` | "Menu: Toggle Windows' Shell Menu" (`menu.toggleShellMenu`, no key) | the last row of "Edit Menu…", a check box "Show Windows' own menu with Shift+right-click" | `contextMenu.shellMenu` |
+
+- **The window follows the file.** The layout, the listing, the pill, the
+  pin, the menu's checks and the edit mode's box are drawn from the
+  configuration the core last sent, at start and at each `config_changed`.
+  A hand edit of the file moves every one of them. A command asked twice
+  before the file's change comes back (Next Layout) goes one step on, not
+  twice to the same layout. A refusal (the core cannot write the file, or the
+  file has an error) shows in the status bar in red and changes nothing.
+- **The hamburger** shows the rows after Toggle Sidebar:
+  `New Tab | New Folder | Find in Pane | Go to Path… | Toggle Sidebar | Layout ›
+  | Show Hidden Files | Follow the Active Pane | Browse Extensions | Open
+  Keyboard Shortcuts | Check for Updates`. A row of a setting has a check mark's place in
+  front of its title; "Layout ›" shows its three rows in the menu's place
+  under a row that goes back, and a click on one runs its command and closes
+  the menu. A row whose command an older core does not list is left out
+  (`ShellMenu.Preferences`, tested).
+- **The palette's rows** say the state: "current" on the layout in effect,
+  "on" or "off" on a toggle, in the chip a plugin's name uses
+  (`SettingStates`, tested).
+- **Panes list again** when `panes.showHidden` changes: the window asks the
+  core for both listings again, as for the sort order.
+- **Logs.** Target `cabinetos_ui::settings`: "layout chosen" and "setting
+  toggled" (the key and the value) when a command wrote one. The snapshot
+  step `shell:<label>` ("shell state") adds `layout`, `layout_status`,
+  `rail_shown`, `hidden_pill`, `show_hidden`, `follow_pin`, `auto_reveal`,
+  `shell_menu`, `editor_shell_check` and `palette_states`, and the hamburger's
+  `menu` text marks a checked row with `[x]` and an unchecked one with `[ ]`
+  and lists the rows of a submenu in brackets.
+
+**Checks.** `ThreeWaysTests` (Core): the layouts and the cycle, the palette's
+marks, the hamburger's preference rows (the current layout checked, the keys,
+an older core). The registry test in `cabinetos-commands` (the new commands, their
+categories, titles and keys). `ThreeWaysEndToEndTests` (with `CABINETOS_UI_E2E=1`,
+a real window and core): each of the four settings is changed by its command,
+by its control and by an edit of the file, and the other two ways show it each
+time: the layout (the rail appears and goes, the status bar's layout, the
+menu's check), the hidden file's listing (1 entry, then 2) and the pill, the
+Explorer's pin and the menu's row (also in the classic layout), and the edit
+mode's box.
 
 ## Updates
 

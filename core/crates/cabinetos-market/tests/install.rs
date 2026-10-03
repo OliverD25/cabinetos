@@ -11,8 +11,8 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use cabinetos_market::{Dirs, Market, Source};
-use cabinetos_protocol::ErrorCode;
+use cabinetos_market::{Dirs, Index, Market, Source};
+use cabinetos_protocol::{Catalogue, ErrorCode, ThemeKind};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -778,4 +778,374 @@ fn the_agent_extension_installs_as_a_plugin_and_a_tool_from_the_repository_s_own
             "{name}"
         );
     }
+}
+
+// The two catalogues (Phase 23, ADR 0022): `index.json` for extensions and
+// `themes.json` for themes.
+
+/// A theme's catalogue item, with the gallery's keys; its download is not
+/// needed for reading the catalogue.
+fn theme_item(id: &str, appearance: &str, density: bool, accent: &str) -> Value {
+    json!({
+        "id": id,
+        "kind": "theme",
+        "name": id,
+        "author": {"name": "Tester", "verified": false},
+        "version": "1.0.0",
+        "description": "A test theme.",
+        "size": 10,
+        "download": {"url": format!("files/{id}-1.0.0.json"), "sha256": "0".repeat(64)},
+        "manifest": {"id": id},
+        "minCoreVersion": "0.1.0",
+        "license": "MIT",
+        "appearance": appearance,
+        "density": density,
+        "tile": {"background": "#202020", "text": "#FFFFFF", "accent": accent}
+    })
+}
+
+fn write_catalogue(dir: &Path, file: &str, items: &[Value]) {
+    let catalogue =
+        json!({"schemaVersion": 1, "generatedAt": "2026-10-03T00:00:00Z", "items": items});
+    fs::write(
+        dir.join(file),
+        serde_json::to_string_pretty(&catalogue).unwrap(),
+    )
+    .unwrap();
+}
+
+fn ids(index: &Index) -> Vec<&str> {
+    index.items.iter().map(|item| item.id.as_str()).collect()
+}
+
+/// `themes.json` wins: the theme items of `index.json` are not read, and
+/// the extensions' list has none of them either way.
+#[test]
+fn themes_json_wins_over_the_theme_items_of_the_index() {
+    let mut setup = Setup::new();
+    setup.offer_hello(&zip(&[("plugin.json", &fixture("plugin.json"))]));
+    setup
+        .items
+        .push(theme_item("old", "dark", false, "#111111"));
+    setup.write_index();
+    write_catalogue(
+        &setup.index_dir(),
+        "themes.json",
+        &[
+            theme_item("fresh", "light", false, "#0067C0"),
+            theme_item("compact", "system", true, "#60CDFF"),
+        ],
+    );
+    let market = setup.market();
+    let source = Source::Local(setup.index_dir());
+
+    // themes.json is there, so the index's address is never asked for.
+    let themes = market
+        .fetch_themes(&source, || panic!("the index is not needed"), false)
+        .unwrap();
+    assert_eq!(ids(&themes), ["fresh", "compact"]);
+    assert!(themes.source.ends_with("themes.json"), "{}", themes.source);
+    let fresh = &themes.items[0];
+    assert_eq!(fresh.appearance, Some(ThemeKind::Light));
+    assert_eq!(fresh.density, Some(false));
+    assert_eq!(fresh.tile.as_ref().unwrap().accent, "#0067C0");
+    assert_eq!(themes.items[1].density, Some(true));
+
+    let extensions = market
+        .fetch(&source, false)
+        .unwrap()
+        .only(Catalogue::Extensions);
+    assert_eq!(ids(&extensions), ["hello"]);
+}
+
+/// While `themes.json` is missing from a local folder, the theme items of
+/// `index.json` stand in for it, and their downloads still resolve next to
+/// the index.
+#[test]
+fn a_missing_themes_file_falls_back_to_the_theme_items_of_the_index() {
+    let mut setup = Setup::new();
+    setup.offer_hello(&zip(&[("plugin.json", &fixture("plugin.json"))]));
+    let mut paper: Value = serde_json::from_str(cabinetos_themes::SHIPPED[1].1).unwrap();
+    paper["id"] = json!("paper");
+    setup.offer(
+        "theme",
+        "paper",
+        "1.0.0",
+        &serde_json::to_vec(&paper).unwrap(),
+        &json!({"appearance": "light"}),
+    );
+    setup.write_index();
+    let market = setup.market();
+    let source = Source::Local(setup.index_dir());
+
+    let themes = market
+        .fetch_themes(&source, || Ok(source.clone()), false)
+        .unwrap();
+    assert_eq!(ids(&themes), ["paper"]);
+    assert!(themes.source.ends_with("index.json"), "{}", themes.source);
+    assert!(
+        themes.items[0].tile.is_none(),
+        "an old index has no tiles; the window paints a plain one"
+    );
+    // The fallback index still finds the download next to index.json.
+    let item = market.choose(&themes, "paper", None).unwrap();
+    market
+        .install(&themes, item, false, &check_plugin, &mut |_, _, _| {})
+        .unwrap();
+    assert!(setup.dirs().themes.join("paper.json").is_file());
+}
+
+/// The themes address may name a themes.json file or its folder.
+#[test]
+fn the_themes_address_may_be_a_file_or_a_folder() {
+    let setup = Setup::new();
+    write_catalogue(
+        &setup.index_dir(),
+        "themes.json",
+        &[theme_item("a", "dark", false, "#222222")],
+    );
+    write_catalogue(&setup.index_dir(), "index.json", &[]);
+    let market = setup.market();
+    let index = Source::Local(setup.index_dir());
+    for themes in [
+        Source::Local(setup.index_dir()),
+        Source::Local(setup.index_dir().join("themes.json")),
+    ] {
+        let found = market
+            .fetch_themes(&themes, || Ok(index.clone()), false)
+            .unwrap();
+        assert_eq!(ids(&found), ["a"]);
+    }
+}
+
+/// An item of another kind in `themes.json` is left out of the themes, and
+/// an item with a bad tile colour or an unknown appearance is left out with
+/// the rest staying.
+#[test]
+fn only_well_formed_theme_items_are_kept_from_the_themes_catalogue() {
+    let mut setup = Setup::new();
+    setup.offer_hello(&zip(&[("plugin.json", &fixture("plugin.json"))]));
+    let hello = setup.items[0].clone();
+    setup.write_index();
+    let mut bad_tile = theme_item("bad-tile", "dark", false, "#222222");
+    bad_tile["tile"]["text"] = json!("white");
+    let mut bad_appearance = theme_item("bad-appearance", "dark", false, "#222222");
+    bad_appearance["appearance"] = json!("sepia");
+    write_catalogue(
+        &setup.index_dir(),
+        "themes.json",
+        &[
+            theme_item("good", "dark", false, "#222222"),
+            bad_tile,
+            bad_appearance,
+            hello,
+        ],
+    );
+    let market = setup.market();
+    let source = Source::Local(setup.index_dir());
+    let themes = market
+        .fetch_themes(&source, || Ok(source.clone()), false)
+        .unwrap();
+    assert_eq!(ids(&themes), ["good"]);
+}
+
+/// A themes.json that is there but damaged is an error: the fallback is for
+/// a file that is missing, not for one that cannot be read.
+#[test]
+fn a_damaged_themes_file_is_an_error_not_a_fallback() {
+    let mut setup = Setup::new();
+    setup.offer("theme", "paper", "1.0.0", b"{}", &json!({}));
+    setup.write_index();
+    fs::write(setup.index_dir().join("themes.json"), "{ not json").unwrap();
+    let source = Source::Local(setup.index_dir());
+    let error = setup
+        .market()
+        .fetch_themes(&source, || Ok(source.clone()), false)
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::MarketplaceError);
+    assert!(error.message.contains("the themes catalogue"), "{error}");
+}
+
+/// On the web: a 404 for themes.json falls back to the index, then once
+/// the site has the file it is read, kept in the cache under its own
+/// names, and answered with a 304 the next time.
+#[test]
+fn a_web_themes_catalogue_falls_back_on_a_404_and_is_cached_by_its_tag() {
+    let mut setup = Setup::new();
+    setup.offer("theme", "paper", "1.0.0", b"{}", &json!({}));
+    setup.write_index();
+    let index_bytes = fs::read(setup.index_dir().join("index.json")).unwrap();
+    write_catalogue(
+        &setup.index_dir(),
+        "themes.json",
+        &[theme_item("fresh", "dark", false, "#222222")],
+    );
+    let themes_bytes = fs::read(setup.index_dir().join("themes.json")).unwrap();
+
+    // Before the site has themes.json: its path answers 404.
+    let (port, seen) = serve(
+        BTreeMap::from([("/market/index.json".to_owned(), index_bytes.clone())]),
+        2,
+    );
+    let index = Source::parse(&format!("http://127.0.0.1:{port}/market/index.json"), true).unwrap();
+    let themes =
+        Source::parse(&format!("http://127.0.0.1:{port}/market/themes.json"), true).unwrap();
+    let market = setup.market();
+    let fallback = market
+        .fetch_themes(&themes, || Ok(index.clone()), true)
+        .unwrap();
+    assert_eq!(ids(&fallback), ["paper"]);
+    {
+        let seen = seen.lock().unwrap();
+        assert!(
+            seen[0].starts_with("GET /market/themes.json"),
+            "{}",
+            seen[0]
+        );
+        assert!(seen[1].starts_with("GET /market/index.json"), "{}", seen[1]);
+    }
+    let cache = setup.dirs().market;
+    assert!(!cache.join("themes.json").exists(), "a 404 caches nothing");
+
+    // After the site publishes it.
+    let (port, seen) = serve(
+        BTreeMap::from([
+            ("/market/index.json".to_owned(), index_bytes),
+            ("/market/themes.json".to_owned(), themes_bytes),
+        ]),
+        2,
+    );
+    let index = Source::parse(&format!("http://127.0.0.1:{port}/market/index.json"), true).unwrap();
+    let themes =
+        Source::parse(&format!("http://127.0.0.1:{port}/market/themes.json"), true).unwrap();
+    let first = market
+        .fetch_themes(&themes, || Ok(index.clone()), true)
+        .unwrap();
+    assert_eq!(ids(&first), ["fresh"]);
+    assert!(cache.join("themes.json").is_file());
+    let meta: Value =
+        serde_json::from_slice(&fs::read(cache.join("themes.meta.json")).unwrap()).unwrap();
+    assert_eq!(meta["etag"], "\"v1\"");
+    let second = market
+        .fetch_themes(&themes, || Ok(index.clone()), true)
+        .unwrap();
+    assert_eq!(second.items, first.items);
+    let seen = seen.lock().unwrap();
+    assert!(!seen[0].to_ascii_lowercase().contains("if-none-match"));
+    assert!(
+        seen[1]
+            .to_ascii_lowercase()
+            .contains("if-none-match: \"v1\"")
+    );
+}
+
+/// A themes server that cannot be reached is an error, not a reason to use
+/// the index: only a 404 means "not published yet".
+#[test]
+fn an_unreachable_themes_server_is_an_error() {
+    let mut setup = Setup::new();
+    setup.offer("theme", "paper", "1.0.0", b"{}", &json!({}));
+    setup.write_index();
+    // A port that nothing listens on.
+    let closed = {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let themes = Source::parse(&format!("http://127.0.0.1:{closed}/themes.json"), true).unwrap();
+    let index = Source::Local(setup.index_dir());
+    let error = setup
+        .market()
+        .fetch_themes(&themes, || Ok(index.clone()), true)
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::MarketplaceError);
+    assert!(
+        error.message.contains("cannot fetch the themes catalogue"),
+        "{error}"
+    );
+}
+
+/// The extensions' index is not allowed to be missing: a 404 for it is an
+/// error that names the index.
+#[test]
+fn a_missing_index_is_still_an_error() {
+    let setup = Setup::new();
+    let (port, _seen) = serve(BTreeMap::new(), 1);
+    let source = Source::parse(&format!("http://127.0.0.1:{port}/index.json"), true).unwrap();
+    let error = setup.market().fetch(&source, true).unwrap_err();
+    assert!(
+        error.message.contains("404") && error.message.contains("the index"),
+        "{error}"
+    );
+}
+
+/// A theme is read for a preview without being installed: nothing lands in
+/// the themes folder or the record, the download is checked, and the
+/// preview's file is gone afterwards.
+#[test]
+fn a_theme_is_previewed_without_being_installed() {
+    let mut setup = Setup::new();
+    let mut paper: Value = serde_json::from_str(cabinetos_themes::SHIPPED[1].1).unwrap();
+    paper["id"] = json!("paper");
+    paper["version"] = json!("1.0.0");
+    setup.offer(
+        "theme",
+        "paper",
+        "1.0.0",
+        &serde_json::to_vec(&paper).unwrap(),
+        &json!({}),
+    );
+    setup.offer_hello(&zip(&[("plugin.json", &fixture("plugin.json"))]));
+    setup.write_index();
+    let market = setup.market();
+    let index = market
+        .fetch(&Source::Local(setup.index_dir()), false)
+        .unwrap();
+
+    let item = market.choose(&index, "paper", None).unwrap();
+    let theme = market.preview_theme(&index, item, false).unwrap();
+    assert_eq!(
+        (theme.id.as_str(), theme.version.as_str()),
+        ("paper", "1.0.0")
+    );
+    assert!(!setup.dirs().themes.exists(), "nothing is installed");
+    assert!(market.installed().is_empty());
+    assert!(
+        files_under(&setup.dirs().market.join("previews")).is_empty(),
+        "the preview's file is deleted"
+    );
+
+    // Only a theme can be previewed.
+    let hello = market.choose(&index, "hello", None).unwrap();
+    let error = market.preview_theme(&index, hello, false).unwrap_err();
+    assert!(error.message.contains("not a theme"), "{error}");
+}
+
+/// A preview checks the download as an install does: a theme file that is
+/// not the one the catalogue hashed is refused.
+#[test]
+fn a_preview_with_the_wrong_hash_is_refused() {
+    let mut setup = Setup::new();
+    let mut paper: Value = serde_json::from_str(cabinetos_themes::SHIPPED[1].1).unwrap();
+    paper["id"] = json!("paper");
+    paper["version"] = json!("1.0.0");
+    setup.offer(
+        "theme",
+        "paper",
+        "1.0.0",
+        &serde_json::to_vec(&paper).unwrap(),
+        &json!({}),
+    );
+    setup.items[0]["download"]["sha256"] = json!("0".repeat(64));
+    setup.write_index();
+    let market = setup.market();
+    let index = market
+        .fetch(&Source::Local(setup.index_dir()), false)
+        .unwrap();
+    let item = market.choose(&index, "paper", None).unwrap();
+    let error = market.preview_theme(&index, item, false).unwrap_err();
+    assert_eq!(error.code, ErrorCode::HashMismatch);
+    assert!(
+        files_under(&setup.dirs().market.join("previews")).is_empty(),
+        "a refused download is deleted"
+    );
 }

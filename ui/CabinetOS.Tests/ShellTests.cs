@@ -157,7 +157,7 @@ public class ShellTests
         {
             Command("keys.open", "Open Keyboard Shortcuts", "ctrl+k ctrl+s"),
             Command("tab.new", "New Tab", "ctrl+t"),
-            Command("marketplace.browse", "Browse Plugins and Themes", "ctrl+shift+x"),
+            Command("marketplace.browse", "Browse Extensions", "ctrl+shift+x"),
             Command("file.newFolder", "New Folder", "f7"),
             // Rebound by the user: the menu shows the key in effect.
             Command("search.focus", "Find in Pane", "ctrl+alt+f", "alt+f7"),
@@ -169,7 +169,7 @@ public class ShellTests
         var menu = ShellMenu.Build(registry);
 
         Assert.Equal(["tab.new", "file.newFolder", "search.focus", "go.toPath", "view.toggleSidebar", "marketplace.browse", "keys.open"], menu.Select(m => m.CommandId));
-        Assert.Equal(["New Tab", "New Folder", "Find in Pane", "Go to Path\u2026", "Toggle Sidebar", "Browse Plugins and Themes", "Open Keyboard Shortcuts"], menu.Select(m => m.Title));
+        Assert.Equal(["New Tab", "New Folder", "Find in Pane", "Go to Path\u2026", "Toggle Sidebar", "Browse Extensions", "Open Keyboard Shortcuts"], menu.Select(m => m.Title));
         Assert.Equal(["Ctrl+T", "F7", "Ctrl+Alt+F", "Ctrl+L", "Ctrl+B", "Ctrl+Shift+X", "Ctrl+K Ctrl+S"], menu.Select(m => m.Keys));
         // An older core without one of them: the menu leaves it out.
         Assert.Equal(6, ShellMenu.Build(registry.Where(c => c.Id != "go.toPath")).Count);

@@ -13,7 +13,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <Product>CabinetOS</Product>
     <Copyright>Copyright (c) 2026 the CabinetOS authors. MIT license.</Copyright>
   </PropertyGroup>

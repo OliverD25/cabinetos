@@ -298,7 +298,10 @@ async fn two_installs_at_once_keep_both_in_the_record() {
     two_themes_index(&index);
     fs::write(
         shared.config(),
-        json!({"marketplace": {"index": index.display().to_string()}}).to_string(),
+        // The same folder for the themes: it has no themes.json, so the
+        // index's theme items stand in (ADR 0022) and nothing is fetched
+        // from the public site.
+        json!({"marketplace": {"index": index.display().to_string(), "themes": index.display().to_string()}}).to_string(),
     )
     .unwrap();
     let (a, b) = (start(&shared, None), start(&shared, None));

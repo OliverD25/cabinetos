@@ -209,9 +209,16 @@ public sealed partial class MainWindow
             return;
         }
         // While an update waits, Check for Updates gives its place to Restart to Update with a dot (Phase 17).
-        var items = ShellMenu.Build(_router.Commands, _update.WaitingVersion)
-            .Select(item => new MenuEntry(MenuEntryKind.Item, item.Title, MenuGlyph(item.CommandId), item.CommandId, Keys: item.Keys, Dot: item.Dot))
-            .ToList();
+        var items = new List<MenuEntry>();
+        foreach (var item in ShellMenu.Build(_router.Commands, _update.WaitingVersion))
+        {
+            items.Add(new MenuEntry(MenuEntryKind.Item, item.Title, MenuGlyph(item.CommandId), item.CommandId, Keys: item.Keys, Dot: item.Dot));
+            if (item.CommandId == "view.toggleSidebar")
+            {
+                // The preferences that were in the file only (Phase 23): Layout, Show Hidden Files, Follow the Active Pane.
+                items.AddRange(PreferenceEntries());
+            }
+        }
         FileMenu.Show(Below(MenuButton), [], items, fromKeyboard, WindowMetrics.Current.DropdownRowHeight);
         Diag.Info(ShellTarget, "menu shown", new LogField("items", items.Count));
     }
@@ -494,6 +501,17 @@ public sealed partial class MainWindow
             new("update_pill", UpdatePill.Visibility == Visibility.Visible ? UpdatePillText.Text : ""),
             new("update_dot", MenuUpdateDot.Visibility == Visibility.Visible),
             new("update_notice", UpdateNotice.Visibility == Visibility.Visible ? UpdateNoticeText.Text : ""),
+            // The four settings that are reachable three ways (Phase 23): what each control shows now.
+            new("layout", _settings.Layout),
+            new("layout_status", LayoutText.Text),
+            new("rail_shown", Rail.Visibility == Visibility.Visible),
+            new("hidden_pill", HiddenPill.Visibility == Visibility.Visible),
+            new("show_hidden", _settings.ShowHidden),
+            new("follow_pin", SidebarView.Tree.FollowsActivePane),
+            new("auto_reveal", _settings.SidebarAutoReveal),
+            new("shell_menu", _menuConfig.ShellMenu),
+            new("editor_shell_check", MenuEditorView.ShellMenuChecked),
+            new("palette_states", string.Join("|", _palette.Rows.Select(r => r.StateText is { } state ? $"{r.Info.Id}={state}" : "").Where(s => s.Length > 0))),
         };
         for (var i = 0; i < _panes.Length; i++)
         {

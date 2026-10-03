@@ -217,6 +217,29 @@ public static class Diag
         Log(LogLevel.Error, target, message, fields: fields);
 
     /// <summary>
+    /// Watches a task that nobody awaits: if it fails, an ERROR line says at once what failed
+    /// (<paramref name="message"/>, the place) and how (the exception with its stack). Without it the
+    /// failure came out only when the garbage collector finalized the task, as "a background task failed
+    /// and nobody observed it", without the place, and not at all when the window closed first.
+    /// </summary>
+    public static void Observe(Task task, string target, string message, params LogField[] fields)
+    {
+        if (task.IsCompletedSuccessfully)
+        {
+            return;
+        }
+        _ = task.ContinueWith(
+            failed =>
+            {
+                var error = failed.Exception!;
+                Error(target, message, [.. fields, new LogField("error", (error.InnerExceptions.Count == 1 ? error.InnerException! : error).ToString())]);
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
     /// Logs an event that belongs to a request, in the span <c>request</c>, so
     /// its <c>request_id</c> leads to the core's lines for the same request.
     /// </summary>

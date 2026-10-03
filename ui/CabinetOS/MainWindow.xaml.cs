@@ -11,6 +11,7 @@ using CabinetOS.Core.Ipc;
 using CabinetOS.Core.Jobs;
 using CabinetOS.Core.Keys;
 using CabinetOS.Core.Listing;
+using CabinetOS.Core.Market;
 using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Core.Protocol;
@@ -162,7 +163,9 @@ public sealed partial class MainWindow : Window
         SetUpQuickOpen();
         SetUpPreview();
         SetUpMarket();
+        SetUpGallery();
         SetUpRail();
+        SetUpThreeWays();
         SetUpColumns();
         SetUpHeaderSort();
         SetUpPaneSplit();
@@ -534,6 +537,12 @@ public sealed partial class MainWindow : Window
                 case "quick-open" or "quick-open-key":
                     await RunQuickOpenStepAsync(step.Kind, step.Argument);
                     break;
+                case "palette-burst" when int.TryParse(step.Argument, out var paletteRows):
+                    await RunPaletteBurstStepAsync(paletteRows);
+                    break;
+                case "palette-state":
+                    await LogPaletteStateAsync(step.Argument);
+                    break;
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
                     break;
@@ -583,6 +592,9 @@ public sealed partial class MainWindow : Window
                     break;
                 case "market":
                     MarketView.LogCardsForSnapshot(step.Argument);
+                    break;
+                case "gallery":
+                    await RunGalleryStepAsync(step.Argument);
                     break;
                 case "preview" or "preview-key" or "plugin-event" or "drop" or "fake-command":
                     await RunPreviewStepAsync(step.Kind, step.Argument);
@@ -779,6 +791,15 @@ public sealed partial class MainWindow : Window
                 invoke.Invoke();
                 return true;
             }
+            // A check box or a toggle has no Invoke: assistive technology toggles it.
+            if (element is Microsoft.UI.Xaml.Controls.Primitives.ToggleButton toggleButton
+                && Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(toggleButton) is { } togglePeer
+                && togglePeer.GetName() == name
+                && togglePeer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Toggle) is Microsoft.UI.Xaml.Automation.Provider.IToggleProvider toggle)
+            {
+                toggle.Toggle();
+                return true;
+            }
             for (var i = VisualTreeHelper.GetChildrenCount(element) - 1; i >= 0; i--)
             {
                 pending.Push(VisualTreeHelper.GetChild(element, i));
@@ -955,6 +976,14 @@ public sealed partial class MainWindow : Window
                 // that), and: every card of its set is made and "marketplace cards complete" is logged.
                 "market-prepared" => MarketView.WasPreparedAhead,
                 "market-complete" => MarketView.CardsComplete,
+                // The gallery is shown, its catalogue is read (or could not be) and every tile is made; gallery-preview: a tile's theme is
+                // painted on the window as a preview (the status bar says so).
+                "gallery-ready" => GalleryView.IsOpen && _gallery.Market.Status is not (MarketStatus.Idle or MarketStatus.Loading) && GalleryView.TilesComplete,
+                "gallery-preview" => _gallery.IsPreviewShown,
+                // setting:<name>=<value>: the window holds that setting's value (layout=rail, hidden=on, follow=off, shell-menu=on), which
+                // is what the file says once config_changed came; the control that shows it is drawn by the same turn.
+                _ when condition.StartsWith("setting:", StringComparison.Ordinal) => SettingIs(condition["setting:".Length..]),
+                _ when condition.StartsWith("gallery-applied:", StringComparison.Ordinal) => _gallery.CurrentThemeId == condition["gallery-applied:".Length..],
                 _ => true,
             };
             if (met)
@@ -1140,6 +1169,12 @@ public sealed partial class MainWindow : Window
             }
         }
         UpdateLayoutText();
+        UpdateHiddenPill();
+        if (settings.Layout != previous.Layout || Layouts.Normalize(_layoutWanted) == Layouts.Normalize(settings.Layout))
+        {
+            // The file shows the layout a command asked for (or another): the next Next Layout starts from it.
+            _layoutWanted = null;
+        }
         if (firstStart || settings.Layout != previous.Layout)
         {
             ApplyDockPlacement(DockLayout.PlacementFor(settings.Layout));
@@ -1247,6 +1282,7 @@ public sealed partial class MainWindow : Window
                 if (changed.Changed.Any(key => key.StartsWith("marketplace", StringComparison.Ordinal)))
                 {
                     OnMarketIndexChanged();
+                    OnThemesCatalogueChanged();
                 }
                 _ = ReadConfigSafelyAsync();
                 break;
@@ -1264,6 +1300,7 @@ public sealed partial class MainWindow : Window
                 {
                     _picker.MarkCurrent(changed.Theme.Id);
                 }
+                _gallery.OnEvent(coreEvent);
                 return;
             case VolumesChangedEvent volumes:
                 // A USB stick or a mapped share came or went: the Drives section follows.
@@ -1290,6 +1327,7 @@ public sealed partial class MainWindow : Window
                 return;
             case InstallProgressEvent or InstallFinishedEvent:
                 _market.OnEvent(coreEvent);
+                _gallery.OnEvent(coreEvent);
                 return;
             case ToolsChangedEvent:
                 _market.OnEvent(coreEvent);
@@ -1306,7 +1344,8 @@ public sealed partial class MainWindow : Window
                 OnUpdateEvent(coreEvent);
                 return;
         }
-        _ = RefreshCommandsAsync(coreEvent);
+        Diag.Observe(RefreshCommandsAsync(coreEvent), Target, "refreshing the commands after a core event failed",
+            new LogField("event", coreEvent.GetType().Name));
     }
 
     private void OnJobEvent(CoreEvent coreEvent)
@@ -1369,7 +1408,10 @@ public sealed partial class MainWindow : Window
         _pluginsUnavailable = false;
         ReviewView.Close();
         PluginsView.Close();
-        // Its downloads ended with it; a shown marketplace reads the index again once it runs.
+        // Its downloads ended with it; a shown marketplace reads the index again once it runs. The gallery closes: a theme
+        // it previewed is painted back, and its next opening reads the catalogue again.
+        CloseGallery(restore: true, focusPane: false);
+        _gallery.Reset();
         _market.Reset();
         _marketRead = false;
         if (_restarts.Count >= 3)
@@ -1632,6 +1674,8 @@ public sealed partial class MainWindow : Window
         RegisterPluginCommands();
         RegisterToolCommands();
         RegisterThemeCommands();
+        RegisterGalleryCommands();
+        RegisterThreeWaysCommands();
         RegisterMarketCommands();
         RegisterRailCommands();
         RegisterColumnCommands();
@@ -1809,6 +1853,55 @@ public sealed partial class MainWindow : Window
         FocusActivePane();
     }
 
+    // The snapshot aid's palette-burst:<rows> step, the race of 2026-10-03 (docs/log/2026-10-03/palette-highlight-race-report.md):
+    // the palette's first showing in the window gets the core's whole list twice and its highlight moves <rows> down, all in one
+    // turn of the UI thread, before WinUI's first layout of the palette, as two answers and a key did on a busy machine. The
+    // refresh asked for at the opening keeps the highlighted command; it replaces the opening's own search, which would put the
+    // highlight back on the first row. A failure is logged as an error, so the steps go on and the test names it.
+    private async Task RunPaletteBurstStepAsync(int rows)
+    {
+        if (await _session.RequestAsync(new SearchCommandsRequest("", 1000)) is not SearchResultsReply results)
+        {
+            Diag.Info("cabinetos_ui::snapshot", "no list of commands for the palette step");
+            return;
+        }
+        OpenPalette();
+        var refresh = _palette.RefreshAsync();
+        try
+        {
+            _palette.Show(results, keepHighlight: false);
+            _palette.Show(results, keepHighlight: true);
+            _palette.MoveHighlight(rows);
+        }
+        catch (COMException error)
+        {
+            Diag.Error("cabinetos_ui::snapshot", "the palette step failed", new LogField("error", error.ToString()));
+        }
+        try
+        {
+            await refresh;
+        }
+        catch (COMException error)
+        {
+            Diag.Error("cabinetos_ui::snapshot", "the palette step's refresh failed", new LogField("error", error.ToString()));
+        }
+    }
+
+    // The snapshot aid's palette-state:<label> step: waits until the palette's highlighted row is laid out inside the list's
+    // visible part (5 s at most) and two frames more, then logs "palette state".
+    private async Task LogPaletteStateAsync(string label)
+    {
+        await WaitForConditionAsync(() => Palette.HighlightState().HighlightShown, 5_000);
+        await SettleFramesAsync();
+        var look = Palette.HighlightState();
+        Diag.Info("cabinetos_ui::snapshot", "palette state", new LogField("label", label), new LogField("open", _palette.IsOpen),
+            new LogField("rows", _palette.Rows.Count), new LogField("highlight", _palette.HighlightIndex),
+            new LogField("list_loaded", look.ListLoaded), new LogField("highlight_shown", look.HighlightShown),
+            new LogField("row_top", double.IsNaN(look.RowTop) ? null : Math.Round(look.RowTop, 2)),
+            new LogField("row_bottom", double.IsNaN(look.RowBottom) ? null : Math.Round(look.RowBottom, 2)),
+            new LogField("viewport", Math.Round(look.Viewport, 2)), new LogField("offset", Math.Round(look.Offset, 2)));
+    }
+
     // Esc: the palette, then the context menu, then an edit in place, then the address box
     // (the design's order), then the search results (back to the folder). The plugin review
     // and the plugin list come right after the palette: they cover the window. Last, an open
@@ -1843,6 +1936,11 @@ public sealed partial class MainWindow : Window
         else if (PluginsView.IsOpen)
         {
             ClosePlugins();
+        }
+        else if (GalleryView.IsOpen)
+        {
+            // A theme that is previewed is painted back by the close.
+            CloseGallery(restore: true, focusPane: true);
         }
         else if (MarketView.IsOpen)
         {
@@ -2668,6 +2766,11 @@ public sealed partial class MainWindow : Window
         }
         switch (_keys.OnKey(combo, CurrentContexts(), e.KeyStatus.WasKeyDown))
         {
+            case KeyOutcome.Run { Command: "search.focus" } when GalleryView.IsOpen:
+                // The key that searches (Ctrl+F) goes to the gallery's search field, not to the Search view behind it.
+                e.Handled = true;
+                GalleryView.FocusSearch();
+                break;
             case KeyOutcome.Run run:
                 e.Handled = true;
                 _ = _router.ExecuteAsync(run.Command, KeyArguments(run.Command, run.Keys), "key", TakeKeyTrace());
