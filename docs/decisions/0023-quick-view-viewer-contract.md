@@ -302,7 +302,10 @@ window decides where each key goes, in this order:
 So **the panel wins**, always. A page may ask only for keys from this set,
 each alone or with Shift: Left, Right, PageUp, PageDown, Home, End, the
 letters A to Z, the digits 0 to 9 of the top row, `plus`, `minus`, `comma`,
-`period`. The window grants a key from the set unless the keymap binds it in
+`period`. (Added at the window's merge, 2026-10-03: the core's key grammar
+has no `plus`, so the window maps it to the grammar's `equal`, Windows'
+VK_OEM_PLUS, the key that carries the plus sign, and sends its presses back
+to the page as `plus`.) The window grants a key from the set unless the keymap binds it in
 `filesView` or everywhere, or it starts a chord bound in either. Space, Esc,
 Enter, Up, Down, Tab and every combination with Ctrl, Alt or Win can never
 be granted. A video viewer therefore pauses with K and seeks with J and L
