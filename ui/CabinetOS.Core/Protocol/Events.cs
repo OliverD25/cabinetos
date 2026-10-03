@@ -149,6 +149,9 @@ public sealed record InstallFinishedEvent(string ExtensionId, bool Ok, string Me
 /// <summary>A Tool Extension was installed or removed; the list is what <c>list_tools</c> would answer now.</summary>
 public sealed record ToolsChangedEvent(IReadOnlyList<ToolInfo> Tools) : CoreEvent;
 
+/// <summary>The Quick View table changed (protocol 21): a tool came or went, or <c>quickView.viewers</c> changed. The whole table.</summary>
+public sealed record QuickViewTableChangedEvent(IReadOnlyList<QuickViewer> Viewers, IReadOnlyList<QuickViewKind> Kinds) : CoreEvent;
+
 /// <summary>How far a measure of one path has come (version 12): at most 30 a second.</summary>
 public sealed record MeasureProgressEvent(ulong MeasureId, string Path, ulong Files, ulong Folders, ulong Bytes) : CoreEvent;
 

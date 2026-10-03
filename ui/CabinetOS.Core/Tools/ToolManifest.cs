@@ -32,8 +32,10 @@ public sealed partial record ToolManifest(
     /// <summary>A tool for the Tool Dock; this version opens it in a pane too.</summary>
     public const string InDock = "dock";
 
+    // "quickView" makes the tool a Quick View viewer (ADR 0023). The core checks that block and the window starts viewers from
+    // the core's table, never from this file, so here it is only a known key: a viewer's pane use must not be refused for it.
     private static readonly FrozenSet<string> Keys = FrozenSet.ToFrozenSet(
-        ["id", "name", "version", "author", "description", "entry", "accepts", "placement", "sidebar"], StringComparer.Ordinal);
+        ["id", "name", "version", "author", "description", "entry", "accepts", "placement", "sidebar", "quickView"], StringComparer.Ordinal);
 
     /// <summary>
     /// Reads <paramref name="json"/>, the <c>tool.json</c> of the folder named

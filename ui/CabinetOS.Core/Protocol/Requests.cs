@@ -699,3 +699,40 @@ public sealed class ShellMenuInvokeRequest(ulong menuId, uint itemId) : CoreRequ
     /// <summary>The item's ID.</summary>
     public uint ItemId { get; } = itemId;
 }
+
+/// <summary>
+/// Asks for the shell's thumbnail of a file or folder (protocol 21, ADR 0023): the core asks the shell on threads of
+/// its own and answers <c>thumbnail</c>, with a PNG or with the reason there is none. A newer request without
+/// <see cref="Ahead"/> takes the place of a waiting one, which is answered <c>superseded</c>.
+/// </summary>
+public sealed class GetThumbnailRequest(string path, uint size) : CoreRequest("get_thumbnail")
+{
+    /// <summary>The file or folder, as an absolute path.</summary>
+    public string Path { get; } = path;
+
+    /// <summary>The longer side in pixels: 96, 256 or 768.</summary>
+    public uint Size { get; } = size;
+
+    /// <summary>A read ahead for a file next to the one shown: it runs only when no other request waits.</summary>
+    public bool Ahead { get; init; }
+}
+
+/// <summary>Asks the shell's image stack to draw a file for a Quick View page (protocol 21); the reply is <c>rendered_image</c>.</summary>
+public sealed class RenderImageRequest(string path, uint maxSize) : CoreRequest("render_image")
+{
+    /// <summary>The file, as an absolute path.</summary>
+    public string Path { get; } = path;
+
+    /// <summary>The longer side in pixels, at most 2560.</summary>
+    public uint MaxSize { get; } = maxSize;
+}
+
+/// <summary>Asks which viewer shows which kind of file (protocol 21); the reply is <c>quick_view_table</c>.</summary>
+public sealed class QuickViewTableRequest() : CoreRequest("quick_view_table");
+
+/// <summary>Asks which marketplace item would show a file no installed viewer claims (protocol 21); the reply is <c>quick_view_offer</c>.</summary>
+public sealed class QuickViewOfferRequest(string name) : CoreRequest("quick_view_offer")
+{
+    /// <summary>The file's name, without its folder.</summary>
+    public string Name { get; } = name;
+}

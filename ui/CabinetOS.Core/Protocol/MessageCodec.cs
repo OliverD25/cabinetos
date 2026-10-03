@@ -46,7 +46,6 @@ public static class MessageCodec
         "preview_cancelled",
         "update_state_changed",
         "update_progress",
-        // Protocol 21 (ADR 0023): known as an event so it is never taken for a reply; its record comes with the panel.
         "quick_view_table_changed",
     ]);
 
@@ -112,6 +111,11 @@ public static class MessageCodec
         ["update_state_changed"] = ProtocolJson.Default.UpdateStateChangedEvent,
         ["update_progress"] = ProtocolJson.Default.UpdateProgressEvent,
         ["shell_menu"] = ProtocolJson.Default.ShellMenuReply,
+        ["thumbnail"] = ProtocolJson.Default.ThumbnailReply,
+        ["rendered_image"] = ProtocolJson.Default.RenderedImageReply,
+        ["quick_view_table"] = ProtocolJson.Default.QuickViewTableReply,
+        ["quick_view_offer"] = ProtocolJson.Default.QuickViewOfferReply,
+        ["quick_view_table_changed"] = ProtocolJson.Default.QuickViewTableChangedEvent,
     }.ToFrozenDictionary();
 
     /// <summary>

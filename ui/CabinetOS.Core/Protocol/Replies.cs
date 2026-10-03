@@ -378,6 +378,62 @@ public sealed record ShellMenuItemInfo(uint Id, string Text, bool Separator, IRe
 /// <summary>Reply to <c>shell_menu</c>: the menu the core built, alive until an item is chosen or 30 s pass.</summary>
 public sealed record ShellMenuReply(ulong MenuId, IReadOnlyList<ShellMenuItemInfo> Items) : CoreReply;
 
+/// <summary>Why a <c>thumbnail</c> reply carries no picture (protocol 21).</summary>
+public static class ThumbnailReasons
+{
+    /// <summary>The shell has no thumbnail for this file (never a generic icon).</summary>
+    public const string None = "none";
+
+    /// <summary>The shell did not answer within 2 s.</summary>
+    public const string Timeout = "timeout";
+
+    /// <summary>Four of the core's thumbnail threads are stuck in the shell.</summary>
+    public const string Busy = "busy";
+
+    /// <summary>The file is not on this disk and the shell's cache has no thumbnail of it.</summary>
+    public const string Cloud = "cloud";
+
+    /// <summary>A newer request took its place in the queue.</summary>
+    public const string Superseded = "superseded";
+}
+
+/// <summary>
+/// Reply to <c>get_thumbnail</c> (protocol 21): the shell's thumbnail as a PNG in base64, <see cref="Width"/> by
+/// <see cref="Height"/> pixels, or no picture (<see cref="PngBase64"/> null) and the <see cref="Reason"/> (<see cref="ThumbnailReasons"/>).
+/// </summary>
+public sealed record ThumbnailReply(string Path, uint Size, uint? Width, uint? Height, string? PngBase64, string? Reason = null) : CoreReply;
+
+/// <summary>Reply to <c>render_image</c> (protocol 21): <c>image.png</c> is in <see cref="Folder"/>, new for every drawing.</summary>
+public sealed record RenderedImageReply(string Folder, uint Width, uint Height) : CoreReply;
+
+/// <summary>One viewer of the Quick View table: a Tool Extension with a valid <c>quickView</c> block, and the page Quick View loads.</summary>
+public sealed record QuickViewer(string Id, string Name, string Version, string Dir, string Entry);
+
+/// <summary>
+/// One kind of the Quick View table: a pattern in lower case and its viewers, the one to use first (the user's
+/// choice, then the viewer installed first). <see cref="Off"/>: the user set the kind to <c>none</c>, the thumbnail only.
+/// </summary>
+public sealed record QuickViewKind(string Pattern, IReadOnlyList<string> Viewers, bool Off = false);
+
+/// <summary>Reply to <c>quick_view_table</c> (protocol 21): every viewer, and the kinds in the order to try them.</summary>
+public sealed record QuickViewTableReply(IReadOnlyList<QuickViewer> Viewers, IReadOnlyList<QuickViewKind> Kinds) : CoreReply;
+
+/// <summary>The marketplace item <c>quick_view_offer</c> offers: a viewer of the catalogue that claims the file's name.</summary>
+public sealed record QuickViewOfferItem(string Id, string Name, string Version, ulong Size, MarketAuthor Author, string Description);
+
+/// <summary>Why <c>quick_view_offer</c> offers nothing.</summary>
+public static class OfferReasons
+{
+    /// <summary>No item of the catalogue claims the name (that this core can run and is not installed).</summary>
+    public const string NoItem = "no_item";
+
+    /// <summary>The catalogue cannot be read.</summary>
+    public const string Offline = "offline";
+}
+
+/// <summary>Reply to <c>quick_view_offer</c> (protocol 21): the item to offer, or null and the reason (<see cref="OfferReasons"/>).</summary>
+public sealed record QuickViewOfferReply(QuickViewOfferItem? Item, string? Reason = null) : CoreReply;
+
 /// <summary>A tint laid over the Mica backdrop: a <c>#RRGGBB</c> colour and how much of it covers the backdrop.</summary>
 public sealed record MicaTint(string Tint, double Opacity);
 
