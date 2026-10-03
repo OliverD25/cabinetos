@@ -531,6 +531,9 @@ public sealed partial class MainWindow : Window
                 case "shell":
                     LogShellState(step.Argument);
                     break;
+                case "settings-state":
+                    LogSettingsState(step.Argument);
+                    break;
                 case "find" or "find-key":
                     await RunFindStepAsync(step.Kind, step.Argument);
                     break;
@@ -927,6 +930,8 @@ public sealed partial class MainWindow : Window
                 "menu-edit" => MenuEditorView.IsOpen,
                 "menu-edit-idle" => MenuEditorView.IsIdle,
                 "menu-edit-closed" => !MenuEditorView.IsOpen,
+                // A prompt (a pick list or a text box in the palette's frame) is on screen.
+                "prompt" => PromptView.IsOpen,
                 // Windows' menu: the core has answered every question for it, and the menu shown has logged where it is.
                 "windows-menu" => _windowsMenuAsking == 0 && (!_windowsMenu.IsOpen || _windowsMenuPlaced),
                 // What ui.tabs holds in the file is what the window shows: the save after the last change is done.
@@ -1095,7 +1100,7 @@ public sealed partial class MainWindow : Window
             ApplyMenuConfig(config.Config);
             ApplyUpdateConfig(config.Config);
             _terminal.Profiles = TerminalProfiles.FromConfig(config.Config);
-            Dock.SetProfiles(_terminal.Profiles);
+            Dock.SetProfiles(_terminal.Profiles, _settings.TerminalRestore, _settings.TerminalStartsLinked);
         }
     }
 

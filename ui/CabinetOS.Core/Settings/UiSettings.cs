@@ -23,6 +23,8 @@ namespace CabinetOS.Core.Settings;
 /// <see cref="TerminalSplit"/> is <c>terminal.split</c>: whether the Tool Dock is split under the two panes.
 /// <see cref="TerminalRestore"/> is <c>terminal.restore</c>: whether the terminal tabs come back after a restart (the first show of the dock).
 /// <see cref="PaneSplitShare"/> is <c>ui.paneSplit</c>: the left pane's share of the two panes' width, 0.2 to 0.8, or null for equal.
+/// <see cref="TerminalDefaultProfile"/> is <c>terminal.defaultProfile</c> and <see cref="TerminalStartsLinked"/> is <c>terminal.defaultMode</c>
+/// being <c>linked</c> (the settings-three-ways skill, gap 5).
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -45,7 +47,9 @@ public sealed record UiSettings(
     CompactSize? CompactOverlay = null,
     bool TerminalSplit = false,
     bool TerminalRestore = true,
-    double? PaneSplitShare = null)
+    double? PaneSplitShare = null,
+    string TerminalDefaultProfile = "pwsh",
+    bool TerminalStartsLinked = false)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -81,7 +85,9 @@ public sealed record UiSettings(
             CompactOverlayLayout.FromConfig(config),
             Bool(Section(config, "terminal"), "split") ?? Defaults.TerminalSplit,
             Bool(Section(config, "terminal"), "restore") ?? Defaults.TerminalRestore,
-            PaneSplit.FromConfig(config));
+            PaneSplit.FromConfig(config),
+            String(Section(config, "terminal"), "defaultProfile") ?? Defaults.TerminalDefaultProfile,
+            String(Section(config, "terminal"), "defaultMode") == "linked");
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).

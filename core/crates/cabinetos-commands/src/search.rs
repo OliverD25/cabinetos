@@ -163,11 +163,12 @@ mod tests {
         // Every terminal command leads, the ones whose category is the word
         // first; toggling the panel comes right after them.
         let terminal = ids("terminal");
-        let mut leading = terminal[..11].to_vec();
+        let mut leading = terminal[..14].to_vec();
         leading.sort();
         assert_eq!(
             leading,
             [
+                "terminal.chooseDefaultProfile",
                 "terminal.close",
                 "terminal.insertPath",
                 "terminal.insertSelectedPaths",
@@ -178,6 +179,8 @@ mod tests {
                 "terminal.runTask",
                 "terminal.setMode",
                 "terminal.show",
+                "terminal.toggleDefaultMode",
+                "terminal.toggleRestore",
                 "terminal.toggleSplit",
             ]
         );
@@ -194,7 +197,7 @@ mod tests {
         // The layout command "Terminal on the Right" (Phase 23) also has the
         // word in its title; both come right after the terminal commands.
         assert!(
-            terminal[11..13].contains(&"view.toggleTerminal".to_owned()),
+            terminal[14..16].contains(&"view.toggleTerminal".to_owned()),
             "{terminal:?}"
         );
         assert_eq!(ids("toggle term")[0], "view.toggleTerminal");

@@ -114,21 +114,52 @@ public sealed partial class TerminalHalfHeader : UserControl
     }
 
     /// <summary>
-    /// The menu of the shells (<c>terminal.profiles</c>); in a half each one starts a session for its pane.
+    /// The chevron's menu (<see cref="TerminalDockMenu"/>): the shells of <c>terminal.profiles</c>, which in a half each start a
+    /// session for its pane, and under a line the terminal's defaults: the default-profile picker, and a check row for
+    /// <c>terminal.restore</c> and for <c>terminal.defaultMode</c> being <c>linked</c>. The button is always there, since the
+    /// settings are.
     /// </summary>
-    public void SetProfiles(TerminalProfiles profiles)
+    public void SetProfiles(TerminalProfiles profiles, bool restoreTabs = true, bool startsLinked = false)
     {
         ProfilesMenu.Items.Clear();
-        foreach (var name in profiles.Names)
+        var rows = TerminalDockMenu.Rows(profiles, restoreTabs, startsLinked);
+        foreach (var row in rows)
         {
-            var item = new MenuFlyoutItem { Text = name == profiles.DefaultProfile ? $"{name} (default)" : name };
-            item.Click += (_, _) => Run("terminal.new", _pane is { } pane
-                ? CommandArgs.Object(("profile", name), ("pane", pane))
-                : CommandArgs.With("profile", name));
-            ProfilesMenu.Items.Add(item);
+            switch (row.Kind)
+            {
+                case DockMenuKind.Separator:
+                    ProfilesMenu.Items.Add(new MenuFlyoutSeparator());
+                    break;
+                case DockMenuKind.Profile:
+                    var name = row.Profile!;
+                    var shell = new MenuFlyoutItem { Text = row.Title };
+                    shell.Click += (_, _) => Run("terminal.new", _pane is { } pane
+                        ? CommandArgs.Object(("profile", name), ("pane", pane))
+                        : CommandArgs.With("profile", name));
+                    ProfilesMenu.Items.Add(shell);
+                    break;
+                default:
+                    var setting = new MenuFlyoutItem { Text = row.Title };
+                    if (row.Checked is { } on)
+                    {
+                        // The check's place stays when the setting is off, so the rows keep their alignment.
+                        setting.Icon = new FontIcon { Glyph = on ? "" : "", FontSize = 12 };
+                        AutomationProperties.SetItemStatus(setting, on ? "on" : "off");
+                    }
+                    var command = row.CommandId!;
+                    setting.Click += (_, _) => Run(command);
+                    ProfilesMenu.Items.Add(setting);
+                    break;
+            }
         }
-        ProfilesButton.Visibility = profiles.Names.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        _menuText = TerminalDockMenu.Describe(rows);
+        ProfilesButton.Visibility = Visibility.Visible;
     }
+
+    private string _menuText = "";
+
+    /// <summary>The chevron menu's rows as the window's log tells them (<see cref="TerminalDockMenu.Describe"/>).</summary>
+    internal string DescribeMenu() => _menuText;
 
     private FrameworkElement TabFor(TerminalTab tab, bool active, out string? badgeColor)
     {

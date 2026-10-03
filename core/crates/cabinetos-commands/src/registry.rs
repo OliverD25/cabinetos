@@ -82,7 +82,7 @@ const TERMINAL: Option<&str> = Some("terminalFocus");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 125] = [
+const SEED: [Seed; 128] = [
     seed(
         "palette.show",
         "View",
@@ -444,6 +444,34 @@ const SEED: [Seed; 125] = [
         "terminal.setMode",
         "Terminal",
         "Lock or Link Terminal to Its Pane",
+        &[],
+        UI,
+        None,
+    ),
+    // The terminal's three defaults from the palette (the settings-three-ways
+    // skill, gap 5). The picker writes `terminal.defaultProfile`, the toggles
+    // write `terminal.restore` and `terminal.defaultMode`; the dock's chevron
+    // menu has a row for each. No keys: the palette and the menu are their places.
+    seed(
+        "terminal.chooseDefaultProfile",
+        "Terminal",
+        "Default Profile",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "terminal.toggleRestore",
+        "Terminal",
+        "Toggle Restore Tabs on Start",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "terminal.toggleDefaultMode",
+        "Terminal",
+        "New Terminals Start Locked or Linked",
         &[],
         UI,
         None,
@@ -1219,7 +1247,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 125);
+        assert_eq!(registry.commands().len(), 128);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1675,6 +1703,38 @@ mod tests {
                 .collect();
             assert_eq!(holders.len(), 1, "{chord}: {holders:?}");
         }
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
+    /// Gap 5 of the settings-three-ways audit: the terminal's three defaults
+    /// each have a command (a picker for the profile, a toggle for each of the
+    /// other two). All run in the window and have no default key.
+    #[test]
+    fn the_terminal_defaults_have_their_commands_with_titles_and_no_keys() {
+        let registry = CommandRegistry::core();
+        for (id, title) in [
+            ("terminal.chooseDefaultProfile", "Default Profile"),
+            ("terminal.toggleRestore", "Toggle Restore Tabs on Start"),
+            (
+                "terminal.toggleDefaultMode",
+                "New Terminals Start Locked or Linked",
+            ),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                ("Terminal", title),
+                "{id}"
+            );
+            assert!(command.default_keys.is_empty(), "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.when, None, "{id}");
+        }
+        // The per-session switch keeps its own command and name.
+        assert_eq!(
+            registry.get("terminal.setMode").unwrap().title,
+            "Lock or Link Terminal to Its Pane"
+        );
         crate::keymap::compile(&registry, &[]).unwrap();
     }
 

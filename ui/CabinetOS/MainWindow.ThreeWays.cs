@@ -42,6 +42,7 @@ public sealed partial class MainWindow
             on => on ? "The Explorer follows the active pane." : "The Explorer stays where it is.", "The Explorer view"));
         _router.RegisterUiHandler("menu.toggleShellMenu", _ => ToggleSettingAsync("contextMenu.shellMenu", !_menuConfig.ShellMenu,
             on => on ? "Shift+right-click shows Windows' own menu." : "Shift+right-click shows the plain menu.", "Windows' own menu"));
+        RegisterPreferenceCommands();
     }
 
     // view.layout*, view.cycleLayout: the layout is written with set_value; the window follows config_changed as for a hand edit.
@@ -90,7 +91,7 @@ public sealed partial class MainWindow
             "hidden" => _settings.ShowHidden == on,
             "follow" => _settings.SidebarAutoReveal == on,
             "shell-menu" => _menuConfig.ShellMenu == on,
-            _ => true,
+            _ => PreferenceIs(parts[0], parts[1]),
         };
     }
 

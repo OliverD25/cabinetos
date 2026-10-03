@@ -1,6 +1,8 @@
+using System.Text.Json;
 using CabinetOS.Core.Protocol;
 using CabinetOS.Core.Settings;
 using CabinetOS.Core.Shell;
+using CabinetOS.Core.Terminal;
 
 namespace CabinetOS.Tests;
 
@@ -114,5 +116,52 @@ public class ThreeWaysTests
         var onlyHidden = ShellMenu.Preferences(Registry.Where(c => c.Id is "view.toggleHiddenFiles" or "view.layoutRail"), "classic", false, true);
         Assert.Equal(["Layout", "Show Hidden Files"], onlyHidden.Select(r => r.Title));
         Assert.Equal(["Activity Rail"], onlyHidden[0].Choices!.Select(c => c.Title));
+    }
+
+    // ----- Gap 5: the terminal's defaults -----
+
+    [Fact]
+    public void The_terminal_defaults_are_read_from_the_configuration_and_default_to_pwsh_locked_and_restoring()
+    {
+        var none = UiSettings.FromConfig(JsonDocument.Parse("""{"terminal": {}}""").RootElement);
+        Assert.Equal(("pwsh", false, true), (none.TerminalDefaultProfile, none.TerminalStartsLinked, none.TerminalRestore));
+        var set = UiSettings.FromConfig(JsonDocument.Parse("""{"terminal": {"defaultProfile": "cmd", "defaultMode": "linked", "restore": false}}""").RootElement);
+        Assert.Equal(("cmd", true, false), (set.TerminalDefaultProfile, set.TerminalStartsLinked, set.TerminalRestore));
+    }
+
+    [Fact]
+    public void The_palette_names_the_default_profile_and_says_whether_the_toggles_are_on()
+    {
+        var restoring = UiSettings.Defaults with { TerminalDefaultProfile = "wsl", TerminalRestore = true, TerminalStartsLinked = false };
+        var other = UiSettings.Defaults with { TerminalDefaultProfile = "cmd", TerminalRestore = false, TerminalStartsLinked = true };
+        Assert.Equal(("wsl", "on", "locked"), (SettingStates.Of("terminal.chooseDefaultProfile", restoring, false),
+            SettingStates.Of("terminal.toggleRestore", restoring, false), SettingStates.Of("terminal.toggleDefaultMode", restoring, false)));
+        Assert.Equal(("cmd", "off", "linked"), (SettingStates.Of("terminal.chooseDefaultProfile", other, false),
+            SettingStates.Of("terminal.toggleRestore", other, false), SettingStates.Of("terminal.toggleDefaultMode", other, false)));
+        // The per-session switch is no setting: its row has no mark.
+        Assert.Null(SettingStates.Of("terminal.setMode", other, false));
+    }
+
+    [Fact]
+    public void The_dock_s_chevron_menu_lists_the_shells_then_the_default_profile_row_and_the_two_check_rows()
+    {
+        var profiles = new TerminalProfiles("cmd", ["pwsh", "cmd", "wsl"]);
+        var rows = TerminalDockMenu.Rows(profiles, restoreTabs: true, startsLinked: false);
+
+        Assert.Equal(["pwsh", "cmd (default)", "wsl"], rows.Where(r => r.Kind == DockMenuKind.Profile).Select(r => r.Title));
+        Assert.Equal(["pwsh", "cmd", "wsl"], rows.Where(r => r.Kind == DockMenuKind.Profile).Select(r => r.Profile));
+        Assert.Equal(DockMenuKind.Separator, rows[3].Kind);
+        Assert.Equal(("Default Profile…", "terminal.chooseDefaultProfile", (bool?)null), (rows[4].Title, rows[4].CommandId, rows[4].Checked));
+        Assert.Equal(("Restore Tabs on Start", "terminal.toggleRestore", (bool?)true), (rows[5].Title, rows[5].CommandId, rows[5].Checked));
+        Assert.Equal(("New Terminals Start Linked", "terminal.toggleDefaultMode", (bool?)false), (rows[6].Title, rows[6].CommandId, rows[6].Checked));
+        Assert.Equal("pwsh|cmd (default)|wsl|-|Default Profile…|Restore Tabs on Start [x]|New Terminals Start Linked [ ]", TerminalDockMenu.Describe(rows));
+    }
+
+    [Fact]
+    public void The_chevron_menu_follows_the_two_toggles_and_a_single_shell_still_has_its_settings()
+    {
+        var one = new TerminalProfiles("pwsh", ["pwsh"]);
+        var rows = TerminalDockMenu.Rows(one, restoreTabs: false, startsLinked: true);
+        Assert.Equal("pwsh (default)|-|Default Profile…|Restore Tabs on Start [ ]|New Terminals Start Linked [x]", TerminalDockMenu.Describe(rows));
     }
 }

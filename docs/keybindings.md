@@ -95,6 +95,9 @@ The core's commands, in palette order:
 | `terminal.previousTab` | Terminal: Previous Terminal Tab | `alt+bracketleft` | `terminalFocus` | UI |
 | `terminal.nextTab` | Terminal: Next Terminal Tab | `alt+bracketright` | `terminalFocus` | UI |
 | `terminal.setMode` | Terminal: Lock or Link Terminal to Its Pane | | | UI |
+| `terminal.chooseDefaultProfile` | Terminal: Default Profile | | | UI |
+| `terminal.toggleRestore` | Terminal: Toggle Restore Tabs on Start | | | UI |
+| `terminal.toggleDefaultMode` | Terminal: New Terminals Start Locked or Linked | | | UI |
 | `terminal.toggleSplit` | Terminal: Split Terminal Under the Panes | `ctrl+backslash` | `terminalFocus` | UI |
 | `go.root` | Go: Up to Root | `ctrl+backslash` | | UI |
 | `go.chooseDriveLeft` | Go: Choose Drive for Left Pane… | `alt+f1` | | UI |
@@ -207,6 +210,14 @@ The core's commands, in palette order:
   `sidebar.toggleFollow` flips `ui.sidebarAutoReveal` and
   `menu.toggleShellMenu` flips `contextMenu.shellMenu`; neither has a key.
   The palette's row of each says "current" or "on" or "off".
+- **The terminal's three defaults** (the settings-three-ways audit, gap 5):
+  `terminal.chooseDefaultProfile` opens a pick list of the profiles and
+  writes `terminal.defaultProfile` (with `{"value": "<name>"}` it writes
+  without the list), `terminal.toggleRestore` flips `terminal.restore` and
+  `terminal.toggleDefaultMode` flips `terminal.defaultMode` between `locked`
+  and `linked`. None has a key; the dock's chevron menu has a row for each
+  ([ui.md](ui.md), "Settings reachable three ways"). The palette's row says
+  the profile in effect, "on" or "off", and "locked" or "linked".
 - `themes.browse` (Phase 23) opens the theme gallery ([ui.md](ui.md), "The
   theme gallery"). It has no key; the theme picker's last row opens it too.
 - `view.toggleColumns` (Phase 19f) shows the active pane's front tab as

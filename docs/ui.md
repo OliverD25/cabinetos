@@ -1080,6 +1080,7 @@ search hit. From the context menu it gets the menu's rows
 | `marketplace.browse`, `preferences.selectColorTheme`, `themes.browse` | Open the Extensions page, the theme picker and the theme gallery ("The marketplace", "Themes", "The theme gallery") |
 | `view.layoutClassic`, `view.layoutRight`, `view.layoutRail`, `view.cycleLayout` | Write `ui.layout` (`cycleLayout` goes classic, right, rail); the window follows the file ("Settings reachable three ways") |
 | `view.toggleHiddenFiles`, `sidebar.toggleFollow`, `menu.toggleShellMenu` | Flip `panes.showHidden`, `ui.sidebarAutoReveal` and `contextMenu.shellMenu`; the palette's row says on or off |
+| `terminal.chooseDefaultProfile`, `terminal.toggleRestore`, `terminal.toggleDefaultMode` | Write `terminal.defaultProfile` (a pick list; `{"value": name}` skips it), flip `terminal.restore`, and flip `terminal.defaultMode` between `locked` and `linked` ("Settings reachable three ways") |
 | `go.root` to `terminal.insertSelectedPaths` | Total Commander's small commands, 31 of them, run in the window ("Total Commander's keys") |
 | `workspace.switch` | The sidebar's workspace dropdown ("The sidebar header"); its "Open folder as workspace…" says that workspaces arrive in a later version |
 | `terminal.runTask` | "arrives in a later version" in the status bar |
@@ -4418,7 +4419,8 @@ bound to keys) and a control in the window, and the three stay in step: a
 command and a control write the key with `set_value`, and the window shows the
 key the core announces with `config_changed`, so a change made any of the
 three ways is the same change (Constitution Articles 4, 6 and 7; the project
-skill `settings-three-ways`). Phase 23 closed the first four gaps of its audit.
+skill `settings-three-ways`). Phase 23 closed the first four gaps of its audit, and the next unit the terminal's
+defaults (gap 5), the update settings (gap 6) and the editor and the log level (gap 7).
 
 | Setting | Commands (palette) | Control in the window | File |
 |---|---|---|---|
@@ -4426,6 +4428,9 @@ skill `settings-three-ways`). Phase 23 closed the first four gaps of its audit.
 | `panes.showHidden` | "View: Toggle Hidden Files" (`view.toggleHiddenFiles`, Ctrl+K Ctrl+H) | the hamburger's "Show Hidden Files" (checked while on) and the status bar's "hidden", which is there while it is on and turns it off when clicked | `panes.showHidden` |
 | `ui.sidebarAutoReveal` | "Sidebar: Follow the Active Pane" (`sidebar.toggleFollow`, no key) | the pin in the Explorer view's header (accent while the tree follows the pane; rail layout) and the hamburger's "Follow the Active Pane" (checked while on), which is the control in the other layouts | `ui.sidebarAutoReveal` |
 | `contextMenu.shellMenu` | "Menu: Toggle Windows' Shell Menu" (`menu.toggleShellMenu`, no key) | the last row of "Edit Menu…", a check box "Show Windows' own menu with Shift+right-click" | `contextMenu.shellMenu` |
+| `terminal.defaultProfile` | "Terminal: Default Profile" (`terminal.chooseDefaultProfile`, no key): a pick list of `terminal.profiles`, the row says the profile in effect | the dock's chevron menu (the button after "+", "Other shells"): "Default Profile…" opens the same list, and the default shell says "(default)" in the list of shells | `terminal.defaultProfile`: the name of a profile |
+| `terminal.restore` | "Terminal: Toggle Restore Tabs on Start" (`terminal.toggleRestore`, no key), the row says on or off | the chevron menu's check row "Restore Tabs on Start" | `terminal.restore` |
+| `terminal.defaultMode` | "Terminal: New Terminals Start Locked or Linked" (`terminal.toggleDefaultMode`, no key), one toggle, the row says locked or linked | the chevron menu's check row "New Terminals Start Linked" (checked while the mode is `linked`) | `terminal.defaultMode`: `locked` or `linked` |
 
 - **The window follows the file.** The layout, the listing, the pill, the
   pin, the menu's checks and the edit mode's box are drawn from the
@@ -4445,6 +4450,13 @@ skill `settings-three-ways`). Phase 23 closed the first four gaps of its audit.
 - **The palette's rows** say the state: "current" on the layout in effect,
   "on" or "off" on a toggle, in the chip a plugin's name uses
   (`SettingStates`, tested).
+- **The dock's chevron menu** (the button after "+", "Other shells") is always there, since the terminal's three defaults
+  are in it (gap 5). Its rows: the shells of `terminal.profiles`, the default one marked "(default)"; a line; "Default
+  Profile…" (opens the pick list of the profiles, the prompt in the palette's frame, with the profile in effect
+  highlighted); and the check rows "Restore Tabs on Start" and "New Terminals Start Linked". A check is on while the
+  setting is, and its place stays empty while it is off. The rows are drawn again at each read of the configuration, so
+  an edit of the file moves them (`TerminalDockMenu`, tested). A pick-list command takes `{"value": ...}` as its
+  argument and writes at once without the list.
 - **Panes list again** when `panes.showHidden` changes: the window asks the
   core for both listings again, as for the sort order.
 - **Logs.** Target `cabinetos_ui::settings`: "layout chosen" and "setting

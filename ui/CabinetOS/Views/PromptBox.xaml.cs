@@ -164,6 +164,9 @@ public sealed partial class PromptBox : UserControl
     /// <summary>Whether the rows follow <paramref name="text"/>: XAML has raised the box's text change for it (the snapshot aid waits for this after <see cref="Type"/>).</summary>
     public bool ListFollows(string text) => _listText == text;
 
+    /// <summary>The rows shown now, "|" between them and a star before the highlighted one (the snapshot aid's log).</summary>
+    public string DescribeRows() => string.Join("|", _list.Shown.Select((row, index) => (index == _list.Highlight ? "*" : "") + row.Title));
+
     /// <summary>Puts text in the box as if typed (the snapshot aid).</summary>
     public void Type(string text)
     {

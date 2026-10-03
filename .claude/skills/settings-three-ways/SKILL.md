@@ -108,11 +108,11 @@ the next audit does not ask again.
 | `files.editor` | none (`file.edit` uses it) | the "Open with" picker is per file | **Gap 7.** "Preferences: Choose Editor" and a Settings entry |
 | `contextMenu` (the menu's rows) | `menu.edit` | "Edit Menu…" in the menu | fine |
 | `contextMenu.shellMenu` | `menu.toggleShellMenu` | the last row of "Edit Menu…" | fine since Phase 23 (was gap 4) |
-| `terminal.defaultProfile` | none | the dock's "+" chooses per terminal | **Gap 5.** "Terminal: Default Profile" picker and a chevron entry |
+| `terminal.defaultProfile` | `terminal.chooseDefaultProfile` (picker; the row names the profile) | the dock chevron's "Default Profile…" | fine since this unit (was gap 5) |
 | `terminal.profiles` | none | none | **Gap 8.** The Settings page (11c); until then "Terminal: Edit Profiles" opens the file at the key |
 | `terminal.split` | `terminal.toggleSplit`, Ctrl+\ | the dock | fine |
-| `terminal.restore` | none | none | **Gap 5.** A toggle command and a chevron entry |
-| `terminal.defaultMode` | none (`terminal.setMode` is per session) | the Locked/Linked switch is per session | **Gap 5.** "Terminal: New Terminals Start Locked/Linked" |
+| `terminal.restore` | `terminal.toggleRestore` (on or off) | the dock chevron's check row "Restore Tabs on Start" | fine since this unit (was gap 5) |
+| `terminal.defaultMode` | `terminal.toggleDefaultMode` (locked or linked; `terminal.setMode` stays per session) | the dock chevron's check row "New Terminals Start Linked" | fine since this unit (was gap 5) |
 | `logging.level` | none | none | **Gap 7.** "Diagnostics: Log Level" picker; Settings page |
 | `logging.heavy` | `diagnostics.toggleHeavy` | to check | command fine; window to check |
 | `marketplace.index`, `marketplace.themes`, `marketplace.allowInsecure` | none | none | **Gap 8.** The Settings page (advanced section) |

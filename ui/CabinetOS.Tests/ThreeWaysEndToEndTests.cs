@@ -367,4 +367,240 @@ public class ThreeWaysEndToEndTests
             run.Stop();
         }
     }
+
+    // ----- Gap 5: the terminal's defaults -----
+
+    // Two cmd shells (the second may be linked), cmd the default: a shell every Windows has, and no prompt hook to wait for.
+    private static JsonObject TerminalConfig(Action<JsonObject>? more = null) => Config(config =>
+    {
+        config["terminal"] = new JsonObject
+        {
+            ["defaultProfile"] = "cmd",
+            ["profiles"] = new JsonArray(
+                new JsonObject { ["name"] = "cmd", ["command"] = "cmd.exe" },
+                new JsonObject { ["name"] = "hooked", ["command"] = "cmd.exe", ["linkable"] = true }),
+        };
+        more?.Invoke(config);
+    });
+
+    private const string MenuWithCmdDefault = "cmd (default)|hooked|-|Default Profile…|Restore Tabs on Start [x]|New Terminals Start Linked [ ]";
+
+    /// <summary>
+    /// terminal.defaultProfile: the picker "Terminal: Default Profile", the dock chevron's "Default Profile…" (the same picker) and the file
+    /// give the same shell; the palette's row names it, the chevron menu marks it, and a new terminal starts with it.
+    /// </summary>
+    [Fact]
+    public async Task The_default_shell_changes_from_the_palette_s_picker_the_dock_s_chevron_menu_and_the_file()
+    {
+        var run = Prepare("three-ways-profile", _ => TerminalConfig());
+        try
+        {
+            var data = MakeData(run);
+            var process = run.Start("profile", string.Join(';',
+                "size:1400x900",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "key:ctrl+backquote",
+                "until:terminals:1",
+                "wait:800",
+                "settings-state:start",
+                // The command's pick list: type the name, Enter.
+                "cmd-nowait:terminal.chooseDefaultProfile",
+                "until:prompt",
+                "settings-state:list",
+                "type:hooked",
+                "accept",
+                "until:setting:default-profile=hooked",
+                "wait:600",
+                "settings-state:by-command",
+                "cmd:palette.show",
+                "wait:300",
+                "type:Default Profile",
+                "wait:600",
+                "settings-state:palette",
+                "cmd:overlay.close",
+                "wait:300",
+                // A new terminal starts with the shell chosen.
+                "cmd:terminal.new",
+                "until:terminals:2",
+                "wait:800",
+                "terminal-state:new-default",
+                // The dock's chevron menu: its "Default Profile…" row opens the same list.
+                "click:Other shells",
+                "wait:500",
+                "click:Default Profile…",
+                "until:prompt",
+                "type:cmd",
+                "accept",
+                "until:setting:default-profile=cmd",
+                "wait:600",
+                "settings-state:by-menu",
+                // The file.
+                "settings-state:edit-now",
+                "until:setting:default-profile=hooked",
+                "wait:600",
+                "settings-state:by-file",
+                "shot:done"));
+            await run.WaitForStateAsync("profile", "settings state", "edit-now");
+            Edit(run, config => Section(config, "terminal")["defaultProfile"] = "hooked");
+            var logs = await run.FinishAsync("profile", process);
+
+            string Settings(string label, string field) => Text(State(logs, "settings state", label), field);
+            Assert.Equal(("cmd", MenuWithCmdDefault), (Settings("start", "default_profile"), Settings("start", "dock_menu")));
+            // The pick list names the profiles, and the default one starts highlighted.
+            Assert.Equal(("true", "*cmd|hooked"), (Settings("list", "prompt_open"), Settings("list", "prompt_rows")));
+
+            Assert.Equal(("hooked", "cmd|hooked (default)|-|Default Profile…|Restore Tabs on Start [x]|New Terminals Start Linked [ ]"),
+                (Settings("by-command", "default_profile"), Settings("by-command", "dock_menu")));
+            Assert.Contains("terminal.chooseDefaultProfile=hooked", Settings("palette", "palette_states").Split('|'));
+            // The second terminal is the default shell's: the profile the command chose.
+            Assert.Contains(" hooked [", Text(State(logs, "terminal state", "new-default"), "tabs").Split(" | ")[1]);
+
+            Assert.Equal(("cmd", MenuWithCmdDefault), (Settings("by-menu", "default_profile"), Settings("by-menu", "dock_menu")));
+            Assert.Equal("hooked", Settings("by-file", "default_profile"));
+            Assert.Contains("hooked (default)", Settings("by-file", "dock_menu"));
+            Assert.Equal("\"hooked\"", Key(run.ReadConfig(), "terminal", "defaultProfile"));
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
+
+    /// <summary>
+    /// terminal.restore: the command, the dock chevron's check row "Restore Tabs on Start" and the file give the same state, and the
+    /// palette's row says on or off.
+    /// </summary>
+    [Fact]
+    public async Task Restoring_the_terminal_tabs_switches_from_the_command_the_dock_s_chevron_menu_and_the_file()
+    {
+        var run = Prepare("three-ways-restore", _ => TerminalConfig());
+        try
+        {
+            var data = MakeData(run);
+            var process = run.Start("restore", string.Join(';',
+                "size:1400x900",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "key:ctrl+backquote",
+                "until:terminals:1",
+                "wait:800",
+                "settings-state:start",
+                "cmd:terminal.toggleRestore",
+                "until:setting:restore=off",
+                "wait:600",
+                "settings-state:off-by-command",
+                "cmd:palette.show",
+                "wait:300",
+                "type:Restore Tabs",
+                "wait:600",
+                "settings-state:palette-off",
+                "cmd:overlay.close",
+                "wait:300",
+                "click:Other shells",
+                "wait:500",
+                "click:Restore Tabs on Start",
+                "until:setting:restore=on",
+                "wait:600",
+                "settings-state:on-by-menu",
+                "settings-state:edit-now",
+                "until:setting:restore=off",
+                "wait:600",
+                "settings-state:off-by-file",
+                "shot:done"));
+            await run.WaitForStateAsync("restore", "settings state", "edit-now");
+            Edit(run, config => Section(config, "terminal")["restore"] = false);
+            var logs = await run.FinishAsync("restore", process);
+
+            string Settings(string label, string field) => Text(State(logs, "settings state", label), field);
+            Assert.Equal(("true", MenuWithCmdDefault), (Settings("start", "restore"), Settings("start", "dock_menu")));
+            Assert.Equal(("false", "cmd (default)|hooked|-|Default Profile…|Restore Tabs on Start [ ]|New Terminals Start Linked [ ]"),
+                (Settings("off-by-command", "restore"), Settings("off-by-command", "dock_menu")));
+            Assert.Contains("terminal.toggleRestore=off", Settings("palette-off", "palette_states").Split('|'));
+            Assert.Equal(("true", MenuWithCmdDefault), (Settings("on-by-menu", "restore"), Settings("on-by-menu", "dock_menu")));
+            Assert.Equal("false", Settings("off-by-file", "restore"));
+            Assert.Contains("Restore Tabs on Start [ ]", Settings("off-by-file", "dock_menu"));
+            Assert.Equal("false", Key(run.ReadConfig(), "terminal", "restore"));
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
+
+    /// <summary>
+    /// terminal.defaultMode: the one toggle command, the dock chevron's check row "New Terminals Start Linked" and the file give the same
+    /// mode; the palette's row says linked or locked, and a new terminal of a linkable shell starts in it.
+    /// </summary>
+    [Fact]
+    public async Task The_mode_new_terminals_start_in_switches_from_the_command_the_dock_s_chevron_menu_and_the_file()
+    {
+        var run = Prepare("three-ways-mode", _ => TerminalConfig());
+        try
+        {
+            var data = MakeData(run);
+            var process = run.Start("mode", string.Join(';',
+                "size:1400x900",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "key:ctrl+backquote",
+                "until:terminals:1",
+                "wait:800",
+                "settings-state:start",
+                "cmd:terminal.toggleDefaultMode",
+                "until:setting:default-mode=linked",
+                "wait:600",
+                "settings-state:linked-by-command",
+                "cmd:palette.show",
+                "wait:300",
+                "type:New Terminals Start",
+                "wait:600",
+                "settings-state:palette-linked",
+                "cmd:overlay.close",
+                "wait:300",
+                // A new terminal of a shell that can be linked starts linked.
+                "cmd:terminal.new {\"profile\":\"hooked\"}",
+                "until:terminals:2",
+                "wait:800",
+                "terminal-state:new-linked",
+                "click:Other shells",
+                "wait:500",
+                "click:New Terminals Start Linked",
+                "until:setting:default-mode=locked",
+                "wait:600",
+                "settings-state:locked-by-menu",
+                "settings-state:edit-now",
+                "until:setting:default-mode=linked",
+                "wait:600",
+                "settings-state:linked-by-file",
+                "shot:done"));
+            await run.WaitForStateAsync("mode", "settings state", "edit-now");
+            Edit(run, config => Section(config, "terminal")["defaultMode"] = "linked");
+            var logs = await run.FinishAsync("mode", process);
+
+            string Settings(string label, string field) => Text(State(logs, "settings state", label), field);
+            Assert.Equal(("locked", MenuWithCmdDefault), (Settings("start", "default_mode"), Settings("start", "dock_menu")));
+            Assert.Equal(("linked", "cmd (default)|hooked|-|Default Profile…|Restore Tabs on Start [x]|New Terminals Start Linked [x]"),
+                (Settings("linked-by-command", "default_mode"), Settings("linked-by-command", "dock_menu")));
+            Assert.Contains("terminal.toggleDefaultMode=linked", Settings("palette-linked", "palette_states").Split('|'));
+            Assert.EndsWith("hooked [Left] Linked", Text(State(logs, "terminal state", "new-linked"), "tabs").Split(" | ")[1].TrimStart('*'));
+            Assert.Equal(("locked", MenuWithCmdDefault), (Settings("locked-by-menu", "default_mode"), Settings("locked-by-menu", "dock_menu")));
+            Assert.Equal("linked", Settings("linked-by-file", "default_mode"));
+            Assert.Contains("New Terminals Start Linked [x]", Settings("linked-by-file", "dock_menu"));
+            Assert.Equal("\"linked\"", Key(run.ReadConfig(), "terminal", "defaultMode"));
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
 }
