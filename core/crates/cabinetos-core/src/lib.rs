@@ -138,6 +138,10 @@ pub struct CoreConfig {
     /// The folder the marketplace installs Tool Extensions into; `None`
     /// uses `%LOCALAPPDATA%\CabinetOS\tools`, where the window reads them.
     pub tools_dir: Option<PathBuf>,
+    /// The window's folder of tools in development (its `--tools-dir`),
+    /// listed first for the Quick View table: a tool there wins over an
+    /// installed one with the same ID. `None`: no such folder.
+    pub dev_tools_dir: Option<PathBuf>,
     /// The marketplace's own folder (the index cache, downloads, the record
     /// of installs); `None` uses `CABINETOS_MARKETPLACE_DIR` or
     /// `%LOCALAPPDATA%\CabinetOS\marketplace`.
@@ -205,6 +209,7 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         plugins_data_dir,
         themes_dir,
         tools_dir,
+        dev_tools_dir,
         marketplace_dir,
         update_dir,
     } = config;
@@ -263,6 +268,11 @@ pub async fn run(config: CoreConfig, shutdown: CancellationToken) -> Result<(), 
         Arc::clone(&events),
         plugins.clone(),
         Arc::clone(&themes),
+        dev_tools_dir,
+    ));
+    tokio::spawn(market::follow_quick_view(
+        Arc::clone(&market),
+        settings.subscribe(),
     ));
     let update_settings = Arc::clone(&settings);
     let update_events = Arc::clone(&events);

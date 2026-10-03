@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::index::{self, Index, Source};
-use crate::tools::{self, TOOL_MANIFEST_FILE};
+use crate::tools::{self, QuickViewTable, TOOL_MANIFEST_FILE};
 use crate::transfer::{self, Client, DownloadError, Http, ZipLimits};
 use crate::{MarketError, now_ms, parse_version};
 
@@ -284,6 +284,19 @@ impl Market {
     #[must_use]
     pub fn tools(&self) -> Vec<ToolInfo> {
         tools::list_tools(&self.dirs.tools)
+    }
+
+    /// The Quick View table (ADR 0023) of the viewers in `dev` (the
+    /// window's development folder) and the tools folder, with the user's
+    /// `quickView.viewers`. Reads the folders and the record of installs.
+    #[must_use]
+    pub fn quick_view_table(
+        &self,
+        dev: Option<&Path>,
+        choices: &BTreeMap<String, String>,
+    ) -> QuickViewTable {
+        let viewers = tools::quick_view_viewers(dev, &self.dirs.tools, &self.installed());
+        tools::quick_view_table(&viewers, choices)
     }
 
     /// Installs `item` of `index`: downloads it (or copies it from disk)

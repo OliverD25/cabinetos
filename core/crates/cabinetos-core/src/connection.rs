@@ -463,7 +463,12 @@ impl Session {
                 request @ (Request::GetThumbnail { .. } | Request::RenderImage { .. }) => {
                     self.image_request(&id, &span, kind, request)
                 }
-                Request::QuickViewTable | Request::QuickViewOffer { .. } => Some(Response::Error {
+                Request::QuickViewTable => {
+                    let market = Arc::clone(&self.services.market);
+                    self.spawn_reply(&id, &span, kind, move || market.quick_view_table());
+                    None
+                }
+                Request::QuickViewOffer { .. } => Some(Response::Error {
                     code: ErrorCode::NotImplemented,
                     message: format!("{kind} is not built yet"),
                 }),
@@ -1897,18 +1902,28 @@ impl Session {
         }
     }
 
-    /// Sends the tools as they are now, for a client that may have missed a
-    /// `tools_changed`. Reading the tools folder is disk work, so it runs on
-    /// the blocking pool, and the event follows the others.
+    /// Sends the tools and the Quick View table as they are now, for a
+    /// client that may have missed a `tools_changed` or a
+    /// `quick_view_table_changed`. Reading the tools folder is disk work,
+    /// so it runs on the blocking pool, and the events follow the others.
     fn resend_tools(&mut self) {
         let market = Arc::clone(&self.services.market);
         let out = self.out.clone();
         self.tasks.spawn(async move {
-            match tokio::task::spawn_blocking(move || market.tools()).await {
-                Ok(tools) => out.send(&Envelope::new(
-                    RequestId::new(),
-                    Event::ToolsChanged { tools },
-                )),
+            match tokio::task::spawn_blocking(move || (market.tools(), market.current_quick_view()))
+                .await
+            {
+                Ok((tools, table)) => {
+                    out.send(&Envelope::new(
+                        RequestId::new(),
+                        Event::ToolsChanged { tools },
+                    ));
+                    let (viewers, kinds) = (*table).clone();
+                    out.send(&Envelope::new(
+                        RequestId::new(),
+                        Event::QuickViewTableChanged { viewers, kinds },
+                    ));
+                }
                 Err(error) => rethrow_panic(Err(error)),
             }
             TaskDone::Replied

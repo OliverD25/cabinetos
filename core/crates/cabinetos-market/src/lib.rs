@@ -44,7 +44,9 @@ use cabinetos_protocol::ErrorCode;
 pub use index::{Index, Source, parse_catalogue, parse_index, search};
 
 pub use install::{Dirs, Installed, Market};
-pub use tools::{TOOL_MANIFEST_FILE, list_tools};
+pub use tools::{
+    QuickViewTable, TOOL_MANIFEST_FILE, Viewer, list_tools, quick_view_table, quick_view_viewers,
+};
 
 /// Environment variable naming the marketplace's own folder (the index
 /// cache, downloads in progress, the record of installs).

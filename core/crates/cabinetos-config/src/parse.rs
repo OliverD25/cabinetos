@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::fmt;
 
 use cabinetos_commands::KeymapError;
+use cabinetos_protocol::{NO_VIEWER, extension_id_problem, kind_pattern_problem};
 
 use crate::locate::{Segment, locate, position};
 use crate::menu::check_extension;
@@ -209,6 +210,7 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
     check_terminal_tabs(text, config)?;
     check_programs(text, config)?;
     check_menu_extensions(text, config)?;
+    check_quick_view(text, config)?;
     let profiles = &config.terminal.profiles;
     for (index, profile) in profiles.iter().enumerate() {
         if profiles[..index]
@@ -436,6 +438,38 @@ fn check_menu_extensions(text: &str, config: &Config) -> Result<(), ConfigError>
                     ));
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+/// `quickView.viewers`: each key a kind (`*.ext` or a whole name), each
+/// value a tool's ID or `none`, so a typo is caught where it was made
+/// instead of making the panel show no viewer for no visible reason.
+fn check_quick_view(text: &str, config: &Config) -> Result<(), ConfigError> {
+    for (pattern, viewer) in &config.quick_view.viewers {
+        let at = [
+            Segment::Key("quickView"),
+            Segment::Key("viewers"),
+            Segment::Key(pattern),
+        ];
+        if let Some(problem) = kind_pattern_problem(pattern) {
+            return Err(ConfigError::at(
+                text,
+                &at,
+                format!("quickView.viewers: {problem}"),
+            ));
+        }
+        if viewer != NO_VIEWER
+            && let Some(problem) = extension_id_problem(viewer)
+        {
+            return Err(ConfigError::at(
+                text,
+                &at,
+                format!(
+                    "quickView.viewers.{pattern} is `{viewer}`: {problem}; name a tool's ID, or `{NO_VIEWER}` for the thumbnail only"
+                ),
+            ));
         }
     }
     Ok(())
@@ -821,6 +855,37 @@ mod tests {
             (r#"{"ui": {"paneSplit": 1}}"#, "ui.paneSplit is 1"),
             (r#"{"ui": {"paneSplit": -0.5}}"#, "ui.paneSplit is -0.5"),
             (r#"{"ui": {"paneSplit": "half"}}"#, "invalid type: string"),
+        ] {
+            let error = parse(bad).unwrap_err();
+            assert!(error.message.contains(expected), "{bad}: {error}");
+        }
+    }
+
+    #[test]
+    fn quick_view_viewers_map_kinds_to_a_tool_or_none() {
+        let config =
+            parse(r#"{"quickView": {"viewers": {"*.pdf": "pdf-viewer", "*.svg": "none", "README": "md-preview"}}}"#)
+                .unwrap();
+        assert_eq!(config.quick_view.viewers["*.svg"], "none");
+        assert_eq!(config.quick_view.viewers.len(), 3);
+        assert!(parse("{}").unwrap().quick_view.viewers.is_empty());
+        let text = "{\n  \"quickView\": {\n    \"viewers\": {\"*\": \"pdf-viewer\"}\n  }\n}";
+        let error = parse(text).unwrap_err();
+        assert_eq!(error.line, Some(3), "{error}");
+        for (bad, expected) in [
+            (
+                r#"{"quickView": {"viewers": {"*.p*f": "x"}}}"#,
+                "quickView.viewers",
+            ),
+            (
+                r#"{"quickView": {"viewers": {"*.pdf": "Not An Id"}}}"#,
+                "quickView.viewers.*.pdf",
+            ),
+            (
+                r#"{"quickView": {"viewers": {"*.pdf": ""}}}"#,
+                "quickView.viewers.*.pdf",
+            ),
+            (r#"{"quickView": {"other": {}}}"#, "unknown field"),
         ] {
             let error = parse(bad).unwrap_err();
             assert!(error.message.contains(expected), "{bad}: {error}");

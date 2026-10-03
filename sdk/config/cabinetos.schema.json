@@ -162,6 +162,13 @@
         "$ref": "#/$defs/ProgramEntry"
       }
     },
+    "quickView": {
+      "description": "Quick View, the panel Space opens (ADR 0023).",
+      "$ref": "#/$defs/QuickViewConfig",
+      "default": {
+        "viewers": {}
+      }
+    },
     "terminal": {
       "description": "The integrated terminal.",
       "$ref": "#/$defs/TerminalConfig",
@@ -949,6 +956,21 @@
         "name",
         "command"
       ]
+    },
+    "QuickViewConfig": {
+      "description": "Quick View (ADR 0023): which viewer shows which kind of file.",
+      "type": "object",
+      "properties": {
+        "viewers": {
+          "description": "The user's choice of viewer for a kind of file: a pattern in the\ngrammar of a viewer's `quickView.kinds` (`*.pdf`, `*.tar.gz`, or a\nwhole name such as `README`) to a Tool Extension's ID, or to `none`\nfor no viewer, the thumbnail only. Example: `{\"*.pdf\": \"pdf-viewer\",\n\"*.svg\": \"none\"}`. A kind not listed goes to the viewer installed\nfirst. The panel's viewer button and the palette's \"View: Choose\nQuick View Viewer…\" write it.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
     },
     "SavedTerminal": {
       "description": "One saved terminal session: what is needed to start the same kind of\nshell again. Its output and its history are not saved.",

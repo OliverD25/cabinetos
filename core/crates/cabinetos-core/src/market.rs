@@ -13,14 +13,18 @@
 //!   core clears the plugin's grants before the new files are in place, and
 //!   the plugin host reloads it.
 //! - A theme install applies at once when `ui.theme` names it; a tool
-//!   install or uninstall sends `tools_changed`.
+//!   install or uninstall sends `tools_changed`, and then
+//!   `quick_view_table_changed` when the Quick View table changed with it.
+//! - The Quick View table (ADR 0023, decision 1) is built from the tools'
+//!   `quickView` blocks at start, after a tool install or uninstall, and
+//!   after `quickView.viewers` changes.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use cabinetos_market::{Index, Installed, Market, MarketError, Source};
+use cabinetos_market::{Index, Installed, Market, MarketError, QuickViewTable, Source};
 use cabinetos_plugins::PluginHost;
 use cabinetos_plugins::manifest::{self, Capability};
 use cabinetos_protocol::{
@@ -30,7 +34,7 @@ use cabinetos_protocol::{
 
 use crate::CORE_VERSION;
 use crate::events::EventHub;
-use crate::settings::Settings;
+use crate::settings::{Settings, Snapshot};
 use crate::themes::Themes;
 
 /// Progress events of one download: at most 30 a second.
@@ -60,6 +64,12 @@ pub(crate) struct Marketplace {
     /// `None` when the plugin host could not start.
     plugins: Option<Arc<PluginHost>>,
     themes: Arc<Themes>,
+    /// The window's tools folder in development (`--dev-tools-dir`), listed
+    /// first for Quick View.
+    dev_tools: Option<PathBuf>,
+    /// The Quick View table built last. The lock is held while one is
+    /// built, so two builds never cross.
+    quick_view: Mutex<Option<Arc<QuickViewTable>>>,
 }
 
 impl Marketplace {
@@ -69,6 +79,7 @@ impl Marketplace {
         events: Arc<EventHub>,
         plugins: Option<Arc<PluginHost>>,
         themes: Arc<Themes>,
+        dev_tools: Option<PathBuf>,
     ) -> Self {
         Self {
             market,
@@ -79,7 +90,57 @@ impl Marketplace {
             events,
             plugins,
             themes,
+            dev_tools,
+            quick_view: Mutex::new(None),
         }
+    }
+
+    /// The reply to `quick_view_table`. Blocking when no table is built yet.
+    pub(crate) fn quick_view_table(&self) -> Response {
+        let (viewers, kinds) = (*self.current_quick_view()).clone();
+        Response::QuickViewTable { viewers, kinds }
+    }
+
+    /// The table built last, built now when there is none. Blocking then.
+    pub(crate) fn current_quick_view(&self) -> Arc<QuickViewTable> {
+        let mut table = self
+            .quick_view
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        Arc::clone(table.get_or_insert_with(|| Arc::new(self.build_quick_view())))
+    }
+
+    /// Builds the table again; when it differs from the one before, every
+    /// client gets `quick_view_table_changed`. Blocking: it reads the tools
+    /// folders.
+    pub(crate) fn rebuild_quick_view(&self) {
+        let mut table = self
+            .quick_view
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let built = self.build_quick_view();
+        if table.as_deref() == Some(&built) {
+            return;
+        }
+        let first = table.is_none();
+        *table = Some(Arc::new(built.clone()));
+        drop(table);
+        let (viewers, kinds) = built;
+        tracing::info!(
+            viewers = viewers.len(),
+            kinds = kinds.len(),
+            "quick view table built"
+        );
+        if !first {
+            self.events
+                .publish(Event::QuickViewTableChanged { viewers, kinds });
+        }
+    }
+
+    fn build_quick_view(&self) -> QuickViewTable {
+        let choices = self.settings.snapshot().config.quick_view.viewers.clone();
+        self.market
+            .quick_view_table(self.dev_tools.as_deref(), &choices)
     }
 
     /// The reply to `marketplace_refresh`: reads the catalogue now.
@@ -244,9 +305,12 @@ impl Marketplace {
                 }
             }
             ExtensionKind::Theme => self.themes.refresh(),
-            ExtensionKind::Tool => self.events.publish(Event::ToolsChanged {
-                tools: self.market.tools(),
-            }),
+            ExtensionKind::Tool => {
+                self.events.publish(Event::ToolsChanged {
+                    tools: self.market.tools(),
+                });
+                self.rebuild_quick_view();
+            }
         }
     }
 
@@ -271,6 +335,7 @@ impl Marketplace {
                     self.events.publish(Event::ToolsChanged {
                         tools: self.market.tools(),
                     });
+                    self.rebuild_quick_view();
                 }
                 Response::Ok
             }
@@ -367,6 +432,36 @@ impl Marketplace {
         }
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Builds the Quick View table at start, then again each time
+/// `quickView.viewers` changes in the configuration (from the window, the
+/// palette or the file).
+pub(crate) async fn follow_quick_view(
+    market: Arc<Marketplace>,
+    mut changes: tokio::sync::watch::Receiver<Arc<Snapshot>>,
+) {
+    let mut applied = changes
+        .borrow_and_update()
+        .config
+        .quick_view
+        .viewers
+        .clone();
+    let building = Arc::clone(&market);
+    let _ = tokio::task::spawn_blocking(move || building.rebuild_quick_view()).await;
+    while changes.changed().await.is_ok() {
+        let viewers = changes
+            .borrow_and_update()
+            .config
+            .quick_view
+            .viewers
+            .clone();
+        if viewers != applied {
+            applied = viewers;
+            let market = Arc::clone(&market);
+            let _ = tokio::task::spawn_blocking(move || market.rebuild_quick_view()).await;
+        }
     }
 }
 

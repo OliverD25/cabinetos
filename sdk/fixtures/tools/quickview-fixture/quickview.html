@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Rule 6 of the first viewer's contract (ADR 0023): its own folder, and the file hosts. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https://*.cabinetos.example data:; media-src https://*.cabinetos.example data:; connect-src https://*.cabinetos.example">
+  <title>Quick View Fixture</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { display: grid; place-items: center; font: 14px "Segoe UI Variable", sans-serif; }
+    img { max-width: 100%; max-height: 100%; }
+  </style>
+  <script src="/quickview.js" defer></script>
+</head>
+<body>
+  <main id="content"></main>
+</body>
+</html>

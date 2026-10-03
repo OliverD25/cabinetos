@@ -62,6 +62,7 @@ names the file and the problem.
 | `entry` | The page the tool starts from: an `.html` file inside the folder, without `..` or a drive. |
 | `accepts` | The file names it opens, without case: `*.ext` or a whole name such as `README`. May be empty. |
 | `placement` | `pane`: the pane's editor tab. `dock`: the Tool Dock; this version opens a dock tool in a pane too, until the dock has tabs for tools. |
+| `quickView` | Optional: the tool is a Quick View viewer ("Quick View" below). |
 | `sidebar` | Optional, `false` when it is left out. `true`: the tool also has a page in the sidebar, with a button of its own in the activity rail of the rail layout. Give `accepts` an empty list when the tool opens no file. |
 
 The window reads the file strictly, like `plugin.json`: an unknown key, a
@@ -277,6 +278,61 @@ let a page run the agent's commands: `agent.chat`, `agent.tier`, `agent.undo`,
 `editor.openMarkdownPreview` is also in the palette ("Editor: Open
 Markdown Preview", Ctrl+K V in a pane): it opens the focused Markdown file
 in the preview, or says that no Markdown tool is installed.
+
+## Quick View
+
+Space on a file opens the floating Quick View panel
+([ADR 0023](decisions/0023-quick-view-viewer-contract.md)). The panel shows
+Windows' thumbnail at once; a viewer, which is a Tool Extension, then shows
+the full view. CabinetOS ships no viewer (Constitution Article 10). A tool
+becomes a viewer with the `quickView` key of its `tool.json`:
+
+```json
+{
+  "id": "image-viewer",
+  "name": "Image Viewer",
+  "version": "1.0.0",
+  "author": "CabinetOS",
+  "description": "Shows images in Quick View.",
+  "entry": "index.html",
+  "accepts": [],
+  "placement": "pane",
+  "quickView": {
+    "kinds": ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.heic"],
+    "entry": "quickview.html"
+  }
+}
+```
+
+| Key | Rule |
+|---|---|
+| `quickView.kinds` | 1 to 512 patterns in the grammar of `accepts`: `*.ext` (an extension, which may have dots, such as `*.tar.gz`) or a whole name (`README`, `Dockerfile`), compared without case. No `*` alone, no `?` and no other wildcards; no MIME types. |
+| `quickView.entry` | Optional: the page Quick View loads, with the rules of `entry`. Without it, the tool's `entry` is used. |
+
+- `accepts` keeps its meaning (Enter opens such a file in the tool), so a
+  viewer that opens nothing in a pane gives it an empty list.
+- **The core reads the block**, not the window: it builds the Quick View
+  table at start, after a tool install or uninstall, and after a change of
+  `quickView.viewers`, and sends it to the window
+  ([ipc.md](ipc.md), "Quick View"). So a viewer installed while the window
+  runs works at once. A block that is wrong (a bad pattern, more than 512,
+  an unknown key, a bad or missing page) leaves the tool out of Quick View
+  with a warning in the core's log that names the file; its pane use is not
+  touched.
+- **Several viewers for one kind.** The user's choice
+  (`quickView.viewers` in [config.md](config.md)) first; then the viewer
+  installed first: the tools of the window's development folder
+  (`--tools-dir`, which the window passes to the core as
+  `--dev-tools-dir`), then marketplace installs by their time in
+  `installed.json`, then tools copied by hand, by folder name. Installing a
+  second viewer therefore never takes a kind from the first.
+- The page's messages in the panel (`quickview-show` and the reports) are
+  in ADR 0023, decisions 2 and 3. The test viewer
+  [sdk/fixtures/tools/quickview-fixture](../sdk/fixtures/tools/quickview-fixture/README.md)
+  does what a `.qvtest` file's first line says.
+- The marketplace item of a viewer sets `minCoreVersion` to the first
+  release with Quick View: an older window reads `tool.json` strictly and
+  would leave a tool with a `quickView` key out.
 
 ## Writing a tool
 
