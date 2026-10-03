@@ -82,7 +82,7 @@ const TERMINAL: Option<&str> = Some("terminalFocus");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 125] = [
+const SEED: [Seed; 128] = [
     seed(
         "palette.show",
         "View",
@@ -155,6 +155,33 @@ const SEED: [Seed; 125] = [
         "View",
         "Toggle Compact Overlay",
         &["ctrl+alt+up"],
+        UI,
+        None,
+    ),
+    // Quick View (Phase 25, ADR 0023, decision 6): Space opens the floating
+    // panel on the cursor row and closes it; Esc closes it as every overlay.
+    // Space is a normal key, not in the Immutable System Tier.
+    seed(
+        "quickView.toggle",
+        "View",
+        "Toggle Quick View",
+        &["space"],
+        UI,
+        FILES,
+    ),
+    seed(
+        "quickView.chooseViewer",
+        "View",
+        "Choose Quick View Viewer…",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "quickView.installViewer",
+        "View",
+        "Install Quick View Viewer",
+        &[],
         UI,
         None,
     ),
@@ -543,11 +570,13 @@ const SEED: [Seed; 125] = [
         UI,
         FILES,
     ),
+    // Total Commander's Space; Shift+Space since Quick View took Space
+    // (ADR 0023, decision 6).
     seed(
         "edit.toggleSelectionInPlace",
         "Edit",
         "Toggle Selection in Place",
-        &["space"],
+        &["shift+space"],
         UI,
         FILES,
     ),
@@ -1096,6 +1125,48 @@ mod tests {
     }
 
     #[test]
+    fn quick_view_has_space_in_the_files_view_and_two_commands_without_keys() {
+        let registry = CommandRegistry::core();
+        let toggle = registry.get("quickView.toggle").unwrap();
+        assert_eq!(
+            (toggle.category.as_str(), toggle.title.as_str()),
+            ("View", "Toggle Quick View")
+        );
+        assert_eq!(texts(&toggle.default_keys), ["space"]);
+        assert_eq!(toggle.when.as_deref(), Some("filesView"));
+        assert_eq!(toggle.target, CommandTarget::Ui);
+        assert!(!toggle.immutable, "Space is a normal key, not in the tier");
+        for (id, title) in [
+            ("quickView.chooseViewer", "Choose Quick View Viewer…"),
+            ("quickView.installViewer", "Install Quick View Viewer"),
+        ] {
+            let command = registry.get(id).unwrap();
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                ("View", title)
+            );
+            assert!(command.default_keys.is_empty(), "{id}");
+            assert_eq!(command.when, None, "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+        }
+        let marking = registry.get("edit.toggleSelectionInPlace").unwrap();
+        assert_eq!(texts(&marking.default_keys), ["shift+space"]);
+        // Space and Shift+Space each belong to one command.
+        for keys in ["space", "shift+space"] {
+            let sharing = registry
+                .commands()
+                .iter()
+                .filter(|command| texts(&command.default_keys).contains(&keys.to_owned()))
+                .count();
+            assert_eq!(sharing, 1, "{keys}");
+        }
+        assert_eq!(
+            IMMUTABLE_TIER,
+            ["palette.show", "overlay.close", "keys.open"]
+        );
+    }
+
+    #[test]
     fn folder_sizes_has_a_toggle_for_the_palette_and_no_key() {
         let registry = CommandRegistry::core();
         let toggle = registry.get("view.toggleFolderSizes").unwrap();
@@ -1219,7 +1290,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 125);
+        assert_eq!(registry.commands().len(), 128);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1353,7 +1424,7 @@ mod tests {
             "edit.toggleSelectionInPlace",
             "Edit",
             "Toggle Selection in Place",
-            &["space"],
+            &["shift+space"],
             Some("filesView"),
         ),
         (

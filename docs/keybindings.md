@@ -40,6 +40,9 @@ The core's commands, in palette order:
 | `view.focusOtherPane` | View: Focus Other Pane | `tab` | `filesView` | UI |
 | `view.toggleSidebar` | View: Toggle Sidebar | `ctrl+b` | | UI |
 | `view.toggleCompactOverlay` | View: Toggle Compact Overlay | `ctrl+alt+up` | | UI |
+| `quickView.toggle` | View: Toggle Quick View | `space` | `filesView` | UI |
+| `quickView.chooseViewer` | View: Choose Quick View Viewer… | | | UI |
+| `quickView.installViewer` | View: Install Quick View Viewer | | | UI |
 | `view.layoutClassic` | View: Classic Layout | | | UI |
 | `view.layoutRight` | View: Terminal on the Right | | | UI |
 | `view.layoutRail` | View: Activity Rail | | | UI |
@@ -108,7 +111,7 @@ The core's commands, in palette order:
 | `view.sortByExtension` | View: Sort by Extension | `ctrl+f4` | `filesView` | UI |
 | `view.sortByModified` | View: Sort by Date Modified | `ctrl+f5` | `filesView` | UI |
 | `view.sortBySize` | View: Sort by Size | `ctrl+f6` | `filesView` | UI |
-| `edit.toggleSelectionInPlace` | Edit: Toggle Selection in Place | `space` | `filesView` | UI |
+| `edit.toggleSelectionInPlace` | Edit: Toggle Selection in Place | `shift+space` | `filesView` | UI |
 | `edit.selectByPattern` | Edit: Select by Pattern… | `numpadadd` | `filesView` | UI |
 | `edit.unselectByPattern` | Edit: Unselect by Pattern… | `numpadsubtract` | `filesView` | UI |
 | `edit.selectSameExtension` | Edit: Select Same Extension | `alt+numpadadd` | `filesView` | UI |
@@ -181,6 +184,24 @@ The core's commands, in palette order:
   always-on-top drawer with one pane, and back ([ui.md](ui.md),
   "Compact overlay"). Its key, `ctrl+alt+up`, is the one the Files app
   uses; no other command has it in any context.
+- **Quick View** (Phase 25, [ADR 0023](decisions/0023-quick-view-viewer-contract.md),
+  decision 6). `quickView.toggle` has Space in a file pane: it opens the
+  floating panel on the cursor row and closes it. Space is a normal key,
+  not in the Immutable System Tier; Esc closes the panel as
+  `overlay.close` closes every overlay, and Enter (`pane.openSelected`)
+  closes it and opens the row. Up, Down, PageUp, PageDown, Home, End and
+  quick search are the list's own keys and move the cursor under the
+  panel, which follows it. `quickView.chooseViewer` picks the viewer of
+  the shown file's kind (`quickView.viewers`, [config.md](config.md)) and
+  `quickView.installViewer` installs the viewer the panel offers; neither
+  has a key. **Marking in place moved from Space to Shift+Space**
+  (`edit.toggleSelectionInPlace`); Insert still marks and moves down. A
+  user who wants Total Commander's Space back binds `space` to
+  `edit.toggleSelectionInPlace` and gives `quickView.toggle` another key:
+  while both have Space in `filesView` the keymap refuses them as a
+  conflict. A viewer page may ask for some keys while it shows a file; the
+  panel's keys and every key the user bound always win (ADR 0023,
+  decision 3).
 - `view.fitColumns` and `view.resetColumns` set the file panes' column
   widths (`ui.columns`, [ui.md](ui.md), "Column widths"). The first makes
   Modified, Type and Size as wide as their texts on screen, as a
