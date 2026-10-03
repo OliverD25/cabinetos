@@ -299,6 +299,18 @@ impl Job {
         })
     }
 
+    /// Stops the job's clock at the end of its work. Done under the
+    /// emitter's lock, so a progress record that is being sent is complete
+    /// first, and only the final one follows (`progress::publish`).
+    pub(crate) fn stop_clock(&self) {
+        let _sending = lock(&self.emitter);
+        let _ = self.final_elapsed_ms.set(self.elapsed_ms());
+    }
+
+    pub(crate) fn clock_stopped(&self) -> bool {
+        self.final_elapsed_ms.get().is_some()
+    }
+
     /// A progress record with the given speed, pace and time left.
     pub(crate) fn progress(
         &self,

@@ -385,7 +385,7 @@ fn set_phase(engine: &Engine, job: &Job, phase: Phase) {
 
 /// Ends the job: the final progress, then the final state.
 pub(crate) fn finish(engine: &Engine, job: &Job, state: &JobState) {
-    let _ = job.final_elapsed_ms.set(job.elapsed_ms());
+    job.stop_clock();
     if matches!(state, &JobState::Cancelled) {
         // Nothing waits for a decision any more.
         lock(&job.queue).parked.clear();

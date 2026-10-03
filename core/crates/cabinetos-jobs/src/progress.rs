@@ -92,8 +92,11 @@ fn changed(before: &JobProgress, now: &JobProgress) -> bool {
 /// waiting out the gap, and nothing follows it.
 pub(crate) fn publish(job: &Job, sink: &EventSink, gap: Duration, last: bool) {
     let mut emitter = lock(&job.emitter);
-    // Once a job has ended, only its final record goes out.
-    if emitter.finished || (!last && job.is_done()) {
+    // Once a job's work has ended, only its final record goes out. The clock
+    // stops with the work, while the undo journal is still being written: a
+    // record sent in that time would carry the stopped time, and under load
+    // dozens of them would share one second of the core's clock.
+    if emitter.finished || (!last && (job.clock_stopped() || job.is_done())) {
         return;
     }
     if let Some(sent) = emitter.last_emit {
@@ -169,6 +172,50 @@ mod tests {
             pace = meter.rate(now, u64::from(step) * 400 * 34 / 1000).unwrap();
         }
         assert!((330.0..=420.0).contains(&pace), "{pace}");
+    }
+
+    #[test]
+    fn nothing_but_the_final_record_goes_out_once_the_clock_has_stopped() {
+        use std::sync::atomic::Ordering;
+        use std::sync::{Arc, Mutex};
+
+        let job = Job::new(
+            1,
+            cabinetos_protocol::JobRequest {
+                kind: cabinetos_protocol::JobKind::Copy,
+                sources: Vec::new(),
+                destination: None,
+                options: cabinetos_protocol::JobOptions::default(),
+            },
+            Vec::new(),
+            Vec::new(),
+        );
+        let _ = job.started.set(Instant::now());
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let sink: EventSink = {
+            let sent = Arc::clone(&sent);
+            Arc::new(move |event| {
+                if let Event::JobProgress(progress) = event {
+                    lock(&sent).push(progress);
+                }
+            })
+        };
+        // No gap, so only the clock decides what goes out.
+        job.counters.files_done.store(1, Ordering::Relaxed);
+        publish(&job, &sink, Duration::ZERO, false);
+        assert_eq!(lock(&sent).len(), 1, "a running job reports");
+
+        job.stop_clock();
+        job.counters.files_done.store(2, Ordering::Relaxed);
+        publish(&job, &sink, Duration::ZERO, false);
+        publish(&job, &sink, Duration::ZERO, false);
+        assert_eq!(lock(&sent).len(), 1, "no record follows the stopped clock");
+
+        publish(&job, &sink, Duration::ZERO, true);
+        let sent = lock(&sent);
+        assert_eq!(sent.len(), 2, "the final record goes out");
+        assert_eq!(sent[1].files_done, 2);
+        assert_eq!(Some(&sent[1].elapsed_ms), job.final_elapsed_ms.get());
     }
 
     #[test]
