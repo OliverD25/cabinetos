@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "nightfox",
+  "name": "Nightfox",
+  "author": "James Simpson (EdenEast), port by CabinetOS",
+  "attribution": "Colours from Nightfox by James Simpson (https://github.com/EdenEast/nightfox.nvim), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#719CD6",
+  "mica": {
+    "tint": "#131A24",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#CDCECF",
+    "textSecondary": "#CDCECFE6",
+    "textTertiary": "#AEAFB0",
+    "textDisabled": "#71839B",
+    "layerFill": "#212E3F80",
+    "layerStroke": "#39506D99",
+    "layerStrokeActive": "#738091",
+    "controlFill": "#212E3FB3",
+    "controlFillHover": "#2B3B51B3",
+    "acrylicTint": "#131A24B8",
+    "terminalBackground": "#131A2499",
+    "folderIcon": "#DBC074",
+    "folderIconFront": "#E8D6A5",
+    "fileTypeColors": {
+      "md": "#719CD6",
+      "rs": "#F4A261",
+      "toml": "#9D79D6",
+      "exe": "#81B29A",
+      "dll": "#81B29A",
+      "bin": "#C94F6D",
+      "pdf": "#C94F6D",
+      "zip": "#DBC074"
+    },
+    "permissionLow": "#81B29A",
+    "permissionMedium": "#DBC074",
+    "permissionHigh": "#C94F6D"
+  },
+  "terminal": {
+    "foreground": "#CDCECF",
+    "background": "#192330",
+    "cursor": "#CDCECF",
+    "ansi": [
+      "#393B44",
+      "#C94F6D",
+      "#81B29A",
+      "#DBC074",
+      "#719CD6",
+      "#9D79D6",
+      "#63CDCF",
+      "#DFDFE0",
+      "#575860",
+      "#D16983",
+      "#8EBAA4",
+      "#E0C989",
+      "#86ABDC",
+      "#BAA1E2",
+      "#7AD5D6",
+      "#E4E4E5"
+    ]
+  }
+}

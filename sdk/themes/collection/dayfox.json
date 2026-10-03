@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "dayfox",
+  "name": "Dayfox",
+  "author": "James Simpson (EdenEast), port by CabinetOS",
+  "attribution": "Colours from Dayfox by James Simpson (https://github.com/EdenEast/nightfox.nvim), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#2848A9",
+  "mica": {
+    "tint": "#E4DCD4",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#3D2B5A",
+    "textSecondary": "#3D2B5A",
+    "textTertiary": "#643F61",
+    "textDisabled": "#837A72",
+    "layerFill": "#F6F2EEB3",
+    "layerStroke": "#D3C7BB",
+    "layerStrokeActive": "#837A72",
+    "controlFill": "#E7D2BEB3",
+    "controlFillHover": "#D3C7BBB3",
+    "acrylicTint": "#F6F2EED9",
+    "terminalBackground": "#F6F2EE99",
+    "folderIcon": "#AC5402",
+    "folderIconFront": "#C9905B",
+    "fileTypeColors": {
+      "md": "#2848A9",
+      "rs": "#955F61",
+      "toml": "#6E33CE",
+      "exe": "#396847",
+      "dll": "#396847",
+      "bin": "#A5222F",
+      "pdf": "#A5222F",
+      "zip": "#AC5402"
+    },
+    "permissionLow": "#396847",
+    "permissionMedium": "#AC5402",
+    "permissionHigh": "#A5222F"
+  },
+  "terminal": {
+    "foreground": "#3D2B5A",
+    "background": "#F6F2EE",
+    "cursor": "#3D2B5A",
+    "ansi": [
+      "#352C24",
+      "#A5222F",
+      "#396847",
+      "#AC5402",
+      "#2848A9",
+      "#6E33CE",
+      "#287980",
+      "#F2E9E1",
+      "#534C45",
+      "#B3434E",
+      "#577F63",
+      "#B86E28",
+      "#4863B6",
+      "#8452D5",
+      "#488D93",
+      "#F4ECE6"
+    ]
+  }
+}

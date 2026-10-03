@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "flexoki-light",
+  "name": "Flexoki Light",
+  "author": "Steph Ango (kepano), port by CabinetOS",
+  "attribution": "Colours from Flexoki Light by Steph Ango (https://stephango.com/flexoki, https://github.com/kepano/flexoki), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#24837B",
+  "mica": {
+    "tint": "#F2F0E5",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#100F0F",
+    "textSecondary": "#100F0FC8",
+    "textTertiary": "#100F0FB3",
+    "textDisabled": "#B7B5AC",
+    "layerFill": "#FFFCF0B3",
+    "layerStroke": "#DAD8CE",
+    "layerStrokeActive": "#878580",
+    "controlFill": "#F2F0E5B3",
+    "controlFillHover": "#DAD8CEB3",
+    "acrylicTint": "#FFFCF0D9",
+    "terminalBackground": "#FFFCF099",
+    "folderIcon": "#AD8301",
+    "folderIconFront": "#CAAE5A",
+    "fileTypeColors": {
+      "md": "#205EA6",
+      "rs": "#BC5215",
+      "toml": "#5E409D",
+      "exe": "#66800B",
+      "dll": "#66800B",
+      "bin": "#AF3029",
+      "pdf": "#AF3029",
+      "zip": "#AD8301"
+    },
+    "permissionLow": "#66800B",
+    "permissionMedium": "#AD8301",
+    "permissionHigh": "#AF3029"
+  },
+  "terminal": {
+    "foreground": "#100F0F",
+    "background": "#FFFCF0",
+    "cursor": "#100F0F",
+    "ansi": [
+      "#100F0F",
+      "#AF3029",
+      "#66800B",
+      "#C19C00",
+      "#205EA6",
+      "#5E409D",
+      "#24837B",
+      "#F2F0E5",
+      "#575653",
+      "#D14D41",
+      "#879A39",
+      "#D0A215",
+      "#4385BE",
+      "#8B7EC8",
+      "#3AA99F",
+      "#FFFCF0"
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "vitesse-dark",
+  "name": "Vitesse Dark",
+  "author": "Anthony Fu, port by CabinetOS",
+  "attribution": "Colours from Vitesse Dark by Anthony Fu (https://github.com/antfu/vscode-theme-vitesse), used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "dark",
+  "accent": "#4D9375",
+  "mica": {
+    "tint": "#121212",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#DBD7CA",
+    "textSecondary": "#DBD7CAC8",
+    "textTertiary": "#BFBAAA",
+    "textDisabled": "#DEDCD550",
+    "layerFill": "#18181880",
+    "layerStroke": "#191919FF",
+    "layerStrokeActive": "#758575",
+    "controlFill": "#181818B3",
+    "controlFillHover": "#393A34B3",
+    "acrylicTint": "#121212B8",
+    "terminalBackground": "#12121299",
+    "folderIcon": "#E6CC77",
+    "folderIconFront": "#EFDEA7",
+    "fileTypeColors": {
+      "md": "#6394BF",
+      "rs": "#C99076",
+      "toml": "#D9739F",
+      "exe": "#4D9375",
+      "dll": "#4D9375",
+      "bin": "#CB7676",
+      "pdf": "#CB7676",
+      "zip": "#E6CC77"
+    },
+    "permissionLow": "#4D9375",
+    "permissionMedium": "#E6CC77",
+    "permissionHigh": "#CB7676"
+  },
+  "terminal": {
+    "foreground": "#DBD7CA",
+    "background": "#121212",
+    "cursor": "#DBD7CA",
+    "ansi": [
+      "#393A34",
+      "#CB7676",
+      "#4D9375",
+      "#E6CC77",
+      "#6394BF",
+      "#D9739F",
+      "#5EAAB5",
+      "#DBD7CA",
+      "#777777",
+      "#CB7676",
+      "#4D9375",
+      "#E6CC77",
+      "#6394BF",
+      "#D9739F",
+      "#5EAAB5",
+      "#FFFFFF"
+    ]
+  }
+}
