@@ -2014,6 +2014,20 @@ and the 0.1.2 page (verified live), the winget submission of 0.1.2 is the
 creator's own step (this session may not create a pull request in their
 name), and GPL or LGPL themes stay out of the collection.**
 
+**Status (2026-10-03, 08:06): the design note is ADR 0023 (branch `worktree-agent-a5904c72cd71567c9`), waiting for the merge.**
+
+**Status (2026-10-03, 08:08): ADR 0023 is on main (merge of the coder's branch).**
+Five points of it are the creator's to confirm before unit 2 starts, and
+the session's reading until then: Space moves the selection toggle
+(`edit.toggleSelectionInPlace`) to Shift+Space, which changes a Total
+Commander habit; the install offer reads the catalogue at most once a
+session when the cache is over seven days old (a new reason for the core
+to go online, trust rule 6 of the marketplace); the first Space of a
+session may take up to 1.5 s on the laptop while a viewer's browser
+process starts; a click inside a viewer returns the keyboard to the list;
+a hung Windows preview handler is not settled and must be tested with a
+handler that hangs on purpose before the Office viewer ships.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
