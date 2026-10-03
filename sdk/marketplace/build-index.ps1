@@ -37,13 +37,22 @@
 # the core's tests; the index offers it as the extension's item only, so
 # without -Extensions it is not offered at all.
 #
+# With -Viewers, the index also offers the Quick View viewers of sdk/tools: each
+# folder there whose tool.json has a quickView block (the Image Viewer and the
+# Media Viewer, ADR 0023) as a Tool Extension item, a zip of the folder, whose
+# manifest is its tool.json. The core's quick_view_offer finds the viewer for a
+# file by the quickView.kinds inside that manifest. Each item sets
+# minCoreVersion to 0.1.3, the first release with Quick View: an older window
+# reads tool.json strictly and would leave a tool with a quickView key out.
+# The public build is -Collection -ThemesOnly -Viewers.
+#
 # Point the core at it with marketplace.index (the folder, or its
 # index.json) and marketplace.themes (the folder, or its themes.json).
 # Nothing is uploaded or published: the folder stays on this machine. The
 # format: sdk/marketplace/index.schema.json and docs/marketplace.md.
 #
 # Run from anywhere, in Windows PowerShell or PowerShell 7:
-#   powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-ThemesOnly] [-Extensions]
+#   powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-ThemesOnly] [-Extensions] [-Viewers]
 
 param(
     [Parameter(Mandatory = $true)]
@@ -56,7 +65,10 @@ param(
     [switch] $ThemesOnly,
 
     # Also pack the extensions of sdk/extensions (plugin and tool).
-    [switch] $Extensions
+    [switch] $Extensions,
+
+    # Also pack the Quick View viewers of sdk/tools (the Image Viewer and the Media Viewer).
+    [switch] $Viewers
 )
 
 $ErrorActionPreference = 'Stop'
@@ -205,7 +217,7 @@ function Add-PluginItem([string] $ManifestPath, [string] $Component, [string] $L
 
 # One Tool Extension as an index item: a zip of the tool's folder, with
 # tool.json at its root.
-function Add-ToolItem([string] $Folder, [string] $Long) {
+function Add-ToolItem([string] $Folder, [string] $Long, [string] $MinCoreVersion = '0.1.0') {
     $manifest = Read-Json (Join-Path $Folder 'tool.json')
     $name = "$($manifest.id)-$($manifest.version).zip"
     $package = Join-Path $files $name
@@ -233,7 +245,7 @@ function Add-ToolItem([string] $Folder, [string] $Long) {
         size           = (Get-Item $package).Length
         download       = [ordered]@{ url = "files/$name"; sha256 = (Get-Sha256 $package) }
         manifest       = $manifest
-        minCoreVersion = '0.1.0'
+        minCoreVersion = $MinCoreVersion
         license        = 'MIT'
     })
 }
@@ -277,6 +289,22 @@ if ($Extensions) {
         if ($extension.tool) {
             Add-ToolItem (Join-Path $folder.FullName $extension.tool) $extension.long.tool
         }
+    }
+}
+
+if ($Viewers) {
+    # A viewer is any tool of sdk/tools with a quickView block (ADR 0023). The kinds are listed in the long
+    # description so the detail view says what Space will show once it is installed.
+    foreach ($folder in @(Get-ChildItem -Path (Join-Path $sdk 'tools') -Directory | Sort-Object Name)) {
+        $manifestPath = Join-Path $folder.FullName 'tool.json'
+        if (-not (Test-Path $manifestPath)) { continue }
+        $manifest = Read-Json $manifestPath
+        if (-not $manifest.quickView) { continue }
+        if ($manifest.id -ne $folder.Name) { throw "$manifestPath names the id '$($manifest.id)'; it must be its folder's name" }
+        $page = if ($manifest.quickView.entry) { $manifest.quickView.entry } else { $manifest.entry }
+        if (-not (Test-Path (Join-Path $folder.FullName $page))) { throw "${manifestPath}: the Quick View page '$page' is not in the folder" }
+        $long = "$($manifest.description) Space on a file of one of these kinds shows it in Quick View: $(@($manifest.quickView.kinds) -join ', ')."
+        Add-ToolItem $folder.FullName $long '0.1.3'
     }
 }
 
@@ -326,6 +354,14 @@ function Assert-Catalogue([string] $File, $Items, [string[]] $Kinds) {
         if ($item.download.sha256 -notmatch '^[0-9a-f]{64}$') { throw "${where}: sha256 is not 64 hex digits" }
         if ($item.size -le 0) { throw "${where}: size is 0" }
         if (-not $item.name -or -not $item.author.name) { throw "${where}: name and author are needed" }
+        if ($item.kind -eq 'tool' -and $item.manifest.quickView) {
+            $claims = @($item.manifest.quickView.kinds)
+            if ($claims.Count -lt 1 -or $claims.Count -gt 512) { throw "${where}: quickView.kinds must hold 1 to 512 patterns" }
+            foreach ($claim in $claims) {
+                if ($claim -isnot [string] -or $claim -notmatch '^(?=\S)(?=.*\S$)(\*\.[^*?\\/:]+|[^*?\\/:]+)$') { throw "${where}: the Quick View kind '$claim' is not *.ext or a whole name" }
+            }
+            if ($item.minCoreVersion -notmatch '^\d+\.\d+\.\d+$') { throw "${where}: a viewer needs minCoreVersion, the first release with Quick View" }
+        }
         if ($item.kind -eq 'theme') {
             if (@('dark', 'light', 'system') -notcontains $item.appearance) { throw "${where}: appearance '$($item.appearance)' is not dark, light or system" }
             if ($item.density -isnot [bool]) { throw "${where}: density must be true or false" }
