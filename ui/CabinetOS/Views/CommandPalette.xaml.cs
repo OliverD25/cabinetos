@@ -165,7 +165,16 @@ public sealed partial class CommandPalette : UserControl
         }
         if (_model is { HighlightIndex: >= 0 } model && model.HighlightIndex < model.Rows.Count)
         {
-            List.GetOrCreateElement(model.HighlightIndex).StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+            var row = List.GetOrCreateElement(model.HighlightIndex);
+            // A row the list makes for this call (outside the rows it has laid out, as at its first layout) is measured but
+            // not laid out. StartBringIntoView's target is the render size, 0 x 0 for that row, and the row stayed outside the
+            // visible part (the palette-burst test); its measured size is the row's own.
+            var size = row.RenderSize.Height > 0 ? row.RenderSize : row.DesiredSize;
+            row.StartBringIntoView(new BringIntoViewOptions
+            {
+                AnimationDesired = false,
+                TargetRect = new Windows.Foundation.Rect(0, 0, size.Width, size.Height),
+            });
         }
     }
 
