@@ -6,6 +6,10 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The command palette no longer fails in the background when its list changes while it scrolls to the highlighted command, as happened on its first showing when a second answer or a key came before the palette was drawn; the highlighted command still comes into view.
+
 ## [0.1.2] - 2026-10-03
 
 ### Added
