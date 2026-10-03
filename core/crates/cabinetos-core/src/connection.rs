@@ -468,10 +468,11 @@ impl Session {
                     self.spawn_reply(&id, &span, kind, move || market.quick_view_table());
                     None
                 }
-                Request::QuickViewOffer { .. } => Some(Response::Error {
-                    code: ErrorCode::NotImplemented,
-                    message: format!("{kind} is not built yet"),
-                }),
+                Request::QuickViewOffer { name } => {
+                    let market = Arc::clone(&self.services.market);
+                    self.spawn_reply(&id, &span, kind, move || market.quick_view_offer(&name));
+                    None
+                }
             }
         };
         // Requests handled right here are done; the others log when they end.

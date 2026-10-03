@@ -19,7 +19,7 @@
 //!   `quickView` blocks at start, after a tool install or uninstall, and
 //!   after `quickView.viewers` changes.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -28,8 +28,8 @@ use cabinetos_market::{Index, Installed, Market, MarketError, QuickViewTable, So
 use cabinetos_plugins::PluginHost;
 use cabinetos_plugins::manifest::{self, Capability};
 use cabinetos_protocol::{
-    CapabilityLevel, Catalogue, ErrorCode, Event, ExtensionKind, MarketItem, Response, Theme,
-    ToolInfo,
+    CapabilityLevel, Catalogue, ErrorCode, Event, ExtensionKind, MarketItem, OfferReason, Response,
+    Theme, ToolInfo,
 };
 
 use crate::CORE_VERSION;
@@ -43,6 +43,10 @@ const PROGRESS_INTERVAL: Duration = Duration::from_millis(33);
 /// How many previewed themes the core keeps (about 2 KB each): the whole
 /// collection and some to spare. A full memory starts over.
 const PREVIEWS_KEPT: usize = 64;
+
+/// How old the cached extensions' index may be for the Quick View offer
+/// before the core reads it from the web again (ADR 0023, decision 5.1).
+const OFFER_CACHE_AGE: Duration = Duration::from_hours(7 * 24);
 
 /// A catalogue read last, with the settings it came from.
 type Read = Option<(String, Arc<Index>)>;
@@ -70,6 +74,9 @@ pub(crate) struct Marketplace {
     /// The Quick View table built last. The lock is held while one is
     /// built, so two builds never cross.
     quick_view: Mutex<Option<Arc<QuickViewTable>>>,
+    /// The `marketplace.index` addresses the Quick View offer read from
+    /// the web in this session: at most once each.
+    offer_reads: Mutex<HashSet<String>>,
 }
 
 impl Marketplace {
@@ -92,7 +99,91 @@ impl Marketplace {
             themes,
             dev_tools,
             quick_view: Mutex::new(None),
+            offer_reads: Mutex::new(HashSet::new()),
         }
+    }
+
+    /// The reply to `quick_view_offer`: the first tool of the extensions
+    /// catalogue, in its order, that claims `name`, that this core can run
+    /// and that is not installed. Blocking: it reads the record of installs
+    /// and the tools folders, and may read the catalogue.
+    pub(crate) fn quick_view_offer(&self, name: &str) -> Response {
+        let Some(index) = self.offer_catalogue() else {
+            return Response::QuickViewOffer {
+                item: None,
+                reason: Some(OfferReason::Offline),
+            };
+        };
+        let mut installed: BTreeSet<String> = self.market.installed().into_keys().collect();
+        installed.extend(self.market.tools().into_iter().map(|tool| tool.id));
+        if let Some(dev) = &self.dev_tools {
+            installed.extend(
+                cabinetos_market::list_tools(dev)
+                    .into_iter()
+                    .map(|tool| tool.id),
+            );
+        }
+        let offered = self.market.offers(&index.items);
+        match cabinetos_market::quick_view_offer(name, &offered, &installed) {
+            Some(item) => Response::QuickViewOffer {
+                item: Some(item),
+                reason: None,
+            },
+            None => Response::QuickViewOffer {
+                item: None,
+                reason: Some(OfferReason::NoItem),
+            },
+        }
+    }
+
+    /// The extensions catalogue for the offer, `None` when it cannot be
+    /// read: the one read in this session for the current address; else a
+    /// catalogue on this machine from disk; else the marketplace's cached
+    /// copy while it is under seven days old; else the web, once per
+    /// session and address.
+    fn offer_catalogue(&self) -> Option<Arc<Index>> {
+        let key = self.key(Catalogue::Extensions);
+        if let Some((read_from, index)) = &*self.lock(Catalogue::Extensions)
+            && *read_from == key
+        {
+            return Some(Arc::clone(index));
+        }
+        let config = self.settings.snapshot().config.marketplace.clone();
+        let source = Source::parse(&config.index, config.allow_insecure)
+            .inspect_err(|error| {
+                tracing::info!(error = %error.message, "no catalogue for the quick view offer");
+            })
+            .ok()?;
+        if let Source::Local(_) = source {
+            return self
+                .market
+                .fetch(&source, config.allow_insecure)
+                .inspect_err(|error| {
+                    tracing::info!(error = %error.message, "no catalogue for the quick view offer");
+                })
+                .ok()
+                .map(|index| Arc::new(index.only(Catalogue::Extensions)));
+        }
+        if let Some(index) = self.market.cached_index(&source, OFFER_CACHE_AGE) {
+            return Some(Arc::new(index.only(Catalogue::Extensions)));
+        }
+        let first = self
+            .offer_reads
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(key);
+        if !first {
+            return None;
+        }
+        tracing::info!(
+            source = %config.index,
+            "the quick view offer reads the extensions catalogue (once this session)"
+        );
+        self.read(Catalogue::Extensions)
+            .inspect_err(|error| {
+                tracing::info!(error = %error.message, "no catalogue for the quick view offer");
+            })
+            .ok()
     }
 
     /// The reply to `quick_view_table`. Blocking when no table is built yet.

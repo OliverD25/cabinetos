@@ -218,8 +218,16 @@ read anyway (a disk error) is fetched again whole, without the tag.
    and reads manifests. A zip entry that points outside its folder, a link,
    more than 1,000 entries or more than 256 MiB unpacked stop the install.
 6. **The core fetches only when asked.** No background refresh; the core
-   reaches the network only for `marketplace_refresh`, `marketplace_search`
-   and `install_extension`.
+   reaches the network only for `marketplace_refresh`, `marketplace_search`,
+   `preview_theme`, `install_extension` and, since Quick View
+   ([ADR 0023](decisions/0023-quick-view-viewer-contract.md), decision
+   5.1), `quick_view_offer`. The last one is asked when the user presses
+   Space on a file that no installed viewer claims, and the offer of a
+   viewer cannot be made without the catalogue. It uses the catalogue read
+   in the session, or the cached `index.json` while it is under seven days
+   old; only an older or missing copy is read from the web, with its
+   `ETag`, and at most once per core session. When that read fails, the
+   panel shows no offer.
 7. **The marketplace replaces only what it installed.** An extension that
    is there already, and was not installed from the marketplace (a shipped
    theme, a plugin copied by hand), is left alone (`already_exists`).
@@ -332,7 +340,8 @@ extension only when the creator publishes it.
 `catalogue`, `extensions` or `themes`), `install_extension`,
 `uninstall_extension`, `list_tools`, and the events `install_progress`,
 `install_finished` and `tools_changed`: [ipc.md](ipc.md), "The
-marketplace".
+marketplace". `quick_view_offer`, which finds the Tool Extension whose
+`quickView.kinds` claim a file's name: [ipc.md](ipc.md), "Quick View".
 
 ## The command line
 

@@ -45,7 +45,8 @@ pub use index::{Index, Source, parse_catalogue, parse_index, search};
 
 pub use install::{Dirs, Installed, Market};
 pub use tools::{
-    QuickViewTable, TOOL_MANIFEST_FILE, Viewer, list_tools, quick_view_table, quick_view_viewers,
+    QuickViewTable, TOOL_MANIFEST_FILE, Viewer, list_tools, quick_view_offer, quick_view_table,
+    quick_view_viewers,
 };
 
 /// Environment variable naming the marketplace's own folder (the index

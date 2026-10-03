@@ -459,3 +459,69 @@ async fn the_development_folder_brings_its_viewers() {
     assert!(Path::new(&viewers[0].dir).ends_with("quickview-fixture"));
     assert_eq!(kinds.len(), 2);
 }
+
+fn offer(name: &str) -> Request {
+    Request::QuickViewOffer {
+        name: name.to_owned(),
+    }
+}
+
+/// Decision 5 of ADR 0023: a file no viewer claims gets the catalogue's
+/// first tool that claims it, until it is installed; a kind nobody claims
+/// gets `no_item`.
+#[tokio::test]
+async fn the_offer_comes_from_the_catalogue_until_the_viewer_is_installed() {
+    let core = start_core_with(&[], |dir| {
+        let mut too_new = fixture_offer(dir, "99.0.0");
+        too_new["id"] = json!("newer-viewer");
+        too_new["manifest"]["id"] = json!("newer-viewer");
+        Some(vec![too_new, fixture_offer(dir, "0.1.0")])
+    });
+    let mut client = connect(&core.pipe).await;
+    let reply = ask(&mut client, offer("case-1.QVTEST")).await;
+    let Response::QuickViewOffer {
+        item: Some(item),
+        reason: None,
+    } = &reply
+    else {
+        panic!("{reply:?}");
+    };
+    assert_eq!(item.id, "quickview-fixture");
+    assert_eq!(item.version, "1.0.0");
+    assert!(item.size > 0);
+    assert_eq!(
+        ask(&mut client, offer("notes.xyz")).await,
+        Response::QuickViewOffer {
+            item: None,
+            reason: Some(cabinetos_protocol::OfferReason::NoItem),
+        }
+    );
+    let install = Request::InstallExtension {
+        extension_id: "quickview-fixture".to_owned(),
+        version: None,
+    };
+    assert_eq!(ask(&mut client, install).await, Response::Ok);
+    assert_eq!(
+        ask(&mut client, offer("case-1.qvtest")).await,
+        Response::QuickViewOffer {
+            item: None,
+            reason: Some(cabinetos_protocol::OfferReason::NoItem),
+        }
+    );
+}
+
+/// A catalogue that cannot be read gives `offline`, and the panel shows no
+/// offer.
+#[tokio::test]
+async fn no_catalogue_gives_offline() {
+    let core = start_core_with(&[], |_| Some(Vec::new()));
+    std::fs::remove_file(core.path("index").join("index.json")).unwrap();
+    let mut client = connect(&core.pipe).await;
+    assert_eq!(
+        ask(&mut client, offer("report.pdf")).await,
+        Response::QuickViewOffer {
+            item: None,
+            reason: Some(cabinetos_protocol::OfferReason::Offline),
+        }
+    );
+}

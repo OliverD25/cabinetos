@@ -6,12 +6,13 @@
 //! the window, which reads the file strictly; `entry` it reads only for
 //! Quick View.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use cabinetos_protocol::{
-    ExtensionKind, MAX_KIND_PATTERNS, NO_VIEWER, QuickViewKind, QuickViewer, ToolInfo,
-    extension_id_problem, kind_pattern_order, kind_pattern_problem,
+    ExtensionKind, MAX_KIND_PATTERNS, MarketItem, NO_VIEWER, QuickViewKind, QuickViewOfferItem,
+    QuickViewer, ToolInfo, extension_id_problem, kind_pattern_matches, kind_pattern_order,
+    kind_pattern_problem,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -226,6 +227,49 @@ pub fn quick_view_table(viewers: &[Viewer], choices: &BTreeMap<String, String>) 
         viewers.iter().map(|viewer| viewer.info.clone()).collect(),
         chosen,
     )
+}
+
+/// The item the Quick View panel offers for a file named `name` that no
+/// installed viewer claims (ADR 0023, decision 5.1): the first of
+/// `offered` (the catalogue's items as [`crate::Market::offers`] gives
+/// them: in index order, each the newest version this core can run) that
+/// is a Tool Extension, is not in `installed`, and whose manifest's
+/// `quickView.kinds` claim the name. An item whose kinds are not all valid
+/// patterns claims nothing.
+#[must_use]
+pub fn quick_view_offer(
+    name: &str,
+    offered: &[MarketItem],
+    installed: &BTreeSet<String>,
+) -> Option<QuickViewOfferItem> {
+    offered
+        .iter()
+        .filter(|item| item.kind == ExtensionKind::Tool && !installed.contains(&item.id))
+        .find(|item| {
+            let Some(kinds) = item.manifest["quickView"]["kinds"].as_array() else {
+                return false;
+            };
+            let patterns: Option<Vec<&str>> = kinds
+                .iter()
+                .map(|kind| {
+                    kind.as_str()
+                        .filter(|text| kind_pattern_problem(text).is_none())
+                })
+                .collect();
+            patterns.is_some_and(|patterns| {
+                patterns
+                    .iter()
+                    .any(|pattern| kind_pattern_matches(pattern, name))
+            })
+        })
+        .map(|item| QuickViewOfferItem {
+            id: item.id.clone(),
+            name: item.name.clone(),
+            version: item.version.clone(),
+            size: item.size,
+            author: item.author.clone(),
+            description: item.description.clone(),
+        })
 }
 
 /// The viewers among the tools of `dir`, by folder name. A tool whose
@@ -587,6 +631,71 @@ mod tests {
         assert_eq!(ids(&viewers), ["image-viewer", "older"]);
         assert!(Path::new(&viewers[0].info.dir).starts_with(dev_dir.path()));
         assert_eq!(viewers[0].kinds, ["*.png", "*.webp"]);
+    }
+
+    fn tool_item(id: &str, kinds: &Value, min_core: &str) -> MarketItem {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "kind": "tool", "name": format!("Viewer {id}"),
+            "author": {"name": "CabinetOS", "verified": true}, "version": "1.0.0",
+            "description": "Shows files in Quick View.", "size": 1_240_000,
+            "download": {"url": format!("files/{id}.zip"), "sha256": "0".repeat(64)},
+            "manifest": {"id": id, "quickView": {"kinds": kinds}},
+            "minCoreVersion": min_core, "license": "MIT"
+        }))
+        .unwrap()
+    }
+
+    fn offered(items: &[MarketItem]) -> Vec<MarketItem> {
+        let scratch = scratch("offer");
+        let dirs = crate::Dirs {
+            plugins: scratch.path().join("plugins"),
+            themes: scratch.path().join("themes"),
+            tools: scratch.path().join("tools"),
+            market: scratch.path().join("market"),
+        };
+        crate::Market::new(dirs, "0.2.0").offers(items)
+    }
+
+    #[test]
+    fn the_offer_is_the_first_matching_tool_in_index_order() {
+        let items = [
+            tool_item("images", &serde_json::json!(["*.png", "*.jpg"]), "0.1.0"),
+            tool_item(
+                "documents",
+                &serde_json::json!(["*.pdf", "*.docx"]),
+                "0.1.0",
+            ),
+            tool_item("documents-pro", &serde_json::json!(["*.PDF"]), "0.1.0"),
+        ];
+        let offered = offered(&items);
+        let offer = quick_view_offer("Report.PDF", &offered, &BTreeSet::new()).unwrap();
+        assert_eq!(offer.id, "documents");
+        assert_eq!(offer.size, 1_240_000);
+        assert!(offer.author.verified);
+        assert_eq!(
+            quick_view_offer("notes.xyz", &offered, &BTreeSet::new()),
+            None
+        );
+    }
+
+    #[test]
+    fn an_installed_tool_and_one_that_needs_a_newer_core_are_skipped() {
+        let items = [
+            tool_item("too-new", &serde_json::json!(["*.pdf"]), "9.0.0"),
+            tool_item("documents", &serde_json::json!(["*.pdf"]), "0.1.0"),
+            tool_item("documents-pro", &serde_json::json!(["*.pdf"]), "0.2.0"),
+            tool_item("broken", &serde_json::json!(["*", "*.pdf"]), "0.1.0"),
+        ];
+        let offered = offered(&items);
+        let installed = BTreeSet::from(["documents".to_owned()]);
+        let offer = quick_view_offer("report.pdf", &offered, &installed).unwrap();
+        assert_eq!(offer.id, "documents-pro");
+        let all = BTreeSet::from(["documents".to_owned(), "documents-pro".to_owned()]);
+        assert_eq!(
+            quick_view_offer("report.pdf", &offered, &all),
+            None,
+            "a bad block claims nothing"
+        );
     }
 
     #[test]
