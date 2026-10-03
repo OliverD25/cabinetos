@@ -389,7 +389,12 @@ to atomic counters after each chunk. One publisher thread reads them on a
 (the clock alone does not count). The gap between two events of one job is
 never under 34 ms, so no one-second window holds more than 30 of them.
 When a job ends, one final event with the final state always follows,
-after the same gap, and then `job_state_changed`.
+after the same gap, and then `job_state_changed`. The job's clock
+(`elapsed_ms`) stops when its work ends, before the undo journal is
+written, so no other event is sent from that moment: it would carry a
+stopped time. The final event is the one exception to "never under 34 ms"
+in the core's clock: it waits out the gap in real time, but carries the
+time the work ended.
 
 - **Speed** (`speed_bps`) is a moving average over about the last second:
   each reading weighs in by the time it covers. It drops to 0 while

@@ -10,8 +10,11 @@ namespace CabinetOS.Tests;
 /// The window's start, as the speed review of 2026-10-01 left it (docs/log/2026-10-01/speed-review.md):
 /// the core is started and connected while WinUI builds the window, and the protocol's JSON tables are
 /// built beside it, so the core's first answer is not held up. Opens a window on the desktop, so it runs
-/// only with <c>CABINETOS_UI_E2E=1</c> and a built window (Debug) and core.
+/// only with <c>CABINETOS_UI_E2E=1</c> and a built window (Debug) and core. The core's first answer is a speed goal
+/// (60 ms), so the test runs alone, in the collection of the frame measurements: on the laptop it took 10 ms with
+/// nothing beside it, and 44 to 263 ms beside two other test runs (docs/log/2026-10-03/test-flakes-round-4-report.md).
 /// </summary>
+[Collection(FrameTests.Name)]
 public class StartEndToEndTests
 {
     private const string OptIn = "CABINETOS_UI_E2E";
