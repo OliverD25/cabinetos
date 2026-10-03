@@ -9,6 +9,9 @@ use crate::job::{
 use crate::market::{Catalogue, ExtensionKind, MarketItem, ToolInfo};
 use crate::plugin::{PluginInfo, PluginState};
 use crate::preview::{OpenedListing, PreviewRow};
+use crate::quick_view::{
+    OfferReason, QuickViewKind, QuickViewOfferItem, QuickViewer, ThumbnailReason,
+};
 use crate::secret::SecretText;
 use crate::terminal::{TerminalMode, TerminalSession};
 use crate::theme::{Theme, ThemeInfo};
@@ -625,6 +628,42 @@ pub enum Request {
         /// The item's `id`.
         item_id: u32,
     },
+    /// Asks for the shell's thumbnail of a file or folder, the one
+    /// Explorer shows (Quick View, ADR 0023). The core asks the shell on
+    /// threads of its own and answers `thumbnail`: with a PNG, or with no
+    /// picture and a `reason`. Newest first: a newer request of the
+    /// connection replaces a queued one, which is answered `superseded`.
+    GetThumbnail {
+        /// The file or folder, as an absolute path.
+        path: String,
+        /// The longer side in pixels: 96, 256 or 768.
+        size: u32,
+        /// A read ahead for a file next to the one shown: it runs only when
+        /// no request without `ahead` waits.
+        #[serde(default)]
+        ahead: bool,
+    },
+    /// Asks the shell's image stack to draw a file at a size, for a Quick
+    /// View page that cannot decode it (HEIC, TIFF, camera RAW). The core
+    /// writes `image.png` into a folder of its own and answers
+    /// `rendered_image`.
+    RenderImage {
+        /// The file, as an absolute path.
+        path: String,
+        /// The longer side in pixels, at most 2560.
+        max_size: u32,
+    },
+    /// Asks for the Quick View table: which viewer shows which kind of
+    /// file. The core answers `quick_view_table`, and sends
+    /// `quick_view_table_changed` each time it changes.
+    QuickViewTable,
+    /// Asks which marketplace item would show a file that no installed
+    /// viewer claims. The core answers `quick_view_offer`. May read the
+    /// extensions catalogue from the web (at most once a session).
+    QuickViewOffer {
+        /// The file's name, without its folder.
+        name: String,
+    },
 }
 
 fn default_bundle_minutes() -> u32 {
@@ -713,6 +752,10 @@ impl Request {
         "update_snooze",
         "shell_menu",
         "shell_menu_invoke",
+        "get_thumbnail",
+        "render_image",
+        "quick_view_table",
+        "quick_view_offer",
     ];
 
     /// The `type` tag of this request on the wire.
@@ -793,6 +836,10 @@ impl Request {
             Self::UpdateSnooze => "update_snooze",
             Self::ShellMenu { .. } => "shell_menu",
             Self::ShellMenuInvoke { .. } => "shell_menu_invoke",
+            Self::GetThumbnail { .. } => "get_thumbnail",
+            Self::RenderImage { .. } => "render_image",
+            Self::QuickViewTable => "quick_view_table",
+            Self::QuickViewOffer { .. } => "quick_view_offer",
         }
     }
 }
@@ -1154,6 +1201,52 @@ pub enum Response {
         /// disabled or draws itself.
         items: Vec<ShellMenuItem>,
     },
+    /// Reply to `get_thumbnail`: the picture, or why there is none.
+    Thumbnail {
+        /// The path asked for.
+        path: String,
+        /// The size asked for.
+        size: u32,
+        /// The picture's width in pixels, aspect kept; absent without one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width: Option<u32>,
+        /// The picture's height in pixels; absent without one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        height: Option<u32>,
+        /// The picture as a PNG with an alpha channel, in base64; `null`
+        /// when there is none.
+        #[serde(default)]
+        png_base64: Option<String>,
+        /// Why there is no picture; absent with one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<ThumbnailReason>,
+    },
+    /// Reply to `render_image`: `image.png` is in `folder`.
+    RenderedImage {
+        /// The folder the core wrote `image.png` into, new for every
+        /// render; the core keeps the last 16.
+        folder: String,
+        /// The picture's width in pixels.
+        width: u32,
+        /// The picture's height in pixels.
+        height: u32,
+    },
+    /// Reply to `quick_view_table`.
+    QuickViewTable {
+        /// Every installed viewer, the one installed first first.
+        viewers: Vec<QuickViewer>,
+        /// The kinds, in the order the window tries them: the first whose
+        /// pattern matches a file's name decides.
+        kinds: Vec<QuickViewKind>,
+    },
+    /// Reply to `quick_view_offer`.
+    QuickViewOffer {
+        /// The item to offer, or `null`.
+        item: Option<QuickViewOfferItem>,
+        /// Why there is none; absent with an item.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<OfferReason>,
+    },
 }
 
 /// One item of Windows' own context menu (`shell_menu`).
@@ -1217,6 +1310,10 @@ impl Response {
         "workspace_info",
         "update_state",
         "shell_menu",
+        "thumbnail",
+        "rendered_image",
+        "quick_view_table",
+        "quick_view_offer",
     ];
 
     /// The `type` tag of this response on the wire.
@@ -1264,6 +1361,10 @@ impl Response {
             Self::WorkspaceInfo { .. } => "workspace_info",
             Self::UpdateState(_) => "update_state",
             Self::ShellMenu { .. } => "shell_menu",
+            Self::Thumbnail { .. } => "thumbnail",
+            Self::RenderedImage { .. } => "rendered_image",
+            Self::QuickViewTable { .. } => "quick_view_table",
+            Self::QuickViewOffer { .. } => "quick_view_offer",
         }
     }
 }
@@ -1681,6 +1782,15 @@ pub enum Event {
         /// The speed since the download began.
         bytes_per_second: u64,
     },
+    /// The Quick View table changed: a tool was installed or removed, or
+    /// `quickView.viewers` changed. The same fields as `quick_view_table`.
+    /// Sent to every connection that said `hello`.
+    QuickViewTableChanged {
+        /// Every installed viewer.
+        viewers: Vec<QuickViewer>,
+        /// The kinds, in the order the window tries them.
+        kinds: Vec<QuickViewKind>,
+    },
 }
 
 impl Event {
@@ -1712,6 +1822,7 @@ impl Event {
         "preview_cancelled",
         "update_state_changed",
         "update_progress",
+        "quick_view_table_changed",
     ];
 
     /// The `type` tag of this event on the wire.
@@ -1743,6 +1854,7 @@ impl Event {
             Self::PreviewCancelled { .. } => "preview_cancelled",
             Self::UpdateStateChanged(_) => "update_state_changed",
             Self::UpdateProgress { .. } => "update_progress",
+            Self::QuickViewTableChanged { .. } => "quick_view_table_changed",
         }
     }
 }
@@ -2279,7 +2391,44 @@ mod tests {
                 menu_id: 3,
                 item_id: 19,
             },
+            Request::GetThumbnail {
+                path: r"C:\photos\IMG_0412.jpg".to_owned(),
+                size: 256,
+                ahead: true,
+            },
+            Request::RenderImage {
+                path: r"C:\photos\IMG_0413.heic".to_owned(),
+                max_size: 1380,
+            },
+            Request::QuickViewTable,
+            Request::QuickViewOffer {
+                name: "report.pdf".to_owned(),
+            },
         ]
+    }
+
+    fn quick_view_table() -> (Vec<QuickViewer>, Vec<QuickViewKind>) {
+        (
+            vec![QuickViewer {
+                id: "image-viewer".to_owned(),
+                name: "Image Viewer".to_owned(),
+                version: "1.0.0".to_owned(),
+                dir: r"C:\Users\a\AppData\Local\CabinetOS\tools\image-viewer".to_owned(),
+                entry: "quickview.html".to_owned(),
+            }],
+            vec![
+                QuickViewKind {
+                    pattern: "*.jpg".to_owned(),
+                    viewers: vec!["image-viewer".to_owned(), "photo-pro".to_owned()],
+                    off: false,
+                },
+                QuickViewKind {
+                    pattern: "*.svg".to_owned(),
+                    viewers: Vec::new(),
+                    off: true,
+                },
+            ],
+        )
     }
 
     fn update_status() -> UpdateStatus {
@@ -2664,6 +2813,27 @@ mod tests {
                     },
                 ],
             },
+            Response::Thumbnail {
+                path: r"C:\photos\IMG_0412.jpg".to_owned(),
+                size: 256,
+                width: Some(256),
+                height: Some(192),
+                png_base64: Some("iVBORw0KGgo=".to_owned()),
+                reason: None,
+            },
+            Response::RenderedImage {
+                folder: r"C:\Users\a\AppData\Local\CabinetOS\cache\render\01J9ZQ".to_owned(),
+                width: 1380,
+                height: 1035,
+            },
+            Response::QuickViewTable {
+                viewers: quick_view_table().0,
+                kinds: quick_view_table().1,
+            },
+            Response::QuickViewOffer {
+                item: None,
+                reason: Some(OfferReason::Offline),
+            },
         ]
     }
 
@@ -2807,7 +2977,121 @@ mod tests {
                 total: 80_000_000,
                 bytes_per_second: 2_000_000,
             },
+            Event::QuickViewTableChanged {
+                viewers: quick_view_table().0,
+                kinds: quick_view_table().1,
+            },
         ]
+    }
+
+    #[test]
+    fn quick_view_messages_have_the_documented_wire_form() {
+        let request: Envelope<Request> = serde_json::from_value(json!({
+            "id": ID, "type": "get_thumbnail", "path": r"C:\photos\IMG_0412.jpg", "size": 256
+        }))
+        .unwrap();
+        assert_eq!(
+            request.body,
+            Request::GetThumbnail {
+                path: r"C:\photos\IMG_0412.jpg".to_owned(),
+                size: 256,
+                ahead: false,
+            }
+        );
+        let none = serde_json::to_value(Envelope::new(
+            id(),
+            Response::Thumbnail {
+                path: r"C:\photos\notes.xyz".to_owned(),
+                size: 256,
+                width: None,
+                height: None,
+                png_base64: None,
+                reason: Some(ThumbnailReason::None),
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            none,
+            json!({"id": ID, "type": "thumbnail", "path": r"C:\photos\notes.xyz", "size": 256,
+                   "png_base64": null, "reason": "none"})
+        );
+        let picture = every_response()
+            .into_iter()
+            .find(|response| response.type_tag() == "thumbnail")
+            .map(|response| serde_json::to_value(Envelope::new(id(), response)).unwrap())
+            .unwrap();
+        assert_eq!(picture["type"], "thumbnail");
+        assert_eq!(
+            (&picture["width"], &picture["height"]),
+            (&json!(256), &json!(192))
+        );
+        assert!(picture.get("reason").is_none());
+        for reason in ["none", "timeout", "busy", "cloud", "superseded"] {
+            let parsed: ThumbnailReason = serde_json::from_value(json!(reason)).unwrap();
+            assert_eq!(serde_json::to_value(parsed).unwrap(), json!(reason));
+        }
+
+        let render: Envelope<Request> = serde_json::from_value(
+            json!({"id": ID, "type": "render_image", "path": r"C:\a.heic", "max_size": 2560}),
+        )
+        .unwrap();
+        assert!(matches!(
+            render.body,
+            Request::RenderImage { max_size: 2560, .. }
+        ));
+
+        let (viewers, kinds) = quick_view_table();
+        let table = serde_json::to_value(Envelope::new(
+            id(),
+            Event::QuickViewTableChanged { viewers, kinds },
+        ))
+        .unwrap();
+        assert_eq!(table["type"], "quick_view_table_changed");
+        assert_eq!(table["viewers"][0]["entry"], "quickview.html");
+        assert_eq!(
+            table["kinds"],
+            json!([{"pattern": "*.jpg", "viewers": ["image-viewer", "photo-pro"]},
+                   {"pattern": "*.svg", "viewers": [], "off": true}])
+        );
+
+        let offer = serde_json::to_value(Envelope::new(
+            id(),
+            Response::QuickViewOffer {
+                item: Some(QuickViewOfferItem {
+                    id: "document-viewer".to_owned(),
+                    name: "Document Viewer".to_owned(),
+                    version: "1.0.0".to_owned(),
+                    size: 1_240_000,
+                    author: Author {
+                        name: "CabinetOS".to_owned(),
+                        verified: false,
+                        url: None,
+                    },
+                    description: "Shows PDF and Office documents in Quick View.".to_owned(),
+                }),
+                reason: None,
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            offer,
+            json!({"id": ID, "type": "quick_view_offer", "item": {"id": "document-viewer",
+                   "name": "Document Viewer", "version": "1.0.0", "size": 1_240_000,
+                   "author": {"name": "CabinetOS", "verified": false},
+                   "description": "Shows PDF and Office documents in Quick View."}})
+        );
+        let no_item = serde_json::to_value(Envelope::new(
+            id(),
+            Response::QuickViewOffer {
+                item: None,
+                reason: Some(OfferReason::NoItem),
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            no_item,
+            json!({"id": ID, "type": "quick_view_offer", "item": null, "reason": "no_item"})
+        );
     }
 
     #[test]

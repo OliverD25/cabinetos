@@ -46,6 +46,8 @@ public static class MessageCodec
         "preview_cancelled",
         "update_state_changed",
         "update_progress",
+        // Protocol 21 (ADR 0023): known as an event so it is never taken for a reply; its record comes with the panel.
+        "quick_view_table_changed",
     ]);
 
     private static readonly FrozenDictionary<string, JsonTypeInfo> Known = new Dictionary<string, JsonTypeInfo>

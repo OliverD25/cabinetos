@@ -1556,6 +1556,92 @@
         "menu_id",
         "item_id"
       ]
+    },
+    {
+      "description": "Asks for the shell's thumbnail of a file or folder, the one\nExplorer shows (Quick View, ADR 0023). The core asks the shell on\nthreads of its own and answers `thumbnail`: with a PNG, or with no\npicture and a `reason`. Newest first: a newer request of the\nconnection replaces a queued one, which is answered `superseded`.",
+      "type": "object",
+      "properties": {
+        "ahead": {
+          "description": "A read ahead for a file next to the one shown: it runs only when\nno request without `ahead` waits.",
+          "type": "boolean",
+          "default": false
+        },
+        "path": {
+          "description": "The file or folder, as an absolute path.",
+          "type": "string"
+        },
+        "size": {
+          "description": "The longer side in pixels: 96, 256 or 768.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "get_thumbnail"
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "size"
+      ]
+    },
+    {
+      "description": "Asks the shell's image stack to draw a file at a size, for a Quick\nView page that cannot decode it (HEIC, TIFF, camera RAW). The core\nwrites `image.png` into a folder of its own and answers\n`rendered_image`.",
+      "type": "object",
+      "properties": {
+        "max_size": {
+          "description": "The longer side in pixels, at most 2560.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "path": {
+          "description": "The file, as an absolute path.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "render_image"
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "max_size"
+      ]
+    },
+    {
+      "description": "Asks for the Quick View table: which viewer shows which kind of\nfile. The core answers `quick_view_table`, and sends\n`quick_view_table_changed` each time it changes.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "quick_view_table"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Asks which marketplace item would show a file that no installed\nviewer claims. The core answers `quick_view_offer`. May read the\nextensions catalogue from the web (at most once a session).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The file's name, without its folder.",
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "quick_view_offer"
+        }
+      },
+      "required": [
+        "type",
+        "name"
+      ]
     }
   ],
   "required": [

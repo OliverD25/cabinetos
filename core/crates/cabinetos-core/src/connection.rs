@@ -460,6 +460,13 @@ impl Session {
                 request @ (Request::ShellMenu { .. } | Request::ShellMenuInvoke { .. }) => {
                     self.shell_menu_request(&id, &span, kind, request)
                 }
+                Request::GetThumbnail { .. }
+                | Request::RenderImage { .. }
+                | Request::QuickViewTable
+                | Request::QuickViewOffer { .. } => Some(Response::Error {
+                    code: ErrorCode::NotImplemented,
+                    message: format!("{kind} is not built yet"),
+                }),
             }
         };
         // Requests handled right here are done; the others log when they end.
