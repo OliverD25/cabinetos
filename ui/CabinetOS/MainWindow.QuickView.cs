@@ -39,6 +39,8 @@ public sealed partial class MainWindow
 
     // The pane whose cursor the panel follows, the listing index it shows, and the direction of the last move (read ahead).
     private int _quickViewPane = -1;
+    // Until this time on _quickViewClock, a focus move out of the list came from a viewer's WebView2 leaving the tree.
+    private long _quickViewFocusGuardUntil;
     private int _quickViewIndex = -1;
     private int _quickViewDirection = 1;
 
@@ -272,6 +274,13 @@ public sealed partial class MainWindow
         {
             // The focus fell to the window's root (an element that had it went away): no user moved it; back to the list.
             Diag.Info(QuickViewTarget, "the keyboard fell to the window's root; back to the list");
+            DispatcherQueue.TryEnqueue(FocusQuickViewList);
+            return;
+        }
+        if (_quickViewClock.ElapsedMilliseconds < _quickViewFocusGuardUntil)
+        {
+            // A crashed page's WebView2 went away and WinUI moved the focus on (the other pane, on the laptop): no user did.
+            Diag.Info(QuickViewTarget, "a closing viewer moved the keyboard; back to the list", new LogField("element", element.GetType().Name));
             DispatcherQueue.TryEnqueue(FocusQuickViewList);
             return;
         }
@@ -573,6 +582,7 @@ public sealed partial class MainWindow
 
     private void CloseQuickViewHost(QuickViewHost host)
     {
+        _quickViewFocusGuardUntil = _quickViewClock.ElapsedMilliseconds + 500;
         host.Close();
         _quickViewHosts.Remove(host.Viewer.Id);
         _quickViewPool.Remove(host.Viewer.Id);
