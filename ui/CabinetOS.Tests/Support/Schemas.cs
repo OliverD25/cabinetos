@@ -14,8 +14,13 @@ internal static class Schemas
     private static readonly Lazy<JsonSchema> ConfigSchema = new(() => JsonSchema.FromFile(Repo.ConfigSchema));
     private static readonly Lazy<JsonSchema> ToolSchema = new(() => JsonSchema.FromFile(Path.Combine(Repo.Tools, "tool.schema.json")));
 
+    private static readonly Lazy<JsonSchema> QuickViewMessagesSchema = new(() => JsonSchema.FromFile(Path.Combine(Repo.Tools, "quickview-messages.schema.json")));
+
     /// <summary><c>sdk/tools/tool.schema.json</c>.</summary>
     public static JsonSchema Tool => ToolSchema.Value;
+
+    /// <summary><c>sdk/tools/quickview-messages.schema.json</c>, the one description of the Quick View page messages.</summary>
+    public static JsonSchema QuickViewMessages => QuickViewMessagesSchema.Value;
 
     /// <summary><c>sdk/protocol/request.schema.json</c>.</summary>
     public static JsonSchema Request => RequestSchema.Value;
