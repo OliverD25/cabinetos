@@ -72,6 +72,13 @@ public class QuickViewEndToEndTests
 
     private static string Q(IReadOnlyList<string> logs, string label, string field) => Text(State(logs, "quick view state", label), field);
 
+    private static double N(IReadOnlyList<string> logs, string label, string field) =>
+        double.Parse(Q(logs, label, field), System.Globalization.CultureInfo.InvariantCulture);
+
+    // The window's lines about Quick View, its pages and the snapshot steps: what a failed check shows.
+    private static string QuickViewLines(IReadOnlyList<string> logs) => WindowLog.Last(logs, 80, l =>
+        Target(l) is "cabinetos_ui::quickview" or "cabinetos_ui::snapshot" or "cabinetos_ui::webview" || Message(l) == "command executed");
+
     /// <summary>
     /// Space opens the panel (the card, then the fixture's page), the keyboard stays in the list, Space and Esc close it;
     /// the panel is drawn in dark and in light; its size is the ADR's share of the window; the line has the times.
@@ -120,9 +127,10 @@ public class QuickViewEndToEndTests
 
             Assert.Equal(("shown", "a.qvtest", Fixture, "page"), (Q(logs, "open-a", "state"), Q(logs, "open-a", "file"), Q(logs, "open-a", "viewer"), Q(logs, "open-a", "picture")));
             Assert.Equal(("true", "QuickView"), (Q(logs, "open-a", "focus_in_list"), Q(logs, "open-a", "overlays")));
-            // 72 % of 1400 and 80 % of 900, within the 24 px margin.
-            Assert.InRange(double.Parse(Q(logs, "open-a", "width"), System.Globalization.CultureInfo.InvariantCulture), 1000, 1010);
-            Assert.InRange(double.Parse(Q(logs, "open-a", "height"), System.Globalization.CultureInfo.InvariantCulture), 715, 725);
+            // 72 % of the area's width and 80 % of its height (the area is the window's content, 1400 wide).
+            Assert.InRange(N(logs, "open-a", "area_width"), 1390, 1410);
+            Assert.InRange(N(logs, "open-a", "width") / N(logs, "open-a", "area_width"), 0.715, 0.725);
+            Assert.InRange(N(logs, "open-a", "height") / N(logs, "open-a", "area_height"), 0.795, 0.805);
             Assert.Equal("shown", Q(logs, "light", "state"));
             Assert.True(File.Exists(Path.Combine(run.Root, "shots-open", "quickview-dark.png")));
             Assert.True(File.Exists(Path.Combine(run.Root, "shots-open", "quickview-light.png")));
@@ -209,7 +217,9 @@ public class QuickViewEndToEndTests
             // The folder comes first in the listing: e.qvtest is the sixth row of six.
             Assert.Equal(("e.qvtest", "6 of 6"), (Q(logs, "at-e", "file"), Q(logs, "at-e", "position")));
             Assert.Equal(("d.qvtest", "5 of 6"), (Q(logs, "back-at-d", "file"), Q(logs, "back-at-d", "position")));
-            Assert.Equal(("shown", "1", "d.qvtest"), (Q(logs, "marked", "state"), Q(logs, "marked", "marked"), Q(logs, "marked", "file")));
+            // Shift+Space ran marking in place under the panel, which stayed open on the same file.
+            Assert.Equal(("shown", "d.qvtest"), (Q(logs, "marked", "state"), Q(logs, "marked", "file")));
+            Assert.Contains(logs, l => Message(l) == "command executed" && Text(l, "command") == "edit.toggleSelectionInPlace" && Text(l, "trigger") == "key");
             Assert.Equal("closed", Q(logs, "after-tab", "state"));
             Assert.Equal(("card", ""), (Q(logs, "folder", "state"), Q(logs, "folder", "viewer")));
             Assert.Contains("2 files", Q(logs, "folder", "card"));
@@ -320,7 +330,7 @@ public class QuickViewEndToEndTests
             Assert.Equal(("loading", "Still loading…", "c-hang.qvtest"), (Q(logs, "still-loading", "state"), Q(logs, "still-loading", "line"), Q(logs, "still-loading", "file")));
             Assert.Equal("closed", Q(logs, "escape-while-hanging", "state"));
             Assert.Equal("Quick View Fixture did not finish.", Q(logs, "hang-failed", "line"));
-            Assert.Equal(("stopped", "Quick View Fixture stopped."), (Q(logs, "crashed", "state"), Q(logs, "crashed", "line")));
+            Assert.True(Q(logs, "crashed", "state") == "stopped" && Q(logs, "crashed", "line") == "Quick View Fixture stopped.", QuickViewLines(logs));
             Assert.Equal(("shown", "e-ok.qvtest"), (Q(logs, "after-crash", "state"), Q(logs, "after-crash", "file")));
             Assert.Contains(Shown(logs), l => Text(l, "full") == "failed:unsupported");
             Assert.Contains(Shown(logs), l => Text(l, "full") == "failed:not-finished");

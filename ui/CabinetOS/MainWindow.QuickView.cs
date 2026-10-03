@@ -268,6 +268,15 @@ public sealed partial class MainWindow
             // A popup of the panel: the viewer button's list.
             return;
         }
+        if (IsAroundContent(element))
+        {
+            // The focus fell to the window's root (an element that had it went away): no user moved it; back to the list.
+            Diag.Info(QuickViewTarget, "the keyboard fell to the window's root; back to the list");
+            DispatcherQueue.TryEnqueue(FocusQuickViewList);
+            return;
+        }
+        Diag.Info(QuickViewTarget, "the keyboard left the list", new LogField("element", element.GetType().Name),
+            new LogField("name", (element as FrameworkElement)?.Name ?? ""));
         CloseQuickView("the keyboard left the list");
     }
 
@@ -929,6 +938,7 @@ public sealed partial class MainWindow
             new LogField("alive", string.Join(",", _quickViewPool.Alive)), new LogField("overlays", OpenOverlayNames()),
             new LogField("marked", Active.MarkedCount()), new LogField("pane_path", Active.Path),
             new LogField("width", Math.Round(width, 1)), new LogField("height", Math.Round(height, 1)),
+            new LogField("area_width", Math.Round(QuickViewView.ActualWidth, 1)), new LogField("area_height", Math.Round(QuickViewView.ActualHeight, 1)),
             new LogField("focus_in_list", _quickViewPane >= 0 && RootGrid.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject f && IsWithin(f, _paneViews[_quickViewPane])));
     }
 
