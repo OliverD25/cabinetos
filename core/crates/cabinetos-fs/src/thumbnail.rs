@@ -462,6 +462,40 @@ mod tests {
         images.warm(r"C:\no such folder here");
     }
 
+    /// The numbers for a report, not a check: a 12-megapixel PNG's
+    /// thumbnail the first time (the shell decodes it), again (the shell's
+    /// thumbnail cache), and the 768 size. Run it with
+    /// `cargo test -p cabinetos-fs measure_thumbnail_times -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "prints timings for a report"]
+    fn measure_thumbnail_times() {
+        let dir = scratch();
+        let images = ShellImages::enter();
+        let started = Instant::now();
+        images.warm(&dir.path().display().to_string());
+        println!(
+            "warm start on the folder: {:.1} ms",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+        for round in 0..3 {
+            let file = dir.path().join(format!("photo-{round}.png"));
+            write_png(&file, 4000, 3000);
+            let path = file.display().to_string();
+            let mut times = Vec::new();
+            for size in [256, 256, 768] {
+                let started = Instant::now();
+                let image = images.image(&path, size, ImageRequest::Thumbnail).unwrap();
+                times.push(format!(
+                    "{size}: {:.1} ms ({}x{})",
+                    started.elapsed().as_secs_f64() * 1000.0,
+                    image.width,
+                    image.height
+                ));
+            }
+            println!("12 MP PNG, round {round}: {}", times.join(", "));
+        }
+    }
+
     #[test]
     fn fitting_keeps_the_aspect_and_never_enlarges() {
         let rgba = vec![255u8; 400 * 100 * 4];

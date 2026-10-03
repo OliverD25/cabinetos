@@ -8,8 +8,14 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The core's part of Quick View, the floating panel that Space will open over the panes (the panel itself comes with the window's part). The core gives the window Windows' own thumbnail of a file, the one Explorer shows, from threads of its own, so a thumbnail that takes long can never hold up a key; a file that is only in the cloud is never downloaded for it. It keeps the list of installed Quick View viewers, which are Tool Extensions with the new `quickView` key in their `tool.json`, and tells the window at once when a viewer is installed or removed. For a file no viewer shows, it finds the viewer in the marketplace to offer. The new setting `quickView.viewers` chooses which viewer shows a kind of file, or none. The core's protocol version is 21.
+
 - Two light themes ship with the core, Catppuccin Latte and GitHub Light, so a fresh install's theme picker has a light choice by name (the picker now lists seven themes). They moved from the theme collection: the collection no longer lists them, and a copy installed from the marketplace before stays as it is.
 - 18 more themes in the theme collection for the marketplace (the theme gallery), all MIT licensed ports with every colour read from the theme's own repository: Everforest Dark and Light, Kanagawa, Rosé Pine, Rosé Pine Dawn, Nightfox, Dayfox, Vitesse Dark and Light, Flexoki Dark and Light, Oceanic Next, Spacegray, Moonlight, Poimandres, Andromeda, Quiet Light and Min Light. Modus Vivendi, Modus Operandi, Zenburn and Bluloco Light are left out because their licenses are GPL or LGPL. The collection has 52 themes; they reach users when the public `themes.json` is published.
+
+### Changed
+
+- Space in a file pane now opens Quick View ("View: Toggle Quick View"), and marking the cursor row without moving the cursor ("Edit: Toggle Selection in Place", Total Commander's Space) moved to Shift+Space. Insert still marks and moves down. To have Total Commander's Space back, bind Space to "Edit: Toggle Selection in Place" and give "View: Toggle Quick View" another key.
 
 ### Fixed
 

@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cabinetos.example/schemas/quickview-messages.schema.json",
+  "title": "CabinetOS Quick View page messages",
+  "description": "The web messages between the window and a Tool Extension page in the Quick View panel (ADR 0023, decisions 2, 3 and 7), one JSON object per chrome.webview message. The page also posts the {\"type\":\"ready\"} every tool page posts (docs/tool-extensions.md). Every report carries the token of the quickview-show it answers; the window drops a report with any other token, and drops anything not listed here.",
+  "oneOf": [
+    { "$ref": "#/$defs/show" },
+    { "$ref": "#/$defs/theme" },
+    { "$ref": "#/$defs/keysGranted" },
+    { "$ref": "#/$defs/key" },
+    { "$ref": "#/$defs/rendered" },
+    { "$ref": "#/$defs/renderFailed" },
+    { "$ref": "#/$defs/systemPreviewFailed" },
+    { "$ref": "#/$defs/shown" },
+    { "$ref": "#/$defs/failed" },
+    { "$ref": "#/$defs/keys" },
+    { "$ref": "#/$defs/render" },
+    { "$ref": "#/$defs/systemPreview" }
+  ],
+  "$defs": {
+    "token": {
+      "description": "Grows with every file the panel shows, in this window.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "pageKey": {
+      "description": "A key a page may ask for, in the core's key grammar (docs/keybindings.md): Left, Right, PageUp, PageDown, Home, End, a letter, a digit of the top row, plus, minus, comma or period, each alone or with Shift. Space, Esc, Enter, Up, Down, Tab and every combination with Ctrl, Alt or Win can never be granted.",
+      "type": "string",
+      "pattern": "^(shift\\+)?(left|right|pageup|pagedown|home|end|[a-z]|[0-9]|plus|minus|comma|period)$"
+    },
+    "pageKeys": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/pageKey" }
+    },
+    "hostUrl": {
+      "description": "A file on a host of the window, read-only and new for every file (f<n>.<id>.cabinetos.example) or render (r<n>.<id>.cabinetos.example).",
+      "type": "string",
+      "pattern": "^https://[a-z0-9-]+\\.[a-z0-9-]+\\.cabinetos\\.example/"
+    },
+    "colour": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "themeLook": {
+      "description": "The window's look: dark or light (which prefers-color-scheme also follows), four colours of the theme in effect, and the font.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appearance", "background", "text", "textSecondary", "accent", "font"],
+      "properties": {
+        "appearance": { "enum": ["dark", "light"] },
+        "background": { "$ref": "#/$defs/colour" },
+        "text": { "$ref": "#/$defs/colour" },
+        "textSecondary": { "$ref": "#/$defs/colour" },
+        "accent": { "$ref": "#/$defs/colour" },
+        "font": { "type": "string", "minLength": 1 }
+      }
+    },
+    "show": {
+      "description": "Window to page, once after ready: the file to show.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "path", "url", "name", "extension", "claim", "size", "modified", "thumbnail", "theme", "panel"],
+      "properties": {
+        "type": { "const": "quickview-show" },
+        "token": { "$ref": "#/$defs/token" },
+        "path": { "description": "The file's absolute path, for display only.", "type": "string" },
+        "url": { "$ref": "#/$defs/hostUrl" },
+        "name": { "type": "string" },
+        "extension": { "description": "Lower case with its dot; empty when the name has none.", "type": "string", "pattern": "^(\\.[^A-Z]*)?$" },
+        "claim": { "description": "The pattern of the viewer's quickView.kinds that matched.", "type": "string" },
+        "size": { "description": "Bytes, from the listing.", "type": "integer", "minimum": 0 },
+        "modified": { "description": "ISO 8601 UTC, from the listing.", "type": "string" },
+        "thumbnail": {
+          "description": "The thumbnail on screen now, or null when the panel shows the icon card.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["dataUrl", "width", "height"],
+              "properties": {
+                "dataUrl": { "type": "string", "pattern": "^data:image/png;base64," },
+                "width": { "type": "integer", "minimum": 1 },
+                "height": { "type": "integer", "minimum": 1 }
+              }
+            }
+          ]
+        },
+        "theme": { "$ref": "#/$defs/themeLook" },
+        "panel": {
+          "description": "The page's area in CSS pixels, and the screen's scale.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height", "scale"],
+          "properties": {
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "height": { "type": "number", "exclusiveMinimum": 0 },
+            "scale": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    "theme": {
+      "description": "Window to page: the theme changed while the panel is open.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "theme"],
+      "properties": {
+        "type": { "const": "quickview-theme" },
+        "token": { "$ref": "#/$defs/token" },
+        "theme": { "$ref": "#/$defs/themeLook" }
+      }
+    },
+    "keysGranted": {
+      "description": "Window to page: the keys of a page's request that the window grants.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "keys"],
+      "properties": {
+        "type": { "const": "quickview-keys-granted" },
+        "token": { "$ref": "#/$defs/token" },
+        "keys": { "$ref": "#/$defs/pageKeys" }
+      }
+    },
+    "key": {
+      "description": "Window to page: a press of a granted key.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "key", "repeat"],
+      "properties": {
+        "type": { "const": "quickview-key" },
+        "token": { "$ref": "#/$defs/token" },
+        "key": { "$ref": "#/$defs/pageKey" },
+        "repeat": { "type": "boolean" }
+      }
+    },
+    "rendered": {
+      "description": "Window to page: the shell's drawing asked with quickview-render.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "url", "width", "height"],
+      "properties": {
+        "type": { "const": "quickview-rendered" },
+        "token": { "$ref": "#/$defs/token" },
+        "url": { "$ref": "#/$defs/hostUrl" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 2560 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 2560 }
+      }
+    },
+    "renderFailed": {
+      "description": "Window to page: the shell could not draw the file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "message"],
+      "properties": {
+        "type": { "const": "quickview-render-failed" },
+        "token": { "$ref": "#/$defs/token" },
+        "message": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "systemPreviewFailed": {
+      "description": "Window to page: no out-of-process preview handler could show the file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token"],
+      "properties": {
+        "type": { "const": "quickview-system-preview-failed" },
+        "token": { "$ref": "#/$defs/token" },
+        "message": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "shown": {
+      "description": "Page to window: the full view is painted (after its first frame with content). The window cross-fades from the thumbnail.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token"],
+      "properties": {
+        "type": { "const": "quickview-shown" },
+        "token": { "$ref": "#/$defs/token" },
+        "keys": { "$ref": "#/$defs/pageKeys" },
+        "details": { "description": "Plain text for the panel's bottom line, such as 4032 × 3024.", "type": "string", "maxLength": 80 }
+      }
+    },
+    "failed": {
+      "description": "Page to window: the page cannot show this file; the panel keeps the thumbnail and shows why.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "reason", "message"],
+      "properties": {
+        "type": { "const": "quickview-failed" },
+        "token": { "$ref": "#/$defs/token" },
+        "reason": { "enum": ["unsupported", "damaged", "too-large", "other"] },
+        "message": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "keys": {
+      "description": "Page to window: the keys the page wants now, replacing those asked before.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "keys"],
+      "properties": {
+        "type": { "const": "quickview-keys" },
+        "token": { "$ref": "#/$defs/token" },
+        "keys": { "$ref": "#/$defs/pageKeys" }
+      }
+    },
+    "render": {
+      "description": "Page to window: draw the file with Windows' image stack at this size in device pixels (render_image of the core). One per token in flight.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token", "width", "height"],
+      "properties": {
+        "type": { "const": "quickview-render" },
+        "token": { "$ref": "#/$defs/token" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 2560 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 2560 }
+      }
+    },
+    "systemPreview": {
+      "description": "Page to window: host the file's Windows preview handler over the page's area (not in the panel's first unit).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "token"],
+      "properties": {
+        "type": { "const": "quickview-system-preview" },
+        "token": { "$ref": "#/$defs/token" }
+      }
+    }
+  }
+}
