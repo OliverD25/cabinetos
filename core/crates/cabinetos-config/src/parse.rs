@@ -8,8 +8,8 @@ use cabinetos_commands::KeymapError;
 use crate::locate::{Segment, locate, position};
 use crate::menu::check_extension;
 use crate::{
-    Config, FORMAT_VERSION, MAX_COLUMN_WIDTH, MAX_COMPACT_SIZE, MIN_COLUMN_WIDTH, MIN_COMPACT_SIZE,
-    MenuItem, is_program_name, parse_arg,
+    Config, FORMAT_VERSION, MAX_COLUMN_WIDTH, MAX_COMPACT_SIZE, MAX_PANE_SPLIT, MIN_COLUMN_WIDTH,
+    MIN_COMPACT_SIZE, MIN_PANE_SPLIT, MenuItem, is_program_name, parse_arg,
 };
 
 /// A configuration file that cannot be used. The settings in effect stay as
@@ -205,6 +205,7 @@ fn check(text: &str, config: &Config) -> Result<(), ConfigError> {
     }
     check_columns(text, config)?;
     check_compact_overlay(text, config)?;
+    check_pane_split(text, config)?;
     check_terminal_tabs(text, config)?;
     check_programs(text, config)?;
     check_menu_extensions(text, config)?;
@@ -322,6 +323,25 @@ fn check_compact_overlay(text: &str, config: &Config) -> Result<(), ConfigError>
                 ),
             ));
         }
+    }
+    Ok(())
+}
+
+/// `ui.paneSplit`: the left pane's share, from 0.2 to 0.8, so a hand edit
+/// cannot hide a pane or push the other one out of the window.
+fn check_pane_split(text: &str, config: &Config) -> Result<(), ConfigError> {
+    let Some(split) = &config.ui.pane_split else {
+        return Ok(());
+    };
+    if !(MIN_PANE_SPLIT..=MAX_PANE_SPLIT).contains(&split.0) {
+        return Err(ConfigError::at(
+            text,
+            &[Segment::Key("ui"), Segment::Key("paneSplit")],
+            format!(
+                "ui.paneSplit is {}; the left pane's share is from {MIN_PANE_SPLIT} to {MAX_PANE_SPLIT}",
+                split.0
+            ),
+        ));
     }
     Ok(())
 }
@@ -764,6 +784,43 @@ mod tests {
                 r#"{"ui": {"compactOverlay": {"width": 480, "height": 640, "top": 0}}}"#,
                 "unknown field `top`",
             ),
+        ] {
+            let error = parse(bad).unwrap_err();
+            assert!(error.message.contains(expected), "{bad}: {error}");
+        }
+    }
+
+    #[test]
+    fn the_pane_split_is_a_share_from_0_2_to_0_8() {
+        let config = parse(r#"{"ui": {"paneSplit": 0.2}}"#).unwrap();
+        assert_eq!(config.ui.pane_split, Some(crate::PaneSplit(0.2)));
+        assert_eq!(
+            parse(r#"{"ui": {"paneSplit": 0.8}}"#)
+                .unwrap()
+                .ui
+                .pane_split,
+            Some(crate::PaneSplit(0.8))
+        );
+        assert_eq!(
+            parse(r#"{"ui": {"paneSplit": null}}"#)
+                .unwrap()
+                .ui
+                .pane_split,
+            None,
+            "null: the panes are equal"
+        );
+        let text = "{\n  \"ui\": {\n    \"paneSplit\": 0.9\n  }\n}";
+        let error = parse(text).unwrap_err();
+        assert!(
+            error.message.contains("ui.paneSplit is 0.9") && error.message.contains("0.2 to 0.8"),
+            "{error}"
+        );
+        assert_eq!(error.line, Some(3), "{error}");
+        for (bad, expected) in [
+            (r#"{"ui": {"paneSplit": 0.19}}"#, "ui.paneSplit is 0.19"),
+            (r#"{"ui": {"paneSplit": 1}}"#, "ui.paneSplit is 1"),
+            (r#"{"ui": {"paneSplit": -0.5}}"#, "ui.paneSplit is -0.5"),
+            (r#"{"ui": {"paneSplit": "half"}}"#, "invalid type: string"),
         ] {
             let error = parse(bad).unwrap_err();
             assert!(error.message.contains(expected), "{bad}: {error}");

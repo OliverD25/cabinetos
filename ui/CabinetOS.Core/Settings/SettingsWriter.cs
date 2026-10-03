@@ -75,6 +75,12 @@ public sealed class SettingsWriter(ICoreChannel core)
     /// <summary>Sets a whole number, such as <c>ui.dockSize.bottom</c>.</summary>
     public Task<bool> SetAsync(string path, uint value) => SetAsync(path, Json(writer => writer.WriteNumberValue(value)));
 
+    /// <summary>Sets a number that may have decimals, such as <c>ui.paneSplit</c>.</summary>
+    public Task<bool> SetNumberAsync(string path, double value) => SetAsync(path, Json(writer => writer.WriteNumberValue(value)));
+
+    /// <summary>Sets a setting to <c>null</c>, which gives its default back (<c>ui.paneSplit</c>, <c>ui.sidebarWidth</c>).</summary>
+    public Task<bool> SetNullAsync(string path) => SetAsync(path, Json(writer => writer.WriteNullValue()));
+
     /// <summary>Sets a list of text, such as <c>ui.lastPaths</c>.</summary>
     public Task<bool> SetAsync(string path, IReadOnlyList<string> values, CancellationToken cancellationToken = default) =>
         SetAsync(path, Json(writer =>

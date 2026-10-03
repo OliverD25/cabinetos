@@ -1891,6 +1891,16 @@ Articles: 3, 4, 6, 7.
 
 **Status (2026-10-03, 00:46): handed to a coder on Sonnet, beside Phase 23.**
 
+**Status (2026-10-03, 03:00): built on the branch `worktree-agent-a4c5f0b65676ff081`, not merged yet.**
+The headings sort the pane through the key's own command, the divider between
+the panes (`ui.paneSplit`, `view.equalPanes`) and the sidebar's divider in every
+layout work and are saved. The core's five checks, the fast tests, the
+end-to-end tests and the live check with the real mouse passed on the laptop,
+and its panel goal holds. One premise above was wrong: `panes.sort.*` is the
+order of a pane that has none of its own, and `view.sortBy*` never wrote it, so
+the headings keep the per-pane order. Details and the list of known failures:
+[the report](log/2026-10-03/header-sorting-and-pane-dividers-report.md).
+
 ### Phase 25 — Quick View (the "New features" card, item 2; decided 2026-10-03)
 
 A floating panel over the window, like macOS: Space on a selected file

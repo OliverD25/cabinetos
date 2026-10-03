@@ -6,6 +6,12 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A click on the Name, Modified, Type or Size heading of a file pane sorts that pane by the column, and a second click reverses it. The sorted heading shows a small arrow. It is the same sort as Ctrl+F3 to Ctrl+F6 and the palette's "View: Sort by ..." commands, so the three ways agree; the order is the pane's own, and Type sorts by extension. A double-click on a heading still fits the column, and leaves the order as it was.
+- A divider between the two file panes: drag it to give the left pane more or less of the width. The share is kept in the new setting `ui.paneSplit` (0.2 to 0.8, `null` for equal), so it survives a resize of the window. A double-click on the divider and the new palette command "View: Equal Panes" (`view.equalPanes`, no key) make the panes equal again; editing `ui.paneSplit` in `cabinetos.json` moves the divider. A pane never gets narrower than its columns need.
+- The sidebar's divider works in the classic layout and in the right layout too, not only in the rail layout. A drag still saves `ui.sidebarWidth`, and a double-click on the divider gives the design's width back.
+
 ### Fixed
 
 - The plugin sandbox runs on wasmtime 49.0.2, which closes seven security advisories of 49.0.1 (RUSTSEC-2026-0321 to 0327: GC heap corruption through mis-typed tag imports or `try_call`, a stack overflow through an unvalidated callback result count, a fuel bypass and three WASI faults). None was reachable without a plugin written to exploit it.

@@ -331,7 +331,7 @@
                     </Grid.ColumnDefinitions>
                     <Grid x:Name="PanesGrid">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="LeftColumn" Width="*" />
                             <ColumnDefinition x:Name="RightColumn" Width="*" />
                         </Grid.ColumnDefinitions>
                         <!--
@@ -383,6 +383,17 @@
                                 Canvas.ZIndex="1" />
                             <views:PreviewPane x:Name="RightPreview" Grid.Row="2" />
                         </Grid>
+                        <!--
+                          The divider between the two panes (docs/ui.md, "The divider between the panes"): in the left pane's
+                          column, at its right edge, laid over the gap; its width and margin follow the theme's gap
+                          (MainWindow.PaneSplit.cs). A drag changes the panes' shares of the width; a double-click makes them equal.
+                        -->
+                        <views:SplitterBar
+                            x:Name="PaneSplitter"
+                            HorizontalAlignment="Right"
+                            Canvas.ZIndex="1"
+                            Orientation="Vertical"
+                            Visibility="Collapsed" />
                     </Grid>
                     <!-- Above the panes and the dock: with no gap the handle lies over their edges. -->
                     <views:SplitterBar

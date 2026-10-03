@@ -145,6 +145,7 @@ The core's commands, in palette order:
 | `update.showNotes` | Update: Show Release Notes | | | UI |
 | `view.fitColumns` | View: Fit Columns to Content | | `filesView` | UI |
 | `view.resetColumns` | View: Reset Column Widths | | `filesView` | UI |
+| `view.equalPanes` | View: Equal Panes | | | UI |
 | `view.toggleFolderSizes` | View: Toggle Folder Sizes | | | UI |
 | `view.toggleColumns` | View: Toggle Column View | `ctrl+alt+c` | `filesView` | UI |
 
@@ -177,6 +178,11 @@ The core's commands, in palette order:
   Modified, Type and Size as wide as their texts on screen, as a
   double-click on the Name heading does; the second gives the theme's
   widths back. They have no default keys: the palette is their place.
+- `view.equalPanes` (Phase 24) makes the two file panes equal in width and
+  writes `ui.paneSplit: null` ([ui.md](ui.md), "The divider between the
+  panes"). A drag of the divider and a double-click on it are the window's
+  ways to the same setting. It has no default key: the palette is its place.
+  It works from anywhere, so its context is empty.
 - `view.toggleFolderSizes` (Phase 19b) switches the setting
   `panes.folderSizes`: while it is on, every folder of a listing is
   measured when the listing opens ([ui.md](ui.md), "Folder sizes"). It has

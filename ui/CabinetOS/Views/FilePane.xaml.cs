@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using CabinetOS.Core.Diagnostics;
 using CabinetOS.Core.Listing;
+using CabinetOS.Core.Platform;
 using CabinetOS.Core.Presentation;
 using CabinetOS.Services;
 using CabinetOS.ViewModels;
@@ -62,6 +63,12 @@ public sealed partial class FilePane : UserControl
     private readonly PendingCursorKeys _cursorKeys = new();
     private bool _cursorKeysHooked;
     private PaneColumns? _columns;
+
+    // A click on a heading sorts at once; the second click of a double-click sorts nothing, and the double-click undoes the first sort.
+    private readonly HeaderClicks _headerClicks = new(() => Environment.TickCount64, DoubleClick.Milliseconds);
+
+    private const string UpChevron = "\uE70E";
+    private const string DownChevron = "\uE70D";
 
     /// <summary>Creates the pane; <see cref="Model"/> gives it its content.</summary>
     public FilePane()
@@ -499,11 +506,12 @@ public sealed partial class FilePane : UserControl
     }
 
     // A chevron on the column the listing is sorted by: up from A to Z (smallest, oldest), down the
-    // other way. The design's plain headings stay for its default, name from A to Z, and for search hits.
+    // other way. The design's plain headings stay for its default, name from A to Z with no order of the
+    // pane's own, and for search hits. A click on the Name heading is the pane's own order, so it shows the chevron.
     private void UpdateSortGlyphs()
     {
         var sort = _model is { Search: null } model ? model.EffectiveSort : null;
-        if (sort is { Key: PaneSort.Name, Descending: false })
+        if (sort is { Key: PaneSort.Name, Descending: false } && _model?.Sort is null)
         {
             sort = null;
         }
@@ -516,7 +524,7 @@ public sealed partial class FilePane : UserControl
         void Show(FontIcon glyph, bool shown)
         {
             glyph.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
-            glyph.Glyph = sort?.Descending == true ? "" : "";
+            glyph.Glyph = sort?.Descending == true ? DownChevron : UpChevron;
         }
     }
 
@@ -1253,17 +1261,89 @@ public sealed partial class FilePane : UserControl
             // The column at the grip's left; the first grip's is Modified, as Name has no width of its own.
             grip.FitRequested += g => FitColumns(g.Divider == ColumnDivider.TypeSize ? ListColumn.Type : ListColumn.Modified);
         }
-        // DoubleTapped only: a single click on a heading is left for sorting by it.
-        NameHeading.DoubleTapped += (_, e) => FitFromHeading(e, ListColumn.Name);
-        ModifiedHeading.DoubleTapped += (_, e) => FitFromHeading(e, ListColumn.Modified);
-        TypeHeading.DoubleTapped += (_, e) => FitFromHeading(e, ListColumn.Type);
-        SizeHeading.DoubleTapped += (_, e) => FitFromHeading(e, ListColumn.Size);
+        // The header row takes the clicks (its background is transparent): a click sorts by the column under the
+        // pointer, a double-click fits it. A grip marks its own clicks handled, so they never reach the row.
+        ColumnGrid.Tapped += OnHeaderTapped;
+        ColumnGrid.DoubleTapped += OnHeaderDoubleTapped;
     }
 
-    private void FitFromHeading(DoubleTappedRoutedEventArgs e, ListColumn column)
+    /// <summary>A click on a column heading: the window sorts this pane by that column (the same as the key of the column does).</summary>
+    public event Action<FilePane, ListColumn>? SortRequested;
+
+    /// <summary>A double-click on a heading: the sort that its first click made is to be undone before the column is fitted.</summary>
+    public event Action<FilePane, ListColumn>? SortUndoRequested;
+
+    private void OnHeaderTapped(object sender, TappedRoutedEventArgs e)
     {
         e.Handled = true;
+        ClickHeader(ColumnAt(e.GetPosition(ColumnGrid).X));
+    }
+
+    private void OnHeaderDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        e.Handled = true;
+        DoubleClickHeader(ColumnAt(e.GetPosition(ColumnGrid).X));
+    }
+
+    // The second click of a double-click sorts nothing (HeaderClicks).
+    private void ClickHeader(ListColumn column)
+    {
+        if (_headerClicks.Tap(column) == HeaderTap.Sort)
+        {
+            SortRequested?.Invoke(this, column);
+        }
+    }
+
+    // The double-click leaves only the fit: the sort of its first click is undone first.
+    private void DoubleClickHeader(ListColumn column)
+    {
+        if (_headerClicks.DoubleTap(column))
+        {
+            SortUndoRequested?.Invoke(this, column);
+        }
         FitColumns(column);
+    }
+
+    // The column whose cell holds x, in the header row's own coordinates: the padding before Name is Name's, the padding after
+    // Size is Size's, and a gap belongs to the column before it.
+    private ListColumn ColumnAt(double x)
+    {
+        var edge = ColumnGrid.Padding.Left;
+        ListColumn[] columns = [ListColumn.Name, ListColumn.Modified, ListColumn.Type];
+        double[] widths = [HeadNameColumn.ActualWidth, HeadModifiedColumn.ActualWidth, HeadTypeColumn.ActualWidth];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            edge += widths[i] + ColumnGrid.ColumnSpacing;
+            if (x < edge)
+            {
+                return columns[i];
+            }
+        }
+        return ListColumn.Size;
+    }
+
+    /// <summary>The snapshot aid's <c>header-click:</c> step: a click on <paramref name="column"/>'s heading, through the click's own path.</summary>
+    internal void ClickHeaderForSnapshot(ListColumn column) => ClickHeader(column);
+
+    /// <summary>The snapshot aid's <c>header-doubleclick:</c> step: what a real double-click raises: two taps and the double tap.</summary>
+    internal void DoubleClickHeaderForSnapshot(ListColumn column)
+    {
+        ClickHeader(column);
+        ClickHeader(column);
+        DoubleClickHeader(column);
+    }
+
+    /// <summary>The column whose heading shows the chevron, and which way it points ("size:down"), or "none"; the snapshot aid's <c>sort-state:</c> step logs it.</summary>
+    internal string SortArrowShown()
+    {
+        foreach (var (name, glyph) in new[] { ("name", NameSortGlyph), ("modified", ModifiedSortGlyph), ("type", TypeSortGlyph), ("size", SizeSortGlyph) })
+        {
+            if (glyph.Visibility == Visibility.Visible)
+            {
+                return $"{name}:{(glyph.Glyph == DownChevron ? "down" : "up")}";
+            }
+        }
+        return "none";
     }
 
     /// <summary>

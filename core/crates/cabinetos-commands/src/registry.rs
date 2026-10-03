@@ -82,7 +82,7 @@ const TERMINAL: Option<&str> = Some("terminalFocus");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 116] = [
+const SEED: [Seed; 117] = [
     seed(
         "palette.show",
         "View",
@@ -784,6 +784,10 @@ const SEED: [Seed; 116] = [
         UI,
         FILES,
     ),
+    // The divider between the two panes (`ui.paneSplit`, Phase 24): a drag
+    // of it and a double-click on it are the window's ways; this is the
+    // keyboard's. It writes `null`, so the panes are equal again. No key.
+    seed("view.equalPanes", "View", "Equal Panes", &[], UI, None),
     // panes.folderSizes from the palette (Phase 19b): the window writes the
     // setting through set_value, so the file and the window agree. No key.
     seed(
@@ -1042,6 +1046,22 @@ mod tests {
         assert!(toggle.default_keys.is_empty());
     }
 
+    #[test]
+    fn equal_panes_resets_the_divider_from_the_palette_and_has_no_key() {
+        let registry = CommandRegistry::core();
+        let command = registry.get("view.equalPanes").unwrap();
+        assert_eq!(command.target, CommandTarget::Ui);
+        assert_eq!(command.source, CommandSource::Core);
+        assert_eq!(
+            (command.category.as_str(), command.title.as_str()),
+            ("View", "Equal Panes")
+        );
+        // The setting's reset works from anywhere, not only over a file pane.
+        assert_eq!(command.when, None);
+        assert!(command.default_keys.is_empty());
+        assert!(!command.immutable);
+    }
+
     /// Phase 19f (ADR 0016): the column view's toggle acts on the active
     /// pane, on Ctrl+Alt+C, which no other command has.
     #[test]
@@ -1136,7 +1156,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 116);
+        assert_eq!(registry.commands().len(), 117);
         let keys = |id: &str| {
             registry
                 .get(id)

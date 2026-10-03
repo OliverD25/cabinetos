@@ -88,7 +88,10 @@
                 Grid.Row="1"
                 BorderBrush="{ThemeResource CbDividerBrush}"
                 BorderThickness="0,0,0,1">
-                <Grid x:Name="ColumnGrid" Padding="14,4">
+                <Grid
+                    x:Name="ColumnGrid"
+                    Padding="14,4"
+                    Background="Transparent">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition
                             x:Name="HeadNameColumn"
@@ -99,8 +102,10 @@
                         <ColumnDefinition x:Name="HeadSizeColumn" Width="64" />
                     </Grid.ColumnDefinitions>
                     <!--
-                      The column the listing is sorted by carries a chevron (the pane's own order, Ctrl+F3 to Ctrl+F6). A
-                      double-click on a heading fits its column; Name's fits the other three (FilePane.FitColumns).
+                      The column the listing is sorted by carries a chevron (the pane's own order, Ctrl+F3 to Ctrl+F6, or a
+                      click on a heading). A click anywhere in a heading's cell sorts by that column, and a double-click fits
+                      it; Name's fits the other three (FilePane.FitColumns). The header row takes the clicks, not each
+                      heading: its background is transparent, so the empty part of a cell is a target too.
                     -->
                     <StackPanel
                         x:Name="NameHeading"

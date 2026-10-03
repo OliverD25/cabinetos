@@ -37,6 +37,9 @@ public sealed partial class MainWindow
     private double _windowWidth;
     private double _sidebarDragStart;
     private bool _sidebarDragging;
+
+    // Whether the pointer moved this press: a click, or a double-click's half, writes no width.
+    private bool _sidebarMoved;
     private bool _sidebarWillClose;
     private bool _treeLocked;
     private bool _autoReveal = true;
@@ -70,10 +73,12 @@ public sealed partial class MainWindow
         SidebarSplitter.DragStarted += () =>
         {
             _sidebarDragging = true;
+            _sidebarMoved = false;
             _sidebarDragStart = SidebarColumn.ActualWidth;
         };
-        SidebarSplitter.Dragged += delta => ResizeSidebar(_sidebarDragStart + delta);
+        SidebarSplitter.Dragged += OnSidebarDragged;
         SidebarSplitter.DragCompleted += EndSidebarDrag;
+        SidebarSplitter.DoubleClicked += ResetSidebarWidth;
 
         // The Search view's field drives the search (the command bar's field is gone since Phase 16).
         SearchPanelView.QueryChanged += SetSearchText;
@@ -120,17 +125,14 @@ public sealed partial class MainWindow
 
     private void ReapplyWidths() => UpdateWidths(_windowWidth > 0 ? _windowWidth : RootGrid.ActualWidth);
 
-    // The sidebar's width: the design's clamp, or in the rail layout the width the user dragged it to.
-    private double SidebarWidthFor(double windowWidth)
-    {
-        var design = WindowMetrics.Current.SidebarWidth(windowWidth);
-        return _railLayout ? SidebarSizing.Effective(_sidebarWidth, design, windowWidth) : design;
-    }
+    // The sidebar's width, in every layout: the design's clamp, or the width the user dragged the divider to.
+    private double SidebarWidthFor(double windowWidth) =>
+        SidebarSizing.Effective(_sidebarWidth, WindowMetrics.Current.SidebarWidth(windowWidth), windowWidth);
 
     // What shows in the sidebar's column, and what the rail says, after any change of the layout, the open state or the view.
     private void UpdateSidebarChrome()
     {
-        SidebarSplitter.Visibility = _railLayout && _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
+        SidebarSplitter.Visibility = _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
         var explorer = _railLayout ? _sidebarView == RailModel.Explorer : !_searchInSidebar;
         SidebarView.Visibility = explorer ? Visibility.Visible : Visibility.Collapsed;
         var search = _railLayout ? _sidebarView == RailModel.Search : _searchInSidebar;
@@ -441,8 +443,19 @@ public sealed partial class MainWindow
     // ----- The divider -----
 
     // The width follows the pointer; under 150 px the column fades to say that letting go closes the sidebar.
+    private void OnSidebarDragged(double delta)
+    {
+        // A move of under a pixel before the first real one is the pointer's jitter, not a drag.
+        if (!_sidebarDragging || (!_sidebarMoved && Math.Abs(delta) < 1))
+        {
+            return;
+        }
+        ResizeSidebar(_sidebarDragStart + delta);
+    }
+
     private void ResizeSidebar(double proposed)
     {
+        _sidebarMoved = true;
         var drag = SidebarSizing.Drag(proposed, _windowWidth);
         _sidebarWillClose = drag.Close;
         SidebarColumn.Width = drag.Width;
@@ -453,6 +466,11 @@ public sealed partial class MainWindow
     {
         _sidebarDragging = false;
         SidebarColumn.Opacity = 1;
+        if (!_sidebarMoved)
+        {
+            return;
+        }
+        _sidebarMoved = false;
         if (_sidebarWillClose)
         {
             // Snapped shut: the width it had before stays for the next time it opens.
@@ -464,6 +482,24 @@ public sealed partial class MainWindow
         var width = SidebarColumn.Width;
         _sidebarWidth = width;
         _ = PersistSidebarWidthAsync(width);
+    }
+
+    // A double-click on the divider: the design's width again, and null in the file. One that changes nothing writes nothing.
+    // The double-click's event comes while the second press is still down, before its release: that press is no drag, so the drag
+    // ends here, or its release would write the width that was just taken away.
+    private void ResetSidebarWidth()
+    {
+        _sidebarDragging = false;
+        _sidebarMoved = false;
+        _sidebarWillClose = false;
+        SidebarColumn.Opacity = 1;
+        if (_sidebarWidth is null)
+        {
+            return;
+        }
+        _sidebarWidth = null;
+        ReapplyWidths();
+        _ = PersistSidebarWidthResetAsync();
     }
 
     // ----- What the rail keeps in the configuration (ui.rail, ui.sidebarWidth, ui.sidebarView) -----
@@ -510,6 +546,19 @@ public sealed partial class MainWindow
         try
         {
             await _settingsWriter.SetAsync("ui.sidebarWidth", SidebarSizing.ToSetting(width));
+        }
+        finally
+        {
+            _widthWrites--;
+        }
+    }
+
+    private async Task PersistSidebarWidthResetAsync()
+    {
+        _widthWrites++;
+        try
+        {
+            await _settingsWriter.SetNullAsync("ui.sidebarWidth");
         }
         finally
         {

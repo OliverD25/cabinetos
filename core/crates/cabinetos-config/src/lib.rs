@@ -38,10 +38,11 @@ pub use menu::{
 pub use model::{
     ColumnWidths, CompactOverlay, Config, DEFAULT_MARKETPLACE_INDEX, DockSize, EditorProgram,
     FORMAT_VERSION, FilesConfig, KeybindingEntry, Keys, Layout, LogLevel, LoggingConfig,
-    MAX_COLUMN_WIDTH, MAX_COMPACT_SIZE, MIN_COLUMN_WIDTH, MIN_COMPACT_SIZE, MarketplaceConfig,
-    PaneTabs, PanesConfig, PluginSettings, ProfileHook, SCHEMA_REFERENCE, SavedTerminal,
-    SelectionMode, ShownTerminals, SortConfig, TabEntry, TabMode, TabsConfig, TerminalConfig,
-    TerminalProfile, TerminalTabs, UiConfig, UpdateConfig,
+    MAX_COLUMN_WIDTH, MAX_COMPACT_SIZE, MAX_PANE_SPLIT, MIN_COLUMN_WIDTH, MIN_COMPACT_SIZE,
+    MIN_PANE_SPLIT, MarketplaceConfig, PaneSplit, PaneTabs, PanesConfig, PluginSettings,
+    ProfileHook, SCHEMA_REFERENCE, SavedTerminal, SelectionMode, ShownTerminals, SortConfig,
+    TabEntry, TabMode, TabsConfig, TerminalConfig, TerminalProfile, TerminalTabs, UiConfig,
+    UpdateConfig,
 };
 pub use parse::{ConfigError, Rejection, file_text, parse, parse_checked};
 pub use store::{
