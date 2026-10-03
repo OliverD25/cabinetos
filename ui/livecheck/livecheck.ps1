@@ -459,6 +459,9 @@ $runTools = "$root\tools"
 New-Item -ItemType Directory -Force $runTools | Out-Null
 Copy-Item -LiteralPath (Join-Path ([System.IO.Path]::GetFullPath($Tools)) 'markdown-preview') -Destination $runTools -Recurse
 Copy-Item -LiteralPath "$PSScriptRoot\fixtures\quick-notes" -Destination $runTools -Recurse
+# The Quick View test viewer (ADR 0023): section 25 opens the panel with it. It opens nothing in a pane and has no sidebar
+# page, so no other section notices it.
+Copy-Item -LiteralPath "$PSScriptRoot\..\..\sdk\fixtures\tools\quickview-fixture" -Destination $runTools -Recurse
 $env:CABINETOS_TOOLS_DIR = $runTools
 "tools dir: $env:CABINETOS_TOOLS_DIR (exists: $(Test-Path -LiteralPath $env:CABINETOS_TOOLS_DIR))"
 Remove-Item Env:CABINETOS_UI_SNAPSHOT -ErrorAction SilentlyContinue
@@ -744,9 +747,10 @@ Shot $h "$ShotDir\11a-pattern-box-live.png"
 "after Num + *.txt: $(SelectionText) (the four .txt files expected)"
 [Live]::Press($VK.Ctrl, $VK.NumSubtract); Start-Sleep -Milliseconds 300
 
-Step "11a: Space on photos: marked in place and measured"
-[Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Space); Start-Sleep -Milliseconds 1200
-"after Space on photos: $(SelectionText) (8 KB expected: its two files)"
+# Marking in place is on Shift+Space since Phase 25: Space is Quick View's (ADR 0023, decision 6; section 25 checks it).
+Step "11a: Shift+Space on photos: marked in place and measured"
+[Live]::Press($VK.Home); [Live]::Press($VK.Down); [Live]::Press($VK.Shift, $VK.Space); Start-Sleep -Milliseconds 1200
+"after Shift+Space on photos: $(SelectionText) (8 KB expected: its two files)"
 Step "11a: Alt+Shift+Enter: every folder measured"
 [Live]::Press($VK.Alt, $VK.Shift, $VK.Enter); Start-Sleep -Milliseconds 1200
 Shot $h "$ShotDir\11a-folder-sizes-live.png"
@@ -3095,6 +3099,131 @@ foreach ($want in 'right', 'rail', 'classic') {
   Start-Sleep -Milliseconds 1500
 }
 "23: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warn23)"
+
+# ----- 25: Quick View (docs/ui.md, "Quick View"; ADR 0023, decision 4.5) -----
+# A folder of its own: a 12-megapixel PNG and a smaller one (the fixture viewer of sdk\fixtures\tools\quickview-fixture,
+# copied into the run's tools folder, shows PNG files and .qvtest files), a .qvtest page, a 12-megapixel JPEG, a text file
+# and a .xyz file no viewer claims. Space opens the panel and Space closes it, ten times on each file; the window's
+# "quick view shown" line of each open has the times from the key press to the rendered frame. The first open of each
+# file is printed apart (the first of the session also against its own ceiling, 1.5 s); the 90th percentile of the
+# other nine is judged against the ADR's table: the card 50 ms every time, the thumbnail 100 ms, the full view 1 s.
+# No viewer for JPEG files exists yet (the viewer pack is step 3 of Phase 25), so the full view is judged on the PNG
+# files and the .qvtest page; this machine has no encoder for a HEIC file or an H.264 video, so those two rows of the
+# ADR's fixture folder are not made. Then Down is held for 3 s over 50 images with the panel open, and the frames' UI
+# work is judged as the panel goal judges the PageDown hold: no frame with UI work over 33 ms.
+$qvDir = "$root\quickview"
+$qvWalk = "$qvDir\walk"
+New-Item -ItemType Directory -Force $qvDir, $qvWalk | Out-Null
+function NewPicture([string]$path, [int]$width, [int]$height, [System.Drawing.Imaging.ImageFormat]$format) {
+  $bmp = New-Object System.Drawing.Bitmap $width, $height
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle 0, 0, $width, $height), ([System.Drawing.Color]::SteelBlue), ([System.Drawing.Color]::Orange), 30.0
+  $g.FillRectangle($brush, 0, 0, $width, $height)
+  $g.DrawString((Split-Path -Leaf $path), (New-Object System.Drawing.Font 'Segoe UI', ([float]($height / 12))), [System.Drawing.Brushes]::White, 20, 20)
+  $bmp.Save($path, $format); $brush.Dispose(); $g.Dispose(); $bmp.Dispose()
+}
+NewPicture "$qvDir\1-big.png" 4000 3000 ([System.Drawing.Imaging.ImageFormat]::Png)
+NewPicture "$qvDir\2-image.png" 1600 1200 ([System.Drawing.Imaging.ImageFormat]::Png)
+Set-Content -LiteralPath "$qvDir\3-page.qvtest" -Value "shown" -Encoding ASCII
+NewPicture "$qvDir\4-photo.jpg" 4000 3000 ([System.Drawing.Imaging.ImageFormat]::Jpeg)
+Set-Content -LiteralPath "$qvDir\5-notes.txt" -Value "Quick View shows this as a card and the shell's thumbnail, if it has one." -Encoding ASCII
+Set-Content -LiteralPath "$qvDir\6-unknown.xyz" -Value "no viewer claims this" -Encoding ASCII
+for ($i = 1; $i -le 50; $i++) { NewPicture ("$qvWalk\walk-{0:D2}.png" -f $i) 640 480 ([System.Drawing.Imaging.ImageFormat]::Png) }
+$qvFiles = '1-big.png', '2-image.png', '3-page.qvtest', '4-photo.jpg', '5-notes.txt', '6-unknown.xyz'
+$qvWarn = @(UiLines '"level":"(WARN|WARNING|ERROR)"').Count
+
+function QuickViewOpen([int]$wait = 8000) {
+  $before = UiCount '"quick view shown"'
+  $at = Get-Date
+  [Live]::Press($VK.Space)
+  $line = WaitUi '"quick view shown"' $before $at 0 $wait
+  $line
+}
+function QuickViewClose {
+  $before = UiCount '"quick view closed"'
+  $at = Get-Date
+  [Live]::Press($VK.Space)
+  [void](WaitUi '"quick view closed"' $before $at 150 3000)
+}
+function P90([double[]]$values) {
+  if ($values.Count -eq 0) { return $null }
+  $sorted = @($values | Sort-Object)
+  $sorted[[Math]::Max(0, [Math]::Ceiling(0.9 * $sorted.Count) - 1)]
+}
+
+Step "25: Quick View on the fixture folder"
+ClickLeftPane
+GoPath $qvDir 1200
+$qvRows = @()
+$qvGoal = $true
+$qvFirstOfSession = $null
+for ($f = 0; $f -lt $qvFiles.Count; $f++) {
+  [Live]::Press($VK.Home); Start-Sleep -Milliseconds 150
+  for ($k = 0; $k -lt $f; $k++) { [Live]::Press($VK.Down); Start-Sleep -Milliseconds 60 }
+  Start-Sleep -Milliseconds 400
+  $runs = @()
+  for ($n = 1; $n -le 10; $n++) {
+    $line = QuickViewOpen
+    if ($n -eq 1 -and $f -eq 0) { Shot $h "$ShotDir\25-quick-view-live.png" }
+    QuickViewClose
+    if (-not $line) { "25: $($qvFiles[$f]) open $n logged no 'quick view shown' line within 8 s"; $qvGoal = $false; continue }
+    $runs += $line.fields
+  }
+  if ($runs.Count -eq 0) { continue }
+  $first = $runs[0]
+  if ($null -eq $qvFirstOfSession -and $first.full_ms) { $qvFirstOfSession = $first }
+  $warm = @($runs | Select-Object -Skip 1)
+  $cards = @($warm | Where-Object { $null -ne $_.card_ms } | ForEach-Object { [double]$_.card_ms })
+  $thumbs = @($warm | Where-Object { $null -ne $_.thumbnail_ms } | ForEach-Object { [double]$_.thumbnail_ms })
+  $fulls = @($warm | Where-Object { $null -ne $_.full_ms } | ForEach-Object { [double]$_.full_ms })
+  $cardWorst = if ($cards.Count) { ($cards | Measure-Object -Maximum).Maximum } else { $null }
+  $row = [pscustomobject]@{
+    File = $qvFiles[$f]; Viewer = $first.viewer
+    FirstCard = $first.card_ms; FirstThumb = $(if ($null -ne $first.thumbnail_ms) { $first.thumbnail_ms } else { $first.thumbnail }); FirstFull = $(if ($null -ne $first.full_ms) { $first.full_ms } else { $first.full }); FirstCold = $first.cold
+    CardWorst = $cardWorst; ThumbP90 = (P90 $thumbs); FullP90 = (P90 $fulls); Warm = $warm.Count
+    ThumbNone = @($warm | Where-Object { $null -eq $_.thumbnail_ms } | ForEach-Object { $_.thumbnail } | Select-Object -Unique) -join ','
+  }
+  $qvRows += $row
+  if ($null -eq $cardWorst -or $cardWorst -gt 50) { $qvGoal = $false }
+  if ($thumbs.Count -gt 0 -and $row.ThumbP90 -gt 100) { $qvGoal = $false }
+  if ($fulls.Count -gt 0 -and $row.FullP90 -gt 1000) { $qvGoal = $false }
+}
+"| file | viewer | first: card / thumbnail / full (cold) | warm runs | card worst | thumbnail p90 | full view p90 |"
+"|---|---|---|---|---|---|---|"
+foreach ($r in $qvRows) {
+  "| {0} | {1} | {2} / {3} / {4} ms ({5}) | {6} | {7} ms | {8} | {9} |" -f $r.File, $r.Viewer, $r.FirstCard, $r.FirstThumb, $r.FirstFull, $r.FirstCold, $r.Warm, $r.CardWorst,
+    $(if ($null -ne $r.ThumbP90) { "$($r.ThumbP90) ms" } else { "none ($($r.ThumbNone))" }), $(if ($null -ne $r.FullP90) { "$($r.FullP90) ms" } else { 'no viewer' })
+}
+$firstFull = if ($qvFirstOfSession) { [double]$qvFirstOfSession.full_ms } else { $null }
+"25: the first Space of the session with a viewer (cold: $($qvFirstOfSession.cold)) showed the full view in $firstFull ms (ceiling 1500 ms): $($null -ne $firstFull -and $firstFull -le 1500)"
+"quick view goal (warm runs: the card within 50 ms every time, the thumbnail's 90th percentile within 100 ms, the full view's within 1000 ms) met: $(if ($Virtual) { 'not measured in a VM' } elseif ($qvGoal) { 'yes' } else { 'no' })"
+
+Step "25: Down held for 3 s over 50 images with the panel open"
+GoPath $qvWalk 1200
+[Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
+[void](QuickViewOpen)
+Start-Sleep -Milliseconds 600
+$walkStart = (Get-Date).ToUniversalTime()
+$walkStop = (Get-Date).AddSeconds(3)
+while ((Get-Date) -lt $walkStop) {
+  if ([Live]::ForegroundPid() -ne [uint32]$p.Id) { Step "the walk was interrupted" }
+  [Live]::Press($VK.Down); Start-Sleep -Milliseconds 33
+}
+$walkEnd = (Get-Date).ToUniversalTime()
+Start-Sleep -Milliseconds 1500
+Shot $h "$ShotDir\25-quick-view-walk-live.png"
+$walkSeconds = @(UiObjects '"frame stats"' |
+  Where-Object { (TsUtc $_.ts) -gt $walkStart.AddSeconds(1) -and (TsUtc $_.ts) -le $walkEnd.AddSeconds(1) })
+$walkFrames = ($walkSeconds | ForEach-Object { $_.fields.frames } | Measure-Object -Sum).Sum
+$walkWork33 = ($walkSeconds | ForEach-Object { $_.fields.busy_over_33ms } | Measure-Object -Sum).Sum
+$walkWork20 = ($walkSeconds | ForEach-Object { $_.fields.busy_over_20ms } | Measure-Object -Sum).Sum
+$walkWorst = ($walkSeconds | ForEach-Object { $_.fields.worst_ms } | Measure-Object -Maximum).Maximum
+$walkShown = @(UiObjects '"quick view shown"' | Where-Object { (TsUtc $_.ts) -ge $walkStart -and (TsUtc $_.ts) -le $walkEnd.AddSeconds(2) })
+"quick view walk goal (no frame with UI work over 33 ms while Down is held over 50 images) met: {0}; {1} frames in {2} s, {3} with UI work over 20 ms, {4} over 33 ms, worst frame {5} ms; {6} files passed under the panel" -f `
+  $(if ($Virtual) { 'not measured in a VM' } elseif ($walkSeconds.Count -gt 0 -and $walkWork33 -eq 0) { 'yes' } else { 'no' }), $walkFrames, $walkSeconds.Count, $walkWork20, $walkWork33, $walkWorst, $walkShown.Count
+[Live]::Press($VK.Esc); Start-Sleep -Milliseconds 500
+"25: Esc closed the panel: $(@(UiLines '"quick view closed"' | Where-Object { $_ -match '"why":"escape"' }).Count -ge 1)"
+"25: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $qvWarn)"
 
 Step "close"
 $script:h = $null
