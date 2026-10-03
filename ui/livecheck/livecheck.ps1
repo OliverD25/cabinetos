@@ -3302,6 +3302,36 @@ for ($f = 0; $f -lt $mediaFiles.Count; $f++) {
 }
 "25: every kind the Media Viewer claims was shown by it ($mediaShown of $(@($mediaFiles | Where-Object { $_ -ne 'hevc.mp4' }).Count) files; not shown: '$($mediaMiss -join ', ')'): $($mediaMiss.Count -eq 0)"
 
+Step "25: the keys a viewer asks for reach it (the window grants those no binding wants)"
+ClickLeftPane
+GoPath $qvDir 1200
+# Opens the file in row $index, presses each key of $keys (virtual-key codes) and notes the key the window's "a key went to
+# the viewer" line names for each one, '(none)' when no line came within 2 s; the panel is closed again.
+function QuickViewKeys([int]$index, [int[]]$keys) {
+  [Live]::Press($VK.Home); Start-Sleep -Milliseconds 150
+  for ($k = 0; $k -lt $index; $k++) { [Live]::Press($VK.Down); Start-Sleep -Milliseconds 60 }
+  Start-Sleep -Milliseconds 400
+  [void](QuickViewOpen)
+  Start-Sleep -Milliseconds 300
+  $granted = LastFields '"keys granted to a viewer"'
+  $reached = @()
+  foreach ($key in $keys) {
+    $before = UiCount '"a key went to the viewer"'
+    $at = Get-Date
+    [Live]::Press($key)
+    $sent = WaitUi '"a key went to the viewer"' $before $at 0 2000
+    $reached += $(if ($sent) { "$($sent.fields.key)" } else { '(none)' })
+  }
+  QuickViewClose
+  [pscustomobject]@{ Asked = "$($granted.asked)"; Granted = "$($granted.granted)"; Reached = ($reached -join ',') }
+}
+# 4-photo.jpg is row 3 and 7-clip.mp4 row 6 of the folder: the Image Viewer is sent + 1 0 (the key = is VK_OEM_PLUS), the Media Viewer K J L M.
+$imageKeys = QuickViewKeys 3 @(0xBB, 0x31, 0x30)
+"25: the Image Viewer asked for [$($imageKeys.Asked)] and was granted [$($imageKeys.Granted)]"
+"25: + 1 0 reached the Image Viewer as plus,1,0 (got $($imageKeys.Reached)): $($imageKeys.Reached -eq 'plus,1,0')"
+$mediaKeys = QuickViewKeys 6 @($VK.K, 0x4A, $VK.L, 0x4D)
+"25: the Media Viewer asked for [$($mediaKeys.Asked)] and was granted [$($mediaKeys.Granted)]"
+"25: K J L M reached the Media Viewer as k,j,l,m (got $($mediaKeys.Reached)): $($mediaKeys.Reached -eq 'k,j,l,m')"
 Step "25: Down held for 3 s over 50 images with the panel open"
 GoPath $qvWalk 1200
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300
