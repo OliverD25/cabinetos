@@ -22,21 +22,23 @@
 # names, the wrappers on the laptop read the id from the lock (the holder's is the only run that may be going), and a
 # wait loop looks for the file with its own id and nothing else.
 
-# Remote runs a command on the machine and returns its output lines. Its default shell is PowerShell.
+# Remote runs a command (a PowerShell text) on the machine and returns its output lines. EVERY ssh call goes through
+# here and sends the text as `powershell -EncodedCommand <base64 of UTF-16LE>`: no quote, backslash or dollar sign
+# crosses a command line. A plain command string breaks in Windows PowerShell 5.1, which passes a native command's
+# embedded double quotes through unescaped (PowerShell 7 escapes them), so the laptop's PowerShell answered "The string
+# is missing the terminator" there. -OutputFormat Text keeps an error's text plain instead of CLIXML. Whatever a script
+# hands back it can write as a line starting with a prefix the caller looks for, which keeps error noise apart.
 function Remote([string]$command) {
-  $out = & ssh -F $sshConfig -o BatchMode=yes $Machine $command 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -ne '' }
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("`$ProgressPreference = 'SilentlyContinue'`r`n" + $command))
+  # 5.1 turns a native command's stderr into a stop under 'Stop'; the exit code below is what judges the call.
+  $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { $out = & ssh -F $sshConfig -o BatchMode=yes $Machine "powershell -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encoded" 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -ne '' } }
+  finally { $ErrorActionPreference = $eap }
   if ($LASTEXITCODE -ne 0) { throw "ssh $Machine failed ($LASTEXITCODE): $($out -join ' ')" }
   $out
 }
 function Send([string]$local, [string]$remote) { & scp -q -r -F $sshConfig -o BatchMode=yes $local "${Machine}:$remote"; if ($LASTEXITCODE -ne 0) { throw "scp to $Machine failed for $local" } }
-
-# Runs a script text on the machine as an encoded command, so it needs no quoting on a command line. Whatever it
-# wants to hand back it writes as a line starting with the prefix the caller looks for; error text from a failed
-# command can come back as noise, which the prefix keeps apart.
-function Invoke-RemoteScript([string]$text) {
-  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("`$ProgressPreference = 'SilentlyContinue'`r`n" + $text))
-  Remote "powershell -NoProfile -NonInteractive -EncodedCommand $encoded"
-}
+function Invoke-RemoteScript([string]$text) { Remote $text }
 
 # Where the machine's exchange folder is, and the same with forward slashes for scp.
 $laptopIo = (Split-Path $RemoteRepo -Parent) + '\_io'
