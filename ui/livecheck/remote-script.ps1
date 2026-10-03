@@ -97,7 +97,7 @@ try {
 
   # 3. The result, home.
   $target = Join-Path $io ("script-$runId-$($name.ToLower()).txt")
-  & scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$remoteIoFwd/script-runs/script-$runId.txt" $target
+  & $scpExe -q -F $sshConfig -o BatchMode=yes "${Machine}:$remoteIoFwd/script-runs/script-$runId.txt" $target
   if ($LASTEXITCODE -ne 0) { throw "scp from $Machine failed for script-$runId.txt" }
   $runExit = Receive-LaptopResult -RemoteDone "$remoteIo\script-runs\DONE-script-$runId.md" -LocalDone (Join-Path $io "DONE-script-$runId-$($name.ToLower()).md") -Sent $sent
   "--- the output's last $Tail lines:"

@@ -22,6 +22,14 @@
 # names, the wrappers on the laptop read the id from the lock (the holder's is the only run that may be going), and a
 # wait loop looks for the file with its own id and nothing else.
 
+# Windows' own OpenSSH by its full path. A PowerShell started from Git Bash finds Git's MSYS ssh first on its PATH,
+# and an MSYS program rewrites arguments that look like paths or lists: the base64 text of -EncodedCommand (it has
+# slashes) arrived broken and the laptop's PowerShell answered with its usage text. So the shell that started
+# PowerShell never decides which ssh runs. Plain ssh and scp only when that folder is missing.
+$openSsh = Join-Path $env:SystemRoot 'System32\OpenSSH'
+$sshExe = if (Test-Path -LiteralPath (Join-Path $openSsh 'ssh.exe')) { Join-Path $openSsh 'ssh.exe' } else { 'ssh' }
+$scpExe = if (Test-Path -LiteralPath (Join-Path $openSsh 'scp.exe')) { Join-Path $openSsh 'scp.exe' } else { 'scp' }
+
 # Remote runs a command (a PowerShell text) on the machine and returns its output lines. EVERY ssh call goes through
 # here and sends the text as `powershell -EncodedCommand <base64 of UTF-16LE>`: no quote, backslash or dollar sign
 # crosses a command line. A plain command string breaks in Windows PowerShell 5.1, which passes a native command's
@@ -32,12 +40,12 @@ function Remote([string]$command) {
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("`$ProgressPreference = 'SilentlyContinue'`r`n" + $command))
   # 5.1 turns a native command's stderr into a stop under 'Stop'; the exit code below is what judges the call.
   $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  try { $out = & ssh -F $sshConfig -o BatchMode=yes $Machine "powershell -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encoded" 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -ne '' } }
+  try { $out = & $sshExe -F $sshConfig -o BatchMode=yes $Machine "powershell -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encoded" 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -ne '' } }
   finally { $ErrorActionPreference = $eap }
   if ($LASTEXITCODE -ne 0) { throw "ssh $Machine failed ($LASTEXITCODE): $($out -join ' ')" }
   $out
 }
-function Send([string]$local, [string]$remote) { & scp -q -r -F $sshConfig -o BatchMode=yes $local "${Machine}:$remote"; if ($LASTEXITCODE -ne 0) { throw "scp to $Machine failed for $local" } }
+function Send([string]$local, [string]$remote) { & $scpExe -q -r -F $sshConfig -o BatchMode=yes $local "${Machine}:$remote"; if ($LASTEXITCODE -ne 0) { throw "scp to $Machine failed for $local" } }
 function Invoke-RemoteScript([string]$text) { Remote $text }
 
 # Where the machine's exchange folder is, and the same with forward slashes for scp.
@@ -238,7 +246,7 @@ function Wait-LaptopFile([string]$RemoteFile, [string]$Task, [int]$Minutes, [int
 # and the run's own exit code is returned (the caller exits with it). A mismatch stops the script loudly. It prints
 # with Write-Host, so that what it returns is the exit code alone.
 function Receive-LaptopResult([string]$RemoteDone, [string]$LocalDone, [string]$Sent) {
-  & scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$($RemoteDone -replace '\\', '/')" $LocalDone
+  & $scpExe -q -F $sshConfig -o BatchMode=yes "${Machine}:$($RemoteDone -replace '\\', '/')" $LocalDone
   if ($LASTEXITCODE -ne 0) { throw "scp from $Machine failed for $RemoteDone" }
   $text = @(Get-Content -LiteralPath $LocalDone)
   $text | ForEach-Object { Write-Host $_ }

@@ -113,7 +113,7 @@ try {
 
   # 5. The result, home.
   $local = Join-Path $io ("run-$runId-$($name.ToLower()).txt")
-  & scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/run-$runId.txt" $local
+  & $scpExe -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/run-$runId.txt" $local
   if ($LASTEXITCODE -ne 0) { throw "scp from $Machine failed for run-$runId.txt" }
   $runExit = Receive-LaptopResult -RemoteDone "$remoteIo\DONE-$runId.md" -LocalDone (Join-Path $io "DONE-$runId-$($name.ToLower()).md") -Sent $sent
   "full output: $local"

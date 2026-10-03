@@ -100,7 +100,7 @@ try {
 
   # 3. The result, home.
   $target = Join-Path $io ("tests-$runId-$($name.ToLower()).txt")
-  & scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$remoteIoFwd/test-runs/tests-$runId.txt" $target
+  & $scpExe -q -F $sshConfig -o BatchMode=yes "${Machine}:$remoteIoFwd/test-runs/tests-$runId.txt" $target
   if ($LASTEXITCODE -ne 0) { throw "scp from $Machine failed for tests-$runId.txt" }
   $runExit = Receive-LaptopResult -RemoteDone "$remoteIo\test-runs\DONE-tests-$runId.md" -LocalDone (Join-Path $io "DONE-tests-$runId-$($name.ToLower()).md") -Sent $sent
   "full output: $target"
