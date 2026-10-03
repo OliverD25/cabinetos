@@ -160,7 +160,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         IsOpen = true;
         _query = "";
         Opened?.Invoke();
-        _ = SearchAsync("");
+        Diag.Observe(SearchAsync(""), Target, "the palette's first search failed");
     }
 
     /// <summary>Closes the palette; a recording in progress is dropped.</summary>
@@ -194,9 +194,9 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
             Diag.Info(Target, "search failed", new LogField("error", error.Message));
             return;
         }
-        // A palette closed while the question was out has no list to show. Applying the answer set the highlight, and the
-        // view's GetOrCreateElement failed on its collapsed list ("Element is already the child of another element"; the log
-        // showed it as an unobserved task). A TextChanged that XAML raises late starts a search after the close too.
+        // A palette closed while the question was out has no list to show. A TextChanged that XAML raises late starts a
+        // search after the close too. This check came with the race of "Element is already the child of another element"
+        // (2026-10-02); its cause, a list WinUI had not laid out yet, is handled in CommandPalette.BringHighlightIntoView.
         if (search != _search || !IsOpen || reply is not SearchResultsReply results)
         {
             return;
@@ -228,7 +228,7 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         if (missing)
         {
             // A plugin registered a command since the list was read.
-            _ = RefreshCommandsAsync();
+            Diag.Observe(RefreshCommandsAsync(), Target, "reading the command list again for the palette failed");
         }
         var keep = highlightedId is null ? -1 : IndexOf(highlightedId);
         _highlight = -1;
@@ -343,11 +343,11 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         var version = ++_recordingVersion;
         if (_combos.Count >= 2)
         {
-            _ = CommitAsync(version);
+            Diag.Observe(CommitAsync(version), Target, "saving the recorded keys failed");
         }
         else
         {
-            _ = CommitAfterWindowAsync(version);
+            Diag.Observe(CommitAfterWindowAsync(version), Target, "saving the recorded keys failed");
         }
     }
 

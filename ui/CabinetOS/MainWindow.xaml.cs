@@ -1312,7 +1312,8 @@ public sealed partial class MainWindow : Window
                 OnUpdateEvent(coreEvent);
                 return;
         }
-        _ = RefreshCommandsAsync(coreEvent);
+        Diag.Observe(RefreshCommandsAsync(coreEvent), Target, "refreshing the commands after a core event failed",
+            new LogField("event", coreEvent.GetType().Name));
     }
 
     private void OnJobEvent(CoreEvent coreEvent)
