@@ -9,6 +9,7 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - The command palette no longer fails in the background when its list changes while it scrolls to the highlighted command, as happened on its first showing when a second answer or a key came before the palette was drawn; the highlighted command still comes into view.
+- A copy, move or delete no longer sends progress records with a stopped clock. When a job's work ends, the core writes the undo journal before it reports the job done. On a busy PC that took several hundred milliseconds, and every progress record sent in that time carried the same `elapsed_ms` while the time went on. Now the final record is the only one after the work ends. The limit of 30 progress records per second was kept all along; only the time stamps were wrong.
 
 ## [0.1.2] - 2026-10-03
 
@@ -22,7 +23,6 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- A copy, move or delete no longer sends progress records with a stopped clock. When a job's work ends, the core writes the undo journal before it reports the job done. On a busy PC that took several hundred milliseconds, and every progress record sent in that time carried the same `elapsed_ms` while the time went on. Now the final record is the only one after the work ends. The limit of 30 progress records per second was kept all along; only the time stamps were wrong.
 - The plugin sandbox runs on wasmtime 49.0.2, which closes seven security advisories of 49.0.1 (RUSTSEC-2026-0321 to 0327: GC heap corruption through mis-typed tag imports or `try_call`, a stack overflow through an unvalidated callback result count, a fuel bypass and three WASI faults). None was reachable without a plugin written to exploit it.
 
 ### Changed
