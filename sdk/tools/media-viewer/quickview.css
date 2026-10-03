@@ -1,0 +1,97 @@
+:root {
+  --background: #202020;
+  --text: #ffffff;
+  --text-secondary: #c5c5c5;
+  --accent: #60cdff;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--text);
+  font: 14px "Segoe UI Variable", "Segoe UI", sans-serif;
+  user-select: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+#video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--background);
+}
+
+#video[hidden],
+#sound[hidden] {
+  display: none;
+}
+
+#sound {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+#symbol .plate {
+  fill: var(--accent);
+  fill-opacity: 0.16;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+#symbol .tint {
+  fill: var(--accent);
+}
+
+#name {
+  margin: 0;
+  max-width: 100%;
+  font-size: 20px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#player {
+  width: min(560px, 100%);
+}
+
+#badge {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+  opacity: 0;
+  transition: opacity 150ms;
+  pointer-events: none;
+}
+
+#badge.on {
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #badge {
+    transition: none;
+  }
+}
