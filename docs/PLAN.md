@@ -1901,6 +1901,20 @@ order of a pane that has none of its own, and `view.sortBy*` never wrote it, so
 the headings keep the per-pane order. Details and the list of known failures:
 [the report](log/2026-10-03/header-sorting-and-pane-dividers-report.md).
 
+**Status (2026-10-03, 03:10): merged into main as f0e042c.** The planning
+session verified the branch again: the five core checks, both window
+builds, 1314 fast tests, and the live check on the laptop (no check
+answered False; the panel goal holds: 276 frames, none with UI work over
+20 ms). The desk card "Clickable column headers" is done, and item 1 of
+"New features" with it. Just before it, the three Rust programs got their
+Windows version resource (merge a8e45ae; SignPath requires it before it
+signs, and Explorer's Details page shows it). Still open from the coder's
+report: three update tests of `ShellEndToEndTests` fail the same way on
+main on the laptop (not caused by this phase; the flake unit after this
+phase looks at them), and the laptop's single clone is shared by two
+coders' runs, which collided once (one clone per branch, or a lock, would
+stop it).
+
 ### Phase 25 — Quick View (the "New features" card, item 2; decided 2026-10-03)
 
 A floating panel over the window, like macOS: Space on a selected file
