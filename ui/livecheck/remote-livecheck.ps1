@@ -5,16 +5,22 @@
 # SSH gets no desktop, so the task is what gives it one), the .NET Desktop Runtime and the Windows App Runtime
 # the window needs, and the Ukrainian keyboard layout. The machine must be logged in and unlocked.
 #
-# What it does, in order: sends the commits the machine does not have yet as a git bundle and fast-forwards its
-# clone; copies this PC's Release window and release core into the clone's build paths (the machine builds
-# nothing); puts what the machine cannot build in place (the Agent extension's plugin, copied from the fixture the
-# repository commits, and the 100,000-entry folder of the core's bench, made by bench-folders.ps1); starts the task;
-# waits for the run's DONE.md; copies the run's output into _io\live-check here with the machine's name in the file
-# name; prints DONE.md. Needs the Release window and the release core built on this PC (docs/ui.md, "The live
-# check"). Runs in Windows PowerShell 5.1 and PowerShell 7.
+# What it does, in order: takes the laptop's one lock (laptop-run.ps1: a second run waits for it, polling every 15 s,
+# up to -LockWaitMinutes, which is -WaitMinutes when left out, then stops with a message that names the holder); puts the
+# wrapper run-livecheck-laptop.ps1 of ui\livecheck\laptop\ in place there; makes the clone's HEAD the exact commit
+# of -Branch, detached (the commits the clone lacks go over as a git bundle; no branch of the clone is moved, so its
+# main is left alone, and a branch that is not a descendant of the clone's last one works); copies this PC's Release
+# window and release core into the clone's build paths (the machine builds nothing); puts what the machine cannot build
+# in place (the Agent extension's plugin, copied from the fixture the repository commits, and the 100,000-entry folder of
+# the core's bench, made by bench-folders.ps1); writes the request with this run's id and commit, starts the task;
+# waits for the run's own DONE-<id>.md (and no other); copies the run's output into _io\live-check here with the
+# machine's name in the file name; prints DONE.md, which says "ran commit <hash>"; fails loudly when that is not the commit
+# it sent; gives the lock back; and exits with the run's own exit code (livecheck.ps1's: 1 when a strict goal was not
+# met). Needs the Release window and the release core built on this PC (docs/ui.md, "The live check"). Runs in
+# Windows PowerShell 5.1 and PowerShell 7.
 #
-# -Branch names the branch to send (main when left out): a git worktree sends its own branch, which must be a
-# fast-forward of what the machine's clone has. The output goes to the main checkout's _io\live-check, also from
+# -Branch names the branch (or any commit) to send, main when left out: a git worktree sends its own branch. It need
+# not be a descendant of anything on the machine. The output goes to the main checkout's _io\live-check, also from
 # a git worktree (paths.ps1); -Io names another folder.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-livecheck.ps1
@@ -26,6 +32,7 @@ param(
   [string]$RemoteRepo = 'C:\Dev\cabinetos\cabinetos',
   [string]$Task = 'CabinetOS-LiveCheck',
   [int]$WaitMinutes = 20,
+  [int]$LockWaitMinutes = -1,
   [switch]$SkipBuilds,
   [string]$Io = '',
   [string]$Branch = 'main'
@@ -40,18 +47,15 @@ New-Item -ItemType Directory -Force $io | Out-Null
 $window = Join-Path $repo 'ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64'
 $core = Join-Path $repo 'core\target\release\cabinetos-core.exe'
 $remoteRepoFwd = $RemoteRepo -replace '\\', '/'
-$remoteIo = (Split-Path $RemoteRepo -Parent) + '\_io\live-check'
 
 # The SSH config of the Windows user, named outright: Git's own ssh reads HOME, which a Git Bash sets elsewhere.
 $sshConfig = Join-Path $env:USERPROFILE '.ssh\config'
-function Remote([string]$command) {
-  $out = & ssh -F $sshConfig -o BatchMode=yes $Machine $command 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -ne '' }
-  if ($LASTEXITCODE -ne 0) { throw "ssh $Machine failed ($LASTEXITCODE): $($out -join ' ')" }
-  $out
-}
-function Send([string]$local, [string]$remote) { & scp -q -r -F $sshConfig -o BatchMode=yes $local "${Machine}:$remote"; if ($LASTEXITCODE -ne 0) { throw "scp to $Machine failed for $local" } }
+. "$PSScriptRoot\laptop-run.ps1"
+$remoteIo = "$laptopIo\live-check"
+$runId = New-RunId
+$lockMinutes = if ($LockWaitMinutes -ge 0) { $LockWaitMinutes } else { $WaitMinutes }
 
-"machine: $Machine, repo there: $RemoteRepo"
+"machine: $Machine, repo there: $RemoteRepo, run $runId"
 $name = (Remote 'hostname') | Select-Object -Last 1
 if (-not $name) { throw "no answer from $Machine over ssh" }
 # A window run needs a signed-in desktop there: after a Windows Update restart nobody is signed in (2026-10-02,
@@ -60,66 +64,63 @@ $signedIn = (Remote "(quser 2>&1 | Select-String ' Active ' | Out-String).Trim()
 if (-not $signedIn) { throw "nobody is signed in on $Machine (quser shows no Active session): a window run needs a signed-in desktop; sign in there and run again" }
 "answered by $name"
 
-# 1. The commits the machine lacks, as a bundle; its clone comes from a bundle too, so it has no GitHub login.
-$theirs = (Remote "git -C $RemoteRepo rev-parse HEAD") | Select-Object -Last 1
-$ours = (& git -C $repo rev-parse $Branch).Trim()
-if ($theirs -ne $ours) {
-  $bundle = Join-Path $env:TEMP 'cabinetos-remote.bundle'
-  & git -C $repo bundle create $bundle "$theirs..$Branch" 2>&1 | Out-Null
-  if ($LASTEXITCODE -ne 0) { & git -C $repo bundle create $bundle $Branch 2>&1 | Out-Null }
-  Send $bundle "$remoteRepoFwd/../_io/inbox/cabinetos.bundle"
-  Remote "git -C $RemoteRepo pull -q --ff-only ../_io/inbox/cabinetos.bundle $Branch; git -C $RemoteRepo log --oneline -1" | Select-Object -Last 1
-} else {
-  "the clone is at $ours already"
+$runExit = 1
+Enter-LaptopLock -RunId $runId -Task $Task -What "live check of branch $Branch" -Minutes $lockMinutes
+try {
+  Install-LaptopWrappers
+
+  # 1. The exact commit, detached; the clone's branches stay where they are.
+  $sent = Sync-LaptopCommit -Branch $Branch -RunId $runId | Select-Object -Last 1
+
+  # 2. The builds: the machine runs what this PC built.
+  if (-not $SkipBuilds) {
+    foreach ($needed in $window, $core) { if (-not (Test-Path -LiteralPath $needed)) { throw "$needed is missing: build it first" } }
+    $remoteWindow = "$remoteRepoFwd/ui/CabinetOS/bin/x64/Release/net10.0-windows10.0.22621.0"
+    # A run that stopped early can leave its window alive there, holding the Release files against the copy
+    # (2026-10-02 10:04); the windows of the end-to-end suite run from the Debug folder and are left alone.
+    $left = (Remote "(Get-Process CabinetOS -ErrorAction SilentlyContinue | Where-Object -Property Path -Like '$RemoteRepo\ui\CabinetOS\bin\x64\Release\*' | Stop-Process -Force -PassThru | Select-Object -ExpandProperty Id) -join ','") | Select-Object -Last 1
+    if ($left) { "ended the Release window(s) left running there: $left" }
+    Remote "New-Item -ItemType Directory -Force '$RemoteRepo\ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0', '$RemoteRepo\core\target\release' | Out-Null" | Out-Null
+    Send $window "$remoteWindow/"
+    Send $core "$remoteRepoFwd/core/target/release/cabinetos-core.exe"
+    # The shell started by the core finds cabinetos-cli.exe next to the core (that folder goes on its PATH): without
+    # it the prompt hook and every cab command have nothing to run (nine False lines on the laptop, 2026-10-02).
+    $cli = Join-Path $repo 'core\target\release\cabinetos-cli.exe'
+    if (Test-Path -LiteralPath $cli) { Send $cli "$remoteRepoFwd/core/target/release/cabinetos-cli.exe" }
+    "builds copied: the window of $((Get-Item (Join-Path $window 'CabinetOS.exe')).LastWriteTime.ToString('HH:mm')), the core of $((Get-Item $core).LastWriteTime.ToString('HH:mm'))$(if (Test-Path -LiteralPath $cli) { ', the CLI' })"
+  }
+
+  # 3. What the machine cannot build, since it has no Rust. The Agent extension's plugin: without it the run's Agent
+  # steps say WAITING. The copy the repository commits as the core tests' fixture is the same plugin, built by
+  # sdk\extensions\build-extensions.ps1; it is copied again when the fixture is newer than the copy there, as a build
+  # would be. Copy-Item keeps the fixture's time, so an unchanged fixture is not copied twice. Then the core bench's
+  # 100,000-entry folder, which the live check scrolls; the first time this takes a minute or two.
+  $agentBuilt = "$RemoteRepo\sdk\extensions\agent\plugin\plugin.wasm"
+  $agentFixture = "$RemoteRepo\sdk\fixtures\plugins\agent\plugin.wasm"
+  Remote "if (-not (Test-Path '$agentBuilt') -or (Get-Item '$agentFixture').LastWriteTimeUtc -gt (Get-Item '$agentBuilt').LastWriteTimeUtc) { Copy-Item '$agentFixture' '$agentBuilt' -Force; 'the Agent plugin: copied from sdk\fixtures\plugins\agent' } else { 'the Agent plugin: in place' }" | Select-Object -Last 1
+  Remote "powershell -NoProfile -ExecutionPolicy Bypass -File '$RemoteRepo\ui\livecheck\bench-folders.ps1'" | ForEach-Object { "bench folders: $_" }
+
+  # 4. The run, in the machine's own session, and the wait for its own DONE-<id>.md. The task stays "Running" while
+  # the Notepad that run-livecheck.ps1 opens on that file is open, so a run from before is ended first.
+  $request = @("id=$runId", "commit=$sent", "repo=$RemoteRepo")
+  $local = Join-Path $env:TEMP "livecheck-request-$runId.txt"
+  Set-Content -LiteralPath $local -Value $request -Encoding ASCII
+  Remote "New-Item -ItemType Directory -Force '$laptopIo\inbox' | Out-Null" | Out-Null
+  Send $local "$laptopIoFwd/inbox/livecheck-request-$runId.txt"
+  Remove-Item -LiteralPath $local -Force -ErrorAction SilentlyContinue
+  Remote "if ((Get-ScheduledTask -TaskName $Task).State -eq 'Running') { Stop-ScheduledTask -TaskName $Task; Start-Sleep -Seconds 2 }; Start-ScheduledTask -TaskName $Task; (Get-ScheduledTask -TaskName $Task).State" | Select-Object -Last 1 | ForEach-Object { "task started: $_" }
+  Wait-LaptopFile -RemoteFile "$remoteIo\DONE-$runId.md" -Task $Task -Minutes $WaitMinutes -PollSeconds 15
+
+  # 5. The result, home.
+  $local = Join-Path $io ("run-$runId-$($name.ToLower()).txt")
+  & $scpExe -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/run-$runId.txt" $local
+  if ($LASTEXITCODE -ne 0) { throw "scp from $Machine failed for run-$runId.txt" }
+  $runExit = Receive-LaptopResult -RemoteDone "$remoteIo\DONE-$runId.md" -LocalDone (Join-Path $io "DONE-$runId-$($name.ToLower()).md") -Sent $sent
+  "full output: $local"
+  # The run's Notepad on DONE-<id>.md keeps the task alive; end it, so the next run can start.
+  Remote "Stop-ScheduledTask -TaskName $Task" | Out-Null
+} finally {
+  Exit-LaptopLock -RunId $runId
 }
-
-# 2. The builds: the machine runs what this PC built.
-if (-not $SkipBuilds) {
-  foreach ($needed in $window, $core) { if (-not (Test-Path -LiteralPath $needed)) { throw "$needed is missing: build it first" } }
-  $remoteWindow = "$remoteRepoFwd/ui/CabinetOS/bin/x64/Release/net10.0-windows10.0.22621.0"
-  # A run that stopped early can leave its window alive there, holding the Release files against the copy
-  # (2026-10-02 10:04); the windows of the end-to-end suite run from the Debug folder and are left alone.
-  $left = (Remote "(Get-Process CabinetOS -ErrorAction SilentlyContinue | Where-Object -Property Path -Like '$RemoteRepo\ui\CabinetOS\bin\x64\Release\*' | Stop-Process -Force -PassThru | Select-Object -ExpandProperty Id) -join ','") | Select-Object -Last 1
-  if ($left) { "ended the Release window(s) left running there: $left" }
-  Remote "New-Item -ItemType Directory -Force '$RemoteRepo\ui\CabinetOS\bin\x64\Release\net10.0-windows10.0.22621.0', '$RemoteRepo\core\target\release' | Out-Null" | Out-Null
-  Send $window "$remoteWindow/"
-  Send $core "$remoteRepoFwd/core/target/release/cabinetos-core.exe"
-  # The shell started by the core finds cabinetos-cli.exe next to the core (that folder goes on its PATH): without
-  # it the prompt hook and every cab command have nothing to run (nine False lines on the laptop, 2026-10-02).
-  $cli = Join-Path $repo 'core\target\release\cabinetos-cli.exe'
-  if (Test-Path -LiteralPath $cli) { Send $cli "$remoteRepoFwd/core/target/release/cabinetos-cli.exe" }
-  "builds copied: the window of $((Get-Item (Join-Path $window 'CabinetOS.exe')).LastWriteTime.ToString('HH:mm')), the core of $((Get-Item $core).LastWriteTime.ToString('HH:mm'))$(if (Test-Path -LiteralPath $cli) { ', the CLI' })"
-}
-
-# 3. What the machine cannot build, since it has no Rust. The Agent extension's plugin: without it the run's Agent
-# steps say WAITING. The copy the repository commits as the core tests' fixture is the same plugin, built by
-# sdk\extensions\build-extensions.ps1; it is copied again when the fixture is newer than the copy there, as a build
-# would be. Copy-Item keeps the fixture's time, so an unchanged fixture is not copied twice. Then the core bench's
-# 100,000-entry folder, which the live check scrolls; the first time this takes a minute or two.
-$agentBuilt = "$RemoteRepo\sdk\extensions\agent\plugin\plugin.wasm"
-$agentFixture = "$RemoteRepo\sdk\fixtures\plugins\agent\plugin.wasm"
-Remote "if (-not (Test-Path '$agentBuilt') -or (Get-Item '$agentFixture').LastWriteTimeUtc -gt (Get-Item '$agentBuilt').LastWriteTimeUtc) { Copy-Item '$agentFixture' '$agentBuilt' -Force; 'the Agent plugin: copied from sdk\fixtures\plugins\agent' } else { 'the Agent plugin: in place' }" | Select-Object -Last 1
-Remote "powershell -NoProfile -ExecutionPolicy Bypass -File '$RemoteRepo\ui\livecheck\bench-folders.ps1'" | ForEach-Object { "bench folders: $_" }
-
-# 4. The run, in the machine's own session, and the wait for its DONE.md. The task stays "Running" while the
-# Notepad that run-livecheck.ps1 opens on DONE.md is open, so a run from before is ended first, and the wait
-# watches DONE.md, not the task's state.
-$doneTicks = "if (Test-Path '$remoteIo\DONE.md') { (Get-Item '$remoteIo\DONE.md').LastWriteTimeUtc.Ticks } else { 0 }"
-$before = (Remote $doneTicks) | Select-Object -Last 1
-Remote "if ((Get-ScheduledTask -TaskName $Task).State -eq 'Running') { Stop-ScheduledTask -TaskName $Task; Start-Sleep -Seconds 2 }; Start-ScheduledTask -TaskName $Task; (Get-ScheduledTask -TaskName $Task).State" | Select-Object -Last 1 | ForEach-Object { "task started: $_" }
-$deadline = (Get-Date).AddMinutes($WaitMinutes)
-do {
-  Start-Sleep -Seconds 15
-  $now = (Remote $doneTicks) | Select-Object -Last 1
-} while ($now -eq $before -and (Get-Date) -lt $deadline)
-if ($now -eq $before) { throw "no new DONE.md on $Machine after $WaitMinutes minutes" }
-
-# 5. The result, home.
-$latest = (Remote "(Get-ChildItem '$remoteIo\run-*.txt' | Sort-Object LastWriteTime | Select-Object -Last 1).Name") | Select-Object -Last 1
-$local = Join-Path $io ($latest -replace '\.txt$', "-$($name.ToLower()).txt")
-& scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/$latest" $local
-& scp -q -F $sshConfig -o BatchMode=yes "${Machine}:$($remoteIo -replace '\\', '/')/DONE.md" (Join-Path $io "DONE-$($name.ToLower()).md")
-Get-Content (Join-Path $io "DONE-$($name.ToLower()).md")
-"full output: $local"
-# The run's Notepad on DONE.md keeps the task alive; end it, so the next run can start.
-Remote "Stop-ScheduledTask -TaskName $Task" | Out-Null
+"exit code of the live check: $runExit"
+exit $runExit

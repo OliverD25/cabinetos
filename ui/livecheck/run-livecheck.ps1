@@ -10,8 +10,13 @@
 # a VM", and DONE.md counts them apart, neither True nor False. -Panel passes on too, for a laptop whose display path
 # sleeps between pages: the scroll goal is judged by the frames' UI work (the "panel goal" line) and the gap goal answers
 # "not judged on a panel", which DONE.md counts apart too. -Virtual wins over -Panel.
-param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown, [switch]$MinimizeOthers, [switch]$Virtual, [switch]$Panel)
+# -RunId is the id of a run on the laptop (remote-livecheck.ps1): it becomes the tag, and the file written last is
+# DONE-<id>.md instead of DONE.md, so a waiting script finds its own run's result and no other. Either way DONE.md
+# ends with the lines "ran commit <hash>" (the commit of the repository this script is in: the code that ran) and
+# "exit code <n>" (livecheck.ps1's own), and this script exits with that code.
+param([string]$Tag = (Get-Date -Format 'yyyy-MM-dd-HHmm'), [string]$Io = '', [switch]$NoCountdown, [switch]$MinimizeOthers, [switch]$Virtual, [switch]$Panel, [string]$RunId = '')
 . "$PSScriptRoot\paths.ps1"
+if ($RunId) { $Tag = $RunId }
 $io = if ($Io) { $Io } else { Join-Path (Get-IoFolder) 'live-check' }
 New-Item -ItemType Directory -Force $io | Out-Null
 $out = "$io\run-$Tag.txt"
@@ -37,6 +42,8 @@ $unmeasured = @($lines | Where-Object { $_ -match 'not measured in a VM' })
 $judgedByWork = $Panel -and -not $Virtual
 $panelGoal = ($lines | Where-Object { $_ -like 'panel goal*' } | Select-Object -Last 1)
 $unjudged = @($lines | Where-Object { $_ -match 'not judged on a panel' })
+$commit = "$(& git -C $PSScriptRoot rev-parse HEAD 2>$null)".Trim()
+$doneFile = if ($RunId) { "$io\DONE-$RunId.md" } else { "$io\DONE.md" }
 $done = @(
   "# Live check finished: you can use the keyboard and mouse again",
   "",
@@ -53,8 +60,13 @@ $done = @(
   $(if ($judgedByWork) { "- Checks not judged on a panel (they judge frame gaps; neither True nor False): $($unjudged.Count)" })
 ) + @(
   "",
-  "Full output: $out"
+  "Full output: $out",
+  "ran commit $commit",
+  "exit code $code"
 )
-$done | Set-Content -LiteralPath "$io\DONE.md" -Encoding UTF8
-Start-Process notepad.exe -ArgumentList "`"$io\DONE.md`""
-"finished with exit code $code; DONE.md written and opened"
+# Written whole in one step: a script that waits for the file never reads half of it.
+$done | Set-Content -LiteralPath "$doneFile.tmp" -Encoding UTF8
+Move-Item -LiteralPath "$doneFile.tmp" -Destination $doneFile -Force
+Start-Process notepad.exe -ArgumentList "`"$doneFile`""
+"finished with exit code $code; $(Split-Path $doneFile -Leaf) written and opened"
+exit $code
