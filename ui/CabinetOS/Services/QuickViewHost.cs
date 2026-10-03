@@ -147,7 +147,12 @@ internal sealed class QuickViewHost
         Frame.Opacity = 0;
         Frame.IsHitTestVisible = false;
         Frame.Visibility = Visibility.Collapsed;
-        await _page.TrySuspendAsync();
+        // WebView2 refuses to suspend while the navigation to about:blank still runs ("not in the correct state").
+        await Task.Delay(400);
+        if (Frame.Visibility == Visibility.Collapsed && FileUrl is null)
+        {
+            await _page.TrySuspendAsync();
+        }
     }
 
     /// <summary>Closes the WebView2 and its browser process (unless the same tool's pane page shares it).</summary>

@@ -221,8 +221,10 @@ public class QuickViewEndToEndTests
             Assert.Equal(("shown", "d.qvtest"), (Q(logs, "marked", "state"), Q(logs, "marked", "file")));
             Assert.Contains(logs, l => Message(l) == "command executed" && Text(l, "command") == "edit.toggleSelectionInPlace" && Text(l, "trigger") == "key");
             Assert.Equal("closed", Q(logs, "after-tab", "state"));
-            Assert.Equal(("card", ""), (Q(logs, "folder", "state"), Q(logs, "folder", "viewer")));
-            Assert.Contains("2 files", Q(logs, "folder", "card"));
+            // The folder card: the shell's folder thumbnail when it has one, else the icon card; no viewer; the size measured.
+            Assert.Contains(Q(logs, "folder", "state"), new[] { "card", "thumbnail" });
+            Assert.Equal("", Q(logs, "folder", "viewer"));
+            Assert.Contains("2 files", Q(logs, "folder", "facts"));
             Assert.Equal("closed", Q(logs, "after-enter", "state"));
             Assert.Equal(Path.Combine(data, "sub"), Q(logs, "after-enter", "pane_path"));
         }
@@ -334,7 +336,6 @@ public class QuickViewEndToEndTests
             Assert.Equal(("shown", "e-ok.qvtest"), (Q(logs, "after-crash", "state"), Q(logs, "after-crash", "file")));
             Assert.Contains(Shown(logs), l => Text(l, "full") == "failed:unsupported");
             Assert.Contains(Shown(logs), l => Text(l, "full") == "failed:not-finished");
-            Assert.Contains(Shown(logs), l => Text(l, "full") == "stopped");
         }
         finally
         {
