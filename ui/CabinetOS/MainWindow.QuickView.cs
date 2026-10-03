@@ -740,7 +740,14 @@ public sealed partial class MainWindow
     private void OnQuickViewerStopped(QuickViewHost host, string reason)
     {
         Diag.Warn(QuickViewTarget, "a viewer stopped", new LogField("viewer", host.Viewer.Id), new LogField("reason", reason));
-        CloseQuickViewHost(host);
+        // Out of the panel's books now; its WebView2 is closed after WebView2's own failure event has returned.
+        _quickViewHosts.Remove(host.Viewer.Id);
+        _quickViewPool.Remove(host.Viewer.Id);
+        if (_quickViewPage == host)
+        {
+            _quickViewPage = null;
+        }
+        DispatcherQueue.TryEnqueue(host.Close);
         if (_quickView.OnStopped(host.Viewer.Id))
         {
             RenderQuickView();
