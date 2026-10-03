@@ -49,7 +49,9 @@ foreach ($pair in ($request['env'] -split ';')) { if ($pair -match '^([^=]+)=(.*
 Push-Location $repo
 # MinimizeAll first: a window left in front (a terminal, a Notepad) would stop a real-key script at once.
 (New-Object -ComObject Shell.Application).MinimizeAll(); Start-Sleep -Milliseconds 800
-$command = "& '$script' $($request['args'])"
+# "powershell -Command" ends with 1 for any script that ended with another code ("exit 3"), so the command passes the
+# script's own code on: its last native command's, or 1 when the script's last statement failed.
+$command = "& '$script' $($request['args']); `$ok = `$?; `$c = `$LASTEXITCODE; if (`$c -is [int] -and `$c -ne 0) { exit `$c }; if (-not `$ok) { exit 1 }; exit 0"
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1 | ForEach-Object { "$_" } | Add-Content -LiteralPath $out
 $code = if ($null -eq $LASTEXITCODE) { 1 } else { $LASTEXITCODE }
 Pop-Location

@@ -46,7 +46,7 @@ $laptopLockPoll = 15
 function New-RunId { (Get-Date -Format 'yyyy-MM-dd-HHmm') + '-' + ('{0:x4}' -f (Get-Random -Maximum 65536)) }
 
 # Text that goes into the lock file and the log: plain characters only, so it needs no escaping anywhere.
-function ConvertTo-PlainText([string]$text) { ($text -replace "[^A-Za-z0-9 _.,:;/()@+=#-]", '_') }
+function ConvertTo-PlainText([string]$text) { (($text -replace '\\', '/') -replace "[^A-Za-z0-9 _.,:;/()@+=#-]", '_') }
 
 # The lock's two laptop-side scripts. @@ID@@ and the like are replaced before they are sent.
 $laptopLockTake = @'
