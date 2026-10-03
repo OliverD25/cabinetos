@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-03
+
 ### Added
 
 - The theme gallery: the themes as colour tiles, each painted in the theme's own colours, with filters for dark, light, system themes, density presets and the installed ones (Windows' mode first), and a search. Selecting a tile previews the theme on the whole window with nothing installed or written, and Esc paints the theme in effect again. Enter or a double-click installs a theme and applies it. Open it with "Themes: Browse" in the command palette (`themes.browse`; bind it to keys if you like) or the new last row of the theme picker, "Browse more themes…". If the themes catalogue cannot be read, the gallery shows your installed themes and says so.
@@ -153,6 +155,7 @@ The first version. How it is built, signed and published:
 - A plugin's folders and the folders a pane opens are compared in their long form, so a short 8.3 spelling such as `C:\Users\CABINE~1\AppData\Local\Temp` is the same folder as `C:\Users\cabinetos\AppData\Local\Temp`. Before, the host compared the text: the Agent extension was never told about a pane that opened a folder in the short form (the preview did not show), and a plugin could not watch a folder under its roots by that name. A root written in the short form in `plugin.json` counts too, and a path that does not exist yet is judged by the folder it will be in.
 - `CabinetOS.exe` has its own icon, the blue folder with the terminal badge, in the taskbar, in Explorer and in the Alt+Tab list. Before, Windows showed the generic program icon for the file itself; only the setup's shortcuts and the Settings > Apps entry had the icon. `ui/CabinetOS/Assets/CabinetOS.ico` is committed (made by `build/make-icon.ps1` from the design's size cuts) and the release ships that file.
 
-[Unreleased]: https://github.com/OliverD25/cabinetos/compare/v0.1.1...main
+[Unreleased]: https://github.com/OliverD25/cabinetos/compare/v0.1.2...main
+[0.1.2]: https://github.com/OliverD25/cabinetos/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/OliverD25/cabinetos/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/OliverD25/cabinetos/releases/tag/v0.1.0
