@@ -140,10 +140,12 @@ function Enter-LaptopLock([string]$RunId, [string]$Task, [string]$What, [int]$Mi
   $deadline = (Get-Date).AddMinutes($Minutes)
   $polls = 0
   while ($true) {
-    $answer = @(Invoke-RemoteScript $text | Where-Object { $_ -like 'LOCK:*' }) | Select-Object -Last 1
+    $answers = @(Invoke-RemoteScript $text | Where-Object { $_ -like 'LOCK:*' })
+    $answer = $answers | Select-Object -Last 1
+    $tookOver = $answers | Where-Object { $_ -like 'LOCK:TOOKOVER|*' } | Select-Object -First 1
     if (-not $answer) { throw "the lock check on $Machine gave no answer" }
     if ($answer -like 'LOCK:ERROR|*') { throw "the lock check on $Machine failed: $($answer.Substring(11))" }
-    if ($answer -like 'LOCK:TOOKOVER|*') { "the laptop's lock was dead and is taken over (recorded in _io\laptop-lock.log there): $($answer.Substring(14))"; $answer = 'LOCK:ACQUIRED' }
+    if ($tookOver) { "the laptop's lock was dead and is taken over (recorded in _io\laptop-lock.log there): $($tookOver.Substring(14))" }
     if ($answer -eq 'LOCK:ACQUIRED') { "laptop lock taken: run $RunId ($What)"; return }
     $info = $answer.Substring(10)
     if ((Get-Date) -ge $deadline) { throw "the laptop stayed busy for $Minutes minutes, so nothing was started and nothing was changed there. Held by: $info. Run again later, or give -WaitMinutes (or -LockWaitMinutes) a larger number." }
