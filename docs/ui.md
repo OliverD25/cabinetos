@@ -3532,9 +3532,12 @@ the row's icon at 48 px from the icons the window holds (a sharper 48 px
 icon is asked for once per icon), the name, the type, the size and the
 date. It asks the core for the shell's thumbnail (`get_thumbnail`, 256 px;
 the window reads no file) and draws it scaled to fit, at most twice its
-size in device pixels; a file with no thumbnail keeps the card. It also
-asks for the two files next to it (`ahead`), the one in the direction of
-the last move first, so walking on finds them in the core's cache.
+size in device pixels; a file with no thumbnail keeps the card. Once the
+keys have rested for 120 ms it also asks for the two files next to it
+(`ahead`), the one in the direction of the last move first, so walking on
+finds them in the core's cache. A held key asks only for the file it
+shows: three thumbnails per step made the laptop pause 50 to 70 ms in
+full garbage collections in the live check of 2026-10-03.
 
 **The viewer.** The window matches the file's name against the core's
 table (`quick_view_table`, then `quick_view_table_changed`), so a viewer

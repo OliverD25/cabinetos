@@ -50,8 +50,13 @@ public sealed partial class MainWindow
     // When the window last handled a key (the zero of the panel's times), on _quickViewClock.
     private long _quickViewKeyAt;
 
-    // The thumbnail on screen, for quickview-show.
-    private QuickViewThumbnail? _quickViewThumbnail;
+    // The thumbnail on screen, for quickview-show; its data URL is written only when a page is sent it, because each
+    // copy of a picture this size is a large-object allocation, and a held Down key in the laptop's live check of
+    // 2026-10-03 spent 50 to 70 ms in full garbage collections on them.
+    private (string Png, int Width, int Height)? _quickViewThumbnail;
+
+    // The read ahead waits until the cursor rests (the viewer's rest): a held key asks only for the file it shows.
+    private DispatcherQueueTimer _quickViewAheadTimer = null!;
 
     // The requests to the core that are out for the panel (thumbnail, offer): until:quickview-idle waits for none.
     private int _quickViewAsking;
@@ -69,6 +74,10 @@ public sealed partial class MainWindow
         _quickViewTimer = DispatcherQueue.CreateTimer();
         _quickViewTimer.IsRepeating = false;
         _quickViewTimer.Tick += (_, _) => OnQuickViewTimer();
+        _quickViewAheadTimer = DispatcherQueue.CreateTimer();
+        _quickViewAheadTimer.IsRepeating = false;
+        _quickViewAheadTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, _quickView.Limits.RestMs));
+        _quickViewAheadTimer.Tick += (_, _) => ReadQuickViewAhead();
         // The card's icon at 48 px; until it comes, the row's icon the window holds.
         _quickViewIcons = new IconCache(_session) { Size = 48 };
         _quickViewIcons.Loaded += key =>
@@ -188,10 +197,11 @@ public sealed partial class MainWindow
         _quickView.Close();
         WriteQuickViewLines();
         _quickViewTimer.Stop();
+        _quickViewAheadTimer.Stop();
         _quickViewFrames.Clear();
         foreach (var host in _quickViewHosts.Values)
         {
-            _ = host.SleepAsync();
+            _ = host.SleepAsync(() => QuickViewHostIdle(host));
         }
         _quickViewPage = null;
         _quickViewThumbnail = null;
@@ -336,7 +346,7 @@ public sealed partial class MainWindow
         if (_quickViewPage is { } previous && previous.Viewer.Id != _quickView.Viewer?.Id)
         {
             // Another viewer (or none) shows this file: the page before goes to about:blank and sleeps.
-            _ = previous.SleepAsync();
+            _ = previous.SleepAsync(() => QuickViewHostIdle(previous));
             _quickViewPage = null;
         }
         else if (_quickViewPage is { } same)
@@ -348,7 +358,8 @@ public sealed partial class MainWindow
         MarkQuickViewFrame(token, QuickViewMoment.Card);
 
         _ = LoadQuickViewThumbnailAsync(token, file);
-        ReadQuickViewAhead(pane, position);
+        _quickViewAheadTimer.Stop();
+        _quickViewAheadTimer.Start();
         if (file.IsFolder)
         {
             // The folder card shows its size, measured at once as Calculate Folder Size measures it (ADR 0023, decision 4.6).
@@ -466,6 +477,10 @@ public sealed partial class MainWindow
             var reply = await _session.RequestAsync(new GetThumbnailRequest(file.Path, 256));
             if (reply is ThumbnailReply { PngBase64: { Length: > 0 } png, Width: { } width, Height: { } height })
             {
+                if (token != _quickView.Token || !_quickView.IsOpen)
+                {
+                    return;
+                }
                 var (stream, _) = await IconBytes.DecodeAsync(png);
                 using (stream)
                 {
@@ -480,7 +495,7 @@ public sealed partial class MainWindow
                         WriteQuickViewLines();
                         return;
                     }
-                    _quickViewThumbnail = new QuickViewThumbnail("data:image/png;base64," + png, (int)width, (int)height);
+                    _quickViewThumbnail = (png, (int)width, (int)height);
                     QuickViewView.SetThumbnail(bitmap, (int)width, (int)height, RootGrid.XamlRoot?.RasterizationScale ?? 1);
                     RenderQuickView();
                     MarkQuickViewFrame(token, QuickViewMoment.Thumbnail);
@@ -509,8 +524,18 @@ public sealed partial class MainWindow
 
     // The files next to the one shown, the one in the direction of the last move first (ADR 0023, decision 4.3): the core
     // puts them in its cache, so walking on is a memory read.
-    private void ReadQuickViewAhead(PaneModel pane, int position)
+    private void ReadQuickViewAhead()
     {
+        if (!_quickView.IsOpen || _quickViewPane < 0 || _quickViewIndex < 0)
+        {
+            return;
+        }
+        var pane = _panes[_quickViewPane];
+        var position = pane.Selection.PositionOf(_quickViewIndex);
+        if (position < 0)
+        {
+            return;
+        }
         foreach (var step in new[] { _quickViewDirection, -_quickViewDirection })
         {
             var at = position + step;
@@ -580,6 +605,8 @@ public sealed partial class MainWindow
         return host;
     }
 
+    private bool QuickViewHostIdle(QuickViewHost host) => !_quickView.IsOpen || _quickView.Viewer?.Id != host.Viewer.Id;
+
     private void CloseQuickViewHost(QuickViewHost host)
     {
         _quickViewFocusGuardUntil = _quickViewClock.ElapsedMilliseconds + 500;
@@ -634,7 +661,8 @@ public sealed partial class MainWindow
                 {
                     var size = QuickViewView.PageSize;
                     host.Post(QuickViewMessages.Show(token, file.Path, url, file.Name, file.Extension, _quickView.Claim ?? "", file.Size, file.Modified,
-                        _quickViewThumbnail, QuickViewLook(), size.Width, size.Height, RootGrid.XamlRoot?.RasterizationScale ?? 1));
+                        _quickViewThumbnail is { } shown ? new QuickViewThumbnail("data:image/png;base64," + shown.Png, shown.Width, shown.Height) : null,
+                        QuickViewLook(), size.Width, size.Height, RootGrid.XamlRoot?.RasterizationScale ?? 1));
                     Diag.Info(QuickViewTarget, "a viewer is ready; the file was sent", new LogField("viewer", host.Viewer.Id), new LogField("token", token));
                 }
                 break;

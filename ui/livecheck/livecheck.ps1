@@ -3112,7 +3112,8 @@ foreach ($want in 'right', 'rail', 'classic') {
 # ADR's fixture folder are not made. Then Down is held for 3 s over 50 images with the panel open, and the frames' UI
 # work is judged as the panel goal judges the PageDown hold: no frame with UI work over 33 ms.
 $qvDir = "$root\quickview"
-$qvWalk = "$qvDir\walk"
+# Beside the fixture folder, not in it: a folder there would be the first row, and every file would be one row off.
+$qvWalk = "$root\quickview-walk"
 New-Item -ItemType Directory -Force $qvDir, $qvWalk | Out-Null
 function NewPicture([string]$path, [int]$width, [int]$height, [System.Drawing.Imaging.ImageFormat]$format) {
   $bmp = New-Object System.Drawing.Bitmap $width, $height
@@ -3171,6 +3172,8 @@ for ($f = 0; $f -lt $qvFiles.Count; $f++) {
   }
   if ($runs.Count -eq 0) { continue }
   $first = $runs[0]
+  $kindExpected = [IO.Path]::GetExtension($qvFiles[$f]).ToLowerInvariant()
+  if ($first.kind -ne $kindExpected) { "25: the cursor was on a $($first.kind) row, not on $($qvFiles[$f]): False"; $qvGoal = $false }
   if ($null -eq $qvFirstOfSession -and $first.full_ms) { $qvFirstOfSession = $first }
   $warm = @($runs | Select-Object -Skip 1)
   $cards = @($warm | Where-Object { $null -ne $_.card_ms } | ForEach-Object { [double]$_.card_ms })

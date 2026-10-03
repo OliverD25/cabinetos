@@ -140,16 +140,19 @@ internal sealed class QuickViewHost
     /// The panel closed, or another viewer shows the next file: the page goes to <c>about:blank</c> at once (a video
     /// stops and its decoder is freed), its file hosts are cleared, the frame is hidden and the page is suspended.
     /// </summary>
-    public async Task SleepAsync()
+    /// <param name="idle">Asked after the wait: false when the panel came back for this viewer meanwhile.</param>
+    public async Task SleepAsync(Func<bool> idle)
     {
         ClearHosts();
         _page.NavigateToBlank();
         Frame.Opacity = 0;
         Frame.IsHitTestVisible = false;
         Frame.Visibility = Visibility.Collapsed;
-        // WebView2 refuses to suspend while the navigation to about:blank still runs ("not in the correct state").
+        // WebView2 refuses to suspend while the navigation to about:blank still runs ("not in the correct state"). A
+        // panel opened again within the wait keeps the page awake: its load comes only after the 120 ms rest, and a
+        // suspend just before it held a warm thumbnail's frame back to 138 ms in the laptop's live check of 2026-10-03.
         await Task.Delay(400);
-        if (Frame.Visibility == Visibility.Collapsed && FileUrl is null)
+        if (Frame.Visibility == Visibility.Collapsed && FileUrl is null && idle())
         {
             await _page.TrySuspendAsync();
         }
