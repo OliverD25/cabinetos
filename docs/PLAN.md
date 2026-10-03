@@ -2072,7 +2072,14 @@ Verified before the merge: the five core checks, both window builds with
 warnings as errors, the fast tests (1423 passed, 86 skipped). Step 3,
 the viewer pack in the marketplace, is next: images and media first,
 then text and Markdown, then PDF; the Office viewer waits for the
-hanging-handler test the ADR asks for.**
+hanging-handler test the ADR asks for. A second run of the same
+commit (00:08, started by accident by a cut-off verification) met the
+scroll, walk and cold goals again (first Space 556 ms) but missed the warm
+goal once: on one of nine warm opens of the small PNG the card took 93 ms
+(goal 50) and the thumbnail's 90th percentile became 122 ms (goal 100);
+every other file stayed within the goals. Recorded as one slow open, not
+a fault; the step 3 runs of section 25 will show whether it repeats, and
+a repeat becomes a unit of its own.**
 
 ## 6. Phase 1 in detail — the Rust core scaffold
 
