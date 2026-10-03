@@ -158,7 +158,10 @@ internal sealed class QuickViewHost
     /// <summary>Closes the WebView2 and its browser process (unless the same tool's pane page shares it).</summary>
     public void Close()
     {
-        ClearHosts();
+        // Not ClearHosts: after a crash the browser is gone and clearing a mapping there throws; the whole WebView2 goes.
+        FileUrl = null;
+        _fileHost = null;
+        _renderHost = null;
         _page.Close();
         if (Frame.Parent is Panel layer)
         {
