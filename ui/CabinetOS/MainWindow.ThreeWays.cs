@@ -110,7 +110,7 @@ public sealed partial class MainWindow
     // then the settings of gaps 6 and 7 (ShellMenu.MoreSettings): Update Settings, Log Level and the editor.
     private IEnumerable<MenuEntry> PreferenceEntries() =>
         ShellMenu.Preferences(_router.Commands, _settings.Layout, _settings.ShowHidden, _settings.SidebarAutoReveal)
-            .Concat(ShellMenu.MoreSettings(_router.Commands, _settings)).Select(row =>
+            .Concat(ShellMenu.MoreSettings(_router.Commands, _settings, _editorPrograms)).Select(row =>
             row.Choices is { } choices
                 ? new MenuEntry(MenuEntryKind.Item, row.Title, "", Keys: row.Keys,
                     Children: [.. choices.Select(choice => new MenuEntry(MenuEntryKind.Item, choice.Title, null, choice.CommandId, Args: choice.Args, Checked: choice.Checked))])

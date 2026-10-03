@@ -26,6 +26,8 @@ namespace CabinetOS.Core.Settings;
 /// <see cref="TerminalDefaultProfile"/> is <c>terminal.defaultProfile</c> and <see cref="TerminalStartsLinked"/> is <c>terminal.defaultMode</c>
 /// being <c>linked</c> (the settings-three-ways skill, gap 5). <see cref="UpdateCheck"/>, <see cref="UpdateAutoInstall"/> and
 /// <see cref="UpdateChannel"/> are <c>update.check</c>, <c>update.autoInstall</c> and <c>update.channel</c> (gap 6).
+/// <see cref="LogLevel"/> is <c>logging.level</c>; <see cref="Editor"/> is <c>files.editor</c> (null for Windows' own edit verb) and
+/// <see cref="EditorLabel"/> what the palette and the menu call it (gap 7).
 /// </summary>
 public sealed record UiSettings(
     string Layout,
@@ -53,7 +55,10 @@ public sealed record UiSettings(
     bool TerminalStartsLinked = false,
     bool UpdateCheck = true,
     bool UpdateAutoInstall = true,
-    string UpdateChannel = "stable")
+    string UpdateChannel = "stable",
+    string LogLevel = "info",
+    EditorSetting? Editor = null,
+    string EditorLabel = EditorChoices.WindowsDefault)
 {
     /// <summary>The defaults of docs/config.md, used until the core answers.</summary>
     public static readonly UiSettings Defaults = new("classic", true, true, "default", false, "name", false);
@@ -94,7 +99,10 @@ public sealed record UiSettings(
             String(Section(config, "terminal"), "defaultMode") == "linked",
             Bool(Section(config, "update"), "check") ?? Defaults.UpdateCheck,
             Bool(Section(config, "update"), "autoInstall") ?? Defaults.UpdateAutoInstall,
-            String(Section(config, "update"), "channel") ?? Defaults.UpdateChannel);
+            String(Section(config, "update"), "channel") ?? Defaults.UpdateChannel,
+            String(Section(config, "logging"), "level") ?? Defaults.LogLevel,
+            EditorChoices.EditorFrom(config),
+            EditorChoices.LabelFrom(config));
     }
 
     // Null for a list that is absent or empty, so two readings of the same file are equal (a record compares lists by reference).

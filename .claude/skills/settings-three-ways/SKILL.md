@@ -105,7 +105,7 @@ the next audit does not ask again.
 | `panes.showHidden` | `view.toggleHiddenFiles`, Ctrl+K Ctrl+H | the menu's "Show Hidden Files", the word "hidden" in the status bar | fine since Phase 23 (was gap 2) |
 | `panes.sort.*` | `view.sortBy*` | column headers (since Phase 24) | fine |
 | `panes.folderSizes` | `view.toggleFolderSizes` | to check | command fine; window to check |
-| `files.editor` | none (`file.edit` uses it) | the "Open with" picker is per file | **Gap 7.** "Preferences: Choose Editor" and a Settings entry |
+| `files.editor` | `preferences.chooseEditor` (picker: Windows' default, the programs of `programs`, Choose…; `file.edit` uses it) | the top row menu's "Editor" submenu | fine since this unit (was gap 7) |
 | `contextMenu` (the menu's rows) | `menu.edit` | "Edit Menu…" in the menu | fine |
 | `contextMenu.shellMenu` | `menu.toggleShellMenu` | the last row of "Edit Menu…" | fine since Phase 23 (was gap 4) |
 | `terminal.defaultProfile` | `terminal.chooseDefaultProfile` (picker; the row names the profile) | the dock chevron's "Default Profile…" | fine since this unit (was gap 5) |
@@ -113,7 +113,7 @@ the next audit does not ask again.
 | `terminal.split` | `terminal.toggleSplit`, Ctrl+\ | the dock | fine |
 | `terminal.restore` | `terminal.toggleRestore` (on or off) | the dock chevron's check row "Restore Tabs on Start" | fine since this unit (was gap 5) |
 | `terminal.defaultMode` | `terminal.toggleDefaultMode` (locked or linked; `terminal.setMode` stays per session) | the dock chevron's check row "New Terminals Start Linked" | fine since this unit (was gap 5) |
-| `logging.level` | none | none | **Gap 7.** "Diagnostics: Log Level" picker; Settings page |
+| `logging.level` | `diagnostics.chooseLogLevel` (picker) | the top row menu's "Log Level" submenu | fine since this unit (was gap 7) |
 | `logging.heavy` | `diagnostics.toggleHeavy` | to check | command fine; window to check |
 | `marketplace.index`, `marketplace.themes`, `marketplace.allowInsecure` | none | none | **Gap 8.** The Settings page (advanced section) |
 | `update.check` (the daily check on or off) | `update.toggleCheck` (on or off; `update.check` checks now) | the update pill's flyout and the top row menu's "Update Settings": "Check Automatically" | fine since this unit (was gap 6) |
@@ -126,8 +126,11 @@ The gaps, in the order to fix them: 1 the layout (the creator's first ask),
 5 the terminal's defaults, 6 the update settings, 7 the editor and the log
 level, 8 the Settings page of Phase 11c for the rest. The desk card
 "Settings reachable three ways" tracks them; gaps 1 to 4 fit one coder unit
-and were closed in Phase 23 (the rows above say which command and which
-control; the window tests are in `ThreeWaysEndToEndTests`).
+and were closed in Phase 23, gaps 5 to 7 in the unit after it (the rows above
+say which command and which control; the window tests are in
+`ThreeWaysEndToEndTests`). Only gap 8 is open: the keys that are in the file only
+because they are advanced (`terminal.profiles`, `marketplace.*`, `update.source`,
+`update.allowInsecure`).
 
 ## 6. How to run the audit again
 

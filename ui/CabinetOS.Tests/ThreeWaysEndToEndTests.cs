@@ -606,6 +606,8 @@ public class ThreeWaysEndToEndTests
 
     // ----- Gap 6: the update settings -----
 
+    // The submenu's text in the log (FileContextMenu.OpenSubmenu) marks only the checked row with [x]; the top-level rows and the
+    // dock menu say [ ] too.
     private const string UpdateRowsDefault = "Check Automatically [x]|Install Automatically [x]|Stable Channel [x]|Preview Channel [ ]";
 
     // The pill that holds the flyout is shown only while an update runs, which these windows do not have: the flyout's row is
@@ -677,7 +679,7 @@ public class ThreeWaysEndToEndTests
             Assert.Equal(("false", "Check Automatically [ ]|Install Automatically [x]|Stable Channel [x]|Preview Channel [ ]"),
                 (Settings("off-by-command", "update_check"), Settings("off-by-command", "update_flyout")));
             Assert.Contains("update.toggleCheck=off", Settings("palette-off", "palette_states").Split('|'));
-            Assert.Equal("Update Settings: Check Automatically [ ]|Install Automatically [x]|Stable Channel [x]|Preview Channel [ ]", Settings("submenu-off", "menu"));
+            Assert.Equal("Update Settings: Check Automatically|Install Automatically [x]|Stable Channel [x]|Preview Channel", Settings("submenu-off", "menu"));
             Assert.Equal(("true", UpdateRowsDefault), (Settings("on-by-menu", "update_check"), Settings("on-by-menu", "update_flyout")));
             Assert.Equal("false", Settings("off-by-flyout", "update_check"));
             Assert.Equal(("true", UpdateRowsDefault), (Settings("on-by-file", "update_check"), Settings("on-by-file", "update_flyout")));
@@ -706,7 +708,7 @@ public class ThreeWaysEndToEndTests
             Assert.Equal(("false", "Check Automatically [x]|Install Automatically [ ]|Stable Channel [x]|Preview Channel [ ]"),
                 (Settings("off-by-command", "update_auto_install"), Settings("off-by-command", "update_flyout")));
             Assert.Contains("update.toggleAutoInstall=off", Settings("palette-off", "palette_states").Split('|'));
-            Assert.Equal("Update Settings: Check Automatically [x]|Install Automatically [ ]|Stable Channel [x]|Preview Channel [ ]", Settings("submenu-off", "menu"));
+            Assert.Equal("Update Settings: Check Automatically [x]|Install Automatically|Stable Channel [x]|Preview Channel", Settings("submenu-off", "menu"));
             Assert.Equal(("true", UpdateRowsDefault), (Settings("on-by-menu", "update_auto_install"), Settings("on-by-menu", "update_flyout")));
             Assert.Equal("false", Settings("off-by-flyout", "update_auto_install"));
             Assert.Equal(("true", UpdateRowsDefault), (Settings("on-by-file", "update_auto_install"), Settings("on-by-file", "update_flyout")));
@@ -784,11 +786,191 @@ public class ThreeWaysEndToEndTests
             Assert.Equal(("preview", "Check Automatically [x]|Install Automatically [x]|Stable Channel [ ]|Preview Channel [x]"),
                 (Settings("preview-by-command", "update_channel"), Settings("preview-by-command", "update_flyout")));
             Assert.Contains("update.chooseChannel=preview", Settings("palette-preview", "palette_states").Split('|'));
-            Assert.Equal("Update Settings: Check Automatically [x]|Install Automatically [x]|Stable Channel [ ]|Preview Channel [x]", Settings("submenu-preview", "menu"));
+            Assert.Equal("Update Settings: Check Automatically [x]|Install Automatically [x]|Stable Channel|Preview Channel [x]", Settings("submenu-preview", "menu"));
             Assert.Equal(("stable", UpdateRowsDefault), (Settings("stable-by-menu", "update_channel"), Settings("stable-by-menu", "update_flyout")));
             Assert.Equal("preview", Settings("preview-by-flyout", "update_channel"));
             Assert.Equal(("stable", UpdateRowsDefault), (Settings("stable-by-file", "update_channel"), Settings("stable-by-file", "update_flyout")));
             Assert.Equal("\"stable\"", Key(run.ReadConfig(), "update", "channel"));
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
+
+    // ----- Gap 7: the editor and the log level -----
+
+    /// <summary>
+    /// files.editor: the pick list "Preferences: Choose Editor" (Windows' default, the programs of the file, Choose…), the "Editor"
+    /// submenu of the top row's menu and the file give the same editor; the palette's row names it. The file dialog of "Choose…" is
+    /// answered by the snapshot step settings-do:editor-file, which a test uses in its place.
+    /// </summary>
+    [Fact]
+    public async Task The_editor_changes_from_the_palette_s_picker_the_menu_s_Editor_submenu_and_the_file()
+    {
+        var run = Prepare("three-ways-editor", _ => Config(config => config["programs"] = new JsonArray(new JsonObject
+        {
+            ["name"] = "code",
+            ["title"] = "Open in Code",
+            ["command"] = "notepad.exe",
+            ["args"] = new JsonArray("--wait", "{selection}"),
+        })));
+        try
+        {
+            var data = MakeData(run);
+            var fromList = Path.Combine(run.Root, "tools", "listed.exe");
+            var fromMenu = Path.Combine(run.Root, "tools", "menued.exe");
+            var process = run.Start("editor", string.Join(';',
+                "size:1400x900",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "settings-state:start",
+                // The command's pick list: a program of the file.
+                "cmd-nowait:preferences.chooseEditor",
+                "until:prompt",
+                "settings-state:list",
+                "type:Open in Code",
+                "accept",
+                "until:setting:editor=notepad.exe",
+                "wait:400",
+                "settings-state:program-by-command",
+                "cmd:palette.show",
+                "wait:300",
+                "type:Choose Editor",
+                "wait:600",
+                "settings-state:palette",
+                "cmd:overlay.close",
+                "wait:300",
+                // The top row's menu: Editor, then Windows' default.
+                "cmd:menu.show",
+                "wait:500",
+                "click:Editor",
+                "wait:400",
+                "settings-state:submenu",
+                "click:Windows' default",
+                "until:setting:editor=default",
+                "wait:400",
+                "settings-state:default-by-menu",
+                // "Choose…" in the pick list: the file dialog is answered by the step.
+                $"settings-do:editor-file|{fromList}",
+                "cmd-nowait:preferences.chooseEditor",
+                "until:prompt",
+                "type:Choose",
+                "accept",
+                $"until:setting:editor={fromList}",
+                "wait:400",
+                "settings-state:file-by-command",
+                // "Choose…" in the menu's submenu.
+                $"settings-do:editor-file|{fromMenu}",
+                "cmd:menu.show",
+                "wait:500",
+                "click:Editor",
+                "wait:400",
+                "settings-state:submenu-after-file",
+                "click:Choose…",
+                $"until:setting:editor={fromMenu}",
+                "wait:400",
+                "settings-state:file-by-menu",
+                // The file.
+                "settings-state:edit-now",
+                "until:setting:editor=vim.exe",
+                "wait:400",
+                "settings-state:by-file",
+                "shot:done"));
+            await run.WaitForStateAsync("editor", "settings state", "edit-now");
+            Edit(run, config => Section(config, "files")["editor"] = new JsonObject { ["command"] = "vim.exe", ["args"] = new JsonArray("-g") });
+            var logs = await run.FinishAsync("editor", process);
+
+            string Settings(string label, string field) => Text(State(logs, "settings state", label), field);
+            Assert.Equal(("Windows' default", "", "Windows' default [x]|Open in Code [ ]|Choose… [ ]"),
+                (Settings("start", "editor_label"), Settings("start", "editor_command"), Settings("start", "editor_choices")));
+            Assert.Equal(("true", "*Windows' default|Open in Code|Choose…"), (Settings("list", "prompt_open"), Settings("list", "prompt_rows")));
+            // The program's arguments without {selection}: files.editor adds the file's path itself.
+            Assert.Equal(("Open in Code", "notepad.exe", "--wait", "Windows' default [ ]|Open in Code [x]|Choose… [ ]"),
+                (Settings("program-by-command", "editor_label"), Settings("program-by-command", "editor_command"), Settings("program-by-command", "editor_args"),
+                    Settings("program-by-command", "editor_choices")));
+            Assert.Contains("preferences.chooseEditor=Open in Code", Settings("palette", "palette_states").Split('|'));
+            Assert.Equal("Editor: Windows' default|Open in Code [x]|Choose…", Settings("submenu", "menu"));
+            Assert.Equal(("Windows' default", ""), (Settings("default-by-menu", "editor_label"), Settings("default-by-menu", "editor_command")));
+            Assert.Equal(("listed", fromList), (Settings("file-by-command", "editor_label"), Settings("file-by-command", "editor_command")));
+            Assert.Equal("Editor: Windows' default|listed [x]|Open in Code|Choose…", Settings("submenu-after-file", "menu"));
+            Assert.Equal(("menued", fromMenu), (Settings("file-by-menu", "editor_label"), Settings("file-by-menu", "editor_command")));
+            Assert.Equal(("vim", "vim.exe", "-g", "Windows' default [ ]|vim [x]|Open in Code [ ]|Choose… [ ]"),
+                (Settings("by-file", "editor_label"), Settings("by-file", "editor_command"), Settings("by-file", "editor_args"), Settings("by-file", "editor_choices")));
+            Assert.Equal("\"vim.exe\"", ((JsonObject)run.ReadConfig()["files"]!["editor"]!)["command"]!.ToJsonString());
+        }
+        finally
+        {
+            run.Stop();
+        }
+    }
+
+    /// <summary>
+    /// logging.level: the pick list "Diagnostics: Log Level" (the level in effect starts highlighted), the "Log Level" submenu of the top
+    /// row's menu and the file give the same level; the palette's row names it.
+    /// </summary>
+    [Fact]
+    public async Task The_log_level_changes_from_the_palette_s_picker_the_menu_s_Log_Level_submenu_and_the_file()
+    {
+        var run = Prepare("three-ways-loglevel", _ => Config());
+        try
+        {
+            var data = MakeData(run);
+            var process = run.Start("loglevel", string.Join(';',
+                "size:1400x900",
+                "pane:1",
+                $"path:{data}",
+                "pane:0",
+                $"path:{data}",
+                "wait:500",
+                "settings-state:start",
+                "cmd-nowait:diagnostics.chooseLogLevel",
+                "until:prompt",
+                "settings-state:list",
+                "type:debug",
+                "accept",
+                "until:setting:log-level=debug",
+                "wait:400",
+                "settings-state:debug-by-command",
+                "cmd:palette.show",
+                "wait:300",
+                "type:Log Level",
+                "wait:600",
+                "settings-state:palette",
+                "cmd:overlay.close",
+                "wait:300",
+                // The top row's menu: Log Level, then Warn.
+                "cmd:menu.show",
+                "wait:500",
+                "click:Log Level",
+                "wait:400",
+                "settings-state:submenu",
+                "click:Warn",
+                "until:setting:log-level=warn",
+                "wait:400",
+                "settings-state:warn-by-menu",
+                // The file.
+                "settings-state:edit-now",
+                "until:setting:log-level=trace",
+                "wait:400",
+                "settings-state:trace-by-file",
+                "shot:done"));
+            await run.WaitForStateAsync("loglevel", "settings state", "edit-now");
+            Edit(run, config => Section(config, "logging")["level"] = "trace");
+            var logs = await run.FinishAsync("loglevel", process);
+
+            string Settings(string label, string field) => Text(State(logs, "settings state", label), field);
+            Assert.Equal("info", Settings("start", "log_level"));
+            Assert.Equal(("true", "trace|debug|*info|warn|error"), (Settings("list", "prompt_open"), Settings("list", "prompt_rows")));
+            Assert.Equal("debug", Settings("debug-by-command", "log_level"));
+            Assert.Contains("diagnostics.chooseLogLevel=debug", Settings("palette", "palette_states").Split('|'));
+            Assert.Equal("Log Level: Trace|Debug [x]|Info|Warn|Error", Settings("submenu", "menu"));
+            Assert.Equal("warn", Settings("warn-by-menu", "log_level"));
+            Assert.Equal("trace", Settings("trace-by-file", "log_level"));
+            Assert.Equal("\"trace\"", Key(run.ReadConfig(), "logging", "level"));
         }
         finally
         {

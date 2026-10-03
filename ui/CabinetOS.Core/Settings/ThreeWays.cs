@@ -102,6 +102,9 @@ public static class SettingStates
         "update.toggleCheck" => OnOff(settings.UpdateCheck),
         "update.toggleAutoInstall" => OnOff(settings.UpdateAutoInstall),
         "update.chooseChannel" => UpdateSettingsMenu.NormalizeChannel(settings.UpdateChannel),
+        // The editor and the log level (gap 7): the pickers' rows name the value in effect.
+        "preferences.chooseEditor" => settings.EditorLabel,
+        "diagnostics.chooseLogLevel" => LogLevels.Normalize(settings.LogLevel),
         _ => null,
     };
 

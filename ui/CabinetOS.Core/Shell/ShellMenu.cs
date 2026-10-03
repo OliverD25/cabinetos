@@ -87,14 +87,28 @@ public static class ShellMenu
         return rows;
     }
 
+    /// <summary>The row whose submenu has the editor's choices (<c>files.editor</c>).</summary>
+    public const string EditorTitle = "Editor";
+
+    /// <summary>The row whose submenu has the levels of <c>logging.level</c>.</summary>
+    public const string LogLevelTitle = "Log Level";
+
     /// <summary>
-    /// The settings the menu shows after the preference rows (the settings-three-ways skill, gaps 6 and 7): "Update Settings"
-    /// with a submenu of <see cref="UpdateSettingsMenu"/>. A row whose command the registry does not list (an older core) is left out.
+    /// The settings the menu shows after the preference rows (the settings-three-ways skill, gaps 6 and 7), each a row with a
+    /// submenu: "Editor" (<see cref="EditorChoices"/>: Windows' default, the programs of <paramref name="programs"/>, Choose…),
+    /// "Update Settings" (<see cref="UpdateSettingsMenu"/>) and "Log Level" (<see cref="LogLevels"/>); the one in effect is checked.
+    /// A row whose command the registry does not list (an older core) is left out.
     /// </summary>
-    public static IReadOnlyList<ShellPreference> MoreSettings(IEnumerable<CommandInfo> commands, UiSettings settings)
+    public static IReadOnlyList<ShellPreference> MoreSettings(IEnumerable<CommandInfo> commands, UiSettings settings, IReadOnlyList<EditorProgram>? programs = null)
     {
         var ids = commands.Select(command => command.Id).ToHashSet(StringComparer.Ordinal);
         var rows = new List<ShellPreference>();
+        if (ids.Contains("preferences.chooseEditor"))
+        {
+            var editor = EditorChoices.Choices(settings.Editor, programs ?? [])
+                .Select(choice => new ShellPreference("preferences.chooseEditor", choice.Title, choice.Checked, Args: choice.Args)).ToList();
+            rows.Add(new ShellPreference("", EditorTitle, Choices: editor));
+        }
         var update = UpdateSettingsMenu.Rows(settings.UpdateCheck, settings.UpdateAutoInstall, settings.UpdateChannel)
             .Where(row => ids.Contains(row.CommandId))
             .Select(row => new ShellPreference(row.CommandId, row.Title, row.Checked, Args: row.Value is null ? null : ValueArgs(row.Value)))
@@ -102,6 +116,13 @@ public static class ShellMenu
         if (update.Count > 0)
         {
             rows.Add(new ShellPreference("", UpdateSettingsMenu.Title, Choices: update));
+        }
+        if (ids.Contains("diagnostics.chooseLogLevel"))
+        {
+            var current = LogLevels.Normalize(settings.LogLevel);
+            var levels = LogLevels.All
+                .Select(level => new ShellPreference("diagnostics.chooseLogLevel", LogLevels.TitleOf(level), level == current, Args: ValueArgs(level))).ToList();
+            rows.Add(new ShellPreference("", LogLevelTitle, Choices: levels));
         }
         return rows;
     }

@@ -86,6 +86,7 @@ The core's commands, in palette order:
 | `plugins.list` | Plugins: Show Plugins | | | UI |
 | `workspace.switch` | Workspace: Switch Workspace… | `ctrl+k ctrl+w` | | UI |
 | `preferences.selectColorTheme` | Preferences: Color Theme | `ctrl+k ctrl+t` | | UI |
+| `preferences.chooseEditor` | Preferences: Choose Editor | | | UI |
 | `themes.browse` | Themes: Browse | | | UI |
 | `terminal.runTask` | Terminal: Run Task… | `ctrl+shift+b` | | UI |
 | `terminal.new` | Terminal: New Terminal | `ctrl+shift+t` | `terminalFocus` | UI |
@@ -149,6 +150,7 @@ The core's commands, in palette order:
 | `diagnostics.toggleHeavy` | Diagnostics: Toggle Heavy Logging | | | UI |
 | `diagnostics.openLogFolder` | Diagnostics: Open Log Folder | | | UI |
 | `diagnostics.saveBundle` | Diagnostics: Save Log Bundle | | | UI |
+| `diagnostics.chooseLogLevel` | Diagnostics: Log Level | | | UI |
 | `update.check` | Update: Check for Updates | | | UI |
 | `update.apply` | Update: Restart to Update | | | UI |
 | `update.rollback` | Update: Roll Back to the Previous Version | | | UI |
@@ -189,6 +191,11 @@ The core's commands, in palette order:
   They are named apart from `update.check`, which checks now. The update pill's flyout and the top row menu's
   "Update Settings" submenu have a row for each ([ui.md](ui.md), "Settings reachable three ways"). The palette's
   row says "on" or "off", and the channel in effect.
+- **The editor and the log level** (the settings-three-ways audit, gap 7): `preferences.chooseEditor` opens a pick list
+  of Windows' default, the programs of the file and "Choose…", and writes `files.editor`; `diagnostics.chooseLogLevel`
+  opens a pick list of the levels and writes `logging.level`. Both take their value as arguments and write without
+  the list (`{"value": "debug"}`; `{"default": true}`, `{"program": "code"}` or `{"choose": true}`), which is how the top row
+  menu's "Editor" and "Log Level" submenus run them. Neither has a key. `file.edit` (F4) uses the editor chosen.
 - `view.toggleCompactOverlay` (Phase 19c) makes the window a small
   always-on-top drawer with one pane, and back ([ui.md](ui.md),
   "Compact overlay"). Its key, `ctrl+alt+up`, is the one the Files app

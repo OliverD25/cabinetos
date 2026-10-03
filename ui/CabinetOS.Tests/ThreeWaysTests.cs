@@ -231,4 +231,122 @@ public class ThreeWaysTests
         var rows = TerminalDockMenu.Rows(one, restoreTabs: false, startsLinked: true);
         Assert.Equal("pwsh (default)|-|Default Profile…|Restore Tabs on Start [ ]|New Terminals Start Linked [x]", TerminalDockMenu.Describe(rows));
     }
+
+    // ----- Gap 7: the editor and the log level -----
+
+    private const string EditorConfig = """
+        {"files": {"editor": {"command": "C:\\Tools\\code.cmd", "args": ["--wait"]}},
+         "programs": [
+           {"name": "code", "title": "Open in Code", "command": "C:\\Tools\\code.cmd", "args": ["--wait", "{selection}"]},
+           {"name": "npp", "command": "notepad++.exe", "args": ["-multiInst", "--file={path}"]},
+           {"name": "nocommand"}, {"command": "x.exe"}]}
+        """;
+
+    private static JsonElement Config(string json) => JsonDocument.Parse(json).RootElement;
+
+    [Fact]
+    public void The_log_levels_are_the_five_the_core_accepts_and_an_odd_one_shows_info()
+    {
+        Assert.Equal(["trace", "debug", "info", "warn", "error"], LogLevels.All);
+        Assert.Equal(("info", "info", "warn"), (LogLevels.Normalize(null), LogLevels.Normalize("loud"), LogLevels.Normalize("warn")));
+        Assert.Equal(["Trace", "Debug", "Info", "Warn", "Error"], LogLevels.All.Select(LogLevels.TitleOf));
+        Assert.Equal("Normal operation", LogLevels.DetailOf("info"));
+        // Typing a level in the pick list finds its own row only: no row's second text names another level.
+        foreach (var level in LogLevels.All)
+        {
+            Assert.Equal([level], LogLevels.All.Where(other => other.Contains(level) || LogLevels.DetailOf(other).Contains(level, StringComparison.OrdinalIgnoreCase)));
+        }
+    }
+
+    [Fact]
+    public void The_programs_of_the_file_are_the_editor_s_choices_and_an_entry_without_a_name_or_a_command_is_left_out()
+    {
+        var programs = EditorChoices.ProgramsFrom(Config(EditorConfig));
+
+        Assert.Equal(["code", "npp"], programs.Select(p => p.Name));
+        Assert.Equal(["Open in Code", "npp"], programs.Select(p => p.Title));
+        // files.editor adds the file's path itself: the arguments that name a token are left behind, "--wait" stays.
+        Assert.Equal(["--wait"], programs[0].EditorArgs);
+        Assert.Equal(["-multiInst"], programs[1].EditorArgs);
+        Assert.Empty(EditorChoices.ProgramsFrom(Config("{}")));
+    }
+
+    [Fact]
+    public void The_editor_in_effect_is_read_from_files_editor_and_named_by_its_program_or_its_file()
+    {
+        var config = Config(EditorConfig);
+        var programs = EditorChoices.ProgramsFrom(config);
+        var editor = EditorChoices.EditorFrom(config);
+
+        Assert.Equal("C:\\Tools\\code.cmd", editor!.Command);
+        Assert.Equal(["--wait"], editor.Args);
+        Assert.Equal("Open in Code", EditorChoices.LabelFrom(config));
+        Assert.Equal("code", EditorChoices.ProgramOf(editor, programs)!.Name);
+        // An editor that is none of the programs shows its file name; none is Windows' own.
+        Assert.Equal("notepad++", EditorChoices.Label(EditorSetting.Of(@"C:\Program Files\Notepad++\notepad++.exe", []), programs));
+        Assert.Equal("Windows' default", EditorChoices.LabelFrom(Config("""{"files": {"editor": null}}""")));
+        Assert.Null(EditorChoices.EditorFrom(Config("""{"files": {"editor": {"command": ""}}}""")));
+        // The same arguments are needed for a match: the program with another argument is another editor.
+        Assert.Null(EditorChoices.ProgramOf(EditorSetting.Of(@"C:\Tools\code.cmd", ["--new-window"]), programs));
+        Assert.Equal(EditorChoices.EditorFrom(config), EditorChoices.EditorFrom(config));
+    }
+
+    [Fact]
+    public void The_editor_s_choices_are_Windows_default_the_programs_and_Choose_with_the_one_in_effect_checked()
+    {
+        var config = Config(EditorConfig);
+        var programs = EditorChoices.ProgramsFrom(config);
+
+        var byProgram = EditorChoices.Choices(EditorChoices.EditorFrom(config), programs);
+        Assert.Equal("Windows' default [ ]|Open in Code [x]|npp [ ]|Choose… [ ]", EditorChoices.Describe(byProgram));
+        Assert.Equal([EditorChoiceKind.WindowsDefault, EditorChoiceKind.Program, EditorChoiceKind.Program, EditorChoiceKind.Choose], byProgram.Select(c => c.Kind));
+        Assert.Equal(["""{"default":true}""", """{"program":"code"}""", """{"program":"npp"}""", """{"choose":true}"""], byProgram.Select(c => c.Args.GetRawText()));
+
+        Assert.Equal("Windows' default [x]|Open in Code [ ]|npp [ ]|Choose… [ ]", EditorChoices.Describe(EditorChoices.Choices(null, programs)));
+        // An editor set by hand that is none of the programs is a row of its own, checked, before the programs.
+        var byHand = EditorChoices.Choices(EditorSetting.Of(@"C:\Tools\vim.exe", []), programs);
+        Assert.Equal("Windows' default [ ]|vim [x]|Open in Code [ ]|npp [ ]|Choose… [ ]", EditorChoices.Describe(byHand));
+        Assert.Equal(("""{"keep":true}""", EditorChoiceKind.Other), (byHand[1].Args.GetRawText(), byHand[1].Kind));
+        // No programs: the two rows that are always there.
+        Assert.Equal("Windows' default [x]|Choose… [ ]", EditorChoices.Describe(EditorChoices.Choices(null, [])));
+    }
+
+    [Fact]
+    public void The_editor_and_the_log_level_are_read_and_the_palette_names_them()
+    {
+        var set = UiSettings.FromConfig(Config("""{"logging": {"level": "debug"}, "files": {"editor": {"command": "x.exe"}}}"""));
+        Assert.Equal(("debug", "x", "x.exe"), (set.LogLevel, set.EditorLabel, set.Editor!.Command));
+        var none = UiSettings.FromConfig(Config("{}"));
+        Assert.Equal(("info", "Windows' default", null), (none.LogLevel, none.EditorLabel, none.Editor?.Command));
+
+        Assert.Equal(("x", "debug"), (SettingStates.Of("preferences.chooseEditor", set, false), SettingStates.Of("diagnostics.chooseLogLevel", set, false)));
+        Assert.Equal(("Windows' default", "info"), (SettingStates.Of("preferences.chooseEditor", none, false), SettingStates.Of("diagnostics.chooseLogLevel", none, false)));
+        // A level the core does not know shows info, as the window does.
+        Assert.Equal("info", SettingStates.Of("diagnostics.chooseLogLevel", set with { LogLevel = "loud" }, false));
+        // Two readings of the same file are equal, so a read that changes nothing changes nothing.
+        Assert.Equal(UiSettings.FromConfig(Config(EditorConfig)), UiSettings.FromConfig(Config(EditorConfig)));
+    }
+
+    [Fact]
+    public void The_hamburger_shows_Editor_Update_Settings_and_Log_Level_as_submenus_with_the_one_in_effect_checked()
+    {
+        var commands = UpdateCommands.Concat([Command("preferences.chooseEditor", "Choose Editor"), Command("diagnostics.chooseLogLevel", "Log Level")]).ToArray();
+        var config = Config(EditorConfig);
+        var settings = UiSettings.FromConfig(config) with { LogLevel = "warn" };
+
+        var rows = ShellMenu.MoreSettings(commands, settings, EditorChoices.ProgramsFrom(config));
+
+        Assert.Equal(["Editor", "Update Settings", "Log Level"], rows.Select(r => r.Title));
+        Assert.Equal(["Windows' default", "Open in Code", "npp", "Choose…"], rows[0].Choices!.Select(c => c.Title));
+        Assert.Equal([false, true, false, false], rows[0].Choices!.Select(c => c.Checked == true));
+        Assert.All(rows[0].Choices!, c => Assert.Equal("preferences.chooseEditor", c.CommandId));
+        Assert.Equal(["Trace", "Debug", "Info", "Warn", "Error"], rows[2].Choices!.Select(c => c.Title));
+        Assert.Equal([false, false, false, true, false], rows[2].Choices!.Select(c => c.Checked == true));
+        Assert.Equal(["""{"value":"trace"}""", """{"value":"debug"}""", """{"value":"info"}""", """{"value":"warn"}""", """{"value":"error"}"""],
+            rows[2].Choices!.Select(c => c.Args!.Value.GetRawText()));
+
+        // An older core: a row whose command it does not list is left out; with none of them there is nothing.
+        Assert.Equal(["Update Settings"], ShellMenu.MoreSettings(UpdateCommands, settings, []).Select(r => r.Title));
+        Assert.Empty(ShellMenu.MoreSettings([Command("tab.new", "New Tab")], settings, []));
+    }
 }

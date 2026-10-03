@@ -1102,6 +1102,7 @@ public sealed partial class MainWindow : Window
             ApplySettings(UiSettings.FromConfig(config.Config), firstStart);
             ApplyMenuConfig(config.Config);
             ApplyUpdateConfig(config.Config);
+            ApplyPreferenceConfig(config.Config);
             _terminal.Profiles = TerminalProfiles.FromConfig(config.Config);
             Dock.SetProfiles(_terminal.Profiles, _settings.TerminalRestore, _settings.TerminalStartsLinked);
         }

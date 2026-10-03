@@ -25,6 +25,7 @@ public sealed partial class MainWindow
             _settings.TerminalStartsLinked ? "locked" : "linked",
             mode => mode == "linked" ? "New terminals start linked to their pane." : "New terminals start locked.", "The terminal's starting mode"));
         RegisterUpdateSettingsCommands();
+        RegisterEditorCommands();
     }
 
     // A text setting is written through set_value, as a toggle is; the core's own words say why it did not take it
@@ -89,24 +90,36 @@ public sealed partial class MainWindow
             "update-check" => _settings.UpdateCheck == on,
             "auto-install" => _settings.UpdateAutoInstall == on,
             "channel" => UpdateSettingsMenu.NormalizeChannel(_settings.UpdateChannel) == value,
+            // editor=default: files.editor is null; editor=<command>: that program; editor-label=<text>: what the palette's row says.
+            "editor" => value == "default" ? _settings.Editor is null : _settings.Editor?.Command == value,
+            "editor-label" => _settings.EditorLabel == value,
+            "log-level" => LogLevels.Normalize(_settings.LogLevel) == value,
             _ => true,
         };
     }
 
     // settings-do:<what>|<argument>: a press the snapshot aid makes where a click cannot reach.
     // update-flyout|<row title>: the update pill's flyout, which is shown only while an update runs.
+    // editor-file|<path>: the answer of the next file dialog of the editor's "Choose…", which a test cannot drive.
     private void RunSettingsStep(string argument)
     {
         var parts = argument.Split('|', 2);
         var done = parts is [var what, var value] && what switch
         {
             "update-flyout" => PressUpdateFlyoutRow(value),
+            "editor-file" => SetEditorFileAnswer(value),
             _ => false,
         };
         if (!done)
         {
             Diag.Info("cabinetos_ui::snapshot", "no such settings step", new LogField("step", argument));
         }
+    }
+
+    private bool SetEditorFileAnswer(string path)
+    {
+        _editorFileAnswer = path;
+        return true;
     }
 
     // settings-state:<label>: what the controls of these settings show, in the log ("settings state"), for the checks that read it.
@@ -122,6 +135,11 @@ public sealed partial class MainWindow
             new LogField("update_auto_install", _settings.UpdateAutoInstall),
             new LogField("update_channel", _settings.UpdateChannel),
             new LogField("update_flyout", _updateFlyoutText),
+            new LogField("editor_label", _settings.EditorLabel),
+            new LogField("editor_command", _settings.Editor?.Command ?? ""),
+            new LogField("editor_args", _settings.Editor?.ArgsText.Replace('\n', ' ') ?? ""),
+            new LogField("editor_choices", EditorChoices.Describe(EditorChoices.Choices(_settings.Editor, _editorPrograms))),
+            new LogField("log_level", LogLevels.Normalize(_settings.LogLevel)),
             new LogField("menu", FileMenu.Describe()),
             new LogField("palette_states", string.Join("|", _palette.Rows.Select(r => r.StateText is { } state ? $"{r.Info.Id}={state}" : "").Where(s => s.Length > 0))),
             new LogField("prompt_open", PromptView.IsOpen),

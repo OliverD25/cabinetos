@@ -1082,6 +1082,7 @@ search hit. From the context menu it gets the menu's rows
 | `view.toggleHiddenFiles`, `sidebar.toggleFollow`, `menu.toggleShellMenu` | Flip `panes.showHidden`, `ui.sidebarAutoReveal` and `contextMenu.shellMenu`; the palette's row says on or off |
 | `terminal.chooseDefaultProfile`, `terminal.toggleRestore`, `terminal.toggleDefaultMode` | Write `terminal.defaultProfile` (a pick list; `{"value": name}` skips it), flip `terminal.restore`, and flip `terminal.defaultMode` between `locked` and `linked` ("Settings reachable three ways") |
 | `update.toggleCheck`, `update.toggleAutoInstall`, `update.chooseChannel` | Flip `update.check` and `update.autoInstall`, and write `update.channel` (a pick list; `{"value": channel}` skips it); the pill's flyout and the top row menu's "Update Settings" have a row for each ("Settings reachable three ways") |
+| `preferences.chooseEditor`, `diagnostics.chooseLogLevel` | Write `files.editor` (a pick list of Windows' default, the programs and "Choose…"; the menu's rows skip it with `{"default": true}`, `{"program": name}` or `{"choose": true}`) and `logging.level` (a pick list; `{"value": level}` skips it) ("Settings reachable three ways") |
 | `go.root` to `terminal.insertSelectedPaths` | Total Commander's small commands, 31 of them, run in the window ("Total Commander's keys") |
 | `workspace.switch` | The sidebar's workspace dropdown ("The sidebar header"); its "Open folder as workspace…" says that workspaces arrive in a later version |
 | `terminal.runTask` | "arrives in a later version" in the status bar |
@@ -4435,6 +4436,8 @@ defaults (gap 5), the update settings (gap 6) and the editor and the log level (
 | `update.check` | "Update: Toggle Automatic Check" (`update.toggleCheck`, no key), the row says on or off; "Update: Check for Updates" (`update.check`) still checks now | "Check Automatically", a check row in the update pill's flyout and in the top row menu's "Update Settings" submenu | `update.check` |
 | `update.autoInstall` | "Update: Toggle Automatic Install" (`update.toggleAutoInstall`, no key), the row says on or off | "Install Automatically", a check row in the same two places | `update.autoInstall` |
 | `update.channel` | "Update: Channel" (`update.chooseChannel`, no key): a pick list of `stable` and `preview`, the row names the channel in effect | "Stable Channel" and "Preview Channel", rows in the same two places, the one in effect checked | `update.channel`: `stable` or `preview` |
+| `files.editor` | "Preferences: Choose Editor" (`preferences.chooseEditor`, no key): a pick list of "Windows' default", each program of `programs` and "Choose…" (a file dialog for an .exe); the row names the editor in effect | the top row menu's "Editor" submenu: the same rows, the one in effect checked | `files.editor`: `null`, or `{ "command", "args" }` |
+| `logging.level` | "Diagnostics: Log Level" (`diagnostics.chooseLogLevel`, no key): a pick list of `trace`, `debug`, `info`, `warn` and `error`, the row names the level in effect | the top row menu's "Log Level" submenu, the one in effect checked | `logging.level` |
 
 - **The window follows the file.** The layout, the listing, the pill, the
   pin, the menu's checks and the edit mode's box are drawn from the
@@ -4445,7 +4448,7 @@ defaults (gap 5), the update settings (gap 6) and the editor and the log level (
   file has an error) shows in the status bar in red and changes nothing.
 - **The hamburger** shows the rows after Toggle Sidebar:
   `New Tab | New Folder | Find in Pane | Go to Path… | Toggle Sidebar | Layout ›
-  | Show Hidden Files | Follow the Active Pane | Browse Extensions | Open
+  | Show Hidden Files | Follow the Active Pane | Editor › | Update Settings › | Log Level › | Browse Extensions | Open
   Keyboard Shortcuts | Check for Updates`. A row of a setting has a check mark's place in
   front of its title; "Layout ›" shows its three rows in the menu's place
   under a row that goes back, and a click on one runs its command and closes
@@ -4468,13 +4471,30 @@ defaults (gap 5), the update settings (gap 6) and the editor and the log level (
   at hand when an update is the thing on screen. The rows: "Check Automatically" and "Install Automatically" with a check
   while on, then "Stable Channel" and "Preview Channel", the one in effect checked. Both are drawn again at each read of the
   configuration, so an edit of the file moves the checks.
+- **The editor** (gap 7). The pick list's rows and the "Editor" submenu's are one list (`EditorChoices`, tested): "Windows' default"
+  (writes `null`), then, when `files.editor` is a program that is none of the entries of `programs` (set by hand in the file), a row
+  of its own named by its file name, then each entry of `programs` by its title, then "Choose…". The one in effect is checked in
+  the menu and says "current" in the list. A program of `programs` becomes the editor with its `command` and the arguments that
+  name no token, because `files.editor` adds the file's path itself. "Choose…" opens a Windows file dialog for an .exe, and the
+  program picked becomes the editor with no arguments; Esc in the dialog changes nothing. The programs are the entries of
+  `programs` in the configuration the core last sent, so a program added to the file shows in both at once. The core finds and
+  starts the editor; a program it cannot start is said at F4, as before.
+- **The log level** (gap 7): the five levels the core accepts, in the pick list (the one in effect starts highlighted; each row's
+  second text says what the level writes) and in the "Log Level" submenu. The core applies a new level at once. The environment
+  variable `CABINETOS_LOG` still wins over the file, as before ([diagnostics.md](diagnostics.md)).
 - **Panes list again** when `panes.showHidden` changes: the window asks the
   core for both listings again, as for the sort order.
 - **Logs.** Target `cabinetos_ui::settings`: "layout chosen" and "setting
   toggled" (the key and the value) when a command wrote one. The snapshot
   step `shell:<label>` ("shell state") adds `layout`, `layout_status`,
   `rail_shown`, `hidden_pill`, `show_hidden`, `follow_pin`, `auto_reveal`,
-  `shell_menu`, `editor_shell_check` and `palette_states`, and the hamburger's
+  `shell_menu`, `editor_shell_check` and `palette_states`. The steps of gaps 5 to 7: `settings-state:<label>` ("settings state":
+  the dock menu's rows, the profile, restore and mode, the update settings and the pill flyout's rows, the editor and its
+  choices, the log level, the open menu's text, and the rows of an open pick list with a star on the highlighted one),
+  `settings-do:update-flyout|<row>` (the pill's flyout, which is shown only while an update runs) and
+  `settings-do:editor-file|<path>` (the answer of the next file dialog of "Choose…"); `until:prompt` waits for a pick list and
+  `until:setting:<name>=<value>` knows `default-profile`, `restore`, `default-mode`, `update-check`, `auto-install`, `channel`,
+  `editor` (`default` or the command), `editor-label` and `log-level`. The hamburger's
   `menu` text marks a checked row with `[x]` and an unchecked one with `[ ]`
   and lists the rows of a submenu in brackets.
 

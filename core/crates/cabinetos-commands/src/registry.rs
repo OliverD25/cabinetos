@@ -82,7 +82,7 @@ const TERMINAL: Option<&str> = Some("terminalFocus");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 131] = [
+const SEED: [Seed; 133] = [
     seed(
         "palette.show",
         "View",
@@ -384,6 +384,18 @@ const SEED: [Seed; 131] = [
         "Preferences",
         "Color Theme",
         &["ctrl+k ctrl+t"],
+        UI,
+        None,
+    ),
+    // `files.editor` from the palette (the settings-three-ways skill, gap 7):
+    // a pick list of Windows' default, the user's programs and a program picked
+    // from disk. The top row's menu has an "Editor" submenu of the same rows.
+    // No key; `file.edit` (F4) uses the editor chosen.
+    seed(
+        "preferences.chooseEditor",
+        "Preferences",
+        "Choose Editor",
+        &[],
         UI,
         None,
     ),
@@ -821,6 +833,17 @@ const SEED: [Seed; 131] = [
         "diagnostics.saveBundle",
         "Diagnostics",
         "Save Log Bundle",
+        &[],
+        UI,
+        None,
+    ),
+    // `logging.level` from the palette (the settings-three-ways skill, gap 7):
+    // a pick list of the levels the core accepts. The top row's menu has a
+    // "Log Level" submenu of the same. No key.
+    seed(
+        "diagnostics.chooseLogLevel",
+        "Diagnostics",
+        "Log Level",
         &[],
         UI,
         None,
@@ -1269,7 +1292,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 131);
+        assert_eq!(registry.commands().len(), 133);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1787,6 +1810,30 @@ mod tests {
             (check_now.category.as_str(), check_now.title.as_str()),
             ("Update", "Check for Updates")
         );
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
+    /// Gap 7 of the settings-three-ways audit: the editor and the log level
+    /// each have a pick-list command, with no default key. `file.edit` (F4)
+    /// keeps its own command, which uses the editor chosen.
+    #[test]
+    fn the_editor_and_the_log_level_have_their_commands_with_titles_and_no_keys() {
+        let registry = CommandRegistry::core();
+        for (id, category, title) in [
+            ("preferences.chooseEditor", "Preferences", "Choose Editor"),
+            ("diagnostics.chooseLogLevel", "Diagnostics", "Log Level"),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                (category, title),
+                "{id}"
+            );
+            assert!(command.default_keys.is_empty(), "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.when, None, "{id}");
+        }
+        assert!(registry.get("file.edit").is_some());
         crate::keymap::compile(&registry, &[]).unwrap();
     }
 
