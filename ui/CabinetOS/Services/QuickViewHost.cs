@@ -131,8 +131,7 @@ internal sealed class QuickViewHost
         var host = ToolFileUrls.RenderHost(Viewer.Id, ++_renderSerial, WebViewHost.Domain);
         try
         {
-            Directory.CreateDirectory(RenderRoot);
-            _page.MapFolder(host, RenderRoot, CoreWebView2HostResourceAccessKind.Allow, navigable: false);
+            _page.MapFolder(host, RenderRoot, CoreWebView2HostResourceAccessKind.Allow, navigable: false, create: true);
             _renderHost = host;
             _renderHostIsRoot = true;
         }

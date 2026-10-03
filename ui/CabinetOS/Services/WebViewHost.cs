@@ -27,7 +27,7 @@ internal sealed class WebViewHost
 
     private readonly Border _frame;
     private readonly string _name;
-    private readonly Dictionary<string, (string Folder, CoreWebView2HostResourceAccessKind Access, bool Navigable)> _mappings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (string Folder, CoreWebView2HostResourceAccessKind Access, bool Navigable, bool Create)> _mappings = new(StringComparer.OrdinalIgnoreCase);
     private WebView2? _view;
     private CoreWebView2? _core;
     private CoreWebView2Environment? _environment;
@@ -105,12 +105,19 @@ internal sealed class WebViewHost
     /// Serves <paramref name="folder"/> at <c>https://&lt;host&gt;/</c>; kept
     /// across restarts. A host that is not <paramref name="navigable"/> only
     /// answers requests (a tool's file folder): the page cannot go there.
+    /// WebView2 refuses a folder that does not exist; with <paramref name="create"/> the folder is made first, each
+    /// time the mapping is set (a folder another program removes and makes again, such as the core's drawings, may
+    /// be gone at the next start).
     /// </summary>
-    public void MapFolder(string host, string folder, CoreWebView2HostResourceAccessKind access, bool navigable = true)
+    public void MapFolder(string host, string folder, CoreWebView2HostResourceAccessKind access, bool navigable = true, bool create = false)
     {
         // First, so a folder WebView2 refuses is not kept for the next start.
+        if (create)
+        {
+            Directory.CreateDirectory(folder);
+        }
         _core?.SetVirtualHostNameToFolderMapping(host, folder, access);
-        _mappings[host] = (folder, access, navigable);
+        _mappings[host] = (folder, access, navigable, create);
     }
 
     /// <summary>Stops serving a folder.</summary>
@@ -162,8 +169,12 @@ internal sealed class WebViewHost
         Configure(core);
         try
         {
-            foreach (var (host, (folder, access, _)) in _mappings)
+            foreach (var (host, (folder, access, _, create)) in _mappings)
             {
+                if (create)
+                {
+                    Directory.CreateDirectory(folder);
+                }
                 core.SetVirtualHostNameToFolderMapping(host, folder, access);
             }
         }
