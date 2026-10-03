@@ -534,6 +534,12 @@ public sealed partial class MainWindow : Window
                 case "quick-open" or "quick-open-key":
                     await RunQuickOpenStepAsync(step.Kind, step.Argument);
                     break;
+                case "palette-burst" when int.TryParse(step.Argument, out var paletteRows):
+                    await RunPaletteBurstStepAsync(paletteRows);
+                    break;
+                case "palette-state":
+                    await LogPaletteStateAsync(step.Argument);
+                    break;
                 case "crash":
                     CrashPageForSnapshot(step.Argument);
                     break;
@@ -1807,6 +1813,52 @@ public sealed partial class MainWindow : Window
             return;
         }
         FocusActivePane();
+    }
+
+    // The snapshot aid's palette-burst:<rows> step, the race of 2026-10-03 (docs/log/2026-10-03/palette-highlight-race-report.md):
+    // the palette's first showing in the window gets the core's whole list twice and its highlight moves <rows> down, all in one
+    // turn of the UI thread, before WinUI's first layout of the palette, as two answers and a key did on a busy machine. The
+    // refresh asked for at the opening keeps the highlighted command; it replaces the opening's own search, which would put the
+    // highlight back on the first row. A failure is logged as an error, so the steps go on and the test names it.
+    private async Task RunPaletteBurstStepAsync(int rows)
+    {
+        if (await _session.RequestAsync(new SearchCommandsRequest("", 1000)) is not SearchResultsReply results)
+        {
+            Diag.Info("cabinetos_ui::snapshot", "no list of commands for the palette step");
+            return;
+        }
+        OpenPalette();
+        var refresh = _palette.RefreshAsync();
+        try
+        {
+            _palette.Show(results, keepHighlight: false);
+            _palette.Show(results, keepHighlight: true);
+            _palette.MoveHighlight(rows);
+        }
+        catch (COMException error)
+        {
+            Diag.Error("cabinetos_ui::snapshot", "the palette step failed", new LogField("error", error.ToString()));
+        }
+        try
+        {
+            await refresh;
+        }
+        catch (COMException error)
+        {
+            Diag.Error("cabinetos_ui::snapshot", "the palette step's refresh failed", new LogField("error", error.ToString()));
+        }
+    }
+
+    // The snapshot aid's palette-state:<label> step: waits until the palette's highlighted row is laid out inside the list's
+    // visible part (5 s at most) and two frames more, then logs "palette state".
+    private async Task LogPaletteStateAsync(string label)
+    {
+        await WaitForConditionAsync(() => Palette.HighlightState().HighlightShown, 5_000);
+        await SettleFramesAsync();
+        var (loaded, shown) = Palette.HighlightState();
+        Diag.Info("cabinetos_ui::snapshot", "palette state", new LogField("label", label), new LogField("open", _palette.IsOpen),
+            new LogField("rows", _palette.Rows.Count), new LogField("highlight", _palette.HighlightIndex),
+            new LogField("list_loaded", loaded), new LogField("highlight_shown", shown));
     }
 
     // Esc: the palette, then the context menu, then an edit in place, then the address box

@@ -201,6 +201,16 @@ public sealed class PaletteModel(ICoreChannel core, CommandRouter router) : Obse
         {
             return;
         }
+        Show(results, keepHighlight);
+    }
+
+    /// <summary>
+    /// Shows the core's ranking: its rows in its order, the highlight on the best match, or with
+    /// <paramref name="keepHighlight"/> on the command highlighted before while it is still listed.
+    /// The snapshot aid's <c>palette-burst</c> step calls it directly, to show two answers in one turn of the UI thread.
+    /// </summary>
+    internal void Show(SearchResultsReply results, bool keepHighlight)
+    {
         var highlightedId = _highlight >= 0 && _highlight < Rows.Count ? Rows[_highlight].Info.Id : null;
         Rows.Clear();
         var missing = false;

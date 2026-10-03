@@ -141,6 +141,21 @@ public sealed partial class CommandPalette : UserControl
         }
     }
 
+    /// <summary>
+    /// The snapshot aid's look at the list: whether it is in the window's live tree, and whether the
+    /// highlighted row is laid out whole inside the list's visible part.
+    /// </summary>
+    internal (bool ListLoaded, bool HighlightShown) HighlightState()
+    {
+        if (!List.IsLoaded || _model is not { HighlightIndex: >= 0 } model
+            || List.TryGetElement(model.HighlightIndex) is not FrameworkElement { ActualHeight: > 0 } row)
+        {
+            return (List.IsLoaded, false);
+        }
+        var bounds = row.TransformToVisual(ListScroller).TransformBounds(new Windows.Foundation.Rect(0, 0, row.ActualWidth, row.ActualHeight));
+        return (true, bounds.Top >= -0.5 && bounds.Bottom <= ListScroller.ViewportHeight + 0.5);
+    }
+
     private void OnPanelKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (_model is null)
