@@ -56,6 +56,8 @@ No value was written from memory, so nothing here is marked "to verify".
 | `moonlight` | [atomiks/moonlight-vscode-theme](https://github.com/atomiks/moonlight-vscode-theme): `src/colors.ts` (the palette) and `src/ui.json` (which colour goes where); the repository builds the theme files from them with `scripts/build.ts` and does not hold them | Copyright (c) 2018 atomiks | MIT | 0.11.1, `05c2cdb1fbd65b6e58ab0e8abdea0db7619f2acf` |
 | `poimandres` | [drcmda/poimandres-theme](https://github.com/drcmda/poimandres-theme): `themes/poimandres-color-theme.json` | Copyright (c) 2023 drcmda | MIT | 0.3.7, `fafa97959af95bd2cdbcff151c3e9c537d355f37` |
 | `andromeda` | [EliverLara/Andromeda](https://github.com/EliverLara/Andromeda): `themes/Andromeda-color-theme.json`; the four ANSI colours it leaves unset are Visual Studio Code's defaults, from [microsoft/vscode](https://github.com/microsoft/vscode): `src/vs/workbench/contrib/terminal/common/terminalColorRegistry.ts` | Copyright (c) 2017 <eliverlara@gmail.com>; Copyright (c) 2015 - present Microsoft Corporation | MIT (both) | 1.10.0, `d1abb48c69493000aa0133a32d594eb25e523d4f`; Visual Studio Code 1.141.0 (development), `67cb2a17e24d903be7d50486a70d9bd835e95ad6` |
+| `quiet-light` | [microsoft/vscode](https://github.com/microsoft/vscode): `extensions/theme-quietlight/themes/quietlight-color-theme.json`, the Quiet Light scheme as Visual Studio Code ships it; its `cgmanifest.json` names [Colorsublime/Colorsublime-Themes](https://github.com/Colorsublime/Colorsublime-Themes) as the origin, and Visual Studio Code's `ThirdPartyNotices.txt` gives that project the MIT License with the notice "Copyright (c) 2015 Colorsublime.com" | Copyright (c) 2015 - present Microsoft Corporation | MIT (both) | 1.141.0 (development), `67cb2a17e24d903be7d50486a70d9bd835e95ad6` |
+| `min-light` | [miguelsolorio/min-theme](https://github.com/miguelsolorio/min-theme): `themes/min-light.json` | Copyright (c) 2018-2021 Miguel Solorio | MIT | 1.5.0, `dd796c3f294daecfb7f10ed277ffdc30517d59cf` |
 
 ## What the port derives
 
@@ -107,6 +109,28 @@ The source colours are used as they are. What the port adds:
   `dainty-shared` package, whose repository and package are no longer
   published, and no public file holds the generated colours. Left out
   rather than written from memory.
+- **Modus Vivendi and Modus Operandi** (Protesilaos Stavrou,
+  [protesilaos/modus-themes](https://github.com/protesilaos/modus-themes) 5.3.0
+  at `4fcc8d00540a81936a213d608a69c4c85df8f970`) are GNU Emacs files:
+  "Copyright (C) 2019-2026 Free Software Foundation, Inc." under the GNU
+  General Public License, version 3 or later (`COPYING`). The collection
+  takes no GPL theme, so they are left out, although their colours are
+  published.
+- **Zenburn** ([jnurmine/Zenburn](https://github.com/jnurmine/Zenburn),
+  `colors/zenburn.vim` at `9d7988abf0d2654f837fcd288145afd5f316b70c`): the
+  `README.md` has a "LICENSE" section that says "GNU GPL", and the scheme's
+  own header says "License: GNU GPL". There is no license file, and no GPL
+  theme in the collection. Left out.
+- **Bluloco Light** ([uloco/theme-bluloco-light](https://github.com/uloco/theme-bluloco-light)
+  3.10.0 at `3363134c8563da0bb03c675aa163796eb1b8f454`) is licensed under the
+  GNU Lesser General Public License, version 3 (`LICENSE`). The collection
+  takes no (L)GPL theme. Left out.
+- **The Neovim port of Oceanic Next**
+  ([mhartington/oceanic-next](https://github.com/mhartington/oceanic-next))
+  holds a copy of Neovim's own license file (Apache License 2.0, and the Vim
+  license for parts of Neovim), not a license for its colours. The original
+  Sublime Text scheme by Dmitri Voronianski, which declares the MIT License,
+  is used instead.
 - **Nord**, **Catppuccin Mocha**, **Catppuccin Latte** and **GitHub Light**
   ship with the core; the collection does not repeat them. Latte and GitHub
   Light were files of this folder until 2026-10-03; their rows in the table

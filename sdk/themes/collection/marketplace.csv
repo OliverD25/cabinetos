@@ -49,3 +49,5 @@ spacegray,MIT,https://github.com/kkga/spacegray,"Spacegray: hype and minimal, in
 moonlight,MIT,https://github.com/atomiks/moonlight-vscode-theme,Moonlight: bubblegum colours on a moonlit background.
 poimandres,MIT,https://github.com/drcmda/poimandres-theme,"Poimandres: a minimal, frameless dark theme with mint and soft blue."
 andromeda,MIT,https://github.com/EliverLara/Andromeda,"Andromeda: a dark theme with a taste of the universe, cyan and violet."
+quiet-light,MIT,https://github.com/microsoft/vscode/tree/main/extensions/theme-quietlight,"Quiet Light: a calm light theme with lilac accents, as Visual Studio Code ships it."
+min-light,MIT,https://github.com/miguelsolorio/min-theme,Min Light: a minimal light theme in white and grey.

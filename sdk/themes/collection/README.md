@@ -96,6 +96,8 @@ list of 30 above.
 | `moonlight` | Moonlight | dark | [atomiks/moonlight-vscode-theme](https://github.com/atomiks/moonlight-vscode-theme) |
 | `poimandres` | Poimandres | dark | [drcmda/poimandres-theme](https://github.com/drcmda/poimandres-theme) |
 | `andromeda` | Andromeda | dark | [EliverLara/Andromeda](https://github.com/EliverLara/Andromeda) |
+| `quiet-light` | Quiet Light | light | [microsoft/vscode](https://github.com/microsoft/vscode/tree/main/extensions/theme-quietlight) |
+| `min-light` | Min Light | light | [miguelsolorio/min-theme](https://github.com/miguelsolorio/min-theme) |
 
 ## How a palette becomes a theme
 
@@ -155,6 +157,7 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 | `kanagawa` | 5.24:1 | row details on the selected row | 8.72:1, 6.41:1 |
 | `matcha` | 4.58:1 | row details on the hovered row | 5.46:1, 4.24:1 |
 | `material-theme` | 5.17:1 | row details on the selected row | 6.78:1, 5.19:1 |
+| `min-light` | 5.31:1 | row details on the selected row | 5.77:1, 3.95:1 |
 | `monokai` | 5.03:1 | row details on the selected row | 4.50:1, 3.54:1 |
 | `moonlight` | 4.66:1 | row details on the selected row | 7.24:1, 5.46:1 |
 | `night-owl` | 4.68:1 | row details on the selected row | 6.39:1, 4.80:1 |
@@ -168,6 +171,7 @@ tint over `#202020` (dark) or `#F3F3F3` (light).
 | `palenight` | 4.73:1 | row details on the selected row | 4.81:1, 3.81:1 |
 | `panda` | 4.53:1 | row details on the selected row | 5.93:1, 4.57:1 |
 | `poimandres` | 6.65:1 | row details on the selected row | 4.83:1, 3.78:1 |
+| `quiet-light` | 5.21:1 | row details on the selected row | 7.45:1, 4.83:1 |
 | `rose-pine` | 4.87:1 | row details on the selected row | 5.28:1, 4.04:1 |
 | `rose-pine-dawn` | 4.58:1 | row details on the selected row | 4.91:1, 3.51:1 |
 | `shades-of-purple` | 5.30:1 | row details on the selected row | 5.77:1, 4.44:1 |

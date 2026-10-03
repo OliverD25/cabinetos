@@ -1,0 +1,65 @@
+{
+  "$schema": "./theme.schema.json",
+  "id": "quiet-light",
+  "name": "Quiet Light",
+  "author": "Microsoft (Visual Studio Code), port by CabinetOS",
+  "attribution": "Colours from Quiet Light as Visual Studio Code ships it (https://github.com/microsoft/vscode, extensions/theme-quietlight, (c) Microsoft Corporation), which comes from Colorsublime-Themes, used under the MIT License.",
+  "version": "1.0.0",
+  "kind": "light",
+  "accent": "#705697",
+  "mica": {
+    "tint": "#EDEDF5",
+    "opacity": 0.9
+  },
+  "palette": {
+    "textPrimary": "#333333",
+    "textSecondary": "#333333",
+    "textTertiary": "#54494B",
+    "textDisabled": "#AAAAAA",
+    "layerFill": "#F5F5F5B3",
+    "layerStroke": "#C9D0D9",
+    "layerStrokeActive": "#9769DC",
+    "controlFill": "#F2F2F2B3",
+    "controlFillHover": "#E0E0E0B3",
+    "acrylicTint": "#F2F2F2D9",
+    "terminalBackground": "#F5F5F599",
+    "folderIcon": "#765500",
+    "folderIconFront": "#A69059",
+    "fileTypeColors": {
+      "md": "#4B69C6",
+      "rs": "#9C5D27",
+      "toml": "#7A3E9D",
+      "exe": "#448C27",
+      "dll": "#448C27",
+      "bin": "#AA3731",
+      "pdf": "#AA3731",
+      "zip": "#765500"
+    },
+    "permissionLow": "#448C27",
+    "permissionMedium": "#765500",
+    "permissionHigh": "#AA3731"
+  },
+  "terminal": {
+    "foreground": "#333333",
+    "background": "#F5F5F5",
+    "cursor": "#54494B",
+    "ansi": [
+      "#333333",
+      "#AA3731",
+      "#448C27",
+      "#9C5D27",
+      "#4B69C6",
+      "#7A3E9D",
+      "#8190A0",
+      "#AAAAAA",
+      "#777777",
+      "#AA3731",
+      "#448C27",
+      "#9C5D27",
+      "#4B69C6",
+      "#7A3E9D",
+      "#91B3E0",
+      "#F5F5F5"
+    ]
+  }
+}
