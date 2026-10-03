@@ -167,12 +167,18 @@ public sealed partial class ToolDock : UserControl
     /// <summary>The caption of the pane's half in the split.</summary>
     public void SetHalfCaption(int pane, string text, string? tip) => HeaderOf(pane).SetCaption(text, tip);
 
-    /// <summary>The menu of the other shells (<c>terminal.profiles</c> without the default).</summary>
-    public void SetProfiles(TerminalProfiles profiles)
+    /// <summary>
+    /// The chevron's menu: the shells (<c>terminal.profiles</c>) and the terminal's defaults, with <c>terminal.restore</c> and
+    /// <c>terminal.defaultMode</c> as the window reads them (<see cref="TerminalDockMenu"/>).
+    /// </summary>
+    public void SetProfiles(TerminalProfiles profiles, bool restoreTabs = true, bool startsLinked = false)
     {
-        LeftHeader.SetProfiles(profiles);
-        RightHeader.SetProfiles(profiles);
+        LeftHeader.SetProfiles(profiles, restoreTabs, startsLinked);
+        RightHeader.SetProfiles(profiles, restoreTabs, startsLinked);
     }
+
+    /// <summary>The rows of the chevron menu now, for the window's log (the one view's, or the left half's).</summary>
+    internal string DescribeProfilesMenu() => LeftHeader.DescribeMenu();
 
     /// <summary>Shows "Starting the terminal…" until the first tab.</summary>
     public void ShowStarting() => StartingText.Visibility = Visibility.Visible;

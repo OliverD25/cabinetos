@@ -82,7 +82,7 @@ const TERMINAL: Option<&str> = Some("terminalFocus");
 /// Every one of them runs in the UI: the shell starts the file jobs
 /// itself (`start_job`), makes a folder with `create_directory`, and shows
 /// About with the versions from `welcome`.
-const SEED: [Seed; 125] = [
+const SEED: [Seed; 133] = [
     seed(
         "palette.show",
         "View",
@@ -387,6 +387,18 @@ const SEED: [Seed; 125] = [
         UI,
         None,
     ),
+    // `files.editor` from the palette (the settings-three-ways skill, gap 7):
+    // a pick list of Windows' default, the user's programs and a program picked
+    // from disk. The top row's menu has an "Editor" submenu of the same rows.
+    // No key; `file.edit` (F4) uses the editor chosen.
+    seed(
+        "preferences.chooseEditor",
+        "Preferences",
+        "Choose Editor",
+        &[],
+        UI,
+        None,
+    ),
     seed(
         "terminal.runTask",
         "Terminal",
@@ -444,6 +456,34 @@ const SEED: [Seed; 125] = [
         "terminal.setMode",
         "Terminal",
         "Lock or Link Terminal to Its Pane",
+        &[],
+        UI,
+        None,
+    ),
+    // The terminal's three defaults from the palette (the settings-three-ways
+    // skill, gap 5). The picker writes `terminal.defaultProfile`, the toggles
+    // write `terminal.restore` and `terminal.defaultMode`; the dock's chevron
+    // menu has a row for each. No keys: the palette and the menu are their places.
+    seed(
+        "terminal.chooseDefaultProfile",
+        "Terminal",
+        "Default Profile",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "terminal.toggleRestore",
+        "Terminal",
+        "Toggle Restore Tabs on Start",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "terminal.toggleDefaultMode",
+        "Terminal",
+        "New Terminals Start Locked or Linked",
         &[],
         UI,
         None,
@@ -797,6 +837,17 @@ const SEED: [Seed; 125] = [
         UI,
         None,
     ),
+    // `logging.level` from the palette (the settings-three-ways skill, gap 7):
+    // a pick list of the levels the core accepts. The top row's menu has a
+    // "Log Level" submenu of the same. No key.
+    seed(
+        "diagnostics.chooseLogLevel",
+        "Diagnostics",
+        "Log Level",
+        &[],
+        UI,
+        None,
+    ),
     // In-app updates (Phase 17, ADR 0014); no keys: the menu, the status-bar pill
     // and the palette are their places.
     seed("update.check", "Update", "Check for Updates", &[], UI, None),
@@ -817,6 +868,28 @@ const SEED: [Seed; 125] = [
         UI,
         None,
     ),
+    // The three update settings from the palette (the settings-three-ways
+    // skill, gap 6): the toggles write `update.check` and `update.autoInstall`,
+    // the picker writes `update.channel`. The status bar's update pill has them
+    // in its flyout and the top row's menu in its "Update Settings" submenu.
+    // Named apart from `update.check`, which checks now. No keys.
+    seed(
+        "update.toggleCheck",
+        "Update",
+        "Toggle Automatic Check",
+        &[],
+        UI,
+        None,
+    ),
+    seed(
+        "update.toggleAutoInstall",
+        "Update",
+        "Toggle Automatic Install",
+        &[],
+        UI,
+        None,
+    ),
+    seed("update.chooseChannel", "Update", "Channel", &[], UI, None),
     // The file panes' column widths (`ui.columns`): the Name heading's
     // double-click fits Modified, Type and Size to their texts; the reset
     // gives the theme's widths back. No keys: the palette is their place.
@@ -1219,7 +1292,7 @@ mod tests {
     #[test]
     fn seeds_the_design_commands_but_not_plugin_ones() {
         let registry = CommandRegistry::core();
-        assert_eq!(registry.commands().len(), 125);
+        assert_eq!(registry.commands().len(), 133);
         let keys = |id: &str| {
             registry
                 .get(id)
@@ -1675,6 +1748,92 @@ mod tests {
                 .collect();
             assert_eq!(holders.len(), 1, "{chord}: {holders:?}");
         }
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
+    /// Gap 5 of the settings-three-ways audit: the terminal's three defaults
+    /// each have a command (a picker for the profile, a toggle for each of the
+    /// other two). All run in the window and have no default key.
+    #[test]
+    fn the_terminal_defaults_have_their_commands_with_titles_and_no_keys() {
+        let registry = CommandRegistry::core();
+        for (id, title) in [
+            ("terminal.chooseDefaultProfile", "Default Profile"),
+            ("terminal.toggleRestore", "Toggle Restore Tabs on Start"),
+            (
+                "terminal.toggleDefaultMode",
+                "New Terminals Start Locked or Linked",
+            ),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                ("Terminal", title),
+                "{id}"
+            );
+            assert!(command.default_keys.is_empty(), "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.when, None, "{id}");
+        }
+        // The per-session switch keeps its own command and name.
+        assert_eq!(
+            registry.get("terminal.setMode").unwrap().title,
+            "Lock or Link Terminal to Its Pane"
+        );
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
+    /// Gap 6 of the settings-three-ways audit: the update settings each have a
+    /// command (a toggle for each of `update.check` and `update.autoInstall`, a
+    /// picker for `update.channel`), named apart from `update.check` (check
+    /// now), which keeps its id and title.
+    #[test]
+    fn the_update_settings_have_their_commands_and_the_check_now_command_is_unchanged() {
+        let registry = CommandRegistry::core();
+        for (id, title) in [
+            ("update.toggleCheck", "Toggle Automatic Check"),
+            ("update.toggleAutoInstall", "Toggle Automatic Install"),
+            ("update.chooseChannel", "Channel"),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                ("Update", title),
+                "{id}"
+            );
+            assert!(command.default_keys.is_empty(), "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.when, None, "{id}");
+        }
+        let check_now = registry.get("update.check").unwrap();
+        assert_eq!(
+            (check_now.category.as_str(), check_now.title.as_str()),
+            ("Update", "Check for Updates")
+        );
+        crate::keymap::compile(&registry, &[]).unwrap();
+    }
+
+    /// Gap 7 of the settings-three-ways audit: the editor and the log level
+    /// each have a pick-list command, with no default key. `file.edit` (F4)
+    /// keeps its own command, which uses the editor chosen.
+    #[test]
+    fn the_editor_and_the_log_level_have_their_commands_with_titles_and_no_keys() {
+        let registry = CommandRegistry::core();
+        for (id, category, title) in [
+            ("preferences.chooseEditor", "Preferences", "Choose Editor"),
+            ("diagnostics.chooseLogLevel", "Diagnostics", "Log Level"),
+        ] {
+            let command = registry.get(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (command.category.as_str(), command.title.as_str()),
+                (category, title),
+                "{id}"
+            );
+            assert!(command.default_keys.is_empty(), "{id}");
+            assert_eq!(command.target, CommandTarget::Ui, "{id}");
+            assert_eq!(command.when, None, "{id}");
+        }
+        assert!(registry.get("file.edit").is_some());
         crate::keymap::compile(&registry, &[]).unwrap();
     }
 

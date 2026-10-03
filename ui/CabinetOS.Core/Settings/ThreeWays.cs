@@ -1,3 +1,5 @@
+using CabinetOS.Core.Updates;
+
 namespace CabinetOS.Core.Settings;
 
 /// <summary>
@@ -61,7 +63,8 @@ public static class Layouts
 
 /// <summary>
 /// What the palette's row of a command says of the setting it changes (the settings-three-ways skill: "a boolean gets a
-/// toggle command whose row shows the current state"): "current" on the layout in effect, "on" or "off" on a toggle.
+/// toggle command whose row shows the current state"): "current" on the layout in effect, "on" or "off" on a toggle, the value in
+/// effect on a picker's row, "linked" or "locked" on the terminal's mode.
 /// </summary>
 public static class SettingStates
 {
@@ -74,6 +77,12 @@ public static class SettingStates
     /// <summary>The mark of a toggle that is off.</summary>
     public const string Off = "off";
 
+    /// <summary>The mark of <c>terminal.defaultMode</c> when new terminals start linked to their pane.</summary>
+    public const string Linked = "linked";
+
+    /// <summary>The mark of <c>terminal.defaultMode</c> when new terminals start locked.</summary>
+    public const string Locked = "locked";
+
     /// <summary>
     /// The mark for <paramref name="commandId"/>'s palette row given the settings now (<paramref name="shellMenu"/> is
     /// <c>contextMenu.shellMenu</c>), or null for a command that has none.
@@ -85,6 +94,17 @@ public static class SettingStates
         "view.toggleHiddenFiles" => OnOff(settings.ShowHidden),
         "sidebar.toggleFollow" => OnOff(settings.SidebarAutoReveal),
         "menu.toggleShellMenu" => OnOff(shellMenu),
+        // The terminal's defaults (gap 5): the picker's row names the profile in effect.
+        "terminal.chooseDefaultProfile" => settings.TerminalDefaultProfile,
+        "terminal.toggleRestore" => OnOff(settings.TerminalRestore),
+        "terminal.toggleDefaultMode" => settings.TerminalStartsLinked ? Linked : Locked,
+        // The update settings (gap 6): the toggles say on or off, the picker's row says the channel in effect.
+        "update.toggleCheck" => OnOff(settings.UpdateCheck),
+        "update.toggleAutoInstall" => OnOff(settings.UpdateAutoInstall),
+        "update.chooseChannel" => UpdateSettingsMenu.NormalizeChannel(settings.UpdateChannel),
+        // The editor and the log level (gap 7): the pickers' rows name the value in effect.
+        "preferences.chooseEditor" => settings.EditorLabel,
+        "diagnostics.chooseLogLevel" => LogLevels.Normalize(settings.LogLevel),
         _ => null,
     };
 

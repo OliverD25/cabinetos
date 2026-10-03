@@ -86,6 +86,7 @@ The core's commands, in palette order:
 | `plugins.list` | Plugins: Show Plugins | | | UI |
 | `workspace.switch` | Workspace: Switch Workspace… | `ctrl+k ctrl+w` | | UI |
 | `preferences.selectColorTheme` | Preferences: Color Theme | `ctrl+k ctrl+t` | | UI |
+| `preferences.chooseEditor` | Preferences: Choose Editor | | | UI |
 | `themes.browse` | Themes: Browse | | | UI |
 | `terminal.runTask` | Terminal: Run Task… | `ctrl+shift+b` | | UI |
 | `terminal.new` | Terminal: New Terminal | `ctrl+shift+t` | `terminalFocus` | UI |
@@ -95,6 +96,9 @@ The core's commands, in palette order:
 | `terminal.previousTab` | Terminal: Previous Terminal Tab | `alt+bracketleft` | `terminalFocus` | UI |
 | `terminal.nextTab` | Terminal: Next Terminal Tab | `alt+bracketright` | `terminalFocus` | UI |
 | `terminal.setMode` | Terminal: Lock or Link Terminal to Its Pane | | | UI |
+| `terminal.chooseDefaultProfile` | Terminal: Default Profile | | | UI |
+| `terminal.toggleRestore` | Terminal: Toggle Restore Tabs on Start | | | UI |
+| `terminal.toggleDefaultMode` | Terminal: New Terminals Start Locked or Linked | | | UI |
 | `terminal.toggleSplit` | Terminal: Split Terminal Under the Panes | `ctrl+backslash` | `terminalFocus` | UI |
 | `go.root` | Go: Up to Root | `ctrl+backslash` | | UI |
 | `go.chooseDriveLeft` | Go: Choose Drive for Left Pane… | `alt+f1` | | UI |
@@ -146,10 +150,14 @@ The core's commands, in palette order:
 | `diagnostics.toggleHeavy` | Diagnostics: Toggle Heavy Logging | | | UI |
 | `diagnostics.openLogFolder` | Diagnostics: Open Log Folder | | | UI |
 | `diagnostics.saveBundle` | Diagnostics: Save Log Bundle | | | UI |
+| `diagnostics.chooseLogLevel` | Diagnostics: Log Level | | | UI |
 | `update.check` | Update: Check for Updates | | | UI |
 | `update.apply` | Update: Restart to Update | | | UI |
 | `update.rollback` | Update: Roll Back to the Previous Version | | | UI |
 | `update.showNotes` | Update: Show Release Notes | | | UI |
+| `update.toggleCheck` | Update: Toggle Automatic Check | | | UI |
+| `update.toggleAutoInstall` | Update: Toggle Automatic Install | | | UI |
+| `update.chooseChannel` | Update: Channel | | | UI |
 | `view.fitColumns` | View: Fit Columns to Content | | `filesView` | UI |
 | `view.resetColumns` | View: Reset Column Widths | | `filesView` | UI |
 | `view.equalPanes` | View: Equal Panes | | | UI |
@@ -177,6 +185,17 @@ The core's commands, in palette order:
 - The four `update.*` commands (Phase 17) have no default keys either:
   the palette, the top row's menu and the status bar's update pill are
   their places ([ui.md](ui.md), "Updates").
+- **The three update settings** (the settings-three-ways audit, gap 6): `update.toggleCheck` flips `update.check`,
+  `update.toggleAutoInstall` flips `update.autoInstall`, and `update.chooseChannel` opens a pick list of the
+  channels and writes `update.channel` (with `{"value": "preview"}` it writes without the list). None has a key.
+  They are named apart from `update.check`, which checks now. The update pill's flyout and the top row menu's
+  "Update Settings" submenu have a row for each ([ui.md](ui.md), "Settings reachable three ways"). The palette's
+  row says "on" or "off", and the channel in effect.
+- **The editor and the log level** (the settings-three-ways audit, gap 7): `preferences.chooseEditor` opens a pick list
+  of Windows' default, the programs of the file and "Choose…", and writes `files.editor`; `diagnostics.chooseLogLevel`
+  opens a pick list of the levels and writes `logging.level`. Both take their value as arguments and write without
+  the list (`{"value": "debug"}`; `{"default": true}`, `{"program": "code"}` or `{"choose": true}`), which is how the top row
+  menu's "Editor" and "Log Level" submenus run them. Neither has a key. `file.edit` (F4) uses the editor chosen.
 - `view.toggleCompactOverlay` (Phase 19c) makes the window a small
   always-on-top drawer with one pane, and back ([ui.md](ui.md),
   "Compact overlay"). Its key, `ctrl+alt+up`, is the one the Files app
@@ -207,6 +226,14 @@ The core's commands, in palette order:
   `sidebar.toggleFollow` flips `ui.sidebarAutoReveal` and
   `menu.toggleShellMenu` flips `contextMenu.shellMenu`; neither has a key.
   The palette's row of each says "current" or "on" or "off".
+- **The terminal's three defaults** (the settings-three-ways audit, gap 5):
+  `terminal.chooseDefaultProfile` opens a pick list of the profiles and
+  writes `terminal.defaultProfile` (with `{"value": "<name>"}` it writes
+  without the list), `terminal.toggleRestore` flips `terminal.restore` and
+  `terminal.toggleDefaultMode` flips `terminal.defaultMode` between `locked`
+  and `linked`. None has a key; the dock's chevron menu has a row for each
+  ([ui.md](ui.md), "Settings reachable three ways"). The palette's row says
+  the profile in effect, "on" or "off", and "locked" or "linked".
 - `themes.browse` (Phase 23) opens the theme gallery ([ui.md](ui.md), "The
   theme gallery"). It has no key; the theme picker's last row opens it too.
 - `view.toggleColumns` (Phase 19f) shows the active pane's front tab as

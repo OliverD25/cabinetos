@@ -441,10 +441,14 @@ public class ShellEndToEndTests
             var logs = await run.FinishAsync("menus", process, "done");
 
             // The registry's titles, as the palette shows them: a rename there shows here too. After Toggle Sidebar come the preferences
-            // that were in the file only (Phase 23): Layout with its three, and the two toggles with their state.
+            // that were in the file only (Phase 23): Layout with its three, and the two toggles with their state; then the settings of
+            // gaps 5 to 7 of the three-ways audit: the editor (this window's config names one that is none of the programs, so it has a
+            // row of its own, checked), the update settings and the log level.
             State(logs, "menu", state => Assert.Equal(
                 "New Tab|New Folder|Find in Pane|Go to Path…|Toggle Sidebar|Layout (Classic Layout [x], Terminal on the Right, Activity Rail)|Show Hidden Files [ ]"
-                + "|Follow the Active Pane [x]|Browse Extensions|Open Keyboard Shortcuts|Check for Updates",
+                + "|Follow the Active Pane [x]|Editor (Windows' default, cabinetos-no-such-editor [x], Choose…)"
+                + "|Update Settings (Check Automatically [x], Install Automatically [x], Stable Channel [x], Preview Channel)"
+                + "|Log Level (Trace, Debug, Info [x], Warn, Error)|Browse Extensions|Open Keyboard Shortcuts|Check for Updates",
                 state.GetProperty("menu").GetString()));
             State(logs, "menu-closed", state => Assert.Equal("", state.GetProperty("menu").GetString()));
             State(logs, "workspace", state => Assert.Equal("Default|Open folder as workspace…", state.GetProperty("menu").GetString()));
