@@ -2112,6 +2112,27 @@ size, so a HEIC page cannot show the file's real pixel size (a schema
 change, to decide). The PDF and the text and Markdown viewers are the next
 units of step 3.
 
+**Status (2026-10-04, 04:20): 0.1.3 is tagged and published on GitHub
+(`v0.1.3` on a4f64c6, six files; the zip's hash matches `latest.json`).**
+It carries Quick View with the Image Viewer and the Media Viewer, three
+groups of settings reachable three ways (eight in all), the two light
+themes in the core, and the palette and job clock fixes. The creator's
+word of 2026-10-04 ("wait for the release 0.1.3, tell me when it is
+done") started it. Verified on the release commit 8c4672b: the five core
+checks, both window builds, 1425 fast tests, and the laptop's live check
+(exit 0, no False, panel and walk goals met; the first Space 556 ms with
+the Image Viewer and 991 ms with the Media Viewer; the Quick View warm
+goal printed "no" again, the open point above). The release's pictures
+(Quick View with a photo, with a clip, the theme gallery with the light
+themes) are in `_ioelease-notes-0.1.3\`. **Two outward steps were not
+run, because the session's permission check blocked the marketplace
+(public surface): the marketplace's stable channel and index (so the
+in-app update sees 0.1.3 and the panel's offer finds the two viewers) and
+the site page, plus the winget submission. They are ready as commands in
+`_ioelease-0.1.3-publish-steps.md`.** Until the marketplace step runs,
+an installed 0.1.2 does not see 0.1.3 and no viewer is offered; the setup
+file of the release works.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
