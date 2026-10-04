@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Rule 6 of the viewer contract (ADR 0023): its own folder, and the hosts the window serves files on. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https://*.cabinetos.example data:; media-src https://*.cabinetos.example data:">
+  <title>Image Viewer</title>
+  <link rel="stylesheet" href="/quickview.css">
+  <script src="/quickview.js" defer></script>
+</head>
+<body>
+  <main id="stage">
+    <div id="badge" role="status"></div>
+  </main>
+</body>
+</html>

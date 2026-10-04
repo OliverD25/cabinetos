@@ -334,6 +334,26 @@ becomes a viewer with the `quickView` key of its `tool.json`:
   release with Quick View: an older window reads `tool.json` strictly and
   would leave a tool with a `quickView` key out.
 
+### The viewer pack
+
+Two real viewers are written in this repository, in `sdk/tools`, and they
+are the examples to start another viewer from: the
+[Image Viewer](../sdk/tools/image-viewer/README.md) (JPEG, PNG, GIF, WebP,
+AVIF, BMP, ICO and SVG from the file's `url` at full resolution, and HEIC,
+TIFF, JPEG XR and camera RAW through `quickview-render`, with zoom on `+`,
+`-`, `0`, `1`, the wheel and a drag) and the
+[Media Viewer](../sdk/tools/media-viewer/README.md) (video and sound that
+play at once, with `K`, `J`, `L`, `,`, `.`, `M`, `+`, `-` and the digits).
+Both follow the seven rules of the viewer contract (ADR 0023, "The first
+viewer's contract"): the kinds in `quickView`, a fresh load for every file,
+`quickview-shown` after the first frame with content, keys only from the set
+of the panel, the window's theme, their own folder under a
+Content-Security-Policy that allows the file hosts, and the render path for
+what the browser cannot decode. `build-index.ps1 -Viewers` offers them in the
+marketplace index as tool items with `minCoreVersion` `0.1.3`
+([marketplace.md](marketplace.md), "A local index"), which is how the panel
+finds them for its one-click install.
+
 ### A viewer page in the panel
 
 What the window does with a viewer's page ([ui.md](ui.md), "Quick View";
@@ -356,7 +376,8 @@ the messages' one description is
   `other`) and `message` (at most 200 characters); `quickview-keys` for
   keys wanted later; `quickview-render` (`width`, `height`, at most 2560)
   for Windows' drawing of a file the browser cannot decode, answered with
-  `quickview-rendered` (a `url` on a host `r<n>.<id>.cabinetos.example`) or
+  `quickview-rendered` (a `url` on a host `r<n>.<id>.cabinetos.example`, mapped
+  before the page loaded) or
   `quickview-render-failed`, one at a time; `quickview-system-preview` is
   answered with `quickview-system-preview-failed` in this version. A
   message over a limit, or malformed, is dropped.

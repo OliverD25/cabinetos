@@ -1,6 +1,7 @@
 # ADR 0023: Quick View is a panel of the window; every viewer is a Tool Extension page with a fixed contract
 
-- Status: accepted
+- Status: accepted; the host a drawing is served from (decision 3, `quickview-render`) is
+  amended by [ADR 0024](0024-drawings-from-a-host-mapped-before-the-load.md)
 - Date: 2026-10-03
 - Decided by: the creator decided the feature in chat on 2026-10-03 (the
   Phase 25 text in [PLAN.md](../PLAN.md): Space opens a floating panel, the

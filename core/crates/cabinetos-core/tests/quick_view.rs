@@ -525,3 +525,96 @@ async fn no_catalogue_gives_offline() {
         }
     );
 }
+
+/// The viewer pack as `sdk/marketplace/build-index.ps1 -Viewers` builds it
+/// into `dir` (the zips of the Image Viewer and the Media Viewer and their
+/// index), and its items. They ask for the first release with Quick View,
+/// 0.1.3, which the core under test, a build of the release before it, is
+/// older than: the items are changed to ask for this build's own version, so
+/// that the offer can be seen.
+fn built_viewer_items(dir: &Path) -> Vec<Value> {
+    let script =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../sdk/marketplace/build-index.ps1");
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&script)
+        .arg("-OutDir")
+        .arg(dir)
+        .args(["-ThemesOnly", "-Viewers"])
+        .output()
+        .expect("Windows PowerShell starts");
+    assert!(
+        output.status.success(),
+        "build-index.ps1 failed:\n{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = std::fs::read_to_string(dir.join("index.json")).unwrap();
+    let index: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap();
+    let mut items = index["items"].as_array().unwrap().clone();
+    for item in &mut items {
+        assert_eq!(item["minCoreVersion"], "0.1.3", "{}", item["id"]);
+        item["minCoreVersion"] = json!(env!("CARGO_PKG_VERSION"));
+    }
+    items
+}
+
+/// Phase 25, step 3: the panel's offer finds the real viewers by the
+/// `quickView.kinds` in their index items' manifests. A photo gets the Image
+/// Viewer, a video the Media Viewer, a text file nothing; installing the
+/// Image Viewer from the built index puts its kinds into the table.
+#[tokio::test]
+async fn the_built_viewer_pack_is_offered_for_its_kinds_and_installs() {
+    let core = start_core_with(&[], |dir| Some(built_viewer_items(dir)));
+    let mut client = connect(&core.pipe).await;
+    for (name, viewer) in [("photo.jpg", "image-viewer"), ("Clip.MKV", "media-viewer")] {
+        let reply = ask(&mut client, offer(name)).await;
+        let Response::QuickViewOffer {
+            item: Some(item),
+            reason: None,
+        } = &reply
+        else {
+            panic!("{name}: {reply:?}");
+        };
+        assert_eq!(item.id, viewer, "{name}");
+        assert!(item.size > 0);
+    }
+    assert_eq!(
+        ask(&mut client, offer("notes.txt")).await,
+        Response::QuickViewOffer {
+            item: None,
+            reason: Some(cabinetos_protocol::OfferReason::NoItem),
+        }
+    );
+
+    let install = Request::InstallExtension {
+        extension_id: "image-viewer".to_owned(),
+        version: None,
+    };
+    assert_eq!(ask(&mut client, install).await, Response::Ok);
+    let Response::QuickViewTable { viewers, kinds } =
+        ask(&mut client, Request::QuickViewTable).await
+    else {
+        panic!("expected the table");
+    };
+    assert_eq!(viewers.len(), 1);
+    assert_eq!(viewers[0].id, "image-viewer");
+    assert_eq!(viewers[0].entry, "quickview.html");
+    assert_eq!(kinds.len(), 18);
+    for pattern in ["*.jpg", "*.heic", "*.svg", "*.arw"] {
+        assert!(
+            kinds
+                .iter()
+                .any(|kind| kind.pattern == pattern && kind.viewers == ["image-viewer"]),
+            "{pattern}"
+        );
+    }
+    assert_eq!(
+        ask(&mut client, offer("photo.jpg")).await,
+        Response::QuickViewOffer {
+            item: None,
+            reason: Some(cabinetos_protocol::OfferReason::NoItem),
+        },
+        "an installed viewer is not offered again"
+    );
+}

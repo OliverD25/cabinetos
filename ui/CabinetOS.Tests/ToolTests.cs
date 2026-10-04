@@ -41,6 +41,25 @@ public class ToolTests
     }
 
     [Theory]
+    [InlineData("image-viewer", 18)]
+    [InlineData("media-viewer", 13)]
+    public void The_shipped_quick_view_viewers_are_valid_tools_for_the_window_and_the_schema(string id, int kinds)
+    {
+        var folder = Path.Combine(Repo.Tools, id);
+        var json = File.ReadAllText(Path.Combine(folder, "tool.json"));
+
+        var manifest = ToolManifest.Parse(json, id);
+        Assert.Empty(manifest.Accepts); // a viewer opens nothing in a pane, so Enter keeps opening these files in their program
+        Assert.True(File.Exists(Path.Combine(folder, manifest.Entry)));
+        Assert.True(Schemas.Tool.Evaluate(JsonDocument.Parse(json).RootElement).IsValid);
+
+        using var document = JsonDocument.Parse(json);
+        var quickView = document.RootElement.GetProperty("quickView");
+        Assert.Equal(kinds, quickView.GetProperty("kinds").GetArrayLength());
+        Assert.True(File.Exists(Path.Combine(folder, quickView.GetProperty("entry").GetString()!)));
+    }
+
+    [Theory]
     [InlineData("""{"id":"markdown-preview"}""", "missing field `name`")]
     [InlineData("[]", "expected an object")]
     [InlineData("not json", "not JSON")]

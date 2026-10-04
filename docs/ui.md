@@ -241,25 +241,42 @@ mouse clicks, sent with `SendInput`, and take screenshots of it:
   `gallery-applied-live.png`, `layout-rail-live.png`, `layout-menu-live.png`
   and, from section 13, `rail13-extensions-live.png` (the Extensions page).
   Section 25, Quick View ("Quick View"; ADR 0023, decision 4.5): a folder
-  of its own with a 12-megapixel PNG, a smaller PNG, a `.qvtest` page (the
-  fixture viewer is in the run's tools folder), a 12-megapixel JPEG, a text
-  file and a `.xyz` file; Space opens the panel and Space closes it, ten
-  times on each file, and the times come from the window's `quick view
-  shown` lines. It prints a table per file: the first open apart (the
-  first of the session with a viewer also against its ceiling of
-  1.5 s), and of the other nine the worst card time and the 90th
+  of its own with a 12-megapixel PNG, a smaller PNG, a `.qvtest` page, a
+  12-megapixel JPEG, a text file, a `.xyz` file, a 1080p H.264 clip (the
+  committed `ui/livecheck/fixtures/media/clip-1080p.mp4`, with a silent
+  sound track), a silent MP3, a TIFF the Image Viewer has Windows draw
+  (`quickview-render`) and, when Windows has the HEIF codec, a HEIC photo
+  (`ui/livecheck/fixtures/quickview/photo.heic`; one line says when the row
+  is skipped). The run's tools folder holds the fixture viewer and the two
+  real viewers of `sdk/tools`; `image-viewer` shows `*.png` because its
+  folder name comes first among tools of the development folder (decision
+  1.2), and a second pass writes `quickView.viewers` `{"*.png":
+  "quickview-fixture"}` for the two PNG rows the fixture keeps, then takes
+  the setting out. Space opens the panel and Space closes it, ten times on
+  each file, and the times come from the window's `quick view shown`
+  lines. It prints a table per file: the first open apart (the first of the
+  session with a viewer, and the first of each viewer, also against a
+  ceiling of 1.5 s), and of the other nine the worst card time and the 90th
   percentile of the thumbnail and the full view; the line "quick view
   goal ... met: yes|no" judges them against the ADR's table (the card
-  50 ms every time, the thumbnail 100 ms, the full view 1 s). No JPEG
-  viewer exists yet, so the full view is judged on the PNG files and the
-  page; the fixture folder has no HEIC file and no video, because the
-  machine has no encoder for them. Then Down is held for 3 s over 50
-  images with the panel open, and "quick view walk goal ... met: yes|no"
-  asks for no frame with UI work over 33 ms; Esc must close the panel, and
-  the section must leave no warning or error line. Step 11a marks in place
-  with Shift+Space since Phase 25. The run keeps
-  `25-quick-view-live.png` and `25-quick-view-walk-live.png`.
-- `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
+  50 ms every time, the thumbnail 100 ms, the full view 1 s: the JPEG, the
+  PNG files, the page, the video playing and the sound; the drawn TIFF and
+  HEIC must show and have no time goal). Then every file of
+  `ui/livecheck/fixtures/media` (one tiny silent file of each kind the
+  Media Viewer claims, and `hevc.mp4`, which is printed and not judged) is
+  opened once in the real panel, and the line "every kind the Media Viewer
+  claims was shown by it" says whether the claimed kinds play in this
+  machine's WebView2. Then Down is held for 3 s over 50 images with the
+  panel open, and "quick view walk goal ... met: yes|no" asks for no frame
+  with UI work over 33 ms; Esc must close the panel, and the section must
+  leave no warning or error line. Step 11a marks in place with Shift+Space
+  since Phase 25. The run keeps `25-quick-view-live.png`,
+  `25-quick-view-jpeg-live.png`, `25-quick-view-video-live.png`,
+  `25-quick-view-audio-live.png`, `25-quick-view-tiff-live.png`,
+  `25-quick-view-heic-live.png` (when the row ran) and
+  `25-quick-view-walk-live.png`. `ui/livecheck/media-probe.ps1` asks the
+  machine's Edge, with no window, which media files in a folder play (run it
+  on the laptop with `remote-script.ps1`).- `livecheck2.ps1`: the input paths. Skip by a real mouse click, then
   Properties with the same checks, the terminal typed with virtual-key
   events and with Unicode key events, and Ctrl+K V twice on the open
   preview.
@@ -3566,7 +3583,13 @@ process, so they share the option). A page in the panel runs no commands
 and follows no plugins: `command`, `subscribe` and `unsubscribe` are
 refused and logged with the trigger `quickview:<id>`.
 `quickview-render` asks the core to draw an image the browser cannot
-decode (`render_image`), served on a host `r<n>.<id>.cabinetos.example`.
+decode (`render_image`), served on a host `r<n>.<id>.cabinetos.example`. That
+host serves the core's folder of drawings (`cache\render`) and is mapped
+before the page loads, with the file's host: WebView2 says a mapping made
+after a page loaded may not reach it, and a host mapped when the drawing was
+ready did not (the Image Viewer reported every TIFF and HEIC as damaged on
+the laptop, 2026-10-04). A drawing is `image.png` in its own folder under
+that host; a drawing somewhere else is mapped when it is ready, as before.
 `quickview-system-preview` is answered at once with
 `quickview-system-preview-failed`: Windows' preview handlers are not
 hosted in this version.

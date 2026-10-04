@@ -5,11 +5,12 @@
 //! validates as it writes, and this test reads the result the way the core
 //! does. Nothing here reaches the network.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use cabinetos_market::{Index, Market, Source, parse_catalogue};
+use cabinetos_market::{Index, Market, Source, parse_catalogue, quick_view_offer};
 use cabinetos_protocol::{Catalogue, ExtensionKind, MarketIndex, MarketItem, ThemeKind};
 use serde_json::Value;
 
@@ -17,8 +18,9 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
-/// Builds both catalogues with the collection into a fresh folder, and
-/// returns the folder. The theme collection is what the public site offers.
+/// Builds both catalogues with the collection and the Quick View viewers
+/// into a fresh folder, and returns the folder. The theme collection and the
+/// viewer pack are what the public site offers.
 fn build(into: &Path) {
     let script = repo().join("sdk/marketplace/build-index.ps1");
     let output = Command::new("powershell")
@@ -26,7 +28,7 @@ fn build(into: &Path) {
         .arg(&script)
         .arg("-OutDir")
         .arg(into)
-        .args(["-Collection", "-ThemesOnly"])
+        .args(["-Collection", "-ThemesOnly", "-Viewers"])
         .output()
         .expect("Windows PowerShell starts");
     assert!(
@@ -58,8 +60,27 @@ fn both_files_follow_the_format_and_hold_only_their_own_kinds() {
         assert!(!typed.generated_at.is_empty(), "{}", file.display());
     }
 
-    // -ThemesOnly: the public index has no fixture plugins, and no theme.
-    assert!(raw_items(&index_file).is_empty());
+    // -ThemesOnly: the public index has no fixture plugins, and no theme. -Viewers: it has the two
+    // Quick View viewers of sdk/tools, as tool items, and the core accepts both.
+    let raw_extensions = raw_items(&index_file);
+    let extensions = parse_catalogue(
+        &fs::read_to_string(&index_file).unwrap(),
+        Catalogue::Extensions,
+    )
+    .unwrap();
+    assert_eq!(extensions.len(), raw_extensions.len(), "none is left out");
+    assert_eq!(
+        extensions
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["image-viewer", "media-viewer"]
+    );
+    assert!(extensions.iter().all(|item| {
+        item.kind == ExtensionKind::Tool
+            && item.min_core_version == "0.1.3"
+            && item.manifest["quickView"]["kinds"].is_array()
+    }));
 
     // The core accepts every theme item: none is left out.
     let raw = raw_items(&themes_file);
@@ -158,5 +179,41 @@ fn the_built_folder_serves_both_catalogues_to_the_market_client() {
         .fetch(&folder, false)
         .unwrap()
         .only(Catalogue::Extensions);
-    assert!(extensions.items.is_empty());
+    assert_eq!(extensions.items.len(), 2, "the two viewers of -Viewers");
+}
+
+#[test]
+fn the_viewer_items_are_offered_for_their_kinds_to_a_core_that_has_quick_view() {
+    let scratch = tempfile::tempdir().unwrap();
+    build(scratch.path());
+    let text = fs::read_to_string(scratch.path().join("index.json")).unwrap();
+    let items = parse_catalogue(&text, Catalogue::Extensions).unwrap();
+    let market = |version: &str| {
+        Market::new(
+            cabinetos_market::Dirs {
+                plugins: scratch.path().join("p"),
+                themes: scratch.path().join("t"),
+                tools: scratch.path().join("l"),
+                market: scratch.path().join("m"),
+            },
+            version,
+        )
+    };
+    let none = BTreeSet::new();
+
+    // 0.1.3 is the first release with Quick View: it is offered the viewers, by the kinds in their manifests.
+    let offered = market("0.1.3").offers(&items);
+    let offer = |name: &str| quick_view_offer(name, &offered, &none);
+    assert_eq!(offer("photo.jpg").unwrap().id, "image-viewer");
+    assert_eq!(offer("scan.TIFF").unwrap().id, "image-viewer");
+    assert_eq!(offer("clip.mkv").unwrap().id, "media-viewer");
+    assert_eq!(offer("song.flac").unwrap().id, "media-viewer");
+    assert_eq!(offer("notes.txt"), None);
+    assert_eq!(offer("report.pdf"), None);
+    // An installed viewer is not offered again.
+    let installed = BTreeSet::from(["image-viewer".to_owned()]);
+    assert_eq!(quick_view_offer("photo.jpg", &offered, &installed), None);
+
+    // The release before it reads tool.json strictly and would leave the tool out: it is offered nothing.
+    assert!(market("0.1.2").offers(&items).is_empty());
 }

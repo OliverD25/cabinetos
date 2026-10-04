@@ -462,6 +462,12 @@ Copy-Item -LiteralPath "$PSScriptRoot\fixtures\quick-notes" -Destination $runToo
 # The Quick View test viewer (ADR 0023): section 25 opens the panel with it. It opens nothing in a pane and has no sidebar
 # page, so no other section notices it.
 Copy-Item -LiteralPath "$PSScriptRoot\..\..\sdk\fixtures\tools\quickview-fixture" -Destination $runTools -Recurse
+# The two real Quick View viewers of sdk\tools (the viewer pack, step 3 of Phase 25): section 25 measures them. The fixture
+# viewer above also claims *.png, and decision 1.2 puts the viewer whose folder name comes first on a kind both claim, in
+# the development folder, so image-viewer shows *.png and section 25 puts *.png back on the fixture with quickView.viewers
+# for its second pass. They open nothing in a pane and have no sidebar page, so no other section notices them.
+Copy-Item -LiteralPath (Join-Path ([System.IO.Path]::GetFullPath($Tools)) 'image-viewer') -Destination $runTools -Recurse
+Copy-Item -LiteralPath (Join-Path ([System.IO.Path]::GetFullPath($Tools)) 'media-viewer') -Destination $runTools -Recurse
 $env:CABINETOS_TOOLS_DIR = $runTools
 "tools dir: $env:CABINETOS_TOOLS_DIR (exists: $(Test-Path -LiteralPath $env:CABINETOS_TOOLS_DIR))"
 Remove-Item Env:CABINETOS_UI_SNAPSHOT -ErrorAction SilentlyContinue
@@ -3101,20 +3107,28 @@ foreach ($want in 'right', 'rail', 'classic') {
 "23: no warning or error line in the window's log during this section: $(@(UiLines '"level":"(WARN|WARNING|ERROR)"').Count -eq $warn23)"
 
 # ----- 25: Quick View (docs/ui.md, "Quick View"; ADR 0023, decision 4.5) -----
-# A folder of its own: a 12-megapixel PNG and a smaller one (the fixture viewer of sdk\fixtures\tools\quickview-fixture,
-# copied into the run's tools folder, shows PNG files and .qvtest files), a .qvtest page, a 12-megapixel JPEG, a text file
-# and a .xyz file no viewer claims. Space opens the panel and Space closes it, ten times on each file; the window's
-# "quick view shown" line of each open has the times from the key press to the rendered frame. The first open of each
-# file is printed apart (the first of the session also against its own ceiling, 1.5 s); the 90th percentile of the
-# other nine is judged against the ADR's table: the card 50 ms every time, the thumbnail 100 ms, the full view 1 s.
-# No viewer for JPEG files exists yet (the viewer pack is step 3 of Phase 25), so the full view is judged on the PNG
-# files and the .qvtest page; this machine has no encoder for a HEIC file or an H.264 video, so those two rows of the
-# ADR's fixture folder are not made. Then Down is held for 3 s over 50 images with the panel open, and the frames' UI
-# work is judged as the panel goal judges the PageDown hold: no frame with UI work over 33 ms.
+# A folder of its own, one file for each row of the ADR's fixture folder: a 12-megapixel PNG and a smaller one, a .qvtest
+# page (the fixture viewer of sdk\fixtures\tools\quickview-fixture), a 12-megapixel JPEG, a text file and a .xyz file no
+# viewer claims, then what the viewer pack (step 3 of Phase 25) shows: a 1080p H.264 clip with a silent sound track, a
+# silent MP3, a TIFF file (the browser cannot decode it: the Image Viewer has Windows draw it through the core, the
+# quickview-render path) and, when Windows has the HEIF codec on this machine, a HEIC photo. Space opens the panel and
+# Space closes it, ten times on each file; the window's "quick view shown" line of each open has the times from the key
+# press to the rendered frame. The first open of each file is printed apart (the first of each viewer in the session
+# also against its own ceiling, 1.5 s); the 90th percentile of the other nine is judged against the ADR's table: the card
+# 50 ms every time, the thumbnail 100 ms, the full view 1 s (the 12 MP JPEG and PNG, the video playing, the sound; the
+# drawn TIFF and HEIC are printed and must show, with no time goal). The development folder holds the fixture viewer and
+# the two real viewers, and decision 1.2 puts the one whose folder name comes first on a kind both claim: image-viewer
+# before quickview-fixture, so the real viewer shows *.png in the first pass. The second pass sets quickView.viewers to
+# {"*.png": "quickview-fixture"} (the setting a user has, which the core sends on as a new table) for the two PNG rows
+# the fixture viewer keeps, and takes the setting out again. Then every kind the Media Viewer claims is opened once in
+# the real panel (tiny silent files of ui\livecheck\fixtures\media: the check that the kinds that play in this machine's
+# WebView2 are the ones the viewer claims). Then Down is held for 3 s over 50 images with the panel open, and the frames'
+# UI work is judged as the panel goal judges the PageDown hold: no frame with UI work over 33 ms.
 $qvDir = "$root\quickview"
 # Beside the fixture folder, not in it: a folder there would be the first row, and every file would be one row off.
 $qvWalk = "$root\quickview-walk"
-New-Item -ItemType Directory -Force $qvDir, $qvWalk | Out-Null
+$qvMedia = "$root\quickview-media"
+New-Item -ItemType Directory -Force $qvDir, $qvWalk, $qvMedia | Out-Null
 function NewPicture([string]$path, [int]$width, [int]$height, [System.Drawing.Imaging.ImageFormat]$format) {
   $bmp = New-Object System.Drawing.Bitmap $width, $height
   $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -3129,8 +3143,35 @@ Set-Content -LiteralPath "$qvDir\3-page.qvtest" -Value "shown" -Encoding ASCII
 NewPicture "$qvDir\4-photo.jpg" 4000 3000 ([System.Drawing.Imaging.ImageFormat]::Jpeg)
 Set-Content -LiteralPath "$qvDir\5-notes.txt" -Value "Quick View shows this as a card and the shell's thumbnail, if it has one." -Encoding ASCII
 Set-Content -LiteralPath "$qvDir\6-unknown.xyz" -Value "no viewer claims this" -Encoding ASCII
+Copy-Item -LiteralPath "$PSScriptRoot\fixtures\media\clip-1080p.mp4" -Destination "$qvDir\7-clip.mp4"
+Copy-Item -LiteralPath "$PSScriptRoot\fixtures\media\silence.mp3" -Destination "$qvDir\8-sound.mp3"
+NewPicture "$qvDir\9-scan.tif" 2400 1800 ([System.Drawing.Imaging.ImageFormat]::Tiff)
+# The HEIC row needs Windows' own decoder, which is the codec the core's drawing uses: WPF's decoder asks the same
+# codecs, so a file it opens is a file Windows can draw.
+$heicSource = "$PSScriptRoot\fixtures\quickview\photo.heic"
+$heicCodec = $false
+try {
+  Add-Type -AssemblyName PresentationCore
+  $heicCodec = [System.Windows.Media.Imaging.BitmapDecoder]::Create(([Uri]$heicSource), 'None', 'OnLoad').Frames.Count -gt 0
+} catch { $heicCodec = $false }
+if ($heicCodec) { Copy-Item -LiteralPath $heicSource -Destination "$qvDir\a-photo.heic" }
+else { "25: no HEIC row: Windows has no HEIF codec on this machine (the HEIF Image Extensions of the Microsoft Store); skipped" }
 for ($i = 1; $i -le 50; $i++) { NewPicture ("$qvWalk\walk-{0:D2}.png" -f $i) 640 480 ([System.Drawing.Imaging.ImageFormat]::Png) }
-$qvFiles = '1-big.png', '2-image.png', '3-page.qvtest', '4-photo.jpg', '5-notes.txt', '6-unknown.xyz'
+Get-ChildItem -LiteralPath "$PSScriptRoot\fixtures\media" -File | Where-Object { $_.Extension -ne '.md' } | Copy-Item -Destination $qvMedia
+# What each file of the first pass is shown by, and what is judged: 'full' (a viewer shows it, within the table's second),
+# 'shown' (a viewer shows it, no time goal: Windows draws it) or 'none' (no viewer claims it).
+$qvPlan = @(
+  @{ File = '1-big.png'; Viewer = 'image-viewer'; Goal = 'full'; Shot = '25-quick-view-live.png' }
+  @{ File = '2-image.png'; Viewer = 'image-viewer'; Goal = 'full' }
+  @{ File = '3-page.qvtest'; Viewer = 'quickview-fixture'; Goal = 'full' }
+  @{ File = '4-photo.jpg'; Viewer = 'image-viewer'; Goal = 'full'; Shot = '25-quick-view-jpeg-live.png' }
+  @{ File = '5-notes.txt'; Viewer = 'none'; Goal = 'none' }
+  @{ File = '6-unknown.xyz'; Viewer = 'none'; Goal = 'none' }
+  @{ File = '7-clip.mp4'; Viewer = 'media-viewer'; Goal = 'full'; Shot = '25-quick-view-video-live.png' }
+  @{ File = '8-sound.mp3'; Viewer = 'media-viewer'; Goal = 'full'; Shot = '25-quick-view-audio-live.png' }
+  @{ File = '9-scan.tif'; Viewer = 'image-viewer'; Goal = 'shown'; Shot = '25-quick-view-tiff-live.png' }
+)
+if ($heicCodec) { $qvPlan += @{ File = 'a-photo.heic'; Viewer = 'image-viewer'; Goal = 'shown'; Shot = '25-quick-view-heic-live.png' } }
 $qvWarn = @(UiLines '"level":"(WARN|WARNING|ERROR)"').Count
 
 function QuickViewOpen([int]$wait = 8000) {
@@ -3151,56 +3192,146 @@ function P90([double[]]$values) {
   $sorted = @($values | Sort-Object)
   $sorted[[Math]::Max(0, [Math]::Ceiling(0.9 * $sorted.Count) - 1)]
 }
+# quickView.viewers in the run's configuration (the core sends the new table on, as for a hand edit); an empty map takes
+# every choice out. Back once the window logged the table, or after 8 s.
+function SetQuickViewViewers([hashtable]$map) {
+  $cfgPath = "$root\config\cabinetos.json"
+  $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $before = UiCount '"quick view table"'
+  $at = Get-Date
+  $cfg | Add-Member -NotePropertyName quickView -NotePropertyValue ([pscustomobject]@{ viewers = [pscustomobject]$map }) -Force
+  [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), (New-Object System.Text.UTF8Encoding $false))
+  [bool](WaitUi '"quick view table"' $before $at 0 8000)
+}
 
-Step "25: Quick View on the fixture folder"
-ClickLeftPane
-GoPath $qvDir 1200
 $qvRows = @()
 $qvGoal = $true
 $qvFirstOfSession = $null
-for ($f = 0; $f -lt $qvFiles.Count; $f++) {
+$qvFirstByViewer = @{}
+# One row of the table: the cursor goes to row $index of the folder, Space opens and closes ten times, the first open is
+# printed apart and the other nine are judged.
+function QuickViewRow($plan, [int]$index, [string]$pass) {
+  $file = $plan.File
   [Live]::Press($VK.Home); Start-Sleep -Milliseconds 150
-  for ($k = 0; $k -lt $f; $k++) { [Live]::Press($VK.Down); Start-Sleep -Milliseconds 60 }
+  for ($k = 0; $k -lt $index; $k++) { [Live]::Press($VK.Down); Start-Sleep -Milliseconds 60 }
   Start-Sleep -Milliseconds 400
   $runs = @()
   for ($n = 1; $n -le 10; $n++) {
     $line = QuickViewOpen
-    if ($n -eq 1 -and $f -eq 0) { Shot $h "$ShotDir\25-quick-view-live.png" }
+    if ($n -eq 1 -and $plan.Shot -and $pass -eq 'real') { Shot $h "$ShotDir\$($plan.Shot)" }
     QuickViewClose
-    if (-not $line) { "25: $($qvFiles[$f]) open $n logged no 'quick view shown' line within 8 s"; $qvGoal = $false; continue }
+    if (-not $line) { "25: $file open $n logged no 'quick view shown' line within 8 s"; $script:qvGoal = $false; continue }
     $runs += $line.fields
   }
-  if ($runs.Count -eq 0) { continue }
+  if ($runs.Count -eq 0) { return }
   $first = $runs[0]
-  $kindExpected = [IO.Path]::GetExtension($qvFiles[$f]).ToLowerInvariant()
-  if ($first.kind -ne $kindExpected) { "25: the cursor was on a $($first.kind) row, not on $($qvFiles[$f]): False"; $qvGoal = $false }
-  if ($null -eq $qvFirstOfSession -and $first.full_ms) { $qvFirstOfSession = $first }
+  $kindExpected = [IO.Path]::GetExtension($file).ToLowerInvariant()
+  if ($first.kind -ne $kindExpected) { "25: the cursor was on a $($first.kind) row, not on ${file}: False"; $script:qvGoal = $false }
+  "25: $file [$pass] was shown by $($first.viewer) (expected $($plan.Viewer)): $($first.viewer -eq $plan.Viewer)"
+  if ($first.viewer -ne $plan.Viewer) { $script:qvGoal = $false }
+  if ($first.viewer -ne 'none' -and $first.full_ms -and -not $script:qvFirstByViewer.ContainsKey($first.viewer)) { $script:qvFirstByViewer[$first.viewer] = $first }
+  if ($null -eq $script:qvFirstOfSession -and $first.full_ms) { $script:qvFirstOfSession = $first }
   $warm = @($runs | Select-Object -Skip 1)
   $cards = @($warm | Where-Object { $null -ne $_.card_ms } | ForEach-Object { [double]$_.card_ms })
   $thumbs = @($warm | Where-Object { $null -ne $_.thumbnail_ms } | ForEach-Object { [double]$_.thumbnail_ms })
   $fulls = @($warm | Where-Object { $null -ne $_.full_ms } | ForEach-Object { [double]$_.full_ms })
   $cardWorst = if ($cards.Count) { ($cards | Measure-Object -Maximum).Maximum } else { $null }
   $row = [pscustomobject]@{
-    File = $qvFiles[$f]; Viewer = $first.viewer
+    File = "$file [$pass]"; Viewer = $first.viewer
     FirstCard = $first.card_ms; FirstThumb = $(if ($null -ne $first.thumbnail_ms) { $first.thumbnail_ms } else { $first.thumbnail }); FirstFull = $(if ($null -ne $first.full_ms) { $first.full_ms } else { $first.full }); FirstCold = $first.cold
     CardWorst = $cardWorst; ThumbP90 = (P90 $thumbs); FullP90 = (P90 $fulls); Warm = $warm.Count
     ThumbNone = @($warm | Where-Object { $null -eq $_.thumbnail_ms } | ForEach-Object { $_.thumbnail } | Select-Object -Unique) -join ','
+    FullNone = @($warm | Where-Object { $null -eq $_.full_ms } | ForEach-Object { $_.full } | Select-Object -Unique) -join ','
   }
-  $qvRows += $row
-  if ($null -eq $cardWorst -or $cardWorst -gt 50) { $qvGoal = $false }
-  if ($thumbs.Count -gt 0 -and $row.ThumbP90 -gt 100) { $qvGoal = $false }
-  if ($fulls.Count -gt 0 -and $row.FullP90 -gt 1000) { $qvGoal = $false }
+  $script:qvRows += $row
+  if ($null -eq $cardWorst -or $cardWorst -gt 50) { $script:qvGoal = $false }
+  if ($thumbs.Count -gt 0 -and $row.ThumbP90 -gt 100) { $script:qvGoal = $false }
+  if ($plan.Goal -ne 'none' -and $fulls.Count -eq 0) { "25: $file [$pass] showed no full view in the warm runs ($($row.FullNone)): False"; $script:qvGoal = $false }
+  if ($plan.Goal -eq 'full' -and $fulls.Count -gt 0 -and $row.FullP90 -gt 1000) { $script:qvGoal = $false }
 }
+
+Step "25: Quick View on the fixture folder, the real viewers first"
+ClickLeftPane
+GoPath $qvDir 1200
+for ($f = 0; $f -lt $qvPlan.Count; $f++) { QuickViewRow $qvPlan[$f] $f 'real' }
+
+Step "25: the fixture viewer keeps the PNG rows (quickView.viewers: *.png on quickview-fixture)"
+"25: the window got the new table: $(SetQuickViewViewers @{ '*.png' = 'quickview-fixture' })"
+Start-Sleep -Milliseconds 500
+for ($f = 0; $f -lt 2; $f++) { QuickViewRow (@{ File = $qvPlan[$f].File; Viewer = 'quickview-fixture'; Goal = 'full' }) $f 'fixture' }
+"25: the window got the table without the choice: $(SetQuickViewViewers @{})"
+Start-Sleep -Milliseconds 500
+
 "| file | viewer | first: card / thumbnail / full (cold) | warm runs | card worst | thumbnail p90 | full view p90 |"
 "|---|---|---|---|---|---|---|"
 foreach ($r in $qvRows) {
   "| {0} | {1} | {2} / {3} / {4} ms ({5}) | {6} | {7} ms | {8} | {9} |" -f $r.File, $r.Viewer, $r.FirstCard, $r.FirstThumb, $r.FirstFull, $r.FirstCold, $r.Warm, $r.CardWorst,
-    $(if ($null -ne $r.ThumbP90) { "$($r.ThumbP90) ms" } else { "none ($($r.ThumbNone))" }), $(if ($null -ne $r.FullP90) { "$($r.FullP90) ms" } else { 'no viewer' })
+    $(if ($null -ne $r.ThumbP90) { "$($r.ThumbP90) ms" } else { "none ($($r.ThumbNone))" }), $(if ($null -ne $r.FullP90) { "$($r.FullP90) ms" } else { "no full view ($($r.FullNone))" })
 }
 $firstFull = if ($qvFirstOfSession) { [double]$qvFirstOfSession.full_ms } else { $null }
-"25: the first Space of the session with a viewer (cold: $($qvFirstOfSession.cold)) showed the full view in $firstFull ms (ceiling 1500 ms): $($null -ne $firstFull -and $firstFull -le 1500)"
+"25: the first Space of the session with a viewer (cold: $($qvFirstOfSession.cold), $($qvFirstOfSession.viewer)) showed the full view in $firstFull ms (ceiling 1500 ms): $($null -ne $firstFull -and $firstFull -le 1500)"
+foreach ($viewer in @($qvFirstByViewer.Keys | Sort-Object)) {
+  $v = $qvFirstByViewer[$viewer]
+  "25: the first Space with $viewer (cold: $($v.cold)) showed the full view in $($v.full_ms) ms (ceiling 1500 ms): $([double]$v.full_ms -le 1500)"
+}
 "quick view goal (warm runs: the card within 50 ms every time, the thumbnail's 90th percentile within 100 ms, the full view's within 1000 ms) met: $(if ($Virtual) { 'not measured in a VM' } elseif ($qvGoal) { 'yes' } else { 'no' })"
 
+Step "25: every kind of the Media Viewer once in the real panel"
+ClickLeftPane
+GoPath $qvMedia 1200
+$mediaFiles = @(Get-ChildItem -LiteralPath $qvMedia -File | Sort-Object Name | ForEach-Object { $_.Name })
+$mediaShown = 0
+$mediaMiss = @()
+"| file | viewer | full view |"
+"|---|---|---|"
+for ($f = 0; $f -lt $mediaFiles.Count; $f++) {
+  [Live]::Press($VK.Home); Start-Sleep -Milliseconds 150
+  for ($k = 0; $k -lt $f; $k++) { [Live]::Press($VK.Down); Start-Sleep -Milliseconds 60 }
+  Start-Sleep -Milliseconds 400
+  $line = QuickViewOpen
+  QuickViewClose
+  if (-not $line) { "| $($mediaFiles[$f]) | - | no 'quick view shown' line within 8 s |"; $mediaMiss += $mediaFiles[$f]; continue }
+  $fields = $line.fields
+  $kindExpected = [IO.Path]::GetExtension($mediaFiles[$f]).ToLowerInvariant()
+  if ($fields.kind -ne $kindExpected) { "25: the cursor was on a $($fields.kind) row, not on $($mediaFiles[$f]): False"; $mediaMiss += $mediaFiles[$f]; continue }
+  $full = if ($null -ne $fields.full_ms) { "$($fields.full_ms) ms" } else { "$($fields.full)" }
+  "| {0} | {1} | {2} |" -f $mediaFiles[$f], $fields.viewer, $full
+  # hevc.mp4 is a codec question, not a kind: it is printed and not judged.
+  if ($mediaFiles[$f] -eq 'hevc.mp4') { continue }
+  if ($fields.viewer -eq 'media-viewer' -and $null -ne $fields.full_ms) { $mediaShown++ } else { $mediaMiss += $mediaFiles[$f] }
+}
+"25: every kind the Media Viewer claims was shown by it ($mediaShown of $(@($mediaFiles | Where-Object { $_ -ne 'hevc.mp4' }).Count) files; not shown: '$($mediaMiss -join ', ')'): $($mediaMiss.Count -eq 0)"
+
+Step "25: the keys a viewer asks for reach it (the window grants those no binding wants)"
+ClickLeftPane
+GoPath $qvDir 1200
+# Opens the file in row $index, presses each key of $keys (virtual-key codes) and notes the key the window's "a key went to
+# the viewer" line names for each one, '(none)' when no line came within 2 s; the panel is closed again.
+function QuickViewKeys([int]$index, [int[]]$keys) {
+  [Live]::Press($VK.Home); Start-Sleep -Milliseconds 150
+  for ($k = 0; $k -lt $index; $k++) { [Live]::Press($VK.Down); Start-Sleep -Milliseconds 60 }
+  Start-Sleep -Milliseconds 400
+  [void](QuickViewOpen)
+  Start-Sleep -Milliseconds 300
+  $granted = LastFields '"keys granted to a viewer"'
+  $reached = @()
+  foreach ($key in $keys) {
+    $before = UiCount '"a key went to the viewer"'
+    $at = Get-Date
+    [Live]::Press($key)
+    $sent = WaitUi '"a key went to the viewer"' $before $at 0 2000
+    $reached += $(if ($sent) { "$($sent.fields.key)" } else { '(none)' })
+  }
+  QuickViewClose
+  [pscustomobject]@{ Asked = "$($granted.asked)"; Granted = "$($granted.granted)"; Reached = ($reached -join ',') }
+}
+# 4-photo.jpg is row 3 and 7-clip.mp4 row 6 of the folder: the Image Viewer is sent + 1 0 (the key = is VK_OEM_PLUS), the Media Viewer K J L M.
+$imageKeys = QuickViewKeys 3 @(0xBB, 0x31, 0x30)
+"25: the Image Viewer asked for [$($imageKeys.Asked)] and was granted [$($imageKeys.Granted)]"
+"25: + 1 0 reached the Image Viewer as plus,1,0 (got $($imageKeys.Reached)): $($imageKeys.Reached -eq 'plus,1,0')"
+$mediaKeys = QuickViewKeys 6 @($VK.K, 0x4A, $VK.L, 0x4D)
+"25: the Media Viewer asked for [$($mediaKeys.Asked)] and was granted [$($mediaKeys.Granted)]"
+"25: K J L M reached the Media Viewer as k,j,l,m (got $($mediaKeys.Reached)): $($mediaKeys.Reached -eq 'k,j,l,m')"
 Step "25: Down held for 3 s over 50 images with the panel open"
 GoPath $qvWalk 1200
 [Live]::Press($VK.Home); Start-Sleep -Milliseconds 300

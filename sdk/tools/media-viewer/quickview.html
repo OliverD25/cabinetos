@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Rule 6 of the viewer contract (ADR 0023): its own folder, and the hosts the window serves files on. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https://*.cabinetos.example data:; media-src https://*.cabinetos.example data:">
+  <title>Media Viewer</title>
+  <link rel="stylesheet" href="/quickview.css">
+  <script src="/quickview.js" defer></script>
+</head>
+<body>
+  <main id="stage">
+    <video id="video" controls playsinline hidden></video>
+    <section id="sound" hidden>
+      <svg id="symbol" viewBox="0 0 96 96" width="144" height="144" aria-hidden="true">
+        <rect class="plate" x="4" y="4" width="88" height="88" rx="20"></rect>
+        <ellipse class="tint" cx="34" cy="68" rx="10" ry="7.5"></ellipse>
+        <ellipse class="tint" cx="62" cy="62" rx="10" ry="7.5"></ellipse>
+        <rect class="tint" x="41" y="26" width="4" height="42"></rect>
+        <rect class="tint" x="69" y="20" width="4" height="42"></rect>
+        <polygon class="tint" points="41,26 73,20 73,29 41,35"></polygon>
+      </svg>
+      <h1 id="name"></h1>
+      <audio id="player" controls></audio>
+    </section>
+    <div id="badge" role="status"></div>
+  </main>
+</body>
+</html>

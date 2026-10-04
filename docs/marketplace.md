@@ -275,14 +275,19 @@ them. Both files are built in this repository and committed in that one, by
 one script:
 
 ```text
-powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <cabinetos-marketplace checkout> -Collection -ThemesOnly
+powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <cabinetos-marketplace checkout> -Collection -ThemesOnly -Viewers
 ```
 
 `-ThemesOnly` leaves the fixture plugins out: they are test material, not
-extensions for the public. So the public `index.json` has no item yet (no
-real plugin exists), and `themes.json` offers 59 themes: the seven shipped
-themes and the 52 of the collection (41 before the collection's second round
-of 2026-10-03; the first index, 2026-09-29, offered 41 in `index.json`).
+extensions for the public. `-Viewers` adds the two Quick View viewers of
+`sdk/tools`, the Image Viewer and the Media Viewer, as tool items (see "A
+local index"). So the public `index.json` has those two items and no plugin
+yet (no real plugin exists), and `themes.json` offers 59 themes: the seven
+shipped themes and the 52 of the collection (41 before the collection's
+second round of 2026-10-03; the first index, 2026-09-29, offered 41 in
+`index.json`). The viewers ask for CabinetOS 0.1.3, the first release with
+Quick View, so older versions are offered none of them (a client is offered
+only what it can run).
 **Publishing this changes what older
 versions see**: CabinetOS 0.1.0 and 0.1.1 read `index.json` only, so once
 the new `index.json` replaces the old one they list no theme in their
@@ -303,7 +308,7 @@ every item against the format before it writes, and stops with a message
 that names the item when one is wrong:
 
 ```text
-powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-Extensions]
+powershell -ExecutionPolicy Bypass -File <repo>\sdk\marketplace\build-index.ps1 -OutDir <folder> [-Collection] [-Extensions] [-Viewers]
 cabinetos-cli config set marketplace.index "<folder>"
 cabinetos-cli config set marketplace.themes "<folder>"
 cabinetos-cli market refresh
@@ -333,6 +338,23 @@ fixture for the core's tests; the index offers it as the extension's item
 only, so without `-Extensions` it is not offered at all. `-Extensions` and
 `-ThemesOnly` are independent. Nothing is uploaded: the public index gets an
 extension only when the creator publishes it.
+
+With `-Viewers` the index also offers the Quick View viewers: every folder of
+`sdk/tools` whose `tool.json` has a `quickView` block (ADR 0023) is packed as a
+Tool Extension item, a zip of the folder with its SHA-256, whose `manifest`
+is its `tool.json`. The panel's install offer finds a viewer for a file by the
+`quickView.kinds` inside that manifest (trust rule 6, `quick_view_offer`), so
+the viewer must be in the index as a tool item and nothing else is needed.
+Today these are [image-viewer](../sdk/tools/image-viewer/README.md) (18 kinds:
+the pictures the browser decodes, and HEIC, TIFF, JPEG XR and camera RAW
+through Windows' image stack) and [media-viewer](../sdk/tools/media-viewer/README.md)
+(13 kinds of video and sound). Each item sets `minCoreVersion` to `0.1.3`, the
+first release with Quick View: an older window reads `tool.json` strictly and
+would leave a tool with a `quickView` key out. The script checks each viewer's
+kinds (1 to 512 patterns of the claim grammar), its Quick View page and its
+folder name, and stops with a message when one is wrong. `-Viewers` is
+independent of the other switches. The index is rebuilt at each release; the
+public one gets the viewers only when the creator publishes it.
 
 ## The messages
 

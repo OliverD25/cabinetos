@@ -1,0 +1,28 @@
+{
+  "id": "media-viewer",
+  "name": "Media Viewer",
+  "version": "1.0.0",
+  "author": "CabinetOS",
+  "description": "Plays video and audio in Quick View, with the browser's own controls and keys for play, seek, volume and mute.",
+  "entry": "index.html",
+  "accepts": [],
+  "placement": "pane",
+  "quickView": {
+    "kinds": [
+      "*.mp4",
+      "*.m4v",
+      "*.mov",
+      "*.webm",
+      "*.mkv",
+      "*.mp3",
+      "*.m4a",
+      "*.aac",
+      "*.flac",
+      "*.wav",
+      "*.ogg",
+      "*.opus",
+      "*.weba"
+    ],
+    "entry": "quickview.html"
+  }
+}
