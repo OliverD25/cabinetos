@@ -326,7 +326,7 @@
     {
       "name": "quick-view",
       "kind": "image",
-      "left": "C:\\\\Demo\\\\Pictures",
+      "left": "C:\\Demo\\Pictures",
       "settleMs": 2500,
       "steps": [
         {
@@ -347,7 +347,7 @@
       "name": "quick-view-video",
       "kind": "video",
       "seconds": 6,
-      "left": "C:\\\\Demo\\\\Pictures",
+      "left": "C:\\Demo\\Pictures",
       "steps": [
         {
           "do": "key",
