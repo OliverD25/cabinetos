@@ -51,7 +51,7 @@
 #
 # -Viewers makes a folder "viewers" in the run's own work folder, copies the Quick View viewers of sdk\tools into it
 # (image-viewer and media-viewer) and starts every window with --tools-dir <that folder>. Without it no viewer is
-# installed, as in a fresh install, and Space shows only the thumbnail. It is for the whole run, not per item: the viewers
+# installed, as in a fresh install, so Quick View has no full view to show. It is for the whole run, not per item: the viewers
 # change nothing in a window that never presses Space, so the other items look the same with it.
 #
 # A recording needs ffmpeg: -Ffmpeg, else C:\ffmpeg\bin\ffmpeg.exe, else C:\Dev\tools\ffmpeg\ffmpeg.exe (the laptop's).
