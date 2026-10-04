@@ -23,7 +23,9 @@
 #                { "name": "command-palette", "kind": "video", "seconds": 6, "steps": [ ... ] } ] }
 # An image item saves <name>.png (the window's own frame). A video item saves <name>.raw.mp4 (15 frames a second, no
 # sound) and "seconds" (5 to 12) is its length; the steps start about 0.7 s after the recording starts. Names are
-# lower case letters, digits and "-". Optional on an item: "settleMs" (the wait before an image, default 1500).
+# lower case letters, digits and "-". Optional on an item: "settleMs" (the wait before an image, default 1500), and
+# "left" and "right" (the folders this item starts with, in place of the list's own; an item that needs another folder,
+# such as C:\Demo\Pictures for Quick View, names it here, so the steps need no "go").
 # The steps, in the order they run:
 #   go (path)              Ctrl+L, the path, Enter, in the pane that has the keys
 #   tab                    switch to the other pane
@@ -47,6 +49,11 @@
 # Phase 23 until its themes.json is published (the public index.json lists no theme, and an older one lists themes
 # without tile colours). Without it every window reads the public catalogues, as a user's does.
 #
+# -Viewers makes a folder "viewers" in the run's own work folder, copies the Quick View viewers of sdk\tools into it
+# (image-viewer and media-viewer) and starts every window with --tools-dir <that folder>. Without it no viewer is
+# installed, as in a fresh install, and Space shows only the thumbnail. It is for the whole run, not per item: the viewers
+# change nothing in a window that never presses Space, so the other items look the same with it.
+#
 # A recording needs ffmpeg: -Ffmpeg, else C:\ffmpeg\bin\ffmpeg.exe, else C:\Dev\tools\ffmpeg\ffmpeg.exe (the laptop's).
 # -Capture screen (default) records the rectangle of the window's frame from the screen. -Capture title records by the
 # window's title, read from the process just before the recording starts. The title mode records only black for the
@@ -68,6 +75,7 @@ param(
   # Only the items with these names (comma separated), for a second try of one or two of them.
   [string[]]$Only = @(),
   [switch]$LocalCatalogue,
+  [switch]$Viewers,
   [switch]$CheckOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -364,6 +372,7 @@ $script:h = $null
 $script:terminalShown = $false
 $runRoot = "$env:TEMP\cabinetos-release-media-run"
 $script:catalogue = $null
+$script:viewersDir = $null
 
 # Every action checks first that the window is in front, so no key goes to another program.
 function Step($text) {
@@ -464,7 +473,8 @@ function Start-App([string]$label) {
   $script:h = $null
   $script:terminalShown = $false
   Step "start $Exe"
-  $script:p = Start-Process -FilePath $Exe -PassThru
+  $script:p = if ($script:viewersDir) { Start-Process -FilePath $Exe -ArgumentList "--tools-dir `"$($script:viewersDir)`"" -PassThru }
+              else { Start-Process -FilePath $Exe -PassThru }
   "app pid: $($script:p.Id)"
   Start-Sleep -Seconds 6
   $deadline = (Get-Date).AddSeconds(40)
@@ -529,9 +539,9 @@ function Invoke-MediaItem($item) {
   $kind = [string]$item.kind
   Start-App "$name-$kind"
   try {
-    GoPath $leftStart
+    GoPath ([string](Opt $item 'left' $leftStart))
     Keys 'Tab'; Start-Sleep -Milliseconds 500
-    GoPath $rightStart
+    GoPath ([string](Opt $item 'right' $rightStart))
     Keys 'Tab'; Start-Sleep -Milliseconds 500
     if ($kind -eq 'image') {
       foreach ($s in @(Opt $item 'steps' @())) { Invoke-Action $s }
@@ -567,6 +577,16 @@ if ($LocalCatalogue) {
   & powershell.exe @indexArgs | ForEach-Object { "catalogue: $_" }
   if ($LASTEXITCODE -ne 0) { "STOP: the local catalogue could not be built"; exit 1 }
   $script:catalogue = "$runRoot\catalogue"
+}
+if ($Viewers) {
+  $viewersSource = [System.IO.Path]::GetFullPath("$PSScriptRoot\..\..\sdk\tools")
+  $script:viewersDir = Join-Path $runRoot 'viewers'
+  New-Item -ItemType Directory -Force $script:viewersDir | Out-Null
+  foreach ($viewer in 'image-viewer', 'media-viewer') {
+    if (-not (Test-Path -LiteralPath (Join-Path $viewersSource $viewer))) { "STOP: $viewersSource\$viewer is missing"; exit 1 }
+    Copy-Item -LiteralPath (Join-Path $viewersSource $viewer) -Destination $script:viewersDir -Recurse
+  }
+  "viewers: $($script:viewersDir)"
 }
 foreach ($item in $items) {
   "=== $($item.name) ($($item.kind))"
