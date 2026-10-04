@@ -322,6 +322,42 @@
           "ms": 4000
         }
       ]
+    },
+    {
+      "name": "quick-view",
+      "kind": "image",
+      "left": "C:\\\\Demo\\\\Pictures",
+      "settleMs": 2500,
+      "steps": [
+        {
+          "do": "down",
+          "count": 1
+        },
+        {
+          "do": "key",
+          "key": "Space"
+        },
+        {
+          "do": "wait",
+          "ms": 2500
+        }
+      ]
+    },
+    {
+      "name": "quick-view-video",
+      "kind": "video",
+      "seconds": 6,
+      "left": "C:\\\\Demo\\\\Pictures",
+      "steps": [
+        {
+          "do": "key",
+          "key": "Space"
+        },
+        {
+          "do": "wait",
+          "ms": 4000
+        }
+      ]
     }
   ]
 }
