@@ -1,0 +1,10 @@
+# Build log, 2026-10-04: the viewer pack of Quick View
+
+The morning of 2026-10-04, after the night of the theme gallery and Quick View. The creator was away. Phase 25 of
+[PLAN.md](../../PLAN.md) goes on with step 3, the viewer pack in the marketplace: the first two viewers, for pictures and
+for video and sound, and their place in the marketplace index. The reports hold every unattended decision as a `what -
+because - undo` line.
+
+| Report | Agent | Item | Result |
+|---|---|---|---|
+| [quick-view-viewer-pack-report.md](quick-view-viewer-pack-report.md) | Phase 25 step 3, unit 1, the first two viewers (ADR 0023, "The first viewer's contract"), Sonnet | the Image Viewer (JPEG, PNG, GIF, WebP, AVIF, BMP, ICO, SVG at full resolution; HEIC, HEIF, TIFF, JPEG XR and camera RAW through Windows' codecs; fit, zoom 25 % to 800 %, pan, theme) and the Media Viewer (MP4, M4V, MOV, WebM, MKV, MP3, M4A, AAC, FLAC, WAV, OGG, Opus, WebA; plays at once, keys K J L , . M + - 0 to 9) in `sdk/tools`; `build-index.ps1 -Viewers` offers them as tool items for 0.1.3; `media-probe.ps1` asks a machine's Edge which kinds play; live check section 25 measures them; ADR 0024 | commits `00e25e3` to `8280510` and the report's commit; no kind dropped (16 of 16 probe files play on the laptop, and all 15 media files show in the real panel); on the laptop the 12 MP JPEG's full view is 68 to 139 ms warm, the 1080p video plays in 668 to 714 ms warm and 994 to 1051 ms cold, the first Space of the session 572 to 590 ms, the walk goal met, the keys reach both viewers; core 963 passed and the five checks green, window built with warnings as errors, fast tests 1425 passed; the whole suite on the laptop 1512 of 1512 at `8280510`; one window change: the TIFF and HEIC drawings did not reach the page (a host mapped after the page loaded), found by the live check, fixed in two commits and covered by a new end-to-end test; "quick view goal" is yes in one run of five (a 50 to 57 ms garbage collection of the window falls on a single open in most runs, and a row's 90th percentile of nine opens is its largest) |
