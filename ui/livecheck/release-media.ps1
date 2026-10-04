@@ -8,7 +8,7 @@
 # consent"). -CheckOnly opens no window and presses no key: it only reads and checks the list.
 #
 # What it does, in order: reads and checks the list; makes the demo folder (default C:\Demo) when it is missing, with
-# harmless files and a tiny git repository, and never changes what is there; then, for every item, starts a fresh
+# harmless files, a drawn photo and a short clip (Pictures), and a tiny git repository, and never changes what is there; then, for every item, starts a fresh
 # window (a new configuration under $env:TEMP, the sidebar hidden), runs the item's steps, saves the shot or the
 # recording into -OutDir, and closes the window. Each item has a window of its own, so nothing one item does (a theme,
 # the terminal, a view) reaches the next. Only the files of the list's items are written in -OutDir.
@@ -23,7 +23,9 @@
 #                { "name": "command-palette", "kind": "video", "seconds": 6, "steps": [ ... ] } ] }
 # An image item saves <name>.png (the window's own frame). A video item saves <name>.raw.mp4 (15 frames a second, no
 # sound) and "seconds" (5 to 12) is its length; the steps start about 0.7 s after the recording starts. Names are
-# lower case letters, digits and "-". Optional on an item: "settleMs" (the wait before an image, default 1500).
+# lower case letters, digits and "-". Optional on an item: "settleMs" (the wait before an image, default 1500), and
+# "left" and "right" (the folders this item starts with, in place of the list's own; an item that needs another folder,
+# such as C:\Demo\Pictures for Quick View, names it here, so the steps need no "go").
 # The steps, in the order they run:
 #   go (path)              Ctrl+L, the path, Enter, in the pane that has the keys
 #   tab                    switch to the other pane
@@ -47,6 +49,11 @@
 # Phase 23 until its themes.json is published (the public index.json lists no theme, and an older one lists themes
 # without tile colours). Without it every window reads the public catalogues, as a user's does.
 #
+# -Viewers makes a folder "viewers" in the run's own work folder, copies the Quick View viewers of sdk\tools into it
+# (image-viewer and media-viewer) and starts every window with --tools-dir <that folder>. Without it no viewer is
+# installed, as in a fresh install, so Quick View has no full view to show. It is for the whole run, not per item: the viewers
+# change nothing in a window that never presses Space, so the other items look the same with it.
+#
 # A recording needs ffmpeg: -Ffmpeg, else C:\ffmpeg\bin\ffmpeg.exe, else C:\Dev\tools\ffmpeg\ffmpeg.exe (the laptop's).
 # -Capture screen (default) records the rectangle of the window's frame from the screen. -Capture title records by the
 # window's title, read from the process just before the recording starts. The title mode records only black for the
@@ -68,6 +75,7 @@ param(
   # Only the items with these names (comma separated), for a second try of one or two of them.
   [string[]]$Only = @(),
   [switch]$LocalCatalogue,
+  [switch]$Viewers,
   [switch]$CheckOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -193,6 +201,87 @@ function Invoke-Git([string]$folder, [string[]]$arguments) {
     if ($LASTEXITCODE -ne 0) { throw "git $($arguments -join ' ') failed in $folder ($LASTEXITCODE)" }
   } finally { $ErrorActionPreference = $previous }
 }
+# A real picture, so Quick View and the thumbnails have something to show: New-DemoFile writes filler, which no viewer can
+# decode. Drawn at run time (a sky, a sun, two mountain ranges, a lake; no text, nothing personal) with a fixed seed, so
+# every run draws the same picture.
+function Write-DemoPhoto([string]$path) {
+  Add-Type -AssemblyName System.Drawing
+  $w = 2400; $h = 1600; $horizon = 1000
+  $bmp = New-Object System.Drawing.Bitmap $w, $h
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  try {
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    function C([int]$r, [int]$gr, [int]$b, [int]$a = 255) { [System.Drawing.Color]::FromArgb($a, $r, $gr, $b) }
+    $vertical = [System.Drawing.Drawing2D.LinearGradientMode]::Vertical
+    # The sky: deep blue at the top, through rose, to a warm glow at the horizon.
+    $skyRect = New-Object System.Drawing.Rectangle 0, 0, $w, ($horizon + 1)
+    $sky = New-Object System.Drawing.Drawing2D.LinearGradientBrush $skyRect, (C 30 50 110), (C 255 190 120), $vertical
+    $blend = New-Object System.Drawing.Drawing2D.ColorBlend 4
+    $blend.Colors = [System.Drawing.Color[]]@((C 28 48 108), (C 96 90 160), (C 236 140 140), (C 255 200 130))
+    $blend.Positions = [single[]]@(0.0, 0.45, 0.80, 1.0)
+    $sky.InterpolationColors = $blend
+    $g.FillRectangle($sky, $skyRect)
+    # The sun: a soft glow, then the disc.
+    $sx = 1980; $sy = 620; $sr = 100
+    $glowPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $glowPath.AddEllipse(($sx - 520), ($sy - 520), 1040, 1040)
+    $glow = New-Object System.Drawing.Drawing2D.PathGradientBrush $glowPath
+    $glow.CenterColor = (C 255 225 150 200)
+    $glow.SurroundColors = [System.Drawing.Color[]]@((C 255 190 120 0))
+    $g.FillPath($glow, $glowPath)
+    $g.FillEllipse((New-Object System.Drawing.SolidBrush (C 255 244 205)), ($sx - $sr), ($sy - $sr), (2 * $sr), (2 * $sr))
+    # Two ranges of mountains on the far shore: a pale one behind, a dark one in front. A fixed seed, so every run draws the same picture.
+    $random = New-Object System.Random 7
+    foreach ($range in @(@{ Base = 700.0; Swing = 150.0; Step = 90; Color = (C 120 98 150) }, @{ Base = 800.0; Swing = 130.0; Step = 70; Color = (C 52 44 82) })) {
+      $points = New-Object System.Collections.Generic.List[System.Drawing.PointF]
+      $points.Add((New-Object System.Drawing.PointF 0, $horizon))
+      $y = $range.Base
+      for ($x = 0; $x -le $w + $range.Step; $x += $range.Step) {
+        $ridge = $range.Base - $range.Swing * [math]::Abs([math]::Sin($x / 520.0 + $range.Base)) - $range.Swing * 0.5 * [math]::Sin($x / 190.0)
+        $y = $ridge + ($random.NextDouble() - 0.5) * 50
+        $points.Add((New-Object System.Drawing.PointF $x, $y))
+      }
+      $points.Add((New-Object System.Drawing.PointF $w, $horizon))
+      $g.FillPolygon((New-Object System.Drawing.SolidBrush $range.Color), $points.ToArray())
+    }
+    # The water: the horizon's colour darkening to deep teal toward the bottom.
+    $waterRect = New-Object System.Drawing.Rectangle 0, $horizon, $w, ($h - $horizon)
+    $water = New-Object System.Drawing.Drawing2D.LinearGradientBrush $waterRect, (C 244 170 130), (C 18 52 78), $vertical
+    $blend = New-Object System.Drawing.Drawing2D.ColorBlend 3
+    $blend.Colors = [System.Drawing.Color[]]@((C 238 170 140), (C 90 100 140), (C 16 48 74))
+    $blend.Positions = [single[]]@(0.0, 0.35, 1.0)
+    $water.InterpolationColors = $blend
+    $g.FillRectangle($water, $waterRect)
+    # The sun's path on the water: bars that grow wider and fainter toward the viewer.
+    for ($i = 0; $i -lt 22; $i++) {
+      $bandY = $horizon + 8 + $i * $i * 1.3 + $i * 6
+      $bandW = 150 + $i * 26
+      $alpha = [int](200 - $i * 8)
+      $g.FillEllipse((New-Object System.Drawing.SolidBrush (C 255 226 160 $alpha)), ($sx - $bandW / 2 + ($random.NextDouble() - 0.5) * 30), $bandY, $bandW, (4 + $i * 0.9))
+    }
+    $jpeg = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+    $quality = New-Object System.Drawing.Imaging.EncoderParameters 1
+    $quality.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), ([long]88)
+    $bmp.Save($path, $jpeg, $quality)
+  } finally { $g.Dispose(); $bmp.Dispose() }
+}
+function New-DemoPhoto([string]$relative, [int]$daysOld) {
+  $path = Join-Path $Demo $relative
+  if (Test-Path -LiteralPath $path) { return }
+  New-DemoDirectory (Split-Path $path -Parent)
+  Write-DemoPhoto $path
+  (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddDays(-$daysOld)
+}
+# A real clip too: the committed 1080p fixture of the live check (a few seconds of picture, no sound, nothing personal).
+function New-DemoClip([string]$relative, [int]$daysOld) {
+  $path = Join-Path $Demo $relative
+  if (Test-Path -LiteralPath $path) { return }
+  $clip = Join-Path $PSScriptRoot 'fixtures\media\clip-1080p.mp4'
+  if (-not (Test-Path -LiteralPath $clip)) { "WARN: $clip is missing: the demo clip is not made"; return }
+  New-DemoDirectory (Split-Path $path -Parent)
+  Copy-Item -LiteralPath $clip -Destination $path
+  (Get-Item -LiteralPath $path).LastWriteTime = (Get-Date).AddDays(-$daysOld)
+}
 function New-DemoFolder {
   # name|bytes|days old. Enough rows to fill a good part of the two panes in the shots.
   $spec = @(
@@ -216,6 +305,8 @@ function New-DemoFolder {
     'Projects\roadmap.csv|5120|22'
   )
   foreach ($entry in $spec) { $part = $entry.Split('|'); New-DemoFile $part[0] ([int]$part[1]) ([int]$part[2]) }
+  New-DemoPhoto 'Pictures\Lake-at-dawn.jpg' 3
+  New-DemoClip 'Pictures\Harbour-clip.mp4' 3
   # A tiny git repository with three commits, so the terminal shot has a log to show.
   $repo = Join-Path $Demo 'Projects\cabinetos-sample'
   if (-not (Test-Path -LiteralPath (Join-Path $repo '.git'))) {
@@ -281,6 +372,7 @@ $script:h = $null
 $script:terminalShown = $false
 $runRoot = "$env:TEMP\cabinetos-release-media-run"
 $script:catalogue = $null
+$script:viewersDir = $null
 
 # Every action checks first that the window is in front, so no key goes to another program.
 function Step($text) {
@@ -381,7 +473,8 @@ function Start-App([string]$label) {
   $script:h = $null
   $script:terminalShown = $false
   Step "start $Exe"
-  $script:p = Start-Process -FilePath $Exe -PassThru
+  $script:p = if ($script:viewersDir) { Start-Process -FilePath $Exe -ArgumentList "--tools-dir `"$($script:viewersDir)`"" -PassThru }
+              else { Start-Process -FilePath $Exe -PassThru }
   "app pid: $($script:p.Id)"
   Start-Sleep -Seconds 6
   $deadline = (Get-Date).AddSeconds(40)
@@ -446,9 +539,9 @@ function Invoke-MediaItem($item) {
   $kind = [string]$item.kind
   Start-App "$name-$kind"
   try {
-    GoPath $leftStart
+    GoPath ([string](Opt $item 'left' $leftStart))
     Keys 'Tab'; Start-Sleep -Milliseconds 500
-    GoPath $rightStart
+    GoPath ([string](Opt $item 'right' $rightStart))
     Keys 'Tab'; Start-Sleep -Milliseconds 500
     if ($kind -eq 'image') {
       foreach ($s in @(Opt $item 'steps' @())) { Invoke-Action $s }
@@ -484,6 +577,16 @@ if ($LocalCatalogue) {
   & powershell.exe @indexArgs | ForEach-Object { "catalogue: $_" }
   if ($LASTEXITCODE -ne 0) { "STOP: the local catalogue could not be built"; exit 1 }
   $script:catalogue = "$runRoot\catalogue"
+}
+if ($Viewers) {
+  $viewersSource = [System.IO.Path]::GetFullPath("$PSScriptRoot\..\..\sdk\tools")
+  $script:viewersDir = Join-Path $runRoot 'viewers'
+  New-Item -ItemType Directory -Force $script:viewersDir | Out-Null
+  foreach ($viewer in 'image-viewer', 'media-viewer') {
+    if (-not (Test-Path -LiteralPath (Join-Path $viewersSource $viewer))) { "STOP: $viewersSource\$viewer is missing"; exit 1 }
+    Copy-Item -LiteralPath (Join-Path $viewersSource $viewer) -Destination $script:viewersDir -Recurse
+  }
+  "viewers: $($script:viewersDir)"
 }
 foreach ($item in $items) {
   "=== $($item.name) ($($item.kind))"

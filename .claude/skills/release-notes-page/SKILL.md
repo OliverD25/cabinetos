@@ -154,8 +154,13 @@ Two scripts do it, both in `ui/livecheck/`:
 **a. The list.** Edit `ui/livecheck/release-media.json`. One item per
 picture or recording: `name` is the file's base name (`column-view`), `kind`
 is `image` or `video`, `seconds` (5 to 12) is for a video, and `steps` are
-the keys that bring the window to what must be shown. Name every file after
-its feature. The screenshots are taken again for every release, because the
+the keys that bring the window to what must be shown. Optional on an item:
+`settleMs` (the wait before an image, default 1500) and `left` and `right` (the
+folders the item starts with, in place of the list's own; `quick-view` uses
+`C:\Demo\Pictures`, where the demo folder keeps a drawn photo and a clip).
+A feature that needs a viewer or another installed tool needs `-Viewers` on the
+run (below): it installs the two Quick View viewers of `sdk/tools` in every
+window of the run. Name every file after its feature. The screenshots are taken again for every release, because the
 look of the window changes. Add an item for each new feature that can be
 seen. The file in the repository is the working example: the item
 `command-palette` with `kind` `video` types "copy" letter by letter.
@@ -194,6 +199,8 @@ cd "E:\codespace\_claude_code\_rde\_cabinetos_windows_system_manager\cabinetos"
 powershell -NoProfile -ExecutionPolicy Bypass -File ui\livecheck\remote-script.ps1 -Script "ui\livecheck\release-media.ps1" -Args "-OutDir C:\Dev\cabinetos\_io\script-runs\release-media" -Branch main
 ```
 
+For Quick View add `-Viewers` to the `-Args` (for example `-Viewers -Only
+quick-view,quick-view-video`); without it no viewer is installed in the windows.
 A run of six items takes about 2.5 minutes: each item starts a fresh
 window. `-Args "... -Only terminal,marketplace"` runs only those items, for a
 second try. The output text comes back to the project's `_io\script-runs\`
