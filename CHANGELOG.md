@@ -6,6 +6,8 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-04
+
 ### Added
 
 - Two more settings that could be changed only by editing `cabinetos.json` now have a command and a control in the window. The program F4 edits a file with (`files.editor`): "Preferences: Choose Editor" in the palette, a pick list of Windows' default, the programs of your `programs` list and "Choose…" (a file dialog for an .exe), whose row names the editor in effect, and an "Editor" menu in the top row's menu with the same rows and the current one checked. The least important level the core logs (`logging.level`): "Diagnostics: Log Level" in the palette, a pick list of the five levels, and a "Log Level" menu in the top row's menu. Whichever way you change them, the file and the window follow at once. None has a key; every command can be bound.
@@ -176,7 +178,8 @@ The first version. How it is built, signed and published:
 - A plugin's folders and the folders a pane opens are compared in their long form, so a short 8.3 spelling such as `C:\Users\CABINE~1\AppData\Local\Temp` is the same folder as `C:\Users\cabinetos\AppData\Local\Temp`. Before, the host compared the text: the Agent extension was never told about a pane that opened a folder in the short form (the preview did not show), and a plugin could not watch a folder under its roots by that name. A root written in the short form in `plugin.json` counts too, and a path that does not exist yet is judged by the folder it will be in.
 - `CabinetOS.exe` has its own icon, the blue folder with the terminal badge, in the taskbar, in Explorer and in the Alt+Tab list. Before, Windows showed the generic program icon for the file itself; only the setup's shortcuts and the Settings > Apps entry had the icon. `ui/CabinetOS/Assets/CabinetOS.ico` is committed (made by `build/make-icon.ps1` from the design's size cuts) and the release ships that file.
 
-[Unreleased]: https://github.com/OliverD25/cabinetos/compare/v0.1.2...main
+[Unreleased]: https://github.com/OliverD25/cabinetos/compare/v0.1.3...main
+[0.1.3]: https://github.com/OliverD25/cabinetos/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/OliverD25/cabinetos/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/OliverD25/cabinetos/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/OliverD25/cabinetos/releases/tag/v0.1.0
