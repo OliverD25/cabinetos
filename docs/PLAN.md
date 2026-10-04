@@ -2124,12 +2124,12 @@ checks, both window builds, 1425 fast tests, and the laptop's live check
 the Image Viewer and 991 ms with the Media Viewer; the Quick View warm
 goal printed "no" again, the open point above). The release's pictures
 (Quick View with a photo, with a clip, the theme gallery with the light
-themes) are in `_ioelease-notes-0.1.3\`. **Two outward steps were not
+themes) are in `_io\release-notes-0.1.3\`. **Two outward steps were not
 run, because the session's permission check blocked the marketplace
 (public surface): the marketplace's stable channel and index (so the
 in-app update sees 0.1.3 and the panel's offer finds the two viewers) and
 the site page, plus the winget submission. They are ready as commands in
-`_ioelease-0.1.3-publish-steps.md`.** Until the marketplace step runs,
+`_io\release-0.1.3-publish-steps.md`.** Until the marketplace step runs,
 an installed 0.1.2 does not see 0.1.3 and no viewer is offered; the setup
 file of the release works.
 
