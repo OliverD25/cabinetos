@@ -2081,6 +2081,37 @@ every other file stayed within the goals. Recorded as one slow open, not
 a fault; the step 3 runs of section 25 will show whether it repeats, and
 a repeat becomes a unit of its own.**
 
+**Status (2026-10-04, 03:45): step 3, unit 1, is on main (merge b393a37,
+Sonnet): the Image Viewer and the Media Viewer.** The Image Viewer shows
+18 kinds (JPEG, PNG, GIF, WebP, AVIF, BMP, ICO and SVG at full resolution;
+HEIC, HEIF, TIFF, JPEG XR and four RAW kinds through Windows' codecs by
+`quickview-render`), with fit, zoom, pan and the keys `+ - 0 1`. The Media
+Viewer plays 13 kinds of video and audio at once, with the keys
+`K J L , . M + -` and `0` to `9`. The marketplace index builder has a
+`-Viewers` switch that offers both as tool items (`minCoreVersion` 0.1.3);
+nothing is published to the public marketplace yet. The first real viewer
+found one fault in the window, which the unit fixed and recorded as ADR
+0024: a drawing's host must be mapped before the page loads, and its folder
+must exist. Verified: the five core checks, both window builds, the fast
+tests (1425 passed), the laptop's whole end-to-end suite (1512 of 1512 at
+the coder's last commit) and the live check on the merge (exit 0, no False,
+panel and walk goals met). Laptop numbers: the first Space showed the full
+view in 517 ms (Image Viewer) and 1032 ms (Media Viewer), ceiling 1500 ms;
+a 12 MP JPEG's warm full view took 132 ms (goal 1000 ms); a 1080p clip
+played within 671 ms warm (goal 1000 ms). **The Quick View warm goal printed
+"no" in four of the coder's five runs and in the merge's run: with nine warm
+opens the 90th percentile is the slowest open, and a single open of 51 to
+117 ms (window garbage collection pauses, and once a HEIC card of 73 ms)
+fails it, while every typical value is far inside the goals.** The goal is
+not part of the live check's exit code. A follow-up unit makes the measure
+fair (eleven opens, the first apart, the 90th percentile of ten) and looks
+at the pauses. Open from the coder: on every close of the panel all alive
+viewers go through resume, `about:blank` and suspend, not only the one
+that showed the file; and `quickview-rendered` carries only the drawing's
+size, so a HEIC page cannot show the file's real pixel size (a schema
+change, to decide). The PDF and the text and Markdown viewers are the next
+units of step 3.
+
 ## 6. Phase 1 in detail — the Rust core scaffold
 
 Moved whole on 2026-09-30 to [plan/phase-01-detail.md](plan/phase-01-detail.md):
