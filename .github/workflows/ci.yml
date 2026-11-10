@@ -8,29 +8,9 @@ name: CI
 # pull requests into main. To run on every push again, restore the `push`
 # trigger this replaced (git history of this file).
 on:
+  # Manual only (decided 2026-11-01): the local checks are the merge gate, so CI
+  # never runs by itself. Start it with "Run workflow" or `gh workflow run ci.yml`.
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - "core/**"
-      - "sdk/protocol/**"
-      - "sdk/config/**"
-      # The plugin host compiles against the WIT, and its tests load the fixtures.
-      - "sdk/wit/**"
-      - "sdk/fixtures/**"
-      # The core embeds the shipped themes; a test checks the theme schema.
-      - "sdk/themes/**"
-      # A test checks the marketplace index schema.
-      - "sdk/marketplace/**"
-      # The Agent extension's plugin has a Cargo project and tests of its own.
-      - "sdk/extensions/**"
-      # The WinUI shell; its tests also read sdk/protocol and sdk/config.
-      - "ui/**"
-      # Tool Extensions; the shell's tests check the shipped tool.json against its schema.
-      - "sdk/tools/**"
-      # The release and install scripts are parsed.
-      - "build/**"
-      - ".github/workflows/ci.yml"
 
 # No workflow-wide concurrency group: each job has its own, so a new run
 # cancels only the same job's older run. The `changes` job decides which
